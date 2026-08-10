@@ -6,9 +6,9 @@ using PowerForge.Web;
 
 namespace PowerForge.Web.Cli;
 
-internal sealed class SqliteWebSearchObservationStore
+internal sealed partial class SqliteWebSearchObservationStore
 {
-    internal const int CurrentSchemaVersion = 3;
+    internal const int CurrentSchemaVersion = 4;
 
     private const string CreateTablesSql = """
         CREATE TABLE IF NOT EXISTS search_observation_runs (
@@ -53,7 +53,49 @@ internal sealed class SqliteWebSearchObservationStore
             ON search_observation_runs(provider, site_id, collected_at_utc);
         """;
 
-    private const string CreateSchemaSql = CreateTablesSql + CreateIndexesSql + "PRAGMA user_version = 3;";
+    private const string CreateTrafficTablesSql = """
+        CREATE TABLE IF NOT EXISTS traffic_observation_runs (
+            run_id TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            site_id TEXT NOT NULL,
+            collected_at_utc TEXT NOT NULL,
+            source_kind TEXT NOT NULL,
+            status TEXT NOT NULL,
+            configuration_hash TEXT NULL,
+            evidence_reference TEXT NULL,
+            normalized_manifest_json TEXT NOT NULL,
+            PRIMARY KEY (provider, site_id, run_id)
+        );
+        CREATE TABLE IF NOT EXISTS traffic_observations (
+            observation_key TEXT NOT NULL PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            site_id TEXT NOT NULL,
+            observation_date TEXT NOT NULL,
+            host TEXT NOT NULL,
+            path TEXT NOT NULL,
+            requests INTEGER NOT NULL,
+            visits INTEGER NOT NULL,
+            edge_response_bytes INTEGER NOT NULL,
+            sample_interval REAL NOT NULL,
+            evidence_reference TEXT NULL,
+            FOREIGN KEY (provider, site_id, run_id)
+                REFERENCES traffic_observation_runs(provider, site_id, run_id)
+        );
+        """;
+
+    private const string CreateTrafficIndexesSql = """
+        CREATE INDEX IF NOT EXISTS ix_traffic_observations_site_date
+            ON traffic_observations(site_id, observation_date);
+        CREATE INDEX IF NOT EXISTS ix_traffic_observations_provider_site_date
+            ON traffic_observations(provider, site_id, observation_date);
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_traffic_observation_runs_provider_site_collected
+            ON traffic_observation_runs(provider, site_id, collected_at_utc);
+        """;
+
+    private const string CreateSchemaSql = CreateTablesSql + CreateIndexesSql +
+                                           CreateTrafficTablesSql + CreateTrafficIndexesSql +
+                                           "PRAGMA user_version = 4;";
 
     private const string FindVersionOneCollisionsSql = """
         SELECT provider, site_id, collected_at_utc
@@ -89,7 +131,9 @@ internal sealed class SqliteWebSearchObservationStore
         FROM search_observations_legacy;
         DROP TABLE search_observations_legacy;
         DROP TABLE search_observation_runs_legacy;
-        """ + CreateIndexesSql + "PRAGMA user_version = 3;";
+        """ + CreateIndexesSql + CreateTrafficTablesSql + CreateTrafficIndexesSql + "PRAGMA user_version = 4;";
+
+    private const string MigrateVersionThreeSql = CreateTrafficTablesSql + CreateTrafficIndexesSql + "PRAGMA user_version = 4;";
 
     private readonly string _databasePath;
 
@@ -402,13 +446,19 @@ internal sealed class SqliteWebSearchObservationStore
                     if (collisions.Count > 0)
                     {
                         throw new InvalidOperationException(
-                            $"Search database schema v1 contains competing runs for {collisions[0]}. Resolve the duplicate collection timestamp before upgrading to schema v3.");
+                            $"Search database schema v1 contains competing runs for {collisions[0]}. Resolve the duplicate collection timestamp before upgrading to schema v4.");
                     }
                 }
                 if (version is 1 or 2)
                 {
                     await transaction.ExecuteNonQueryAsync(
                         MigrateLegacySchemaSql,
+                        cancellationToken: token).ConfigureAwait(false);
+                }
+                else if (version == 3)
+                {
+                    await transaction.ExecuteNonQueryAsync(
+                        MigrateVersionThreeSql,
                         cancellationToken: token).ConfigureAwait(false);
                 }
             },

@@ -110,19 +110,52 @@ public static partial class WebSearchProviderDoctor
     private static void ValidateCloudflare(
         IReadOnlyDictionary<string, string?> settings,
         string siteId,
-        string? _,
+        string? siteBaseUrl,
         string providerId,
         List<WebSearchProviderCheck> checks)
     {
         if (settings.TryGetValue("zoneId", out var value) &&
             !string.IsNullOrWhiteSpace(value) &&
-            !CloudflareZoneRegex.IsMatch(value.Trim()))
+            (!value.Equals(value.Trim(), StringComparison.Ordinal) || !CloudflareZoneRegex.IsMatch(value)))
         {
             AddCheck(
                 checks,
                 "provider.cloudflare-zone-invalid",
                 WebSearchProviderCheckSeverity.Error,
                 "Cloudflare zoneId must be a 32-character hexadecimal zone identifier.",
+                siteId,
+                providerId);
+        }
+
+        if (TryGetHttpUrl(siteBaseUrl, out var siteUri) && !siteUri!.IsDefaultPort)
+        {
+            AddCheck(
+                checks,
+                "provider.cloudflare-site-port-unsupported",
+                WebSearchProviderCheckSeverity.Error,
+                "Cloudflare traffic collection requires the owning site baseUrl to use the default HTTP(S) port.",
+                siteId,
+                providerId);
+        }
+
+        if (siteUri is not null && siteUri.AbsolutePath.Contains("//", StringComparison.Ordinal))
+        {
+            AddCheck(
+                checks,
+                "provider.cloudflare-site-path-invalid",
+                WebSearchProviderCheckSeverity.Error,
+                "Cloudflare traffic collection does not support repeated path separators in the owning site baseUrl.",
+                siteId,
+                providerId);
+        }
+
+        if (siteUri is not null && siteUri.AbsolutePath.IndexOfAny(['%', '_']) >= 0)
+        {
+            AddCheck(
+                checks,
+                "provider.cloudflare-site-path-filter-unsupported",
+                WebSearchProviderCheckSeverity.Error,
+                "Cloudflare traffic collection cannot safely scope a site baseUrl whose path contains analytics wildcard metacharacters.",
                 siteId,
                 providerId);
         }

@@ -1,8 +1,8 @@
 # PowerForge.Web Search Intelligence
 
-PowerForge.Web can import daily search-performance observations, keep an idempotent local history, and produce evidence-linked opportunities. This is the first operational slice of the broader Search Intelligence design. It gives provider collectors, scheduled jobs, reports, and future Control.Web screens one owned data contract instead of letting each integration invent its own model.
+PowerForge.Web can collect search-performance and first-party traffic observations, keep an idempotent fleet history, and produce evidence-linked opportunities. Search and traffic use separate contracts and tables so related measurements can be compared without pretending they mean the same thing.
 
-The current release supports imported Search Analytics-style data, fleet provider configuration and capability checks, authenticated Google Search Console collection, and Bing Webmaster API collection with a CSV export fallback. It does not yet collect Cloudflare traffic or Lighthouse/CrUX performance data, and it does not crawl competitors or draft articles automatically.
+The current release supports imported Search Analytics-style data, fleet provider configuration and capability checks, authenticated Google Search Console collection, Bing Webmaster API collection with a CSV export fallback, and Cloudflare end-user HTTP traffic collection. It does not yet collect Lighthouse/CrUX performance data, and it does not crawl competitors or draft articles automatically.
 
 ## Ownership
 
@@ -13,6 +13,7 @@ The current release supports imported Search Analytics-style data, fleet provide
 | Opportunity report | `powerforge-web` | `opportunity list` human or JSON output |
 | Provider identities, requested capabilities and credential references | `PowerForge.Web` | `WebSearchProviderConfiguration`, `WebSearchProviderDoctor` |
 | Provider authentication and collection | Adapters in `PowerForge.Web` | Google Search Console and Bing Webmaster collectors with thin `powerforge-web` orchestration |
+| First-party traffic observations | `PowerForge.Web` | `WebTrafficObservationBatch`, Cloudflare GraphQL collector, and `traffic collect/list` |
 | Site-specific product facts and content changes | Owning site repository | Consume evidence; normal PR review remains the publication gate |
 | Authenticated fleet UI | Future thin `Control.Web` consumer | Read the PowerForge Search service/API when that boundary is justified |
 
@@ -170,6 +171,38 @@ powerforge-web observe import-bing `
 
 The fallback accepts comma-, semicolon- or tab-delimited CSV with a real date column, clicks, impressions, and at least one page or query column. Export-only registrations declare the owning Bing property through the validated `siteUrl` setting so query-only rows retain a trustworthy site boundary. CTR and average position are optional. Quoted fields, correctly grouped invariant thousands separators, and percentage CTR values are supported; malformed count grouping and nonzero CTR with zero impressions are rejected instead of being silently reinterpreted. Every row must fall inside the declared date range, and the file is normalized before storage is opened. `--collected-at` is required and becomes part of the stable run identity, so importing the same export again with the same timestamp remains idempotent even if the file was copied or downloaded again. Aggregate-only exports without dates or dimensions are rejected because converting a range total into daily evidence would fabricate data. Header-only exports are also rejected because they contain no provider-owned range evidence and cannot prove zero data for caller-supplied dates.
 
+## Collect Cloudflare traffic observations
+
+Configure an API token with read access to the exact zone and expose it through the environment variable referenced by the provider's `cloudflare-api-token` credential. Before GraphQL collection, the collector reads the zone identity and requires its canonical name to own the configured fleet site's base host. It then reads the zone-specific dataset settings, including availability, retention and maximum row count. Every analytics request is constrained to the configured site's exact host and, when the base URL contains a path, that path subtree. Because Cloudflare's path filter treats `%` and `_` as wildcard metacharacters, path-scoped Cloudflare sites containing those characters are rejected instead of querying a broader subtree; this restriction is provider-local and does not affect Google or Bing collection. This prevents a valid token, shared zone or unrelated zone ID from storing another site's traffic under the wrong fleet identity.
+
+```powershell
+powerforge-web traffic collect `
+    --config .\search-providers.json `
+    --database .\.powerforge\search.db `
+    --site officeimo `
+    --provider cloudflare `
+    --from 2026-08-01 `
+    --to 2026-08-07 `
+    --evidence evidence/cloudflare-officeimo-2026-08-01-to-07 `
+    --output json
+```
+
+Each closed UTC reporting date is queried separately through `httpRequestsAdaptiveGroups`, grouped by scheme, host and request path, filtered to `requestSource: eyeball`, and stored as requests, visits, edge response bytes and sampling interval. Scheme, host and path must all remain inside the configured fleet site boundary. The current UTC date and future dates are rejected before any provider request because they cannot support complete or zero-data claims. A later failed date preserves earlier completed partitions. Reaching the provider's row limit produces an explicit partial run because the collector cannot prove that every host/path row was returned.
+
+Cloudflare's request count is an HTTP traffic metric, not a browser page-view metric, and a visit is not a unique visitor. Adaptive datasets may return estimates; `sampleInterval` remains attached to every observation and `traffic list` reports when sampled estimates are present. This keeps future Cloudflare Web Analytics/RUM page views and CrUX field performance in their own truthful contracts.
+
+```powershell
+powerforge-web traffic list `
+    --database .\.powerforge\search.db `
+    --site officeimo `
+    --provider cloudflare `
+    --from 2026-08-01 `
+    --to 2026-08-07 `
+    --output json
+```
+
+`traffic list` selects one best partition per provider, site and reporting date, preferring completed partitions before recency. A date completed before a later failure remains complete evidence even though its parent run is partial. Every totals query requires `--provider`, preventing independently collected providers from being added together or from hiding complementary gaps. Its JSON and human output distinguish a missing database, no matching evidence, partial evidence, missing dates inside a bounded range and an explicit complete-zero run; partial, incomplete or missing evidence returns a non-zero exit code instead of presenting ordinary-looking totals. The traffic contract is published at `Schemas/powerforge.web.traffic-observations.schema.json`; `Examples/PowerForge.Web/Search/traffic-observations.json` is a runnable example. Traffic and search runs share the transactional fleet database and deterministic revision rules but use independent tables and normalizers.
+
 ## List opportunities
 
 ```powershell
@@ -197,10 +230,9 @@ Provider adapters should preserve their raw evidence and map only stable Search 
 
 The next implementation steps are:
 
-1. Cloudflare traffic observations in a contract kept separate from search metrics;
-2. Lighthouse and CrUX performance observations in their own contract;
-3. scheduled collection, backfill, retention and static fleet reports;
-4. competitor evidence through RadarX/HtmlTinkerX, followed by human-approved briefs and measured outcomes;
-5. Google and Bing sitemap capabilities when their operator workflows and shared sitemap contract are defined.
+1. Lighthouse and CrUX performance observations in their own contract;
+2. scheduled collection, backfill, retention and static fleet reports;
+3. competitor evidence through RadarX/HtmlTinkerX, followed by human-approved briefs and measured outcomes;
+4. Google and Bing sitemap capabilities when their operator workflows and shared sitemap contract are defined.
 
 Those additions must keep the current separation: first-party search facts, traffic facts, performance measurements, competitor evidence and recommendations are related, but they are not interchangeable datasets.

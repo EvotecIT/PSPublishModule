@@ -447,6 +447,33 @@ public sealed partial class WebSearchProviderDoctorTests
         Assert.DoesNotContain(sensitiveValue, serialized, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Doctor_AllowsRepeatedPathSeparatorsForNonCloudflareProviders()
+    {
+        var configuration = CreateGoogleConfiguration();
+        configuration.Sites[0].BaseUrl = "https://officeimo.com/docs//v2/";
+
+        var result = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
+
+        Assert.True(result.Success);
+        Assert.DoesNotContain(result.Checks, check => check.Code == "site.base-url-invalid");
+    }
+
+    [Theory]
+    [InlineData("https://officeimo.com/docs//v2/", "provider.cloudflare-site-path-invalid")]
+    [InlineData("https://officeimo.com/docs%20archive/", "provider.cloudflare-site-path-filter-unsupported")]
+    [InlineData("https://officeimo.com/docs_archive/", "provider.cloudflare-site-path-filter-unsupported")]
+    public void Doctor_RejectsCloudflareSpecificPathFilterBoundaries(string baseUrl, string expectedCode)
+    {
+        var configuration = CreateCloudflareConfiguration("abcdef0123456789abcdef0123456789");
+        configuration.Sites[0].BaseUrl = baseUrl;
+
+        var result = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Checks, check => check.Code == expectedCode);
+    }
+
     [Theory]
     [InlineData("sc-domain:")]
     [InlineData("sc-domain:https://officeimo.com")]

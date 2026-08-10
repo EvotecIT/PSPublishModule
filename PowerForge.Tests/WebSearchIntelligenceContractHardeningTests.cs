@@ -324,6 +324,45 @@ public sealed partial class WebSearchIntelligenceTests
     }
 
     [Fact]
+    public void TrafficObservationSchema_AcceptsTheNormalizedContractAndRejectsMissingSamplingEvidence()
+    {
+        var batch = WebTrafficObservationNormalizer.Normalize(new WebTrafficObservationBatch
+        {
+            Provider = "cloudflare",
+            SiteId = "officeimo",
+            CollectedAtUtc = new DateTimeOffset(2026, 8, 10, 12, 34, 56, TimeSpan.Zero),
+            SourceKind = "fixture",
+            Status = "complete",
+            CollectionCoverage = new WebTrafficObservationCollectionCoverage
+            {
+                FromDate = new DateOnly(2026, 8, 1),
+                ThroughDate = new DateOnly(2026, 8, 1),
+                CompletedDates = [new DateOnly(2026, 8, 1)]
+            },
+            Observations =
+            [
+                new WebTrafficObservation
+                {
+                    Date = new DateOnly(2026, 8, 1),
+                    Host = "officeimo.com",
+                    Path = "/",
+                    Requests = 10,
+                    Visits = 2,
+                    EdgeResponseBytes = 1000,
+                    SampleInterval = 1
+                }
+            ]
+        });
+        var documented = JsonNode.Parse(JsonSerializer.Serialize(batch))!;
+        var missingSampling = documented.DeepClone();
+        missingSampling["observations"]![0]!.AsObject().Remove("sampleInterval");
+        var schema = LoadTrafficObservationSchema();
+
+        Assert.True(schema.Evaluate(documented, new EvaluationOptions()).IsValid);
+        Assert.False(schema.Evaluate(missingSampling, new EvaluationOptions()).IsValid);
+    }
+
+    [Fact]
     public async Task SqliteStore_ScopesExternalRunIdentifiersByProviderAndSite()
     {
         var root = CreateTemporaryDirectory();
@@ -349,7 +388,7 @@ public sealed partial class WebSearchIntelligenceTests
             };
 
             Assert.All(imports, result => Assert.Equal(1, result.InsertedCount));
-            Assert.All(imports, result => Assert.Equal(3, result.DatabaseSchemaVersion));
+            Assert.All(imports, result => Assert.Equal(4, result.DatabaseSchemaVersion));
             Assert.Single(await store.QueryAsync(new WebSearchObservationQuery
             {
                 SiteId = "officeimo",
@@ -529,6 +568,16 @@ public sealed partial class WebSearchIntelligenceTests
             "..", "..", "..", "..",
             "Schemas",
             "powerforge.web.search-observations.schema.json"));
+        return JsonSchema.FromText(File.ReadAllText(schemaPath));
+    }
+
+    private static JsonSchema LoadTrafficObservationSchema()
+    {
+        var schemaPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..",
+            "Schemas",
+            "powerforge.web.traffic-observations.schema.json"));
         return JsonSchema.FromText(File.ReadAllText(schemaPath));
     }
 

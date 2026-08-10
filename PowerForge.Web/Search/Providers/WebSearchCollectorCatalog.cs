@@ -13,6 +13,8 @@ public static class WebSearchCollectorCatalog
             [BingWebmasterCollector.ProviderKind] = BingWebmasterCollector.AvailableCapabilities
                 .ToFrozenSet(StringComparer.OrdinalIgnoreCase),
             [BingWebmasterCsvExportParser.ProviderKind] = BingWebmasterCsvExportParser.AvailableCapabilities
+                .ToFrozenSet(StringComparer.OrdinalIgnoreCase),
+            [CloudflareAnalyticsCollector.ProviderKind] = new[] { WebSearchProviderCapabilities.TrafficAnalytics }
                 .ToFrozenSet(StringComparer.OrdinalIgnoreCase)
         }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 

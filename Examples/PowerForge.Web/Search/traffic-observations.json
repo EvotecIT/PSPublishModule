@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "provider": "cloudflare",
+  "siteId": "officeimo",
+  "collectedAtUtc": "2026-08-10T12:34:56Z",
+  "sourceKind": "api",
+  "status": "complete",
+  "configurationHash": "sha256:fleet-configuration-hash",
+  "evidenceReference": "evidence/cloudflare-officeimo-2026-08-01.json",
+  "collectionCoverage": {
+    "fromDate": "2026-08-01",
+    "throughDate": "2026-08-01",
+    "completedDates": ["2026-08-01"]
+  },
+  "observations": [
+    {
+      "date": "2026-08-01",
+      "host": "officeimo.com",
+      "path": "/convert/",
+      "requests": 120,
+      "visits": 34,
+      "edgeResponseBytes": 420000,
+      "sampleInterval": 1
+    }
+  ]
+}

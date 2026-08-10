@@ -323,7 +323,7 @@ public static partial class WebSearchProviderDoctor
                 checks,
                 "site.base-url-invalid",
                 WebSearchProviderCheckSeverity.Error,
-                "Site baseUrl must be an absolute HTTP(S) URL without user info, query or fragment.",
+                "Site baseUrl must be an absolute HTTP(S) URL without user info, query, or fragment.",
                 siteId);
         }
 
