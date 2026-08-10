@@ -736,9 +736,7 @@ public sealed partial class WebBingWebmasterCollectorTests
                                 EnvironmentVariable = "POWERFORGE_TEST_BING_API_KEY_UNAVAILABLE"
                             }
                             : null,
-                        Settings = kind == BingWebmasterCollector.ProviderKind
-                            ? new Dictionary<string, string?> { ["siteUrl"] = "https://officeimo.com/" }
-                            : new Dictionary<string, string?>()
+                        Settings = new Dictionary<string, string?> { ["siteUrl"] = "https://officeimo.com/" }
                     }
                 ]
             }

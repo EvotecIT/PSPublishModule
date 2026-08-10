@@ -101,6 +101,7 @@ internal static class WebSearchProviderSecretPolicy
     {
         ["google-search-console"] = new HashSet<string>(["property"], StringComparer.Ordinal),
         ["bing-webmaster"] = new HashSet<string>(["siteUrl"], StringComparer.Ordinal),
+        ["bing-webmaster-export"] = new HashSet<string>(["siteUrl"], StringComparer.Ordinal),
         ["cloudflare-analytics"] = new HashSet<string>(["zoneId"], StringComparer.Ordinal)
     };
 
@@ -133,7 +134,7 @@ internal static class WebSearchProviderSecretPolicy
         }
 
         if ((normalizedKind == "google-search-console" && name == "property") ||
-            (normalizedKind == "bing-webmaster" && name == "siteUrl"))
+            (normalizedKind is "bing-webmaster" or "bing-webmaster-export" && name == "siteUrl"))
         {
             return Uri.TryCreate(trimmedValue, UriKind.Absolute, out _)
                 ? WebSearchProviderConfigurationFingerprint.NormalizeUrl(trimmedValue)

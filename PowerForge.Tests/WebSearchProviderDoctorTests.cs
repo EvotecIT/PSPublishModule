@@ -117,7 +117,8 @@ public sealed partial class WebSearchProviderDoctorTests
         {
             Id = "bing",
             Kind = "bing-webmaster-export",
-            Capabilities = [WebSearchProviderCapabilities.SearchAnalytics]
+            Capabilities = [WebSearchProviderCapabilities.SearchAnalytics],
+            Settings = new Dictionary<string, string?> { ["siteUrl"] = "https://officeimo.com/" }
         };
         first.Sites[0].Providers = [first.Sites[0].Providers[0], bing];
         var reordered = CreateGoogleConfiguration();

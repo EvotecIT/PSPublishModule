@@ -112,6 +112,9 @@ public static class BingWebmasterCsvExportParser
             var impressions = ParseCount(row[impressionIndex], rowIndex, "impressions");
             if (clicks > impressions)
                 throw new FormatException($"Bing Webmaster CSV row {rowIndex + 1} has more clicks than impressions.");
+            var clickThroughRate = ParseOptionalRate(GetOptional(row, clickThroughRateIndex), rowIndex);
+            if (impressions == 0 && clickThroughRate is not null and not 0d)
+                throw new FormatException($"Bing Webmaster CSV row {rowIndex + 1} has nonzero CTR with zero impressions.");
             var parsedPosition = ParseOptionalNonNegativeDouble(GetOptional(row, positionIndex), rowIndex, "average position");
 
             observations.Add(new WebSearchObservation
@@ -122,7 +125,7 @@ public static class BingWebmasterCsvExportParser
                 SearchType = options.SearchType,
                 Clicks = clicks,
                 Impressions = impressions,
-                ClickThroughRate = ParseOptionalRate(GetOptional(row, clickThroughRateIndex), rowIndex),
+                ClickThroughRate = clickThroughRate,
                 AveragePosition = impressions == 0 ? null : parsedPosition,
                 EvidenceReference = options.EvidenceReference
             });

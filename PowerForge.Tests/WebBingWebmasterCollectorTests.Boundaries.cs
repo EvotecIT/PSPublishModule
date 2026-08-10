@@ -55,4 +55,14 @@ public sealed partial class WebBingWebmasterCollectorTests
         Assert.Equal(1234, observation.Clicks);
         Assert.Equal(2000, observation.Impressions);
     }
+
+    [Fact]
+    public void CsvExport_RejectsNonzeroCtrWithZeroImpressions()
+    {
+        const string csv = "Date,Query,Clicks,Impressions,CTR\n2026-08-01,powerforge,0,0,50%";
+
+        var exception = Assert.Throws<FormatException>(() => BingWebmasterCsvExportParser.Parse(csv, CreateCsvOptions()));
+
+        Assert.Contains("nonzero CTR with zero impressions", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }
