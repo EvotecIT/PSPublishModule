@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.evotec.xyz/powerforge/web/search-observations/v1.json",
+  "$id": "https://schemas.evotec.xyz/powerforge/web/search-observations/v2.json",
   "title": "PowerForge.Web Search Observation Batch",
   "description": "Portable structural schema for Search observation exchange. Cross-field semantic invariants are enforced by WebSearchObservationNormalizer during import.",
   "type": "object",
@@ -18,7 +18,7 @@
     "schemaVersion": {
       "type": "integer",
       "minimum": 1,
-      "maximum": 1
+      "maximum": 2
     },
     "runId": {
       "type": ["string", "null"],
@@ -52,6 +52,14 @@
     "evidenceReference": {
       "type": ["string", "null"]
     },
+    "collectionCoverage": {
+      "$ref": "#/$defs/collectionCoverage"
+    },
+    "zeroDataConfirmed": {
+      "type": "boolean",
+      "default": false,
+      "description": "True only when a successful provider request explicitly confirmed that the requested slice contained no rows."
+    },
     "observations": {
       "type": "array",
       "items": {
@@ -59,7 +67,46 @@
       }
     }
   },
+  "x-powerforge-semanticConstraints": [
+    {
+      "expression": "schemaVersion=1 cannot contain collectionCoverage or zeroDataConfirmed",
+      "enforcedBy": "PowerForge.Web.WebSearchObservationNormalizer"
+    },
+    {
+      "expression": "complete batches require observations or zeroDataConfirmed=true; zeroDataConfirmed is invalid for partial or nonempty batches and requires complete collectionCoverage",
+      "enforcedBy": "PowerForge.Web.WebSearchObservationNormalizer"
+    },
+    {
+      "expression": "partial collectionCoverage requires failedDate and failureCategory; completedDates are the consecutive prefix before failedDate; observations belong only to completedDates or failedDate",
+      "enforcedBy": "PowerForge.Web.WebSearchObservationNormalizer"
+    }
+  ],
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "schemaVersion": { "maximum": 1 }
+        }
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            { "required": ["collectionCoverage"] },
+            { "required": ["zeroDataConfirmed"] }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "schemaVersion": { "minimum": 2 }
+        }
+      },
+      "then": {
+        "required": ["collectionCoverage"]
+      }
+    },
     {
       "if": {
         "properties": {
@@ -68,13 +115,57 @@
         "required": ["status"]
       },
       "then": {
-        "properties": {
-          "observations": { "minItems": 1 }
-        }
+        "anyOf": [
+          {
+            "properties": {
+              "observations": { "minItems": 1 }
+            }
+          },
+          {
+            "required": ["zeroDataConfirmed"],
+            "properties": {
+              "zeroDataConfirmed": { "enum": [true] },
+              "observations": { "maxItems": 0 }
+            }
+          }
+        ]
       }
     }
   ],
   "$defs": {
+    "collectionCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fromDate", "throughDate", "completedDates"],
+      "properties": {
+        "fromDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "throughDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "searchType": {
+          "type": ["string", "null"]
+        },
+        "completedDates": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "date"
+          }
+        },
+        "failedDate": {
+          "type": ["string", "null"],
+          "format": "date"
+        },
+        "failureCategory": {
+          "type": ["string", "null"]
+        }
+      }
+    },
     "observation": {
       "type": "object",
       "$comment": "Draft 2020-12 cannot compare sibling numeric values. Import additionally enforces clicks <= impressions through WebSearchObservationNormalizer.",

@@ -65,6 +65,32 @@
         "resolved": "0.15.0",
         "contentHash": "Wx9+mX7mpv0vY6/Lux52AKHvEs9WbgzIJXlM6CkcYDNch0+pFiqS4sJJ84h0kQWot4Lg/AhMw8randglDjDNJw=="
       },
+      "Google.Apis": {
+        "type": "Transitive",
+        "resolved": "1.75.0",
+        "contentHash": "ZqODi2IvyTBezeGztemXv6U/+VinyqxxPiyoW2CZbzIrUp+a35Rt5tzUjXHPXK9nA1YQi/w8ABpYQpBm31ditw==",
+        "dependencies": {
+          "Google.Apis.Core": "1.75.0"
+        }
+      },
+      "Google.Apis.Auth": {
+        "type": "Transitive",
+        "resolved": "1.75.0",
+        "contentHash": "hzuGwUBIQYdFkChXm62E5Suxe+q5PHt2uE5EunGBco2j01uQJGlUgzNujZvGHMlAIEHaytzhdn3v3v52ZPgv2Q==",
+        "dependencies": {
+          "Google.Apis": "1.75.0",
+          "Google.Apis.Core": "1.75.0",
+          "System.Management": "7.0.2"
+        }
+      },
+      "Google.Apis.Core": {
+        "type": "Transitive",
+        "resolved": "1.75.0",
+        "contentHash": "7AuI44XP4LzMFiOjdk4GCtCxJTIWZcjrXLeGjLYYSpTHHbiPkvm76XNym7zPOnD90sIg+zdTulg+I6D5W5spTQ==",
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.4"
+        }
+      },
       "HtmlAgilityPack": {
         "type": "Transitive",
         "resolved": "1.12.4",
@@ -141,6 +167,11 @@
           "Microsoft.Bcl.AsyncInterfaces": "6.0.0",
           "System.ComponentModel.Annotations": "5.0.0"
         }
+      },
+      "Newtonsoft.Json": {
+        "type": "Transitive",
+        "resolved": "13.0.4",
+        "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
       },
       "NuGet.Common": {
         "type": "Transitive",
@@ -277,6 +308,11 @@
           "SQLitePCLRaw.core": "3.0.5"
         }
       },
+      "System.CodeDom": {
+        "type": "Transitive",
+        "resolved": "7.0.0",
+        "contentHash": "GLltyqEsE5/3IE+zYRP5sNa1l44qKl9v+bfdMcwg+M9qnQf47wK3H0SUR/T+3N4JEQXF3vV4CSuuo0rsg+nq2A=="
+      },
       "System.ComponentModel.Annotations": {
         "type": "Transitive",
         "resolved": "5.0.0",
@@ -286,6 +322,14 @@
         "type": "Transitive",
         "resolved": "10.0.10",
         "contentHash": "SZT8XZ8Tktdnhaq5eWOJWN0VBczFZ7l6K5C5ykbaQFXZ0Uv8UBJwQcYUM1NVk5pKAmPlHnancMh33jF6IKnUrg=="
+      },
+      "System.Management": {
+        "type": "Transitive",
+        "resolved": "7.0.2",
+        "contentHash": "/qEUN91mP/MUQmJnM5y5BdT7ZoPuVrtxnFlbJ8a3kBJGhe2wCzBfnPFtK2wTtEEcf3DMGR9J00GZZfg6HRI6yA==",
+        "dependencies": {
+          "System.CodeDom": "7.0.0"
+        }
       },
       "System.Reflection.MetadataLoadContext": {
         "type": "Transitive",
@@ -314,6 +358,7 @@
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
+          "Google.Apis.Auth": "[1.75.0, )",
           "HtmlTinkerX": "[2.2.2, )",
           "Magick.NET-Q8-AnyCPU": "[14.16.0, )",
           "OfficeIMO.Markdown": "[3.0.3, )",

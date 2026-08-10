@@ -97,6 +97,32 @@
           "SQLitePCLRaw.core": "3.0.5"
         }
       },
+      "Google.Apis": {
+        "type": "Transitive",
+        "resolved": "1.75.0",
+        "contentHash": "ZqODi2IvyTBezeGztemXv6U/+VinyqxxPiyoW2CZbzIrUp+a35Rt5tzUjXHPXK9nA1YQi/w8ABpYQpBm31ditw==",
+        "dependencies": {
+          "Google.Apis.Core": "1.75.0"
+        }
+      },
+      "Google.Apis.Auth": {
+        "type": "Transitive",
+        "resolved": "1.75.0",
+        "contentHash": "hzuGwUBIQYdFkChXm62E5Suxe+q5PHt2uE5EunGBco2j01uQJGlUgzNujZvGHMlAIEHaytzhdn3v3v52ZPgv2Q==",
+        "dependencies": {
+          "Google.Apis": "1.75.0",
+          "Google.Apis.Core": "1.75.0",
+          "System.Management": "7.0.2"
+        }
+      },
+      "Google.Apis.Core": {
+        "type": "Transitive",
+        "resolved": "1.75.0",
+        "contentHash": "7AuI44XP4LzMFiOjdk4GCtCxJTIWZcjrXLeGjLYYSpTHHbiPkvm76XNym7zPOnD90sIg+zdTulg+I6D5W5spTQ==",
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.4"
+        }
+      },
       "HtmlAgilityPack": {
         "type": "Transitive",
         "resolved": "1.12.4",
@@ -464,8 +490,8 @@
       },
       "Newtonsoft.Json": {
         "type": "Transitive",
-        "resolved": "13.0.3",
-        "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
+        "resolved": "13.0.4",
+        "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
       },
       "NuGet.Common": {
         "type": "Transitive",
@@ -1017,6 +1043,7 @@
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
+          "Google.Apis.Auth": "[1.75.0, )",
           "HtmlTinkerX": "[2.2.2, )",
           "Magick.NET-Q8-AnyCPU": "[14.16.0, )",
           "OfficeIMO.Markdown": "[3.0.3, )",

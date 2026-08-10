@@ -18,6 +18,7 @@ public sealed partial class WebSearchIntelligenceTests
         var second = WebSearchObservationNormalizer.Normalize(batch);
 
         Assert.Equal(first.RunId, second.RunId);
+        Assert.Equal("41b6de26c03ea17de07c23b0af3b284bd465f141eb83a35e3b9914437a520a5d", first.RunId);
         Assert.Equal("google-search-console", first.Provider);
         Assert.Equal("officeimo", first.SiteId);
         Assert.Equal("desktop", first.Observations[0].Device);
@@ -293,6 +294,7 @@ public sealed partial class WebSearchIntelligenceTests
         {
             var databasePath = Path.Combine(root, "history", "search.db");
             var normalized = WebSearchObservationNormalizer.Normalize(CreateBatch());
+            var legacyManifest = JsonSerializer.Serialize(normalized, WebCliJson.Options);
             var store = new SqliteWebSearchObservationStore(databasePath);
 
             var first = await store.ImportAsync(normalized);
@@ -310,6 +312,9 @@ public sealed partial class WebSearchIntelligenceTests
             Assert.Equal(3, first.DatabaseSchemaVersion);
             Assert.Equal(0, second.InsertedCount);
             Assert.Equal(1, second.DuplicateCount);
+            Assert.Equal(1, normalized.SchemaVersion);
+            Assert.DoesNotContain("collectionCoverage", legacyManifest, StringComparison.Ordinal);
+            Assert.DoesNotContain("zeroDataConfirmed", legacyManifest, StringComparison.Ordinal);
             var observation = Assert.Single(observations);
             Assert.Equal(normalized.Observations[0].ObservationKey, observation.ObservationKey);
             Assert.Equal(100, observation.Impressions);
@@ -639,6 +644,7 @@ public sealed partial class WebSearchIntelligenceTests
 
     private static WebSearchObservationBatch CreateBatch() => new()
     {
+        SchemaVersion = 1,
         Provider = " Google-Search-Console ",
         SiteId = " OfficeIMO ",
         CollectedAtUtc = new DateTimeOffset(2026, 8, 2, 8, 0, 0, TimeSpan.Zero),

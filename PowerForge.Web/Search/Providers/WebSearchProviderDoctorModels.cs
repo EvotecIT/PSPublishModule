@@ -62,6 +62,12 @@ public sealed class WebSearchProviderCapabilityState
 
     /// <summary>Capabilities known for the provider kind.</summary>
     public string[] SupportedCapabilities { get; set; } = Array.Empty<string>();
+
+    /// <summary>Requested capabilities implemented by the current executable.</summary>
+    public string[] AvailableCollectorCapabilities { get; set; } = Array.Empty<string>();
+
+    /// <summary>Requested capabilities not implemented by the current executable.</summary>
+    public string[] MissingCollectorCapabilities { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>Fleet provider configuration and capability doctor result.</summary>

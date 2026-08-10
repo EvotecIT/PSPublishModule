@@ -35,7 +35,9 @@ internal static partial class WebCliCommandHandlers
         try
         {
             var loaded = WebSearchProviderConfigurationLoader.LoadWithPath(configPath, WebCliJson.Options);
-            var result = WebSearchProviderDoctor.Inspect(loaded.Configuration);
+            var result = WebSearchProviderDoctor.InspectWithCapabilities(
+                loaded.Configuration,
+                WebSearchCollectorCatalog.AvailableCapabilities);
             var exitCode = result.Success ? 0 : 1;
 
             if (outputJson)

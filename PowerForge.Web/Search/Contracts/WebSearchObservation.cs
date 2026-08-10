@@ -7,7 +7,10 @@ namespace PowerForge.Web;
 public sealed class WebSearchObservationBatch
 {
     /// <summary>Current JSON contract version.</summary>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
+
+    /// <summary>Oldest JSON contract version that remains import-compatible.</summary>
+    public const int MinimumSupportedSchemaVersion = 1;
 
     /// <summary>JSON contract version.</summary>
     [JsonPropertyName("schemaVersion"), JsonRequired]
@@ -46,9 +49,48 @@ public sealed class WebSearchObservationBatch
     [JsonPropertyName("evidenceReference")]
     public string? EvidenceReference { get; set; }
 
+    /// <summary>Optional durable description of the requested and completed provider collection partitions.</summary>
+    [JsonPropertyName("collectionCoverage")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WebSearchObservationCollectionCoverage? CollectionCoverage { get; set; }
+
+    /// <summary>Whether a successful provider request explicitly confirmed that the requested slice contained no rows.</summary>
+    [JsonPropertyName("zeroDataConfirmed")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ZeroDataConfirmed { get; set; }
+
     /// <summary>Search performance observations in this run.</summary>
     [JsonPropertyName("observations"), JsonRequired]
     public WebSearchObservation[] Observations { get; set; } = Array.Empty<WebSearchObservation>();
+}
+
+/// <summary>Durable coverage metadata for a bounded provider collection request.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class WebSearchObservationCollectionCoverage
+{
+    /// <summary>Inclusive first reporting date requested from the provider.</summary>
+    [JsonPropertyName("fromDate"), JsonRequired]
+    public DateOnly FromDate { get; set; }
+
+    /// <summary>Inclusive last reporting date requested from the provider.</summary>
+    [JsonPropertyName("throughDate"), JsonRequired]
+    public DateOnly ThroughDate { get; set; }
+
+    /// <summary>Provider search surface covered by the request.</summary>
+    [JsonPropertyName("searchType")]
+    public string? SearchType { get; set; }
+
+    /// <summary>Daily partitions whose pagination completed successfully.</summary>
+    [JsonPropertyName("completedDates"), JsonRequired]
+    public DateOnly[] CompletedDates { get; set; } = Array.Empty<DateOnly>();
+
+    /// <summary>First daily partition that did not complete, when the batch is partial.</summary>
+    [JsonPropertyName("failedDate")]
+    public DateOnly? FailedDate { get; set; }
+
+    /// <summary>Stable non-secret failure category for a partial collection.</summary>
+    [JsonPropertyName("failureCategory")]
+    public string? FailureCategory { get; set; }
 }
 
 /// <summary>A provider-neutral daily search performance observation.</summary>

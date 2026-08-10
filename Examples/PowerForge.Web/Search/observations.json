@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "provider": "google-search-console",
   "siteId": "officeimo",
   "collectedAtUtc": "2026-08-02T08:00:00Z",
@@ -7,6 +7,12 @@
   "status": "complete",
   "configurationHash": "sha256:example-fleet-configuration",
   "evidenceReference": "evidence/gsc-officeimo-2026-08-01.json",
+  "collectionCoverage": {
+    "fromDate": "2026-08-01",
+    "throughDate": "2026-08-01",
+    "searchType": "web",
+    "completedDates": ["2026-08-01"]
+  },
   "observations": [
     {
       "date": "2026-08-01",
