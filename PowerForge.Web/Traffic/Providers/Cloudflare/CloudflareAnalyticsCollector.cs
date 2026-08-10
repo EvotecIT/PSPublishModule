@@ -189,7 +189,7 @@ public sealed class CloudflareAnalyticsCollector
     }
 
     private static bool TryMapRows(
-        IReadOnlyCollection<CloudflareTrafficGroup> rows,
+        IReadOnlyCollection<CloudflareTrafficGroup?> rows,
         CloudflareAnalyticsCollectionOptions options,
         DateOnly requestedDate,
         out WebTrafficObservation[] observations)
@@ -201,6 +201,11 @@ public sealed class CloudflareAnalyticsCollector
         var sitePath = NormalizeSitePath(siteUri.AbsolutePath);
         foreach (var row in rows)
         {
+            if (row is null)
+            {
+                observations = Array.Empty<WebTrafficObservation>();
+                return false;
+            }
             var dimensions = row.Dimensions;
             if (row.Count is null || row.Sum?.Visits is null || row.Sum.EdgeResponseBytes is null ||
                 row.Average?.SampleInterval is null || dimensions?.Date != requestedDate ||
@@ -208,6 +213,11 @@ public sealed class CloudflareAnalyticsCollector
                 string.IsNullOrWhiteSpace(dimensions.Scheme) ||
                 row.Count > long.MaxValue || row.Sum.Visits > long.MaxValue || row.Sum.EdgeResponseBytes > long.MaxValue ||
                 !double.IsFinite(row.Average.SampleInterval.Value) || row.Average.SampleInterval.Value < 1d)
+            {
+                observations = Array.Empty<WebTrafficObservation>();
+                return false;
+            }
+            if (!TryScaleSampledCount(row.Count.Value, row.Average.SampleInterval.Value, out var requests))
             {
                 observations = Array.Empty<WebTrafficObservation>();
                 return false;
@@ -229,7 +239,7 @@ public sealed class CloudflareAnalyticsCollector
                 Date = requestedDate,
                 Host = rowHost,
                 Path = dimensions.Path,
-                Requests = (long)row.Count.Value,
+                Requests = requests,
                 Visits = (long)row.Sum.Visits.Value,
                 EdgeResponseBytes = (long)row.Sum.EdgeResponseBytes.Value,
                 SampleInterval = row.Average.SampleInterval.Value,
@@ -307,6 +317,24 @@ public sealed class CloudflareAnalyticsCollector
 
         host = uri.IdnHost.TrimEnd('.').ToLowerInvariant();
         return host.Length > 0;
+    }
+
+    private static bool TryScaleSampledCount(ulong count, double sampleInterval, out long value)
+    {
+        value = 0;
+        try
+        {
+            var scaled = checked((decimal)count * (decimal)sampleInterval);
+            var rounded = decimal.Round(scaled, 0, MidpointRounding.AwayFromZero);
+            if (rounded > long.MaxValue)
+                return false;
+            value = decimal.ToInt64(rounded);
+            return true;
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
     }
 
     private CloudflareAnalyticsCollectionResult Failure(
@@ -456,13 +484,9 @@ public sealed class CloudflareAnalyticsCollector
 
     private static string? NormalizeZoneName(string? zoneName)
     {
-        if (string.IsNullOrWhiteSpace(zoneName) ||
-            !Uri.TryCreate("https://" + zoneName.Trim().TrimEnd('.') + "/", UriKind.Absolute, out var uri))
-        {
-            return null;
-        }
-
-        return uri.IdnHost.TrimEnd('.').ToLowerInvariant();
+        return !string.IsNullOrWhiteSpace(zoneName) && TryNormalizeHostDimension(zoneName, out var host)
+            ? host
+            : null;
     }
 
     private static bool HostBelongsToZone(string host, string zoneName) =>
