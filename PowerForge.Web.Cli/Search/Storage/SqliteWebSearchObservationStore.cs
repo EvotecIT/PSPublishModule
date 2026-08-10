@@ -8,7 +8,7 @@ namespace PowerForge.Web.Cli;
 
 internal sealed partial class SqliteWebSearchObservationStore
 {
-    internal const int CurrentSchemaVersion = 5;
+    internal const int CurrentSchemaVersion = 6;
 
     private const string CreateTablesSql = """
         CREATE TABLE IF NOT EXISTS search_observation_runs (
@@ -138,10 +138,24 @@ internal sealed partial class SqliteWebSearchObservationStore
             ON performance_observation_runs(provider, site_id, measurement_kind, target_kind, target_url, form_factor, collected_at_utc);
         """;
 
+    private const string CreateFleetTablesSql = """
+        CREATE TABLE IF NOT EXISTS fleet_retained_coverage (
+            kind TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            site_id TEXT NOT NULL,
+            stream_key TEXT NOT NULL,
+            configuration_hash TEXT NOT NULL,
+            from_date TEXT NOT NULL,
+            through_date TEXT NOT NULL,
+            retained_at_utc TEXT NOT NULL,
+            PRIMARY KEY (kind, provider, site_id, stream_key, configuration_hash, from_date, through_date)
+        );
+        """;
+
     private const string CreateSchemaSql = CreateTablesSql + CreateIndexesSql +
                                            CreateTrafficTablesSql + CreateTrafficIndexesSql +
                                            CreatePerformanceTablesSql + CreatePerformanceIndexesSql +
-                                           "PRAGMA user_version = 5;";
+                                           CreateFleetTablesSql + "PRAGMA user_version = 6;";
 
     private const string FindVersionOneCollisionsSql = """
         SELECT provider, site_id, collected_at_utc
@@ -178,14 +192,16 @@ internal sealed partial class SqliteWebSearchObservationStore
         DROP TABLE search_observations_legacy;
         DROP TABLE search_observation_runs_legacy;
         """ + CreateIndexesSql + CreateTrafficTablesSql + CreateTrafficIndexesSql +
-        CreatePerformanceTablesSql + CreatePerformanceIndexesSql + "PRAGMA user_version = 5;";
+        CreatePerformanceTablesSql + CreatePerformanceIndexesSql + CreateFleetTablesSql + "PRAGMA user_version = 6;";
 
     private const string MigrateVersionThreeSql = CreateTrafficTablesSql + CreateTrafficIndexesSql +
                                                    CreatePerformanceTablesSql + CreatePerformanceIndexesSql +
-                                                   "PRAGMA user_version = 5;";
+                                                   CreateFleetTablesSql + "PRAGMA user_version = 6;";
 
     private const string MigrateVersionFourSql = CreatePerformanceTablesSql + CreatePerformanceIndexesSql +
-                                                  "PRAGMA user_version = 5;";
+                                                  CreateFleetTablesSql + "PRAGMA user_version = 6;";
+
+    private const string MigrateVersionFiveSql = CreateFleetTablesSql + "PRAGMA user_version = 6;";
 
     private readonly string _databasePath;
 
@@ -498,7 +514,7 @@ internal sealed partial class SqliteWebSearchObservationStore
                     if (collisions.Count > 0)
                     {
                         throw new InvalidOperationException(
-                            $"Search database schema v1 contains competing runs for {collisions[0]}. Resolve the duplicate collection timestamp before upgrading to schema v5.");
+                            $"Search database schema v1 contains competing runs for {collisions[0]}. Resolve the duplicate collection timestamp before upgrading to schema v{CurrentSchemaVersion}.");
                     }
                 }
                 if (version is 1 or 2)
@@ -517,6 +533,12 @@ internal sealed partial class SqliteWebSearchObservationStore
                 {
                     await transaction.ExecuteNonQueryAsync(
                         MigrateVersionFourSql,
+                        cancellationToken: token).ConfigureAwait(false);
+                }
+                else if (version == 5)
+                {
+                    await transaction.ExecuteNonQueryAsync(
+                        MigrateVersionFiveSql,
                         cancellationToken: token).ConfigureAwait(false);
                 }
             },

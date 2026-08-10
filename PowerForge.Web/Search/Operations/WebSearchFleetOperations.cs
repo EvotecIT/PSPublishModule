@@ -13,6 +13,8 @@ public sealed class WebSearchFleetEvidenceStream
     public string Capability { get; set; } = string.Empty;
     /// <summary>Capability-specific collection scope, such as search type or performance target and form factor.</summary>
     public string ScopeKey { get; set; } = string.Empty;
+    /// <summary>Configuration identity that produced this evidence stream.</summary>
+    public string? ConfigurationHash { get; set; }
     /// <summary>Latest reporting date proven complete for a daily stream.</summary>
     public DateOnly? LatestCompleteDate { get; set; }
     /// <summary>Non-overlapping reporting ranges already proven collected for a daily stream.</summary>
@@ -23,6 +25,10 @@ public sealed class WebSearchFleetEvidenceStream
     public DateTimeOffset? LastAttemptAtUtc { get; set; }
     /// <summary>Whether the newest available attempt is partial.</summary>
     public bool HasPartialEvidence { get; set; }
+    /// <summary>Failure category recorded by the newest partial daily attempt.</summary>
+    public string? LatestFailureCategory { get; set; }
+    /// <summary>Whether completed coverage survives only as a compact retention summary.</summary>
+    public bool HasRetainedCoverage { get; set; }
     /// <summary>Number of stored runs contributing to this stream.</summary>
     public int RunCount { get; set; }
 }
@@ -70,6 +76,8 @@ public sealed class WebSearchFleetWorkItem
     public DateTimeOffset? DueAtUtc { get; set; }
     /// <summary>Whether another bounded backfill chunk remains after this work item.</summary>
     public bool HasMoreBackfill { get; set; }
+    /// <summary>Permanent provider boundary that requires operator input before retrying.</summary>
+    public string? FailureCategory { get; set; }
 }
 
 /// <summary>Deterministic collection work due for a fleet at one point in time.</summary>
@@ -164,6 +172,11 @@ public sealed class WebSearchFleetRetentionResult
 /// <summary>Builds deterministic schedule and fleet-report contracts without contacting providers.</summary>
 public static class WebSearchFleetPlanner
 {
+    private static readonly IReadOnlySet<string> PermanentDailyFailureCategories = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "retention-boundary", "duration-boundary", "row-limit-reached"
+    };
+
     /// <summary>Creates due collection work from configuration and durable evidence.</summary>
     public static WebSearchFleetSchedulePlan CreateSchedule(
         WebSearchProviderConfiguration configuration,
@@ -199,7 +212,7 @@ public static class WebSearchFleetPlanner
                     ? null
                     : "collector-unavailable";
             var evidence = providerState?.ConfigurationReady == true
-                ? FindStream(snapshot, site, provider, capability)
+                ? FindStream(snapshot, site, provider, capability, doctor.ConfigurationHash)
                 : null;
             if (capability == WebSearchProviderCapabilities.SearchAnalytics)
             {
@@ -268,7 +281,7 @@ public static class WebSearchFleetPlanner
                 value.ProviderId.Equals(provider.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase));
             var capabilityAvailable = providerState?.AvailableCollectorCapabilities.Contains(capability, StringComparer.OrdinalIgnoreCase) == true;
             var evidence = providerState?.ConfigurationReady == true
-                ? FindStream(snapshot, site, provider, capability)
+                ? FindStream(snapshot, site, provider, capability, doctor.ConfigurationHash)
                 : null;
             var due = schedule.WorkItems.Any(value =>
                 value.SiteId.Equals(site.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
@@ -277,8 +290,9 @@ public static class WebSearchFleetPlanner
             var state = !provider.Enabled ? "disabled" :
                 providerState?.ConfigurationReady != true ? "configuration-error" :
                 !capabilityAvailable ? "collector-unavailable" :
-                evidence is null || evidence.LastCompleteAtUtc is null ? evidence?.HasPartialEvidence == true ? "partial" : "missing" :
+                evidence is null ? "missing" :
                 evidence.HasPartialEvidence ? "partial" :
+                evidence.LastCompleteAtUtc is null && !evidence.HasRetainedCoverage ? "missing" :
                 due ? "due" : "current";
             rows.Add(new WebSearchFleetReportRow
             {
@@ -351,6 +365,11 @@ public static class WebSearchFleetPlanner
             .FirstOrDefault();
         if (nextCoveredRange is not null)
             through = nextCoveredRange.FromDate.AddDays(-1);
+        var failureCategory = evidence?.HasPartialEvidence == true &&
+                              PermanentDailyFailureCategories.Contains(evidence.LatestFailureCategory ?? string.Empty)
+            ? evidence.LatestFailureCategory
+            : null;
+        var effectiveReadiness = failureCategory is not null && readiness == "ready" ? "input-required" : readiness;
         work.Add(new WebSearchFleetWorkItem
         {
             SiteId = site.Id ?? string.Empty,
@@ -358,10 +377,11 @@ public static class WebSearchFleetPlanner
             ProviderKind = provider.Kind ?? string.Empty,
             Capability = capability,
             Action = action,
-            Readiness = readiness,
+            Readiness = effectiveReadiness,
             FromDate = start,
             ThroughDate = through,
-            HasMoreBackfill = through < targetThrough && FindFirstMissing(through.AddDays(1), targetThrough, ranges).HasValue
+            HasMoreBackfill = through < targetThrough && FindFirstMissing(through.AddDays(1), targetThrough, ranges).HasValue,
+            FailureCategory = failureCategory
         });
     }
 
@@ -395,23 +415,31 @@ public static class WebSearchFleetPlanner
         WebSearchFleetEvidenceSnapshot snapshot,
         WebSearchSiteProviderConfiguration site,
         WebSearchProviderRegistration provider,
-        string capability)
+        string capability,
+        string? configurationHash)
     {
         var matches = snapshot.Streams.Where(value =>
             value.SiteId.Equals(site.Id, StringComparison.OrdinalIgnoreCase) &&
             value.ProviderId.Equals(provider.Id, StringComparison.OrdinalIgnoreCase) &&
-            value.Capability.Equals(capability, StringComparison.OrdinalIgnoreCase));
+            value.Capability.Equals(capability, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(value.ConfigurationHash, configurationHash, StringComparison.Ordinal));
         var expectedScope = capability switch
         {
             WebSearchProviderCapabilities.SearchAnalytics => "web",
             WebSearchProviderCapabilities.TrafficAnalytics => "traffic",
             WebSearchProviderCapabilities.PerformanceCrux => string.Join("\u001f", "field", "origin",
-                WebPerformanceObservationNormalizer.CanonicalizeTarget(site.BaseUrl, "origin"), "all"),
+                CanonicalizeSiteOrigin(site.BaseUrl), "all"),
             _ => null
         };
         return expectedScope is null
             ? matches.OrderByDescending(value => value.LastCompleteAtUtc).ThenByDescending(value => value.LastAttemptAtUtc).FirstOrDefault()
             : matches.FirstOrDefault(value => value.ScopeKey.Equals(expectedScope, StringComparison.Ordinal));
+    }
+
+    private static string CanonicalizeSiteOrigin(string siteBaseUrl)
+    {
+        var site = new Uri(WebPerformanceObservationNormalizer.CanonicalizeTarget(siteBaseUrl, "url"), UriKind.Absolute);
+        return WebPerformanceObservationNormalizer.CanonicalizeTarget(site.GetLeftPart(UriPartial.Authority) + "/", "origin");
     }
 
     private static DateOnly? FindFirstMissing(
