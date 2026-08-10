@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DBAClientX;
 using PowerForge.Web;
 using PowerForge.Web.Cli;
 
@@ -237,6 +238,58 @@ public sealed partial class WebSearchFleetOperationsTests
             var range = Assert.Single(stream.CompletedRanges);
             Assert.Equal(new DateOnly(2026, 1, 1), range.FromDate);
             Assert.Equal(new DateOnly(2026, 1, 2), range.ThroughDate);
+            Assert.Empty((await store.ReadFleetSnapshotAsync(AsOf.AddDays(-61))).Streams);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Import_MigratesVersionSixRetainedCoverageWithAConservativeSourceTimestamp()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var databasePath = Path.Combine(root, "fleet.db");
+            var store = new SqliteWebSearchObservationStore(databasePath);
+            await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(
+                TrafficBatch("schema-seed", new DateOnly(2026, 8, 1), AsOf)));
+            await using var client = new SQLite();
+            await client.ExecuteNonQueryAsync(databasePath,
+                """
+                DROP TABLE fleet_retained_coverage;
+                CREATE TABLE fleet_retained_coverage (
+                    kind TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    site_id TEXT NOT NULL,
+                    stream_key TEXT NOT NULL,
+                    configuration_hash TEXT NOT NULL,
+                    from_date TEXT NOT NULL,
+                    through_date TEXT NOT NULL,
+                    retained_at_utc TEXT NOT NULL,
+                    PRIMARY KEY (kind, provider, site_id, stream_key, configuration_hash, from_date, through_date)
+                );
+                INSERT INTO fleet_retained_coverage (
+                    kind, provider, site_id, stream_key, configuration_hash,
+                    from_date, through_date, retained_at_utc
+                ) VALUES (
+                    'traffic', 'cloudflare', 'officeimo', 'daily', '',
+                    '2026-01-01', '2026-01-01', '2026-08-10T12:00:00.0000000+00:00'
+                );
+                PRAGMA user_version = 6;
+                """);
+
+            var migrationTrigger = TrafficBatch("migration-trigger", new DateOnly(2026, 8, 2), AsOf.AddMinutes(1));
+            await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(migrationTrigger));
+
+            var version = await client.ExecuteScalarAsync(databasePath, "PRAGMA user_version;");
+            var sourceTimestamp = await client.ExecuteScalarAsync(
+                databasePath,
+                "SELECT source_collected_at_utc FROM fleet_retained_coverage LIMIT 1;");
+            Assert.Equal(7, Convert.ToInt32(version));
+            Assert.Equal("2026-08-10T12:00:00.0000000+00:00", Convert.ToString(sourceTimestamp));
         }
         finally
         {

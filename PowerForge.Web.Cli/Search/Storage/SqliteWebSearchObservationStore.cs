@@ -8,7 +8,7 @@ namespace PowerForge.Web.Cli;
 
 internal sealed partial class SqliteWebSearchObservationStore
 {
-    internal const int CurrentSchemaVersion = 6;
+    internal const int CurrentSchemaVersion = 7;
 
     private const string CreateTablesSql = """
         CREATE TABLE IF NOT EXISTS search_observation_runs (
@@ -147,6 +147,7 @@ internal sealed partial class SqliteWebSearchObservationStore
             configuration_hash TEXT NOT NULL,
             from_date TEXT NOT NULL,
             through_date TEXT NOT NULL,
+            source_collected_at_utc TEXT NOT NULL,
             retained_at_utc TEXT NOT NULL,
             PRIMARY KEY (kind, provider, site_id, stream_key, configuration_hash, from_date, through_date)
         );
@@ -155,7 +156,7 @@ internal sealed partial class SqliteWebSearchObservationStore
     private const string CreateSchemaSql = CreateTablesSql + CreateIndexesSql +
                                            CreateTrafficTablesSql + CreateTrafficIndexesSql +
                                            CreatePerformanceTablesSql + CreatePerformanceIndexesSql +
-                                           CreateFleetTablesSql + "PRAGMA user_version = 6;";
+                                           CreateFleetTablesSql + "PRAGMA user_version = 7;";
 
     private const string FindVersionOneCollisionsSql = """
         SELECT provider, site_id, collected_at_utc
@@ -192,16 +193,24 @@ internal sealed partial class SqliteWebSearchObservationStore
         DROP TABLE search_observations_legacy;
         DROP TABLE search_observation_runs_legacy;
         """ + CreateIndexesSql + CreateTrafficTablesSql + CreateTrafficIndexesSql +
-        CreatePerformanceTablesSql + CreatePerformanceIndexesSql + CreateFleetTablesSql + "PRAGMA user_version = 6;";
+        CreatePerformanceTablesSql + CreatePerformanceIndexesSql + CreateFleetTablesSql + "PRAGMA user_version = 7;";
 
     private const string MigrateVersionThreeSql = CreateTrafficTablesSql + CreateTrafficIndexesSql +
                                                    CreatePerformanceTablesSql + CreatePerformanceIndexesSql +
-                                                   CreateFleetTablesSql + "PRAGMA user_version = 6;";
+                                                   CreateFleetTablesSql + "PRAGMA user_version = 7;";
 
     private const string MigrateVersionFourSql = CreatePerformanceTablesSql + CreatePerformanceIndexesSql +
-                                                  CreateFleetTablesSql + "PRAGMA user_version = 6;";
+                                                  CreateFleetTablesSql + "PRAGMA user_version = 7;";
 
-    private const string MigrateVersionFiveSql = CreateFleetTablesSql + "PRAGMA user_version = 6;";
+    private const string MigrateVersionFiveSql = CreateFleetTablesSql + "PRAGMA user_version = 7;";
+
+    private const string MigrateVersionSixSql = """
+        ALTER TABLE fleet_retained_coverage ADD COLUMN source_collected_at_utc TEXT NULL;
+        UPDATE fleet_retained_coverage
+        SET source_collected_at_utc = retained_at_utc
+        WHERE source_collected_at_utc IS NULL;
+        PRAGMA user_version = 7;
+        """;
 
     private readonly string _databasePath;
 
@@ -539,6 +548,12 @@ internal sealed partial class SqliteWebSearchObservationStore
                 {
                     await transaction.ExecuteNonQueryAsync(
                         MigrateVersionFiveSql,
+                        cancellationToken: token).ConfigureAwait(false);
+                }
+                else if (version == 6)
+                {
+                    await transaction.ExecuteNonQueryAsync(
+                        MigrateVersionSixSql,
                         cancellationToken: token).ConfigureAwait(false);
                 }
             },

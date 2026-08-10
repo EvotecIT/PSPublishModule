@@ -314,7 +314,7 @@ public sealed partial class WebPerformanceObservationTests
 
             var evidence = await store.QueryPerformanceEvidenceAsync(new WebPerformanceObservationQuery { SiteId = "officeimo", MeasurementKind = "field" });
 
-            Assert.Equal(6, first.DatabaseSchemaVersion);
+            Assert.Equal(7, first.DatabaseSchemaVersion);
             Assert.Equal(1, first.InsertedCount);
             Assert.Equal(1, duplicate.DuplicateCount);
             Assert.False(evidence.HasPartialEvidence);

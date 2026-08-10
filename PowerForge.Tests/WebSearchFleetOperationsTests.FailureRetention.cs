@@ -15,7 +15,7 @@ public sealed partial class WebSearchFleetOperationsTests
         var snapshot = new WebSearchFleetEvidenceSnapshot
         {
             StoreExists = true,
-            DatabaseSchemaVersion = 6,
+            DatabaseSchemaVersion = 7,
             Streams =
             [
                 Stream(

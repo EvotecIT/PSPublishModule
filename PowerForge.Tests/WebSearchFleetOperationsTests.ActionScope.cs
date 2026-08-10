@@ -35,7 +35,7 @@ public sealed partial class WebSearchFleetOperationsTests
         var report = WebSearchFleetPlanner.CreateReport(
             configuration,
             doctor,
-            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 6, Streams = [evidence] },
+            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 7, Streams = [evidence] },
             AsOf);
 
         Assert.False(doctor.Success);
@@ -65,7 +65,7 @@ public sealed partial class WebSearchFleetOperationsTests
         var item = Assert.Single(WebSearchFleetPlanner.CreateSchedule(
             configuration,
             doctor,
-            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 6 },
+            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 7 },
             AsOf).WorkItems, value => value.ProviderId == "gsc");
 
         Assert.False(doctor.Success);
@@ -87,12 +87,12 @@ public sealed partial class WebSearchFleetOperationsTests
         var plan = WebSearchFleetPlanner.CreateSchedule(
             configuration,
             doctor,
-            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 6 },
+            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 7 },
             AsOf);
         var report = WebSearchFleetPlanner.CreateReport(
             configuration,
             doctor,
-            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 6 },
+            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 7 },
             AsOf);
 
         Assert.False(doctor.Success);

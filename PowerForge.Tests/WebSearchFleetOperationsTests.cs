@@ -18,7 +18,7 @@ public sealed partial class WebSearchFleetOperationsTests
         var snapshot = new WebSearchFleetEvidenceSnapshot
         {
             StoreExists = true,
-            DatabaseSchemaVersion = 6,
+            DatabaseSchemaVersion = 7,
             Streams =
             [
                 Stream("gsc", WebSearchProviderCapabilities.SearchAnalytics, new DateOnly(2026, 8, 1), AsOf.AddDays(-1)),
@@ -64,7 +64,7 @@ public sealed partial class WebSearchFleetOperationsTests
         var snapshot = new WebSearchFleetEvidenceSnapshot
         {
             StoreExists = true,
-            DatabaseSchemaVersion = 6,
+            DatabaseSchemaVersion = 7,
             Streams =
             [
                 new WebSearchFleetEvidenceStream
@@ -100,7 +100,7 @@ public sealed partial class WebSearchFleetOperationsTests
         var snapshot = new WebSearchFleetEvidenceSnapshot
         {
             StoreExists = true,
-            DatabaseSchemaVersion = 6,
+            DatabaseSchemaVersion = 7,
             Streams =
             [
                 Stream("gsc", WebSearchProviderCapabilities.SearchAnalytics, new DateOnly(2026, 8, 7), AsOf.AddHours(-1)),
@@ -187,7 +187,7 @@ public sealed partial class WebSearchFleetOperationsTests
             var snapshot = await store.ReadFleetSnapshotAsync();
 
             Assert.True(snapshot.StoreExists);
-            Assert.Equal(6, snapshot.DatabaseSchemaVersion);
+            Assert.Equal(7, snapshot.DatabaseSchemaVersion);
             Assert.Equal(3, snapshot.Streams.Length);
             Assert.Equal(new DateOnly(2026, 8, 7), Assert.Single(snapshot.Streams, value => value.Capability == WebSearchProviderCapabilities.SearchAnalytics).LatestCompleteDate);
             Assert.Equal(new DateOnly(2026, 8, 9), Assert.Single(snapshot.Streams, value => value.Capability == WebSearchProviderCapabilities.TrafficAnalytics).LatestCompleteDate);
@@ -427,7 +427,7 @@ public sealed partial class WebSearchFleetOperationsTests
         var plan = WebSearchFleetPlanner.CreateSchedule(
             configuration,
             doctor,
-            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 6, Streams = [gscEvidence] },
+            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 7, Streams = [gscEvidence] },
             AsOf);
 
         Assert.DoesNotContain(plan.WorkItems, value => value.ProviderId == "gsc");
@@ -476,7 +476,7 @@ public sealed partial class WebSearchFleetOperationsTests
         var snapshot = new WebSearchFleetEvidenceSnapshot
         {
             StoreExists = true,
-            DatabaseSchemaVersion = 6,
+            DatabaseSchemaVersion = 7,
             Streams =
             [
                 Stream(
@@ -509,7 +509,7 @@ public sealed partial class WebSearchFleetOperationsTests
         var plan = WebSearchFleetPlanner.CreateSchedule(
             configuration,
             doctor,
-            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 6, Streams = [stream] },
+            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 7, Streams = [stream] },
             AsOf);
 
         Assert.True(doctor.Success);

@@ -32,6 +32,7 @@ internal sealed partial class SqliteWebSearchObservationStore
             search = search.Where(value => value.CollectedAtUtc <= cutoff).ToArray();
             traffic = traffic.Where(value => value.CollectedAtUtc <= cutoff).ToArray();
             performance = performance.Where(value => value.CollectedAtUtc <= cutoff).ToArray();
+            retainedCoverage = retainedCoverage.Where(value => value.SourceCollectedAtUtc <= cutoff).ToArray();
         }
         search = search.Concat(retainedCoverage.Where(value => value.Kind == "search").Select(ToCoverageFleetRun)).ToArray();
         traffic = traffic.Concat(retainedCoverage.Where(value => value.Kind == "traffic").Select(ToCoverageFleetRun)).ToArray();
@@ -91,13 +92,16 @@ internal sealed partial class SqliteWebSearchObservationStore
                     {
                         await transaction.ExecuteNonQueryAsync(
                             """
-                            INSERT OR IGNORE INTO fleet_retained_coverage (
+                            INSERT INTO fleet_retained_coverage (
                                 kind, provider, site_id, stream_key, configuration_hash,
-                                from_date, through_date, retained_at_utc
+                                from_date, through_date, source_collected_at_utc, retained_at_utc
                             ) VALUES (
                                 @kind, @provider, @site_id, @stream_key, @configuration_hash,
-                                @from_date, @through_date, @retained_at_utc
-                            );
+                                @from_date, @through_date, @source_collected_at_utc, @retained_at_utc
+                            )
+                            ON CONFLICT(kind, provider, site_id, stream_key, configuration_hash, from_date, through_date)
+                            DO UPDATE SET
+                                source_collected_at_utc = MIN(source_collected_at_utc, excluded.source_collected_at_utc);
                             """,
                             RetainedCoverageParameters(coverage), token).ConfigureAwait(false);
                     }
@@ -292,12 +296,13 @@ internal sealed partial class SqliteWebSearchObservationStore
             _databasePath,
             """
             SELECT kind, provider, site_id, stream_key, NULLIF(configuration_hash, ''),
-                   from_date, through_date, retained_at_utc
+                   from_date, through_date, source_collected_at_utc, retained_at_utc
             FROM fleet_retained_coverage;
             """,
             static record => new FleetRetainedCoverage(
                 record.GetString(0), record.GetString(1), record.GetString(2), record.GetString(3), NullableString(record, 4),
-                ParseFleetDate(record.GetString(5)), ParseFleetDate(record.GetString(6)), ParseFleetTimestamp(record.GetString(7))),
+                ParseFleetDate(record.GetString(5)), ParseFleetDate(record.GetString(6)),
+                ParseFleetTimestamp(record.GetString(7)), ParseFleetTimestamp(record.GetString(8))),
             cancellationToken: cancellationToken).ConfigureAwait(false);
         return values.ToArray();
     }
@@ -307,7 +312,7 @@ internal sealed partial class SqliteWebSearchObservationStore
         value.Provider,
         value.SiteId,
         $"coverage:{value.Kind}:{value.StreamKey}:{value.FromDate:yyyy-MM-dd}:{value.ThroughDate:yyyy-MM-dd}",
-        value.RetainedAtUtc,
+        value.SourceCollectedAtUtc,
         "coverage-summary",
         value.StreamKey,
         [new WebSearchFleetCompletedRange { FromDate = value.FromDate, ThroughDate = value.ThroughDate }],
@@ -409,7 +414,7 @@ internal sealed partial class SqliteWebSearchObservationStore
             .Where(value => candidateIdentities.Contains(FleetRunIdentity(value)))
             .SelectMany(value => value.CompletedRanges.Select(range => new FleetRetainedCoverage(
                 kind, value.Provider, value.SiteId, value.StreamKey, value.ConfigurationHash,
-                range.FromDate, range.ThroughDate, retainedAtUtc)))
+                range.FromDate, range.ThroughDate, value.CollectedAtUtc, retainedAtUtc)))
             .Distinct()
             .ToArray();
         return new RetentionPlan(runTable, observationTable, candidates, coverageSummaries, new WebSearchFleetRetentionKindResult
@@ -534,6 +539,7 @@ internal sealed partial class SqliteWebSearchObservationStore
         ["@configuration_hash"] = value.ConfigurationHash ?? string.Empty,
         ["@from_date"] = value.FromDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         ["@through_date"] = value.ThroughDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        ["@source_collected_at_utc"] = value.SourceCollectedAtUtc.ToString("O", CultureInfo.InvariantCulture),
         ["@retained_at_utc"] = value.RetainedAtUtc.ToString("O", CultureInfo.InvariantCulture)
     };
 
@@ -588,6 +594,7 @@ internal sealed partial class SqliteWebSearchObservationStore
         string? ConfigurationHash,
         DateOnly FromDate,
         DateOnly ThroughDate,
+        DateTimeOffset SourceCollectedAtUtc,
         DateTimeOffset RetainedAtUtc);
 
     private sealed record RetentionPlan(

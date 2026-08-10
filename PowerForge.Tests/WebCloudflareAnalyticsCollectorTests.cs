@@ -441,7 +441,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
             var second = await searchStore.ImportTrafficAsync(traffic);
             var stored = await searchStore.QueryTrafficAsync(new WebTrafficObservationQuery { SiteId = "officeimo" });
 
-            Assert.Equal(6, first.DatabaseSchemaVersion);
+            Assert.Equal(7, first.DatabaseSchemaVersion);
             Assert.Equal(1, first.InsertedCount);
             Assert.Equal(1, second.DuplicateCount);
             Assert.Single(stored);

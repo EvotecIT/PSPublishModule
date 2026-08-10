@@ -388,7 +388,7 @@ public sealed partial class WebSearchIntelligenceTests
             };
 
             Assert.All(imports, result => Assert.Equal(1, result.InsertedCount));
-            Assert.All(imports, result => Assert.Equal(6, result.DatabaseSchemaVersion));
+            Assert.All(imports, result => Assert.Equal(7, result.DatabaseSchemaVersion));
             Assert.Single(await store.QueryAsync(new WebSearchObservationQuery
             {
                 SiteId = "officeimo",
