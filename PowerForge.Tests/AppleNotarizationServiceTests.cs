@@ -245,6 +245,34 @@ public sealed partial class AppleNotarizationServiceTests
     }
 
     [Fact]
+    public async Task NotarizeAsync_RejectsTransientPrivateArtifactReplacementAfterStaplerValidation()
+    {
+        var artifact = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(artifact, "approved-pkg");
+        try
+        {
+            var checkpointed = false;
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(new TransientPostValidationMutationRunner()).NotarizeAsync(
+                    new AppleNotarizationRequest
+                    {
+                        ArtifactPath = artifact,
+                        KeychainProfile = "powerforge-notary",
+                        Assess = false,
+                        StapledCheckpoint = _ => checkpointed = true
+                    }));
+
+            Assert.Contains("validated private Apple notarization artifact changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("approved-pkg", await File.ReadAllTextAsync(artifact));
+            Assert.False(checkpointed);
+        }
+        finally
+        {
+            try { File.Delete(artifact); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task NotarizeAsync_AcceptedCheckpointFailureReportsSubmissionBeforeStapling()
     {
         var artifact = Path.GetTempFileName() + ".pkg";
@@ -780,6 +808,39 @@ public sealed partial class AppleNotarizationServiceTests
                 TimeSpan.FromMilliseconds(1),
                 false);
             return Task.FromResult(result);
+        }
+    }
+
+    private sealed class TransientPostValidationMutationRunner : IProcessRunner
+    {
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            var notarySubmission = request.Arguments.Count > 0 && request.Arguments[0] == "notarytool";
+            if (request.Arguments.Count > 2 &&
+                request.Arguments[0] == "stapler" &&
+                request.Arguments[1] == "staple")
+            {
+                File.AppendAllText(request.Arguments[2], "-stapled");
+            }
+            if (request.Arguments.Count > 2 &&
+                request.Arguments[0] == "stapler" &&
+                request.Arguments[1] == "validate")
+            {
+                var validatedBytes = File.ReadAllBytes(request.Arguments[2]);
+                File.WriteAllText(request.Arguments[2], "attacker-replacement");
+                File.WriteAllBytes(request.Arguments[2], validatedBytes);
+            }
+
+            var output = notarySubmission
+                ? JsonSerializer.Serialize(new { id = "submission-transient-replacement", status = "Accepted" })
+                : "ok";
+            return Task.FromResult(new ProcessRunResult(
+                0,
+                output,
+                string.Empty,
+                request.FileName,
+                TimeSpan.FromMilliseconds(1),
+                false));
         }
     }
 

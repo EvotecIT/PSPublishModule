@@ -270,6 +270,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .Select(static value => value!.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0])
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var shippingSources = ResolveShippingSourceOwnership(objects, metadataPath);
         var cache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var validatedLocalPackageRoots = new HashSet<string>(GetPathComparer());
 
@@ -362,7 +363,8 @@ internal sealed partial class AppleReleaseSourceTrustService
                 item,
                 metadataPath,
                 generatedOutputPaths,
-                buildFileReferences);
+                buildFileReferences,
+                shippingSources);
         }
     }
 
@@ -562,7 +564,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         PbxObject item,
         string metadataPath,
         IReadOnlyCollection<string> generatedOutputPaths,
-        ISet<string> buildFileReferences)
+        ISet<string> buildFileReferences,
+        ShippingSourceOwnership shippingSources)
     {
         EnsurePathWithinRepository(repositoryRoot, candidate, $"Xcode {item.Isa} input");
         var directoryFileReferenceIsBuilt =
@@ -578,15 +581,29 @@ internal sealed partial class AppleReleaseSourceTrustService
         {
             EnsureNoGeneratedOutputOverlap(candidate, generatedOutputPaths, $"Xcode {item.Isa} input");
         }
+        var isShippingSource = shippingSources.FileReferences.Contains(item.Id) ||
+                               shippingSources.SynchronizedRoots.Contains(item.Id);
         if (File.Exists(candidate))
-            EnsureTrackedFile(repositoryRoot, candidate, $"Xcode {item.Isa} input");
+        {
+            EnsureTrackedFile(
+                repositoryRoot,
+                candidate,
+                $"Xcode {item.Isa} input",
+                validateSwiftDeterminism: false);
+            if (isShippingSource && Path.GetExtension(candidate).Equals(".swift", StringComparison.OrdinalIgnoreCase))
+                ValidateSourceLevelIncludes(repositoryRoot, candidate, validateSwiftDeterminism: true);
+        }
         else if (Directory.Exists(candidate))
         {
             if (directoryFileReferenceIsBuilt ||
                 item.Isa.Equals("XCVersionGroup", StringComparison.OrdinalIgnoreCase) ||
                 item.Isa.Equals("PBXFileSystemSynchronizedRootGroup", StringComparison.OrdinalIgnoreCase))
             {
-                EnsureTrackedDirectoryTree(repositoryRoot, candidate, $"Xcode {item.Isa} input");
+                EnsureTrackedDirectoryTree(
+                    repositoryRoot,
+                    candidate,
+                    $"Xcode {item.Isa} input",
+                    validateSwiftDeterminism: isShippingSource);
             }
             else
             {
@@ -603,7 +620,11 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
     }
 
-    private void EnsureTrackedDirectoryTree(string repositoryRoot, string path, string name)
+    private void EnsureTrackedDirectoryTree(
+        string repositoryRoot,
+        string path,
+        string name,
+        bool validateSwiftDeterminism = false)
     {
         EnsureDirectoryWithinRepository(repositoryRoot, path, name);
         var relativeRoot = FrameworkCompatibility.GetRelativePath(repositoryRoot, path).Replace('\\', '/');
@@ -640,7 +661,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                         $"{name} differs from the exact source commit: " +
                         FrameworkCompatibility.GetRelativePath(repositoryRoot, entry).Replace('\\', '/'));
                 }
-                ValidateSourceLevelIncludes(repositoryRoot, fullPath);
+                ValidateSourceLevelIncludes(repositoryRoot, fullPath, validateSwiftDeterminism);
             }
         }
     }

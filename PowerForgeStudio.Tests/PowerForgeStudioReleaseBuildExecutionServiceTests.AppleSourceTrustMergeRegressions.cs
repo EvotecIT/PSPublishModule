@@ -226,6 +226,104 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("/tmp/injected.h", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ResolveExactAppleSourceCommit_validates_c_preprocessor_digraph_includes()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("DigraphIncludeRepo");
+        var project = scope.CreateDirectory(Path.Combine("DigraphIncludeRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Source.m; sourceTree = \"<group>\"; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Source.m"), "%:include \"/tmp/injected.h\"\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("/tmp/injected.h", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("absolute preprocessor include", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("Source.m", "const char *path = __FILE__;", "__FILE__")]
+    [InlineData("Source.m", "const char *path = __BASE_FILE__;", "__BASE_FILE__")]
+    [InlineData("Source.m", "const char *path = __builtin_FILE();", "__builtin_FILE")]
+    [InlineData("Source.cpp", "auto location = std::source_location::current();", "source_location")]
+    [InlineData("Source.m", "#define PATH_TOKEN __FI %:%: LE__", "__FILE__")]
+    [InlineData("Source.swift", "let path = #filePath", "#filePath")]
+    [InlineData("Source.swift", "let path = #file", "#file")]
+    public void ResolveExactAppleSourceCommit_rejects_snapshot_path_compiler_identifiers(
+        string sourceName,
+        string source,
+        string expectedIdentifier)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("SnapshotPathIdentifierRepo" + sourceName.Length + expectedIdentifier.Length);
+        var project = scope.CreateDirectory(Path.Combine(
+            "SnapshotPathIdentifierRepo" + sourceName.Length + expectedIdentifier.Length,
+            "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            $"000000000000000000000002 = {{ isa = PBXFileReference; path = {sourceName}; sourceTree = \"<group>\"; }}; " +
+            "000000000000000000000003 = { isa = PBXSourcesBuildPhase; files = (000000000000000000000001,); }; " +
+            "000000000000000000000004 = { isa = PBXNativeTarget; buildPhases = (000000000000000000000003,); productType = \"com.apple.product-type.application\"; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, sourceName), source + "\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains(expectedIdentifier, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_allows_snapshot_path_literal_in_ui_test_only_source()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("UiTestSnapshotPathLiteralRepo");
+        var project = scope.CreateDirectory(Path.Combine("UiTestSnapshotPathLiteralRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = UiTests.swift; sourceTree = \"<group>\"; }; " +
+            "000000000000000000000003 = { isa = PBXSourcesBuildPhase; files = (000000000000000000000001,); }; " +
+            "000000000000000000000004 = { isa = PBXNativeTarget; buildPhases = (000000000000000000000003,); productType = \"com.apple.product-type.bundle.ui-testing\"; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "UiTests.swift"), "let source = #filePath\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var sourceCommit = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(ReadFixtureHead(repositoryRoot), sourceCommit);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_snapshot_path_literal_in_shipping_synchronized_source_root()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("SynchronizedSnapshotPathLiteralRepo");
+        var sourceRoot = scope.CreateDirectory(Path.Combine("SynchronizedSnapshotPathLiteralRepo", "Sources"));
+        var project = scope.CreateDirectory(Path.Combine("SynchronizedSnapshotPathLiteralRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000002 = { isa = PBXFileReference; path = Source.swift; sourceTree = \"<group>\"; }; " +
+            "000000000000000000000003 = { isa = PBXFileSystemSynchronizedRootGroup; path = Sources; sourceTree = \"<group>\"; children = (000000000000000000000002,); }; " +
+            "000000000000000000000004 = { isa = PBXNativeTarget; buildPhases = (); fileSystemSynchronizedGroups = (000000000000000000000003,); productType = \"com.apple.product-type.application\"; };");
+        File.WriteAllText(Path.Combine(sourceRoot, "Source.swift"), "let source = #filePath\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("#filePath", exception.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("__DATE__")]
     [InlineData("__TIME__")]
@@ -262,7 +360,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             "000000000000000000000002 = { isa = PBXFileReference; path = Source.m; sourceTree = \"<group>\"; };");
         File.WriteAllText(
             Path.Combine(repositoryRoot, "Source.m"),
-            "// __DATE__\nconst char *documentation = \"__TIME__ and __TIMESTAMP__\";\n");
+            "// __DATE__ and __FILE__\nconst char *documentation = \"__TIME__, __TIMESTAMP__, __BASE_FILE__, and source_location\";\n");
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         CommitRepository(repositoryRoot);
 

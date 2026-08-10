@@ -7,20 +7,31 @@ internal sealed partial class AppleReleaseSourceTrustService
     private static readonly HashSet<string> SourceIncludeExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".c", ".cc", ".cpp", ".cxx", ".m", ".mm", ".metal", ".s",
-        ".h", ".hh", ".hpp", ".hxx", ".inc", ".pch", ".modulemap"
+        ".h", ".hh", ".hpp", ".hxx", ".inc", ".pch", ".modulemap", ".swift"
     };
 
-    private void ValidateSourceLevelIncludes(string repositoryRoot, string sourcePath)
+    private void ValidateSourceLevelIncludes(
+        string repositoryRoot,
+        string sourcePath,
+        bool validateSwiftDeterminism = false)
     {
         if (!SourceIncludeExtensions.Contains(Path.GetExtension(sourcePath)))
             return;
         var fullSourcePath = Path.GetFullPath(sourcePath);
+        var extension = Path.GetExtension(fullSourcePath);
+        if (extension.Equals(".swift", StringComparison.OrdinalIgnoreCase) && !validateSwiftDeterminism)
+            return;
         if (!_validatedSourceIncludeFiles.Add(fullSourcePath))
             return;
 
-        if (Path.GetExtension(fullSourcePath).Equals(".modulemap", StringComparison.OrdinalIgnoreCase))
+        if (extension.Equals(".modulemap", StringComparison.OrdinalIgnoreCase))
         {
             ValidateClangModuleMapInputs(repositoryRoot, fullSourcePath);
+            return;
+        }
+        if (extension.Equals(".swift", StringComparison.OrdinalIgnoreCase))
+        {
+            ValidateSwiftSourceDeterminism(fullSourcePath);
             return;
         }
 
@@ -36,7 +47,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
         foreach (Match directive in Regex.Matches(
                      source,
-                     "(?m)^[ \\t]*#[ \\t]*(?:include|include_next|import)[ \\t]+(?<operand>[^\\r\\n]+)",
+                     "(?m)^[ \\t]*(?:#|%:)[ \\t]*(?:include|include_next|import)[ \\t]+(?<operand>[^\\r\\n]+)",
                      RegexOptions.CultureInvariant))
         {
             var operand = Regex.Replace(directive.Groups["operand"].Value, "[ \\t]*(?://.*)?$", string.Empty).Trim();
@@ -68,6 +79,24 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (File.Exists(candidate))
                 EnsureTrackedFile(repositoryRoot, candidate, $"preprocessor include from {fullSourcePath}");
         }
+    }
+
+    private static void ValidateSwiftSourceDeterminism(string sourcePath)
+    {
+        var contents = File.ReadAllText(sourcePath);
+        if (contents.IndexOf("#file", StringComparison.Ordinal) < 0)
+            return;
+        var syntax = MaskSwiftStringLiterals(RemoveSwiftComments(contents));
+        var locationLiteral = Regex.Match(
+            syntax,
+            "(?<![A-Za-z0-9_])#(?<literal>file|filePath)(?![A-Za-z0-9_])",
+            RegexOptions.CultureInvariant);
+        if (!locationLiteral.Success)
+            return;
+        throw new InvalidOperationException(
+            $"Swift source input '{sourcePath}' uses snapshot-path compiler literal '#{locationLiteral.Groups["literal"].Value}', " +
+            "which exposes changing checkout or host state and cannot be bound to one reproducible detached source location. " +
+            "Use #fileID or an explicit stable identifier instead.");
     }
 
     private void ValidateClangModuleMapInputs(string repositoryRoot, string moduleMapPath)
@@ -123,7 +152,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         if (found is not null)
             return found;
 
-        var tokenPasted = Regex.Replace(masked, "[ \\t\\r\\n]*##[ \\t\\r\\n]*", string.Empty);
+        var tokenPasted = Regex.Replace(masked, "[ \\t\\r\\n]*(?:##|%:%:)[ \\t\\r\\n]*", string.Empty);
         return FindNondeterministicCompilerIdentifier(tokenPasted);
     }
 
@@ -138,7 +167,9 @@ internal sealed partial class AppleReleaseSourceTrustService
                    (source[index + 1] == '_' || char.IsLetterOrDigit(source[index + 1])))
                 index++;
             var identifier = source.Substring(start, index - start + 1);
-            if (identifier is "__DATE__" or "__TIME__" or "__TIMESTAMP__")
+            if (identifier is "__DATE__" or "__TIME__" or "__TIMESTAMP__" or
+                "__FILE__" or "__BASE_FILE__" or "__builtin_FILE" or
+                "__builtin_source_location" or "source_location")
                 return identifier;
         }
         return null;

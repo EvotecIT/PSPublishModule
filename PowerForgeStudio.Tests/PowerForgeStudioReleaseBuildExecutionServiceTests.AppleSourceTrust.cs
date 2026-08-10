@@ -240,7 +240,11 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             """
             000000000000000000000000 = { isa = PBXBuildFile; fileRef = 000000000000000000000001; };
             000000000000000000000001 = { isa = PBXFileReference; path = SampleExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-            000000000000000000000002 = { isa = PBXNativeTarget; productReference = 000000000000000000000001; };
+            000000000000000000000002 = {
+                isa = PBXNativeTarget;
+                productReference = 000000000000000000000001;
+                productType = "com.apple.product-type.app-extension";
+            };
             """);
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         var sourceCommit = CommitRepository(repositoryRoot);
