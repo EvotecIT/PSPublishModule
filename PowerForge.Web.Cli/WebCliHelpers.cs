@@ -27,6 +27,9 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web observe collect --config <search-providers.json> --database <search.db> --site <id> --provider <id>");
         Console.WriteLine("                     --from <yyyy-MM-dd> --to <yyyy-MM-dd> [--search-type <type>] [--evidence <reference>] [--output json]");
         Console.WriteLine("  powerforge-web observe import --input <observations.json> --database <search.db> [--provider <id>] [--site <id>] [--output json]");
+        Console.WriteLine("  powerforge-web observe import-bing --config <search-providers.json> --input <export.csv> --database <search.db>");
+        Console.WriteLine("                     --site <id> --provider <id> --from <yyyy-MM-dd> --to <yyyy-MM-dd> --collected-at <ISO-8601-with-offset>");
+        Console.WriteLine("                     [--search-type <type>] [--evidence <reference>] [--output json]");
         Console.WriteLine("  powerforge-web opportunity list --database <search.db> --site <id> [--provider <id>] [--from <yyyy-MM-dd>] [--to <yyyy-MM-dd>]");
         Console.WriteLine("                     [--min-impressions <n>] [--min-ctr <0-1>] [--output json]");
         Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");

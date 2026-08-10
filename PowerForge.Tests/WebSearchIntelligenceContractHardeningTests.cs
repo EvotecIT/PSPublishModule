@@ -229,6 +229,29 @@ public sealed partial class WebSearchIntelligenceTests
     }
 
     [Fact]
+    public void ObservationSchema_VersionThreeRequiresADeclaredCoverageMode()
+    {
+        var batch = CreateBatch();
+        batch.SchemaVersion = 3;
+        batch.CollectionCoverage = new WebSearchObservationCollectionCoverage
+        {
+            Mode = "snapshot",
+            FromDate = new DateOnly(2026, 8, 1),
+            ThroughDate = new DateOnly(2026, 8, 7),
+            SearchType = "web",
+            CompletedDates = [new DateOnly(2026, 8, 1)]
+        };
+        var documented = JsonNode.Parse(JsonSerializer.Serialize(batch))!;
+        var missingMode = documented.DeepClone();
+        missingMode["collectionCoverage"]!.AsObject().Remove("mode");
+        var schema = LoadObservationSchema();
+
+        Assert.True(schema.Evaluate(documented, new EvaluationOptions()).IsValid);
+        Assert.False(schema.Evaluate(missingMode, new EvaluationOptions()).IsValid);
+        Assert.Single(WebSearchObservationNormalizer.Normalize(batch).CollectionCoverage!.CompletedDates);
+    }
+
+    [Fact]
     public async Task SqliteStore_ScopesExternalRunIdentifiersByProviderAndSite()
     {
         var root = CreateTemporaryDirectory();

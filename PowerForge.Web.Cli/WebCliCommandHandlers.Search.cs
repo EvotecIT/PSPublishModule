@@ -16,13 +16,14 @@ internal static partial class WebCliCommandHandlers
         int outputSchemaVersion)
     {
         if (subArgs.Length == 0)
-            return FailSearch("Observe requires the 'import' or 'collect' action.", outputJson, logger, "web.observe");
+            return FailSearch("Observe requires the 'import', 'import-bing' or 'collect' action.", outputJson, logger, "web.observe");
 
         return subArgs[0].ToLowerInvariant() switch
         {
             "import" => HandleObserveImport(subArgs.Skip(1).ToArray(), outputJson, logger, outputSchemaVersion),
+            "import-bing" => HandleObserveImportBing(subArgs.Skip(1).ToArray(), outputJson, logger, outputSchemaVersion),
             "collect" => HandleObserveCollect(subArgs.Skip(1).ToArray(), outputJson, logger, outputSchemaVersion),
-            _ => FailSearch("Observe requires the 'import' or 'collect' action.", outputJson, logger, "web.observe")
+            _ => FailSearch("Observe requires the 'import', 'import-bing' or 'collect' action.", outputJson, logger, "web.observe")
         };
     }
 

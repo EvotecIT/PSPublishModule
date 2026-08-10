@@ -345,6 +345,7 @@ public sealed class GoogleSearchConsoleCollector
                 EvidenceReference = options.EvidenceReference,
                 CollectionCoverage = new WebSearchObservationCollectionCoverage
                 {
+                    Mode = "daily",
                     FromDate = options.FromDate,
                     ThroughDate = options.ThroughDate,
                     SearchType = options.SearchType,

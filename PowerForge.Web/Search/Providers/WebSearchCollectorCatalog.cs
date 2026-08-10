@@ -9,6 +9,10 @@ public static class WebSearchCollectorCatalog
         new Dictionary<string, IReadOnlySet<string>>(StringComparer.OrdinalIgnoreCase)
         {
             [GoogleSearchConsoleCollector.ProviderKind] = GoogleSearchConsoleCollector.AvailableCapabilities
+                .ToFrozenSet(StringComparer.OrdinalIgnoreCase),
+            [BingWebmasterCollector.ProviderKind] = BingWebmasterCollector.AvailableCapabilities
+                .ToFrozenSet(StringComparer.OrdinalIgnoreCase),
+            [BingWebmasterCsvExportParser.ProviderKind] = BingWebmasterCsvExportParser.AvailableCapabilities
                 .ToFrozenSet(StringComparer.OrdinalIgnoreCase)
         }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 

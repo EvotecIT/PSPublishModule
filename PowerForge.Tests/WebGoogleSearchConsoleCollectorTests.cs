@@ -444,6 +444,7 @@ public sealed partial class WebGoogleSearchConsoleCollectorTests
             Status = "partial",
             CollectionCoverage = new WebSearchObservationCollectionCoverage
             {
+                Mode = "daily",
                 FromDate = new DateOnly(2026, 8, 1),
                 ThroughDate = new DateOnly(2026, 8, 3),
                 SearchType = "web",
@@ -781,6 +782,7 @@ public sealed partial class WebGoogleSearchConsoleCollectorTests
         Status = status,
         CollectionCoverage = new WebSearchObservationCollectionCoverage
         {
+            Mode = "daily",
             FromDate = new DateOnly(2026, 8, 1),
             ThroughDate = new DateOnly(2026, 8, 1),
             SearchType = "web",

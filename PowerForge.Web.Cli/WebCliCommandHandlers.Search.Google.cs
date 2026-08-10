@@ -74,8 +74,24 @@ internal static partial class WebCliCommandHandlers
                 provider,
                 WebSearchProviderCapabilities.SearchAnalytics,
                 useSelectedCredential: true);
+            if (provider.Kind.Equals(BingWebmasterCollector.ProviderKind, StringComparison.Ordinal))
+            {
+                return HandleBingObserveCollect(
+                    site,
+                    provider,
+                    doctor.ConfigurationHash!,
+                    loaded.FullPath,
+                    databasePath,
+                    fromDate,
+                    throughDate,
+                    searchType,
+                    TryGetOptionValue(args, "--evidence"),
+                    outputJson,
+                    logger,
+                    outputSchemaVersion);
+            }
             if (!provider.Kind.Equals(GoogleSearchConsoleCollector.ProviderKind, StringComparison.Ordinal))
-                return FailSearch("Observe collect currently supports only Google Search Console providers.", outputJson, logger, "web.observe.collect");
+                return FailSearch("Observe collect supports Google Search Console and Bing Webmaster API providers.", outputJson, logger, "web.observe.collect");
             if (!provider.Capabilities.Contains(WebSearchProviderCapabilities.SearchAnalytics, StringComparer.Ordinal))
                 return FailSearch("Google Search Console provider must request search.analytics.", outputJson, logger, "web.observe.collect");
             if (provider.Credential is null)
