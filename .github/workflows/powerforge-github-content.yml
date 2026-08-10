@@ -50,7 +50,7 @@ jobs:
           }
 
       - name: Checkout caller repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           # Resolve the branch when this serialized job actually starts. The event SHA
           # may predate a generated-content commit pushed by an earlier queued run.
@@ -86,7 +86,7 @@ jobs:
           "ref=$ref" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Checkout PowerForge
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           repository: ${{ steps.workflow_source.outputs.repository }}
           ref: ${{ steps.workflow_source.outputs.ref }}

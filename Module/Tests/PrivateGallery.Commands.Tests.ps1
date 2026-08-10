@@ -183,7 +183,7 @@ Describe 'Private gallery command metadata' {
         $workflow | Should -Match 'GenerateDisposablePackage'
         $workflow | Should -Match 'private-gallery-live\.evidence\.json'
         $workflow | Should -Match 'GITHUB_STEP_SUMMARY'
-        $workflow | Should -Match 'actions/upload-artifact@v4'
+        $workflow | Should -Match 'actions/upload-artifact@v7'
     }
 
     It 'offers pre-merge live validation through the existing module build workflow' {

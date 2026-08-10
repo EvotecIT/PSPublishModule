@@ -181,7 +181,7 @@ jobs:
       workflow_sha: ${{ steps.guardrail_source.outputs.sha }}
     steps:
       - name: Checkout caller repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ github.token }}
           ref: ${{ inputs.source_ref || github.event.pull_request.head.sha || github.sha }}
@@ -203,7 +203,7 @@ jobs:
           "sha=$($sha.ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Checkout shared guardrail
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ steps.guardrail_source.outputs.repository }}
           ref: ${{ steps.guardrail_source.outputs.sha }}
@@ -288,12 +288,12 @@ jobs:
       contents: read
     steps:
       - name: Checkout exact caller source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.build.outputs.source_sha }}
 
       - name: Checkout shared deployment action
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ needs.guardrails.outputs.workflow_repository }}
           ref: ${{ needs.guardrails.outputs.workflow_sha }}
