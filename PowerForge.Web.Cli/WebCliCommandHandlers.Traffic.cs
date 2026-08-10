@@ -73,6 +73,12 @@ internal static partial class WebCliCommandHandlers
                 throw new ArgumentException("Cloudflare analytics requires a credential reference.");
             if (!provider.Settings.TryGetValue("zoneId", out var zoneId) || string.IsNullOrWhiteSpace(zoneId))
                 throw new ArgumentException("Cloudflare analytics requires the zoneId setting.");
+            var doctor = InspectProviderAction(
+                loaded.Configuration,
+                site,
+                provider,
+                WebSearchProviderCapabilities.TrafficAnalytics,
+                useSelectedCredential: true);
 
             var tokenProvider = CloudflareEnvironmentApiTokenProvider.Create(provider.Credential);
             using var httpClient = new HttpClient();
@@ -85,7 +91,7 @@ internal static partial class WebCliCommandHandlers
                 SiteBaseUrl = site.BaseUrl,
                 FromDate = fromDate,
                 ThroughDate = throughDate,
-                ConfigurationHash = doctor.ConfigurationHash,
+                ConfigurationHash = doctor.ConfigurationHash!,
                 EvidenceReference = TryGetOptionValue(args, "--evidence")
             }).GetAwaiter().GetResult();
             var normalized = WebTrafficObservationNormalizer.Normalize(collection.Batch);

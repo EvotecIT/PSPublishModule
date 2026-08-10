@@ -217,8 +217,9 @@ public sealed class WebPerformanceObservationTests
             Assert.Equal(1, first.InsertedCount);
             Assert.Equal(1, duplicate.DuplicateCount);
             Assert.False(evidence.HasPartialEvidence);
-            Assert.Equal(2300, Assert.Single(evidence.Observations).Value);
-            Assert.Equal(complete.RunId, Assert.Single(evidence.SelectedRuns).RunId);
+            var evidenceSet = Assert.Single(evidence.EvidenceSets);
+            Assert.Equal(2300, Assert.Single(evidenceSet.Observations).Value);
+            Assert.Equal(complete.RunId, evidenceSet.Run.RunId);
         }
         finally
         {
@@ -244,10 +245,11 @@ public sealed class WebPerformanceObservationTests
             await store.ImportPerformanceAsync(desktop);
             var evidence = await store.QueryPerformanceEvidenceAsync(new WebPerformanceObservationQuery { SiteId = "officeimo" });
 
-            Assert.Equal(2, evidence.SelectedRuns.Length);
-            Assert.Equal(2, evidence.Observations.Length);
-            Assert.Contains(evidence.SelectedRuns, value => value.FormFactor == "phone");
-            Assert.Contains(evidence.SelectedRuns, value => value.FormFactor == "desktop");
+            Assert.Equal(2, evidence.EvidenceSets.Length);
+            var phoneSet = Assert.Single(evidence.EvidenceSets, value => value.Run.FormFactor == "phone");
+            var desktopSet = Assert.Single(evidence.EvidenceSets, value => value.Run.FormFactor == "desktop");
+            Assert.Equal(2300, Assert.Single(phoneSet.Observations).Value);
+            Assert.Equal(1800, Assert.Single(desktopSet.Observations).Value);
         }
         finally
         {
@@ -277,9 +279,9 @@ public sealed class WebPerformanceObservationTests
 
             Assert.Equal(1, first.InsertedCount);
             Assert.Equal(1, second.InsertedCount);
-            Assert.Single(officeEvidence.Observations);
-            Assert.Single(tactraEvidence.Observations);
-            Assert.NotEqual(officeEvidence.Observations[0].ObservationKey, tactraEvidence.Observations[0].ObservationKey);
+            var officeObservation = Assert.Single(Assert.Single(officeEvidence.EvidenceSets).Observations);
+            var tactraObservation = Assert.Single(Assert.Single(tactraEvidence.EvidenceSets).Observations);
+            Assert.NotEqual(officeObservation.ObservationKey, tactraObservation.ObservationKey);
         }
         finally
         {
@@ -371,6 +373,82 @@ public sealed class WebPerformanceObservationTests
                 outputJson: true, logger: new WebConsoleLogger(), outputSchemaVersion: 1);
 
             Assert.Equal(2, exitCode);
+            Assert.False(File.Exists(databasePath));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LighthouseCli_IgnoresUnrelatedCredentialReadinessAndUsesPortableEvidenceIdentity()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-performance-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var configPath = Path.Combine(root, "providers.json");
+            var firstInput = Path.Combine(root, "first", "lighthouse.json");
+            var secondInput = Path.Combine(root, "second", "copied-lighthouse.json");
+            var databasePath = Path.Combine(root, "fleet.db");
+            Directory.CreateDirectory(Path.GetDirectoryName(firstInput)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(secondInput)!);
+            File.WriteAllText(configPath, JsonSerializer.Serialize(CreateConfigurationWithLighthouseAndMissingCrux()));
+            File.WriteAllText(firstInput, LighthouseReport());
+            File.WriteAllText(secondInput, LighthouseReport());
+
+            var firstExit = RunLighthouseImport(configPath, firstInput, databasePath);
+            var secondExit = RunLighthouseImport(configPath, secondInput, databasePath);
+            var evidence = await new SqliteWebSearchObservationStore(databasePath)
+                .QueryPerformanceEvidenceAsync(new WebPerformanceObservationQuery
+                {
+                    SiteId = "officeimo",
+                    Provider = "lighthouse"
+                });
+
+            Assert.Equal(0, firstExit);
+            Assert.Equal(0, secondExit);
+            var evidenceSet = Assert.Single(evidence.EvidenceSets);
+            Assert.Equal(6, evidenceSet.Observations.Length);
+            using var sqlite = new SQLite();
+            var runCount = Convert.ToInt32(await sqlite.ExecuteScalarAsync(
+                databasePath,
+                "SELECT COUNT(*) FROM performance_observation_runs WHERE provider = 'lighthouse' AND site_id = 'officeimo';"));
+            Assert.Equal(1, runCount);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void CruxCli_ReportsOperationalFailureWithoutCreatingStorage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-performance-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var databasePath = Path.Combine(root, "fleet.db");
+            var batch = CreateFieldBatch();
+            batch.Status = "partial";
+            var exitCode = WebCliCommandHandlers.CompleteCruxCollection(
+                new CruxCollectionResult
+                {
+                    Success = false,
+                    RequestCount = 1,
+                    ErrorCode = "provider-unavailable",
+                    ErrorMessage = "CrUX API request did not complete.",
+                    Batch = batch
+                },
+                "providers.json",
+                databasePath,
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+
+            Assert.Equal(1, exitCode);
             Assert.False(File.Exists(databasePath));
         }
         finally
@@ -506,6 +584,45 @@ public sealed class WebPerformanceObservationTests
             }
         ]
     };
+
+    private static WebSearchProviderConfiguration CreateConfigurationWithLighthouseAndMissingCrux() => new()
+    {
+        Sites =
+        [
+            new WebSearchSiteProviderConfiguration
+            {
+                Id = "officeimo", BaseUrl = "https://officeimo.com/",
+                Providers =
+                [
+                    new WebSearchProviderRegistration
+                    {
+                        Id = "lighthouse", Kind = LighthouseReportImporter.ProviderKind, Enabled = true,
+                        Capabilities = [WebSearchProviderCapabilities.PerformanceLighthouse]
+                    },
+                    new WebSearchProviderRegistration
+                    {
+                        Id = "crux", Kind = CruxCollector.ProviderKind, Enabled = true,
+                        Capabilities = [WebSearchProviderCapabilities.PerformanceCrux],
+                        Credential = new WebSearchCredentialReference
+                        {
+                            Kind = "google-api-key", EnvironmentVariable = "POWERFORGE_TEST_CRUX_UNAVAILABLE"
+                        }
+                    }
+                ]
+            }
+        ]
+    };
+
+    private static int RunLighthouseImport(string configPath, string inputPath, string databasePath) =>
+        WebCliCommandHandlers.HandleSubCommand(
+            "performance",
+            [
+                "import-lighthouse", "--config", configPath, "--input", inputPath, "--database", databasePath,
+                "--site", "officeimo", "--provider", "lighthouse", "--output", "json"
+            ],
+            outputJson: true,
+            logger: new WebConsoleLogger(),
+            outputSchemaVersion: 1);
 
     private static HttpResponseMessage JsonResponse(object value) => new(HttpStatusCode.OK)
     {

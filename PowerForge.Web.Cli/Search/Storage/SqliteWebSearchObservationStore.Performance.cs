@@ -127,22 +127,25 @@ internal sealed partial class SqliteWebSearchObservationStore
             .ThenBy(batch => batch.FormFactor, StringComparer.Ordinal)
             .ToArray();
 
-        var observations = selected.SelectMany(batch => batch.Observations).ToArray();
-        return new WebPerformanceObservationQueryResult
+        var evidenceSets = selected.Select(batch => new WebPerformanceObservationEvidenceSet
         {
-            StoreExists = true,
-            HasEvidence = selected.Length > 0,
-            HasPartialEvidence = selected.Any(batch => batch.Status == "partial"),
-            HasExplicitZeroEvidence = selected.Any(batch => batch.ZeroDataConfirmed),
-            SelectedRuns = selected.Select(batch => new WebPerformanceObservationRunEvidence
+            Run = new WebPerformanceObservationRunEvidence
             {
                 RunId = batch.RunId!, Provider = batch.Provider, SiteId = batch.SiteId,
                 CollectedAtUtc = batch.CollectedAtUtc, Status = batch.Status,
                 MeasurementKind = batch.MeasurementKind, TargetKind = batch.TargetKind,
                 TargetUrl = batch.TargetUrl, FormFactor = batch.FormFactor,
                 ToolVersion = batch.ToolVersion, ZeroDataConfirmed = batch.ZeroDataConfirmed
-            }).ToArray(),
-            Observations = observations
+            },
+            Observations = batch.Observations
+        }).ToArray();
+        return new WebPerformanceObservationQueryResult
+        {
+            StoreExists = true,
+            HasEvidence = selected.Length > 0,
+            HasPartialEvidence = selected.Any(batch => batch.Status == "partial"),
+            HasExplicitZeroEvidence = selected.Any(batch => batch.ZeroDataConfirmed),
+            EvidenceSets = evidenceSets
         };
     }
 

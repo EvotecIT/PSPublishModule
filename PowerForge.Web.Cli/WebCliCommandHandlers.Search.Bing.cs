@@ -187,7 +187,7 @@ internal static partial class WebCliCommandHandlers
                     ThroughDate = throughDate,
                     SearchType = TryGetOptionValue(args, "--search-type") ?? "web",
                     CollectedAtUtc = collectedAtUtc,
-                    ConfigurationHash = doctor.ConfigurationHash,
+                    ConfigurationHash = doctor.ConfigurationHash!,
                     EvidenceReference = TryGetOptionValue(args, "--evidence")
                 });
             var fullDatabasePath = Path.GetFullPath(databasePath.Trim().Trim('"'));

@@ -45,7 +45,7 @@ internal static partial class WebCliCommandHandlers
                 SiteId = context.Site.Id,
                 SiteBaseUrl = context.Site.BaseUrl,
                 ConfigurationHash = context.ConfigurationHash,
-                EvidenceReference = TryGetOptionValue(args, "--evidence") ?? inputPath
+                EvidenceReference = TryGetOptionValue(args, "--evidence")
             });
             var store = new SqliteWebSearchObservationStore(RequiredPerformanceOption(args, "--database"));
             var import = store.ImportPerformanceAsync(batch).GetAwaiter().GetResult();
@@ -92,21 +92,51 @@ internal static partial class WebCliCommandHandlers
                 ConfigurationHash = context.ConfigurationHash,
                 EvidenceReference = TryGetOptionValue(args, "--evidence")
             }).GetAwaiter().GetResult();
-            if (!result.Success)
-                return FailSearch(result.ErrorMessage ?? "CrUX collection failed.", outputJson, logger, "web.performance.collect-crux");
-            var store = new SqliteWebSearchObservationStore(RequiredPerformanceOption(args, "--database"));
-            var import = store.ImportPerformanceAsync(result.Batch).GetAwaiter().GetResult();
-            return WritePerformanceResult("web.performance.collect-crux", true, 0, context.ConfigPath,
-                new WebPerformanceCollectionCommandResult { Batch = result.Batch, Import = import, RequestCount = result.RequestCount },
-                outputJson, logger, outputSchemaVersion,
-                result.Batch.ZeroDataConfirmed
-                    ? $"CrUX explicitly found no field record for {EscapeSearchConsoleText(result.Batch.TargetUrl, "(unknown target)")}."
-                    : $"Collected {import.InputCount} CrUX field metrics for {EscapeSearchConsoleText(result.Batch.TargetUrl, "(unknown target)")}.");
+            return CompleteCruxCollection(
+                result,
+                context.ConfigPath,
+                RequiredPerformanceOption(args, "--database"),
+                outputJson,
+                logger,
+                outputSchemaVersion);
         }
         catch (Exception ex)
         {
             return FailSearch(ex.Message, outputJson, logger, "web.performance.collect-crux");
         }
+    }
+
+    internal static int CompleteCruxCollection(
+        CruxCollectionResult result,
+        string configPath,
+        string databasePath,
+        bool outputJson,
+        WebConsoleLogger logger,
+        int outputSchemaVersion)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        if (!result.Success)
+        {
+            return WritePerformanceResult("web.performance.collect-crux", false, 1, configPath,
+                new WebPerformanceCollectionCommandResult
+                {
+                    Batch = result.Batch,
+                    RequestCount = result.RequestCount,
+                    ErrorCode = result.ErrorCode,
+                    ErrorMessage = result.ErrorMessage
+                },
+                outputJson, logger, outputSchemaVersion,
+                result.ErrorMessage ?? "CrUX collection failed.");
+        }
+
+        var store = new SqliteWebSearchObservationStore(databasePath);
+        var import = store.ImportPerformanceAsync(result.Batch).GetAwaiter().GetResult();
+        return WritePerformanceResult("web.performance.collect-crux", true, 0, configPath,
+            new WebPerformanceCollectionCommandResult { Batch = result.Batch, Import = import, RequestCount = result.RequestCount },
+            outputJson, logger, outputSchemaVersion,
+            result.Batch.ZeroDataConfirmed
+                ? $"CrUX explicitly found no field record for {EscapeSearchConsoleText(result.Batch.TargetUrl, "(unknown target)")}."
+                : $"Collected {import.InputCount} CrUX field metrics for {EscapeSearchConsoleText(result.Batch.TargetUrl, "(unknown target)")}.");
     }
 
     private static int HandlePerformanceList(string[] args, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
@@ -137,8 +167,7 @@ internal static partial class WebCliCommandHandlers
                 HasEvidence = evidence.HasEvidence,
                 HasPartialEvidence = evidence.HasPartialEvidence,
                 HasExplicitZeroEvidence = evidence.HasExplicitZeroEvidence,
-                SelectedRuns = evidence.SelectedRuns,
-                Observations = evidence.Observations
+                EvidenceSets = evidence.EvidenceSets
             };
             var exitCode = state == "complete" ? 0 : state == "missing-store" ? 2 : 1;
             if (outputJson)
@@ -154,8 +183,8 @@ internal static partial class WebCliCommandHandlers
                 if (state == "missing-store") logger.Error("Performance database does not exist.");
                 else if (state == "no-evidence") logger.Warn("No performance evidence matches the requested filters.");
                 else if (state == "partial") logger.Warn("Performance evidence is partial; inspect selected run provenance.");
-                else if (result.HasExplicitZeroEvidence && result.Observations.Length == 0) logger.Info("Performance collection explicitly confirmed no field record.");
-                logger.Info($"Performance runs: {result.SelectedRuns.Length}; metrics: {result.Observations.Length}.");
+                else if (result.HasExplicitZeroEvidence && result.EvidenceSets.All(set => set.Observations.Length == 0)) logger.Info("Performance collection explicitly confirmed no field record.");
+                logger.Info($"Performance runs: {result.EvidenceSets.Length}; metrics: {result.EvidenceSets.Sum(set => set.Observations.Length)}.");
             }
             return exitCode;
         }
@@ -168,9 +197,6 @@ internal static partial class WebCliCommandHandlers
     private static PerformanceProviderContext ResolvePerformanceProvider(string[] args, string kind, string capability)
     {
         var loaded = WebSearchProviderConfigurationLoader.LoadWithPath(RequiredPerformanceOption(args, "--config"), WebCliJson.Options);
-        var doctor = WebSearchProviderDoctor.InspectWithCapabilities(loaded.Configuration, WebSearchCollectorCatalog.AvailableCapabilities);
-        if (!doctor.Success || string.IsNullOrWhiteSpace(doctor.ConfigurationHash))
-            throw new ArgumentException(doctor.Checks.FirstOrDefault(check => check.Severity == WebSearchProviderCheckSeverity.Error)?.Message ?? "Provider configuration is invalid.");
         var siteId = RequiredPerformanceOption(args, "--site");
         var providerId = RequiredPerformanceOption(args, "--provider");
         var site = loaded.Configuration.Sites.SingleOrDefault(value => value.Id.Equals(siteId, StringComparison.OrdinalIgnoreCase))
@@ -180,7 +206,13 @@ internal static partial class WebCliCommandHandlers
         if (!provider.Enabled) throw new ArgumentException($"Performance provider '{providerId}' is disabled.");
         if (!provider.Kind.Equals(kind, StringComparison.Ordinal)) throw new ArgumentException($"Performance action requires provider kind '{kind}'.");
         if (!provider.Capabilities.Contains(capability, StringComparer.Ordinal)) throw new ArgumentException($"Provider must request capability '{capability}'.");
-        return new PerformanceProviderContext(loaded.FullPath, doctor.ConfigurationHash, site, provider);
+        var doctor = InspectProviderAction(
+            loaded.Configuration,
+            site,
+            provider,
+            capability,
+            useSelectedCredential: provider.Credential is not null);
+        return new PerformanceProviderContext(loaded.FullPath, doctor.ConfigurationHash!, site, provider);
     }
 
     private static int WritePerformanceResult(string command, bool success, int exitCode, string configPath,
@@ -194,7 +226,8 @@ internal static partial class WebCliCommandHandlers
                 Result = WebCliJson.SerializeToElement(result, WebCliJson.Context.WebPerformanceCollectionCommandResult)
             });
         }
-        else logger.Success(message);
+        else if (success) logger.Success(message);
+        else logger.Error(message);
         return exitCode;
     }
 
@@ -231,7 +264,9 @@ internal sealed class WebPerformanceCollectionCommandResult
 {
     public WebPerformanceObservationBatch Batch { get; set; } = new();
     public int RequestCount { get; set; }
-    public WebPerformanceObservationImportResult Import { get; set; } = new();
+    public string? ErrorCode { get; set; }
+    public string? ErrorMessage { get; set; }
+    public WebPerformanceObservationImportResult? Import { get; set; }
 }
 
 internal sealed class WebPerformanceListCommandResult
@@ -242,6 +277,5 @@ internal sealed class WebPerformanceListCommandResult
     public bool HasEvidence { get; set; }
     public bool HasPartialEvidence { get; set; }
     public bool HasExplicitZeroEvidence { get; set; }
-    public WebPerformanceObservationRunEvidence[] SelectedRuns { get; set; } = Array.Empty<WebPerformanceObservationRunEvidence>();
-    public WebPerformanceObservation[] Observations { get; set; } = Array.Empty<WebPerformanceObservation>();
+    public WebPerformanceObservationEvidenceSet[] EvidenceSets { get; set; } = Array.Empty<WebPerformanceObservationEvidenceSet>();
 }

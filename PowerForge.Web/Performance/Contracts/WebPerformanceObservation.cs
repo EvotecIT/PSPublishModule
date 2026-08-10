@@ -175,9 +175,16 @@ public sealed class WebPerformanceObservationQueryResult
     public bool HasPartialEvidence { get; set; }
     /// <summary>Whether a selected complete field query explicitly found no record.</summary>
     public bool HasExplicitZeroEvidence { get; set; }
-    /// <summary>Best complete-before-recency run for each target dimension.</summary>
-    public WebPerformanceObservationRunEvidence[] SelectedRuns { get; set; } = Array.Empty<WebPerformanceObservationRunEvidence>();
-    /// <summary>Metrics belonging to the selected runs.</summary>
+    /// <summary>Best complete-before-recency evidence grouped with its run provenance.</summary>
+    public WebPerformanceObservationEvidenceSet[] EvidenceSets { get; set; } = Array.Empty<WebPerformanceObservationEvidenceSet>();
+}
+
+/// <summary>One selected performance run and the metrics that belong to it.</summary>
+public sealed class WebPerformanceObservationEvidenceSet
+{
+    /// <summary>Run, provider, target, and form-factor provenance.</summary>
+    public WebPerformanceObservationRunEvidence Run { get; set; } = new();
+    /// <summary>Metric observations belonging only to <see cref="Run"/>.</summary>
     public WebPerformanceObservation[] Observations { get; set; } = Array.Empty<WebPerformanceObservation>();
 }
 

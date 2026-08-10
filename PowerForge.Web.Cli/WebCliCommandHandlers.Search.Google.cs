@@ -111,7 +111,7 @@ internal static partial class WebCliCommandHandlers
                 FromDate = fromDate,
                 ThroughDate = throughDate,
                 SearchType = searchType,
-                ConfigurationHash = doctor.ConfigurationHash,
+                ConfigurationHash = doctor.ConfigurationHash!,
                 EvidenceReference = TryGetOptionValue(args, "--evidence")
             }).GetAwaiter().GetResult();
 
