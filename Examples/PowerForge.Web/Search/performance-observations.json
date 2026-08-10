@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "provider": "crux",
+  "siteId": "officeimo",
+  "collectedAtUtc": "2026-08-10T12:34:56Z",
+  "sourceKind": "api",
+  "status": "complete",
+  "measurementKind": "field",
+  "targetKind": "origin",
+  "targetUrl": "https://officeimo.com/",
+  "formFactor": "phone",
+  "toolVersion": "crux-api-v1",
+  "evidenceReference": "evidence/crux-officeimo-phone-2026-08-10",
+  "observations": [
+    {
+      "metric": "largest-contentful-paint",
+      "value": 2100,
+      "unit": "milliseconds",
+      "percentile": 75,
+      "periodStartDate": "2026-07-12",
+      "periodEndDate": "2026-08-08",
+      "histogram": [
+        { "start": 0, "end": 2500, "density": 0.78 },
+        { "start": 2500, "end": 4000, "density": 0.14 },
+        { "start": 4000, "density": 0.08 }
+      ]
+    }
+  ]
+}

@@ -85,7 +85,7 @@ internal static partial class WebCliCommandHandlers
                 SiteBaseUrl = site.BaseUrl,
                 FromDate = fromDate,
                 ThroughDate = throughDate,
-                ConfigurationHash = doctor.ConfigurationHash,
+                ConfigurationHash = doctor.ConfigurationHash!,
                 EvidenceReference = TryGetOptionValue(args, "--evidence")
             }).GetAwaiter().GetResult();
             var normalized = WebTrafficObservationNormalizer.Normalize(collection.Batch);

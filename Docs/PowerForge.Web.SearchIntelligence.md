@@ -1,8 +1,8 @@
 # PowerForge.Web Search Intelligence
 
-PowerForge.Web can collect search-performance and first-party traffic observations, keep an idempotent fleet history, and produce evidence-linked opportunities. Search and traffic use separate contracts and tables so related measurements can be compared without pretending they mean the same thing.
+PowerForge.Web can collect search-performance, first-party traffic, laboratory performance and field-performance observations, keep an idempotent fleet history, and produce evidence-linked opportunities. Search, traffic and performance use separate contracts and tables so related measurements can be compared without pretending they mean the same thing.
 
-The current release supports imported Search Analytics-style data, fleet provider configuration and capability checks, authenticated Google Search Console collection, Bing Webmaster API collection with a CSV export fallback, and Cloudflare end-user HTTP traffic collection. It does not yet collect Lighthouse/CrUX performance data, and it does not crawl competitors or draft articles automatically.
+The current release supports imported Search Analytics-style data, fleet provider configuration and capability checks, authenticated Google Search Console collection, Bing Webmaster API collection with a CSV export fallback, Cloudflare end-user HTTP traffic collection, Lighthouse report import and CrUX field-data collection. It does not crawl competitors or draft articles automatically.
 
 ## Ownership
 
@@ -14,6 +14,7 @@ The current release supports imported Search Analytics-style data, fleet provide
 | Provider identities, requested capabilities and credential references | `PowerForge.Web` | `WebSearchProviderConfiguration`, `WebSearchProviderDoctor` |
 | Provider authentication and collection | Adapters in `PowerForge.Web` | Google Search Console and Bing Webmaster collectors with thin `powerforge-web` orchestration |
 | First-party traffic observations | `PowerForge.Web` | `WebTrafficObservationBatch`, Cloudflare GraphQL collector, and `traffic collect/list` |
+| Laboratory and field performance observations | `PowerForge.Web` | Lighthouse importer, CrUX collector, and `performance import-lighthouse/collect-crux/list` |
 | Site-specific product facts and content changes | Owning site repository | Consume evidence; normal PR review remains the publication gate |
 | Authenticated fleet UI | Future thin `Control.Web` consumer | Read the PowerForge Search service/API when that boundary is justified |
 
@@ -203,6 +204,53 @@ powerforge-web traffic list `
 
 `traffic list` selects one best partition per provider, site and reporting date, preferring completed partitions before recency. A date completed before a later failure remains complete evidence even though its parent run is partial. Every totals query requires `--provider`, preventing independently collected providers from being added together or from hiding complementary gaps. Its JSON and human output distinguish a missing database, no matching evidence, partial evidence, missing dates inside a bounded range and an explicit complete-zero run; partial, incomplete or missing evidence returns a non-zero exit code instead of presenting ordinary-looking totals. The traffic contract is published at `Schemas/powerforge.web.traffic-observations.schema.json`; `Examples/PowerForge.Web/Search/traffic-observations.json` is a runnable example. Traffic and search runs share the transactional fleet database and deterministic revision rules but use independent tables and normalizers.
 
+## Collect performance evidence
+
+Performance evidence has a separate contract because synthetic laboratory runs and aggregated real-user measurements answer different questions. Lighthouse reports are imported as `lab` evidence. CrUX records are collected as `field` evidence. They share target, form-factor, provenance and revision mechanics, but PowerForge does not blend their metrics into one score.
+
+Run Lighthouse with its supported CLI, CI action, DevTools, or another trusted producer and retain the JSON report. PowerForge imports only the stable performance category and five laboratory metrics: performance score, FCP, LCP, CLS, TBT and Speed Index. Lighthouse cannot measure INP without real user interaction, so the importer never creates an INP value; TBT remains a distinct laboratory proxy.
+
+```powershell
+powerforge-web performance import-lighthouse `
+    --config .\search-providers.json `
+    --input .\lighthouse-officeimo-mobile.json `
+    --database .\.powerforge\search.db `
+    --site officeimo `
+    --provider lighthouse `
+    --evidence evidence/lighthouse-officeimo-mobile.json `
+    --output json
+```
+
+The report's final URL must belong to the configured fleet site. Its original `fetchTime`, Lighthouse version and mobile/desktop form factor are preserved. PowerForge does not embed another browser runtime in this layer; producing the report remains an explicit CI or operator step and importing it is deterministic and portable. The local input path is never used as evidence identity automatically: provide `--evidence` only when a stable, non-secret reference exists.
+`Examples/PowerForge.Web/Search/lighthouse-report.json` is a minimal importable fixture for the supported report fields.
+
+CrUX uses a Google Cloud API key with the Chrome UX Report API enabled. Expose it only through the environment variable referenced by the provider's `google-api-key` credential:
+
+```powershell
+powerforge-web performance collect-crux `
+    --config .\search-providers.json `
+    --database .\.powerforge\search.db `
+    --site officeimo `
+    --provider crux `
+    --scope origin `
+    --form-factor phone `
+    --evidence evidence/crux-officeimo-phone `
+    --output json
+```
+
+The collector requests LCP, INP, CLS, FCP and experimental TTFB from `records:queryRecord`. It stores the provider's p75 values, 28-day collection period and histogram proportions. URL and origin scope remain explicit: URL targets retain the fleet path boundary, while origin evidence belongs to the site's whole scheme/host/port origin even when the fleet site starts at a subpath. `all` omits the API form-factor dimension; phone, desktop and tablet map to the provider's dimensions. A provider `404` is durable complete-zero evidence for that exact target and form factor. Operational failures return exit code 1 with stable `credential-unavailable`, `authentication-failed`, `request-rejected`, `rate-limited`, `provider-unavailable`, or `invalid-response` categories, request count and a partial batch; configuration or command errors return exit code 2. Neither becomes an ordinary-looking successful run.
+
+```powershell
+powerforge-web performance list `
+    --database .\.powerforge\search.db `
+    --site officeimo `
+    --kind field `
+    --form-factor phone `
+    --output json
+```
+
+`performance list` selects one run per provider, site, measurement kind, target scope, target URL and form factor, preferring complete evidence before recency. JSON groups every metric array inside its selected run provenance so identical metric names from different targets or form factors remain unambiguous. The result distinguishes missing storage, no evidence, partial evidence and explicit CrUX no-data evidence. The structural contract is published at `Schemas/powerforge.web.performance-observations.schema.json`; runtime normalization enforces the lab/field rules that JSON Schema cannot express safely.
+
 ## List opportunities
 
 ```powershell
@@ -230,9 +278,8 @@ Provider adapters should preserve their raw evidence and map only stable Search 
 
 The next implementation steps are:
 
-1. Lighthouse and CrUX performance observations in their own contract;
-2. scheduled collection, backfill, retention and static fleet reports;
-3. competitor evidence through RadarX/HtmlTinkerX, followed by human-approved briefs and measured outcomes;
-4. Google and Bing sitemap capabilities when their operator workflows and shared sitemap contract are defined.
+1. scheduled collection, backfill, retention and static fleet reports;
+2. competitor evidence through RadarX/HtmlTinkerX, followed by human-approved briefs and measured outcomes;
+3. Google and Bing sitemap capabilities when their operator workflows and shared sitemap contract are defined.
 
 Those additions must keep the current separation: first-party search facts, traffic facts, performance measurements, competitor evidence and recommendations are related, but they are not interchangeable datasets.

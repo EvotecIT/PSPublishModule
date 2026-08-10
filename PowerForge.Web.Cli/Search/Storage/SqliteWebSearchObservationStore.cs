@@ -8,7 +8,7 @@ namespace PowerForge.Web.Cli;
 
 internal sealed partial class SqliteWebSearchObservationStore
 {
-    internal const int CurrentSchemaVersion = 4;
+    internal const int CurrentSchemaVersion = 5;
 
     private const string CreateTablesSql = """
         CREATE TABLE IF NOT EXISTS search_observation_runs (
@@ -93,9 +93,55 @@ internal sealed partial class SqliteWebSearchObservationStore
             ON traffic_observation_runs(provider, site_id, collected_at_utc);
         """;
 
+    private const string CreatePerformanceTablesSql = """
+        CREATE TABLE IF NOT EXISTS performance_observation_runs (
+            run_id TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            site_id TEXT NOT NULL,
+            collected_at_utc TEXT NOT NULL,
+            source_kind TEXT NOT NULL,
+            status TEXT NOT NULL,
+            measurement_kind TEXT NOT NULL,
+            target_kind TEXT NOT NULL,
+            target_url TEXT NOT NULL,
+            form_factor TEXT NOT NULL,
+            tool_version TEXT NULL,
+            zero_data_confirmed INTEGER NOT NULL,
+            configuration_hash TEXT NULL,
+            evidence_reference TEXT NULL,
+            normalized_manifest_json TEXT NOT NULL,
+            PRIMARY KEY (provider, site_id, run_id)
+        );
+        CREATE TABLE IF NOT EXISTS performance_observations (
+            observation_key TEXT NOT NULL PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            site_id TEXT NOT NULL,
+            metric TEXT NOT NULL,
+            metric_value REAL NOT NULL,
+            unit TEXT NOT NULL,
+            percentile INTEGER NULL,
+            period_start_date TEXT NULL,
+            period_end_date TEXT NULL,
+            histogram_json TEXT NOT NULL,
+            FOREIGN KEY (provider, site_id, run_id)
+                REFERENCES performance_observation_runs(provider, site_id, run_id)
+        );
+        """;
+
+    private const string CreatePerformanceIndexesSql = """
+        CREATE INDEX IF NOT EXISTS ix_performance_observation_runs_site_kind
+            ON performance_observation_runs(site_id, measurement_kind);
+        CREATE INDEX IF NOT EXISTS ix_performance_observation_runs_target
+            ON performance_observation_runs(provider, site_id, measurement_kind, target_url, form_factor);
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_performance_observation_runs_provider_site_collected
+            ON performance_observation_runs(provider, site_id, measurement_kind, target_kind, target_url, form_factor, collected_at_utc);
+        """;
+
     private const string CreateSchemaSql = CreateTablesSql + CreateIndexesSql +
                                            CreateTrafficTablesSql + CreateTrafficIndexesSql +
-                                           "PRAGMA user_version = 4;";
+                                           CreatePerformanceTablesSql + CreatePerformanceIndexesSql +
+                                           "PRAGMA user_version = 5;";
 
     private const string FindVersionOneCollisionsSql = """
         SELECT provider, site_id, collected_at_utc
@@ -131,9 +177,15 @@ internal sealed partial class SqliteWebSearchObservationStore
         FROM search_observations_legacy;
         DROP TABLE search_observations_legacy;
         DROP TABLE search_observation_runs_legacy;
-        """ + CreateIndexesSql + CreateTrafficTablesSql + CreateTrafficIndexesSql + "PRAGMA user_version = 4;";
+        """ + CreateIndexesSql + CreateTrafficTablesSql + CreateTrafficIndexesSql +
+        CreatePerformanceTablesSql + CreatePerformanceIndexesSql + "PRAGMA user_version = 5;";
 
-    private const string MigrateVersionThreeSql = CreateTrafficTablesSql + CreateTrafficIndexesSql + "PRAGMA user_version = 4;";
+    private const string MigrateVersionThreeSql = CreateTrafficTablesSql + CreateTrafficIndexesSql +
+                                                   CreatePerformanceTablesSql + CreatePerformanceIndexesSql +
+                                                   "PRAGMA user_version = 5;";
+
+    private const string MigrateVersionFourSql = CreatePerformanceTablesSql + CreatePerformanceIndexesSql +
+                                                  "PRAGMA user_version = 5;";
 
     private readonly string _databasePath;
 
@@ -446,7 +498,7 @@ internal sealed partial class SqliteWebSearchObservationStore
                     if (collisions.Count > 0)
                     {
                         throw new InvalidOperationException(
-                            $"Search database schema v1 contains competing runs for {collisions[0]}. Resolve the duplicate collection timestamp before upgrading to schema v4.");
+                            $"Search database schema v1 contains competing runs for {collisions[0]}. Resolve the duplicate collection timestamp before upgrading to schema v5.");
                     }
                 }
                 if (version is 1 or 2)
@@ -459,6 +511,12 @@ internal sealed partial class SqliteWebSearchObservationStore
                 {
                     await transaction.ExecuteNonQueryAsync(
                         MigrateVersionThreeSql,
+                        cancellationToken: token).ConfigureAwait(false);
+                }
+                else if (version == 4)
+                {
+                    await transaction.ExecuteNonQueryAsync(
+                        MigrateVersionFourSql,
                         cancellationToken: token).ConfigureAwait(false);
                 }
             },
