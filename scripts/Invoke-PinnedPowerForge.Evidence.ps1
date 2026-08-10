@@ -14,7 +14,8 @@ function Register-AppleReceiptEvidenceFile {
     param(
         [Parameter(Mandatory)][string] $Path,
         [Parameter(Mandatory)][string] $SourceCommit,
-        [switch] $HistoryEntry
+        [switch] $HistoryEntry,
+        [switch] $AllowLegacy
     )
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
     $item = Get-Item -LiteralPath $Path -Force
@@ -26,20 +27,44 @@ function Register-AppleReceiptEvidenceFile {
         throw "Apple release receipt is not valid JSON: $Path"
     }
     $receiptSource = [string]$receipt.sourceCommit
-    $immutableReceipt = [int]$receipt.schemaVersion -ge 4
-    if ($immutableReceipt) {
+    $authenticatedReceipt = [int]$receipt.schemaVersion -ge 5
+    if ($authenticatedReceipt) {
         if (
             ([string]$receipt.attemptId) -notmatch '^[0-9A-Fa-f]{32}$' -or
             ([string]$receipt.receiptSha256) -notmatch '^[0-9A-Fa-f]{64}$' -or
+            ([string]$receipt.receiptAuthenticationSha256) -notmatch '^[0-9A-Fa-f]{64}$' -or
             (-not [string]::IsNullOrWhiteSpace($receiptSource) -and
              $receiptSource -notmatch '^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$')) {
-            throw "Apple release evidence does not satisfy the immutable receipt contract: $Path"
+            throw "Apple release evidence does not satisfy the authenticated receipt contract: $Path"
         }
-    } elseif (-not $HistoryEntry -and
-              -not $receiptSource.Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Apple release receipt source commit does not match the exact consumer HEAD '$SourceCommit'."
+        $keyPath = if (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_APPLE_RECEIPT_AUTH_KEY_PATH)) {
+            [IO.Path]::GetFullPath($env:POWERFORGE_APPLE_RECEIPT_AUTH_KEY_PATH)
+        } else {
+            Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)) '.powerforge/apple-receipt-auth.key'
+        }
+        if (-not (Test-Path -LiteralPath $keyPath -PathType Leaf)) {
+            throw "Authenticated Apple release evidence requires the machine-local key '$keyPath'."
+        }
+        Assert-UnlinkedPath -Path $keyPath -Name 'Apple release receipt authentication key'
+        $key = [IO.File]::ReadAllBytes($keyPath)
+        if ($key.Length -ne 32) { throw "Apple release receipt authentication key must contain exactly 32 bytes: $keyPath" }
+        $hmac = [Security.Cryptography.HMACSHA256]::new($key)
+        try {
+            $expected = $hmac.ComputeHash([Text.Encoding]::ASCII.GetBytes(([string]$receipt.receiptSha256).ToLowerInvariant()))
+        } finally {
+            $hmac.Dispose()
+        }
+        $actual = [Convert]::FromHexString([string]$receipt.receiptAuthenticationSha256)
+        if (-not [Security.Cryptography.CryptographicOperations]::FixedTimeEquals($expected, $actual)) {
+            throw "Apple release receipt recovery authentication failed: $Path"
+        }
+    } else {
+        if (-not $AllowLegacy) {
+            throw "Apple release receipt is legacy unauthenticated evidence and cannot be admitted without an authenticated receipt chain: $Path"
+        }
     }
     Add-AllowedConsumerEvidencePath -Path $Path -Name 'Apple release receipt'
+    return $authenticatedReceipt
 }
 
 function Get-ForwardedArgumentList {
@@ -140,22 +165,35 @@ function Register-AppleAutomationEvidence {
         'build/powerforge/apple/release-receipt.json'
     } else { [string]$automation.ReceiptPath }
     $receiptPath = Resolve-PathFromBase -BasePath $projectRoot -Value $receiptValue
-    if (Test-Path -LiteralPath $receiptPath) {
-        Register-AppleReceiptEvidenceFile -Path $receiptPath -SourceCommit $SourceCommit
-    }
 
     $historyValue = if ([string]::IsNullOrWhiteSpace([string]$automation.ReceiptHistoryPath)) {
         'build/powerforge/apple/receipts'
     } else { [string]$automation.ReceiptHistoryPath }
     $historyPath = Resolve-PathFromBase -BasePath $projectRoot -Value $historyValue
+    $receiptEvidenceFiles = [Collections.Generic.List[object]]::new()
+    if (Test-Path -LiteralPath $receiptPath) {
+        $receiptEvidenceFiles.Add([pscustomobject]@{ Path = $receiptPath; History = $false })
+    }
     if (Test-Path -LiteralPath $historyPath) {
         Assert-UnlinkedDirectory -Path $historyPath -Name 'Apple release receipt history'
         foreach ($entry in @(Get-ChildItem -LiteralPath $historyPath -Force)) {
             if ($entry.PSIsContainer -or -not $entry.Name.EndsWith('.json', [StringComparison]::OrdinalIgnoreCase)) {
                 throw "Apple release receipt history contains an unsupported entry: $($entry.FullName)"
             }
-            Register-AppleReceiptEvidenceFile -Path $entry.FullName -SourceCommit $SourceCommit -HistoryEntry
+            $receiptEvidenceFiles.Add([pscustomobject]@{ Path = $entry.FullName; History = $true })
         }
+    }
+    $classifiedReceipts = foreach ($entry in $receiptEvidenceFiles) {
+        try { $value = Get-Content -LiteralPath $entry.Path -Raw | ConvertFrom-Json }
+        catch { throw "Apple release receipt is not valid JSON: $($entry.Path)" }
+        [pscustomobject]@{ Path = $entry.Path; History = $entry.History; Authenticated = ([int]$value.schemaVersion -ge 5) }
+    }
+    $authenticatedReceipts = @($classifiedReceipts | Where-Object Authenticated)
+    foreach ($entry in $authenticatedReceipts) {
+        $null = Register-AppleReceiptEvidenceFile -Path $entry.Path -SourceCommit $SourceCommit -HistoryEntry:$entry.History
+    }
+    foreach ($entry in @($classifiedReceipts | Where-Object { -not $_.Authenticated })) {
+        $null = Register-AppleReceiptEvidenceFile -Path $entry.Path -SourceCommit $SourceCommit -HistoryEntry:$entry.History -AllowLegacy:($authenticatedReceipts.Count -gt 0)
     }
 
     $expectedPlanSha256 = Get-OptionValue -Option '--apple-expected-plan-sha256'

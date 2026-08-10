@@ -200,6 +200,27 @@ public sealed class AppStoreConnectScreenshotSyncService
                 DeletedCount = deletedCount,
                 Uploaded = uploaded.ToArray()
             });
+
+            if (request.ReplaceExisting)
+            {
+                var finalScreenshots = await _client.GetScreenshotsAsync(
+                    set.Id,
+                    limit: 200,
+                    cancellationToken).ConfigureAwait(false);
+                var expectedChecksums = plannedSet.Preflighted.Files
+                    .Select(ComputeSourceChecksum)
+                    .ToArray();
+                var finalChecksums = finalScreenshots
+                    .Select(static screenshot => screenshot.SourceFileChecksum?.Trim() ?? string.Empty)
+                    .ToArray();
+                if (finalChecksums.Length != expectedChecksums.Length ||
+                    !finalChecksums.SequenceEqual(expectedChecksums, StringComparer.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"App Store Connect screenshot inventory for '{displayType}' changed during replacement. " +
+                        "The final remote inventory does not exactly match the approved screenshot bytes; review and run a new plan before submission.");
+                }
+            }
         }
 
         return new AppStoreConnectScreenshotSyncResult

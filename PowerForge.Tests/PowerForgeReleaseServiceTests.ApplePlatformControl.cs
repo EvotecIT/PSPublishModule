@@ -314,7 +314,8 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(result.Success);
             var receipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt);
-            Assert.Equal(4, receipt.SchemaVersion);
+            Assert.Equal(5, receipt.SchemaVersion);
+            Assert.Matches("^[0-9a-f]{64}$", receipt.ReceiptAuthenticationSha256);
             var target = Assert.Single(receipt.Targets);
             Assert.Equal(AppleDistributionRoute.AppStore, target.DistributionRoute);
             Assert.Equal("6778025328", target.AppId);

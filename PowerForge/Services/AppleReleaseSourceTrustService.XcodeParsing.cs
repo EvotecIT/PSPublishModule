@@ -28,6 +28,12 @@ internal sealed partial class AppleReleaseSourceTrustService
                 ValidateSdkSelectionBuildSetting(key, assignment.Value, source);
                 continue;
             }
+            if (DefinitionBuildSettings.Contains(baseKey))
+            {
+                foreach (var definition in SplitBuildSettingPaths(assignment.Value))
+                    ValidatePreprocessorFlagPayload(definition, key);
+                continue;
+            }
             IEnumerable<string> values;
             if (FileValuedBuildSettings.Contains(baseKey) ||
                 SearchPathBuildSettings.Contains(baseKey) ||

@@ -1105,7 +1105,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
-    public void ResolveExactAppleSourceCommit_accepts_tracked_project_lock_for_local_package_dependency()
+    public void ResolveExactAppleSourceCommit_rejects_locked_remote_package_when_source_cannot_be_inspected()
     {
         using var scope = new TemporaryDirectoryScope();
         var repositoryRoot = scope.CreateDirectory("LockedLocalRemotePackageInputRepo");
@@ -1142,15 +1142,17 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             Path.Combine(lockDirectory, "Package.resolved"),
             $$"""{ "pins": [ { "location": "{{dependencyUrl}}", "state": { "revision": "0123456789abcdef0123456789abcdef01234567" } } ] }""");
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
-        var sourceCommit = CommitRepository(repositoryRoot);
+        CommitRepository(repositoryRoot);
 
-        var resolved = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
-        Assert.Equal(sourceCommit, resolved);
+        Assert.Contains("fetch", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(dependencyUrl, exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ResolveExactAppleSourceCommit_accepts_tracked_workspace_lock_for_nested_project_dependency()
+    public void ResolveExactAppleSourceCommit_rejects_workspace_locked_remote_package_when_source_cannot_be_inspected()
     {
         using var scope = new TemporaryDirectoryScope();
         var repositoryRoot = scope.CreateDirectory("WorkspacePackageLockRepo");
@@ -1197,11 +1199,13 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
               }
             }
             """);
-        var sourceCommit = CommitRepository(repositoryRoot);
+        CommitRepository(repositoryRoot);
 
-        var resolved = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
-        Assert.Equal(sourceCommit, resolved);
+        Assert.Contains("fetch", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(dependencyUrl, exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -181,6 +181,9 @@ internal sealed class PowerForgeAppleReleaseReceipt
     /// <summary>Canonical SHA-256 of this receipt with this property omitted.</summary>
     public string? ReceiptSha256 { get; set; }
 
+    /// <summary>Machine-local HMAC-SHA-256 authenticating <see cref="ReceiptSha256"/> for recovery.</summary>
+    public string? ReceiptAuthenticationSha256 { get; set; }
+
     /// <summary>True when the operator explicitly requested adoption of an unattested existing build.</summary>
     public bool AdoptExistingBuild { get; set; }
 

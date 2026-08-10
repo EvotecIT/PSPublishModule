@@ -55,6 +55,34 @@ public sealed class AppleReleaseReceiptStoreTests
     }
 
     [Fact]
+    public void ReadAll_RejectsForgedSchemaFiveReceiptWithOnlySelfHash()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var plan = CreatePlan(root);
+            var store = new AppleReleaseReceiptStore();
+            store.WriteAttempt(plan, CreateReceipt(PowerForgeAppleReleaseAction.Upload, success: true));
+            var historyPath = Assert.Single(Directory.GetFiles(plan.ReceiptHistoryPath, "*.json"));
+            var json = File.ReadAllText(historyPath);
+            File.WriteAllText(
+                historyPath,
+                System.Text.RegularExpressions.Regex.Replace(
+                    json,
+                    "\"receiptAuthenticationSha256\"\\s*:\\s*\"[A-Fa-f0-9]{64}\"",
+                    "\"receiptAuthenticationSha256\": \"" + new string('0', 64) + "\""));
+
+            var exception = Assert.Throws<InvalidOperationException>(() => store.ReadAll(plan));
+
+            Assert.Contains("recovery authentication failed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ReadAll_RejectsLatestReceiptThatPointsAtDifferentValidHistoryEntry()
     {
         var root = CreateSandbox();

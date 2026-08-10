@@ -74,7 +74,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         var manifestWithoutComments = RemoveSwiftComments(File.ReadAllText(manifestPath));
         EnsureNoExecutableSwiftStringInterpolation(packageRoot, manifestWithoutComments);
         var manifestSyntax = MaskSwiftStringLiterals(manifestWithoutComments);
-        ValidateLocalPackageExecutableSafety(packageRoot, manifestSyntax);
+        ValidateLocalPackageExecutableSafety(packageRoot, manifestWithoutComments, manifestSyntax);
         ValidateDirectSwiftPackageDependencyFactories(packageRoot, manifestSyntax);
         var dependencyCalls = ParseDirectSwiftPackageDependencyCalls(manifestWithoutComments, manifestSyntax);
         ValidateRemotePackageDependencies(repositoryRoot, packageRoot, packageLockPaths, dependencyCalls);
@@ -87,13 +87,19 @@ internal sealed partial class AppleReleaseSourceTrustService
         ValidateLiteralSwiftPackagePaths(repositoryRoot, packageRoot, manifestWithoutComments, manifestSyntax);
     }
 
-    private static void ValidateLocalPackageExecutableSafety(string packageRoot, string manifestSyntax)
+    private static void ValidateLocalPackageExecutableSafety(
+        string packageRoot,
+        string manifestSource,
+        string manifestSyntax,
+        bool allowInactiveNonAppleSystemLibraries = false)
     {
         if (ContainsSwiftIdentifier(manifestSyntax, "unsafeFlags"))
             throw new InvalidOperationException(
                 $"Local Swift package '{packageRoot}' uses unsafeFlags, whose compiler and linker inputs cannot be proven at the exact source commit. " +
                 "Replace unsafe flags with tracked package settings before creating an Apple checkpoint.");
-        if (ContainsSwiftIdentifier(manifestSyntax, "systemLibrary"))
+        if (ContainsSwiftIdentifier(manifestSyntax, "systemLibrary") &&
+            (!allowInactiveNonAppleSystemLibraries ||
+             !AllSystemLibrariesAreExcludedFromAppleTargets(manifestSource, manifestSyntax)))
             throw new InvalidOperationException(
                 $"Local Swift package '{packageRoot}' declares a systemLibrary target, whose pkg-config and host library inputs cannot be proven at the exact source commit. " +
                 "Replace the system library dependency with tracked package sources before creating an Apple checkpoint.");
@@ -102,6 +108,60 @@ internal sealed partial class AppleReleaseSourceTrustService
                 $"Local Swift package '{packageRoot}' declares or invokes a SwiftPM plugin or macro, whose executable runtime inputs cannot be proven at the exact source commit. " +
                 "Replace build-tool plugins and macros with tracked deterministic build inputs before creating an Apple checkpoint.");
         ValidateDeclarativeSwiftPackageManifest(packageRoot, manifestSyntax);
+    }
+
+    private static bool AllSystemLibrariesAreExcludedFromAppleTargets(string source, string syntax)
+    {
+        var systemLibraries = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match reference in Regex.Matches(syntax, "\\.\\s*(?:systemLibrary|`systemLibrary`)\\s*\\(", RegexOptions.CultureInvariant))
+        {
+            var opening = reference.Index + reference.Length - 1;
+            var closing = FindMatchingSwiftDelimiter(syntax, opening, '(', ')');
+            var arguments = ParseTopLevelSwiftArguments(
+                source.Substring(opening + 1, closing - opening - 1),
+                syntax.Substring(opening + 1, closing - opening - 1));
+            if (!arguments.TryGetValue("name", out var nameArgument) ||
+                !TryReadLiteralSwiftString(nameArgument, out var name))
+                return false;
+            systemLibraries.Add(name);
+        }
+        if (systemLibraries.Count == 0)
+            return false;
+
+        foreach (var systemLibrary in systemLibraries)
+        {
+            var conditionedReferences = 0;
+            foreach (Match reference in Regex.Matches(syntax, "\\.\\s*(?:target|`target`)\\s*\\(", RegexOptions.CultureInvariant))
+            {
+                var opening = reference.Index + reference.Length - 1;
+                var closing = FindMatchingSwiftDelimiter(syntax, opening, '(', ')');
+                var arguments = ParseTopLevelSwiftArguments(
+                    source.Substring(opening + 1, closing - opening - 1),
+                    syntax.Substring(opening + 1, closing - opening - 1));
+                if (!arguments.TryGetValue("name", out var nameArgument) ||
+                    !TryReadLiteralSwiftString(nameArgument, out var name) ||
+                    !name.Equals(systemLibrary, StringComparison.Ordinal))
+                    continue;
+                if (!arguments.TryGetValue("condition", out var condition) ||
+                    !Regex.IsMatch(condition, "\\.\\s*when\\s*\\(", RegexOptions.CultureInvariant) ||
+                    !condition.Contains("platforms", StringComparison.Ordinal) ||
+                    Regex.IsMatch(condition, "\\.\\s*(?:iOS|macOS|macCatalyst|watchOS|tvOS|visionOS)\\b", RegexOptions.CultureInvariant) ||
+                    !Regex.IsMatch(condition, "\\.\\s*(?:linux|android|windows|openbsd|wasi)\\b", RegexOptions.CultureInvariant))
+                {
+                    return false;
+                }
+                conditionedReferences++;
+            }
+
+            var literalOccurrences = Regex.Matches(
+                source,
+                "\"" + Regex.Escape(systemLibrary) + "\"",
+                RegexOptions.CultureInvariant).Count;
+            if (conditionedReferences == 0 || literalOccurrences != conditionedReferences + 1)
+                return false;
+        }
+
+        return true;
     }
 
     private static void ValidateDeclarativeSwiftPackageManifest(string packageRoot, string manifestSyntax)
@@ -147,6 +207,24 @@ internal sealed partial class AppleReleaseSourceTrustService
                 $"Local Swift package '{packageRoot}' uses executable manifest control flow '{executableControlFlow.Groups["keyword"].Value}', which cannot be proven independent of host state. " +
                 "Use declarative PackageDescription declarations before creating an exact-source Apple checkpoint.");
         }
+
+        var executableDeclaration = Regex.Match(
+            manifestSyntax,
+            "(?<![A-Za-z0-9_])(?<declaration>func|class|struct|enum|protocol|extension|subscript|init|deinit|operator|precedencegroup|var)(?![A-Za-z0-9_])|@[A-Za-z_][A-Za-z0-9_]*",
+            RegexOptions.CultureInvariant);
+        var ternaryExpression = Regex.IsMatch(
+            manifestSyntax,
+            "\\?(?=[^;\\r\\n]*:)",
+            RegexOptions.CultureInvariant);
+        if (executableDeclaration.Success || ternaryExpression)
+        {
+            var construct = executableDeclaration.Success
+                ? executableDeclaration.Value
+                : "ternary expression";
+            throw new InvalidOperationException(
+                $"Local Swift package '{packageRoot}' uses executable manifest construct '{construct}', which cannot be proven independent of host state. " +
+                "Use declarative PackageDescription declarations before creating an exact-source Apple checkpoint.");
+        }
     }
 
     private void ValidateRemotePackageDependencies(
@@ -166,23 +244,26 @@ internal sealed partial class AppleReleaseSourceTrustService
                     $"Local Swift package '{packageRoot}' declares a dynamic external dependency that cannot be bound to exact source. " +
                     "Use a literal package URL or registry identity and commit its Package.resolved lock.");
 
+            var revisionValue = string.Empty;
             var hasExactRevision = dependency.Arguments.TryGetValue("revision", out var revision) &&
-                                   TryReadLiteralSwiftString(revision, out var revisionValue) &&
-                                   Regex.IsMatch(revisionValue, "^[A-Fa-f0-9]{40}$", RegexOptions.CultureInvariant);
-            if (!dependency.Arguments.ContainsKey("id") && hasExactRevision)
-                continue;
-            var locks = FindTrackedPackageLocks(
-                packageLockPaths
-                    .Concat(new[] { Path.Combine(packageRoot, "Package.resolved") })
-                    .Distinct(GetPathComparer())
-                    .ToArray(),
-                identity);
-            if (locks.Length == 0)
+                                   TryReadLiteralSwiftString(revision, out revisionValue) &&
+                                   Regex.IsMatch(revisionValue, "^(?:[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})$", RegexOptions.CultureInvariant);
+            var effectiveLocks = packageLockPaths
+                .Concat(new[] { Path.Combine(packageRoot, "Package.resolved") })
+                .Distinct(GetPathComparer())
+                .ToArray();
+            var locks = FindTrackedPackageLocks(effectiveLocks, identity);
+            if (locks.Length == 0 && !hasExactRevision)
                 throw new InvalidOperationException(
-                    $"Local Swift package '{packageRoot}' declares external dependency '{identity}' without an exact 40-character revision. " +
+                    $"Local Swift package '{packageRoot}' declares external dependency '{identity}' without an exact full Git revision. " +
                     "Commit a Package.resolved lock containing that dependency before creating an exact-source Apple checkpoint.");
             foreach (var packageLock in locks)
                 EnsureTrackedFile(repositoryRoot, packageLock, "Xcode local Swift package resolution lock");
+            var resolvedRevision = ResolvePackageRevision(
+                effectiveLocks,
+                identity,
+                !dependency.Arguments.ContainsKey("id") && hasExactRevision ? revisionValue : null);
+            ValidateRemotePackageSource(identity, resolvedRevision, effectiveLocks);
         }
     }
 

@@ -1,3 +1,4 @@
+using PowerForge;
 using PowerForgeStudio.Orchestrator.Queue;
 
 namespace PowerForgeStudio.Tests;
@@ -31,8 +32,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         File.WriteAllText(
             Path.Combine(packageRoot, "Package.swift"),
             "// swift-tools-version: 6.0\nimport PackageDescription\n" +
-            "func choose(revision: String) -> Package.Dependency.Requirement { .branch(\"main\") }\n" +
-            "let package = Package(name: \"Shared\", dependencies: [.package(url: \"https://example.invalid/Mutable.git\", branch: choose(revision: \"0123456789abcdef0123456789abcdef01234567\"))])");
+            "let package = Package(name: \"Shared\", dependencies: [.package(url: \"https://example.invalid/Mutable.git\", branch: .branch(revision: \"0123456789abcdef0123456789abcdef01234567\"))])");
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         CommitRepository(repositoryRoot);
 
@@ -360,7 +360,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         File.WriteAllText(
             Path.Combine(packageRoot, "Package.swift"),
             "// swift-tools-version: 6.0\nimport PackageDescription\n" +
-            "let help = \"use path: foo\"\nfunc explain(path: String) -> String { path }\n" +
+            "let help = \"use path: foo\"\n" +
             "let package = Package(name: \"Shared\", targets: [.target(name: \"Shared\")])");
         var sources = scope.CreateDirectory(Path.Combine("SwiftPathTextRepo", "Packages", "Shared", "Sources", "Shared"));
         File.WriteAllText(Path.Combine(sources, "Shared.swift"), "public struct Shared {}");
@@ -368,6 +368,140 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         var expected = CommitRepository(repositoryRoot);
 
         var actual = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_per_file_compiler_flags()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("PerFileCompilerFlagsRepo");
+        var project = scope.CreateDirectory(Path.Combine("PerFileCompilerFlagsRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; settings = { COMPILER_FLAGS = \"-fplugin=/tmp/injected.dylib\"; }; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = App.swift; sourceTree = SOURCE_ROOT; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "App.swift"), "struct App {}");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("COMPILER_FLAGS", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("/tmp/injected.dylib", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("GCC_PREPROCESSOR_DEFINITIONS", "RELEASE_SEED=$(HOME)")]
+    [InlineData("SWIFT_ACTIVE_COMPILATION_CONDITIONS", "$(CI_FEATURE)")]
+    public void ResolveExactAppleSourceCommit_rejects_dynamic_dedicated_definition_settings(string key, string value)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("DedicatedDefinitionsRepo" + Guid.NewGuid().ToString("N"));
+        var project = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Sample.xcodeproj")).FullName;
+        File.WriteAllText(Path.Combine(project, "project.pbxproj"),
+            $"000000000000000000000001 = {{ isa = XCBuildConfiguration; buildSettings = {{ {key} = \"{value}\"; }}; }};");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains(key, exception.Message, StringComparison.Ordinal);
+        Assert.Contains("build-setting reference", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_external_entry_inside_linker_file_list()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("LinkerFileListRepo");
+        var project = scope.CreateDirectory(Path.Combine("LinkerFileListRepo", "Sample.xcodeproj"));
+        File.WriteAllText(Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCBuildConfiguration; buildSettings = { OTHER_LDFLAGS = \"-filelist Inputs.xcfilelist\"; }; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Inputs.xcfilelist"), "/tmp/injected.a\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("OTHER_LDFLAGS", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("/tmp/injected.a", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("@_silgen_name(\"getpid\") func hostValue() -> Int32")]
+    [InlineData("let enabled = true ? [] : [.define(\"HOST\")]")]
+    public void ResolveExactAppleSourceCommit_rejects_native_or_expression_manifest_execution(string executableSyntax)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, _, packageRoot) = CreateLocalPackageFixture(scope, "ExecutableManifestRepo" + Guid.NewGuid().ToString("N"));
+        File.WriteAllText(Path.Combine(packageRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\n" + executableSyntax +
+            "\nlet package = Package(name: \"Shared\")");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("executable manifest", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Capture_rejects_executable_behavior_in_exact_remote_package_revision()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var remoteRoot = scope.CreateDirectory("RemoteUnsafePackage");
+        RunGit(remoteRoot, "init", "--quiet");
+        File.WriteAllText(Path.Combine(remoteRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"Remote\", targets: [.target(name: \"Remote\", swiftSettings: [.unsafeFlags([\"-I/tmp\"])])])");
+        var remoteRevision = CommitRepository(remoteRoot);
+
+        var repositoryRoot = scope.CreateDirectory("RemotePackageConsumer");
+        var project = scope.CreateDirectory(Path.Combine("RemotePackageConsumer", "Sample.xcodeproj"));
+        const string remoteUrl = "https://example.invalid/RemoteUnsafePackage.git";
+        File.WriteAllText(Path.Combine(project, "project.pbxproj"),
+            $"000000000000000000000001 = {{ isa = XCRemoteSwiftPackageReference; repositoryURL = \"{remoteUrl}\"; requirement = {{ kind = revision; revision = {remoteRevision}; }}; }};");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+        var service = new AppleReleaseSourceTrustService(
+            remotePackageCheckoutResolver: (_, _) => remoteRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Capture(repositoryRoot, configPath));
+
+        Assert.Contains("unsafeFlags", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Capture_accepts_declarative_exact_remote_package_revision()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var remoteRoot = scope.CreateDirectory("RemoteSafePackage");
+        RunGit(remoteRoot, "init", "--quiet");
+        File.WriteAllText(Path.Combine(remoteRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\n" +
+            "let package = Package(name: \"Remote\", targets: [" +
+            ".target(name: \"Remote\", dependencies: [.target(name: \"HostFallback\", condition: .when(platforms: [.linux, .windows]))]), " +
+            ".systemLibrary(name: \"HostFallback\", pkgConfig: \"host-fallback\")])");
+        var sources = scope.CreateDirectory(Path.Combine("RemoteSafePackage", "Sources", "Remote"));
+        File.WriteAllText(Path.Combine(sources, "Remote.swift"), "public struct Remote {}");
+        var remoteRevision = CommitRepository(remoteRoot);
+
+        var repositoryRoot = scope.CreateDirectory("SafeRemotePackageConsumer");
+        var project = scope.CreateDirectory(Path.Combine("SafeRemotePackageConsumer", "Sample.xcodeproj"));
+        const string remoteUrl = "https://example.invalid/RemoteSafePackage.git";
+        File.WriteAllText(Path.Combine(project, "project.pbxproj"),
+            $"000000000000000000000001 = {{ isa = XCRemoteSwiftPackageReference; repositoryURL = \"{remoteUrl}\"; requirement = {{ kind = revision; revision = {remoteRevision}; }}; }};");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var expected = CommitRepository(repositoryRoot);
+        var service = new AppleReleaseSourceTrustService(
+            remotePackageCheckoutResolver: (_, _) => remoteRoot);
+
+        var actual = service.ResolveExactCommit(repositoryRoot, configPath);
 
         Assert.Equal(expected, actual);
     }

@@ -20,6 +20,13 @@ internal sealed partial class AppleReleaseSourceTrustService
                 source,
                 responseFiles)
             .ToArray();
+        ValidateLinkerFileLists(
+            repositoryRoot,
+            projectDirectory,
+            expandedTokens,
+            key,
+            generatedOutputPaths,
+            source);
         foreach (var rawValue in ExtractBuildFlagInputPaths(expandedTokens, key))
         {
             var normalizedValue = rawValue.Trim().TrimEnd('/');
@@ -39,6 +46,51 @@ internal sealed partial class AppleReleaseSourceTrustService
                 throw new FileNotFoundException(
                     $"Xcode build setting {key} references a missing exact-source input: {candidate}",
                     candidate);
+        }
+    }
+
+    private void ValidateLinkerFileLists(
+        string repositoryRoot,
+        string projectDirectory,
+        string[] inputTokens,
+        string key,
+        IReadOnlyCollection<string> generatedOutputPaths,
+        string source)
+    {
+        var tokens = ExpandForwardedBuildFlagTokens(inputTokens, key);
+        for (var index = 0; index < tokens.Length; index++)
+        {
+            if (!tokens[index].Equals("-filelist", StringComparison.Ordinal))
+                continue;
+            if (++index >= tokens.Length)
+                throw new InvalidOperationException($"Xcode build setting {key} ends with linker option '-filelist' and no input.");
+
+            var parts = tokens[index].Split(new[] { ',' }, 2, StringSplitOptions.None);
+            var listPath = ResolveBuildSettingPath(projectDirectory, parts[0], key);
+            EnsurePathWithinRepository(repositoryRoot, listPath, $"linker file list from {source}");
+            EnsureNoGeneratedOutputOverlap(listPath, generatedOutputPaths, $"Xcode build setting {key} linker file list");
+            if (!File.Exists(listPath))
+                throw new FileNotFoundException($"Xcode build setting {key} references a missing linker file list: {listPath}", listPath);
+            EnsureTrackedFile(repositoryRoot, listPath, $"Xcode build setting {key} linker file list");
+
+            var inputRoot = parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[1])
+                ? ResolveBuildSettingPath(projectDirectory, parts[1], key)
+                : projectDirectory;
+            EnsurePathWithinRepository(repositoryRoot, inputRoot, $"linker file list base directory from {source}");
+            foreach (var line in File.ReadAllLines(listPath))
+            {
+                var entry = line.Trim();
+                if (entry.Length >= 2 && entry[0] == '"' && entry[entry.Length - 1] == '"')
+                    entry = entry.Substring(1, entry.Length - 2).Replace("\\\"", "\"");
+                if (string.IsNullOrWhiteSpace(entry))
+                    continue;
+                var candidate = ResolveBuildSettingPath(inputRoot, entry, key);
+                EnsurePathWithinRepository(repositoryRoot, candidate, $"linker file list entry from {source}");
+                EnsureNoGeneratedOutputOverlap(candidate, generatedOutputPaths, $"Xcode build setting {key} linker file list entry");
+                if (!File.Exists(candidate))
+                    throw new FileNotFoundException($"Xcode build setting {key} linker file list references a missing exact-source input: {candidate}", candidate);
+                EnsureTrackedFile(repositoryRoot, candidate, $"Xcode build setting {key} linker file list entry");
+            }
         }
     }
 
@@ -115,7 +167,6 @@ internal sealed partial class AppleReleaseSourceTrustService
                 token.Equals("-L", StringComparison.Ordinal) ||
                 token.Equals("-include", StringComparison.Ordinal) ||
                 token.Equals("-force_load", StringComparison.Ordinal) ||
-                token.Equals("-filelist", StringComparison.Ordinal) ||
                 token.Equals("-ivfsoverlay", StringComparison.Ordinal) ||
                 token.Equals("-vfsoverlay", StringComparison.Ordinal) ||
                 token.Equals("-fplugin", StringComparison.Ordinal) ||
@@ -128,6 +179,14 @@ internal sealed partial class AppleReleaseSourceTrustService
                 token.Equals("-sdk", StringComparison.Ordinal))
             {
                 consumeNext = true;
+                continue;
+            }
+
+
+            if (token.Equals("-filelist", StringComparison.Ordinal))
+            {
+                if (++index >= tokens.Length)
+                    throw new InvalidOperationException($"Xcode build setting {key} ends with linker option '-filelist' and no input.");
                 continue;
             }
 

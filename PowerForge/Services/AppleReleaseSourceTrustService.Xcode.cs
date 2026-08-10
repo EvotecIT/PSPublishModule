@@ -39,6 +39,14 @@ internal sealed partial class AppleReleaseSourceTrustService
         "OTHER_SWIFT_FLAGS"
     };
 
+    private static readonly HashSet<string> DefinitionBuildSettings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "GCC_PREPROCESSOR_DEFINITIONS",
+        "GCC_PREPROCESSOR_DEFINITIONS_NOT_USED_IN_PRECOMPS",
+        "INFOPLIST_PREPROCESSOR_DEFINITIONS",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS"
+    };
+
     private static readonly HashSet<string> ExecutableBuildSettings = new(StringComparer.OrdinalIgnoreCase)
     {
         "ACTOOL", "AR", "AS", "BITCODE_STRIP", "CC", "CHMOD", "CHOWN", "CODE_SIGN", "CODESIGN_ALLOCATE",
@@ -276,6 +284,17 @@ internal sealed partial class AppleReleaseSourceTrustService
                     $"PBX legacy targets are not accepted for exact-source checkpoints because their external build tool cannot be proven: {metadataPath}");
             }
 
+            if (item.Isa.Equals("PBXBuildFile", StringComparison.OrdinalIgnoreCase))
+            {
+                ValidateBuildFileSettings(
+                    repositoryRoot,
+                    projectDirectory,
+                    item,
+                    generatedOutputPaths,
+                    metadataPath);
+                continue;
+            }
+
             if (item.Isa.Equals("XCLocalSwiftPackageReference", StringComparison.OrdinalIgnoreCase))
             {
                 ValidateLocalPackageReference(
@@ -335,6 +354,39 @@ internal sealed partial class AppleReleaseSourceTrustService
                 metadataPath,
                 generatedOutputPaths,
                 buildFileReferences);
+        }
+    }
+
+    private void ValidateBuildFileSettings(
+        string repositoryRoot,
+        string projectDirectory,
+        PbxObject item,
+        IReadOnlyCollection<string> generatedOutputPaths,
+        string metadataPath)
+    {
+        var settings = ReadPbxDictionary(item.Body, "settings");
+        if (settings is null)
+            return;
+
+        foreach (var assignment in ReadPbxAssignments(settings))
+        {
+            if (assignment.Key.Equals("ATTRIBUTES", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (assignment.Key.Equals("COMPILER_FLAGS", StringComparison.OrdinalIgnoreCase))
+            {
+                ValidateBuildFlagInputPaths(
+                    repositoryRoot,
+                    projectDirectory,
+                    assignment.Value,
+                    "COMPILER_FLAGS",
+                    generatedOutputPaths,
+                    $"PBXBuildFile '{item.Id}' in {metadataPath}",
+                    new HashSet<string>(GetPathComparer()));
+                continue;
+            }
+
+            throw new InvalidOperationException(
+                $"PBXBuildFile '{item.Id}' uses unsupported per-file setting '{assignment.Key}', whose build behavior cannot be proven: {metadataPath}");
         }
     }
 
@@ -487,7 +539,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         var kind = requirement is null ? null : ReadPbxScalar(requirement, "kind");
         var revision = requirement is null ? null : ReadPbxScalar(requirement, "revision");
         var exactRevision = string.Equals(kind, "revision", StringComparison.OrdinalIgnoreCase) &&
-                            revision?.Length == 40 &&
+                            (revision?.Length == 40 || revision?.Length == 64) &&
                             revision.All(Uri.IsHexDigit);
         var locks = FindTrackedPackageLocks(packageLockPaths, repositoryUrl!);
         if (locks.Length == 0 && !exactRevision)
@@ -497,6 +549,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
         foreach (var packageLock in locks)
             EnsureTrackedFile(repositoryRoot, packageLock, "Swift package resolution lock");
+        var resolvedRevision = ResolvePackageRevision(packageLockPaths, repositoryUrl!, exactRevision ? revision : null);
+        ValidateRemotePackageSource(repositoryUrl!, resolvedRevision, packageLockPaths);
     }
 
     private void ValidateResolvedProjectInput(

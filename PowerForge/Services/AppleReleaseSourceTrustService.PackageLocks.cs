@@ -18,6 +18,9 @@ internal sealed partial class AppleReleaseSourceTrustService
     }
 
     private static bool PackageLockBindsDependency(string path, string dependencyIdentity)
+        => ReadPackagePinRevisions(path, dependencyIdentity).Length > 0;
+
+    private static string[] ReadPackagePinRevisions(string path, string dependencyIdentity)
     {
         JsonDocument document;
         try
@@ -29,6 +32,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException($"Swift package resolution lock is not valid JSON: {path}", exception);
         }
 
+        var revisions = new List<string>();
         using (document)
         {
             var root = document.RootElement;
@@ -38,7 +42,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                  legacyObject.TryGetProperty("pins", out pins)))
             {
                 if (pins.ValueKind != JsonValueKind.Array)
-                    return false;
+                    return Array.Empty<string>();
                 foreach (var pin in pins.EnumerateArray())
                 {
                     if (!PackagePinMatchesIdentity(pin, dependencyIdentity) ||
@@ -49,22 +53,43 @@ internal sealed partial class AppleReleaseSourceTrustService
 
                     var revision = ReadJsonString(state, "revision");
                     if (!string.IsNullOrWhiteSpace(revision) &&
-                        revision!.Length == 40 &&
+                        (revision!.Length == 40 || revision.Length == 64) &&
                         revision.All(Uri.IsHexDigit))
                     {
-                        return true;
+                        revisions.Add(revision.ToLowerInvariant());
                     }
 
                     if (!LooksLikeRepositoryLocation(dependencyIdentity) &&
                         !string.IsNullOrWhiteSpace(ReadJsonString(state, "version")))
                     {
-                        return true;
+                        throw new InvalidOperationException(
+                            $"Swift registry package '{dependencyIdentity}' is version-bound but cannot be source-inspected as a Git revision.");
                     }
                 }
             }
         }
 
-        return false;
+        return revisions.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static string ResolvePackageRevision(
+        IReadOnlyCollection<string> effectiveLockPaths,
+        string dependencyIdentity,
+        string? exactRevision = null)
+    {
+        if (!string.IsNullOrWhiteSpace(exactRevision))
+            return exactRevision!.ToLowerInvariant();
+        var revisions = effectiveLockPaths
+            .Where(File.Exists)
+            .SelectMany(path => ReadPackagePinRevisions(path, dependencyIdentity))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (revisions.Length != 1)
+        {
+            throw new InvalidOperationException(
+                $"Remote Swift package '{dependencyIdentity}' must resolve to one exact Git revision across the effective Package.resolved graph.");
+        }
+        return revisions[0];
     }
 
     private static bool PackagePinMatchesIdentity(JsonElement pin, string dependencyIdentity)

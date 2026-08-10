@@ -44,7 +44,7 @@ internal sealed partial class PowerForgeReleaseService
                     string.Equals(candidate.BundleId, target.BundleId, StringComparison.OrdinalIgnoreCase) &&
                     candidate.Platform == target.Platform &&
                     candidate.DistributionRoute == target.DistributionRoute);
-                if (app is null || string.IsNullOrWhiteSpace(receipt.ReceiptSha256))
+                if (app is null || receipt.SchemaVersion < 5 || string.IsNullOrWhiteSpace(receipt.ReceiptSha256))
                     continue;
                 var artifactPath = ValidateDirectRecoveryArtifactPath(plan, app, target.DirectArtifactPath!);
                 if (File.Exists(artifactPath) || Directory.Exists(artifactPath))
@@ -239,6 +239,7 @@ internal sealed partial class PowerForgeReleaseService
         string? build)
     {
         if (receipt.PlanOnly ||
+            receipt.SchemaVersion < 5 ||
             string.IsNullOrWhiteSpace(receipt.ReceiptSha256) ||
             !string.Equals(receipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))
         {
@@ -323,6 +324,7 @@ internal sealed partial class PowerForgeReleaseService
         var prior = _appleReceiptStore.ReadAll(plan)
             .Where(receipt =>
                 !receipt.PlanOnly &&
+                receipt.SchemaVersion >= 5 &&
                 !string.IsNullOrWhiteSpace(receipt.ReceiptSha256) &&
                 !string.IsNullOrWhiteSpace(plan.SourceCommit) &&
                 string.Equals(receipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))

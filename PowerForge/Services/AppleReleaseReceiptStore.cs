@@ -10,6 +10,8 @@ namespace PowerForge;
 internal sealed class AppleReleaseReceiptStore
 {
     private const long MaximumReceiptBytes = 2L * 1024L * 1024L;
+    private const int AuthenticatedReceiptSchemaVersion = 5;
+    private const string AuthenticationKeyEnvironmentVariable = "POWERFORGE_APPLE_RECEIPT_AUTH_KEY_PATH";
     private static readonly StringComparison PathComparison =
         Path.DirectorySeparatorChar == '\\'
             ? StringComparison.OrdinalIgnoreCase
@@ -104,7 +106,10 @@ internal sealed class AppleReleaseReceiptStore
         receipt.ReceiptPath = ToRelativePath(plan.ProjectRoot, plan.ReceiptPath);
         receipt.HistoryPath = ToRelativePath(plan.ProjectRoot, historyPath);
         receipt.PreviousReceiptSha256 = previousReceipt?.ReceiptSha256;
+        receipt.SchemaVersion = AuthenticatedReceiptSchemaVersion;
+        receipt.ReceiptAuthenticationSha256 = null;
         receipt.ReceiptSha256 = ComputeReceiptSha256(receipt);
+        receipt.ReceiptAuthenticationSha256 = ComputeReceiptAuthenticationSha256(receipt.ReceiptSha256, readOnly: false);
 
         var payload = Serialize(receipt);
         WriteImmutableHistoryEntry(historyDirectory, historyPath, payload);
@@ -302,6 +307,16 @@ internal sealed class AppleReleaseReceiptStore
                 throw new InvalidOperationException($"Apple release receipt integrity validation failed: {path}");
         }
 
+        if (receipt.SchemaVersion >= AuthenticatedReceiptSchemaVersion)
+        {
+            var authentication = receipt.ReceiptAuthenticationSha256?.Trim();
+            if (!IsSha256(authentication) || string.IsNullOrWhiteSpace(receipt.ReceiptSha256))
+                throw new InvalidOperationException($"Apple release receipt is missing its required recovery authentication: {path}");
+            var actualAuthentication = ComputeReceiptAuthenticationSha256(receipt.ReceiptSha256!, readOnly: true);
+            if (!FixedTimeHexEquals(authentication!, actualAuthentication))
+                throw new InvalidOperationException($"Apple release receipt recovery authentication failed: {path}");
+        }
+
         return receipt;
     }
 
@@ -322,7 +337,9 @@ internal sealed class AppleReleaseReceiptStore
                 writer.WriteStartObject();
                 foreach (var property in element.EnumerateObject().OrderBy(static value => value.Name, StringComparer.Ordinal))
                 {
-                    if (omitReceiptHash && property.Name.Equals("receiptSha256", StringComparison.OrdinalIgnoreCase))
+                    if (omitReceiptHash &&
+                        (property.Name.Equals("receiptSha256", StringComparison.OrdinalIgnoreCase) ||
+                         property.Name.Equals("receiptAuthenticationSha256", StringComparison.OrdinalIgnoreCase)))
                         continue;
                     writer.WritePropertyName(property.Name);
                     WriteCanonicalJson(writer, property.Value, omitReceiptHash: false);
@@ -468,6 +485,84 @@ internal sealed class AppleReleaseReceiptStore
         => !string.IsNullOrWhiteSpace(value) &&
            value!.Length == 64 &&
            value.All(static character => Uri.IsHexDigit(character));
+
+    private static string ComputeReceiptAuthenticationSha256(string receiptSha256, bool readOnly)
+    {
+        var key = ReadAuthenticationKey(readOnly);
+        using var hmac = new HMACSHA256(key);
+        return ToLowerHex(hmac.ComputeHash(System.Text.Encoding.ASCII.GetBytes(receiptSha256.ToLowerInvariant())));
+    }
+
+    private static byte[] ReadAuthenticationKey(bool readOnly)
+    {
+        var configured = Environment.GetEnvironmentVariable(AuthenticationKeyEnvironmentVariable);
+        var keyPath = Path.GetFullPath(string.IsNullOrWhiteSpace(configured)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".powerforge", "apple-receipt-auth.key")
+            : configured!);
+        EnsureUnlinkedAuthenticationKeyPath(keyPath);
+        if (!File.Exists(keyPath))
+        {
+            if (readOnly)
+                throw new InvalidOperationException(
+                    $"Authenticated Apple release evidence requires the machine-local key '{keyPath}', but it was not found.");
+            var directory = Path.GetDirectoryName(keyPath)!;
+            Directory.CreateDirectory(directory);
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+#endif
+            var generated = new byte[32];
+            using (var random = RandomNumberGenerator.Create())
+                random.GetBytes(generated);
+            try
+            {
+                using var stream = new FileStream(keyPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                stream.Write(generated, 0, generated.Length);
+                stream.Flush(flushToDisk: true);
+#if NET8_0_OR_GREATER
+                if (!OperatingSystem.IsWindows())
+                    File.SetUnixFileMode(keyPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+#endif
+            }
+            catch (IOException) when (File.Exists(keyPath))
+            {
+                // Another release process created the same machine-local key.
+            }
+        }
+
+        var key = File.ReadAllBytes(keyPath);
+        if (key.Length != 32)
+            throw new InvalidOperationException($"Apple release receipt authentication key must contain exactly 32 bytes: {keyPath}");
+        return key;
+    }
+
+    private static void EnsureUnlinkedAuthenticationKeyPath(string keyPath)
+    {
+        var current = File.Exists(keyPath) ? keyPath : Path.GetDirectoryName(keyPath);
+        while (!string.IsNullOrWhiteSpace(current))
+        {
+            if ((File.Exists(current) || Directory.Exists(current)) &&
+                (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Apple release receipt authentication key must not traverse a symbolic link or reparse point: {current}");
+            }
+            var parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) || parent.Equals(current, PathComparison))
+                break;
+            current = parent;
+        }
+    }
+
+    private static bool FixedTimeHexEquals(string left, string right)
+    {
+        if (left.Length != right.Length)
+            return false;
+        var difference = 0;
+        for (var index = 0; index < left.Length; index++)
+            difference |= char.ToLowerInvariant(left[index]) ^ char.ToLowerInvariant(right[index]);
+        return difference == 0;
+    }
 
     private static void EnsureSafeOutputPath(string projectRoot, string path, string settingName)
     {

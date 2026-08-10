@@ -21,15 +21,19 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private readonly HomeAssistantReleaseGitService _git;
     private readonly GitClient _gitClient;
+    private readonly Func<string, string, string>? _remotePackageCheckoutResolver;
     private readonly Dictionary<string, string> _gitObjectFormats = new(
         Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    private readonly HashSet<string> _validatedRemotePackages = new(StringComparer.OrdinalIgnoreCase);
 
     internal AppleReleaseSourceTrustService(
         HomeAssistantReleaseGitService? git = null,
-        GitClient? gitClient = null)
+        GitClient? gitClient = null,
+        Func<string, string, string>? remotePackageCheckoutResolver = null)
     {
         _git = git ?? new HomeAssistantReleaseGitService();
         _gitClient = gitClient ?? new GitClient(defaultTimeout: TimeSpan.FromMinutes(2));
+        _remotePackageCheckoutResolver = remotePackageCheckoutResolver;
     }
 
     internal string ResolveExactCommit(string repositoryRoot, string configPath)
