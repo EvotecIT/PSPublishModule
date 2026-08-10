@@ -134,6 +134,19 @@ public static partial class WebSearchProviderDoctor
                 WebSearchProviderCheckSeverity.Error,
                 $"Provider configuration schema version {configuration.SchemaVersion} is not supported; expected {WebSearchProviderConfiguration.CurrentSchemaVersion}.");
         }
+        try
+        {
+            WebSearchFleetPlanner.ValidatePolicy(configuration.Operations ?? new WebSearchFleetOperationsConfiguration());
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            AddCheck(
+                checks,
+                "configuration.operations-invalid",
+                WebSearchProviderCheckSeverity.Error,
+                ex.Message,
+                remediation: "Use the bounded scheduling and retention ranges published by the provider schema.");
+        }
 
         var sites = configuration.Sites ?? Array.Empty<WebSearchSiteProviderConfiguration>();
         if (sites.Length == 0)

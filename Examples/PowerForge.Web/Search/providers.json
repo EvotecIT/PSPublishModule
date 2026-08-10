@@ -1,5 +1,16 @@
 {
   "schemaVersion": 1,
+  "operations": {
+    "backfillStartDate": "2025-01-01",
+    "maxBackfillDaysPerRun": 31,
+    "searchDataLagDays": 3,
+    "trafficDataLagDays": 1,
+    "cruxIntervalDays": 7,
+    "lighthouseIntervalDays": 7,
+    "searchRunRetentionDays": 730,
+    "trafficRunRetentionDays": 400,
+    "performanceRunRetentionDays": 400
+  },
   "sites": [
     {
       "id": "officeimo",

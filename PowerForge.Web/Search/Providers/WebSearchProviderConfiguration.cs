@@ -16,6 +16,51 @@ public sealed class WebSearchProviderConfiguration
     /// <summary>Sites governed by this configuration.</summary>
     [JsonPropertyName("sites"), JsonRequired]
     public WebSearchSiteProviderConfiguration[] Sites { get; set; } = Array.Empty<WebSearchSiteProviderConfiguration>();
+
+    /// <summary>Optional fleet scheduling, backfill, and retention policy.</summary>
+    [JsonPropertyName("operations")]
+    public WebSearchFleetOperationsConfiguration? Operations { get; set; }
+}
+
+/// <summary>Portable policy used by fleet schedulers and retention jobs.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class WebSearchFleetOperationsConfiguration
+{
+    /// <summary>Oldest reporting date that automatic backfill may request.</summary>
+    [JsonPropertyName("backfillStartDate")]
+    public DateOnly? BackfillStartDate { get; set; }
+
+    /// <summary>Maximum consecutive daily partitions emitted in one work item.</summary>
+    [JsonPropertyName("maxBackfillDaysPerRun")]
+    public int MaxBackfillDaysPerRun { get; set; } = 31;
+
+    /// <summary>Delay behind the current UTC date before search data is treated as final.</summary>
+    [JsonPropertyName("searchDataLagDays")]
+    public int SearchDataLagDays { get; set; } = 3;
+
+    /// <summary>Delay behind the current UTC date before traffic data is collected.</summary>
+    [JsonPropertyName("trafficDataLagDays")]
+    public int TrafficDataLagDays { get; set; } = 1;
+
+    /// <summary>Minimum age of complete CrUX evidence before another collection is due.</summary>
+    [JsonPropertyName("cruxIntervalDays")]
+    public int CruxIntervalDays { get; set; } = 7;
+
+    /// <summary>Minimum age of complete Lighthouse evidence before another capture is due.</summary>
+    [JsonPropertyName("lighthouseIntervalDays")]
+    public int LighthouseIntervalDays { get; set; } = 7;
+
+    /// <summary>Retention window for collected search runs, based on collection time.</summary>
+    [JsonPropertyName("searchRunRetentionDays")]
+    public int SearchRunRetentionDays { get; set; } = 730;
+
+    /// <summary>Retention window for collected traffic runs, based on collection time.</summary>
+    [JsonPropertyName("trafficRunRetentionDays")]
+    public int TrafficRunRetentionDays { get; set; } = 400;
+
+    /// <summary>Retention window for collected performance runs, based on collection time.</summary>
+    [JsonPropertyName("performanceRunRetentionDays")]
+    public int PerformanceRunRetentionDays { get; set; } = 400;
 }
 
 /// <summary>Provider registrations for one fleet site.</summary>
