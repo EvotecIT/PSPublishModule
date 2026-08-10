@@ -203,8 +203,10 @@ internal sealed partial class SqliteWebSearchObservationStore
                     }
                     foreach (var scope in scopes)
                     {
-                        var dates = scope.Select(value => value.Date);
-                        if (scope.Key == "web")
+                        var dates = run.Status == "partial"
+                            ? explicitDates
+                            : scope.Select(value => value.Date);
+                        if (run.Status != "partial" && scope.Key == "web")
                             dates = dates.Concat(explicitDates);
                         result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
                             scope.Key, MergeDates(dates), run.ConfigurationHash, run.FailureCategory, run.FailureDate));

@@ -65,6 +65,57 @@ public sealed partial class WebSearchFleetOperationsTests
     }
 
     [Fact]
+    public async Task Snapshot_DoesNotCreditFailedDateRowsAsCompletedCoverage()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var completedDate = new DateOnly(2026, 8, 1);
+            var failedDate = completedDate.AddDays(1);
+            await store.ImportAsync(WebSearchObservationNormalizer.Normalize(new WebSearchObservationBatch
+            {
+                SchemaVersion = 2,
+                RunId = "partial-failed-date-row",
+                Provider = "gsc",
+                SiteId = "officeimo",
+                CollectedAtUtc = AsOf.AddMinutes(-1),
+                SourceKind = "fixture",
+                Status = "partial",
+                CollectionCoverage = new WebSearchObservationCollectionCoverage
+                {
+                    FromDate = completedDate,
+                    ThroughDate = failedDate,
+                    CompletedDates = [completedDate],
+                    FailedDate = failedDate,
+                    FailureCategory = "provider-unavailable"
+                },
+                Observations =
+                [
+                    new WebSearchObservation
+                    {
+                        Date = failedDate,
+                        Page = "https://officeimo.com/incomplete",
+                        Clicks = 1,
+                        Impressions = 2
+                    }
+                ]
+            }));
+
+            var stream = Assert.Single((await store.ReadFleetSnapshotAsync()).Streams);
+
+            Assert.True(stream.HasPartialEvidence);
+            var range = Assert.Single(stream.CompletedRanges);
+            Assert.Equal(completedDate, range.FromDate);
+            Assert.Equal(completedDate, range.ThroughDate);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Snapshot_ExcludesRunsCollectedAfterTheRequestedAsOfTime()
     {
         var root = CreateTempRoot();
