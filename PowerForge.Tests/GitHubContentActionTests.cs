@@ -120,7 +120,7 @@ public sealed class GitHubContentActionTests
         Assert.Contains("group: powerforge-github-content-${{ github.repository }}-${{ github.ref }}", workflow, StringComparison.Ordinal);
         Assert.Contains("cancel-in-progress: false", workflow, StringComparison.Ordinal);
         Assert.Contains(
-            "- name: Checkout caller repository\n        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4\n        with:\n          # Resolve the branch when this serialized job actually starts.",
+            "- name: Checkout caller repository\n        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4\n        with:\n          # Resolve the branch when this serialized job actually starts.",
             Normalize(workflow),
             StringComparison.Ordinal);
         Assert.Contains("ref: ${{ github.ref }}", workflow, StringComparison.Ordinal);

@@ -125,8 +125,8 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("FullyQualifiedName~GitHubServerRecoveryValidation", workflow, StringComparison.Ordinal);
         Assert.Contains("FullyQualifiedName~ServerRecovery", workflow, StringComparison.Ordinal);
         Assert.Contains("FullyQualifiedName~ServerScaffoldTests", workflow, StringComparison.Ordinal);
-        Assert.Contains("actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd", workflow, StringComparison.Ordinal);
-        Assert.Contains("actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7", workflow, StringComparison.Ordinal);
+        Assert.Contains("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", workflow, StringComparison.Ordinal);
+        Assert.Contains("actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68", workflow, StringComparison.Ordinal);
     }
 
     private static string ReadRepoFile(params string[] relativePath)
