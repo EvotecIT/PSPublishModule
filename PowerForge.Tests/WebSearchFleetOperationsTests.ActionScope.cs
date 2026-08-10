@@ -74,4 +74,29 @@ public sealed partial class WebSearchFleetOperationsTests
         Assert.Equal(new DateOnly(2026, 1, 7), item.ThroughDate);
         Assert.True(item.HasMoreBackfill);
     }
+
+    [Fact]
+    public void Planner_ReturnsConfigurationErrorsWhenADailyProviderKindIsNull()
+    {
+        var configuration = CreateConfiguration();
+        var provider = configuration.Sites[0].Providers.Single(value => value.Id == "gsc");
+        configuration.Sites[0].Providers = [provider];
+        provider.Kind = null!;
+        var doctor = Doctor(configuration);
+
+        var plan = WebSearchFleetPlanner.CreateSchedule(
+            configuration,
+            doctor,
+            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 6 },
+            AsOf);
+        var report = WebSearchFleetPlanner.CreateReport(
+            configuration,
+            doctor,
+            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 6 },
+            AsOf);
+
+        Assert.False(doctor.Success);
+        Assert.Equal("configuration-error", Assert.Single(plan.WorkItems).Readiness);
+        Assert.Equal("configuration-error", Assert.Single(report.Rows).EvidenceState);
+    }
 }

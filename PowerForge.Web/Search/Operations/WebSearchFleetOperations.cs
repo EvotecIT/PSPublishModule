@@ -363,7 +363,7 @@ public static class WebSearchFleetPlanner
         var start = FindFirstMissing(policy.BackfillStartDate ?? defaultStart, targetThrough, ranges);
         if (start is null)
             return;
-        var maximumDays = provider.Kind.Equals(GoogleSearchConsoleCollector.ProviderKind, StringComparison.OrdinalIgnoreCase)
+        var maximumDays = string.Equals(provider.Kind, GoogleSearchConsoleCollector.ProviderKind, StringComparison.OrdinalIgnoreCase)
             ? Math.Min(policy.MaxBackfillDaysPerRun, GoogleSearchConsoleCollector.MaximumCollectionDateCount)
             : policy.MaxBackfillDaysPerRun;
         var through = start.Value.AddDays(maximumDays - 1);
