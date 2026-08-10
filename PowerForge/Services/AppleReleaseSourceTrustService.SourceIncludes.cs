@@ -166,6 +166,21 @@ internal sealed partial class AppleReleaseSourceTrustService
     private void ValidatePreprocessorFileExistenceProbes(string repositoryRoot, string sourcePath, string source)
     {
         var syntax = MaskCStringAndCharacterLiterals(source);
+        var tokenPastedOperator = FindTokenPastedPreprocessorFileSelectionOperator(syntax);
+        if (tokenPastedOperator is not null)
+        {
+            throw new InvalidOperationException(
+                $"Source input '{sourcePath}' constructs preprocessor file-selection probe '{tokenPastedOperator}' through token pasting and cannot be bound to exact source.");
+        }
+        var embedProbe = Regex.Match(
+            syntax,
+            "(?<![A-Za-z0-9_])__has_embed[ \\t]*\\(",
+            RegexOptions.CultureInvariant);
+        if (embedProbe.Success)
+        {
+            throw new InvalidOperationException(
+                $"Source input '{sourcePath}' uses a C23 __has_embed probe, whose file selection cannot be bound safely to the exact source commit.");
+        }
         foreach (Match probe in Regex.Matches(
                      syntax,
                      "(?<![A-Za-z0-9_])__has_include(?:_next)?[ \\t]*\\(",
@@ -201,6 +216,20 @@ internal sealed partial class AppleReleaseSourceTrustService
                 throw new FileNotFoundException($"Preprocessor file-existence probe input was not found: {candidate}", candidate);
             EnsureTrackedFile(repositoryRoot, candidate, $"preprocessor file-existence probe from {sourcePath}");
         }
+    }
+
+    private static string? FindTokenPastedPreprocessorFileSelectionOperator(string syntax)
+    {
+        var tokenPastedSyntax = Regex.Replace(syntax, "[ \\t\\r\\n]*(?:##|%:%:)[ \\t\\r\\n]*", string.Empty);
+        foreach (var operatorName in new[] { "__has_include", "__has_include_next", "__has_embed" })
+        {
+            if (!syntax.Contains(operatorName, StringComparison.Ordinal) &&
+                tokenPastedSyntax.Contains(operatorName, StringComparison.Ordinal))
+            {
+                return operatorName;
+            }
+        }
+        return null;
     }
 
     private static readonly HashSet<string> ApprovedToolchainHeaders = new(StringComparer.Ordinal)

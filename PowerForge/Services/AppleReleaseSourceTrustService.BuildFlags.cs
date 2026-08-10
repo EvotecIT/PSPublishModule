@@ -161,6 +161,33 @@ internal sealed partial class AppleReleaseSourceTrustService
                 continue;
             }
 
+            if (token.Equals("-load-plugin-executable", StringComparison.Ordinal))
+            {
+                if (++index >= tokens.Length)
+                    throw new InvalidOperationException($"Xcode build setting {key} ends with Swift compiler option '-load-plugin-executable' and no argument.");
+                yield return ReadSwiftPluginExecutablePath(tokens[index], key);
+                continue;
+            }
+            if (token.StartsWith("-load-plugin-executable=", StringComparison.Ordinal))
+            {
+                yield return ReadSwiftPluginExecutablePath(token.Substring("-load-plugin-executable=".Length), key);
+                continue;
+            }
+            if (token.Equals("-external-plugin-path", StringComparison.Ordinal))
+            {
+                if (++index >= tokens.Length)
+                    throw new InvalidOperationException($"Xcode build setting {key} ends with Swift compiler option '-external-plugin-path' and no argument.");
+                foreach (var path in ReadSwiftExternalPluginPaths(tokens[index], key))
+                    yield return path;
+                continue;
+            }
+            if (token.StartsWith("-external-plugin-path=", StringComparison.Ordinal))
+            {
+                foreach (var path in ReadSwiftExternalPluginPaths(token.Substring("-external-plugin-path=".Length), key))
+                    yield return path;
+                continue;
+            }
+
             if (token.Equals("-I", StringComparison.Ordinal) ||
                 token.Equals("-F", StringComparison.Ordinal) ||
                 token.Equals("-L", StringComparison.Ordinal) ||
@@ -186,6 +213,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 token.Equals("-load", StringComparison.Ordinal) ||
                 token.Equals("-plugin", StringComparison.Ordinal) ||
                 token.Equals("-plugin-path", StringComparison.Ordinal) ||
+                token.Equals("-load-plugin-library", StringComparison.Ordinal) ||
                 token.Equals("-module-map-file", StringComparison.Ordinal) ||
                 token.Equals("-fmodule-map-file", StringComparison.Ordinal) ||
                 token.Equals("-fmodule-file", StringComparison.Ordinal) ||
@@ -240,6 +268,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 "-include-pch=", "-include-pth=", "-gcc-toolchain=", "-resource-dir=",
                 "-iwithprefix", "-fprofile-use=", "-fmodule-file=", "-module-map-file=",
                 "-ivfsoverlay=", "-vfsoverlay=", "-plugin-path=", "-fpass-plugin=",
+                "-load-plugin-library=",
                 "-iframework", "-idirafter", "-imacros=", "-include=", "--sysroot=",
                 "-isystem-after", "-isystem", "-iquote", "-iprefix", "-fplugin=", "-isysroot=", "-sdk=",
                 "-I", "-F", "-L", "-B"
@@ -384,6 +413,34 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException(
                 $"Xcode build setting {key} contains a preprocessor definition or undefinition with an unresolved build-setting reference: {payload}");
         }
+        var nondeterministicIdentifier = FindNondeterministicCompilerMacro(payload);
+        if (nondeterministicIdentifier is not null)
+        {
+            throw new InvalidOperationException(
+                $"Xcode build setting {key} supplies nondeterministic compiler identifier '{nondeterministicIdentifier}' through a preprocessor definition or undefinition.");
+        }
+    }
+
+    private static string ReadSwiftPluginExecutablePath(string value, string key)
+    {
+        var separator = value.IndexOf('#');
+        if (separator <= 0 || separator == value.Length - 1)
+        {
+            throw new InvalidOperationException(
+                $"Xcode build setting {key} contains malformed Swift compiler plugin executable '{value}'. Expected <path>#<module-names>.");
+        }
+        return value.Substring(0, separator);
+    }
+
+    private static string[] ReadSwiftExternalPluginPaths(string value, string key)
+    {
+        var separator = value.IndexOf('#');
+        if (separator <= 0 || separator == value.Length - 1 || value.IndexOf('#', separator + 1) >= 0)
+        {
+            throw new InvalidOperationException(
+                $"Xcode build setting {key} contains malformed Swift external plugin path '{value}'. Expected <search-path>#<plugin-server-path>.");
+        }
+        return new[] { value.Substring(0, separator), value.Substring(separator + 1) };
     }
 
     private static string[] ExpandForwardedBuildFlagTokens(string[] tokens, string key)

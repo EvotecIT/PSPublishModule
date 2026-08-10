@@ -184,8 +184,9 @@ internal sealed partial class AppleReleaseSourceTrustService
             var logical = RemoveCComments(SpliceCPreprocessingLines(contents));
             if (Regex.IsMatch(
                     logical,
-                    "(?m)^[ \\t]*(?:#|%:)[ \\t]*(?:include|include_next|import|embed)(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])__has_include(?:_next)?[ \\t]*\\(",
-                    RegexOptions.CultureInvariant))
+                    "(?m)^[ \\t]*(?:#|%:)[ \\t]*(?:include|include_next|import|embed)(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])__has_(?:include(?:_next)?|embed)[ \\t]*\\(",
+                    RegexOptions.CultureInvariant) ||
+                FindTokenPastedPreprocessorFileSelectionOperator(logical) is not null)
             {
                 throw new InvalidOperationException(
                     $"Preprocessed INFOPLIST_FILE '{plistPath}' uses a file-selecting preprocessor directive that cannot consume unbound host bytes. " +

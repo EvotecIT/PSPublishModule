@@ -116,19 +116,28 @@ internal sealed class AppleReleaseVersionSourceService
     private void WriteIfUnchanged(string path, string expectedContent, string content)
     {
         var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(content);
-        using (var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
+        var directory = Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
+        var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        var backupPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.previous");
+        try
         {
-            string currentContent;
-            using (var reader = new StreamReader(
-                       stream,
-                       Encoding.UTF8,
-                       detectEncodingFromByteOrderMarks: true,
-                       bufferSize: 4096,
-                       leaveOpen: true))
+            using (var stream = new FileStream(
+                       temporaryPath,
+                       FileMode.CreateNew,
+                       FileAccess.Write,
+                       FileShare.None,
+                       bufferSize: 16 * 1024,
+                       options: FileOptions.WriteThrough))
             {
-                currentContent = reader.ReadToEnd();
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(flushToDisk: true);
             }
-            if (!string.Equals(currentContent, expectedContent, StringComparison.Ordinal))
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(temporaryPath, File.GetUnixFileMode(path));
+#endif
+
+            if (!string.Equals(File.ReadAllText(path), expectedContent, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
                     $"Apple version source changed after plan approval: {path}");
@@ -136,19 +145,48 @@ internal sealed class AppleReleaseVersionSourceService
 
             _onComparedVersionSource?.Invoke(path);
 
-            // Keep the same read/write handle from comparison through the durable
-            // write. Platforms with mandatory share modes exclude another writer;
-            // pathname-replacing editors are covered by the post-write check below.
-            stream.Position = 0;
-            stream.Write(bytes, 0, bytes.Length);
-            stream.SetLength(bytes.Length);
-            stream.Flush(flushToDisk: true);
-        }
+            File.Replace(temporaryPath, path, backupPath, ignoreMetadataErrors: true);
+            var replacedContent = File.ReadAllText(backupPath);
+            if (!string.Equals(replacedContent, expectedContent, StringComparison.Ordinal))
+            {
+                RestoreConcurrentVersionSource(path, backupPath, content);
+                throw new InvalidOperationException(
+                    $"Apple version source changed while applying the approved update and was restored instead of being overwritten: {path}");
+            }
+            File.Delete(backupPath);
 
-        // On platforms where a pathname can be replaced while its old inode is
-        // open, ensure that the bytes currently named by the source path are the
-        // bytes we published. An atomic editor wins and is never overwritten.
-        if (!string.Equals(File.ReadAllText(path), content, StringComparison.Ordinal))
-            throw new InvalidOperationException($"Apple version source changed while the approved update was being written: {path}");
+            if (!string.Equals(File.ReadAllText(path), content, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Apple version source changed while the approved update was being published: {path}");
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+            if (File.Exists(backupPath) && string.Equals(File.ReadAllText(backupPath), expectedContent, StringComparison.Ordinal))
+                File.Delete(backupPath);
+        }
+    }
+
+    private static void RestoreConcurrentVersionSource(string path, string candidatePath, string expectedNamedContent)
+    {
+        var directory = Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
+        while (true)
+        {
+            var installedCandidateContent = File.ReadAllText(candidatePath);
+            var displacedPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.displaced");
+            File.Replace(candidatePath, path, displacedPath, ignoreMetadataErrors: true);
+            var displacedContent = File.ReadAllText(displacedPath);
+            if (string.Equals(displacedContent, expectedNamedContent, StringComparison.Ordinal))
+            {
+                File.Delete(displacedPath);
+                return;
+            }
+
+            // A newer pathname replacement won while the prior concurrent bytes
+            // were being restored. Promote those newer bytes on the next atomic
+            // exchange instead of silently overwriting or deleting them.
+            candidatePath = displacedPath;
+            expectedNamedContent = installedCandidateContent;
+        }
     }
 }
