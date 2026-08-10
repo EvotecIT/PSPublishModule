@@ -63,6 +63,7 @@ collection: {{collection}}
             "observe" => HandleObserve(subArgs, outputJson, logger, outputSchemaVersion),
             "opportunity" => HandleOpportunity(subArgs, outputJson, logger, outputSchemaVersion),
             "traffic" => HandleTraffic(subArgs, outputJson, logger, outputSchemaVersion),
+            "performance" => HandlePerformance(subArgs, outputJson, logger, outputSchemaVersion),
             _ => HandleUnknownCommand()
         };
     }

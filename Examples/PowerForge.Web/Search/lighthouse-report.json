@@ -1,0 +1,30 @@
+{
+  "finalUrl": "https://officeimo.com/docs/",
+  "fetchTime": "2026-08-10T12:34:56Z",
+  "lighthouseVersion": "12.3.0",
+  "configSettings": {
+    "formFactor": "mobile"
+  },
+  "categories": {
+    "performance": {
+      "score": 0.91
+    }
+  },
+  "audits": {
+    "first-contentful-paint": {
+      "numericValue": 900
+    },
+    "largest-contentful-paint": {
+      "numericValue": 1800
+    },
+    "cumulative-layout-shift": {
+      "numericValue": 0.04
+    },
+    "total-blocking-time": {
+      "numericValue": 120
+    },
+    "speed-index": {
+      "numericValue": 1300
+    }
+  }
+}
