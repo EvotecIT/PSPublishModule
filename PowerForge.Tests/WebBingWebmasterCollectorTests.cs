@@ -81,7 +81,7 @@ public sealed class WebBingWebmasterCollectorTests
             0 => SitesResponse("https://officeimo.com/", true),
             1 => StatsResponse(Stat("powerforge", 3, 30, 4.5)),
             2 => StatsResponse(LegacyPageStat("https://officeimo.com/docs/powerforge", 2, 20, 3.25)),
-            3 => TrafficResponse(5, 50),
+            3 => throw new InvalidOperationException("Traffic totals must not be requested for nonempty dimensions."),
             _ => throw new InvalidOperationException("Unexpected request.")
         });
         using var httpClient = new HttpClient(handler);
@@ -94,7 +94,7 @@ public sealed class WebBingWebmasterCollectorTests
         var normalized = WebSearchObservationNormalizer.Normalize(result.Batch);
 
         Assert.True(result.Success);
-        Assert.Equal(4, result.RequestCount);
+        Assert.Equal(3, result.RequestCount);
         Assert.Equal(1, result.CompletedDateCount);
         Assert.Equal(CompletionTime, normalized.CollectedAtUtc);
         Assert.Equal("complete", normalized.Status);
@@ -110,7 +110,7 @@ public sealed class WebBingWebmasterCollectorTests
         Assert.Null(page.Query);
         Assert.Equal("web", page.SearchType);
         Assert.Equal(
-            ["GetUserSites", "GetQueryStats", "GetPageStats", "GetRankAndTrafficStats"],
+            ["GetUserSites", "GetQueryStats", "GetPageStats"],
             handler.Requests.Select(request => new Uri(request.AbsoluteUri).AbsolutePath.Split('/').Last()));
     }
 
@@ -468,6 +468,20 @@ public sealed class WebBingWebmasterCollectorTests
         var exception = Assert.Throws<ArgumentException>(() => BingWebmasterCsvExportParser.Parse(csv, options));
 
         Assert.Contains("only the 'web'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("NaN")]
+    [InlineData("not-a-number")]
+    public void CsvExport_RejectsMalformedSuppliedPositionsEvenWhenImpressionsAreZero(string position)
+    {
+        var csv = $"Date,Page,Clicks,Impressions,Position\n2026-08-01,https://officeimo.com/,0,0,{position}";
+
+        var exception = Assert.Throws<FormatException>(() =>
+            BingWebmasterCsvExportParser.Parse(csv, CreateCsvOptions()));
+
+        Assert.Contains("average position", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

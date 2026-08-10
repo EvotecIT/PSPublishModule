@@ -24,7 +24,7 @@ public static class WebSearchObservationNormalizer
             throw new ArgumentException("Search observation schema version 1 cannot contain collection coverage or zero-data confirmation.", nameof(batch));
         if (batch.SchemaVersion >= 2 && batch.CollectionCoverage is null)
             throw new ArgumentException("Search observation schema versions 2 and later require collection coverage.", nameof(batch));
-        if (batch.SchemaVersion == 2 && batch.CollectionCoverage?.Mode is not null)
+        if (batch.SchemaVersion == 2 && batch.CollectionCoverage?.ModeSpecified == true)
             throw new ArgumentException("Search observation schema version 2 cannot contain a coverage mode.", nameof(batch));
         if (batch.ObservationsWasNull)
             throw new ArgumentException("Search observation observations must be an array.", nameof(batch));
@@ -191,9 +191,8 @@ public static class WebSearchObservationNormalizer
                 throw new ArgumentException("Search observation type must match collection coverage.", nameof(coverage));
         }
 
-        return new WebSearchObservationCollectionCoverage
+        var normalizedCoverage = new WebSearchObservationCollectionCoverage
         {
-            Mode = schemaVersion >= 3 ? mode : null,
             FromDate = coverage.FromDate,
             ThroughDate = coverage.ThroughDate,
             SearchType = searchType,
@@ -201,6 +200,9 @@ public static class WebSearchObservationNormalizer
             FailedDate = coverage.FailedDate,
             FailureCategory = failureCategory
         };
+        if (schemaVersion >= 3)
+            normalizedCoverage.Mode = mode;
+        return normalizedCoverage;
     }
 
     private static WebSearchObservation NormalizeObservation(

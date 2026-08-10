@@ -149,37 +149,41 @@ public sealed partial class BingWebmasterCollector
             return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned invalid page statistics.", observations);
         observations.AddRange(pageObservations);
 
-        var trafficResponse = await SendAsync<BingWebmasterTrafficStat>(
-            "GetRankAndTrafficStats", parameters, apiKey, cancellationToken).ConfigureAwait(false);
-        requestCount++;
-        if (!trafficResponse.Success)
-            return BuildFailure(options, probe, requestCount, trafficResponse.ErrorCode!, trafficResponse.ErrorMessage!, observations);
-
         var requestedDates = EnumerateDates(options.FromDate, options.ThroughDate);
-        var traffic = new List<(DateOnly Date, long Clicks, long Impressions)>();
-        foreach (var value in trafficResponse.Values)
+        var trafficByDate = new Dictionary<DateOnly, (DateOnly Date, long Clicks, long Impressions)[]>();
+        var zeroConfirmed = false;
+        if (observations.Count == 0)
         {
-            var date = TryParseProviderDate(value.Date);
-            if (!date.HasValue || !value.Clicks.HasValue || !value.Impressions.HasValue ||
-                value.Clicks.Value < 0 || value.Impressions.Value < 0 || value.Clicks.Value > value.Impressions.Value)
+            var trafficResponse = await SendAsync<BingWebmasterTrafficStat>(
+                "GetRankAndTrafficStats", parameters, apiKey, cancellationToken).ConfigureAwait(false);
+            requestCount++;
+            if (!trafficResponse.Success)
+                return BuildFailure(options, probe, requestCount, trafficResponse.ErrorCode!, trafficResponse.ErrorMessage!, observations);
+
+            var traffic = new List<(DateOnly Date, long Clicks, long Impressions)>();
+            foreach (var value in trafficResponse.Values)
             {
-                return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned invalid traffic statistics.", observations);
+                var date = TryParseProviderDate(value.Date);
+                if (!date.HasValue || !value.Clicks.HasValue || !value.Impressions.HasValue ||
+                    value.Clicks.Value < 0 || value.Impressions.Value < 0 || value.Clicks.Value > value.Impressions.Value)
+                {
+                    return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned invalid traffic statistics.", observations);
+                }
+                if (date.Value >= options.FromDate && date.Value <= options.ThroughDate)
+                    traffic.Add((date.Value, value.Clicks.Value, value.Impressions.Value));
             }
-            if (date.Value >= options.FromDate && date.Value <= options.ThroughDate)
-                traffic.Add((date.Value, value.Clicks.Value, value.Impressions.Value));
-        }
-        var trafficByDate = traffic
-            .GroupBy(item => item.Date)
-            .ToDictionary(group => group.Key, group => group.ToArray());
-        if (trafficByDate.Any(pair => pair.Value.Length != 1))
-            return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned duplicate traffic dates.", observations);
-        var zeroConfirmed = observations.Count == 0 &&
-                            trafficByDate.Count == requestedDates.Length &&
+            trafficByDate = traffic
+                .GroupBy(item => item.Date)
+                .ToDictionary(group => group.Key, group => group.ToArray());
+            if (trafficByDate.Any(pair => pair.Value.Length != 1))
+                return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned duplicate traffic dates.", observations);
+            zeroConfirmed = trafficByDate.Count == requestedDates.Length &&
                             requestedDates.All(date =>
                                 trafficByDate.TryGetValue(date, out var rows) &&
                                 rows.Length == 1 &&
                                 rows[0].Clicks == 0 &&
                                 rows[0].Impressions == 0);
+        }
         if (observations.Count == 0 && !zeroConfirmed)
         {
             return BuildFailure(

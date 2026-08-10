@@ -232,6 +232,27 @@ public sealed partial class WebSearchIntelligenceTests
     }
 
     [Fact]
+    public void Normalizer_RejectsAnExplicitNullCoverageModeFromVersionTwoJson()
+    {
+        var batch = CreateBatch();
+        batch.SchemaVersion = 2;
+        batch.CollectionCoverage = new WebSearchObservationCollectionCoverage
+        {
+            FromDate = new DateOnly(2026, 8, 1),
+            ThroughDate = new DateOnly(2026, 8, 1),
+            SearchType = "web",
+            CompletedDates = [new DateOnly(2026, 8, 1)]
+        };
+        var document = JsonNode.Parse(JsonSerializer.Serialize(batch))!;
+        document["collectionCoverage"]!["mode"] = null;
+        var parsed = JsonSerializer.Deserialize<WebSearchObservationBatch>(document.ToJsonString(), WebCliJson.Options)!;
+
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(parsed));
+
+        Assert.Contains("version 2", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ObservationSchema_VersionThreeRequiresADeclaredCoverageMode()
     {
         var batch = CreateBatch();

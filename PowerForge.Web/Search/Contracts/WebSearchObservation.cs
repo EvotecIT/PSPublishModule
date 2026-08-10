@@ -108,13 +108,27 @@ public sealed class WebSearchObservationBatch
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class WebSearchObservationCollectionCoverage
 {
+    private string? _mode;
+
     /// <summary>
     /// Coverage acquisition mode. Version 2 omits this value and means <c>daily</c>.
     /// Version 3 supports <c>daily</c> and <c>snapshot</c>.
     /// </summary>
     [JsonPropertyName("mode")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Mode { get; set; }
+    public string? Mode
+    {
+        get => _mode;
+        set
+        {
+            ModeSpecified = true;
+            _mode = value;
+        }
+    }
+
+    /// <summary>Whether mode was explicitly supplied, including an explicit null JSON value.</summary>
+    [JsonIgnore]
+    internal bool ModeSpecified { get; private set; }
 
     /// <summary>Inclusive first reporting date requested from the provider.</summary>
     [JsonPropertyName("fromDate"), JsonRequired]
