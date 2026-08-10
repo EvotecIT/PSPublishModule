@@ -7,12 +7,6 @@ namespace PowerForge;
 /// <summary>Submits direct macOS artifacts for notarization and verifies the accepted result locally.</summary>
 public sealed class AppleNotarizationService
 {
-    private static readonly IReadOnlyDictionary<string, string?> TrustedSystemToolEnvironment =
-        new Dictionary<string, string?>(StringComparer.Ordinal)
-        {
-            ["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
-        };
-
     private readonly IProcessRunner _processRunner;
 
     /// <summary>Creates a notarization service.</summary>
@@ -62,7 +56,7 @@ public sealed class AppleNotarizationService
             "/usr/sbin/spctl",
             request.RequireTrustedSystemTools);
         var toolEnvironment = request.RequireTrustedSystemTools
-            ? TrustedSystemToolEnvironment
+            ? AppleTrustedExecutionEnvironment.Create()
             : null;
 
         var artifactSha256 = ComputeArtifactSha256(artifactPath);
@@ -386,7 +380,10 @@ public sealed class AppleNotarizationService
                 Path.GetDirectoryName(artifactPath) ?? Directory.GetCurrentDirectory(),
                 arguments,
                 timeout,
-                environmentVariables),
+                environmentVariables,
+                captureOutput: true,
+                captureError: true,
+                inheritEnvironment: environmentVariables is null),
             cancellationToken);
 
     private static string ResolveAppleToolExecutable(

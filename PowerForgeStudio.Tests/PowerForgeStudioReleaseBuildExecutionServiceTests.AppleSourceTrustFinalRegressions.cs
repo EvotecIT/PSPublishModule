@@ -22,6 +22,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         File.WriteAllText(
             Path.Combine(project, "project.pbxproj"),
             $"000000000000000000000001 = {{ isa = XCRemoteSwiftPackageReference; repositoryURL = \"{remoteUrl}\"; requirement = {{ kind = revision; revision = {revision}; }}; }};");
+        WriteTrackedPackageResolutionLock(repositoryRoot, remoteUrl, revision);
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         var expected = CommitRepository(repositoryRoot);
         var resolverCalls = 0;
@@ -65,6 +66,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         File.WriteAllText(
             Path.Combine(project, "project.pbxproj"),
             $"000000000000000000000001 = {{ isa = XCRemoteSwiftPackageReference; repositoryURL = \"{remoteUrl}\"; requirement = {{ kind = revision; revision = {remoteRevision}; }}; }};");
+        WriteTrackedPackageResolutionLock(repositoryRoot, remoteUrl, remoteRevision);
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         CommitRepository(repositoryRoot);
         var service = new AppleReleaseSourceTrustService(

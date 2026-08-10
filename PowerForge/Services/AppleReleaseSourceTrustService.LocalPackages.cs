@@ -253,7 +253,8 @@ internal sealed partial class AppleReleaseSourceTrustService
             "pluginPermission", "define", "linkedLibrary", "linkedFramework", "headerSearchPath",
             "unsafeFlags", "when", "exact", "revision", "branch", "upToNextMajor", "upToNextMinor",
             "range", "Dependency", "Product", "Target", "SupportedPlatform", "SystemPackageProvider", "LanguageTag", "BuildSettingCondition",
-            "iOS", "macOS", "macCatalyst", "watchOS", "tvOS", "visionOS", "driverKit"
+            "iOS", "macOS", "macCatalyst", "watchOS", "tvOS", "visionOS", "driverKit",
+            "apt", "brew", "yum"
         };
         foreach (Match call in Regex.Matches(
                      manifestSyntax,

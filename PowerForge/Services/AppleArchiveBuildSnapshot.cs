@@ -32,11 +32,16 @@ internal sealed class AppleArchiveBuildSnapshot : IDisposable {
     /// atomically replaces the configured public archive. A missing archive is retained only for
     /// injected process adapters.
     /// </summary>
-    internal string? Publish(string destinationArchivePath) {
+    internal string? Publish(string destinationArchivePath, string? expectedSourceSha256 = null) {
         if (!Directory.Exists(ArchivePath))
             return null;
 
         var sourceSha256 = AppleNotarizationService.ComputeArtifactSha256(ArchivePath);
+        if (!string.IsNullOrWhiteSpace(expectedSourceSha256) &&
+            !sourceSha256.Equals(expectedSourceSha256, StringComparison.OrdinalIgnoreCase)) {
+            throw new InvalidOperationException(
+                $"The private Apple archive changed after xcodebuild completed. Expected '{expectedSourceSha256}', received '{sourceSha256}'.");
+        }
         var destination = Path.GetFullPath(destinationArchivePath);
         var parent = Path.GetDirectoryName(destination)
             ?? throw new InvalidOperationException($"Apple archive path has no parent: {destination}");

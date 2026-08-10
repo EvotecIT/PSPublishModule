@@ -55,6 +55,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             spec.AppleApps.Automation.CleanupBeforeArchive = false;
             spec.AppleApps.Automation.WaitForProcessing = false;
             string? uploaderArchivePath = null;
+            var trustedUploadExecution = false;
             var service = CreateAppleAutomationService(
                 request => CreateReleaseState(request, processingState: null),
                 archiveAppleApp: request =>
@@ -66,6 +67,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 uploadAppleApp: request =>
                 {
                     uploaderArchivePath = request.ArchivePath;
+                    trustedUploadExecution = request.RequireTrustedSystemTools;
                     File.WriteAllText(Path.Combine(request.ArchivePath!, "payload"), "after");
                     return CreateSuccessfulUpload(request);
                 });
@@ -81,6 +83,7 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.False(result.Success);
             Assert.NotNull(uploaderArchivePath);
+            Assert.True(trustedUploadExecution);
             Assert.NotEqual(Assert.Single(result.AppleAppPlan!.Apps).ArchivePath, uploaderArchivePath);
             Assert.Equal("before", File.ReadAllText(Path.Combine(Assert.Single(result.AppleAppPlan.Apps).ArchivePath, "payload")));
             Assert.Contains("private Apple upload archive snapshot changed", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);

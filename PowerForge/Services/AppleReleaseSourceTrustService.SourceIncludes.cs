@@ -6,7 +6,8 @@ internal sealed partial class AppleReleaseSourceTrustService
 {
     private static readonly HashSet<string> SourceIncludeExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".c", ".cc", ".cpp", ".cxx", ".m", ".mm", ".h", ".hh", ".hpp", ".hxx", ".inc", ".pch"
+        ".c", ".cc", ".cpp", ".cxx", ".m", ".mm", ".metal", ".s",
+        ".h", ".hh", ".hpp", ".hxx", ".inc", ".pch"
     };
 
     private void ValidateSourceLevelIncludes(string repositoryRoot, string sourcePath)

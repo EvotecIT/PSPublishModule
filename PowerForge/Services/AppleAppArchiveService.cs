@@ -119,10 +119,14 @@ public sealed partial class AppleAppArchiveService
             packageSnapshot?.Dispose();
         }
 
+        var archiveSha256 = result.Succeeded && Directory.Exists(archivePath)
+            ? AppleNotarizationService.ComputeArtifactSha256(archivePath)
+            : null;
         return new AppleAppArchiveResult
         {
             ArchivePath = archivePath,
             Destination = destination,
+            ArchiveSha256 = archiveSha256,
             ProcessResult = result
         };
     }
@@ -175,12 +179,26 @@ public sealed partial class AppleAppArchiveService
             args);
         args.AddRange(request.AdditionalArguments ?? Array.Empty<string>());
 
+        var xcodeBuildExecutable = NormalizeExecutable(request.XcodeBuildExecutable);
+        if (request.RequireTrustedSystemTools &&
+            !xcodeBuildExecutable.Equals("/usr/bin/xcodebuild", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Exact-source Apple export and upload require the system Xcode build tool '/usr/bin/xcodebuild'; received '{xcodeBuildExecutable}'.");
+        }
+        var toolEnvironment = request.RequireTrustedSystemTools
+            ? AppleTrustedExecutionEnvironment.Create()
+            : null;
         var result = await _processRunner.RunAsync(
             new ProcessRunRequest(
-                NormalizeExecutable(request.XcodeBuildExecutable),
+                xcodeBuildExecutable,
                 Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory(),
                 args,
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout),
+                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout,
+                toolEnvironment,
+                captureOutput: true,
+                captureError: true,
+                inheritEnvironment: toolEnvironment is null),
             cancellationToken).ConfigureAwait(false);
 
         var diagnostics = ResolveUploadDiagnostics(result);

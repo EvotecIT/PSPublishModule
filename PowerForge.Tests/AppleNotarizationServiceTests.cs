@@ -119,11 +119,15 @@ public sealed partial class AppleNotarizationServiceTests
                 {
                     Assert.Equal("/usr/bin/xcrun", request.FileName);
                     Assert.Equal("/usr/bin:/bin:/usr/sbin:/sbin", request.EnvironmentVariables?["PATH"]);
+                    Assert.False(request.InheritEnvironment);
+                    Assert.False(request.EnvironmentVariables?.ContainsKey("DEVELOPER_DIR"));
                 },
                 request =>
                 {
                     Assert.Equal("/usr/sbin/spctl", request.FileName);
                     Assert.Equal("/usr/bin:/bin:/usr/sbin:/sbin", request.EnvironmentVariables?["PATH"]);
+                    Assert.False(request.InheritEnvironment);
+                    Assert.False(request.EnvironmentVariables?.ContainsKey("DEVELOPER_DIR"));
                 });
         }
         finally

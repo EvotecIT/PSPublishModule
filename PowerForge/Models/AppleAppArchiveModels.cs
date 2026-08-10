@@ -68,6 +68,9 @@ public sealed class AppleAppArchiveResult
     /// <summary>Resolved xcodebuild destination.</summary>
     public string Destination { get; set; } = string.Empty;
 
+    /// <summary>SHA-256 of the exact archive bytes observed immediately after xcodebuild completed.</summary>
+    public string? ArchiveSha256 { get; set; }
+
     /// <summary>xcodebuild process result.</summary>
     public ProcessRunResult ProcessResult { get; set; } = new(0, string.Empty, string.Empty, "xcodebuild", TimeSpan.Zero, false);
 
@@ -130,6 +133,9 @@ public sealed class AppleAppArchiveUploadRequest
 
     /// <summary>xcodebuild executable name or path.</summary>
     public string XcodeBuildExecutable { get; set; } = "xcodebuild";
+
+    /// <summary>Requires the fixed system xcodebuild and an explicit environment allowlist.</summary>
+    public bool RequireTrustedSystemTools { get; set; }
 
     /// <summary>Additional structured arguments appended to the export command.</summary>
     public string[] AdditionalArguments { get; set; } = Array.Empty<string>();

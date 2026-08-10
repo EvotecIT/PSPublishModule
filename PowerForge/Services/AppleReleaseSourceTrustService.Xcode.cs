@@ -13,6 +13,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     private static readonly HashSet<string> FileValuedBuildSettings = new(StringComparer.OrdinalIgnoreCase)
     {
         "INFOPLIST_FILE",
+        "INFOPLIST_PREFIX_HEADER",
         "CODE_SIGN_ENTITLEMENTS",
         "SWIFT_OBJC_BRIDGING_HEADER",
         "GCC_PREFIX_HEADER",
@@ -543,21 +544,15 @@ internal sealed partial class AppleReleaseSourceTrustService
         if (string.IsNullOrWhiteSpace(repositoryUrl))
             throw new InvalidOperationException("Remote Swift package reference is missing repositoryURL.");
 
-        var requirement = ReadPbxDictionary(item.Body, "requirement");
-        var kind = requirement is null ? null : ReadPbxScalar(requirement, "kind");
-        var revision = requirement is null ? null : ReadPbxScalar(requirement, "revision");
-        var exactRevision = string.Equals(kind, "revision", StringComparison.OrdinalIgnoreCase) &&
-                            (revision?.Length == 40 || revision?.Length == 64) &&
-                            revision.All(Uri.IsHexDigit);
         var locks = FindTrackedPackageLocks(packageLockPaths, repositoryUrl!);
-        if (locks.Length == 0 && !exactRevision)
+        if (locks.Length == 0)
         {
             throw new InvalidOperationException(
-                $"Remote Swift package '{repositoryUrl}' must be bound by a tracked Package.resolved lock or an exact 40-character revision.");
+                $"Remote Swift package '{repositoryUrl}' must be bound by a tracked Package.resolved lock so preflight and exact archive materialization consume the same approved graph.");
         }
         foreach (var packageLock in locks)
             EnsureTrackedFile(repositoryRoot, packageLock, "Swift package resolution lock");
-        var resolvedRevision = ResolvePackageRevision(packageLockPaths, repositoryUrl!, exactRevision ? revision : null);
+        var resolvedRevision = ResolvePackageRevision(packageLockPaths, repositoryUrl!);
         ValidateRemotePackageSource(repositoryUrl!, resolvedRevision, packageLockPaths);
     }
 

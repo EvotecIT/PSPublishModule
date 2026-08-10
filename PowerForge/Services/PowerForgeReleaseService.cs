@@ -2213,7 +2213,7 @@ internal sealed partial class PowerForgeReleaseService
                         return CompleteAppleExecutionFailure(plan, resultsByApp, app);
                     }
 
-                    var publishedArchiveSha256 = archiveBuildSnapshot?.Publish(app.ArchivePath);
+                    var publishedArchiveSha256 = archiveBuildSnapshot?.Publish(app.ArchivePath, archive.ArchiveSha256);
                     if (!string.IsNullOrWhiteSpace(publishedArchiveSha256))
                     {
                         approvedArchiveInputPath = archiveBuildSnapshot!.ArchivePath;
@@ -2251,6 +2251,7 @@ internal sealed partial class PowerForgeReleaseService
                     ExportPath = directExportSnapshot?.ExportPath ?? app.ExportPath,
                     TeamId = app.TeamId,
                     XcodeBuildExecutable = plan.XcodeBuildExecutable,
+                    RequireTrustedSystemTools = !string.IsNullOrWhiteSpace(plan.SourceCommit),
                     SigningStyle = plan.SigningStyle,
                     Destination = direct ? "export" : "upload",
                     Method = direct ? plan.DirectDistribution.ExportMethod : "app-store-connect",

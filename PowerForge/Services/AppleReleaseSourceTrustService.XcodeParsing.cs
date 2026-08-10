@@ -77,7 +77,11 @@ internal sealed partial class AppleReleaseSourceTrustService
                 EnsurePathWithinRepository(repositoryRoot, candidate, $"Xcode build setting {key} from {source}");
                 EnsureNoGeneratedOutputOverlap(candidate, generatedOutputPaths, $"Xcode build setting {key}");
                 if (File.Exists(candidate))
+                {
                     EnsureTrackedFile(repositoryRoot, candidate, $"Xcode build setting {key}");
+                    if (baseKey.Equals("INFOPLIST_FILE", StringComparison.OrdinalIgnoreCase))
+                        ValidateInfoPlistBuildSettingReferences(candidate, source);
+                }
                 else if (Directory.Exists(candidate))
                     EnsureTrackedDirectoryTree(repositoryRoot, candidate, $"Xcode build setting {key}");
                 else
@@ -88,25 +92,72 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
     }
 
-    private static void ValidateUnclassifiedBuildSettingReferences(string key, string value, string source)
+    private static void ValidateUnclassifiedBuildSettingReferences(
+        string key,
+        string value,
+        string source,
+        ISet<string>? additionalApprovedReferences = null)
     {
         var approvedReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "inherited", "TARGET_NAME", "PRODUCT_NAME", "EXECUTABLE_NAME", "WRAPPER_NAME",
             "FULL_PRODUCT_NAME", "CONTENTS_FOLDER_PATH", "INFOPLIST_PATH", "TEST_HOST"
         };
-        foreach (Match reference in Regex.Matches(
-                     value,
-                     "\\$\\((?<name>[A-Za-z_][A-Za-z0-9_]*)\\)|\\$\\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\\}",
-                     RegexOptions.CultureInvariant))
+        foreach (var reference in ReadBuildSettingReferences(value, key, source))
         {
-            var name = reference.Groups["name"].Value;
-            if (approvedReferences.Contains(name))
+            if (approvedReferences.Contains(reference.Key) ||
+                additionalApprovedReferences?.Contains(reference.Key) == true)
                 continue;
             throw new InvalidOperationException(
                 $"Xcode build setting {key} contains unapproved host or environment reference '{reference.Value}' " +
                 $"and cannot be bound to the exact source commit: {source}");
         }
+    }
+
+    private static IEnumerable<KeyValuePair<string, string>> ReadBuildSettingReferences(
+        string value,
+        string key,
+        string source)
+    {
+        for (var index = 0; index + 1 < value.Length; index++)
+        {
+            if (value[index] != '$' || (value[index + 1] != '(' && value[index + 1] != '{'))
+                continue;
+            var close = value[index + 1] == '(' ? ')' : '}';
+            var end = value.IndexOf(close, index + 2);
+            if (end < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Xcode build setting {key} contains an unterminated build-setting reference and cannot be proven: {source}");
+            }
+
+            var reference = value.Substring(index, end - index + 1);
+            var payload = value.Substring(index + 2, end - index - 2);
+            var modifier = payload.IndexOf(':');
+            var name = (modifier < 0 ? payload : payload.Substring(0, modifier)).Trim();
+            if (!Regex.IsMatch(name, "^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant))
+            {
+                throw new InvalidOperationException(
+                    $"Xcode build setting {key} contains malformed build-setting reference '{reference}' and cannot be proven: {source}");
+            }
+            yield return new KeyValuePair<string, string>(name, reference);
+            index = end;
+        }
+    }
+
+    private static void ValidateInfoPlistBuildSettingReferences(string plistPath, string source)
+    {
+        var plistReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "DEVELOPMENT_LANGUAGE", "PRODUCT_BUNDLE_IDENTIFIER", "MARKETING_VERSION",
+            "CURRENT_PROJECT_VERSION", "PRODUCT_MODULE_NAME"
+        };
+        var contents = DecodeTrackedText(File.ReadAllBytes(plistPath));
+        ValidateUnclassifiedBuildSettingReferences(
+            "INFOPLIST_FILE contents",
+            contents,
+            $"{source}; plist '{plistPath}'",
+            plistReferences);
     }
 
     private static void ValidateSourceSelectionBuildSetting(string key, string value, string source)

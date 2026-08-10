@@ -193,7 +193,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         var exception = Assert.Throws<InvalidOperationException>(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
-        Assert.Contains("exact 40-character revision", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tracked Package.resolved", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -363,7 +363,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Package.resolved", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("exact 40-character revision", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tracked Package.resolved", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

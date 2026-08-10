@@ -466,6 +466,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         const string remoteUrl = "https://example.invalid/RemoteUnsafePackage.git";
         File.WriteAllText(Path.Combine(project, "project.pbxproj"),
             $"000000000000000000000001 = {{ isa = XCRemoteSwiftPackageReference; repositoryURL = \"{remoteUrl}\"; requirement = {{ kind = revision; revision = {remoteRevision}; }}; }};");
+        WriteTrackedPackageResolutionLock(repositoryRoot, remoteUrl, remoteRevision);
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         CommitRepository(repositoryRoot);
         var service = new AppleReleaseSourceTrustService(
@@ -486,7 +487,8 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             "// swift-tools-version: 6.0\nimport PackageDescription\n" +
             "let package = Package(name: \"Remote\", targets: [" +
             ".target(name: \"Remote\", dependencies: [.target(name: \"HostFallback\", condition: .when(platforms: [.linux, .windows]))]), " +
-            ".systemLibrary(name: \"HostFallback\", pkgConfig: \"host-fallback\")])");
+            ".systemLibrary(name: \"HostFallback\", pkgConfig: \"host-fallback\", providers: [" +
+            ".apt([\"host-fallback-dev\"]), .brew([\"host-fallback\"]), .yum([\"host-fallback-devel\"])])])");
         var sources = scope.CreateDirectory(Path.Combine("RemoteSafePackage", "Sources", "Remote"));
         File.WriteAllText(Path.Combine(sources, "Remote.swift"), "public struct Remote {}");
         var remoteRevision = CommitRepository(remoteRoot);
@@ -496,6 +498,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         const string remoteUrl = "https://example.invalid/RemoteSafePackage.git";
         File.WriteAllText(Path.Combine(project, "project.pbxproj"),
             $"000000000000000000000001 = {{ isa = XCRemoteSwiftPackageReference; repositoryURL = \"{remoteUrl}\"; requirement = {{ kind = revision; revision = {remoteRevision}; }}; }};");
+        WriteTrackedPackageResolutionLock(repositoryRoot, remoteUrl, remoteRevision);
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         var expected = CommitRepository(repositoryRoot);
         var service = new AppleReleaseSourceTrustService(

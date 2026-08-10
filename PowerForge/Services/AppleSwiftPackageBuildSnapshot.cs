@@ -63,7 +63,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             var approvedPackageRevisions = new AppleReleaseSourceTrustService().ReadApprovedTrackedPackageRevisions(
                 repositoryRoot,
                 DiscoverApprovedPackageLocks(repositoryRoot, projectPath));
-            var environmentVariables = BuildIsolatedEnvironment();
+            var environmentVariables = AppleTrustedExecutionEnvironment.Create(isolateGitConfiguration: true);
             var arguments = new[]
             {
                 isWorkspace ? "-workspace" : "-project",
@@ -167,24 +167,6 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         _monitor?.Dispose();
         if (Directory.Exists(RootPath))
             Directory.Delete(RootPath, recursive: true);
-    }
-
-    private static IReadOnlyDictionary<string, string?> BuildIsolatedEnvironment()
-    {
-        var environment = new Dictionary<string, string?>(StringComparer.Ordinal)
-        {
-            ["GIT_CONFIG_NOSYSTEM"] = "1",
-            ["GIT_CONFIG_SYSTEM"] = "/dev/null",
-            ["GIT_CONFIG_GLOBAL"] = "/dev/null",
-            ["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
-        };
-        foreach (var name in new[] { "HOME", "TMPDIR", "USER", "LOGNAME", "LANG", "LC_ALL", "SSH_AUTH_SOCK" })
-        {
-            var value = Environment.GetEnvironmentVariable(name);
-            if (!string.IsNullOrWhiteSpace(value))
-                environment[name] = value;
-        }
-        return environment;
     }
 
     private static IEnumerable<string> DiscoverApprovedPackageLocks(string repositoryRoot, string projectPath)

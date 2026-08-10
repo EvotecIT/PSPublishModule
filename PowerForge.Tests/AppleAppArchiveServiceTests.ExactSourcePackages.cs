@@ -27,6 +27,7 @@ public sealed partial class AppleAppArchiveServiceTests
             });
 
             Assert.True(result.Succeeded);
+            Assert.Equal(64, result.ArchiveSha256?.Length);
             Assert.Equal(2, runner.Requests.Count);
             var resolve = runner.Requests[0];
             var archive = runner.Requests[1];
@@ -182,6 +183,13 @@ public sealed partial class AppleAppArchiveServiceTests
                 var original = File.ReadAllText(manifest);
                 File.WriteAllText(manifest, original + "// injected\n");
                 File.WriteAllText(manifest, original);
+            }
+
+            if (!request.Arguments.Contains("-resolvePackageDependencies"))
+            {
+                var archiveIndex = Array.IndexOf(request.Arguments.ToArray(), "-archivePath");
+                var archive = Directory.CreateDirectory(request.Arguments[archiveIndex + 1]);
+                File.WriteAllText(Path.Combine(archive.FullName, "payload"), "approved archive");
             }
 
             return Task.FromResult(new ProcessRunResult(
