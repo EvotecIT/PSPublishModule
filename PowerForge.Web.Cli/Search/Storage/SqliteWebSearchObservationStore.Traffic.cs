@@ -140,6 +140,8 @@ internal sealed partial class SqliteWebSearchObservationStore
             .Select(group =>
             {
                 var batch = group.First().Batch;
+                var selectedDates = group.Select(value => value.Date).Distinct().OrderBy(date => date).ToArray();
+                var selectedDateSet = selectedDates.ToHashSet();
                 return new WebTrafficObservationRunEvidence
                 {
                     RunId = batch.RunId!,
@@ -147,9 +149,11 @@ internal sealed partial class SqliteWebSearchObservationStore
                     SiteId = batch.SiteId,
                     CollectedAtUtc = batch.CollectedAtUtc,
                     Status = group.All(value => value.IsComplete) ? "complete" : "partial",
-                    ZeroDataConfirmed = batch.ZeroDataConfirmed,
+                    ZeroDataConfirmed = batch.ZeroDataConfirmed ||
+                                        (group.All(value => value.IsComplete) &&
+                                         !batch.Observations.Any(observation => selectedDateSet.Contains(observation.Date))),
                     CollectionCoverage = batch.CollectionCoverage,
-                    SelectedDates = group.Select(value => value.Date).Distinct().OrderBy(date => date).ToArray()
+                    SelectedDates = selectedDates
                 };
             })
             .OrderBy(value => value.Provider, StringComparer.Ordinal)

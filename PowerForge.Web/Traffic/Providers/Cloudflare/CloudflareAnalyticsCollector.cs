@@ -100,6 +100,19 @@ public sealed class CloudflareAnalyticsCollector
         if (!probe.Success)
             return Failure(options, probe, probe.RequestCount, Array.Empty<WebTrafficObservation>(), Array.Empty<DateOnly>(), options.FromDate, probe.ErrorCode!, probe.ErrorMessage!);
 
+        var firstPartitionStart = new DateTimeOffset(options.FromDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        if (probe.NotOlderThanSeconds is > 0 &&
+            firstPartitionStart < _timeProvider.GetUtcNow().Subtract(TimeSpan.FromSeconds(probe.NotOlderThanSeconds.Value)))
+        {
+            return Failure(options, probe, probe.RequestCount, Array.Empty<WebTrafficObservation>(), Array.Empty<DateOnly>(), options.FromDate,
+                "retention-boundary", "The requested Cloudflare traffic range starts before the provider-reported retention boundary.");
+        }
+        if (probe.MaxDurationSeconds is > 0 and < 86_400)
+        {
+            return Failure(options, probe, probe.RequestCount, Array.Empty<WebTrafficObservation>(), Array.Empty<DateOnly>(), options.FromDate,
+                "duration-boundary", "The provider-reported query duration cannot cover a complete UTC traffic partition.");
+        }
+
         string token;
         try
         {
@@ -197,7 +210,8 @@ public sealed class CloudflareAnalyticsCollector
                 observations = Array.Empty<WebTrafficObservation>();
                 return false;
             }
-            if (!Uri.TryCreate("https://" + dimensions.Host.TrimEnd('.') + "/", UriKind.Absolute, out var rowUri) ||
+            if (!IsValidRequestPath(dimensions.Path) ||
+                !Uri.TryCreate("https://" + dimensions.Host.TrimEnd('.') + "/", UriKind.Absolute, out var rowUri) ||
                 Uri.CheckHostName(rowUri.IdnHost) != UriHostNameType.Dns)
             {
                 observations = Array.Empty<WebTrafficObservation>();
@@ -262,6 +276,9 @@ public sealed class CloudflareAnalyticsCollector
         var prefix = sitePath.TrimEnd('/');
         return path.Equals(prefix, StringComparison.Ordinal) || path.StartsWith(prefix + "/", StringComparison.Ordinal);
     }
+
+    private static bool IsValidRequestPath(string path) =>
+        path.StartsWith("/", StringComparison.Ordinal) && !path.Contains('#') && !path.Any(char.IsControl);
 
     private CloudflareAnalyticsCollectionResult Failure(
         CloudflareAnalyticsCollectionOptions options,
@@ -459,7 +476,7 @@ public sealed class CloudflareAnalyticsCollector
         """;
 
     private const string TrafficQuery = """
-        query PowerForgeCloudflareTraffic($zoneTag: string, $filter: filter, $limit: Int) {
+        query PowerForgeCloudflareTraffic($zoneTag: string, $filter: ZoneHttpRequestsAdaptiveGroupsFilter_InputObject, $limit: Int) {
           viewer {
             zones(filter: { zoneTag: $zoneTag }) {
               traffic: httpRequestsAdaptiveGroups(

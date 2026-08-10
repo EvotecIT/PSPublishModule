@@ -88,9 +88,59 @@ public sealed class WebCloudflareAnalyticsCollectorTests
         Assert.Equal(2d, sampled.SampleInterval);
         Assert.All(handler.Requests.Skip(2), request =>
         {
+            Assert.Contains("ZoneHttpRequestsAdaptiveGroupsFilter_InputObject", request.Body, StringComparison.Ordinal);
             Assert.Contains("\"requestSource\":\"eyeball\"", request.Body, StringComparison.Ordinal);
             Assert.Contains("\"clientRequestHTTPHost\":\"officeimo.com\"", request.Body, StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public async Task Collect_RejectsDatesOutsideTheProbedRetentionWindowBeforeTrafficRequests()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(notOlderThan: 86_400),
+            _ => throw new InvalidOperationException("Traffic collection must not cross the retention boundary.")
+        });
+        using var client = new HttpClient(handler);
+        var collector = new CloudflareAnalyticsCollector(
+            client,
+            new FakeTokenProvider(),
+            timeProvider: new FixedTimeProvider(CompletionTime));
+
+        var result = await collector.CollectAsync(CreateOptions());
+
+        Assert.False(result.Success);
+        Assert.Equal("retention-boundary", result.ErrorCode);
+        Assert.Equal(2, result.RequestCount);
+        Assert.False(result.Batch.ZeroDataConfirmed);
+        Assert.Empty(result.Batch.CollectionCoverage.CompletedDates);
+        Assert.Equal(new DateOnly(2026, 8, 1), result.Batch.CollectionCoverage.FailedDate);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Collect_RejectsCapabilitiesThatCannotCoverOneCompleteUtcPartition()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(maxDuration: 3600),
+            _ => throw new InvalidOperationException("Traffic collection must not exceed the duration boundary.")
+        });
+        using var client = new HttpClient(handler);
+        var collector = new CloudflareAnalyticsCollector(
+            client,
+            new FakeTokenProvider(),
+            timeProvider: new FixedTimeProvider(CompletionTime));
+
+        var result = await collector.CollectAsync(CreateOptions());
+
+        Assert.False(result.Success);
+        Assert.Equal("duration-boundary", result.ErrorCode);
+        Assert.Equal(2, result.RequestCount);
+        Assert.Equal(2, handler.Requests.Count);
     }
 
     [Fact]
@@ -215,6 +265,32 @@ public sealed class WebCloudflareAnalyticsCollectorTests
         Assert.Single(result.Batch.Observations);
         Assert.Equal([new DateOnly(2026, 8, 1)], result.Batch.CollectionCoverage.CompletedDates);
         Assert.Equal(new DateOnly(2026, 8, 2), result.Batch.CollectionCoverage.FailedDate);
+    }
+
+    [Fact]
+    public async Task Collect_RejectsMalformedReturnedPathsWithoutDiscardingCompletedPartitions()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => TrafficResponse(TrafficRow(new DateOnly(2026, 8, 1), "officeimo.com", "/", 10, 2, 1000, 1)),
+            3 => TrafficResponse(TrafficRow(new DateOnly(2026, 8, 2), "officeimo.com", "relative", 5, 1, 500, 1)),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+        var collector = new CloudflareAnalyticsCollector(client, new FakeTokenProvider());
+        var options = CreateOptions();
+        options.ThroughDate = new DateOnly(2026, 8, 2);
+
+        var result = await collector.CollectAsync(options);
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.ErrorCode);
+        Assert.Equal("partial", result.Batch.Status);
+        Assert.Equal([new DateOnly(2026, 8, 1)], result.Batch.CollectionCoverage.CompletedDates);
+        Assert.Equal(new DateOnly(2026, 8, 2), result.Batch.CollectionCoverage.FailedDate);
+        Assert.Single(result.Batch.Observations);
     }
 
     [Fact]
@@ -427,6 +503,42 @@ public sealed class WebCloudflareAnalyticsCollectorTests
     }
 
     [Fact]
+    public async Task TrafficReports_PreserveZeroEvidenceForACompletedPartitionInsideAPartialRun()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-cloudflare-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var partial = CreateTrafficBatch();
+            partial.Status = "partial";
+            partial.CollectionCoverage.ThroughDate = new DateOnly(2026, 8, 2);
+            partial.CollectionCoverage.FailedDate = new DateOnly(2026, 8, 2);
+            partial.CollectionCoverage.FailureCategory = "provider-unavailable";
+            partial.Observations = Array.Empty<WebTrafficObservation>();
+            await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(partial));
+
+            var completedZero = await store.QueryTrafficEvidenceAsync(new WebTrafficObservationQuery
+            {
+                SiteId = "officeimo", Provider = "cloudflare",
+                FromDate = new DateOnly(2026, 8, 1), ThroughDate = new DateOnly(2026, 8, 1)
+            });
+
+            Assert.True(completedZero.HasEvidence);
+            Assert.False(completedZero.HasPartialEvidence);
+            Assert.True(completedZero.HasExplicitZeroEvidence);
+            Assert.Empty(completedZero.Observations);
+            var selectedRun = Assert.Single(completedZero.SelectedRuns);
+            Assert.Equal("complete", selectedRun.Status);
+            Assert.True(selectedRun.ZeroDataConfirmed);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task TrafficReports_RequireProviderForBoundedCompleteness()
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-cloudflare-tests", Guid.NewGuid().ToString("N"));
@@ -588,7 +700,10 @@ public sealed class WebCloudflareAnalyticsCollectorTests
         ]
     };
 
-    private static HttpResponseMessage CapabilityResponse(int maxPageSize = 1000) => JsonResponse(new
+    private static HttpResponseMessage CapabilityResponse(
+        int maxPageSize = 1000,
+        int maxDuration = 86_400,
+        int notOlderThan = 2_678_400) => JsonResponse(new
     {
         errors = (object?)null,
         data = new
@@ -601,7 +716,7 @@ public sealed class WebCloudflareAnalyticsCollectorTests
                     {
                         settings = new
                         {
-                            httpRequestsAdaptiveGroups = new { enabled = true, maxPageSize, maxDuration = 86400, notOlderThan = 2678400 }
+                            httpRequestsAdaptiveGroups = new { enabled = true, maxPageSize, maxDuration, notOlderThan }
                         }
                     }
                 }
