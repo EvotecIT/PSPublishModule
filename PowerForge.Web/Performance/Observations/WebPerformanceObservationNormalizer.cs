@@ -5,6 +5,8 @@ namespace PowerForge.Web;
 /// <summary>Validates and canonicalizes provider-neutral laboratory and field performance evidence.</summary>
 public static class WebPerformanceObservationNormalizer
 {
+    private const double HistogramDensityTolerance = 0.001d;
+
     private static readonly IReadOnlyDictionary<string, string> LabMetricUnits = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["performance-score"] = "score",
@@ -167,10 +169,11 @@ public static class WebPerformanceObservationNormalizer
                     throw new ArgumentException($"Metric '{metric}' histogram ranges must be contiguous and non-overlapping.", nameof(value));
             }
             var density = histogram.Sum(bin => bin.Density);
-            if (density < 0.999d || density > 1.001d)
+            if (density < 1d - HistogramDensityTolerance || density > 1d + HistogramDensityTolerance)
                 throw new ArgumentException($"Metric '{metric}' histogram densities must sum to one.", nameof(value));
             var cumulativeDensity = 0d;
-            var percentileBin = histogram.First(bin => (cumulativeDensity += bin.Density) >= 0.75d);
+            var percentileBin = histogram.First(bin =>
+                (cumulativeDensity += bin.Density) >= 0.75d - HistogramDensityTolerance);
             var tolerance = Math.Max(1e-9d, Math.Abs(value.Value) * 1e-12d);
             if (percentileBin.Start is double percentileStart && value.Value < percentileStart - tolerance ||
                 percentileBin.End is double percentileEnd && value.Value > percentileEnd + tolerance)
