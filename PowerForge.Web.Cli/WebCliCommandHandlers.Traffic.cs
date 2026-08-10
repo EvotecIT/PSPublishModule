@@ -48,18 +48,23 @@ internal static partial class WebCliCommandHandlers
             if (fromDate > throughDate)
                 throw new ArgumentException("Traffic collect requires --from to be on or before --to.");
             var loaded = WebSearchProviderConfigurationLoader.LoadWithPath(configPath!, WebCliJson.Options);
-            var doctor = WebSearchProviderDoctor.InspectWithCapabilities(loaded.Configuration, WebSearchCollectorCatalog.AvailableCapabilities);
-            if (!doctor.Success || string.IsNullOrWhiteSpace(doctor.ConfigurationHash))
-            {
-                var first = doctor.Checks.FirstOrDefault(value => value.Severity == WebSearchProviderCheckSeverity.Error);
-                return FailSearch(first?.Message ?? "Provider configuration has blocking capability errors.", outputJson, logger, "web.traffic.collect");
-            }
             var site = loaded.Configuration.Sites.SingleOrDefault(value => string.Equals(value.Id, siteId, StringComparison.OrdinalIgnoreCase))
                 ?? throw new ArgumentException($"Traffic site '{siteId}' is not configured.");
             var provider = site.Providers.SingleOrDefault(value => string.Equals(value.Id, providerId, StringComparison.OrdinalIgnoreCase))
                 ?? throw new ArgumentException($"Traffic provider '{providerId}' is not configured for site '{siteId}'.");
             if (!provider.Enabled)
                 throw new ArgumentException($"Traffic provider '{providerId}' is disabled.");
+            var doctor = InspectProviderAction(
+                loaded.Configuration,
+                site,
+                provider,
+                WebSearchProviderCapabilities.TrafficAnalytics,
+                useSelectedCredential: true);
+            if (!doctor.Success || string.IsNullOrWhiteSpace(doctor.ConfigurationHash))
+            {
+                var first = doctor.Checks.FirstOrDefault(value => value.Severity == WebSearchProviderCheckSeverity.Error);
+                return FailSearch(first?.Message ?? "Provider configuration has blocking capability errors.", outputJson, logger, "web.traffic.collect");
+            }
             if (!provider.Kind.Equals(CloudflareAnalyticsCollector.ProviderKind, StringComparison.Ordinal))
                 throw new ArgumentException("Traffic collect currently supports the cloudflare-analytics provider.");
             if (!provider.Capabilities.Contains(WebSearchProviderCapabilities.TrafficAnalytics, StringComparer.Ordinal))

@@ -12,8 +12,10 @@ internal static partial class WebCliCommandHandlers
         WebSearchSiteProviderConfiguration site,
         WebSearchProviderRegistration provider,
         string requiredCapability,
-        bool useSelectedCredential)
+        bool useSelectedCredential,
+        Func<string, string?>? environmentReader = null)
     {
+        var readEnvironment = environmentReader ?? Environment.GetEnvironmentVariable;
         var selectedCredentialVariable = useSelectedCredential
             ? provider.Credential?.EnvironmentVariable
             : null;
@@ -24,7 +26,7 @@ internal static partial class WebCliCommandHandlers
             WebSearchCollectorCatalog.AvailableCapabilities,
             name => !string.IsNullOrWhiteSpace(selectedCredentialVariable) &&
                     string.Equals(name, selectedCredentialVariable, StringComparison.Ordinal)
-                ? Environment.GetEnvironmentVariable(name)
+                ? readEnvironment(name)
                 : SelectedActionCredentialPlaceholder);
         if (!doctor.Success || string.IsNullOrWhiteSpace(doctor.ConfigurationHash))
         {
