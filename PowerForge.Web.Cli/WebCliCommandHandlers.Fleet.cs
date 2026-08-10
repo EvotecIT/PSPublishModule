@@ -11,7 +11,8 @@ internal static partial class WebCliCommandHandlers
     private static readonly string[] FleetPruneOptions = ["--config", "--database", "--as-of", "--output"];
     private static readonly string[] FleetPruneFlags = ["--apply"];
     private static readonly Regex ExplicitOffsetPattern = new(
-        "(?:[zZ]|[+-][0-9]{2}:[0-9]{2})$", RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,7})?(?:Z|[+-][0-9]{2}:[0-9]{2})$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1));
 
     internal static int HandleFleet(string[] args, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
@@ -191,7 +192,7 @@ internal static partial class WebCliCommandHandlers
             return DateTimeOffset.UtcNow;
         var trimmed = value.Trim();
         if (!ExplicitOffsetPattern.IsMatch(trimmed) ||
-            !DateTimeOffset.TryParse(trimmed, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var parsed))
+            !DateTimeOffset.TryParse(trimmed, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
             throw new ArgumentException("--as-of must be an ISO-8601 timestamp with an explicit UTC offset.", nameof(value));
         return parsed.ToUniversalTime();
     }

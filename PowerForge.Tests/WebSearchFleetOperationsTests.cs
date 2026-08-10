@@ -309,6 +309,83 @@ public sealed class WebSearchFleetOperationsTests
     }
 
     [Fact]
+    public async Task VersionTwoCoverageWithoutSearchTypeDerivesScopeFromStoredObservations()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var date = new DateOnly(2026, 8, 7);
+            var batch = new WebSearchObservationBatch
+            {
+                SchemaVersion = 2,
+                RunId = "v2-image-scope",
+                Provider = "gsc",
+                SiteId = "officeimo",
+                CollectedAtUtc = AsOf.AddMinutes(-1),
+                SourceKind = "fixture",
+                Status = "complete",
+                CollectionCoverage = new WebSearchObservationCollectionCoverage
+                {
+                    FromDate = date,
+                    ThroughDate = date,
+                    CompletedDates = [date]
+                },
+                Observations =
+                [
+                    new WebSearchObservation
+                    {
+                        Date = date,
+                        Page = "https://officeimo.com/image/",
+                        SearchType = "image",
+                        Clicks = 1,
+                        Impressions = 2
+                    }
+                ]
+            };
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            await store.ImportAsync(WebSearchObservationNormalizer.Normalize(batch));
+
+            var snapshot = await store.ReadFleetSnapshotAsync();
+
+            var stream = Assert.Single(snapshot.Streams);
+            Assert.Equal("image", stream.ScopeKey);
+            Assert.DoesNotContain(snapshot.Streams, value => value.ScopeKey == "web");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DoctorRetainsConfigurationIdentityWhenOnlyAnotherProvidersCredentialIsUnavailable()
+    {
+        var configuration = CreateConfiguration();
+        var doctor = WebSearchProviderDoctor.InspectWithCapabilities(
+            configuration,
+            WebSearchCollectorCatalog.AvailableCapabilities,
+            name => name == "TEST_CF" ? null : "test-credential");
+
+        Assert.False(doctor.Success);
+        Assert.NotNull(doctor.ConfigurationHash);
+        Assert.True(doctor.Providers.Single(value => value.ProviderId == "gsc").ConfigurationReady);
+
+        var gscEvidence = Stream(
+            "gsc",
+            WebSearchProviderCapabilities.SearchAnalytics,
+            new DateOnly(2026, 8, 7),
+            AsOf.AddHours(-1),
+            configurationHash: doctor.ConfigurationHash);
+        var plan = WebSearchFleetPlanner.CreateSchedule(
+            configuration,
+            doctor,
+            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 6, Streams = [gscEvidence] },
+            AsOf);
+
+        Assert.DoesNotContain(plan.WorkItems, value => value.ProviderId == "gsc");
+    }
+
+    [Fact]
     public async Task Planner_IgnoresEvidenceCollectedUnderAnotherConfigurationHash()
     {
         var root = CreateTempRoot();
@@ -516,6 +593,12 @@ public sealed class WebSearchFleetOperationsTests
             Assert.Equal(2, WebCliCommandHandlers.HandleSubCommand(
                 "fleet",
                 ["schedule", "--config", configPath, "--database", databasePath, "--as-of", "2026-08-10T12:00:00", "--output", "json"],
+                outputJson: true, logger: new WebConsoleLogger(), outputSchemaVersion: 1));
+            Assert.False(File.Exists(databasePath));
+
+            Assert.Equal(2, WebCliCommandHandlers.HandleSubCommand(
+                "fleet",
+                ["prune", "--config", configPath, "--database", databasePath, "--as-of", "08/10/2026 12:00:00 +00:00", "--apply", "--output", "json"],
                 outputJson: true, logger: new WebConsoleLogger(), outputSchemaVersion: 1));
             Assert.False(File.Exists(databasePath));
 

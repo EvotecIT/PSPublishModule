@@ -252,10 +252,15 @@ public static partial class WebSearchProviderDoctor
                 (check.ProviderId is null || string.Equals(check.ProviderId, state.ProviderId, StringComparison.OrdinalIgnoreCase)));
         }
         var success = orderedChecks.All(check => check.Severity != WebSearchProviderCheckSeverity.Error);
+        var configurationCanBeFingerprinted = orderedChecks.All(check =>
+            check.Severity != WebSearchProviderCheckSeverity.Error ||
+            string.Equals(check.Code, "provider.credential-unavailable", StringComparison.Ordinal));
         return new WebSearchProviderDoctorResult
         {
             Success = success,
-            ConfigurationHash = success ? WebSearchProviderConfigurationFingerprint.Compute(configuration) : null,
+            ConfigurationHash = configurationCanBeFingerprinted
+                ? WebSearchProviderConfigurationFingerprint.Compute(configuration)
+                : null,
             SiteCount = sites.Length,
             ProviderCount = states.Count,
             ConfigurationReadyCount = states.Count(state => state.ConfigurationReady),

@@ -165,11 +165,22 @@ internal sealed partial class SqliteWebSearchObservationStore
             if (run.FromDate.HasValue && run.ThroughDate.HasValue)
             {
                 var explicitDates = coverageByRun[identity].Select(value => value.Date);
-                var ranges = run.Status == "complete" && string.Equals(run.CoverageMode, "daily", StringComparison.Ordinal)
-                    ? [new WebSearchFleetCompletedRange { FromDate = run.FromDate.Value, ThroughDate = run.ThroughDate.Value }]
-                    : MergeDates(explicitDates);
-                result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
-                    run.SearchType?.Trim().ToLowerInvariant() ?? "web", ranges, run.ConfigurationHash, run.FailureCategory));
+                if (!string.IsNullOrWhiteSpace(run.SearchType))
+                {
+                    var ranges = run.Status == "complete" && string.Equals(run.CoverageMode, "daily", StringComparison.Ordinal)
+                        ? [new WebSearchFleetCompletedRange { FromDate = run.FromDate.Value, ThroughDate = run.ThroughDate.Value }]
+                        : MergeDates(explicitDates);
+                    result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
+                        run.SearchType.Trim().ToLowerInvariant(), ranges, run.ConfigurationHash, run.FailureCategory));
+                }
+                else
+                {
+                    foreach (var scope in observationsByRun[identity].GroupBy(value => value.Scope, StringComparer.Ordinal))
+                    {
+                        result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
+                            scope.Key, MergeDates(scope.Select(value => value.Date)), run.ConfigurationHash, run.FailureCategory));
+                    }
+                }
                 continue;
             }
 
