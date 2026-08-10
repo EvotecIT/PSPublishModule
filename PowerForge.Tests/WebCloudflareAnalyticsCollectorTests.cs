@@ -22,7 +22,7 @@ public sealed class WebCloudflareAnalyticsCollectorTests
             _ => throw new InvalidOperationException("Unexpected request.")
         });
         using var client = new HttpClient(handler);
-        var collector = new CloudflareAnalyticsCollector(client, new FakeTokenProvider());
+        var collector = CreateCollector(client);
 
         var result = await collector.ProbeAsync(ZoneId, "https://www.officeimo.com/");
 
@@ -49,7 +49,7 @@ public sealed class WebCloudflareAnalyticsCollectorTests
             ? ZoneResponse("tactra.dev")
             : throw new InvalidOperationException("Analytics probe must not run for another site's zone."));
         using var client = new HttpClient(handler);
-        var collector = new CloudflareAnalyticsCollector(client, new FakeTokenProvider());
+        var collector = CreateCollector(client);
 
         var result = await collector.ProbeAsync(ZoneId, "https://officeimo.com/");
 
@@ -154,7 +154,7 @@ public sealed class WebCloudflareAnalyticsCollectorTests
             _ => throw new InvalidOperationException("Unexpected request.")
         });
         using var client = new HttpClient(handler);
-        var collector = new CloudflareAnalyticsCollector(client, new FakeTokenProvider());
+        var collector = CreateCollector(client);
         var options = CreateOptions();
         options.SiteBaseUrl = "https://docs.officeimo.com/products/powerforge/";
 
@@ -178,7 +178,7 @@ public sealed class WebCloudflareAnalyticsCollectorTests
             _ => throw new InvalidOperationException("Unexpected request.")
         });
         using var nullClient = new HttpClient(nullHandler);
-        var nullResult = await new CloudflareAnalyticsCollector(nullClient, new FakeTokenProvider()).CollectAsync(CreateOptions());
+        var nullResult = await CreateCollector(nullClient).CollectAsync(CreateOptions());
         Assert.False(nullResult.Success);
         Assert.Equal("invalid-response", nullResult.ErrorCode);
         Assert.False(nullResult.Batch.ZeroDataConfirmed);
@@ -191,7 +191,7 @@ public sealed class WebCloudflareAnalyticsCollectorTests
             _ => throw new InvalidOperationException("Unexpected request.")
         });
         using var foreignClient = new HttpClient(foreignHandler);
-        var foreignResult = await new CloudflareAnalyticsCollector(foreignClient, new FakeTokenProvider()).CollectAsync(CreateOptions());
+        var foreignResult = await CreateCollector(foreignClient).CollectAsync(CreateOptions());
         Assert.False(foreignResult.Success);
         Assert.Equal("invalid-response", foreignResult.ErrorCode);
     }
@@ -207,7 +207,7 @@ public sealed class WebCloudflareAnalyticsCollectorTests
             _ => throw new InvalidOperationException("Unexpected request.")
         });
         using var client = new HttpClient(handler);
-        var collector = new CloudflareAnalyticsCollector(client, new FakeTokenProvider());
+        var collector = CreateCollector(client);
         var options = CreateOptions();
         options.ThroughDate = new DateOnly(2026, 8, 2);
 
@@ -253,7 +253,7 @@ public sealed class WebCloudflareAnalyticsCollectorTests
             _ => throw new InvalidOperationException("Unexpected request.")
         });
         using var client = new HttpClient(handler);
-        var collector = new CloudflareAnalyticsCollector(client, new FakeTokenProvider());
+        var collector = CreateCollector(client);
         var options = CreateOptions();
         options.ThroughDate = new DateOnly(2026, 8, 2);
 
@@ -279,7 +279,7 @@ public sealed class WebCloudflareAnalyticsCollectorTests
             _ => throw new InvalidOperationException("Unexpected request.")
         });
         using var client = new HttpClient(handler);
-        var collector = new CloudflareAnalyticsCollector(client, new FakeTokenProvider());
+        var collector = CreateCollector(client);
         var options = CreateOptions();
         options.ThroughDate = new DateOnly(2026, 8, 2);
 
@@ -309,7 +309,7 @@ public sealed class WebCloudflareAnalyticsCollectorTests
             _ => throw new InvalidOperationException("Unexpected request.")
         });
         using var client = new HttpClient(handler);
-        var collector = new CloudflareAnalyticsCollector(client, new FakeTokenProvider());
+        var collector = CreateCollector(client);
         var options = CreateOptions();
         options.ThroughDate = new DateOnly(2026, 8, 2);
 
@@ -334,7 +334,7 @@ public sealed class WebCloudflareAnalyticsCollectorTests
             _ => throw new InvalidOperationException("Unexpected request.")
         });
         using var client = new HttpClient(handler);
-        var collector = new CloudflareAnalyticsCollector(client, new FakeTokenProvider());
+        var collector = CreateCollector(client);
 
         var result = await collector.CollectAsync(CreateOptions());
 
@@ -343,6 +343,29 @@ public sealed class WebCloudflareAnalyticsCollectorTests
         Assert.Empty(result.Batch.CollectionCoverage.CompletedDates);
         Assert.Equal(new DateOnly(2026, 8, 1), result.Batch.CollectionCoverage.FailedDate);
         Assert.Equal(2, result.Batch.Observations.Length);
+    }
+
+    [Fact]
+    public async Task Collect_ConvertsDuplicateProviderGroupsIntoAPartialResult()
+    {
+        var duplicate = TrafficRow(new DateOnly(2026, 8, 1), "officeimo.com", "/", 10, 2, 1000, 1);
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => TrafficResponse(duplicate, duplicate),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+        var collector = CreateCollector(client);
+
+        var result = await collector.CollectAsync(CreateOptions());
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.ErrorCode);
+        Assert.Equal("partial", result.Batch.Status);
+        Assert.Empty(result.Batch.Observations);
+        WebTrafficObservationNormalizer.Normalize(result.Batch);
     }
 
     [Fact]
@@ -362,7 +385,7 @@ public sealed class WebCloudflareAnalyticsCollectorTests
             _ => throw new InvalidOperationException("Unexpected request.")
         });
         using var client = new HttpClient(handler);
-        var collector = new CloudflareAnalyticsCollector(client, new FakeTokenProvider());
+        var collector = CreateCollector(client);
 
         var result = await collector.CollectAsync(CreateOptions());
 
@@ -635,6 +658,9 @@ public sealed class WebCloudflareAnalyticsCollectorTests
                 Directory.Delete(root, recursive: true);
         }
     }
+
+    private static CloudflareAnalyticsCollector CreateCollector(HttpClient client) =>
+        new(client, new FakeTokenProvider(), timeProvider: new FixedTimeProvider(CompletionTime));
 
     private static CloudflareAnalyticsCollectionOptions CreateOptions() => new()
     {

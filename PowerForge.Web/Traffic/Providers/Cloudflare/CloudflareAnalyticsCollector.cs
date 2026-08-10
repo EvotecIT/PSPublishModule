@@ -233,7 +233,9 @@ public sealed class CloudflareAnalyticsCollector
             });
         }
         observations = mapped.ToArray();
-        return true;
+        return observations
+            .GroupBy(observation => (observation.Date, observation.Host, observation.Path))
+            .All(group => group.Count() == 1);
     }
 
     private static Dictionary<string, object?> BuildTrafficFilter(string siteBaseUrl, DateTime start, DateTime end)
