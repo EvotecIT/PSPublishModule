@@ -173,21 +173,6 @@ function Get-OptionValue {
     return $null
 }
 
-function Get-ForwardedArgumentList {
-    if ($ArgumentList[0] -ne 'apple-release') { return @($ArgumentList) }
-    $result = [Collections.Generic.List[string]]::new()
-    for ($index = 0; $index -lt $ArgumentList.Count; $index++) {
-        $argument = $ArgumentList[$index]
-        if ($argument -eq '--capture-provenance') {
-            $index++
-            continue
-        }
-        if ($argument.StartsWith('--capture-provenance=', [StringComparison]::OrdinalIgnoreCase)) { continue }
-        $result.Add($argument)
-    }
-    return @($result)
-}
-
 function Assert-SafeArguments {
     if ($ArgumentList.Count -lt 1 -or $ArgumentList[0] -notin @('apple-release', 'apple-screenshots', 'apple-governance', 'apple-review-details')) {
         throw 'Pinned local operator accepts only Apple PowerForge commands.'
@@ -586,10 +571,7 @@ try {
     Assert-FixedAppleToolConfiguration
     Invoke-TrackedInputValidator -SourceCommit $consumerHead
     Assert-FixedLocalCredentialProfile -Saved $savedCredentialEnvironment
-    $configuredSourceCommit = Get-OptionValue -Option '--apple-source-commit'
-    if ($configuredSourceCommit -and $configuredSourceCommit.ToLowerInvariant() -ne $consumerHead) {
-        throw "--apple-source-commit must match the exact consumer HEAD '$consumerHead'."
-    }
+    $forwardedArgumentList = Get-ForwardedArgumentList -SourceCommit $consumerHead
 
     $dotnet = Resolve-FixedTool -Name dotnet
     if ($null -ne (Get-OptionValue -Option '--capture-provenance')) {
@@ -630,7 +612,7 @@ try {
     $toolExitCode = Invoke-RedactedProcess `
         -FilePath $dotnet `
         -WorkingDirectory $consumer `
-        -Arguments (@($cliAssembly) + (Get-ForwardedArgumentList)) `
+        -Arguments (@($cliAssembly) + $forwardedArgumentList) `
         -NuGetPackagesPath $nugetPackages `
         -IncludeAppleCredentials
     if ($toolExitCode -ne 0) { exit $toolExitCode }

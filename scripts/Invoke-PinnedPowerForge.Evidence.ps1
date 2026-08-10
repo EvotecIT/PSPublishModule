@@ -10,6 +10,59 @@ function Add-AllowedConsumerEvidencePath {
     $null = $script:allowedConsumerEvidencePaths.Add($full)
 }
 
+function Get-ForwardedArgumentList {
+    param([Parameter(Mandatory)][string] $SourceCommit)
+    if ($ArgumentList[0] -ne 'apple-release') { return @($ArgumentList) }
+    if ($SourceCommit -notmatch '^[0-9A-Fa-f]{40}$') {
+        throw 'Verified consumer source commit must be an exact 40-character Git commit SHA.'
+    }
+
+    $withoutLocalEvidence = [Collections.Generic.List[string]]::new()
+    for ($index = 0; $index -lt $ArgumentList.Count; $index++) {
+        $argument = $ArgumentList[$index]
+        if ($argument -eq '--capture-provenance') {
+            if ($index + 1 -ge $ArgumentList.Count) { throw 'Missing value for --capture-provenance.' }
+            $index++
+            continue
+        }
+        if ($argument.StartsWith('--capture-provenance=', [StringComparison]::OrdinalIgnoreCase)) { continue }
+        $withoutLocalEvidence.Add($argument)
+    }
+
+    $result = [Collections.Generic.List[string]]::new()
+    $sourceCommitFound = $false
+    for ($index = 0; $index -lt $withoutLocalEvidence.Count; $index++) {
+        $argument = $withoutLocalEvidence[$index]
+        $configuredSourceCommit = $null
+        if ($argument -eq '--apple-source-commit') {
+            if ($index + 1 -ge $withoutLocalEvidence.Count) { throw 'Missing value for --apple-source-commit.' }
+            $configuredSourceCommit = $withoutLocalEvidence[++$index]
+        } elseif ($argument.StartsWith('--apple-source-commit=', [StringComparison]::OrdinalIgnoreCase)) {
+            $configuredSourceCommit = $argument.Substring('--apple-source-commit='.Length)
+        } else {
+            $result.Add($argument)
+            continue
+        }
+
+        if ($sourceCommitFound) { throw '--apple-source-commit must be specified at most once.' }
+        $sourceCommitFound = $true
+        if ([string]::IsNullOrWhiteSpace($configuredSourceCommit) -or
+            $configuredSourceCommit -notmatch '^[0-9A-Fa-f]{40}$') {
+            throw '--apple-source-commit must contain an exact 40-character Git commit SHA.'
+        }
+        if (-not $configuredSourceCommit.Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "--apple-source-commit must match the exact consumer HEAD '$SourceCommit'."
+        }
+        $result.Add('--apple-source-commit')
+        $result.Add($SourceCommit.ToLowerInvariant())
+    }
+    if (-not $sourceCommitFound) {
+        $result.Add('--apple-source-commit')
+        $result.Add($SourceCommit.ToLowerInvariant())
+    }
+    return @($result)
+}
+
 function Assert-ConsumerRepositoryContent {
     $paths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($arguments in @(

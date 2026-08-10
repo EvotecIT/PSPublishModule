@@ -6,6 +6,85 @@ namespace PowerForge.Tests;
 public sealed partial class AppleReleaseWorkflowTests
 {
     [Fact]
+    public void PinnedAppleReleaseAlwaysForwardsTheVerifiedConsumerCommit()
+    {
+        var root = FindRepoRoot();
+        var parent = Path.Combine(root, ".test-temp", $"powerforge-source-forwarding-{Guid.NewGuid():N}");
+        const string commit = "0123456789abcdef0123456789abcdef01234567";
+        try
+        {
+            Directory.CreateDirectory(parent);
+            var harness = Path.Combine(parent, "source-forwarding-harness.ps1");
+            File.WriteAllText(harness,
+                $$"""
+                param([string] $Support)
+                $ErrorActionPreference = 'Stop'
+                function Get-OptionValue {
+                    param([string] $Option)
+                    for ($index = 0; $index -lt $ArgumentList.Count; $index++) {
+                        if ($ArgumentList[$index] -eq $Option) { return $ArgumentList[$index + 1] }
+                        if ($ArgumentList[$index].StartsWith("$Option=", [StringComparison]::OrdinalIgnoreCase)) {
+                            return $ArgumentList[$index].Substring($Option.Length + 1)
+                        }
+                    }
+                    return $null
+                }
+                . $Support
+
+                $ArgumentList = @('apple-release', 'Status', '--config', 'powerforge.release.json', '--capture-provenance', 'capture.json')
+                $forwarded = @(Get-ForwardedArgumentList -SourceCommit '{{commit}}')
+                if (($forwarded -join '|') -ne 'apple-release|Status|--config|powerforge.release.json|--apple-source-commit|{{commit}}') {
+                    throw "Verified source commit was not injected: $($forwarded -join '|')"
+                }
+
+                $ArgumentList = @('apple-release', 'Status', '--config', 'powerforge.release.json', '--apple-source-commit={{commit}}')
+                $forwarded = @(Get-ForwardedArgumentList -SourceCommit '{{commit}}')
+                if (($forwarded -join '|') -ne 'apple-release|Status|--config|powerforge.release.json|--apple-source-commit|{{commit}}') {
+                    throw "Explicit source commit was not normalized: $($forwarded -join '|')"
+                }
+
+                $ArgumentList = @('apple-release', 'Status', '--config', 'powerforge.release.json', '--capture-provenance', '--apple-source-commit={{commit}}')
+                $forwarded = @(Get-ForwardedArgumentList -SourceCommit '{{commit}}')
+                if (($forwarded -join '|') -ne 'apple-release|Status|--config|powerforge.release.json|--apple-source-commit|{{commit}}') {
+                    throw "A capture path was mistaken for a source option: $($forwarded -join '|')"
+                }
+
+                foreach ($invalidArguments in @(
+                    @('apple-release', 'Status', '--config', 'powerforge.release.json', '--apple-source-commit', ''),
+                    @('apple-release', 'Status', '--config', 'powerforge.release.json', '--apple-source-commit', '{{commit}}', '--apple-source-commit={{commit}}'),
+                    @('apple-release', 'Status', '--config', 'powerforge.release.json', '--apple-source-commit', '89abcdef0123456789abcdef0123456789abcdef'))) {
+                    $ArgumentList = $invalidArguments
+                    try {
+                        Get-ForwardedArgumentList -SourceCommit '{{commit}}' | Out-Null
+                        throw "Invalid source arguments were accepted: $($ArgumentList -join '|')"
+                    } catch {
+                        if ($_.Exception.Message -like 'Invalid source arguments were accepted:*') { throw }
+                    }
+                }
+
+                $ArgumentList = @('apple-governance', 'validate', '--config', 'governance.json')
+                $forwarded = @(Get-ForwardedArgumentList -SourceCommit '{{commit}}')
+                if (($forwarded -join '|') -ne ($ArgumentList -join '|')) {
+                    throw "A non-release command was changed: $($forwarded -join '|')"
+                }
+                'PASS'
+                """);
+
+            var result = Run(
+                "pwsh",
+                parent,
+                "-NoLogo", "-NoProfile", "-File", harness,
+                "-Support", Path.Combine(root, "scripts", "Invoke-PinnedPowerForge.Evidence.ps1"));
+            result.EnsureSuccess();
+            Assert.Contains("PASS", result.StandardOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(parent)) Directory.Delete(parent, recursive: true);
+        }
+    }
+
+    [Fact]
     public void TrackedSourceLinksMustRemainInsideTheExactConsumerCheckout()
     {
         if (OperatingSystem.IsWindows()) return;
