@@ -6,6 +6,9 @@ namespace PowerForge.Web;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class WebSearchObservationBatch
 {
+    private WebSearchObservationCollectionCoverage? _collectionCoverage;
+    private bool _zeroDataConfirmed;
+
     /// <summary>Current JSON contract version.</summary>
     public const int CurrentSchemaVersion = 2;
 
@@ -52,12 +55,36 @@ public sealed class WebSearchObservationBatch
     /// <summary>Optional durable description of the requested and completed provider collection partitions.</summary>
     [JsonPropertyName("collectionCoverage")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public WebSearchObservationCollectionCoverage? CollectionCoverage { get; set; }
+    public WebSearchObservationCollectionCoverage? CollectionCoverage
+    {
+        get => _collectionCoverage;
+        set
+        {
+            _collectionCoverage = value;
+            CollectionCoverageSpecified = true;
+        }
+    }
+
+    /// <summary>Whether collectionCoverage was explicitly supplied rather than omitted.</summary>
+    [JsonIgnore]
+    internal bool CollectionCoverageSpecified { get; private set; }
 
     /// <summary>Whether a successful provider request explicitly confirmed that the requested slice contained no rows.</summary>
     [JsonPropertyName("zeroDataConfirmed")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public bool ZeroDataConfirmed { get; set; }
+    public bool ZeroDataConfirmed
+    {
+        get => _zeroDataConfirmed;
+        set
+        {
+            _zeroDataConfirmed = value;
+            ZeroDataConfirmedSpecified = true;
+        }
+    }
+
+    /// <summary>Whether zeroDataConfirmed was explicitly supplied rather than omitted.</summary>
+    [JsonIgnore]
+    internal bool ZeroDataConfirmedSpecified { get; private set; }
 
     /// <summary>Search performance observations in this run.</summary>
     [JsonPropertyName("observations"), JsonRequired]

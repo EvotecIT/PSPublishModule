@@ -20,7 +20,7 @@ public static class WebSearchObservationNormalizer
 
         if (batch.SchemaVersion is < WebSearchObservationBatch.MinimumSupportedSchemaVersion or > WebSearchObservationBatch.CurrentSchemaVersion)
             throw new ArgumentException($"Unsupported search observation schema version '{batch.SchemaVersion}'.", nameof(batch));
-        if (batch.SchemaVersion == 1 && (batch.ZeroDataConfirmed || batch.CollectionCoverage is not null))
+        if (batch.SchemaVersion == 1 && (batch.CollectionCoverageSpecified || batch.ZeroDataConfirmedSpecified))
             throw new ArgumentException("Search observation schema version 1 cannot contain collection coverage or zero-data confirmation.", nameof(batch));
         if (batch.SchemaVersion == 2 && batch.CollectionCoverage is null)
             throw new ArgumentException("Search observation schema version 2 requires collection coverage.", nameof(batch));
@@ -72,10 +72,13 @@ public static class WebSearchObservationNormalizer
             Status = status,
             ConfigurationHash = NormalizeOptional(batch.ConfigurationHash),
             EvidenceReference = NormalizeOptional(batch.EvidenceReference),
-            CollectionCoverage = collectionCoverage,
-            ZeroDataConfirmed = batch.ZeroDataConfirmed,
             Observations = observations
         };
+        if (batch.SchemaVersion >= 2)
+        {
+            normalized.CollectionCoverage = collectionCoverage;
+            normalized.ZeroDataConfirmed = batch.ZeroDataConfirmed;
+        }
         normalized.RunId = NormalizeOptional(batch.RunId) ?? ComputeRunId(normalized);
         foreach (var observation in normalized.Observations)
             observation.ObservationKey = ComputeObservationKey(normalized.RunId, observation);

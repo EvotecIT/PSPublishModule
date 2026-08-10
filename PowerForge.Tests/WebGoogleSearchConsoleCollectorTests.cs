@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using PowerForge.Web;
 using PowerForge.Web.Cli;
 
@@ -118,6 +119,40 @@ public sealed class WebGoogleSearchConsoleCollectorTests
 
         var normalized = WebSearchObservationNormalizer.Normalize(result.Batch);
         Assert.Equal(3, normalized.Observations.Length);
+    }
+
+    [Theory]
+    [InlineData("discover")]
+    [InlineData("googleNews")]
+    public async Task Collect_OmitsUnsupportedQueryDimensionForQuerylessSearchTypes(string searchType)
+    {
+        var handler = new ScriptedHandler((request, index) => index switch
+        {
+            0 => SitesResponse("sc-domain:officeimo.com"),
+            1 => QueryResponse(),
+            2 => QueryResponse(RowWithoutQuery(
+                "2026-08-01", "https://officeimo.com/news/", "pol", "MOBILE", 3, 30, 0.1, 4.5)),
+            3 => QueryResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var httpClient = new HttpClient(handler);
+        var collector = new GoogleSearchConsoleCollector(httpClient, new FakeTokenProvider());
+        var options = CreateOptions();
+        options.SearchType = searchType;
+
+        var result = await collector.CollectAsync(options);
+
+        Assert.True(result.Success);
+        var observation = Assert.Single(result.Batch.Observations);
+        Assert.Equal("https://officeimo.com/news/", observation.Page);
+        Assert.Null(observation.Query);
+        Assert.Equal("pol", observation.Country);
+        Assert.Equal("MOBILE", observation.Device);
+        Assert.Equal(searchType, observation.SearchType);
+        using var requestBody = JsonDocument.Parse(handler.Requests[2].Body!);
+        Assert.Equal(
+            ["date", "page", "country", "device"],
+            requestBody.RootElement.GetProperty("dimensions").EnumerateArray().Select(value => value.GetString()));
     }
 
     [Fact]
@@ -258,6 +293,42 @@ public sealed class WebGoogleSearchConsoleCollectorTests
         Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(unconfirmed));
         Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(partialConfirmed));
         Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(nonEmptyConfirmed));
+    }
+
+    [Theory]
+    [InlineData("collectionCoverage")]
+    [InlineData("zeroDataConfirmed")]
+    public void Normalize_RejectsExplicitVersionTwoMembersInVersionOneJson(string propertyName)
+    {
+        var legacy = new WebSearchObservationBatch
+        {
+            SchemaVersion = 1,
+            Provider = "google-search-console",
+            SiteId = "officeimo",
+            CollectedAtUtc = CompletionTime,
+            SourceKind = "fixture",
+            Status = "complete",
+            Observations =
+            [
+                new WebSearchObservation
+                {
+                    Date = new DateOnly(2026, 8, 1),
+                    Page = "https://officeimo.com/",
+                    Clicks = 1,
+                    Impressions = 10
+                }
+            ]
+        };
+        var document = JsonNode.Parse(JsonSerializer.Serialize(legacy))!.AsObject();
+        if (propertyName == "zeroDataConfirmed")
+            document[propertyName] = false;
+        else
+            document[propertyName] = null;
+        var deserialized = JsonSerializer.Deserialize<WebSearchObservationBatch>(document.ToJsonString())!;
+
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(deserialized));
+
+        Assert.Contains("version 1", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -499,6 +570,23 @@ public sealed class WebGoogleSearchConsoleCollectorTests
         double position) => JsonSerializer.Serialize(new
         {
             keys = new[] { date, page, query, country, device },
+            clicks,
+            impressions,
+            ctr,
+            position
+        });
+
+    private static string RowWithoutQuery(
+        string date,
+        string page,
+        string country,
+        string device,
+        double clicks,
+        double impressions,
+        double ctr,
+        double position) => JsonSerializer.Serialize(new
+        {
+            keys = new[] { date, page, country, device },
             clicks,
             impressions,
             ctr,

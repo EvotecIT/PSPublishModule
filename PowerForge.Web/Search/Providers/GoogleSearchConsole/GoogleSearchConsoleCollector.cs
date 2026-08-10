@@ -18,7 +18,8 @@ public sealed class GoogleSearchConsoleCollector
 
     private const int MaximumErrorBodyCharacters = 2_000;
     private static readonly Uri SitesEndpoint = new("https://www.googleapis.com/webmasters/v3/sites");
-    private static readonly string[] Dimensions = ["date", "page", "query", "country", "device"];
+    private static readonly string[] DimensionsWithQuery = ["date", "page", "query", "country", "device"];
+    private static readonly string[] DimensionsWithoutQuery = ["date", "page", "country", "device"];
     private static readonly string[] FinalityDimensions = ["date"];
     private static readonly string[] SearchTypes = ["web", "image", "video", "news", "discover", "googleNews"];
     private static readonly IReadOnlySet<string> CollectorCapabilities =
@@ -187,6 +188,7 @@ public sealed class GoogleSearchConsoleCollector
         }
 
         var date = options.FromDate;
+        var dimensions = GetDimensions(options.SearchType);
         while (true)
         {
             if (firstIncompleteDate is DateOnly incompleteDate && date >= incompleteDate)
@@ -212,7 +214,7 @@ public sealed class GoogleSearchConsoleCollector
                 {
                     StartDate = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     EndDate = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                    Dimensions = Dimensions,
+                    Dimensions = dimensions,
                     Type = options.SearchType,
                     DataState = "final",
                     RowLimit = options.RowLimit,
@@ -245,7 +247,7 @@ public sealed class GoogleSearchConsoleCollector
                         break;
 
                     foreach (var row in rows)
-                        observations.Add(MapRow(row, date, options, probe.Property));
+                        observations.Add(MapRow(row, dimensions, date, options, probe.Property));
                     startRow = checked(startRow + options.RowLimit);
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -349,11 +351,12 @@ public sealed class GoogleSearchConsoleCollector
 
     private static WebSearchObservation MapRow(
         GoogleSearchConsoleQueryRow row,
+        IReadOnlyList<string> dimensions,
         DateOnly requestedDate,
         GoogleSearchConsoleCollectionOptions options,
         string property)
     {
-        if (row.Keys is null || row.Keys.Length != Dimensions.Length)
+        if (row.Keys is null || row.Keys.Length != dimensions.Count)
             throw new InvalidOperationException("Google Search Console returned a row with an unexpected dimension set.");
         if (!DateOnly.TryParseExact(row.Keys[0], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var rowDate) ||
             rowDate != requestedDate)
@@ -370,15 +373,19 @@ public sealed class GoogleSearchConsoleCollector
         if (!double.IsFinite(row.Position.Value) || row.Position.Value < 0d)
             throw new InvalidOperationException("Google Search Console returned an invalid average position.");
 
+        var dimensionValues = dimensions
+            .Select((dimension, index) => (Dimension: dimension, Value: NullIfEmpty(row.Keys[index])))
+            .ToDictionary(item => item.Dimension, item => item.Value, StringComparer.Ordinal);
+
         return new WebSearchObservation
         {
             Provider = options.ProviderId,
             SiteId = options.SiteId,
             Date = rowDate,
-            Page = NullIfEmpty(row.Keys[1]),
-            Query = NullIfEmpty(row.Keys[2]),
-            Country = NullIfEmpty(row.Keys[3]),
-            Device = NullIfEmpty(row.Keys[4]),
+            Page = dimensionValues["page"],
+            Query = dimensionValues.GetValueOrDefault("query"),
+            Country = dimensionValues["country"],
+            Device = dimensionValues["device"],
             SearchType = options.SearchType,
             Clicks = clicks,
             Impressions = impressions,
@@ -387,6 +394,9 @@ public sealed class GoogleSearchConsoleCollector
             EvidenceReference = options.EvidenceReference ?? $"gsc:{property}:{rowDate:yyyy-MM-dd}:{options.SearchType}"
         };
     }
+
+    private static string[] GetDimensions(string searchType) =>
+        searchType is "discover" or "googleNews" ? DimensionsWithoutQuery : DimensionsWithQuery;
 
     private static long ConvertCount(double value, string metric)
     {
