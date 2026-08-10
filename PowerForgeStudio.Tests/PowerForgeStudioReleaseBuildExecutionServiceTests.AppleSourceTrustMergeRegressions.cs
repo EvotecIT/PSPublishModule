@@ -81,6 +81,67 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_binary_info_plist_before_substitution_validation()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("BinaryInfoPlistRepo");
+        var project = scope.CreateDirectory(Path.Combine("BinaryInfoPlistRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCBuildConfiguration; buildSettings = { INFOPLIST_FILE = Info.plist; }; };");
+        File.WriteAllBytes(
+            Path.Combine(repositoryRoot, "Info.plist"),
+            Convert.FromBase64String("YnBsaXN0MDDRAQJZQnVpbGRIb3N0aADpACQAKABVAFMARQBSACkICxUAAAAAAAABAQAAAAAAAAADAAAAAAAAAAAAAAAAAAAAJg=="));
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("binary property-list", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("text property list", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_local_remote_dependency_without_tracked_lock_even_with_literal_revision()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, _, packageRoot) = CreateLocalPackageFixture(scope, "LocalRemotePackageWithoutLockRepo");
+        File.WriteAllText(
+            Path.Combine(packageRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\n" +
+            "let package = Package(name: \"Shared\", dependencies: [" +
+            ".package(url: \"https://example.invalid/Remote.git\", revision: \"0123456789abcdef0123456789abcdef01234567\")])");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("tracked Package.resolved", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("same approved graph", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("-framework Injected")]
+    [InlineData("-Wl,-weak_framework,Injected")]
+    public void ResolveExactAppleSourceCommit_rejects_unbound_named_framework_linker_flags(string flags)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "NamedFrameworkFlagRepo" + Guid.NewGuid().ToString("N"),
+            $"OTHER_LDFLAGS = {flags}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Named framework 'Injected'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("cannot be bound", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_rejects_external_info_plist_prefix_header()
     {
         using var scope = new TemporaryDirectoryScope();

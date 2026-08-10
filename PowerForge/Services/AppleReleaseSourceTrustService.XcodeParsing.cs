@@ -152,7 +152,17 @@ internal sealed partial class AppleReleaseSourceTrustService
             "DEVELOPMENT_LANGUAGE", "PRODUCT_BUNDLE_IDENTIFIER", "MARKETING_VERSION",
             "CURRENT_PROJECT_VERSION", "PRODUCT_MODULE_NAME"
         };
-        var contents = DecodeTrackedText(File.ReadAllBytes(plistPath));
+        var bytes = File.ReadAllBytes(plistPath);
+        if (bytes.Length >= 8 &&
+            bytes[0] == (byte)'b' && bytes[1] == (byte)'p' && bytes[2] == (byte)'l' && bytes[3] == (byte)'i' &&
+            bytes[4] == (byte)'s' && bytes[5] == (byte)'t' && bytes[6] == (byte)'0' && bytes[7] == (byte)'0')
+        {
+            throw new InvalidOperationException(
+                $"INFOPLIST_FILE '{plistPath}' uses the binary property-list format, whose semantic string values cannot be inspected " +
+                $"for exact-source build-setting substitutions. Commit a text property list before creating an Apple checkpoint: {source}");
+        }
+
+        var contents = DecodeTrackedText(bytes);
         ValidateUnclassifiedBuildSettingReferences(
             "INFOPLIST_FILE contents",
             contents,

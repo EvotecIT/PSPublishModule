@@ -293,25 +293,20 @@ internal sealed partial class AppleReleaseSourceTrustService
                     $"Local Swift package '{packageRoot}' declares a dynamic external dependency that cannot be bound to exact source. " +
                     "Use a literal package URL or registry identity and commit its Package.resolved lock.");
 
-            var revisionValue = string.Empty;
-            var hasExactRevision = dependency.Arguments.TryGetValue("revision", out var revision) &&
-                                   TryReadLiteralSwiftString(revision, out revisionValue) &&
-                                   Regex.IsMatch(revisionValue, "^(?:[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})$", RegexOptions.CultureInvariant);
             var effectiveLocks = packageLockPaths
                 .Concat(new[] { Path.Combine(packageRoot, "Package.resolved") })
                 .Distinct(GetPathComparer())
                 .ToArray();
             var locks = FindTrackedPackageLocks(effectiveLocks, identity);
-            if (locks.Length == 0 && !hasExactRevision)
+            if (locks.Length == 0)
                 throw new InvalidOperationException(
-                    $"Local Swift package '{packageRoot}' declares external dependency '{identity}' without an exact full Git revision. " +
-                    "Commit a Package.resolved lock containing that dependency before creating an exact-source Apple checkpoint.");
+                    $"Local Swift package '{packageRoot}' declares external dependency '{identity}' without a tracked Package.resolved lock. " +
+                    "Commit the effective lock containing that dependency so preflight and exact archive materialization consume the same approved graph.");
             foreach (var packageLock in locks)
                 EnsureTrackedFile(repositoryRoot, packageLock, "Xcode local Swift package resolution lock");
             var resolvedRevision = ResolvePackageRevision(
                 effectiveLocks,
-                identity,
-                !dependency.Arguments.ContainsKey("id") && hasExactRevision ? revisionValue : null);
+                identity);
             ValidateRemotePackageSource(identity, resolvedRevision, effectiveLocks);
         }
     }

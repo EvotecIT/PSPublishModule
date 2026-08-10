@@ -318,13 +318,21 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static bool TrySkipNonInputLinkerOption(string[] tokens, ref int index, string token, string key)
     {
+        if (token.Equals("-framework", StringComparison.Ordinal) ||
+            token.Equals("-weak_framework", StringComparison.Ordinal) ||
+            token.Equals("-reexport_framework", StringComparison.Ordinal) ||
+            token.Equals("-lazy_framework", StringComparison.Ordinal) ||
+            token.Equals("-needed_framework", StringComparison.Ordinal))
+        {
+            if (++index >= tokens.Length)
+                throw new InvalidOperationException($"Xcode build setting {key} ends with linker option '{token}' and no framework name.");
+            throw new InvalidOperationException(
+                $"Named framework '{tokens[index]}' in Xcode build setting {key} cannot be bound to an exact SDK, toolchain, or tracked framework input. " +
+                "Use a validated PBX framework reference or an explicit approved-root framework path.");
+        }
+
         var argumentCount = token switch
         {
-            "-framework" => 1,
-            "-weak_framework" => 1,
-            "-reexport_framework" => 1,
-            "-lazy_framework" => 1,
-            "-needed_framework" => 1,
             "-compatibility_version" => 1,
             "-current_version" => 1,
             "-arch" => 1,
