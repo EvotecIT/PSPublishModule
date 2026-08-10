@@ -32,10 +32,17 @@ public sealed partial class BingWebmasterCollector
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _apiKeyProvider = apiKeyProvider ?? throw new ArgumentNullException(nameof(apiKeyProvider));
-        _apiBaseUri = apiBaseUri ?? DefaultApiBaseUri;
+        var configuredApiBaseUri = apiBaseUri ?? DefaultApiBaseUri;
         _timeProvider = timeProvider ?? TimeProvider.System;
-        if (!_apiBaseUri.IsAbsoluteUri || _apiBaseUri.Scheme != Uri.UriSchemeHttps)
-            throw new ArgumentException("Bing Webmaster API base URI must be absolute HTTPS.", nameof(apiBaseUri));
+        if (!configuredApiBaseUri.IsAbsoluteUri ||
+            configuredApiBaseUri.Scheme != Uri.UriSchemeHttps ||
+            !string.IsNullOrEmpty(configuredApiBaseUri.UserInfo) ||
+            !string.IsNullOrEmpty(configuredApiBaseUri.Query) ||
+            !string.IsNullOrEmpty(configuredApiBaseUri.Fragment))
+        {
+            throw new ArgumentException("Bing Webmaster API base URI must be absolute HTTPS without user info, query, or fragment.", nameof(apiBaseUri));
+        }
+        _apiBaseUri = new Uri(configuredApiBaseUri.AbsoluteUri.TrimEnd('/') + "/", UriKind.Absolute);
     }
 
     /// <summary>Verifies that the credential can see the exact configured Bing site.</summary>
@@ -138,7 +145,7 @@ public sealed partial class BingWebmasterCollector
         requestCount++;
         if (!pageResponse.Success)
             return BuildFailure(options, probe, requestCount, pageResponse.ErrorCode!, pageResponse.ErrorMessage!, observations);
-        if (!TryMapStats(pageResponse.Values, value => value.Page, options, pageDimension: true, out var pageObservations))
+        if (!TryMapStats(pageResponse.Values, value => value.Page ?? value.Query, options, pageDimension: true, out var pageObservations))
             return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned invalid page statistics.", observations);
         observations.AddRange(pageObservations);
 

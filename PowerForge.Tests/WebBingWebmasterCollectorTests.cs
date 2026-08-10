@@ -40,6 +40,22 @@ public sealed class WebBingWebmasterCollectorTests
     }
 
     [Fact]
+    public async Task Probe_TreatsCustomApiBaseAsDirectoryWithoutTrailingSlash()
+    {
+        var handler = new ScriptedHandler((_, _) => SitesResponse("https://officeimo.com/", true));
+        using var httpClient = new HttpClient(handler);
+        var collector = new BingWebmasterCollector(
+            httpClient,
+            new FakeApiKeyProvider(),
+            new Uri("https://proxy.example/api.svc/json"));
+
+        var result = await collector.ProbeAsync("https://officeimo.com/");
+
+        Assert.True(result.Success);
+        Assert.Equal("/api.svc/json/GetUserSites", new Uri(Assert.Single(handler.Requests).AbsoluteUri).AbsolutePath);
+    }
+
+    [Fact]
     public async Task Probe_AndCollect_ClassifyCredentialFailureWithoutClaimingAnHttpRequest()
     {
         var handler = new ScriptedHandler((_, _) => throw new InvalidOperationException("Transport must not be reached."));
@@ -64,7 +80,7 @@ public sealed class WebBingWebmasterCollectorTests
         {
             0 => SitesResponse("https://officeimo.com/", true),
             1 => StatsResponse(Stat("powerforge", 3, 30, 4.5)),
-            2 => StatsResponse(PageStat("https://officeimo.com/docs/powerforge", 2, 20, 3.25)),
+            2 => StatsResponse(LegacyPageStat("https://officeimo.com/docs/powerforge", 2, 20, 3.25)),
             3 => TrafficResponse(5, 50),
             _ => throw new InvalidOperationException("Unexpected request.")
         });
@@ -352,6 +368,21 @@ public sealed class WebBingWebmasterCollectorTests
         Assert.Throws<FormatException>(() => BingWebmasterCsvExportParser.Parse(csv, CreateCsvOptions()));
     }
 
+    [Theory]
+    [InlineData("discover")]
+    [InlineData("webb")]
+    [InlineData("WEB")]
+    public void CsvExport_RejectsUnsupportedSearchTypes(string searchType)
+    {
+        const string csv = "Date,Page,Clicks,Impressions\n2026-08-01,https://officeimo.com/,1,10\n";
+        var options = CreateCsvOptions();
+        options.SearchType = searchType;
+
+        var exception = Assert.Throws<ArgumentException>(() => BingWebmasterCsvExportParser.Parse(csv, options));
+
+        Assert.Contains("only the 'web'", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void CsvExport_HeaderOnlyFileCannotFabricateZeroData()
     {
@@ -612,6 +643,16 @@ public sealed class WebBingWebmasterCollectorTests
     private static object PageStat(string page, long clicks, long impressions, double position) => new
     {
         Page = page,
+        Date = ProviderDate(new DateOnly(2026, 8, 1)),
+        Clicks = clicks,
+        Impressions = impressions,
+        AvgImpressionPosition = position,
+        AvgClickPosition = position
+    };
+
+    private static object LegacyPageStat(string page, long clicks, long impressions, double position) => new
+    {
+        Query = page,
         Date = ProviderDate(new DateOnly(2026, 8, 1)),
         Clicks = clicks,
         Impressions = impressions,

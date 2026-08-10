@@ -336,8 +336,8 @@ public static class BingWebmasterCsvExportParser
             throw new ArgumentException("Bing Webmaster CSV import requires provider and site identifiers.", nameof(options));
         if (options.FromDate == default || options.ThroughDate == default || options.FromDate > options.ThroughDate)
             throw new ArgumentException("Bing Webmaster CSV import date range is invalid.", nameof(options));
-        if (string.IsNullOrWhiteSpace(options.SearchType))
-            throw new ArgumentException("Bing Webmaster CSV import requires a search type.", nameof(options));
+        if (!string.Equals(options.SearchType, "web", StringComparison.Ordinal))
+            throw new ArgumentException("Bing Webmaster CSV import supports only the 'web' search type.", nameof(options));
         if (options.CollectedAtUtc == default)
             throw new ArgumentException("Bing Webmaster CSV import requires an offset-aware collection time.", nameof(options));
     }

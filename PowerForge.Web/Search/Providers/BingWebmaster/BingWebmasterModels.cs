@@ -124,6 +124,9 @@ internal sealed class BingWebmasterPageStat : BingWebmasterSearchStat
 {
     [JsonPropertyName("Page")]
     public string? Page { get; set; }
+
+    [JsonPropertyName("Query")]
+    public string? Query { get; set; }
 }
 
 internal sealed class BingWebmasterTrafficStat
