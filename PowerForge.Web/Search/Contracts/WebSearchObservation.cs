@@ -6,6 +6,7 @@ namespace PowerForge.Web;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class WebSearchObservationBatch
 {
+    private WebSearchObservation[] _observations = Array.Empty<WebSearchObservation>();
     private WebSearchObservationCollectionCoverage? _collectionCoverage;
     private bool _zeroDataConfirmed;
 
@@ -88,7 +89,19 @@ public sealed class WebSearchObservationBatch
 
     /// <summary>Search performance observations in this run.</summary>
     [JsonPropertyName("observations"), JsonRequired]
-    public WebSearchObservation[] Observations { get; set; } = Array.Empty<WebSearchObservation>();
+    public WebSearchObservation[] Observations
+    {
+        get => _observations;
+        set
+        {
+            ObservationsWasNull = value is null;
+            _observations = value ?? Array.Empty<WebSearchObservation>();
+        }
+    }
+
+    /// <summary>Whether the JSON contract explicitly supplied a null observations value.</summary>
+    [JsonIgnore]
+    internal bool ObservationsWasNull { get; private set; }
 }
 
 /// <summary>Durable coverage metadata for a bounded provider collection request.</summary>

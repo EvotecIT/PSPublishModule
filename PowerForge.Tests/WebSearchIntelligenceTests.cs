@@ -361,6 +361,46 @@ public sealed partial class WebSearchIntelligenceTests
     }
 
     [Fact]
+    public async Task SqliteStore_NewerCompleteZeroDataRunSuppressesStaleDailyEvidence()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "search.db"));
+            var observed = WebSearchObservationNormalizer.Normalize(CreateBatch());
+            var zeroData = WebSearchObservationNormalizer.Normalize(new WebSearchObservationBatch
+            {
+                SchemaVersion = 2,
+                Provider = observed.Provider,
+                SiteId = observed.SiteId,
+                CollectedAtUtc = observed.CollectedAtUtc.AddDays(1),
+                SourceKind = "api",
+                Status = "complete",
+                CollectionCoverage = new WebSearchObservationCollectionCoverage
+                {
+                    FromDate = observed.Observations[0].Date,
+                    ThroughDate = observed.Observations[0].Date,
+                    SearchType = observed.Observations[0].SearchType,
+                    CompletedDates = [observed.Observations[0].Date]
+                },
+                ZeroDataConfirmed = true,
+                Observations = Array.Empty<WebSearchObservation>()
+            });
+
+            await store.ImportAsync(observed);
+            await store.ImportAsync(zeroData);
+
+            var observations = await store.QueryAsync(new WebSearchObservationQuery { SiteId = observed.SiteId });
+
+            Assert.Empty(observations);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task SqliteStore_RejectsRunIdentifierCollisionWithDifferentEvidence()
     {
         var root = CreateTemporaryDirectory();

@@ -223,6 +223,33 @@ public sealed class WebGoogleSearchConsoleCollectorTests
     }
 
     [Fact]
+    public async Task Collect_PreservesRowsAsPartialWhenALaterResponseBodyCannotBeRead()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => SitesResponse("sc-domain:officeimo.com"),
+            1 => QueryResponse(),
+            2 => QueryResponse(Row(
+                "2026-08-01", "https://officeimo.com/", "officeimo", "pol", "DESKTOP", 1, 10, 0.1, 1)),
+            3 => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ThrowingReadContent() },
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var httpClient = new HttpClient(handler);
+        var collector = new GoogleSearchConsoleCollector(
+            httpClient,
+            new FakeTokenProvider(),
+            new FixedTimeProvider(CompletionTime));
+
+        var result = await collector.CollectAsync(CreateOptions(rowLimit: 1));
+
+        Assert.False(result.Success);
+        Assert.Equal("partial", result.Batch.Status);
+        Assert.Equal("provider-unavailable", result.ErrorCode);
+        Assert.Single(result.Batch.Observations);
+        WebSearchObservationNormalizer.Normalize(result.Batch);
+    }
+
+    [Fact]
     public async Task Collect_RecordsAnExplicitCompleteZeroDataRun()
     {
         var handler = new ScriptedHandler((request, index) => index switch
@@ -350,6 +377,18 @@ public sealed class WebGoogleSearchConsoleCollectorTests
         Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(unconfirmed));
         Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(partialConfirmed));
         Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(nonEmptyConfirmed));
+    }
+
+    [Fact]
+    public void Normalize_RejectsExplicitNullObservations()
+    {
+        var document = JsonNode.Parse(JsonSerializer.Serialize(CreateEmptyBatch(zeroDataConfirmed: true, status: "complete")))!.AsObject();
+        document["observations"] = null;
+        var batch = JsonSerializer.Deserialize<WebSearchObservationBatch>(document.ToJsonString(), WebCliJson.Options)!;
+
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(batch));
+
+        Assert.Contains("must be an array", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -622,6 +661,23 @@ public sealed class WebGoogleSearchConsoleCollectorTests
     }
 
     [Fact]
+    public void ServiceAccountFactory_DoesNotEchoAMissingCredentialFilePath()
+    {
+        var secretPath = Path.Combine(Path.GetTempPath(), "powerforge-secret", Guid.NewGuid().ToString("N"), "credential.json");
+        var reference = new WebSearchCredentialReference
+        {
+            Kind = "google-service-account-file",
+            EnvironmentVariable = "POWERFORGE_TEST_GSC_FILE"
+        };
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            GoogleSearchConsoleServiceAccountAccessTokenProvider.Create(reference, _ => secretPath));
+
+        Assert.DoesNotContain(secretPath, exception.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(reference.EnvironmentVariable, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Cli_ObserveCollect_FailsClosedBeforeCreatingStorageWhenCredentialIsUnavailable()
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-gsc-tests", Guid.NewGuid().ToString("N"));
@@ -812,6 +868,18 @@ public sealed class WebGoogleSearchConsoleCollectorTests
     private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => value;
+    }
+
+    private sealed class ThrowingReadContent : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
+            Task.FromException(new IOException("simulated response-body failure"));
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
     }
 
     private sealed class ScriptedHandler(Func<HttpRequestMessage, int, HttpResponseMessage> responder) : HttpMessageHandler

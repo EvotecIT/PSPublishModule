@@ -47,7 +47,8 @@ public sealed class GoogleSearchConsoleServiceAccountAccessTokenProvider : IGoog
             case "google-service-account-file":
                 var fullPath = Path.GetFullPath(value.Trim().Trim('"'));
                 if (!File.Exists(fullPath))
-                    throw new FileNotFoundException($"Google Search Console service-account file was not found: {fullPath}");
+                    throw new FileNotFoundException(
+                        $"Google Search Console service-account file configured by environment variable '{environmentVariable}' was not found.");
                 credential = LoadServiceAccount(() => CredentialFactory.FromFile<ServiceAccountCredential>(fullPath));
                 break;
             default:

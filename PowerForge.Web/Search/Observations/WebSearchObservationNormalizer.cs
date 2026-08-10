@@ -24,6 +24,8 @@ public static class WebSearchObservationNormalizer
             throw new ArgumentException("Search observation schema version 1 cannot contain collection coverage or zero-data confirmation.", nameof(batch));
         if (batch.SchemaVersion == 2 && batch.CollectionCoverage is null)
             throw new ArgumentException("Search observation schema version 2 requires collection coverage.", nameof(batch));
+        if (batch.ObservationsWasNull)
+            throw new ArgumentException("Search observation observations must be an array.", nameof(batch));
 
         var provider = NormalizeRequiredIdentifier(batch.Provider, "provider");
         var siteId = NormalizeRequiredIdentifier(batch.SiteId, "siteId");
@@ -34,7 +36,7 @@ public static class WebSearchObservationNormalizer
         if (batch.CollectedAtUtc == default)
             throw new ArgumentException("Search observation batch requires collectedAtUtc.", nameof(batch));
 
-        var normalizedObservations = (batch.Observations ?? Array.Empty<WebSearchObservation>())
+        var normalizedObservations = batch.Observations
             .Select((observation, index) => NormalizeObservation(observation, provider, siteId, batch.EvidenceReference, index))
             .ToArray();
         var duplicateDimension = normalizedObservations

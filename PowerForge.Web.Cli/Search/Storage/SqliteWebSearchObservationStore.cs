@@ -260,6 +260,27 @@ internal sealed class SqliteWebSearchObservationStore
                    AND runs.site_id = observations.site_id
                    AND runs.run_id = observations.run_id
                 WHERE {string.Join(" AND ", clauses.Select(clause => "observations." + clause))}
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM search_observation_runs AS zero_runs
+                      INNER JOIN json_each(
+                          zero_runs.normalized_manifest_json,
+                          '$.collectionCoverage.completedDates') AS completed_dates
+                      WHERE zero_runs.provider = observations.provider
+                        AND zero_runs.site_id = observations.site_id
+                        AND zero_runs.status = 'complete'
+                        AND json_extract(zero_runs.normalized_manifest_json, '$.zeroDataConfirmed') = 1
+                        AND completed_dates.value = observations.observation_date
+                        AND COALESCE(
+                                NULLIF(LOWER(TRIM(json_extract(
+                                    zero_runs.normalized_manifest_json,
+                                    '$.collectionCoverage.searchType'))), ''),
+                                'web') = COALESCE(NULLIF(LOWER(TRIM(observations.search_type)), ''), 'web')
+                        AND (
+                            zero_runs.collected_at_utc > runs.collected_at_utc OR
+                            (zero_runs.collected_at_utc = runs.collected_at_utc AND zero_runs.run_id > runs.run_id)
+                        )
+                  )
             )
             SELECT observation_key, provider, site_id, observation_date, page, query,
                    country, device, search_type, clicks, impressions, click_through_rate,

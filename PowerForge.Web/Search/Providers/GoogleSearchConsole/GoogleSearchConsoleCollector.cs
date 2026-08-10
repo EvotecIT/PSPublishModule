@@ -103,7 +103,7 @@ public sealed class GoogleSearchConsoleCollector
         {
             throw;
         }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException or TokenResponseException)
+        catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or InvalidOperationException or TokenResponseException)
         {
             return ProbeFailure(normalizedProperty, ClassifyException(ex), SafeFailureMessage(ex, "Google Search Console property probe failed."));
         }
@@ -179,7 +179,7 @@ public sealed class GoogleSearchConsoleCollector
         {
             throw;
         }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException or FormatException or TokenResponseException)
+        catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or InvalidOperationException or FormatException or TokenResponseException)
         {
             return BuildResult(
                 options,
@@ -271,7 +271,7 @@ public sealed class GoogleSearchConsoleCollector
                 {
                     throw;
                 }
-                catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException or OverflowException or FormatException or TokenResponseException)
+                catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or InvalidOperationException or OverflowException or FormatException or TokenResponseException)
                 {
                     return BuildResult(
                         options,
@@ -503,7 +503,7 @@ public sealed class GoogleSearchConsoleCollector
     {
         JsonException => "provider-response-invalid",
         TokenResponseException => "authentication-failed",
-        HttpRequestException => "provider-unavailable",
+        HttpRequestException or IOException => "provider-unavailable",
         FormatException or OverflowException => "provider-response-invalid",
         _ when exception.Message.Contains("authentication", StringComparison.OrdinalIgnoreCase) => "authentication-failed",
         _ => "provider-response-invalid"
