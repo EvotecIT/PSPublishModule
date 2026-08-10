@@ -782,7 +782,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Theory]
     [InlineData(PowerForgeAppleReleaseAction.Upload)]
     [InlineData(PowerForgeAppleReleaseAction.UploadExisting)]
-    public void Execute_AppleUploadAction_ResumesExactValidRemoteBuildAndWritesCompactReceipt(
+    public void Execute_AppleUploadAction_RequiresExplicitAdoptionThenResumesExactRemoteBuild(
         PowerForgeAppleReleaseAction action)
     {
         const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
@@ -842,13 +842,30 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 getAvailableBytes: _ => throw new InvalidOperationException("Resumed builds must skip archive preflight."));
 
-            var result = service.Execute(
+            var blocked = service.Execute(
                 spec,
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleSourceCommit = sourceCommit,
                     AppleAction = action
+                });
+            Assert.False(blocked.Success);
+            Assert.Contains(
+                "continuity evidence, not authority",
+                Assert.Single(blocked.AppleReceipt!.Targets).ErrorMessage,
+                StringComparison.OrdinalIgnoreCase);
+            stateCalls = 0;
+
+            var result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleSourceCommit = sourceCommit,
+                    AppleAction = action,
+                    AppleAdoptExistingBuild = true,
+                    AppleActionConfirmed = true
                 });
 
             Assert.True(result.Success, result.ErrorMessage);
@@ -1329,7 +1346,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.UploadExisting,
                     AppleSourceCommit = sourceCommit,
-                    AppleWaitForProcessing = false
+                    AppleWaitForProcessing = false,
+                    AppleAdoptExistingBuild = true,
+                    AppleActionConfirmed = true
                 });
 
             Assert.True(resumed.Success, resumed.ErrorMessage);
@@ -1358,7 +1377,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.UploadExisting,
                     AppleSourceCommit = sourceCommit,
-                    AppleWaitForProcessing = false
+                    AppleWaitForProcessing = false,
+                    AppleAdoptExistingBuild = true,
+                    AppleActionConfirmed = true
                 });
 
             Assert.False(rejected.Success);

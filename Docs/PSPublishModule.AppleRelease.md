@@ -336,6 +336,12 @@ version/build in App Store Connect is not enough by itself. If no retained attem
 that PowerForge uploaded that binary from the current source, the action stops instead
 of silently treating an unrelated binary as the current release.
 
+Receipt hashes detect corruption and preserve continuity, but receipt files owned by the
+same local account are not treated as operator authority. Resuming an upload or accepted
+notarization in a later process therefore requires explicit adoption and confirmation,
+even when the matching receipt is present. This prevents a writable local journal from
+silently authorizing a remote release mutation.
+
 Run real publication through `scripts/Invoke-PinnedPowerForge.ps1`; it supplies the exact
 consumer commit automatically. Direct CLI callers should pass the same 40-character SHA
 with `--apple-source-commit`. If an older binary must be recovered and independent evidence
@@ -346,10 +352,10 @@ powerforge apple-release Upload --config powerforge.release.json --apple-source-
 powerforge apple-release Upload --config powerforge.release.json --apple-source-commit <exact-commit> --apple-adopt-existing-build --confirm-apple-action --summary --output json
 ```
 
-Adoption never claims that PowerForge uploaded the binary. The receipt records
-`adoptedExistingBuild=true` and emits
-`APPLE_BUILD_ADOPTED_WITHOUT_UPLOAD_ATTESTATION`. Prefer a new build number and a fresh
-upload whenever that is possible.
+Adoption records the deliberate recovery decision. When no matching upload attestation
+exists, it also emits `APPLE_BUILD_ADOPTED_WITHOUT_UPLOAD_ATTESTATION`; when attestation
+does exist, it is retained as continuity evidence rather than being promoted to authority.
+Prefer a new build number and a fresh upload whenever that is possible.
 
 `CleanupAfterProcessing` removes only artifacts older than `ArtifactRetentionDays` after
 the remote build is valid. It deliberately retains the current archive and export so a

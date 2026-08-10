@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace PowerForge.Tests;
 
-public sealed class AppleNotarizationServiceTests
+public sealed partial class AppleNotarizationServiceTests
 {
     [Fact]
     public async Task NotarizeAsync_PackagesSubmitsStaplesValidatesAndAssessesApp()

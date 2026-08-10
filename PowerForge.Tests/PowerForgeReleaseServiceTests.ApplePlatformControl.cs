@@ -314,8 +314,8 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(result.Success);
             var receipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt);
-            Assert.Equal(5, receipt.SchemaVersion);
-            Assert.Matches("^[0-9a-f]{64}$", receipt.ReceiptAuthenticationSha256);
+            Assert.Equal(6, receipt.SchemaVersion);
+            Assert.Null(receipt.ReceiptAuthenticationSha256);
             var target = Assert.Single(receipt.Targets);
             Assert.Equal(AppleDistributionRoute.AppStore, target.DistributionRoute);
             Assert.Equal("6778025328", target.AppId);
@@ -838,7 +838,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
                         AppleSourceCommit = sourceCommit,
-                        AppleAction = PowerForgeAppleReleaseAction.Configured
+                        AppleAction = PowerForgeAppleReleaseAction.Configured,
+                        AppleAdoptExistingBuild = true,
+                        AppleActionConfirmed = true
                     });
 
             Assert.True(configuredResumed.Success);
@@ -854,7 +856,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleSourceCommit = sourceCommit,
-                    AppleAction = PowerForgeAppleReleaseAction.Upload
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleAdoptExistingBuild = true,
+                    AppleActionConfirmed = true
                 });
 
             Assert.True(resumed.Success);
@@ -920,7 +924,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleSourceCommit = sourceCommit,
-                    AppleAction = PowerForgeAppleReleaseAction.Upload
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleAdoptExistingBuild = true,
+                    AppleActionConfirmed = true
                 });
 
             Assert.True(nextRelease.Success);
@@ -990,7 +996,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleSourceCommit = sourceCommit,
-                    AppleAction = PowerForgeAppleReleaseAction.Upload
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleAdoptExistingBuild = true,
+                    AppleActionConfirmed = true
                 });
             Assert.False(changedArtifact.Success);
             Assert.Contains(

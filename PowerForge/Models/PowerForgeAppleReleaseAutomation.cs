@@ -141,7 +141,7 @@ internal sealed class PowerForgeAppleDirectDistributionOptions
 /// </summary>
 internal sealed class PowerForgeAppleReleaseReceipt
 {
-    public int SchemaVersion { get; set; } = 4;
+    public int SchemaVersion { get; set; } = 6;
 
     /// <summary>Unique immutable attempt identity.</summary>
     public string? AttemptId { get; set; }
@@ -181,10 +181,10 @@ internal sealed class PowerForgeAppleReleaseReceipt
     /// <summary>Canonical SHA-256 of this receipt with this property omitted.</summary>
     public string? ReceiptSha256 { get; set; }
 
-    /// <summary>Machine-local HMAC-SHA-256 authenticating <see cref="ReceiptSha256"/> for recovery.</summary>
+    /// <summary>Legacy schema-5 machine-local HMAC retained only for reading historical receipts; it is not recovery authority.</summary>
     public string? ReceiptAuthenticationSha256 { get; set; }
 
-    /// <summary>True when the operator explicitly requested adoption of an unattested existing build.</summary>
+    /// <summary>True when the operator explicitly authorized recovery after independently verifying the remote Apple operation.</summary>
     public bool AdoptExistingBuild { get; set; }
 
     public PowerForgeAppleVersionReceipt? Versioning { get; set; }

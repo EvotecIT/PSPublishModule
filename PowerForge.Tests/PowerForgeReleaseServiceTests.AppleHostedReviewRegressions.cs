@@ -519,7 +519,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
                         AppleAction = PowerForgeAppleReleaseAction.Configured,
-                        AppleSourceCommit = sourceCommit
+                        AppleSourceCommit = sourceCommit,
+                        AppleAdoptExistingBuild = true,
+                        AppleActionConfirmed = true
                     });
 
             Assert.True(resumed.Success, resumed.ErrorMessage);

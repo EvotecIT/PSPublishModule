@@ -275,13 +275,14 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     public SwitchParameter ConfirmAppleAction { get; set; }
 
     /// <summary>
-    /// Explicitly adopts an exact remote Apple build when no matching local upload attestation exists.
-    /// Requires ConfirmAppleAction and is intended only for deliberate recovery.
+    /// Explicitly adopts a verified remote Apple build or accepted notarization operation.
+    /// Local receipts provide continuity evidence but never authorize cross-process recovery by themselves;
+    /// this switch requires ConfirmAppleAction and is intended only for deliberate recovery.
     /// </summary>
     [Parameter]
     public SwitchParameter AdoptExistingAppleBuild { get; set; }
 
-    /// <summary>Forces exact remote-build reuse on this run.</summary>
+    /// <summary>Enables recovery discovery; deliberate cross-process reuse also requires AdoptExistingAppleBuild and ConfirmAppleAction.</summary>
     [Parameter]
     public SwitchParameter AppleResume { get; set; }
 

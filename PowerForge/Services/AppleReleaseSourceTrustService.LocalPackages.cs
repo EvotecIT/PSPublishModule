@@ -166,6 +166,17 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static void ValidateDeclarativeSwiftPackageManifest(string packageRoot, string manifestSyntax)
     {
+        var compilerLiteral = Regex.Match(
+            manifestSyntax,
+            "(?<![A-Za-z0-9_])#(?<literal>[A-Za-z_][A-Za-z0-9_]*)",
+            RegexOptions.CultureInvariant);
+        if (compilerLiteral.Success)
+        {
+            throw new InvalidOperationException(
+                $"Local Swift package '{packageRoot}' uses compiler-provided manifest literal '#{compilerLiteral.Groups["literal"].Value}', " +
+                "which can expose checkout or host state. Use literal PackageDescription declarations before creating an exact-source Apple checkpoint.");
+        }
+
         foreach (Match import in Regex.Matches(
                      manifestSyntax,
                      "(?m)^\\s*(?:@[A-Za-z_][A-Za-z0-9_]*(?:\\([^\\r\\n]*\\))?\\s+)*" +

@@ -235,7 +235,7 @@ internal sealed class PowerForgeReleaseRequest
 
     public bool AppleActionConfirmed { get; set; }
 
-    /// <summary>Explicitly adopt a matching remote build when no verified local upload attestation exists.</summary>
+    /// <summary>Explicitly authorize deliberate recovery after independently verifying the remote Apple operation.</summary>
     public bool AppleAdoptExistingBuild { get; set; }
 
     public bool? AppleResume { get; set; }

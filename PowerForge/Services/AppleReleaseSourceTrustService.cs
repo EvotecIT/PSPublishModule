@@ -24,6 +24,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     private readonly Func<string, string, string>? _remotePackageCheckoutResolver;
     private readonly Dictionary<string, string> _gitObjectFormats = new(
         Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    private readonly HashSet<string> _remotePackagesUnderValidation = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _validatedRemotePackages = new(StringComparer.OrdinalIgnoreCase);
 
     internal AppleReleaseSourceTrustService(

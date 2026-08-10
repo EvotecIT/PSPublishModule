@@ -61,6 +61,14 @@ public sealed class AppleNotarizationService
         var staplingCompleted = request.StaplingCompleted;
         using var submissionSnapshot = AppleNotarizationInputSnapshot.Create(artifactPath, artifactSha256);
         var submissionArtifactPath = submissionSnapshot.ArtifactPath;
+        using var packagingMonitor = !resumed &&
+                                     extension.Equals(".app", StringComparison.OrdinalIgnoreCase)
+            ? new AppleReleaseSourceMutationMonitor(
+                submissionArtifactPath,
+                "private Apple notarization app snapshot",
+                "ditto",
+                "Discard the package and create a new notarization snapshot.")
+            : null;
         var submittedPath = resumed
             ? artifactPath
             : await PrepareSubmissionAsync(
@@ -70,6 +78,17 @@ public sealed class AppleNotarizationService
                     timeout,
                     cancellationToken)
                 .ConfigureAwait(false);
+        if (packagingMonitor is not null)
+        {
+            packagingMonitor.ValidateNoChanges();
+            var observedPackagedArtifactSha256 = ComputeArtifactSha256(submissionArtifactPath);
+            if (!observedPackagedArtifactSha256.Equals(artifactSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"The private Apple notarization app snapshot changed while ditto was packaging it. Expected SHA-256 " +
+                    $"'{artifactSha256}', received '{observedPackagedArtifactSha256}'. Discard the package and create a new notarization snapshot.");
+            }
+        }
         var submissionSha256 = resumed
             ? request.AcceptedSubmissionSha256?.Trim()
             : ComputeFileSha256(submittedPath);

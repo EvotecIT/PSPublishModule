@@ -107,9 +107,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         {
             if (token.Length <= 1 ||
                 token[0] != '@' ||
-                token.StartsWith("@executable_path", StringComparison.Ordinal) ||
-                token.StartsWith("@loader_path", StringComparison.Ordinal) ||
-                token.StartsWith("@rpath", StringComparison.Ordinal))
+                IsAppleRuntimeRelativePath(token))
             {
                 yield return token;
                 continue;
@@ -221,13 +219,13 @@ internal sealed partial class AppleReleaseSourceTrustService
             }
 
             if (token.StartsWith("-Werror=", StringComparison.Ordinal) ||
-                token.StartsWith("-Wno-", StringComparison.Ordinal) ||
-                token.Contains("@executable_path", StringComparison.Ordinal) ||
-                token.Contains("@loader_path", StringComparison.Ordinal) ||
-                token.Contains("@rpath", StringComparison.Ordinal))
+                token.StartsWith("-Wno-", StringComparison.Ordinal))
             {
                 continue;
             }
+
+            if (IsAppleRuntimeRelativePath(token))
+                continue;
 
             if (token.StartsWith("-", StringComparison.Ordinal) && IsPathLikeBuildFlagToken(token))
             {
@@ -301,6 +299,17 @@ internal sealed partial class AppleReleaseSourceTrustService
            token.Contains('\\') ||
            token.Contains("$(", StringComparison.Ordinal) ||
            token.Contains("${", StringComparison.Ordinal);
+
+    private static bool IsAppleRuntimeRelativePath(string token)
+        => IsAppleRuntimeRelativePath(token, "@executable_path") ||
+           IsAppleRuntimeRelativePath(token, "@loader_path") ||
+           IsAppleRuntimeRelativePath(token, "@rpath");
+
+    private static bool IsAppleRuntimeRelativePath(string token, string marker)
+        => token.Equals(marker, StringComparison.Ordinal) ||
+           (token.StartsWith(marker, StringComparison.Ordinal) &&
+            token.Length > marker.Length &&
+            token[marker.Length] == '/');
 
     private static bool IsValidatedToolchainOrBuildProductPath(
         string value,

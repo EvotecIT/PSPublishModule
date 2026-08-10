@@ -44,7 +44,7 @@ internal sealed partial class PowerForgeReleaseService
                     string.Equals(candidate.BundleId, target.BundleId, StringComparison.OrdinalIgnoreCase) &&
                     candidate.Platform == target.Platform &&
                     candidate.DistributionRoute == target.DistributionRoute);
-                if (app is null || receipt.SchemaVersion < 5 || string.IsNullOrWhiteSpace(receipt.ReceiptSha256))
+                if (app is null || receipt.SchemaVersion < 4 || string.IsNullOrWhiteSpace(receipt.ReceiptSha256))
                     continue;
                 var artifactPath = ValidateDirectRecoveryArtifactPath(plan, app, target.DirectArtifactPath!);
                 if (File.Exists(artifactPath) || Directory.Exists(artifactPath))
@@ -72,6 +72,7 @@ internal sealed partial class PowerForgeReleaseService
         {
             if (attestation is not null)
             {
+                EnsureExplicitAppleRecoveryAdoption(plan, app, "an attested upload that is not yet visible as a build");
                 if (plan.Automation.WaitForProcessing)
                     state = WaitForAppleBuild(plan, app, state, attestation.Target.BuildUploadId);
                 else
@@ -97,12 +98,14 @@ internal sealed partial class PowerForgeReleaseService
                 state);
         }
 
-        if (attestation is null && !plan.AdoptExistingBuild)
+        if (!plan.AdoptExistingBuild)
         {
+            var evidence = attestation is null
+                ? "no immutable local upload receipt can independently authorize it"
+                : "the local upload receipt is continuity evidence, not authority against another process running as this account";
             throw new InvalidOperationException(
                 $"App Store Connect already contains build {state.VersionString} ({state.BuildNumber}) for '{app.Name}', " +
-                "but no immutable local upload receipt binds that build to the current source commit and archive SHA-256. " +
-                "Increment the build number and upload a new archive, or deliberately adopt the existing build with " +
+                $"but {evidence}. Increment the build number and upload a new archive, or deliberately adopt the existing build with " +
                 "--apple-adopt-existing-build --confirm-apple-action after verifying it outside PowerForge.");
         }
 
@@ -129,6 +132,20 @@ internal sealed partial class PowerForgeReleaseService
         result.ResumedUploadAttestationAttemptId = attestation?.Target.UploadAttestationAttemptId ?? attestation?.Receipt.AttemptId;
         result.ArchiveSha256 = attestation?.Target.ArchiveSha256;
         result.SkippedSteps = new[] { "archive", "upload" };
+    }
+
+    private static void EnsureExplicitAppleRecoveryAdoption(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        string recoveredOperation)
+    {
+        if (plan.AdoptExistingBuild)
+            return;
+
+        throw new InvalidOperationException(
+            $"Apple recovery for '{app.Name}' found {recoveredOperation}, but local receipt files cannot authorize a cross-process recovery. " +
+            "Verify the remote operation and exact source/archive evidence, then rerun with --apple-adopt-existing-build " +
+            "--confirm-apple-action, or disable resume and start a new version/build.");
     }
 
     private void EnsureAppleBuildUploadIsNotTerminal(
@@ -239,7 +256,7 @@ internal sealed partial class PowerForgeReleaseService
         string? build)
     {
         if (receipt.PlanOnly ||
-            receipt.SchemaVersion < 5 ||
+            receipt.SchemaVersion < 4 ||
             string.IsNullOrWhiteSpace(receipt.ReceiptSha256) ||
             !string.Equals(receipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))
         {
@@ -324,7 +341,7 @@ internal sealed partial class PowerForgeReleaseService
         var prior = _appleReceiptStore.ReadAll(plan)
             .Where(receipt =>
                 !receipt.PlanOnly &&
-                receipt.SchemaVersion >= 5 &&
+                receipt.SchemaVersion >= 4 &&
                 !string.IsNullOrWhiteSpace(receipt.ReceiptSha256) &&
                 !string.IsNullOrWhiteSpace(plan.SourceCommit) &&
                 string.Equals(receipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))
@@ -336,6 +353,7 @@ internal sealed partial class PowerForgeReleaseService
                 IsSha256(target.DirectArtifactSha256));
         if (prior is null)
             return false;
+        EnsureExplicitAppleRecoveryAdoption(plan, app, "an accepted direct notarization submission");
 
         var artifactPath = ValidateDirectRecoveryArtifactPath(plan, app, prior.DirectArtifactPath!);
         if (!File.Exists(artifactPath) && !Directory.Exists(artifactPath))

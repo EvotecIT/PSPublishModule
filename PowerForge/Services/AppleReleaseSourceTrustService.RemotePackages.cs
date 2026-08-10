@@ -23,45 +23,56 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException($"Remote Swift package '{repositoryUrl}' is not bound to an exact Git revision.");
 
         var identity = NormalizePackageLocation(repositoryUrl) + "@" + revision.ToLowerInvariant();
-        if (!_validatedRemotePackages.Add(identity))
+        if (_validatedRemotePackages.Contains(identity))
+            return;
+        if (!_remotePackagesUnderValidation.Add(identity))
             return;
 
-        if (_remotePackageCheckoutResolver is not null)
-        {
-            var resolvedCheckout = Path.GetFullPath(_remotePackageCheckoutResolver(repositoryUrl, revision));
-            ValidateRemotePackageCheckout(resolvedCheckout, repositoryUrl, revision, packageLockPaths);
-            return;
-        }
-
-        var cacheRoot = ResolveRemotePackageCacheRoot();
-        Directory.CreateDirectory(cacheRoot);
-#if NET8_0_OR_GREATER
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(cacheRoot, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-#endif
-        var mirrorPath = Path.Combine(cacheRoot, ComputeStablePathToken(repositoryUrl) + ".git");
-        EnsureRemotePackageMirror(mirrorPath, repositoryUrl, revision);
-
-        var checkoutParent = Path.Combine(Path.GetTempPath(), "PowerForge", "apple-swiftpm-source-trust");
-        Directory.CreateDirectory(checkoutParent);
-#if NET8_0_OR_GREATER
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(checkoutParent, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-#endif
-        var checkoutPath = Path.Combine(checkoutParent, Guid.NewGuid().ToString("N"));
         try
         {
-            RunGit(mirrorPath, "-c", "core.hooksPath=/dev/null", "worktree", "add", "--detach", checkoutPath, revision);
-            ValidateRemotePackageCheckout(checkoutPath, repositoryUrl, revision, packageLockPaths);
+            if (_remotePackageCheckoutResolver is not null)
+            {
+                var resolvedCheckout = Path.GetFullPath(_remotePackageCheckoutResolver(repositoryUrl, revision));
+                ValidateRemotePackageCheckout(resolvedCheckout, repositoryUrl, revision, packageLockPaths);
+                _validatedRemotePackages.Add(identity);
+                return;
+            }
+
+            var cacheRoot = ResolveRemotePackageCacheRoot();
+            Directory.CreateDirectory(cacheRoot);
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(cacheRoot, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+#endif
+            var mirrorPath = Path.Combine(cacheRoot, ComputeStablePathToken(repositoryUrl) + ".git");
+            EnsureRemotePackageMirror(mirrorPath, repositoryUrl, revision);
+
+            var checkoutParent = Path.Combine(Path.GetTempPath(), "PowerForge", "apple-swiftpm-source-trust");
+            Directory.CreateDirectory(checkoutParent);
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(checkoutParent, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+#endif
+            var checkoutPath = Path.Combine(checkoutParent, Guid.NewGuid().ToString("N"));
+            try
+            {
+                RunGit(mirrorPath, "-c", "core.hooksPath=/dev/null", "worktree", "add", "--detach", checkoutPath, revision);
+                ValidateRemotePackageCheckout(checkoutPath, repositoryUrl, revision, packageLockPaths);
+                _validatedRemotePackages.Add(identity);
+            }
+            finally
+            {
+                if (Directory.Exists(checkoutPath))
+                {
+                    var removed = RunGitAllowFailure(mirrorPath, "worktree", "remove", "--force", checkoutPath);
+                    if (!removed.Succeeded && Directory.Exists(checkoutPath))
+                        Directory.Delete(checkoutPath, recursive: true);
+                }
+            }
         }
         finally
         {
-            if (Directory.Exists(checkoutPath))
-            {
-                var removed = RunGitAllowFailure(mirrorPath, "worktree", "remove", "--force", checkoutPath);
-                if (!removed.Succeeded && Directory.Exists(checkoutPath))
-                    Directory.Delete(checkoutPath, recursive: true);
-            }
+            _remotePackagesUnderValidation.Remove(identity);
         }
     }
 
@@ -75,6 +86,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         if (!head.Equals(revision, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Remote Swift package '{repositoryUrl}' did not materialize the approved revision '{revision}'.");
         EnsureNoGitReplacementRefs(checkoutPath);
+        EnsureRemotePackageHasNoGitLinks(checkoutPath, repositoryUrl);
         _git.EnsureClean(checkoutPath);
         var locks = packageLockPaths.Where(File.Exists).Select(Path.GetFullPath).ToList();
         ValidateCheckedOutPackageRoot(
@@ -86,6 +98,26 @@ internal sealed partial class AppleReleaseSourceTrustService
         var headAfter = RunGit(checkoutPath, "rev-parse", "HEAD").StdOut.Trim();
         if (!headAfter.Equals(revision, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Remote Swift package '{repositoryUrl}' changed during source inspection.");
+    }
+
+    private void EnsureRemotePackageHasNoGitLinks(string checkoutPath, string repositoryUrl)
+    {
+        var gitLinks = RunGit(checkoutPath, "ls-files", "--stage", "-z").StdOut
+            .Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(static entry => entry.StartsWith("160000 ", StringComparison.Ordinal))
+            .Select(static entry =>
+            {
+                var separator = entry.IndexOf('\t');
+                return separator >= 0 ? entry.Substring(separator + 1) : entry;
+            })
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+        if (gitLinks.Length == 0)
+            return;
+
+        throw new InvalidOperationException(
+            $"Remote Swift package '{repositoryUrl}' contains Git submodule input '{gitLinks[0]}'. " +
+            "Exact-source Apple checkpoints reject remote-package gitlinks because SwiftPM materializes their bytes outside the attested parent revision.");
     }
 
     private void ValidateCheckedOutPackageRoot(

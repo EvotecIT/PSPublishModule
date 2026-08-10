@@ -240,7 +240,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             spec.AppleApps.ProjectRoot = relocatedRoot;
             spec.AppleApps.AppStoreConnectApiKeyPath = Path.Combine(relocatedRoot, "AuthKey_TEST.p8");
             AppleNotarizationRequest? resumedRequest = null;
-            var resumed = CreateAppleAutomationService(
+            var resumeService = CreateAppleAutomationService(
                     _ => throw new InvalidOperationException("Direct distribution must not query App Store release state."),
                     archiveAppleApp: _ => throw new InvalidOperationException("Relocated accepted artifact must skip archive."),
                     uploadAppleApp: _ => throw new InvalidOperationException("Relocated accepted artifact must skip export."),
@@ -260,12 +260,26 @@ public sealed partial class PowerForgeReleaseServiceTests
                             StapleValidation = new ProcessRunResult(0, "valid", string.Empty, "xcrun", TimeSpan.Zero, false),
                             Assessment = new ProcessRunResult(0, "accepted", string.Empty, "spctl", TimeSpan.Zero, false)
                         };
-                    })
-                .Execute(spec, new PowerForgeReleaseRequest
+                    });
+            var blocked = resumeService.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(relocatedRoot, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Upload,
+                AppleSourceCommit = sourceCommit
+            });
+            Assert.False(blocked.Success);
+            Assert.Contains(
+                "cannot authorize a cross-process recovery",
+                Assert.Single(blocked.AppleReceipt!.Targets).ErrorMessage,
+                StringComparison.OrdinalIgnoreCase);
+
+            var resumed = resumeService.Execute(spec, new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(relocatedRoot, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = sourceCommit,
+                    AppleAdoptExistingBuild = true,
+                    AppleActionConfirmed = true
                 });
 
             Assert.True(resumed.Success, resumed.ErrorMessage);

@@ -55,7 +55,7 @@ public sealed class AppleReleaseReceiptStoreTests
     }
 
     [Fact]
-    public void ReadAll_RejectsForgedSchemaFiveReceiptWithOnlySelfHash()
+    public void WriteAttempt_UsesIntegrityOnlySchemaWithoutClaimingSameAccountAuthentication()
     {
         var root = CreateSandbox();
         try
@@ -63,18 +63,11 @@ public sealed class AppleReleaseReceiptStoreTests
             var plan = CreatePlan(root);
             var store = new AppleReleaseReceiptStore();
             store.WriteAttempt(plan, CreateReceipt(PowerForgeAppleReleaseAction.Upload, success: true));
-            var historyPath = Assert.Single(Directory.GetFiles(plan.ReceiptHistoryPath, "*.json"));
-            var json = File.ReadAllText(historyPath);
-            File.WriteAllText(
-                historyPath,
-                System.Text.RegularExpressions.Regex.Replace(
-                    json,
-                    "\"receiptAuthenticationSha256\"\\s*:\\s*\"[A-Fa-f0-9]{64}\"",
-                    "\"receiptAuthenticationSha256\": \"" + new string('0', 64) + "\""));
+            var receipt = Assert.Single(store.ReadAll(plan));
 
-            var exception = Assert.Throws<InvalidOperationException>(() => store.ReadAll(plan));
-
-            Assert.Contains("recovery authentication failed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(6, receipt.SchemaVersion);
+            Assert.Null(receipt.ReceiptAuthenticationSha256);
+            Assert.Matches("^[0-9a-f]{64}$", receipt.ReceiptSha256);
         }
         finally
         {

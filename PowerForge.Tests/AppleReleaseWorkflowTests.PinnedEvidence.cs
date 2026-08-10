@@ -290,8 +290,8 @@ public sealed partial class AppleReleaseWorkflowTests
             File.WriteAllText(Path.Combine(sandbox, ".gitignore"), "build/\n");
             const string latestSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
             File.WriteAllText(Path.Combine(output, "release-receipt.json"), JsonSerializer.Serialize(new {
-                schemaVersion = 5, attemptId = "00000000000000000000000000000000", receiptSha256 = latestSha,
-                receiptAuthenticationSha256 = Authenticate(latestSha), sourceCommit = commit }));
+                schemaVersion = 6, attemptId = "00000000000000000000000000000000", receiptSha256 = latestSha,
+                sourceCommit = commit }));
             File.WriteAllText(Path.Combine(receiptHistory.FullName, "prior-upload.json"), JsonSerializer.Serialize(new
             {
                 schemaVersion = 5,
@@ -361,7 +361,7 @@ public sealed partial class AppleReleaseWorkflowTests
                 Move-Item -LiteralPath $historyDirectory -Destination $historyBackup
                 Set-Content -LiteralPath $latestReceipt -Value '{"schemaVersion":4,"attemptId":"ffffffffffffffffffffffffffffffff","receiptSha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","sourceCommit":"{{commit}}"}'
                 try { Register-AppleAutomationEvidence -SourceCommit '{{commit}}'; throw 'Forged self-hashed receipt was accepted.' }
-                catch { if ($_.Exception.Message -notlike '*without an authenticated receipt chain*') { throw } }
+                catch { if ($_.Exception.Message -notlike '*without a supported current receipt chain*') { throw } }
                 Move-Item -LiteralPath $historyBackup -Destination $historyDirectory
                 Set-Content -LiteralPath $latestReceipt -Value $savedLatestReceipt -NoNewline
                 Set-Content -LiteralPath (Join-Path $consumer 'build/powerforge/apple/injected.bin') -Value 'not reviewed'

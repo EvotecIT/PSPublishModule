@@ -1817,7 +1817,9 @@ internal sealed partial class PowerForgeReleaseService
         {
             var missingArchive = apps.FirstOrDefault(app =>
                 !Directory.Exists(app.ArchivePath) &&
-                (!automation.Resume || !HasPotentialVerifiedAppleUploadAttestation(plan, app)));
+                (!automation.Resume ||
+                 !plan.AdoptExistingBuild ||
+                 !HasPotentialVerifiedAppleUploadAttestation(plan, app)));
             if (missingArchive is not null)
             {
                 throw new FileNotFoundException(
