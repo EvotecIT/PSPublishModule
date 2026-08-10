@@ -47,6 +47,16 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         }
     }
 
+    internal void ValidateUnchanged(string expectedSha256)
+    {
+        var actual = AppleNotarizationService.ComputeArtifactSha256(ArchivePath);
+        if (!actual.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The private Apple upload snapshot changed while xcodebuild was reading it. Expected '{expectedSha256}', received '{actual}'. Discard the upload/export result and inspect remote state before retrying.");
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)

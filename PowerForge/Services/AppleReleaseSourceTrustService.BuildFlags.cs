@@ -145,9 +145,23 @@ internal sealed partial class AppleReleaseSourceTrustService
                 continue;
             }
 
+            if (token.Equals("-D", StringComparison.Ordinal) ||
+                token.Equals("-U", StringComparison.Ordinal))
+            {
+                if (++index >= tokens.Length)
+                    throw new InvalidOperationException($"Xcode build setting {key} ends with preprocessor option '{token}' and no argument.");
+                ValidatePreprocessorFlagPayload(tokens[index], key);
+                continue;
+            }
+
             if (token.StartsWith("-D", StringComparison.Ordinal) ||
-                token.StartsWith("-U", StringComparison.Ordinal) ||
-                token.StartsWith("-Werror=", StringComparison.Ordinal) ||
+                token.StartsWith("-U", StringComparison.Ordinal))
+            {
+                ValidatePreprocessorFlagPayload(token.Substring(2), key);
+                continue;
+            }
+
+            if (token.StartsWith("-Werror=", StringComparison.Ordinal) ||
                 token.StartsWith("-Wno-", StringComparison.Ordinal) ||
                 token.Contains("@executable_path", StringComparison.Ordinal) ||
                 token.Contains("@loader_path", StringComparison.Ordinal) ||
@@ -171,6 +185,18 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
         if (consumeNext)
             throw new InvalidOperationException($"Xcode build setting {key} ends with a path-consuming flag and no input.");
+    }
+
+    private static void ValidatePreprocessorFlagPayload(string payload, string key)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+            throw new InvalidOperationException($"Xcode build setting {key} contains an empty preprocessor definition or undefinition.");
+        if (payload.Contains("$(", StringComparison.Ordinal) ||
+            payload.Contains("${", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Xcode build setting {key} contains a preprocessor definition or undefinition with an unresolved build-setting reference: {payload}");
+        }
     }
 
     private static string[] ExpandForwardedBuildFlagTokens(string[] tokens, string key)

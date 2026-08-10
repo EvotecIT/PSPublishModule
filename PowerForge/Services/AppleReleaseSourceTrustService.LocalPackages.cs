@@ -101,6 +101,52 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException(
                 $"Local Swift package '{packageRoot}' declares or invokes a SwiftPM plugin or macro, whose executable runtime inputs cannot be proven at the exact source commit. " +
                 "Replace build-tool plugins and macros with tracked deterministic build inputs before creating an Apple checkpoint.");
+        ValidateDeclarativeSwiftPackageManifest(packageRoot, manifestSyntax);
+    }
+
+    private static void ValidateDeclarativeSwiftPackageManifest(string packageRoot, string manifestSyntax)
+    {
+        foreach (Match import in Regex.Matches(
+                     manifestSyntax,
+                     "(?m)^\\s*(?:@[A-Za-z_][A-Za-z0-9_]*(?:\\([^\\r\\n]*\\))?\\s+)*" +
+                     "import\\s+(?:(?:class|struct|enum|protocol|typealias|func|var|let)\\s+)?" +
+                     "(?<module>[A-Za-z_][A-Za-z0-9_]*)(?:\\.[^\\r\\n]+)?\\s*$",
+                     RegexOptions.CultureInvariant))
+        {
+            var module = import.Groups["module"].Value;
+            if (module.Equals("PackageDescription", StringComparison.Ordinal))
+                continue;
+            throw new InvalidOperationException(
+                $"Local Swift package '{packageRoot}' imports '{module}', which permits host-dependent manifest execution. " +
+                "Use a declarative PackageDescription-only manifest before creating an exact-source Apple checkpoint.");
+        }
+
+        var hostStateIdentifiers = new[]
+        {
+            "ProcessInfo", "NSProcessInfo", "FileManager", "CommandLine", "UserDefaults",
+            "Date", "Calendar", "TimeZone", "Locale", "Bundle", "Process", "UUID",
+            "Context", "System", "Clock", "ContinuousClock", "SuspendingClock", "DispatchTime",
+            "getenv", "readLine", "arc4random", "SecRandomCopyBytes", "CFAbsoluteTimeGetCurrent"
+        };
+        var hostState = hostStateIdentifiers.FirstOrDefault(identifier =>
+            ContainsSwiftIdentifier(manifestSyntax, identifier));
+        if (hostState is not null)
+        {
+            throw new InvalidOperationException(
+                $"Local Swift package '{packageRoot}' reads host state through '{hostState}', so its executed manifest cannot be bound to the exact source commit. " +
+                "Use literal PackageDescription declarations before creating an exact-source Apple checkpoint.");
+        }
+
+        var executableControlFlow = Regex.Match(
+            manifestSyntax,
+            "(?<![A-Za-z0-9_])(?<keyword>if|else|switch|case|for|while|repeat|guard|do|try|catch|throw|defer|return)(?![A-Za-z0-9_])",
+            RegexOptions.CultureInvariant);
+        if (executableControlFlow.Success)
+        {
+            throw new InvalidOperationException(
+                $"Local Swift package '{packageRoot}' uses executable manifest control flow '{executableControlFlow.Groups["keyword"].Value}', which cannot be proven independent of host state. " +
+                "Use declarative PackageDescription declarations before creating an exact-source Apple checkpoint.");
+        }
     }
 
     private void ValidateRemotePackageDependencies(

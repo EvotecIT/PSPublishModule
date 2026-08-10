@@ -2233,6 +2233,13 @@ internal sealed partial class PowerForgeReleaseService
                     ? null
                     : AppleArchiveUploadSnapshot.Create(approvedArchiveInputPath, approvedArchiveSha256!);
                 using var directExportSnapshot = direct ? AppleDirectExportSnapshot.Create() : null;
+                using var uploadMutationMonitor = uploadSnapshot is null
+                    ? null
+                    : new AppleReleaseSourceMutationMonitor(
+                        uploadSnapshot.RootPath,
+                        "private Apple upload archive snapshot",
+                        "xcodebuild exportArchive",
+                        "Discard the upload/export result and inspect remote state before retrying.");
                 var upload = _uploadAppleApp(new AppleAppArchiveUploadRequest
                 {
                     ArchivePath = uploadSnapshot?.ArchivePath ?? app.ArchivePath,
@@ -2252,6 +2259,9 @@ internal sealed partial class PowerForgeReleaseService
                     AppStoreConnectApiIssuerId = direct ? null : plan.AppStoreConnectApiIssuerId,
                     AllowProvisioningUpdates = plan.AllowProvisioningUpdates
                 });
+                uploadMutationMonitor?.ValidateNoChanges();
+                if (uploadSnapshot is not null)
+                    uploadSnapshot.ValidateUnchanged(approvedArchiveSha256!);
                 upload.ArchivePath = app.ArchivePath;
                 result.Upload = upload;
                 if (!upload.Succeeded)

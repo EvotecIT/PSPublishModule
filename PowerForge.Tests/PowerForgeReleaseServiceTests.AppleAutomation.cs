@@ -42,7 +42,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_AppleUpload_UsesPrivateArchiveSnapshotDuringUploaderMutation()
+    public void Execute_AppleUpload_RejectsPrivateArchiveSnapshotMutation()
     {
         var root = CreateSandbox();
         try
@@ -79,11 +79,12 @@ public sealed partial class PowerForgeReleaseServiceTests
                     AppleAction = PowerForgeAppleReleaseAction.Upload
                 });
 
-            Assert.True(result.Success, result.ErrorMessage);
+            Assert.False(result.Success);
             Assert.NotNull(uploaderArchivePath);
             Assert.NotEqual(Assert.Single(result.AppleAppPlan!.Apps).ArchivePath, uploaderArchivePath);
             Assert.Equal("before", File.ReadAllText(Path.Combine(Assert.Single(result.AppleAppPlan.Apps).ArchivePath, "payload")));
-            Assert.Contains(
+            Assert.Contains("private Apple upload archive snapshot changed", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(
                 new AppleReleaseReceiptStore().ReadAll(result.AppleAppPlan!),
                 receipt => receipt.OperationPhase == "UploadAttested");
         }

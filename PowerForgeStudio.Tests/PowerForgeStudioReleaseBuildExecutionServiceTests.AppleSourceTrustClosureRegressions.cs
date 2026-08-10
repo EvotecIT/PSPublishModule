@@ -306,6 +306,52 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Equal(expected, actual);
     }
 
+    [Theory]
+    [InlineData("-DRELEASE_SEED=$(CI_PIPELINE_ID)")]
+    [InlineData("-UFEATURE_$(CONFIGURATION)")]
+    [InlineData("-Xcc=-DHOST=${BUILD_NUMBER}")]
+    public void ResolveExactAppleSourceCommit_rejects_build_setting_references_in_preprocessor_flags(string flags)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("DynamicPreprocessorFlagRepo");
+        var project = scope.CreateDirectory(Path.Combine("DynamicPreprocessorFlagRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            $"000000000000000000000001 = {{ isa = XCBuildConfiguration; buildSettings = {{ OTHER_CFLAGS = \"{flags}\"; }}; }};");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("preprocessor", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("build-setting reference", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("import Foundation\nlet enabled = ProcessInfo.processInfo.environment[\"CI\"] != nil")]
+    [InlineData("@preconcurrency import Darwin\nlet enabled = time(nil) > 0")]
+    [InlineData("let enabled = CommandLine.arguments.contains(\"--ci\")")]
+    [InlineData("let enabled = true\nif enabled { print(\"host branch\") }")]
+    [InlineData("#if os(macOS)\nlet enabled = true\n#else\nlet enabled = false\n#endif")]
+    public void ResolveExactAppleSourceCommit_rejects_host_dependent_or_imperative_package_manifests(string executableSyntax)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, _, packageRoot) = CreateLocalPackageFixture(scope, "HostDependentManifestRepo");
+        File.WriteAllText(
+            Path.Combine(packageRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\n" + executableSyntax +
+            "\nlet package = Package(name: \"Shared\")");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("manifest", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("exact-source", exception.Message.Replace("exact source", "exact-source", StringComparison.OrdinalIgnoreCase), StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void ResolveExactAppleSourceCommit_ignores_nonargument_path_labels_in_swift_text()
     {

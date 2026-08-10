@@ -128,6 +128,51 @@ public sealed partial class PowerForgeReleaseServiceTests {
         }
     }
 
+    [Fact]
+    public void Execute_AppleUpload_rejects_transient_private_archive_snapshot_mutation() {
+        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        var root = CreateSandbox();
+        try {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.MinimumFreeSpaceGB = 0;
+            spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            spec.AppleApps.Automation.WaitForProcessing = false;
+            string? privateArchive = null;
+
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, processingState: null),
+                    archiveAppleApp: request => {
+                        var archive = Directory.CreateDirectory(request.ArchivePath!);
+                        File.WriteAllText(Path.Combine(archive.FullName, "payload"), "approved bytes");
+                        return CreateSuccessfulArchive(request);
+                    },
+                    uploadAppleApp: request => {
+                        privateArchive = request.ArchivePath;
+                        var payload = Path.Combine(request.ArchivePath, "payload");
+                        File.WriteAllText(payload, "transient unapproved bytes");
+                        File.WriteAllText(payload, "approved bytes");
+                        return CreateSuccessfulUpload(request);
+                    })
+                .Execute(spec, new PowerForgeReleaseRequest {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleSourceCommit = sourceCommit
+                });
+
+            Assert.False(result.Success);
+            Assert.NotNull(privateArchive);
+            Assert.Contains("private Apple upload archive snapshot changed", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(
+                new AppleReleaseReceiptStore().ReadAll(result.AppleAppPlan!),
+                receipt => receipt.OperationPhase == "UploadAttested");
+        } finally {
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData("team")]
     [InlineData("signing")]
