@@ -8,6 +8,34 @@ namespace PowerForge.Tests;
 public sealed partial class WebSearchFleetOperationsTests
 {
     [Fact]
+    public async Task Store_ProjectsPerformanceFleetMetadataWithoutLoadingObservationManifests()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var path = Path.Combine(root, "fleet.db");
+            var store = new SqliteWebSearchObservationStore(path);
+            await store.ImportPerformanceAsync(WebPerformanceObservationNormalizer.Normalize(
+                PerformanceBatch("performance-run", AsOf.AddMinutes(-1))));
+            await using var sqlite = new SQLite();
+            await sqlite.ExecuteNonQueryAsync(
+                path,
+                "UPDATE performance_observation_runs SET normalized_manifest_json = '{not-json';");
+
+            var snapshot = await store.ReadFleetSnapshotAsync();
+
+            var stream = Assert.Single(snapshot.Streams);
+            Assert.Equal(WebSearchProviderCapabilities.PerformanceCrux, stream.Capability);
+            Assert.Equal(AsOf.AddMinutes(-1), stream.LastCompleteAtUtc);
+            Assert.Equal(string.Join("\u001f", "field", "origin", "https://officeimo.com/", "phone"), stream.ScopeKey);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Snapshot_PreservesRowlessCompletedDatesForInferredWebCoverage()
     {
         var root = CreateTempRoot();

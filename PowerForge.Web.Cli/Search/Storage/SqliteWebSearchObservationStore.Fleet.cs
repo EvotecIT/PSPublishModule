@@ -274,19 +274,24 @@ internal sealed partial class SqliteWebSearchObservationStore
 
     private async Task<FleetRun[]> ReadPerformanceFleetRunsAsync(SQLite client, CancellationToken cancellationToken)
     {
-        var manifests = await client.QueryAsListAsync(_databasePath,
-            "SELECT normalized_manifest_json FROM performance_observation_runs;", static record => record.GetString(0),
+        var runs = await client.QueryAsListAsync(_databasePath,
+            """
+            SELECT run_id, provider, site_id, collected_at_utc, status,
+                   measurement_kind, target_kind, target_url, form_factor, configuration_hash
+            FROM performance_observation_runs;
+            """,
+            static record => new PerformanceFleetRunMetadata(
+                record.GetString(0), record.GetString(1), record.GetString(2), ParseFleetTimestamp(record.GetString(3)),
+                record.GetString(4), record.GetString(5), record.GetString(6), record.GetString(7), record.GetString(8),
+                NullableString(record, 9)),
             cancellationToken: cancellationToken).ConfigureAwait(false);
-        return manifests.Select(value => JsonSerializer.Deserialize<WebPerformanceObservationBatch>(value, WebCliJson.Options)
-                                         ?? throw new InvalidOperationException("Stored performance manifest is empty."))
-            .Select(WebPerformanceObservationNormalizer.Normalize)
-            .Select(batch => new FleetRun(
-                "performance", batch.Provider, batch.SiteId, batch.RunId!, batch.CollectedAtUtc, batch.Status,
-                string.Join("\u001f", batch.MeasurementKind, batch.TargetKind, batch.TargetUrl, batch.FormFactor),
+        return runs.Select(run => new FleetRun(
+                "performance", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
+                string.Join("\u001f", run.MeasurementKind, run.TargetKind, run.TargetUrl, run.FormFactor),
                 Array.Empty<WebSearchFleetCompletedRange>(),
-                batch.ConfigurationHash,
+                run.ConfigurationHash,
                 null,
-                MeasurementKind: batch.MeasurementKind))
+                MeasurementKind: run.MeasurementKind))
             .ToArray();
     }
 
@@ -583,6 +588,18 @@ internal sealed partial class SqliteWebSearchObservationStore
         DateOnly? ThroughDate,
         string? FailureCategory,
         DateOnly? FailureDate);
+
+    private sealed record PerformanceFleetRunMetadata(
+        string RunId,
+        string Provider,
+        string SiteId,
+        DateTimeOffset CollectedAtUtc,
+        string Status,
+        string MeasurementKind,
+        string TargetKind,
+        string TargetUrl,
+        string FormFactor,
+        string? ConfigurationHash);
 
     private sealed record FleetDatedScope(string Provider, string SiteId, string RunId, DateOnly Date, string Scope);
 
