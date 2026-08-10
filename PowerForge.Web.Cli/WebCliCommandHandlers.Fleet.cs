@@ -37,9 +37,10 @@ internal static partial class WebCliCommandHandlers
         {
             var doctor = WebSearchProviderDoctor.InspectWithCapabilities(
                 prepared.Configuration!, WebSearchCollectorCatalog.AvailableCapabilities);
-            var snapshot = new SqliteWebSearchObservationStore(prepared.DatabasePath!).ReadFleetSnapshotAsync().GetAwaiter().GetResult();
+            var snapshot = new SqliteWebSearchObservationStore(prepared.DatabasePath!).ReadFleetSnapshotAsync(prepared.AsOfUtc).GetAwaiter().GetResult();
             var plan = WebSearchFleetPlanner.CreateSchedule(prepared.Configuration!, doctor, snapshot, prepared.AsOfUtc);
-            var exitCode = plan.ConfigurationValid ? 0 : 2;
+            var hasActionableWork = plan.WorkItems.Any(value => value.Readiness is "ready" or "input-required");
+            var exitCode = plan.ConfigurationValid || hasActionableWork ? 0 : 2;
             if (outputJson)
                 WriteFleetEnvelope("web.fleet.schedule", plan, WebCliJson.Context.WebSearchFleetSchedulePlan, exitCode, prepared.ConfigPath!, outputSchemaVersion);
             else
@@ -70,7 +71,7 @@ internal static partial class WebCliCommandHandlers
         {
             var doctor = WebSearchProviderDoctor.InspectWithCapabilities(
                 prepared.Configuration!, WebSearchCollectorCatalog.AvailableCapabilities);
-            var snapshot = new SqliteWebSearchObservationStore(prepared.DatabasePath!).ReadFleetSnapshotAsync().GetAwaiter().GetResult();
+            var snapshot = new SqliteWebSearchObservationStore(prepared.DatabasePath!).ReadFleetSnapshotAsync(prepared.AsOfUtc).GetAwaiter().GetResult();
             var report = WebSearchFleetPlanner.CreateReport(prepared.Configuration!, doctor, snapshot, prepared.AsOfUtc);
             var exitCode = report.ConfigurationValid ? report.NeedsAttention ? 1 : 0 : 2;
             if (outputJson)

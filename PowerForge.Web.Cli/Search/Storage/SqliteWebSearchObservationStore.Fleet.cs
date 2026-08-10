@@ -8,7 +8,14 @@ namespace PowerForge.Web.Cli;
 
 internal sealed partial class SqliteWebSearchObservationStore
 {
-    internal async Task<WebSearchFleetEvidenceSnapshot> ReadFleetSnapshotAsync(CancellationToken cancellationToken = default)
+    private static readonly IReadOnlySet<string> PermanentFleetFailureCategories = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "retention-boundary", "duration-boundary", "row-limit-reached"
+    };
+
+    internal async Task<WebSearchFleetEvidenceSnapshot> ReadFleetSnapshotAsync(
+        DateTimeOffset? asOfUtc = null,
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(_databasePath))
             return new WebSearchFleetEvidenceSnapshot { StoreExists = false };
@@ -19,6 +26,14 @@ internal sealed partial class SqliteWebSearchObservationStore
         var traffic = await ReadTrafficFleetRunsAsync(client, cancellationToken).ConfigureAwait(false);
         var performance = await ReadPerformanceFleetRunsAsync(client, cancellationToken).ConfigureAwait(false);
         var retainedCoverage = await ReadRetainedCoverageAsync(client, cancellationToken).ConfigureAwait(false);
+        if (asOfUtc is DateTimeOffset requestedAsOf)
+        {
+            var cutoff = requestedAsOf.ToUniversalTime();
+            search = search.Where(value => value.CollectedAtUtc <= cutoff).ToArray();
+            traffic = traffic.Where(value => value.CollectedAtUtc <= cutoff).ToArray();
+            performance = performance.Where(value => value.CollectedAtUtc <= cutoff).ToArray();
+            retainedCoverage = retainedCoverage.Where(value => value.RetainedAtUtc <= cutoff).ToArray();
+        }
         search = search.Concat(retainedCoverage.Where(value => value.Kind == "search").Select(ToCoverageFleetRun)).ToArray();
         traffic = traffic.Concat(retainedCoverage.Where(value => value.Kind == "traffic").Select(ToCoverageFleetRun)).ToArray();
         var streams = BuildSearchStreams(search)
@@ -189,8 +204,11 @@ internal sealed partial class SqliteWebSearchObservationStore
                     }
                     foreach (var scope in scopes)
                     {
+                        var dates = scope.Select(value => value.Date);
+                        if (scope.Key == "web")
+                            dates = dates.Concat(explicitDates);
                         result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
-                            scope.Key, MergeDates(scope.Select(value => value.Date)), run.ConfigurationHash, run.FailureCategory, run.FailureDate));
+                            scope.Key, MergeDates(dates), run.ConfigurationHash, run.FailureCategory, run.FailureDate));
                     }
                 }
                 continue;
@@ -204,8 +222,11 @@ internal sealed partial class SqliteWebSearchObservationStore
             }
             foreach (var scope in legacyScopes)
             {
+                var ranges = run.Status == "complete"
+                    ? MergeDates(scope.Select(value => value.Date))
+                    : Array.Empty<WebSearchFleetCompletedRange>();
                 result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
-                    scope.Key, MergeDates(scope.Select(value => value.Date)), run.ConfigurationHash, run.FailureCategory, run.FailureDate));
+                    scope.Key, ranges, run.ConfigurationHash, run.FailureCategory, run.FailureDate));
             }
         }
         return result.ToArray();
@@ -356,7 +377,7 @@ internal sealed partial class SqliteWebSearchObservationStore
     {
         var preserved = runs
             .GroupBy(value => (value.Provider, value.SiteId, value.StreamKey, value.ConfigurationHash))
-            .Select(SelectRetentionPreservationRun)
+            .SelectMany(SelectRetentionPreservationRuns)
             .Select(FleetRunIdentity)
             .ToHashSet(StringComparer.Ordinal);
         var candidates = runs
@@ -398,6 +419,20 @@ internal sealed partial class SqliteWebSearchObservationStore
             .ThenByDescending(value => value.CollectedAtUtc)
             .ThenByDescending(value => value.RunId, StringComparer.Ordinal)
             .First();
+    }
+
+    private static IEnumerable<FleetRun> SelectRetentionPreservationRuns(IEnumerable<FleetRun> values)
+    {
+        var runs = values.ToArray();
+        var primary = SelectRetentionPreservationRun(runs);
+        yield return primary;
+        var permanentFailure = runs
+            .Where(value => value.Status == "partial" && PermanentFleetFailureCategories.Contains(value.FailureCategory ?? string.Empty))
+            .OrderByDescending(value => value.CollectedAtUtc)
+            .ThenByDescending(value => value.RunId, StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (permanentFailure is not null && FleetRunIdentity(permanentFailure) != FleetRunIdentity(primary))
+            yield return permanentFailure;
     }
 
     private async Task<int> CountFleetObservationsAsync(SQLite client, RetentionPlan plan, CancellationToken cancellationToken)
