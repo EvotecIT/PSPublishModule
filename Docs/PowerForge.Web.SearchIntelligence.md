@@ -2,7 +2,7 @@
 
 PowerForge.Web can import daily search-performance observations, keep an idempotent local history, and produce evidence-linked opportunities. This is the first operational slice of the broader Search Intelligence design. It gives provider collectors, scheduled jobs, reports, and future Control.Web screens one owned data contract instead of letting each integration invent its own model.
 
-The current release supports imported Search Analytics-style data. It does not yet authenticate to Google Search Console, Bing Webmaster Tools, or Cloudflare, and it does not crawl competitors or draft articles automatically.
+The current release supports imported Search Analytics-style data plus fleet provider configuration and capability checks. It does not yet authenticate to Google Search Console, Bing Webmaster Tools, or Cloudflare, and it does not crawl competitors or draft articles automatically.
 
 ## Ownership
 
@@ -11,7 +11,8 @@ The current release supports imported Search Analytics-style data. It does not y
 | Observation contract, normalization, identity and opportunity rules | `PowerForge.Web` | `WebSearchObservationBatch`, `WebSearchObservationNormalizer`, `WebSearchOpportunityAnalyzer` |
 | Import orchestration and SQLite history | `powerforge-web` | `observe import`, backed by `DBAClientX.SQLite` |
 | Opportunity report | `powerforge-web` | `opportunity list` human or JSON output |
-| Provider authentication and collection | Future adapters in `powerforge-web` | Normalize into the same observation batch |
+| Provider identities, requested capabilities and credential references | `PowerForge.Web` | `WebSearchProviderConfiguration`, `WebSearchProviderDoctor` |
+| Provider authentication and collection | Adapters in `powerforge-web` | Normalize into the matching observation family |
 | Site-specific product facts and content changes | Owning site repository | Consume evidence; normal PR review remains the publication gate |
 | Authenticated fleet UI | Future thin `Control.Web` consumer | Read the PowerForge Search service/API when that boundary is justified |
 
@@ -68,6 +69,39 @@ Search storage initializes and migrates its schema transactionally. It initializ
 
 The import result reports input, inserted and duplicate counts plus the database schema version. The stored run keeps the normalized manifest and a non-secret evidence reference. Providers may revise recent daily metrics, so later collection runs remain immutable revisions. Reports prefer the newest complete snapshot for each provider/site/date/dimension; a partial snapshot is used only when no complete observation exists for that dimension. A provider/site pair may have only one run at a given `collectedAtUtc`; collectors must use the actual completion time so competing revisions never rely on arbitrary ID ordering. Raw provider payloads should remain in a separately governed evidence location; do not put access tokens or private account data in the import file.
 
+## Configure and inspect providers
+
+Keep fleet identities and provider intent in one reusable JSON document rather than duplicating authentication choices across site repositories. The structural schema is `Schemas/powerforge.web.search-providers.schema.json`, and `Examples/PowerForge.Web/Search/providers.json` shows Google Search Console, Bing Webmaster, Cloudflare, Lighthouse and CrUX registrations for one site.
+
+Credential values never belong in provider configuration. A provider references only an environment variable name and the expected credential shape:
+
+```json
+{
+  "id": "google-search-console",
+  "kind": "google-search-console",
+  "capabilities": ["search.analytics", "search.sitemaps", "search.url-inspection"],
+  "credential": {
+    "kind": "google-service-account-file",
+    "environmentVariable": "POWERFORGE_GSC_CREDENTIALS_FILE"
+  },
+  "settings": {
+    "property": "sc-domain:officeimo.com"
+  }
+}
+```
+
+Run the capability doctor before collection:
+
+```powershell
+powerforge-web provider doctor `
+    --config .\search-providers.json `
+    --output json
+```
+
+The doctor validates schema version, unique fleet identities, canonical site URLs, provider kinds, requested capabilities, provider-specific non-secret settings, credential kinds and whether the referenced environment variables are visible to the current process. Property names and stable identifiers use the exact casing and whitespace accepted by the published schema. The loader rejects duplicate JSON object members before deserialization, so a later member cannot silently replace reviewed intent. The doctor never emits credential values. Secret-looking settings are rejected, and only the catalog's known non-secret setting names may contribute values to configuration identity; unsupported setting values are redacted as well. A missing credential for an enabled provider is an error; a disabled provider may keep an unavailable credential reference as a warning so fleet configuration can be prepared before a rollout. A successful report emits a deterministic `configurationHash` over normalized non-secret configuration; reports with any blocking semantic error omit it. Collectors should copy a successful report's hash into observation batches so historical runs can be tied to the configuration that produced them.
+
+Provider state deliberately separates `configurationReady`, `collectorAvailable` and `collectionReady`. A valid registration can therefore be reviewed and deployed before its collector ships without pretending that collection already works. The first provider implementation will mark its own adapter kind available and perform authenticated identity/capability probes on top of this common preflight.
+
 ## List opportunities
 
 ```powershell
@@ -95,10 +129,10 @@ Provider adapters should preserve their raw evidence and map only stable Search 
 
 The next implementation steps are:
 
-1. capability and identity checks before provider collection;
-2. Google Search Console and Bing adapters plus export fallbacks;
+1. Google Search Console collection with authenticated property and capability probes;
+2. Bing collection plus an export fallback;
 3. Cloudflare traffic observations and Lighthouse/CrUX performance contracts kept separate from search metrics;
-4. scheduled collection, retention and static fleet reports;
+4. scheduled collection, backfill, retention and static fleet reports;
 5. competitor evidence through RadarX/HtmlTinkerX, followed by human-approved briefs and measured outcomes.
 
 Those additions must keep the current separation: first-party search facts, traffic facts, performance measurements, competitor evidence and recommendations are related, but they are not interchangeable datasets.

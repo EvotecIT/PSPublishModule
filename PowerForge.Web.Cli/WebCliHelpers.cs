@@ -23,6 +23,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web nav-export --config <site.json> [--out <file>] [--overwrite] [--output json]");
         Console.WriteLine("  powerforge-web git-sync (--repo <repo> --destination <dir> | --spec <file.json>) [--output json]");
         Console.WriteLine("  powerforge-web sources-sync --config <site.json> [--output json]");
+        Console.WriteLine("  powerforge-web provider doctor --config <search-providers.json> [--output json]");
         Console.WriteLine("  powerforge-web observe import --input <observations.json> --database <search.db> [--provider <id>] [--site <id>] [--output json]");
         Console.WriteLine("  powerforge-web opportunity list --database <search.db> --site <id> [--provider <id>] [--from <yyyy-MM-dd>] [--to <yyyy-MM-dd>]");
         Console.WriteLine("                     [--min-impressions <n>] [--min-ctr <0-1>] [--output json]");
