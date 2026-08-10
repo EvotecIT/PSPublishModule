@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.evotec.xyz/powerforge/web/traffic-observations/v1.json",
+  "title": "PowerForge.Web Traffic Observation Batch",
+  "description": "Portable structural schema for provider-neutral website traffic observations. WebTrafficObservationNormalizer enforces cross-field and coverage semantics.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "provider", "siteId", "collectedAtUtc", "sourceKind", "status", "collectionCoverage", "observations"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1, "maximum": 1 },
+    "runId": { "type": ["string", "null"], "minLength": 1 },
+    "provider": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "siteId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "collectedAtUtc": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "sourceKind": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "status": { "enum": ["complete", "partial"] },
+    "configurationHash": { "type": ["string", "null"] },
+    "evidenceReference": { "type": ["string", "null"] },
+    "zeroDataConfirmed": { "type": "boolean" },
+    "collectionCoverage": { "$ref": "#/$defs/coverage" },
+    "observations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/observation" }
+    }
+  },
+  "x-powerforge-semanticConstraints": [
+    {
+      "expression": "complete coverage contains every requested date; partial coverage contains the consecutive prefix and a bounded failedDate/failureCategory",
+      "enforcedBy": "PowerForge.Web.WebTrafficObservationNormalizer"
+    },
+    {
+      "expression": "zeroDataConfirmed is valid only for a complete empty batch",
+      "enforcedBy": "PowerForge.Web.WebTrafficObservationNormalizer"
+    },
+    {
+      "expression": "provider/site/date/host/path dimensions are unique within a batch and all metrics are finite non-negative values",
+      "enforcedBy": "PowerForge.Web.WebTrafficObservationNormalizer"
+    }
+  ],
+  "$defs": {
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fromDate", "throughDate", "completedDates"],
+      "properties": {
+        "fromDate": { "type": "string", "format": "date" },
+        "throughDate": { "type": "string", "format": "date" },
+        "completedDates": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "format": "date" }
+        },
+        "failedDate": { "type": ["string", "null"], "format": "date" },
+        "failureCategory": { "type": ["string", "null"] }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date", "host", "path", "requests", "visits", "edgeResponseBytes", "sampleInterval"],
+      "properties": {
+        "observationKey": { "type": ["string", "null"] },
+        "provider": { "type": ["string", "null"] },
+        "siteId": { "type": ["string", "null"] },
+        "date": { "type": "string", "format": "date" },
+        "host": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "pattern": "^/" },
+        "requests": { "type": "integer", "minimum": 0 },
+        "visits": { "type": "integer", "minimum": 0 },
+        "edgeResponseBytes": { "type": "integer", "minimum": 0 },
+        "sampleInterval": { "type": "number", "minimum": 1 },
+        "evidenceReference": { "type": ["string", "null"] }
+      }
+    }
+  }
+}
