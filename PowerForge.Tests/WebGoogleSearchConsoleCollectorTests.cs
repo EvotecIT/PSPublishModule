@@ -678,6 +678,34 @@ public sealed class WebGoogleSearchConsoleCollectorTests
     }
 
     [Fact]
+    public void ServiceAccountFactory_DoesNotEchoAPathWhenAnExistingCredentialFileCannotBeRead()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-gsc-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var secretPath = Path.Combine(root, "credential.json");
+        File.WriteAllText(secretPath, "{}");
+        try
+        {
+            using var lockStream = new FileStream(secretPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            var reference = new WebSearchCredentialReference
+            {
+                Kind = "google-service-account-file",
+                EnvironmentVariable = "POWERFORGE_TEST_GSC_LOCKED_FILE"
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                GoogleSearchConsoleServiceAccountAccessTokenProvider.Create(reference, _ => secretPath));
+
+            Assert.DoesNotContain(secretPath, exception.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("Google Search Console service-account credential is invalid.", exception.Message);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Cli_ObserveCollect_FailsClosedBeforeCreatingStorageWhenCredentialIsUnavailable()
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-gsc-tests", Guid.NewGuid().ToString("N"));

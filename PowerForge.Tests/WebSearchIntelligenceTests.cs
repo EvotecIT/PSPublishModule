@@ -401,6 +401,54 @@ public sealed partial class WebSearchIntelligenceTests
     }
 
     [Fact]
+    public async Task SqliteStore_NewerCompleteRunSupersedesTheWholeCoveredSlice()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var firstInput = CreateBatch();
+            firstInput.SchemaVersion = 2;
+            firstInput.CollectionCoverage = DailyCoverage(firstInput.Observations[0].Date, "web");
+            firstInput.Observations =
+            [
+                firstInput.Observations[0],
+                new WebSearchObservation
+                {
+                    Date = firstInput.Observations[0].Date,
+                    Page = "https://officeimo.com/removed/",
+                    Query = "removed dimension",
+                    SearchType = "web",
+                    Clicks = 1,
+                    Impressions = 5,
+                    AveragePosition = 5
+                }
+            ];
+            var revisionInput = CreateBatch();
+            revisionInput.SchemaVersion = 2;
+            revisionInput.CollectedAtUtc = firstInput.CollectedAtUtc.AddDays(1);
+            revisionInput.CollectionCoverage = DailyCoverage(revisionInput.Observations[0].Date, "web");
+            revisionInput.Observations[0].Clicks = 4;
+            revisionInput.Observations[0].Impressions = 120;
+            var first = WebSearchObservationNormalizer.Normalize(firstInput);
+            var revision = WebSearchObservationNormalizer.Normalize(revisionInput);
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "search.db"));
+
+            await store.ImportAsync(first);
+            await store.ImportAsync(revision);
+
+            var observations = await store.QueryAsync(new WebSearchObservationQuery { SiteId = "officeimo" });
+
+            var current = Assert.Single(observations);
+            Assert.Equal(revision.Observations[0].ObservationKey, current.ObservationKey);
+            Assert.DoesNotContain(observations, value => value.Query == "removed dimension");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task SqliteStore_RejectsRunIdentifierCollisionWithDifferentEvidence()
     {
         var root = CreateTemporaryDirectory();
@@ -681,6 +729,14 @@ public sealed partial class WebSearchIntelligenceTests
             TryDeleteDirectory(root);
         }
     }
+
+    private static WebSearchObservationCollectionCoverage DailyCoverage(DateOnly date, string searchType) => new()
+    {
+        FromDate = date,
+        ThroughDate = date,
+        SearchType = searchType,
+        CompletedDates = [date]
+    };
 
     private static WebSearchObservationBatch CreateBatch() => new()
     {

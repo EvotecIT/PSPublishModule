@@ -64,7 +64,7 @@ public sealed class GoogleSearchConsoleServiceAccountAccessTokenProvider : IGoog
         {
             return loader();
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or JsonException or FormatException or CryptographicException)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or JsonException or FormatException or CryptographicException or IOException or UnauthorizedAccessException)
         {
             throw new InvalidOperationException("Google Search Console service-account credential is invalid.");
         }

@@ -269,7 +269,6 @@ internal sealed class SqliteWebSearchObservationStore
                       WHERE zero_runs.provider = observations.provider
                         AND zero_runs.site_id = observations.site_id
                         AND zero_runs.status = 'complete'
-                        AND json_extract(zero_runs.normalized_manifest_json, '$.zeroDataConfirmed') = 1
                         AND completed_dates.value = observations.observation_date
                         AND COALESCE(
                                 NULLIF(LOWER(TRIM(json_extract(
