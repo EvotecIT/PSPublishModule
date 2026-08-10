@@ -383,7 +383,45 @@ public static class WebSearchFleetPlanner
         var defaultStart = ranges.Length > 0
             ? ranges.Min(value => value.FromDate)
             : targetThrough.AddDays(1 - policy.MaxBackfillDaysPerRun);
-        var start = FindFirstMissing(policy.BackfillStartDate ?? defaultStart, targetThrough, ranges);
+        var requestedStart = policy.BackfillStartDate ?? defaultStart;
+        var permanentFailures = (evidence?.PermanentFailures ?? Array.Empty<WebSearchFleetFailurePartition>())
+            .Where(value => PermanentDailyFailureCategories.Contains(value.Category))
+            .Concat(evidence?.HasPartialEvidence == true &&
+                    evidence.LatestFailureDate is DateOnly latestFailureDate &&
+                    PermanentDailyFailureCategories.Contains(evidence.LatestFailureCategory ?? string.Empty)
+                ? [new WebSearchFleetFailurePartition { Date = latestFailureDate, Category = evidence.LatestFailureCategory! }]
+                : Array.Empty<WebSearchFleetFailurePartition>())
+            .Where(value => value.Date >= requestedStart && value.Date <= targetThrough)
+            .GroupBy(value => value.Date)
+            .Select(group => group.First())
+            .OrderBy(value => value.Date)
+            .ToArray();
+        var schedulingRanges = ranges;
+        var start = FindFirstMissing(requestedStart, targetThrough, schedulingRanges);
+        while (readiness == "ready" && start is not null)
+        {
+            var failure = permanentFailures.FirstOrDefault(value => value.Date == start.Value);
+            if (failure is null)
+                break;
+            work.Add(new WebSearchFleetWorkItem
+            {
+                SiteId = site.Id ?? string.Empty,
+                ProviderId = provider.Id ?? string.Empty,
+                ProviderKind = provider.Kind ?? string.Empty,
+                Capability = capability,
+                Action = action,
+                Readiness = "input-required",
+                FromDate = failure.Date,
+                ThroughDate = failure.Date,
+                FailureCategory = failure.Category
+            });
+            schedulingRanges = schedulingRanges.Append(
+                    new WebSearchFleetCompletedRange { FromDate = failure.Date, ThroughDate = failure.Date })
+                .OrderBy(value => value.FromDate)
+                .ThenBy(value => value.ThroughDate)
+                .ToArray();
+            start = FindFirstMissing(failure.Date.AddDays(1), targetThrough, schedulingRanges);
+        }
         if (start is null)
             return;
         var maximumDays = string.Equals(provider.Kind, GoogleSearchConsoleCollector.ProviderKind, StringComparison.OrdinalIgnoreCase)
@@ -392,23 +430,23 @@ public static class WebSearchFleetPlanner
         var through = start.Value.AddDays(maximumDays - 1);
         if (through > targetThrough)
             through = targetThrough;
-        var nextCoveredRange = ranges
+        var nextCoveredRange = schedulingRanges
             .Where(value => value.FromDate > start.Value && value.FromDate <= through)
+            .Concat(permanentFailures
+                .Where(value => value.Date > start.Value && value.Date <= through)
+                .Select(value => new WebSearchFleetCompletedRange
+                {
+                    FromDate = value.Date,
+                    ThroughDate = value.Date
+                }))
             .OrderBy(value => value.FromDate)
+            .ThenBy(value => value.ThroughDate)
             .FirstOrDefault();
         if (nextCoveredRange is not null)
             through = nextCoveredRange.FromDate.AddDays(-1);
-        var failureCategory = evidence?.PermanentFailures
-            .FirstOrDefault(value => value.Date == start && PermanentDailyFailureCategories.Contains(value.Category))
-            ?.Category;
-        if (failureCategory is null &&
-            evidence?.HasPartialEvidence == true &&
-            evidence.LatestFailureDate == start &&
-            PermanentDailyFailureCategories.Contains(evidence.LatestFailureCategory ?? string.Empty))
-        {
-            failureCategory = evidence.LatestFailureCategory;
-        }
-        var effectiveReadiness = failureCategory is not null && readiness == "ready" ? "input-required" : readiness;
+        var failureCategory = readiness == "ready"
+            ? null
+            : permanentFailures.FirstOrDefault(value => value.Date == start)?.Category;
         work.Add(new WebSearchFleetWorkItem
         {
             SiteId = site.Id ?? string.Empty,
@@ -416,10 +454,10 @@ public static class WebSearchFleetPlanner
             ProviderKind = provider.Kind ?? string.Empty,
             Capability = capability,
             Action = action,
-            Readiness = effectiveReadiness,
+            Readiness = readiness,
             FromDate = start,
             ThroughDate = through,
-            HasMoreBackfill = through < targetThrough && FindFirstMissing(through.AddDays(1), targetThrough, ranges).HasValue,
+            HasMoreBackfill = through < targetThrough && FindFirstMissing(through.AddDays(1), targetThrough, schedulingRanges).HasValue,
             FailureCategory = failureCategory
         });
     }

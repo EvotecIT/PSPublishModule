@@ -492,10 +492,16 @@ public sealed partial class WebSearchFleetOperationsTests
             ]
         };
 
-        var work = Assert.Single(WebSearchFleetPlanner.CreateSchedule(configuration, doctor, snapshot, AsOf).WorkItems);
+        var work = WebSearchFleetPlanner.CreateSchedule(configuration, doctor, snapshot, AsOf).WorkItems;
 
-        Assert.Equal("input-required", work.Readiness);
-        Assert.Equal("retention-boundary", work.FailureCategory);
+        var blocked = Assert.Single(work, value => value.FailureCategory == "retention-boundary");
+        Assert.Equal("input-required", blocked.Readiness);
+        Assert.Equal(new DateOnly(2026, 8, 8), blocked.FromDate);
+        Assert.Equal(blocked.FromDate, blocked.ThroughDate);
+        var collectible = Assert.Single(work, value => value.Readiness == "ready");
+        Assert.Equal(new DateOnly(2026, 8, 9), collectible.FromDate);
+        Assert.Equal(collectible.FromDate, collectible.ThroughDate);
+        Assert.Null(collectible.FailureCategory);
     }
 
     [Fact]
