@@ -421,6 +421,80 @@ public sealed partial class WebSearchIntelligenceTests
     }
 
     [Fact]
+    public async Task SqliteStore_PreservesSnapshotCoverageByDateAndDimensionShape()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var firstDate = new DateOnly(2026, 8, 1);
+            var secondDate = firstDate.AddDays(1);
+            var older = WebSearchObservationNormalizer.Normalize(new WebSearchObservationBatch
+            {
+                Provider = "bing-webmaster",
+                SiteId = "officeimo",
+                CollectedAtUtc = new DateTimeOffset(2026, 8, 3, 8, 0, 0, TimeSpan.Zero),
+                SourceKind = "fixture",
+                Status = "complete",
+                CollectionCoverage = new WebSearchObservationCollectionCoverage
+                {
+                    Mode = "snapshot",
+                    FromDate = firstDate,
+                    ThroughDate = secondDate,
+                    SearchType = "web",
+                    DimensionScopes = ["page", "query"],
+                    CompletedDates = [firstDate, secondDate]
+                },
+                Observations =
+                [
+                    new WebSearchObservation { Date = firstDate, Page = "https://officeimo.com/old-page", SearchType = "web", Clicks = 1, Impressions = 10 },
+                    new WebSearchObservation { Date = secondDate, Query = "old query", SearchType = "web", Clicks = 2, Impressions = 20 }
+                ]
+            });
+            var newer = WebSearchObservationNormalizer.Normalize(new WebSearchObservationBatch
+            {
+                Provider = "bing-webmaster",
+                SiteId = "officeimo",
+                CollectedAtUtc = older.CollectedAtUtc.AddHours(1),
+                SourceKind = "fixture",
+                Status = "complete",
+                CollectionCoverage = new WebSearchObservationCollectionCoverage
+                {
+                    Mode = "snapshot",
+                    FromDate = firstDate,
+                    ThroughDate = secondDate,
+                    SearchType = "web",
+                    DimensionScopes = ["page", "query"],
+                    CompletedDates = [firstDate, secondDate]
+                },
+                Observations =
+                [
+                    new WebSearchObservation { Date = firstDate, Query = "new query", SearchType = "web", Clicks = 3, Impressions = 30 },
+                    new WebSearchObservation { Date = secondDate, Page = "https://officeimo.com/new-page", SearchType = "web", Clicks = 4, Impressions = 40 }
+                ]
+            });
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "snapshot-revisions.db"));
+
+            await store.ImportAsync(older);
+            await store.ImportAsync(newer);
+            var current = await store.QueryAsync(new WebSearchObservationQuery
+            {
+                SiteId = "officeimo",
+                Provider = "bing-webmaster"
+            });
+
+            Assert.Equal(4, current.Count);
+            Assert.Contains(current, value => value.Date == firstDate && value.Page == "https://officeimo.com/old-page");
+            Assert.Contains(current, value => value.Date == firstDate && value.Query == "new query");
+            Assert.Contains(current, value => value.Date == secondDate && value.Query == "old query");
+            Assert.Contains(current, value => value.Date == secondDate && value.Page == "https://officeimo.com/new-page");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task SqliteStore_RefusesToClaimUnrelatedVersionZeroDatabase()
     {
         var root = CreateTemporaryDirectory();
