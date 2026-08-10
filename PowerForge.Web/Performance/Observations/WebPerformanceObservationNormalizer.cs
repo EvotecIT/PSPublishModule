@@ -48,10 +48,12 @@ public static class WebPerformanceObservationNormalizer
             throw new ArgumentException("Performance formFactor is not valid for the measurement kind.", nameof(batch));
         if (batch.CollectedAtUtc == default)
             throw new ArgumentException("Performance observation batch requires collectedAtUtc.", nameof(batch));
+        if (batch.Observations is null)
+            throw new ArgumentException("Performance observations must be an array.", nameof(batch));
 
         var targetUrl = CanonicalizeTarget(batch.TargetUrl, targetKind);
         var metrics = measurementKind == "lab" ? LabMetricUnits : FieldMetricUnits;
-        var observations = (batch.Observations ?? Array.Empty<WebPerformanceObservation>())
+        var observations = batch.Observations
             .Select((value, index) => NormalizeObservation(value, measurementKind, metrics, index))
             .OrderBy(value => value.Metric, StringComparer.Ordinal)
             .ToArray();

@@ -9,7 +9,7 @@ using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
-public sealed class WebPerformanceObservationTests
+public sealed partial class WebPerformanceObservationTests
 {
     private static readonly DateTimeOffset CollectionTime = new(2026, 8, 10, 12, 34, 56, TimeSpan.Zero);
 

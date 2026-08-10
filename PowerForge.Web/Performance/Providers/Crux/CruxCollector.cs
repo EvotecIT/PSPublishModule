@@ -92,7 +92,7 @@ public sealed class CruxCollector
             };
         }
         if (!response.IsSuccessStatusCode)
-            return Failure(partial, 1, "provider-unavailable", $"CrUX API returned HTTP {(int)response.StatusCode}.");
+            return Failure(partial, 1, ClassifyHttpError(response.StatusCode), $"CrUX API returned HTTP {(int)response.StatusCode}.");
 
         try
         {
@@ -232,7 +232,10 @@ public sealed class CruxCollector
         var targetKind = options.TargetKind.Trim().ToLowerInvariant();
         if (targetKind is not ("url" or "origin"))
             throw new ArgumentException("CrUX targetKind must be url or origin.", nameof(options));
-        if (!WebPerformanceObservationNormalizer.TargetBelongsToSite(options.TargetUrl, options.SiteBaseUrl))
+        var belongsToSite = targetKind == "origin"
+            ? OriginMatchesSite(options.TargetUrl, options.SiteBaseUrl)
+            : WebPerformanceObservationNormalizer.TargetBelongsToSite(options.TargetUrl, options.SiteBaseUrl);
+        if (!belongsToSite)
             throw new ArgumentException("CrUX target does not belong to the configured fleet site.", nameof(options));
         _ = WebPerformanceObservationNormalizer.Normalize(new WebPerformanceObservationBatch
         {
@@ -248,6 +251,23 @@ public sealed class CruxCollector
             Observations = Array.Empty<WebPerformanceObservation>()
         });
     }
+
+    private static bool OriginMatchesSite(string targetUrl, string siteBaseUrl)
+    {
+        var target = new Uri(WebPerformanceObservationNormalizer.CanonicalizeTarget(targetUrl, "origin"), UriKind.Absolute);
+        var site = new Uri(WebPerformanceObservationNormalizer.CanonicalizeTarget(siteBaseUrl, "url"), UriKind.Absolute);
+        return target.Scheme.Equals(site.Scheme, StringComparison.OrdinalIgnoreCase) &&
+               target.Port == site.Port &&
+               target.IdnHost.TrimEnd('.').Equals(site.IdnHost.TrimEnd('.'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ClassifyHttpError(HttpStatusCode statusCode) => statusCode switch
+    {
+        HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => "authentication-failed",
+        HttpStatusCode.TooManyRequests => "rate-limited",
+        _ when (int)statusCode >= 500 => "provider-unavailable",
+        _ => "request-rejected"
+    };
 
     private static JsonElement RequiredObject(JsonElement parent, string name)
     {
