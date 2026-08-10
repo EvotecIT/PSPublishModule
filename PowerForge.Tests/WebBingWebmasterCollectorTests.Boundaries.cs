@@ -113,8 +113,8 @@ public sealed partial class WebBingWebmasterCollectorTests
                 ThroughDate = new DateOnly(2026, 8, 1)
             });
 
-            Assert.Equal(["page"], pageBatch.CollectionCoverage!.DimensionScopes);
-            Assert.Equal(["query"], queryBatch.CollectionCoverage!.DimensionScopes);
+            Assert.Equal(["page"], pageBatch.CollectionCoverage!.DimensionScopes!);
+            Assert.Equal(["query"], queryBatch.CollectionCoverage!.DimensionScopes!);
             Assert.Equal(2, observations.Count);
             Assert.Contains(observations, value => value.Page == "https://officeimo.com/");
             Assert.Contains(observations, value => value.Query == "powerforge");

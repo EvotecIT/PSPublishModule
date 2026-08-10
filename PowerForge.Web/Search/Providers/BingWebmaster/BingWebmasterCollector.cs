@@ -144,9 +144,11 @@ public sealed partial class BingWebmasterCollector
             "GetPageStats", parameters, apiKey, cancellationToken).ConfigureAwait(false);
         requestCount++;
         if (!pageResponse.Success)
-            return BuildFailure(options, probe, requestCount, pageResponse.ErrorCode!, pageResponse.ErrorMessage!, observations);
+            return BuildFailure(options, probe, requestCount, pageResponse.ErrorCode!, pageResponse.ErrorMessage!, observations,
+                dimensionScopes: ["query"]);
         if (!TryMapStats(pageResponse.Values, value => value.Page ?? value.Query, options, pageDimension: true, out var pageObservations))
-            return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned invalid page statistics.", observations);
+            return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned invalid page statistics.", observations,
+                dimensionScopes: ["query"]);
         observations.AddRange(pageObservations);
 
         var requestedDates = EnumerateDates(options.FromDate, options.ThroughDate);
@@ -158,7 +160,8 @@ public sealed partial class BingWebmasterCollector
                 "GetRankAndTrafficStats", parameters, apiKey, cancellationToken).ConfigureAwait(false);
             requestCount++;
             if (!trafficResponse.Success)
-                return BuildFailure(options, probe, requestCount, trafficResponse.ErrorCode!, trafficResponse.ErrorMessage!, observations);
+                return BuildFailure(options, probe, requestCount, trafficResponse.ErrorCode!, trafficResponse.ErrorMessage!, observations,
+                    dimensionScopes: ["page", "query"]);
 
             var traffic = new List<(DateOnly Date, long Clicks, long Impressions)>();
             foreach (var value in trafficResponse.Values)
@@ -167,7 +170,8 @@ public sealed partial class BingWebmasterCollector
                 if (!date.HasValue || !value.Clicks.HasValue || !value.Impressions.HasValue ||
                     value.Clicks.Value < 0 || value.Impressions.Value < 0 || value.Clicks.Value > value.Impressions.Value)
                 {
-                    return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned invalid traffic statistics.", observations);
+                    return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned invalid traffic statistics.", observations,
+                        dimensionScopes: ["page", "query"]);
                 }
                 if (date.Value >= options.FromDate && date.Value <= options.ThroughDate)
                     traffic.Add((date.Value, value.Clicks.Value, value.Impressions.Value));
@@ -176,7 +180,8 @@ public sealed partial class BingWebmasterCollector
                 .GroupBy(item => item.Date)
                 .ToDictionary(group => group.Key, group => group.ToArray());
             if (trafficByDate.Any(pair => pair.Value.Length != 1))
-                return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned duplicate traffic dates.", observations);
+                return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned duplicate traffic dates.", observations,
+                    dimensionScopes: ["page", "query"]);
             zeroConfirmed = trafficByDate.Count == requestedDates.Length &&
                             requestedDates.All(date =>
                                 trafficByDate.TryGetValue(date, out var rows) &&
@@ -193,7 +198,8 @@ public sealed partial class BingWebmasterCollector
                 "dimension-data-unavailable",
                 "Bing returned no dated page or query rows, so a complete search observation run cannot be proven.",
                 observations,
-                trafficByDate.Keys);
+                trafficByDate.Keys,
+                ["page", "query"]);
         }
 
         var completedDates = observations.Select(observation => observation.Date)
@@ -219,6 +225,7 @@ public sealed partial class BingWebmasterCollector
                 FromDate = options.FromDate,
                 ThroughDate = options.ThroughDate,
                 SearchType = options.SearchType,
+                DimensionScopes = ["page", "query"],
                 CompletedDates = completedDates
             },
             Observations = observations.ToArray()
@@ -352,7 +359,8 @@ public sealed partial class BingWebmasterCollector
         string errorCode,
         string errorMessage,
         IReadOnlyCollection<WebSearchObservation>? observations = null,
-        IEnumerable<DateOnly>? additionalCompletedDates = null)
+        IEnumerable<DateOnly>? additionalCompletedDates = null,
+        IEnumerable<string>? dimensionScopes = null)
     {
         var retainedObservations = observations?.ToArray() ?? Array.Empty<WebSearchObservation>();
         var completedDates = retainedObservations.Select(observation => observation.Date)
@@ -376,6 +384,8 @@ public sealed partial class BingWebmasterCollector
                 FromDate = options.FromDate,
                 ThroughDate = options.ThroughDate,
                 SearchType = options.SearchType,
+                DimensionScopes = dimensionScopes?.Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToArray()
+                    ?? Array.Empty<string>(),
                 CompletedDates = completedDates,
                 FailureCategory = errorCode
             },

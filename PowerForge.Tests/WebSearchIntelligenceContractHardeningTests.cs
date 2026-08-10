@@ -209,8 +209,56 @@ public sealed partial class WebSearchIntelligenceTests
         var schema = LoadObservationSchema();
 
         Assert.True(schema.Evaluate(documented, new EvaluationOptions()).IsValid);
+        Assert.Null(documented["collectionCoverage"]!["dimensionScopes"]);
+        var normalizedDocument = JsonNode.Parse(JsonSerializer.Serialize(WebSearchObservationNormalizer.Normalize(batch)))!;
+        var reparsed = JsonSerializer.Deserialize<WebSearchObservationBatch>(normalizedDocument.ToJsonString(), WebCliJson.Options)!;
+        var renormalizedDocument = JsonNode.Parse(JsonSerializer.Serialize(WebSearchObservationNormalizer.Normalize(reparsed)))!;
+        Assert.Null(normalizedDocument["collectionCoverage"]!["dimensionScopes"]);
+        Assert.True(JsonNode.DeepEquals(normalizedDocument, renormalizedDocument));
         Assert.False(schema.Evaluate(missingCoverage, new EvaluationOptions()).IsValid);
         Assert.False(schema.Evaluate(modeFromVersionThree, new EvaluationOptions()).IsValid);
+    }
+
+    [Fact]
+    public void Normalizer_RejectsDimensionScopesFromVersionTwoJson()
+    {
+        var batch = CreateBatch();
+        batch.SchemaVersion = 2;
+        batch.CollectionCoverage = new WebSearchObservationCollectionCoverage
+        {
+            FromDate = new DateOnly(2026, 8, 1),
+            ThroughDate = new DateOnly(2026, 8, 1),
+            SearchType = "web",
+            CompletedDates = [new DateOnly(2026, 8, 1)]
+        };
+        var document = JsonNode.Parse(JsonSerializer.Serialize(batch))!;
+        document["collectionCoverage"]!["dimensionScopes"] = new JsonArray();
+        var schema = LoadObservationSchema();
+        var parsed = JsonSerializer.Deserialize<WebSearchObservationBatch>(document.ToJsonString(), WebCliJson.Options)!;
+
+        Assert.False(schema.Evaluate(document, new EvaluationOptions()).IsValid);
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(parsed));
+        Assert.Contains("version 2", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Normalizer_RejectsDimensionScopesOutsideSnapshotMode()
+    {
+        var batch = CreateBatch();
+        batch.SchemaVersion = 3;
+        batch.CollectionCoverage = new WebSearchObservationCollectionCoverage
+        {
+            Mode = "daily",
+            FromDate = batch.Observations[0].Date,
+            ThroughDate = batch.Observations[0].Date,
+            SearchType = "web",
+            DimensionScopes = ["page"],
+            CompletedDates = [batch.Observations[0].Date]
+        };
+
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(batch));
+
+        Assert.Contains("snapshot", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

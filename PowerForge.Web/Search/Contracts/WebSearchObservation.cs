@@ -109,6 +109,7 @@ public sealed class WebSearchObservationBatch
 public sealed class WebSearchObservationCollectionCoverage
 {
     private string? _mode;
+    private string[]? _dimensionScopes;
 
     /// <summary>
     /// Coverage acquisition mode. Version 2 omits this value and means <c>daily</c>.
@@ -147,7 +148,20 @@ public sealed class WebSearchObservationCollectionCoverage
     /// selected search type. Supported values are <c>page</c>, <c>query</c>, and <c>page-query</c>.
     /// </summary>
     [JsonPropertyName("dimensionScopes")]
-    public string[] DimensionScopes { get; set; } = Array.Empty<string>();
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string[]? DimensionScopes
+    {
+        get => _dimensionScopes;
+        set
+        {
+            DimensionScopesSpecified = true;
+            _dimensionScopes = value;
+        }
+    }
+
+    /// <summary>Whether dimensionScopes was explicitly supplied, including an explicit null JSON value.</summary>
+    [JsonIgnore]
+    internal bool DimensionScopesSpecified { get; private set; }
 
     /// <summary>
     /// Dates whose daily partitions completed in <c>daily</c> mode, or dates explicitly present in a successful

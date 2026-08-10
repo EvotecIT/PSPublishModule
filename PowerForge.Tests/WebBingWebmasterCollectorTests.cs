@@ -202,6 +202,7 @@ public sealed partial class WebBingWebmasterCollectorTests
 
         Assert.True(result.Success);
         Assert.Equal("snapshot", normalized.CollectionCoverage!.Mode);
+        Assert.Equal(["page", "query"], normalized.CollectionCoverage.DimensionScopes!);
         Assert.Equal([new DateOnly(2026, 8, 1)], normalized.CollectionCoverage.CompletedDates);
         Assert.Equal(1, result.CompletedDateCount);
     }
@@ -226,6 +227,7 @@ public sealed partial class WebBingWebmasterCollectorTests
         Assert.Equal("provider-unavailable", result.ErrorCode);
         Assert.Equal("partial", normalized.Status);
         Assert.Equal("powerforge", Assert.Single(normalized.Observations).Query);
+        Assert.Equal(["query"], normalized.CollectionCoverage!.DimensionScopes!);
         Assert.Equal([new DateOnly(2026, 8, 1)], normalized.CollectionCoverage!.CompletedDates);
     }
 

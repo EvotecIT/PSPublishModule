@@ -83,6 +83,10 @@
     {
       "expression": "schemaVersion=3 requires collectionCoverage.mode; daily preserves consecutive partition semantics while snapshot records only dates explicitly present in a provider response",
       "enforcedBy": "PowerForge.Web.WebSearchObservationNormalizer"
+    },
+    {
+      "expression": "collectionCoverage.dimensionScopes is a schemaVersion=3 snapshot-only qualifier",
+      "enforcedBy": "PowerForge.Web.WebSearchObservationNormalizer"
     }
   ],
   "allOf": [
@@ -135,7 +139,10 @@
         "properties": {
           "collectionCoverage": {
             "not": {
-              "required": ["mode"]
+              "anyOf": [
+                { "required": ["mode"] },
+                { "required": ["dimensionScopes"] }
+              ]
             }
           }
         }
