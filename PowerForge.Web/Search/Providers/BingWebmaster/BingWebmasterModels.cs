@@ -14,6 +14,9 @@ public sealed class BingWebmasterCollectionOptions
     /// <summary>Exact verified Bing Webmaster site URL.</summary>
     public string SiteUrl { get; set; } = string.Empty;
 
+    /// <summary>Owning fleet site boundary that the verified property must match exactly.</summary>
+    public string SiteBaseUrl { get; set; } = string.Empty;
+
     /// <summary>Inclusive first reporting date.</summary>
     public DateOnly FromDate { get; set; }
 

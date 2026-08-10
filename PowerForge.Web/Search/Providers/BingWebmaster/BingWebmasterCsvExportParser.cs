@@ -12,6 +12,12 @@ public sealed class BingWebmasterCsvExportOptions
     /// <summary>Stable fleet site identifier written to the observation batch.</summary>
     public string SiteId { get; set; } = string.Empty;
 
+    /// <summary>Owning fleet site boundary used to validate exported page rows.</summary>
+    public string SiteBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>Optional verified Bing property identity used to authorize query-only rows.</summary>
+    public string? PropertySiteUrl { get; set; }
+
     /// <summary>Inclusive first reporting date represented by the export.</summary>
     public DateOnly FromDate { get; set; }
 
@@ -94,6 +100,13 @@ public static class BingWebmasterCsvExportParser
             var query = GetOptional(row, queryIndex);
             if (page is null && query is null)
                 throw new FormatException($"Bing Webmaster CSV row {rowIndex + 1} requires a page or query value.");
+            if (page is not null && !BingWebmasterCollector.PageBelongsToSite(page, options.SiteBaseUrl))
+                throw new FormatException($"Bing Webmaster CSV row {rowIndex + 1} page is outside the owning fleet site boundary.");
+            if (page is null && !PropertyMatchesSite(options.PropertySiteUrl, options.SiteBaseUrl))
+            {
+                throw new FormatException(
+                    $"Bing Webmaster CSV row {rowIndex + 1} is query-only and cannot prove that it belongs to the owning fleet site.");
+            }
 
             var clicks = ParseCount(row[clickIndex], rowIndex, "clicks");
             var impressions = ParseCount(row[impressionIndex], rowIndex, "impressions");
@@ -334,6 +347,8 @@ public static class BingWebmasterCsvExportParser
         ArgumentNullException.ThrowIfNull(options);
         if (string.IsNullOrWhiteSpace(options.ProviderId) || string.IsNullOrWhiteSpace(options.SiteId))
             throw new ArgumentException("Bing Webmaster CSV import requires provider and site identifiers.", nameof(options));
+        if (!BingWebmasterCollector.TryNormalizeSiteUrl(options.SiteBaseUrl, out _))
+            throw new ArgumentException("Bing Webmaster CSV import requires a valid owning site base URL.", nameof(options));
         if (options.FromDate == default || options.ThroughDate == default || options.FromDate > options.ThroughDate)
             throw new ArgumentException("Bing Webmaster CSV import date range is invalid.", nameof(options));
         if (!string.Equals(options.SearchType, "web", StringComparison.Ordinal))
@@ -341,4 +356,9 @@ public static class BingWebmasterCsvExportParser
         if (options.CollectedAtUtc == default)
             throw new ArgumentException("Bing Webmaster CSV import requires an offset-aware collection time.", nameof(options));
     }
+
+    private static bool PropertyMatchesSite(string? propertySiteUrl, string siteBaseUrl) =>
+        BingWebmasterCollector.TryNormalizeSiteUrl(propertySiteUrl, out var normalizedProperty) &&
+        BingWebmasterCollector.TryNormalizeSiteUrl(siteBaseUrl, out var normalizedSite) &&
+        string.Equals(normalizedProperty, normalizedSite, StringComparison.Ordinal);
 }

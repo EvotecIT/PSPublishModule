@@ -41,6 +41,7 @@ internal static partial class WebCliCommandHandlers
                 ProviderId = provider.Id,
                 SiteId = site.Id,
                 SiteUrl = siteUrl,
+                SiteBaseUrl = site.BaseUrl,
                 FromDate = fromDate,
                 ThroughDate = throughDate,
                 SearchType = searchType,
@@ -180,6 +181,10 @@ internal static partial class WebCliCommandHandlers
                 {
                     ProviderId = provider.Id,
                     SiteId = site.Id,
+                    SiteBaseUrl = site.BaseUrl,
+                    PropertySiteUrl = provider.Settings.TryGetValue("siteUrl", out var propertySiteUrl)
+                        ? propertySiteUrl
+                        : null,
                     FromDate = fromDate,
                     ThroughDate = throughDate,
                     SearchType = TryGetOptionValue(args, "--search-type") ?? "web",

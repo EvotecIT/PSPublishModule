@@ -312,7 +312,8 @@ public sealed partial class BingWebmasterCollector
             }
             if (pageDimension &&
                 (!Uri.TryCreate(dimension, UriKind.Absolute, out var pageUri) ||
-                 (pageUri.Scheme != Uri.UriSchemeHttp && pageUri.Scheme != Uri.UriSchemeHttps)))
+                 (pageUri.Scheme != Uri.UriSchemeHttp && pageUri.Scheme != Uri.UriSchemeHttps) ||
+                 !PageBelongsToSite(dimension, options.SiteBaseUrl)))
             {
                 observations = Array.Empty<WebSearchObservation>();
                 return false;
@@ -428,8 +429,12 @@ public sealed partial class BingWebmasterCollector
             throw new ArgumentException("Bing Webmaster collection requires a provider identifier.", nameof(options));
         if (string.IsNullOrWhiteSpace(options.SiteId))
             throw new ArgumentException("Bing Webmaster collection requires a site identifier.", nameof(options));
-        if (!TryNormalizeSiteUrl(options.SiteUrl, out _))
+        if (!TryNormalizeSiteUrl(options.SiteUrl, out var normalizedProperty))
             throw new ArgumentException("Bing Webmaster site URL must be an absolute HTTP(S) URL without user info, query or fragment.", nameof(options));
+        if (!TryNormalizeSiteUrl(options.SiteBaseUrl, out var normalizedSite))
+            throw new ArgumentException("Bing Webmaster collection requires a valid owning site base URL.", nameof(options));
+        if (!string.Equals(normalizedProperty, normalizedSite, StringComparison.Ordinal))
+            throw new ArgumentException("Bing Webmaster site URL must match the owning site base URL exactly.", nameof(options));
         if (options.FromDate == default || options.ThroughDate == default || options.FromDate > options.ThroughDate)
             throw new ArgumentException("Bing Webmaster collection date range is invalid.", nameof(options));
         if (string.IsNullOrWhiteSpace(options.SearchType))
@@ -472,7 +477,7 @@ public sealed partial class BingWebmasterCollector
         }
     }
 
-    private static bool TryNormalizeSiteUrl(string? value, out string normalized)
+    internal static bool TryNormalizeSiteUrl(string? value, out string normalized)
     {
         normalized = string.Empty;
         if (string.IsNullOrWhiteSpace(value) ||
@@ -497,6 +502,31 @@ public sealed partial class BingWebmasterCollector
         builder.Path = path.Length == 0 ? "/" : path + "/";
         normalized = builder.Uri.AbsoluteUri;
         return true;
+    }
+
+    internal static bool PageBelongsToSite(string? page, string siteBaseUrl)
+    {
+        if (!TryNormalizeSiteUrl(siteBaseUrl, out var normalizedSite) ||
+            string.IsNullOrWhiteSpace(page) ||
+            !Uri.TryCreate(page.Trim(), UriKind.Absolute, out var pageUri) ||
+            (pageUri.Scheme != Uri.UriSchemeHttp && pageUri.Scheme != Uri.UriSchemeHttps) ||
+            !string.IsNullOrEmpty(pageUri.UserInfo))
+        {
+            return false;
+        }
+
+        var siteUri = new Uri(normalizedSite, UriKind.Absolute);
+        if (!pageUri.Scheme.Equals(siteUri.Scheme, StringComparison.OrdinalIgnoreCase) ||
+            !pageUri.IdnHost.TrimEnd('.').Equals(siteUri.IdnHost.TrimEnd('.'), StringComparison.OrdinalIgnoreCase) ||
+            pageUri.Port != siteUri.Port)
+        {
+            return false;
+        }
+
+        var sitePath = siteUri.AbsolutePath;
+        var pagePath = pageUri.AbsolutePath;
+        return pagePath.Equals(sitePath.TrimEnd('/'), StringComparison.Ordinal) ||
+               pagePath.StartsWith(sitePath, StringComparison.Ordinal);
     }
 
     [GeneratedRegex("^/Date\\((-?[0-9]+)(?:([+-])([0-9]{2})([0-9]{2}))?\\)/$", RegexOptions.CultureInvariant)]

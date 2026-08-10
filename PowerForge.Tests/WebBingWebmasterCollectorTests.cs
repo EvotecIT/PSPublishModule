@@ -368,6 +368,46 @@ public sealed class WebBingWebmasterCollectorTests
     }
 
     [Fact]
+    public async Task Collect_RejectsABroaderPropertyThanTheOwningFleetSite()
+    {
+        var options = CreateOptions();
+        options.SiteBaseUrl = "https://officeimo.com/docs/";
+        using var httpClient = new HttpClient(
+            new ScriptedHandler((_, _) => throw new InvalidOperationException("HTTP must not be reached.")));
+        var collector = new BingWebmasterCollector(httpClient, new FakeApiKeyProvider());
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => collector.CollectAsync(options));
+
+        Assert.Contains("match", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CsvExport_RejectsPagesOutsideTheOwningFleetSite()
+    {
+        const string csv = "Date,Page,Clicks,Impressions\n2026-08-01,https://officeimo.com/other/,1,10";
+        var options = CreateCsvOptions();
+        options.SiteBaseUrl = "https://officeimo.com/docs/";
+        options.PropertySiteUrl = "https://officeimo.com/docs/";
+
+        var exception = Assert.Throws<FormatException>(() => BingWebmasterCsvExportParser.Parse(csv, options));
+
+        Assert.Contains("outside", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CsvExport_RejectsQueryOnlyRowsWithoutAnExactVerifiedPropertyBoundary()
+    {
+        const string csv = "Date,Query,Clicks,Impressions\n2026-08-01,officeimo,1,10";
+        var options = CreateCsvOptions();
+        options.PropertySiteUrl = "https://officeimo.com/";
+        options.SiteBaseUrl = "https://officeimo.com/docs/";
+
+        var exception = Assert.Throws<FormatException>(() => BingWebmasterCsvExportParser.Parse(csv, options));
+
+        Assert.Contains("cannot prove", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void CsvExport_ParsesQuotedPageAndQueryRowsWithInvariantMetrics()
     {
         const string csv = "\uFEFFDate,Page,Keyword,Clicks,Impressions,Avg. CTR,Avg. position\r\n" +
@@ -638,6 +678,7 @@ public sealed class WebBingWebmasterCollectorTests
         ProviderId = "bing-webmaster",
         SiteId = "officeimo",
         SiteUrl = "https://officeimo.com/",
+        SiteBaseUrl = "https://officeimo.com/",
         FromDate = new DateOnly(2026, 8, 1),
         ThroughDate = new DateOnly(2026, 8, 1),
         SearchType = "web",
@@ -648,6 +689,8 @@ public sealed class WebBingWebmasterCollectorTests
     {
         ProviderId = "bing-webmaster",
         SiteId = "officeimo",
+        SiteBaseUrl = "https://officeimo.com/",
+        PropertySiteUrl = "https://officeimo.com/",
         FromDate = new DateOnly(2026, 8, 1),
         ThroughDate = new DateOnly(2026, 8, 1),
         SearchType = "web",
