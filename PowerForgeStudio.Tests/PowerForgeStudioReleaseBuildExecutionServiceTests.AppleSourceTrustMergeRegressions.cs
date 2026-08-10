@@ -409,6 +409,28 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("??=", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_c23_embed_payloads()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("C23EmbedRepo");
+        var project = scope.CreateDirectory(Path.Combine("C23EmbedRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Source.c; sourceTree = \"<group>\"; };");
+        File.WriteAllText(
+            Path.Combine(repositoryRoot, "Source.c"),
+            "const unsigned char payload[] = {\n#embed \"/tmp/payload.bin\"\n};\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("C23 embed", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(".include")]
     [InlineData(".incbin")]
@@ -491,6 +513,27 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Modules", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("-fsanitize-ignorelist=Ignorelist")]
+    [InlineData("-fsanitize-blacklist=Ignorelist")]
+    [InlineData("-fsanitize-system-ignorelist Ignorelist")]
+    [InlineData("-fsanitize-coverage-allowlist=Ignorelist")]
+    public void ResolveExactAppleSourceCommit_classifies_sanitizer_list_inputs(string option)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "SanitizerListRepo" + option.Length,
+            $"OTHER_CFLAGS = {option}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Ignorelist", exception.Message, StringComparison.Ordinal);
         Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 

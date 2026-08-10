@@ -49,6 +49,15 @@ internal sealed partial class AppleReleaseSourceTrustService
         var physicalSource = File.ReadAllText(fullSourcePath);
         RejectCTrigraphs(physicalSource, fullSourcePath);
         var source = RemoveCComments(SpliceCPreprocessingLines(physicalSource));
+        var embedDirective = Regex.Match(
+            source,
+            "(?m)^[ \\t]*(?:#|%:)[ \\t]*embed(?![A-Za-z0-9_])",
+            RegexOptions.CultureInvariant);
+        if (embedDirective.Success)
+        {
+            throw new InvalidOperationException(
+                $"Source input '{fullSourcePath}' uses a C23 embed directive, whose payload selection cannot be bound safely to the exact source commit.");
+        }
         var nondeterministicMacro = FindNondeterministicCompilerMacro(source);
         if (nondeterministicMacro is not null)
         {

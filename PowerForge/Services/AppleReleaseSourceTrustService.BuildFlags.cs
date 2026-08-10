@@ -193,6 +193,14 @@ internal sealed partial class AppleReleaseSourceTrustService
                 token.Equals("-fprofile-use", StringComparison.Ordinal) ||
                 token.Equals("-fprofile-instr-use", StringComparison.Ordinal) ||
                 token.Equals("-fprofile-sample-use", StringComparison.Ordinal) ||
+                token.Equals("-fsanitize-ignorelist", StringComparison.Ordinal) ||
+                token.Equals("-fsanitize-blacklist", StringComparison.Ordinal) ||
+                token.Equals("-fsanitize-system-ignorelist", StringComparison.Ordinal) ||
+                token.Equals("-fsanitize-system-blacklist", StringComparison.Ordinal) ||
+                token.Equals("-fsanitize-coverage-allowlist", StringComparison.Ordinal) ||
+                token.Equals("-fsanitize-coverage-ignorelist", StringComparison.Ordinal) ||
+                token.Equals("-fsanitize-coverage-whitelist", StringComparison.Ordinal) ||
+                token.Equals("-fsanitize-coverage-blacklist", StringComparison.Ordinal) ||
                 token.Equals("-resource-dir", StringComparison.Ordinal) ||
                 token.Equals("-working-directory", StringComparison.Ordinal) ||
                 token.Equals("-gcc-toolchain", StringComparison.Ordinal) ||
@@ -218,6 +226,10 @@ internal sealed partial class AppleReleaseSourceTrustService
             {
                 "-iframeworkwithsysroot", "-iwithprefixbefore", "-fprofile-instr-use=",
                 "-fprofile-sample-use=", "-fmodule-map-file=", "-working-directory=",
+                "-fsanitize-system-ignorelist=", "-fsanitize-system-blacklist=",
+                "-fsanitize-coverage-allowlist=", "-fsanitize-coverage-ignorelist=",
+                "-fsanitize-coverage-whitelist=", "-fsanitize-coverage-blacklist=",
+                "-fsanitize-ignorelist=", "-fsanitize-blacklist=",
                 "-fprebuilt-module-path=",
                 "-include-pch=", "-include-pth=", "-gcc-toolchain=", "-resource-dir=",
                 "-iwithprefix", "-fprofile-use=", "-fmodule-file=", "-module-map-file=",

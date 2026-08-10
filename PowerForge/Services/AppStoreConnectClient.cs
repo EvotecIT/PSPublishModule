@@ -454,24 +454,26 @@ public sealed partial class AppStoreConnectClient : IDisposable
         var file = new FileInfo(fullPath);
         if (!file.Exists)
             throw new FileNotFoundException("Screenshot file was not found.", fullPath);
-        var capturedBytes = File.ReadAllBytes(fullPath);
-        if (!string.IsNullOrWhiteSpace(expectedSha256) &&
-            !ComputeSha256Checksum(capturedBytes).Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"Screenshot '{fullPath}' changed after its immutable upload snapshot was captured.");
-        }
+        using var captured = AppStoreConnectScreenshotUploadSnapshot.Capture(fullPath, expectedSha256);
+        using var mutationMonitor = new AppleReleaseSourceMutationMonitor(
+            captured.RootPath,
+            "private screenshot upload snapshot",
+            "App Store Connect upload operations",
+            "Discard the screenshot upload result and retry from approved bytes.");
+        captured.ValidateUnchanged();
 
         var reservation = await CreateScreenshotReservationAsync(
             screenshotSetId,
             file.Name,
-            capturedBytes.LongLength,
+            captured.Length,
             cancellationToken).ConfigureAwait(false);
 
         foreach (var operation in reservation.UploadOperations)
-            await ExecuteUploadOperationAsync(capturedBytes, operation, cancellationToken).ConfigureAwait(false);
+            await ExecuteUploadOperationAsync(captured, operation, cancellationToken).ConfigureAwait(false);
+        captured.ValidateUnchanged();
+        mutationMonitor.ValidateNoChanges();
 
-        var checksum = ComputeMd5Checksum(capturedBytes);
+        var checksum = captured.Md5;
         var committed = await CommitScreenshotUploadAsync(reservation.Id, checksum, cancellationToken).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(committed.SourceFileChecksum))
             reservation.SourceFileChecksum = committed.SourceFileChecksum;
@@ -743,7 +745,7 @@ public sealed partial class AppStoreConnectClient : IDisposable
     }
 
     private async Task ExecuteUploadOperationAsync(
-        byte[] fileBytes,
+        AppStoreConnectScreenshotUploadSnapshot captured,
         AppStoreConnectUploadOperation operation,
         CancellationToken cancellationToken)
     {
@@ -751,19 +753,11 @@ public sealed partial class AppStoreConnectClient : IDisposable
             throw new InvalidOperationException("Upload operation URL is missing.");
         if (operation.Length < 0)
             throw new InvalidOperationException("Upload operation length cannot be negative.");
-        if (operation.Length > int.MaxValue)
-            throw new InvalidOperationException("Upload operation is too large for the current uploader.");
-        if (operation.Offset < 0 || operation.Offset > int.MaxValue)
+        if (operation.Offset < 0)
             throw new InvalidOperationException("Upload operation offset is outside the captured screenshot bytes.");
 
-        var bytes = new byte[(int)operation.Length];
-        var offset = (int)operation.Offset;
-        if (offset > fileBytes.Length - bytes.Length)
-            throw new EndOfStreamException("Captured screenshot bytes ended before the upload operation range.");
-        Buffer.BlockCopy(fileBytes, offset, bytes, 0, bytes.Length);
-
         using var request = new HttpRequestMessage(new HttpMethod(string.IsNullOrWhiteSpace(operation.Method) ? "PUT" : operation.Method), operation.Url);
-        request.Content = new ByteArrayContent(bytes);
+        request.Content = captured.CreateRangeContent(operation.Offset, operation.Length);
         foreach (var header in operation.RequestHeaders)
         {
             if (string.Equals(header.Key, "Content-Length", StringComparison.OrdinalIgnoreCase))
@@ -1064,20 +1058,6 @@ public sealed partial class AppStoreConnectClient : IDisposable
         if (limit < 1) return 1;
         if (limit > 200) return 200;
         return limit;
-    }
-
-    private static string ComputeMd5Checksum(byte[] bytes)
-    {
-        using var md5 = MD5.Create();
-        var hash = md5.ComputeHash(bytes);
-        return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
-    }
-
-    private static string ComputeSha256Checksum(byte[] bytes)
-    {
-        using var sha256 = SHA256.Create();
-        var hash = sha256.ComputeHash(bytes);
-        return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
     }
 
     private sealed class BuildPreReleaseVersion

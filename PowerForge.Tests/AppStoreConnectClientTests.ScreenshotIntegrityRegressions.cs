@@ -1,0 +1,205 @@
+using System.Net;
+using System.Security.Cryptography;
+
+namespace PowerForge.Tests;
+
+public sealed partial class AppStoreConnectClientTests
+{
+    [Fact]
+    public async Task ReleasePreparationService_RejectsScreenshotInventoryDriftBeforeFirstMutation()
+    {
+        var approvedInventorySha256 = AppStoreConnectScreenshotInventory.ComputeSha256(
+        [
+            new AppStoreConnectReleaseScreenshotSetReadiness
+            {
+                ScreenshotDisplayType = "APP_IPHONE_65",
+                ScreenshotSetId = "set-1",
+                Count = 1,
+                Screenshots =
+                [
+                    new AppStoreConnectReleaseScreenshotAssetReadiness
+                    {
+                        Id = "shot-before",
+                        FileName = "01-home.png",
+                        FileSize = 3,
+                        SourceFileChecksum = "approved-checksum",
+                        AssetDeliveryState = "COMPLETE"
+                    }
+                ]
+            }
+        ]);
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """{ "data": [{ "id": "build-5", "type": "builds", "attributes": { "version": "5", "processingState": "VALID", "expired": false }, "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } } }], "included": [{ "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.0", "platform": "IOS" } }] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": null }"""),
+            new SequenceResponse(HttpStatusCode.OK,
+                """{ "data": [{ "id": "loc-1", "type": "appStoreVersionLocalizations", "attributes": { "locale": "en-US" } }] }"""),
+            new SequenceResponse(HttpStatusCode.OK,
+                """{ "data": [{ "id": "set-1", "type": "appScreenshotSets", "attributes": { "screenshotDisplayType": "APP_IPHONE_65" } }] }"""),
+            new SequenceResponse(HttpStatusCode.OK,
+                """{ "data": [{ "id": "shot-after", "type": "appScreenshots", "attributes": { "fileName": "01-home.png", "fileSize": 3, "sourceFileChecksum": "changed-checksum", "assetDeliveryState": { "state": "COMPLETE" } } }] }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new AppStoreConnectReleasePreparationService(client).PrepareAsync(new AppStoreConnectReleasePreparationRequest
+            {
+                AppId = "app-1",
+                VersionString = "1.0.0",
+                BuildNumber = "5",
+                Platform = ApplePlatform.iOS,
+                CreateVersion = false,
+                SelectBuild = true,
+                ReplaceScreenshots = true,
+                ExpectedScreenshotInventorySha256 = approvedInventorySha256,
+                ScreenshotSpec = new AppStoreConnectScreenshotSyncSpec
+                {
+                    AppId = "app-1",
+                    VersionString = "1.0.0",
+                    VersionId = "version-1",
+                    Platform = ApplePlatform.iOS,
+                    Locale = "en-US",
+                    ScreenshotSets =
+                    [
+                        new AppStoreConnectScreenshotSetSyncSpec
+                        {
+                            ScreenshotDisplayType = "APP_IPHONE_65",
+                            Path = "not-read-before-inventory-compare"
+                        }
+                    ]
+                }
+            }));
+
+        Assert.Contains("before any remote release mutation", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(5, handler.RequestUris.Count);
+        Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+    }
+
+    [Fact]
+    public async Task ScreenshotSyncService_PreservesSubdirectoryFiltersInApprovedInventory()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root.FullName, "screenshots"));
+            var nested = Directory.CreateDirectory(Path.Combine(folder.FullName, "iPhone"));
+            var screenshotPath = Path.Combine(nested.FullName, "01-home.png");
+            await File.WriteAllBytesAsync(screenshotPath, new byte[] { 1, 2, 3 });
+            var handler = new SequenceHandler(
+                new SequenceResponse(HttpStatusCode.OK, """{ "data": [{ "id": "version-1", "type": "appStoreVersions", "attributes": { "versionString": "1.0.0", "platform": "IOS" } }] }"""),
+                new SequenceResponse(HttpStatusCode.OK, """{ "data": [{ "id": "loc-1", "type": "appStoreVersionLocalizations", "attributes": { "locale": "en-US" } }] }"""),
+                new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+                new SequenceResponse(HttpStatusCode.Created, """{ "data": { "id": "set-1", "type": "appScreenshotSets", "attributes": { "screenshotDisplayType": "APP_IPHONE_65" } } }"""),
+                ScreenshotReservation("shot-1", "01-home.png", 3),
+                ScreenshotCommit("shot-1", "01-home.png", "5289df737df57326fcdd22597afb1fac"));
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+            using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+            var result = await new AppStoreConnectScreenshotSyncService(client).SyncAsync(new AppStoreConnectScreenshotSyncRequest
+            {
+                BaseDirectory = root.FullName,
+                ExpectedFileSha256 = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [screenshotPath] = ComputeScreenshotSha256(screenshotPath)
+                },
+                Spec = new AppStoreConnectScreenshotSyncSpec
+                {
+                    AppId = "app-1",
+                    VersionString = "1.0.0",
+                    Platform = ApplePlatform.iOS,
+                    Locale = "en-US",
+                    ScreenshotSets =
+                    [
+                        new AppStoreConnectScreenshotSetSyncSpec
+                        {
+                            ScreenshotDisplayType = "APP_IPHONE_65",
+                            Path = "screenshots",
+                            Filter = "iPhone/*.png"
+                        }
+                    ]
+                }
+            });
+
+            Assert.Equal(screenshotPath, Assert.Single(Assert.Single(result.ScreenshotSets).Uploaded).FilePath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ScreenshotUploadSnapshot_UsesPrivateFileBackedRanges()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var screenshotPath = Path.Combine(root.FullName, "large.png");
+            var bytes = Enumerable.Range(0, 1024 * 1024).Select(static value => (byte)(value % 251)).ToArray();
+            await File.WriteAllBytesAsync(screenshotPath, bytes);
+            using var snapshot = AppStoreConnectScreenshotUploadSnapshot.Capture(
+                screenshotPath,
+                ComputeScreenshotSha256(screenshotPath));
+            File.WriteAllBytes(screenshotPath, new byte[] { 9, 9, 9 });
+            using var content = snapshot.CreateRangeContent(700_000, 7);
+
+            var range = await content.ReadAsByteArrayAsync();
+
+            Assert.Equal(bytes.Skip(700_000).Take(7), range);
+            Assert.NotEqual(Path.GetFullPath(screenshotPath), snapshot.FilePath);
+            Assert.Equal(bytes.LongLength, snapshot.Length);
+            Assert.Equal(7, content.Headers.ContentLength);
+            if (!OperatingSystem.IsWindows())
+            {
+                Assert.Equal(
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute,
+                    File.GetUnixFileMode(snapshot.RootPath));
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task UploadScreenshotAsync_RejectsPrivateSnapshotMutationDuringReservation()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var screenshotPath = Path.Combine(root.FullName, "01-home.png");
+            await File.WriteAllBytesAsync(screenshotPath, new byte[] { 1, 2, 3 });
+            var handler = new SequenceHandler(ScreenshotReservation("shot-1", "01-home.png", 3));
+            handler.OnRequest = count =>
+            {
+                if (count != 1)
+                    return;
+                var snapshotBase = Path.Combine(Path.GetTempPath(), "PowerForge", "appstore-screenshot-upload");
+                var snapshot = Directory.EnumerateFiles(snapshotBase, "screenshot-bytes", SearchOption.AllDirectories)
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .First();
+                File.WriteAllBytes(snapshot, new byte[] { 9, 9, 9 });
+            };
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+            using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                client.UploadScreenshotAsync("set-1", screenshotPath));
+
+            Assert.Contains("private screenshot upload snapshot changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Single(handler.RequestUris);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    private static string ComputeScreenshotSha256(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        using var sha256 = SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+    }
+}

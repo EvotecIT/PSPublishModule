@@ -19,6 +19,63 @@ public sealed class AppStoreConnectScreenshotSyncService
     }
 
     /// <summary>
+    /// Re-reads and compares the exact ordered remote screenshot inventory without performing any remote mutation.
+    /// </summary>
+    internal async Task ValidateExpectedRemoteInventoryAsync(
+        AppStoreConnectScreenshotSyncSpec spec,
+        string expectedInventorySha256,
+        CancellationToken cancellationToken = default)
+    {
+        if (spec is null)
+            throw new ArgumentNullException(nameof(spec));
+        if (string.IsNullOrWhiteSpace(expectedInventorySha256))
+            throw new ArgumentException("Expected screenshot inventory SHA-256 is required.", nameof(expectedInventorySha256));
+
+        var version = !string.IsNullOrWhiteSpace(spec.VersionId)
+            ? new AppStoreConnectVersionInfo
+            {
+                Id = spec.VersionId!.Trim(),
+                VersionString = spec.VersionString,
+                Platform = spec.Platform.ToString()
+            }
+            : (await _client.GetVersionsAsync(
+                spec.AppId,
+                spec.VersionString,
+                spec.Platform,
+                limit: 10,
+                cancellationToken).ConfigureAwait(false)).FirstOrDefault()
+                ?? throw new InvalidOperationException($"App Store version '{spec.VersionString}' was not found before screenshot inventory validation.");
+        var localization = (await _client.GetVersionLocalizationsAsync(
+            version.Id,
+            spec.Locale,
+            limit: 10,
+            cancellationToken).ConfigureAwait(false)).FirstOrDefault()
+            ?? throw new InvalidOperationException($"Localization '{spec.Locale}' was not found before screenshot inventory validation.");
+        var existingSets = await _client.GetScreenshotSetsAsync(
+            localization.Id,
+            limit: 200,
+            cancellationToken).ConfigureAwait(false);
+        var remoteInventory = new List<AppStoreConnectReleaseScreenshotSetReadiness>();
+        foreach (var sourceSet in spec.ScreenshotSets)
+        {
+            var displayType = sourceSet.ScreenshotDisplayType.Trim();
+            var set = existingSets.FirstOrDefault(candidate =>
+                string.Equals(candidate.ScreenshotDisplayType, displayType, StringComparison.OrdinalIgnoreCase));
+            var screenshots = set is null
+                ? Array.Empty<AppStoreConnectScreenshotInfo>()
+                : await _client.GetScreenshotsAsync(set.Id, limit: 200, cancellationToken).ConfigureAwait(false);
+            remoteInventory.Add(CreateRemoteInventorySet(displayType, set?.Id, screenshots));
+        }
+
+        var actualInventorySha256 = AppStoreConnectScreenshotInventory.ComputeSha256(remoteInventory);
+        if (!actualInventorySha256.Equals(expectedInventorySha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "App Store Connect screenshots changed after Apple plan approval. Review a new exact screenshot replacement plan before any remote release mutation.");
+        }
+    }
+
+    /// <summary>
     /// Syncs screenshots from local folders to App Store Connect.
     /// </summary>
     /// <param name="request">Sync request.</param>
@@ -119,22 +176,10 @@ public sealed class AppStoreConnectScreenshotSyncService
 
         if (request.ReplaceExisting && !string.IsNullOrWhiteSpace(request.ExpectedRemoteInventorySha256))
         {
-            var remoteInventory = plannedSets.Select(static plannedSet =>
-                new AppStoreConnectReleaseScreenshotSetReadiness
-                {
-                    ScreenshotDisplayType = plannedSet.Preflighted.ScreenshotDisplayType,
-                    ScreenshotSetId = plannedSet.ScreenshotSet?.Id,
-                    Count = plannedSet.ExistingScreenshots.Length,
-                    Screenshots = plannedSet.ExistingScreenshots.Select(static screenshot =>
-                        new AppStoreConnectReleaseScreenshotAssetReadiness
-                        {
-                            Id = screenshot.Id,
-                            FileName = screenshot.FileName,
-                            FileSize = screenshot.FileSize,
-                            SourceFileChecksum = screenshot.SourceFileChecksum,
-                            AssetDeliveryState = screenshot.AssetDeliveryState
-                        }).ToArray()
-                });
+            var remoteInventory = plannedSets.Select(static plannedSet => CreateRemoteInventorySet(
+                plannedSet.Preflighted.ScreenshotDisplayType,
+                plannedSet.ScreenshotSet?.Id,
+                plannedSet.ExistingScreenshots));
             var actualInventorySha256 = AppStoreConnectScreenshotInventory.ComputeSha256(remoteInventory);
             if (!actualInventorySha256.Equals(request.ExpectedRemoteInventorySha256, StringComparison.OrdinalIgnoreCase))
             {
@@ -227,6 +272,26 @@ public sealed class AppStoreConnectScreenshotSyncService
             ScreenshotSets = results.ToArray()
         };
     }
+
+    private static AppStoreConnectReleaseScreenshotSetReadiness CreateRemoteInventorySet(
+        string displayType,
+        string? screenshotSetId,
+        AppStoreConnectScreenshotInfo[] screenshots)
+        => new()
+        {
+            ScreenshotDisplayType = displayType,
+            ScreenshotSetId = screenshotSetId,
+            Count = screenshots.Length,
+            Screenshots = screenshots.Select(static screenshot =>
+                new AppStoreConnectReleaseScreenshotAssetReadiness
+                {
+                    Id = screenshot.Id,
+                    FileName = screenshot.FileName,
+                    FileSize = screenshot.FileSize,
+                    SourceFileChecksum = screenshot.SourceFileChecksum,
+                    AssetDeliveryState = screenshot.AssetDeliveryState
+                }).ToArray()
+        };
 
     private static string ComputeSourceChecksum(string filePath)
     {
@@ -331,27 +396,43 @@ public sealed class AppStoreConnectScreenshotSyncService
         foreach (var set in sourceSets)
         {
             var approved = expected
-                .Where(item => pathComparer.Equals(
-                    Path.GetDirectoryName(Path.GetFullPath(item.Key)),
-                    set.Folder))
-                .Where(item => MatchesScreenshotFilter(Path.GetFileName(item.Key), set.Filter))
-                .OrderBy(static item => item.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(item => new
+                {
+                    Item = item,
+                    RelativePath = GetRelativeScreenshotPath(set.Folder, item.Key)
+                })
+                .Where(static item => item.RelativePath is not null)
+                .Where(item => MatchesScreenshotFilter(item.RelativePath!, set.Filter))
+                .OrderBy(static item => item.Item.Key, StringComparer.OrdinalIgnoreCase)
                 .Take(set.MaxCount);
             foreach (var item in approved)
-                selected[Path.GetFullPath(item.Key)] = item.Value;
+                selected[Path.GetFullPath(item.Item.Key)] = item.Item.Value;
         }
         return selected;
     }
 
-    private static bool MatchesScreenshotFilter(string fileName, string filter)
+    private static string? GetRelativeScreenshotPath(string folder, string screenshotPath)
     {
-        var expression = "^" + System.Text.RegularExpressions.Regex.Escape(filter)
-            .Replace("\\*", ".*")
-            .Replace("\\?", ".") + "$";
+        var relative = FrameworkCompatibility.GetRelativePath(folder, Path.GetFullPath(screenshotPath));
+        if (Path.IsPathRooted(relative) ||
+            relative.Equals("..", StringComparison.Ordinal) ||
+            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+        {
+            return null;
+        }
+        return relative.Replace('\\', '/');
+    }
+
+    private static bool MatchesScreenshotFilter(string relativePath, string filter)
+    {
+        var normalizedFilter = filter.Replace('\\', '/');
+        var expression = "^" + System.Text.RegularExpressions.Regex.Escape(normalizedFilter)
+            .Replace("\\*", "[^/]*")
+            .Replace("\\?", "[^/]") + "$";
         var options = System.Text.RegularExpressions.RegexOptions.CultureInvariant;
         if (Path.DirectorySeparatorChar == '\\')
             options |= System.Text.RegularExpressions.RegexOptions.IgnoreCase;
-        return System.Text.RegularExpressions.Regex.IsMatch(fileName, expression, options);
+        return System.Text.RegularExpressions.Regex.IsMatch(relativePath, expression, options);
     }
 
     private static string ComputeSha256(string filePath)
