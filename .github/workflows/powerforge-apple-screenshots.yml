@@ -108,7 +108,7 @@ jobs:
           if ($env:MARKETING_VERSION -notmatch '^\d+\.\d+(?:\.\d+)?$') { throw 'marketing_version must use x.y or x.y.z.' }
 
       - name: Checkout exact screenshot source
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           ref: ${{ inputs.source_ref }}
           fetch-depth: 1
@@ -217,7 +217,7 @@ jobs:
             Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-screenshot-provenance.json') -Encoding utf8
 
       - name: Retain compact capture provenance
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: powerforge-apple-screenshot-provenance-${{ inputs.source_ref }}
           path: ${{ runner.temp }}/powerforge-apple-screenshot-provenance.json
@@ -225,7 +225,7 @@ jobs:
           retention-days: 30
 
       - name: Retain captures for protected review
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: powerforge-apple-screenshots-${{ inputs.source_ref }}
           path: source/${{ inputs.capture_artifact_path }}/**/*.png
@@ -244,7 +244,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout exact approved source
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           ref: ${{ inputs.source_ref }}
           fetch-depth: 1
@@ -252,7 +252,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout pinned PowerForge screenshot workflow
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           repository: EvotecIT/PSPublishModule
           ref: ${{ inputs.powerforge_ref }}
@@ -287,13 +287,13 @@ jobs:
           "review_path=$reviewPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Restore reviewed captures outside source
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: powerforge-apple-screenshots-${{ inputs.source_ref }}
           path: ${{ steps.capture-path.outputs.review_path }}
 
       - name: Restore exact capture provenance outside source
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: powerforge-apple-screenshot-provenance-${{ inputs.source_ref }}
           path: ${{ runner.temp }}/powerforge-apple-screenshot-provenance
@@ -431,7 +431,7 @@ jobs:
 
       - name: Retain approved captures and manifests
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: powerforge-apple-screenshots-approved-${{ inputs.source_ref }}
           path: |
