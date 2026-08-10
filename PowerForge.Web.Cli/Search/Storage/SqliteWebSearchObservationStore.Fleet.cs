@@ -175,7 +175,18 @@ internal sealed partial class SqliteWebSearchObservationStore
                 }
                 else
                 {
-                    foreach (var scope in observationsByRun[identity].GroupBy(value => value.Scope, StringComparer.Ordinal))
+                    var scopes = observationsByRun[identity]
+                        .GroupBy(value => value.Scope, StringComparer.Ordinal)
+                        .ToArray();
+                    if (scopes.Length == 0)
+                    {
+                        var ranges = run.Status == "complete" && string.Equals(run.CoverageMode, "daily", StringComparison.Ordinal)
+                            ? [new WebSearchFleetCompletedRange { FromDate = run.FromDate.Value, ThroughDate = run.ThroughDate.Value }]
+                            : MergeDates(explicitDates);
+                        result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
+                            "web", ranges, run.ConfigurationHash, run.FailureCategory));
+                    }
+                    foreach (var scope in scopes)
                     {
                         result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
                             scope.Key, MergeDates(scope.Select(value => value.Date)), run.ConfigurationHash, run.FailureCategory));

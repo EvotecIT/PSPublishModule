@@ -358,6 +358,46 @@ public sealed class WebSearchFleetOperationsTests
     }
 
     [Fact]
+    public async Task VersionTwoZeroDataCoverageWithoutSearchTypeRetainsTheDefaultScope()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var date = new DateOnly(2026, 8, 7);
+            var batch = new WebSearchObservationBatch
+            {
+                SchemaVersion = 2,
+                RunId = "v2-zero-default-scope",
+                Provider = "gsc",
+                SiteId = "officeimo",
+                CollectedAtUtc = AsOf.AddMinutes(-1),
+                SourceKind = "fixture",
+                Status = "complete",
+                ZeroDataConfirmed = true,
+                CollectionCoverage = new WebSearchObservationCollectionCoverage
+                {
+                    FromDate = date,
+                    ThroughDate = date,
+                    CompletedDates = [date]
+                },
+                Observations = Array.Empty<WebSearchObservation>()
+            };
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            await store.ImportAsync(WebSearchObservationNormalizer.Normalize(batch));
+
+            var snapshot = await store.ReadFleetSnapshotAsync();
+
+            var stream = Assert.Single(snapshot.Streams);
+            Assert.Equal("web", stream.ScopeKey);
+            Assert.Equal(date, stream.LatestCompleteDate);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void DoctorRetainsConfigurationIdentityWhenOnlyAnotherProvidersCredentialIsUnavailable()
     {
         var configuration = CreateConfiguration();
