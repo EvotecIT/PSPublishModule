@@ -50,6 +50,21 @@ public sealed class WebGoogleSearchConsoleCollectorTests
         Assert.Equal("siteUnverifiedUser", result.PermissionLevel);
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{\"siteEntry\":[null,{\"siteUrl\":\"sc-domain:officeimo.com\",\"permissionLevel\":\"siteOwner\"}]}")]
+    public async Task Probe_RejectsNullPropertyPayloads(string json)
+    {
+        var handler = new ScriptedHandler((_, _) => JsonResponse(HttpStatusCode.OK, json));
+        using var httpClient = new HttpClient(handler);
+        var collector = new GoogleSearchConsoleCollector(httpClient, new FakeTokenProvider());
+
+        var result = await collector.ProbeAsync("sc-domain:officeimo.com");
+
+        Assert.False(result.Success);
+        Assert.Equal("provider-response-invalid", result.ErrorCode);
+    }
+
     [Fact]
     public async Task Collect_PagesDailyAnalyticsAndMapsProviderNeutralObservations()
     {
@@ -214,6 +229,30 @@ public sealed class WebGoogleSearchConsoleCollectorTests
         Assert.Equal("complete", normalized.Status);
         Assert.Equal(new DateOnly(2026, 8, 1), normalized.CollectionCoverage!.FromDate);
         Assert.Equal([new DateOnly(2026, 8, 1)], normalized.CollectionCoverage.CompletedDates);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{\"rows\":null}")]
+    public async Task Collect_DoesNotTreatNullAnalyticsPayloadsAsConfirmedZero(string json)
+    {
+        var handler = new ScriptedHandler((request, index) => index switch
+        {
+            0 => SitesResponse("sc-domain:officeimo.com"),
+            1 => QueryResponse(),
+            2 => JsonResponse(HttpStatusCode.OK, json),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var httpClient = new HttpClient(handler);
+        var collector = new GoogleSearchConsoleCollector(httpClient, new FakeTokenProvider());
+
+        var result = await collector.CollectAsync(CreateOptions());
+
+        Assert.False(result.Success);
+        Assert.Equal("provider-response-invalid", result.ErrorCode);
+        Assert.False(result.Batch.ZeroDataConfirmed);
+        Assert.Equal("partial", result.Batch.Status);
+        WebSearchObservationNormalizer.Normalize(result.Batch);
     }
 
     [Fact]

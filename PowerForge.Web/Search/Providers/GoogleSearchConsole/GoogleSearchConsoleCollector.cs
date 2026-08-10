@@ -65,7 +65,9 @@ public sealed class GoogleSearchConsoleCollector
             var payload = await response.Content
                 .ReadFromJsonAsync<GoogleSearchConsoleSitesResponse>(JsonOptions, cancellationToken)
                 .ConfigureAwait(false);
-            var matchingSite = (payload?.SiteEntries ?? Array.Empty<GoogleSearchConsoleSiteEntry>())
+            if (payload is null || payload.SiteEntries is null || payload.SiteEntries.Any(static entry => entry is null))
+                throw new InvalidOperationException("Google Search Console returned invalid property entries.");
+            var matchingSite = payload.SiteEntries
                 .FirstOrDefault(entry => PropertiesEqual(entry.SiteUrl, normalizedProperty));
             if (matchingSite is null)
             {
@@ -164,7 +166,9 @@ public sealed class GoogleSearchConsoleCollector
             var payload = await response.Content
                 .ReadFromJsonAsync<GoogleSearchConsoleQueryResponse>(JsonOptions, cancellationToken)
                 .ConfigureAwait(false);
-            firstIncompleteDate = ParseFirstIncompleteDate(payload?.Metadata?.FirstIncompleteDate, options);
+            if (payload is null)
+                throw new InvalidOperationException("Google Search Console returned an empty final-data payload.");
+            firstIncompleteDate = ParseFirstIncompleteDate(payload.Metadata?.FirstIncompleteDate, options);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -242,7 +246,9 @@ public sealed class GoogleSearchConsoleCollector
                     var payload = await response.Content
                         .ReadFromJsonAsync<GoogleSearchConsoleQueryResponse>(JsonOptions, cancellationToken)
                         .ConfigureAwait(false);
-                    var rows = payload?.Rows ?? Array.Empty<GoogleSearchConsoleQueryRow>();
+                    if (payload is null || payload.Rows is null)
+                        throw new InvalidOperationException("Google Search Console returned a null analytics payload.");
+                    var rows = payload.Rows;
                     if (rows.Length == 0)
                         break;
 
