@@ -211,6 +211,8 @@ public sealed class WebPerformanceObservationRunEvidence
     public string FormFactor { get; set; } = string.Empty;
     /// <summary>Producing tool or API version.</summary>
     public string? ToolVersion { get; set; }
+    /// <summary>Optional durable reference to separately retained raw evidence.</summary>
+    public string? EvidenceReference { get; set; }
     /// <summary>Whether this complete field run explicitly found no record.</summary>
     public bool ZeroDataConfirmed { get; set; }
 }

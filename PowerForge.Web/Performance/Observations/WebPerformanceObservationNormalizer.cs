@@ -90,15 +90,27 @@ public static class WebPerformanceObservationNormalizer
         return normalized;
     }
 
-    /// <summary>Returns whether a target URL belongs to the configured fleet site host.</summary>
+    /// <summary>Returns whether a target URL belongs to the configured fleet site URL boundary.</summary>
     public static bool TargetBelongsToSite(string targetUrl, string siteBaseUrl)
     {
         var target = new Uri(CanonicalizeTarget(targetUrl, "url"), UriKind.Absolute);
         var site = new Uri(CanonicalizeTarget(siteBaseUrl, "url"), UriKind.Absolute);
         var targetHost = target.IdnHost.TrimEnd('.');
         var siteHost = site.IdnHost.TrimEnd('.');
-        return targetHost.Equals(siteHost, StringComparison.OrdinalIgnoreCase) ||
-               targetHost.EndsWith("." + siteHost, StringComparison.OrdinalIgnoreCase);
+        if (!target.Scheme.Equals(site.Scheme, StringComparison.OrdinalIgnoreCase) ||
+            target.Port != site.Port ||
+            !(targetHost.Equals(siteHost, StringComparison.OrdinalIgnoreCase) ||
+              targetHost.EndsWith("." + siteHost, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        var sitePath = site.AbsolutePath;
+        if (!sitePath.EndsWith('/'))
+            sitePath += "/";
+        var exactSitePath = sitePath.Length == 1 ? "/" : sitePath.TrimEnd('/');
+        return target.AbsolutePath.Equals(exactSitePath, StringComparison.Ordinal) ||
+               target.AbsolutePath.StartsWith(sitePath, StringComparison.Ordinal);
     }
 
     private static WebPerformanceObservation NormalizeObservation(

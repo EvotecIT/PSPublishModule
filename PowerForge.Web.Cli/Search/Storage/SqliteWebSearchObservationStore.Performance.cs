@@ -135,7 +135,8 @@ internal sealed partial class SqliteWebSearchObservationStore
                 CollectedAtUtc = batch.CollectedAtUtc, Status = batch.Status,
                 MeasurementKind = batch.MeasurementKind, TargetKind = batch.TargetKind,
                 TargetUrl = batch.TargetUrl, FormFactor = batch.FormFactor,
-                ToolVersion = batch.ToolVersion, ZeroDataConfirmed = batch.ZeroDataConfirmed
+                ToolVersion = batch.ToolVersion, EvidenceReference = batch.EvidenceReference,
+                ZeroDataConfirmed = batch.ZeroDataConfirmed
             },
             Observations = batch.Observations
         }).ToArray();

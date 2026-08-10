@@ -219,7 +219,7 @@ public sealed class CruxCollector
         RequestCount = requests,
         ErrorCode = code,
         ErrorMessage = message,
-        Batch = batch
+        Batch = WebPerformanceObservationNormalizer.Normalize(batch)
     };
 
     private static void ValidateOptions(CruxCollectionOptions options)

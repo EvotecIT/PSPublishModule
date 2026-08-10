@@ -188,6 +188,26 @@ public sealed class WebPerformanceObservationTests
     }
 
     [Fact]
+    public async Task CruxCollector_NormalizesStructuredFailureEvidence()
+    {
+        var handler = new ScriptedHandler(_ => throw new HttpRequestException("provider unavailable"));
+        using var client = new HttpClient(handler);
+        var options = CruxOptions();
+        options.FormFactor = "PHONE";
+        options.TargetKind = "URL";
+        options.TargetUrl = "HTTPS://OFFICEIMO.COM:443/docs/";
+
+        var result = await new CruxCollector(client, new FakeApiKeyProvider(), new FixedTimeProvider(CollectionTime))
+            .CollectAsync(options);
+
+        Assert.False(result.Success);
+        Assert.Equal("phone", result.Batch.FormFactor);
+        Assert.Equal("url", result.Batch.TargetKind);
+        Assert.Equal("https://officeimo.com/docs/", result.Batch.TargetUrl);
+        Assert.NotNull(result.Batch.RunId);
+    }
+
+    [Fact]
     public async Task PerformanceStorage_MigratesSchemaFourAndSelectsCompleteBeforeRecency()
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-performance-tests", Guid.NewGuid().ToString("N"));
@@ -203,6 +223,8 @@ public sealed class WebPerformanceObservationTests
             }
 
             var complete = WebPerformanceObservationNormalizer.Normalize(CreateFieldBatch());
+            complete.EvidenceReference = "evidence://crux/officeimo/2026-08-10";
+            complete = WebPerformanceObservationNormalizer.Normalize(complete);
             var first = await store.ImportPerformanceAsync(complete);
             var duplicate = await store.ImportPerformanceAsync(complete);
             var partial = CreateFieldBatch();
@@ -220,6 +242,7 @@ public sealed class WebPerformanceObservationTests
             var evidenceSet = Assert.Single(evidence.EvidenceSets);
             Assert.Equal(2300, Assert.Single(evidenceSet.Observations).Value);
             Assert.Equal(complete.RunId, evidenceSet.Run.RunId);
+            Assert.Equal(complete.EvidenceReference, evidenceSet.Run.EvidenceReference);
         }
         finally
         {
@@ -341,6 +364,14 @@ public sealed class WebPerformanceObservationTests
             "https://example.com/", "https://docs.example.com/"));
         Assert.True(WebPerformanceObservationNormalizer.TargetBelongsToSite(
             "https://api.docs.example.com/", "https://docs.example.com/"));
+        Assert.False(WebPerformanceObservationNormalizer.TargetBelongsToSite(
+            "http://docs.example.com/product/", "https://docs.example.com/product/"));
+        Assert.False(WebPerformanceObservationNormalizer.TargetBelongsToSite(
+            "https://docs.example.com:8443/product/", "https://docs.example.com/product/"));
+        Assert.False(WebPerformanceObservationNormalizer.TargetBelongsToSite(
+            "https://docs.example.com/other/", "https://docs.example.com/product/"));
+        Assert.True(WebPerformanceObservationNormalizer.TargetBelongsToSite(
+            "https://docs.example.com/product/page/", "https://docs.example.com/product/"));
     }
 
     [Fact]
