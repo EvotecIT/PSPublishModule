@@ -41,9 +41,7 @@ public static class LighthouseReportImporter
         var finalUrl = RequiredString(root, "finalUrl");
         if (!WebPerformanceObservationNormalizer.TargetBelongsToSite(finalUrl, options.SiteBaseUrl))
             throw new ArgumentException("Lighthouse finalUrl does not belong to the configured fleet site.", nameof(json));
-        var fetchTimeValue = RequiredString(root, "fetchTime");
-        if (!HasExplicitOffset(fetchTimeValue) || !DateTimeOffset.TryParse(fetchTimeValue, null, System.Globalization.DateTimeStyles.RoundtripKind, out var fetchTime))
-            throw new ArgumentException("Lighthouse fetchTime must be ISO-8601 with an explicit UTC offset.", nameof(json));
+        var fetchTime = RequiredOffsetTimestamp(root, "fetchTime");
         var version = RequiredString(root, "lighthouseVersion");
         var formFactor = root.TryGetProperty("configSettings", out var settings) &&
                          settings.TryGetProperty("formFactor", out var formFactorElement) &&
@@ -122,6 +120,19 @@ public static class LighthouseReportImporter
             !value.TryGetDouble(out var number) || !double.IsFinite(number))
             throw new ArgumentException($"Lighthouse report requires finite numeric '{name}'.", nameof(parent));
         return number;
+    }
+
+    private static DateTimeOffset RequiredOffsetTimestamp(JsonElement parent, string name)
+    {
+        if (!parent.TryGetProperty(name, out var value) ||
+            value.ValueKind != JsonValueKind.String ||
+            value.GetString() is not { } text ||
+            !HasExplicitOffset(text) ||
+            !value.TryGetDateTimeOffset(out var timestamp))
+        {
+            throw new ArgumentException("Lighthouse fetchTime must be ISO-8601 with an explicit UTC offset.", nameof(parent));
+        }
+        return timestamp;
     }
 
     private static bool HasExplicitOffset(string value) =>

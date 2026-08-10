@@ -145,6 +145,13 @@ public static class WebPerformanceObservationNormalizer
                 throw new ArgumentException("CrUX field metrics require the provider's 28-day aggregation period.", nameof(value));
             if (histogram.Length == 0)
                 throw new ArgumentException("Field metrics require provider histogram evidence.", nameof(value));
+            for (var binIndex = 1; binIndex < histogram.Length; binIndex++)
+            {
+                var previousEnd = histogram[binIndex - 1].End;
+                var currentStart = histogram[binIndex].Start;
+                if (previousEnd is null || currentStart is null || currentStart.Value < previousEnd.Value)
+                    throw new ArgumentException($"Metric '{metric}' histogram ranges must be ordered and non-overlapping.", nameof(value));
+            }
             var density = histogram.Sum(bin => bin.Density);
             if (density < 0.999d || density > 1.001d)
                 throw new ArgumentException($"Metric '{metric}' histogram densities must sum to one.", nameof(value));

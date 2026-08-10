@@ -57,6 +57,10 @@ public sealed class WebPerformanceObservationTests
         var offsetless = LighthouseReport().Replace("2026-08-10T12:34:56Z", "2026-08-10T12:34:56", StringComparison.Ordinal);
         Assert.Contains("explicit UTC offset", Assert.Throws<ArgumentException>(() =>
             LighthouseReportImporter.Import(offsetless, LighthouseOptions())).Message, StringComparison.OrdinalIgnoreCase);
+
+        var cultureAmbiguous = LighthouseReport().Replace("2026-08-10T12:34:56Z", "08/10/2026 12:34:56+00:00", StringComparison.Ordinal);
+        Assert.Contains("ISO-8601", Assert.Throws<ArgumentException>(() =>
+            LighthouseReportImporter.Import(cultureAmbiguous, LighthouseOptions())).Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -90,6 +94,21 @@ public sealed class WebPerformanceObservationTests
         var exception = Assert.Throws<ArgumentException>(() => WebPerformanceObservationNormalizer.Normalize(batch));
 
         Assert.Contains("28-day", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Normalizer_RejectsOverlappingFieldHistogramRanges()
+    {
+        var batch = CreateFieldBatch();
+        batch.Observations[0].Histogram =
+        [
+            new WebPerformanceHistogramBin { Start = 0, End = 4000, Density = 0.5 },
+            new WebPerformanceHistogramBin { Start = 2500, Density = 0.5 }
+        ];
+
+        var exception = Assert.Throws<ArgumentException>(() => WebPerformanceObservationNormalizer.Normalize(batch));
+
+        Assert.Contains("non-overlapping", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -223,6 +242,7 @@ public sealed class WebPerformanceObservationTests
             }
 
             var complete = WebPerformanceObservationNormalizer.Normalize(CreateFieldBatch());
+            complete.ConfigurationHash = "sha256:performance-configuration";
             complete.EvidenceReference = "evidence://crux/officeimo/2026-08-10";
             complete = WebPerformanceObservationNormalizer.Normalize(complete);
             var first = await store.ImportPerformanceAsync(complete);
@@ -242,6 +262,7 @@ public sealed class WebPerformanceObservationTests
             var evidenceSet = Assert.Single(evidence.EvidenceSets);
             Assert.Equal(2300, Assert.Single(evidenceSet.Observations).Value);
             Assert.Equal(complete.RunId, evidenceSet.Run.RunId);
+            Assert.Equal(complete.ConfigurationHash, evidenceSet.Run.ConfigurationHash);
             Assert.Equal(complete.EvidenceReference, evidenceSet.Run.EvidenceReference);
         }
         finally
