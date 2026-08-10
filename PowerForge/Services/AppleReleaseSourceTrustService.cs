@@ -27,6 +27,9 @@ internal sealed partial class AppleReleaseSourceTrustService
     private readonly HashSet<string> _remotePackagesUnderValidation = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _validatedRemotePackages = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _validatedSourceIncludeFiles = new(GetPathComparer());
+    private readonly HashSet<string> _validatedSourceSemanticInputs = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _inactiveRemoteSystemLibraryRoots = new(GetPathComparer());
+    private readonly Dictionary<string, HashSet<string>> _trackedSourceSuffixes = new(GetPathComparer());
 
     internal AppleReleaseSourceTrustService(
         HomeAssistantReleaseGitService? git = null,
@@ -504,7 +507,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         var worktreeBlob = capturedWorktreeBlob ?? ComputeRawGitBlobId(repositoryRoot, candidate);
         if (!headBlob.StdOut.Trim().Equals(worktreeBlob, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"{name} differs from the exact source commit: {relative}");
-        ValidateSourceLevelIncludes(repositoryRoot, candidate, validateSwiftDeterminism);
+        ValidateSourceLevelIncludes(repositoryRoot, candidate, validateSwiftDeterminism, worktreeBlob);
     }
 
     private string ComputeRawGitBlobId(string repositoryRoot, string filePath)

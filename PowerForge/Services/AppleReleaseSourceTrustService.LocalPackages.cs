@@ -165,6 +165,37 @@ internal sealed partial class AppleReleaseSourceTrustService
         return true;
     }
 
+    private static HashSet<string> ReadInactiveNonAppleSystemLibraryRoots(
+        string packageRoot,
+        string source,
+        string syntax)
+    {
+        var roots = new HashSet<string>(GetPathComparer());
+        if (!AllSystemLibrariesAreExcludedFromAppleTargets(source, syntax))
+            return roots;
+
+        foreach (Match reference in Regex.Matches(syntax, "\\.\\s*(?:systemLibrary|`systemLibrary`)\\s*\\(", RegexOptions.CultureInvariant))
+        {
+            var opening = reference.Index + reference.Length - 1;
+            var closing = FindMatchingSwiftDelimiter(syntax, opening, '(', ')');
+            var arguments = ParseTopLevelSwiftArguments(
+                source.Substring(opening + 1, closing - opening - 1),
+                syntax.Substring(opening + 1, closing - opening - 1));
+            if (!arguments.TryGetValue("name", out var nameArgument) ||
+                !TryReadLiteralSwiftString(nameArgument, out var name))
+                continue;
+
+            var relative = Path.Combine("Sources", name);
+            if (arguments.TryGetValue("path", out var pathArgument))
+            {
+                if (!TryReadLiteralSwiftString(pathArgument, out relative))
+                    continue;
+            }
+            roots.Add(Path.GetFullPath(Path.Combine(packageRoot, relative)));
+        }
+        return roots;
+    }
+
     private static void ValidateDeclarativeSwiftPackageManifest(string packageRoot, string manifestSyntax)
     {
         var compilerLiteral = Regex.Match(

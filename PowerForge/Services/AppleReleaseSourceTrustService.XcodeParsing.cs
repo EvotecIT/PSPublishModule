@@ -81,6 +81,8 @@ internal sealed partial class AppleReleaseSourceTrustService
                     EnsureTrackedFile(repositoryRoot, candidate, $"Xcode build setting {key}");
                     if (baseKey.Equals("INFOPLIST_FILE", StringComparison.OrdinalIgnoreCase))
                         ValidateInfoPlistBuildSettingReferences(candidate, source);
+                    else if (baseKey.Equals("CODE_SIGN_ENTITLEMENTS", StringComparison.OrdinalIgnoreCase))
+                        ValidateEntitlementsBuildSettingReferences(candidate, source);
                 }
                 else if (Directory.Exists(candidate))
                     EnsureTrackedDirectoryTree(repositoryRoot, candidate, $"Xcode build setting {key}");
@@ -168,6 +170,29 @@ internal sealed partial class AppleReleaseSourceTrustService
             contents,
             $"{source}; plist '{plistPath}'",
             plistReferences);
+    }
+
+    private static void ValidateEntitlementsBuildSettingReferences(string entitlementsPath, string source)
+    {
+        var approvedReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "AppIdentifierPrefix", "TeamIdentifierPrefix", "PRODUCT_BUNDLE_IDENTIFIER"
+        };
+        var bytes = File.ReadAllBytes(entitlementsPath);
+        if (bytes.Length >= 8 &&
+            bytes[0] == (byte)'b' && bytes[1] == (byte)'p' && bytes[2] == (byte)'l' && bytes[3] == (byte)'i' &&
+            bytes[4] == (byte)'s' && bytes[5] == (byte)'t' && bytes[6] == (byte)'0' && bytes[7] == (byte)'0')
+        {
+            throw new InvalidOperationException(
+                $"CODE_SIGN_ENTITLEMENTS '{entitlementsPath}' uses the binary property-list format, whose semantic string values cannot be inspected " +
+                $"for exact-source build-setting substitutions. Commit a text property list before creating an Apple checkpoint: {source}");
+        }
+
+        ValidateUnclassifiedBuildSettingReferences(
+            "CODE_SIGN_ENTITLEMENTS contents",
+            DecodeTrackedText(bytes),
+            $"{source}; entitlements '{entitlementsPath}'",
+            approvedReferences);
     }
 
     private static void ValidateSourceSelectionBuildSetting(string key, string value, string source)

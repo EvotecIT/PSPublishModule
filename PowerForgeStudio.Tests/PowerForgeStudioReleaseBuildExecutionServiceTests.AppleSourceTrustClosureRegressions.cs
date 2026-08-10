@@ -491,6 +491,8 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             ".apt([\"host-fallback-dev\"]), .brew([\"host-fallback\"]), .yum([\"host-fallback-devel\"])])])");
         var sources = scope.CreateDirectory(Path.Combine("RemoteSafePackage", "Sources", "Remote"));
         File.WriteAllText(Path.Combine(sources, "Remote.swift"), "public struct Remote {}");
+        var inactiveSystemLibrary = scope.CreateDirectory(Path.Combine("RemoteSafePackage", "Sources", "HostFallback"));
+        File.WriteAllText(Path.Combine(inactiveSystemLibrary, "module.modulemap"), "module HostFallback [system] { link \"host-fallback\" export * }");
         var remoteRevision = CommitRepository(remoteRoot);
 
         var repositoryRoot = scope.CreateDirectory("SafeRemotePackageConsumer");

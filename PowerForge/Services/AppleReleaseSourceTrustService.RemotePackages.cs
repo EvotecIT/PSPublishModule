@@ -187,16 +187,6 @@ internal sealed partial class AppleReleaseSourceTrustService
         if (!manifests.Any(path => Path.GetFileName(path).Equals("Package.swift", StringComparison.Ordinal)))
             throw new FileNotFoundException($"Remote Swift package manifest was not found at the approved revision: {packageRoot}");
 
-        foreach (var conventionalInput in new[]
-                 {
-                     Path.Combine(packageRoot, "Sources"),
-                     Path.Combine(packageRoot, "Plugins")
-                 })
-        {
-            if (Directory.Exists(conventionalInput))
-                EnsureTrackedDirectoryTree(checkoutRoot, conventionalInput, "remote Swift package source input");
-        }
-
         var locks = effectiveLockPaths.ToList();
         var localLock = Path.Combine(packageRoot, "Package.resolved");
         if (File.Exists(localLock))
@@ -205,6 +195,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             locks.Add(localLock);
         }
 
+        HashSet<string>? inactiveSystemLibraryRoots = null;
         foreach (var manifestPath in manifests)
         {
             EnsureTrackedFile(checkoutRoot, manifestPath, "remote Swift package manifest");
@@ -216,6 +207,11 @@ internal sealed partial class AppleReleaseSourceTrustService
                 source,
                 syntax,
                 allowInactiveNonAppleSystemLibraries: true);
+            var manifestInactiveRoots = ReadInactiveNonAppleSystemLibraryRoots(packageRoot, source, syntax);
+            if (inactiveSystemLibraryRoots is null)
+                inactiveSystemLibraryRoots = manifestInactiveRoots;
+            else
+                inactiveSystemLibraryRoots.IntersectWith(manifestInactiveRoots);
             ValidateDirectSwiftPackageDependencyFactories(packageRoot, syntax);
             ValidatePackageDescriptionCalls(packageRoot, syntax);
             ValidateLiteralSwiftPackagePaths(checkoutRoot, packageRoot, source, syntax);
@@ -247,6 +243,21 @@ internal sealed partial class AppleReleaseSourceTrustService
                 var resolved = ResolvePackageRevision(locks, dependencyUrl, hasRevision ? dependencyRevision : null);
                 ValidateRemotePackageSource(dependencyUrl, resolved, locks);
             }
+        }
+
+        if (inactiveSystemLibraryRoots is not null)
+        {
+            foreach (var root in inactiveSystemLibraryRoots)
+                _inactiveRemoteSystemLibraryRoots.Add(root);
+        }
+        foreach (var conventionalInput in new[]
+                 {
+                     Path.Combine(packageRoot, "Sources"),
+                     Path.Combine(packageRoot, "Plugins")
+                 })
+        {
+            if (Directory.Exists(conventionalInput))
+                EnsureTrackedDirectoryTree(checkoutRoot, conventionalInput, "remote Swift package source input");
         }
     }
 

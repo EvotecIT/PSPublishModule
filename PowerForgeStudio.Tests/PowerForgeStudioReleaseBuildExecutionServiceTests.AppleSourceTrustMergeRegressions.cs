@@ -388,6 +388,134 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("unapproved host", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_c_trigraph_preprocessor_directives()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("TrigraphIncludeRepo");
+        var project = scope.CreateDirectory(Path.Combine("TrigraphIncludeRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Source.m; sourceTree = \"<group>\"; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Source.m"), "??=include \"/tmp/injected.h\"\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("trigraph", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("??=", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(".include")]
+    [InlineData(".incbin")]
+    public void ResolveExactAppleSourceCommit_rejects_absolute_assembler_inputs(string directive)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryName = "AssemblerInputRepo" + directive.Length;
+        var repositoryRoot = scope.CreateDirectory(repositoryName);
+        var project = scope.CreateDirectory(Path.Combine(repositoryName, "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Startup.S; sourceTree = \"<group>\"; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Startup.S"), $"{directive} \"/tmp/injected.bin\"\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Assembler source input", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("/tmp/injected.bin", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_host_reference_in_entitlements()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("EntitlementsHostReferenceRepo");
+        var project = scope.CreateDirectory(Path.Combine("EntitlementsHostReferenceRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCBuildConfiguration; buildSettings = { CODE_SIGN_ENTITLEMENTS = App.entitlements; }; };");
+        File.WriteAllText(
+            Path.Combine(repositoryRoot, "App.entitlements"),
+            "<?xml version=\"1.0\"?><plist><dict><key>application-identifier</key><string>$(USER).app</string></dict></plist>");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("CODE_SIGN_ENTITLEMENTS contents", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("$(USER)", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_classifies_joined_prebuilt_module_path()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "PrebuiltModulePathRepo",
+            "OTHER_CFLAGS = -fprebuilt-module-path=Modules\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Modules", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_angled_source_include_with_unbound_search_roots()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("AngledIncludeRepo");
+        var project = scope.CreateDirectory(Path.Combine("AngledIncludeRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Source.m; sourceTree = \"<group>\"; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Source.m"), "#include <Injected/Host.h>\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("angled preprocessor include", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unbound compiler search roots", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("link framework \"Injected\"")]
+    [InlineData("link \"Injected\"")]
+    public void ResolveExactAppleSourceCommit_rejects_unbound_module_map_autolinks(string declaration)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryName = "ModuleMapAutolinkRepo" + declaration.Length;
+        var repositoryRoot = scope.CreateDirectory(repositoryName);
+        var project = scope.CreateDirectory(Path.Combine(repositoryName, "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCBuildConfiguration; buildSettings = { MODULEMAP_FILE = Config.modulemap; }; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Config.modulemap"), $"module Sample {{ {declaration} export * }}");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("unbound autolink", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Injected", exception.Message, StringComparison.Ordinal);
+    }
+
     private static void WriteTrackedPackageResolutionLock(string repositoryRoot, string url, string revision)
     {
         var project = Directory.EnumerateDirectories(repositoryRoot, "*.xcodeproj", SearchOption.AllDirectories).Single();

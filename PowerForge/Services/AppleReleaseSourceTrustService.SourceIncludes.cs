@@ -13,7 +13,8 @@ internal sealed partial class AppleReleaseSourceTrustService
     private void ValidateSourceLevelIncludes(
         string repositoryRoot,
         string sourcePath,
-        bool validateSwiftDeterminism = false)
+        bool validateSwiftDeterminism = false,
+        string? sourceBlob = null)
     {
         if (!SourceIncludeExtensions.Contains(Path.GetExtension(sourcePath)))
             return;
@@ -23,6 +24,13 @@ internal sealed partial class AppleReleaseSourceTrustService
             return;
         if (!_validatedSourceIncludeFiles.Add(fullSourcePath))
             return;
+        if (!string.IsNullOrWhiteSpace(sourceBlob))
+        {
+            var semanticPath = ResolveSourceSemanticPath(fullSourcePath);
+            var semanticKey = sourceBlob + "|" + semanticPath + "|" + validateSwiftDeterminism;
+            if (!_validatedSourceSemanticInputs.Add(semanticKey))
+                return;
+        }
 
         if (extension.Equals(".modulemap", StringComparison.OrdinalIgnoreCase))
         {
@@ -38,7 +46,9 @@ internal sealed partial class AppleReleaseSourceTrustService
         // C and Objective-C splice escaped physical lines before comments and
         // preprocessing directives are interpreted. Scan that logical source so
         // an include keyword cannot be split across lines to evade attestation.
-        var source = RemoveCComments(SpliceCPreprocessingLines(File.ReadAllText(fullSourcePath)));
+        var physicalSource = File.ReadAllText(fullSourcePath);
+        RejectCTrigraphs(physicalSource, fullSourcePath);
+        var source = RemoveCComments(SpliceCPreprocessingLines(physicalSource));
         var nondeterministicMacro = FindNondeterministicCompilerMacro(source);
         if (nondeterministicMacro is not null)
         {
@@ -71,13 +81,127 @@ internal sealed partial class AppleReleaseSourceTrustService
             {
                 if (segments.Any(static segment => segment == ".."))
                     throw new InvalidOperationException($"Source input '{fullSourcePath}' uses escaping system include '{include}'.");
-                continue;
+                if (IsApprovedAngledInclude(repositoryRoot, include))
+                    continue;
+                throw new InvalidOperationException(
+                    $"Source input '{fullSourcePath}' uses angled preprocessor include '{include}', whose selected bytes depend on unbound compiler search roots. " +
+                    "Use a tracked quoted include or a validated Xcode module/framework reference instead.");
             }
 
             var candidate = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(fullSourcePath)!, include));
             EnsurePathWithinRepository(repositoryRoot, candidate, $"preprocessor include from {fullSourcePath}");
             if (File.Exists(candidate))
                 EnsureTrackedFile(repositoryRoot, candidate, $"preprocessor include from {fullSourcePath}");
+        }
+
+        if (extension.Equals(".s", StringComparison.OrdinalIgnoreCase))
+            ValidateAssemblerInputs(repositoryRoot, fullSourcePath, source);
+    }
+
+    private static string ResolveSourceSemanticPath(string sourcePath)
+    {
+        var normalized = sourcePath.Replace('\\', '/');
+        var framework = normalized.IndexOf(".xcframework/", StringComparison.OrdinalIgnoreCase);
+        if (framework < 0)
+            return normalized;
+        var headers = normalized.IndexOf("/Headers/", framework, StringComparison.OrdinalIgnoreCase);
+        return headers < 0 ? normalized : normalized.Substring(headers + "/Headers/".Length);
+    }
+
+    private bool IsApprovedAngledInclude(string repositoryRoot, string include)
+    {
+        var normalized = include.Replace('\\', '/').TrimStart('/');
+        if (!_trackedSourceSuffixes.TryGetValue(repositoryRoot, out var trackedSuffixes))
+        {
+            trackedSuffixes = new HashSet<string>(GetPathComparer());
+            var tracked = RunGit(repositoryRoot, "ls-files", "-z").StdOut
+                .Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(static path => path.Replace('\\', '/'))
+                .ToArray();
+            foreach (var path in tracked)
+            {
+                trackedSuffixes.Add(path);
+                for (var index = path.IndexOf('/'); index >= 0; index = path.IndexOf('/', index + 1))
+                    trackedSuffixes.Add(path.Substring(index + 1));
+            }
+            _trackedSourceSuffixes[repositoryRoot] = trackedSuffixes;
+        }
+        if (trackedSuffixes.Contains(normalized))
+            return true;
+
+        var slash = normalized.IndexOf('/');
+        if (slash < 0)
+            return ApprovedToolchainHeaders.Contains(normalized);
+        return ApprovedAppleSdkHeaderRoots.Contains(normalized.Substring(0, slash));
+    }
+
+    private static readonly HashSet<string> ApprovedToolchainHeaders = new(StringComparer.Ordinal)
+    {
+        "assert.h", "complex.h", "ctype.h", "errno.h", "fenv.h", "float.h", "inttypes.h", "iso646.h",
+        "limits.h", "locale.h", "math.h", "setjmp.h", "signal.h", "stdalign.h", "stdarg.h", "stdatomic.h",
+        "stdbool.h", "stddef.h", "stdint.h", "stdio.h", "stdlib.h", "stdnoreturn.h", "string.h", "tgmath.h",
+        "threads.h", "time.h", "uchar.h", "wchar.h", "wctype.h",
+        "algorithm", "array", "atomic", "bit", "bitset", "cassert", "cctype", "cerrno", "cfenv", "cfloat",
+        "charconv", "chrono", "cinttypes", "climits", "cmath", "complex", "concepts", "condition_variable",
+        "coroutine", "cstddef", "cstdint", "cstdio", "cstdlib", "cstring", "deque", "exception", "filesystem",
+        "format", "forward_list", "fstream", "functional", "future", "initializer_list", "iomanip", "ios", "iosfwd",
+        "iostream", "istream", "iterator", "latch", "limits", "list", "map", "memory", "memory_resource", "mutex",
+        "new", "numbers", "numeric", "optional", "ostream", "queue", "random", "ranges", "ratio", "regex",
+        "scoped_allocator", "semaphore", "set", "shared_mutex", "source_location", "span", "sstream", "stack",
+        "stdexcept", "stop_token", "streambuf", "string", "string_view", "syncstream", "system_error", "thread",
+        "tuple", "type_traits", "typeindex", "typeinfo", "unordered_map", "unordered_set", "utility", "valarray",
+        "variant", "vector", "version"
+    };
+
+    private static readonly HashSet<string> ApprovedAppleSdkHeaderRoots = new(StringComparer.Ordinal)
+    {
+        "Accelerate", "AppKit", "AudioToolbox", "AVFoundation", "CFNetwork", "CloudKit", "CommonCrypto",
+        "Compression", "Contacts", "CoreAudio", "CoreBluetooth", "CoreData", "CoreFoundation", "CoreGraphics",
+        "CoreImage", "CoreLocation", "CoreMedia", "CoreMotion", "CoreServices", "CoreText", "CoreVideo",
+        "CryptoKit", "Darwin", "DeviceCheck", "Dispatch", "EventKit", "Foundation", "GameController",
+        "HealthKit", "HomeKit", "ImageIO", "IOKit", "LocalAuthentication", "MapKit", "Metal", "MetalKit",
+        "Network", "NetworkExtension", "OSLog", "PassKit", "Photos", "QuartzCore", "SafariServices", "Security",
+        "StoreKit", "SystemConfiguration", "UIKit", "UniformTypeIdentifiers", "UserNotifications", "VideoToolbox",
+        "WatchKit", "WebKit", "arpa", "dispatch", "libkern", "mach", "mach-o", "net", "netinet", "os", "simd",
+        "sys", "xpc"
+    };
+
+    private static void RejectCTrigraphs(string source, string sourcePath)
+    {
+        var trigraph = Regex.Match(source, "\\?\\?[=/'()!<>-]", RegexOptions.CultureInvariant);
+        if (!trigraph.Success)
+            return;
+        throw new InvalidOperationException(
+            $"Source input '{sourcePath}' uses C trigraph '{trigraph.Value}', whose translation can change preprocessing semantics before exact-source validation.");
+    }
+
+    private void ValidateAssemblerInputs(string repositoryRoot, string sourcePath, string source)
+    {
+        foreach (Match directive in Regex.Matches(
+                     source,
+                     "(?im)^[ \\t]*\\.(?<kind>include|incbin)(?![A-Za-z0-9_])[ \\t]+(?<operand>[^\\r\\n]+)",
+                     RegexOptions.CultureInvariant))
+        {
+            var operand = directive.Groups["operand"].Value.Trim();
+            var literal = Regex.Match(operand, "^\\\"(?<path>[^\\\"\\\\]*)\\\"", RegexOptions.CultureInvariant);
+            if (!literal.Success)
+            {
+                throw new InvalidOperationException(
+                    $"Assembler source input '{sourcePath}' uses computed .{directive.Groups["kind"].Value} input '{operand}', which cannot be bound to the exact source commit.");
+            }
+
+            var input = literal.Groups["path"].Value;
+            if (Path.IsPathRooted(input))
+            {
+                throw new InvalidOperationException(
+                    $"Assembler source input '{sourcePath}' references absolute .{directive.Groups["kind"].Value} input '{input}', which is outside the exact-source graph.");
+            }
+
+            var candidate = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourcePath)!, input));
+            EnsurePathWithinRepository(repositoryRoot, candidate, $"assembler .{directive.Groups["kind"].Value} input from {sourcePath}");
+            if (!File.Exists(candidate))
+                throw new FileNotFoundException($"Assembler input was not found inside the exact checked-out source: {candidate}", candidate);
+            EnsureTrackedFile(repositoryRoot, candidate, $"assembler .{directive.Groups["kind"].Value} input from {sourcePath}");
         }
     }
 
@@ -102,6 +226,16 @@ internal sealed partial class AppleReleaseSourceTrustService
     private void ValidateClangModuleMapInputs(string repositoryRoot, string moduleMapPath)
     {
         var source = RemoveCComments(File.ReadAllText(moduleMapPath));
+        var unboundLink = Regex.Match(
+            source,
+            "(?<![A-Za-z0-9_])link\\s+(?:framework\\s+)?\\\"(?<name>(?:\\\\.|[^\\\"\\\\])*)\\\"",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        if (unboundLink.Success &&
+            !_inactiveRemoteSystemLibraryRoots.Any(root => IsPathAtOrWithin(moduleMapPath, root)))
+        {
+            throw new InvalidOperationException(
+                $"Clang module map '{moduleMapPath}' declares unbound autolink '{unboundLink.Value.Trim()}', whose SDK or library bytes cannot be proven at the exact source commit.");
+        }
         const string declaration =
             "(?<![A-Za-z0-9_])(?:" +
             "(?:(?:private|textual)\\s+)*header|" +

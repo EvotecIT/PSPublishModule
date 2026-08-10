@@ -189,6 +189,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 token.Equals("-module-map-file", StringComparison.Ordinal) ||
                 token.Equals("-fmodule-map-file", StringComparison.Ordinal) ||
                 token.Equals("-fmodule-file", StringComparison.Ordinal) ||
+                token.Equals("-fprebuilt-module-path", StringComparison.Ordinal) ||
                 token.Equals("-fprofile-use", StringComparison.Ordinal) ||
                 token.Equals("-fprofile-instr-use", StringComparison.Ordinal) ||
                 token.Equals("-fprofile-sample-use", StringComparison.Ordinal) ||
@@ -217,6 +218,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             {
                 "-iframeworkwithsysroot", "-iwithprefixbefore", "-fprofile-instr-use=",
                 "-fprofile-sample-use=", "-fmodule-map-file=", "-working-directory=",
+                "-fprebuilt-module-path=",
                 "-include-pch=", "-include-pth=", "-gcc-toolchain=", "-resource-dir=",
                 "-iwithprefix", "-fprofile-use=", "-fmodule-file=", "-module-map-file=",
                 "-ivfsoverlay=", "-vfsoverlay=", "-plugin-path=", "-fpass-plugin=",
