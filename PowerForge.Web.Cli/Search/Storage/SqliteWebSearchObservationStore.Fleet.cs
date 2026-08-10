@@ -548,7 +548,10 @@ internal sealed partial class SqliteWebSearchObservationStore
             .Select(group => group
                 .OrderByDescending(value => value.CollectedAtUtc)
                 .ThenByDescending(value => value.RunId, StringComparer.Ordinal)
-                .First());
+                .First())
+            .Where(failure => failure.FailureDate is DateOnly failureDate && !runs.Any(candidate =>
+                candidate.CollectedAtUtc > failure.CollectedAtUtc &&
+                candidate.CompletedRanges.Any(range => failureDate >= range.FromDate && failureDate <= range.ThroughDate)));
         foreach (var permanentFailure in permanentFailures)
         {
             if (FleetRunIdentity(permanentFailure) != FleetRunIdentity(primary))

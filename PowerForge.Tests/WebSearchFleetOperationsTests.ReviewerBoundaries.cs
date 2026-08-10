@@ -421,6 +421,44 @@ public sealed partial class WebSearchFleetOperationsTests
     }
 
     [Fact]
+    public async Task Retention_PrunesPermanentFailureSupersededByLaterCoverage()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var date = new DateOnly(2026, 1, 2);
+            var failure = TrafficBatch("permanent-failure-old", date, AsOf.AddDays(-60));
+            failure.Status = "partial";
+            failure.Observations = Array.Empty<WebTrafficObservation>();
+            failure.CollectionCoverage!.CompletedDates = Array.Empty<DateOnly>();
+            failure.CollectionCoverage.FailedDate = date;
+            failure.CollectionCoverage.FailureCategory = "row-limit-reached";
+            await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(failure));
+            await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(
+                TrafficBatch("covered-later", date, AsOf.AddDays(-50))));
+
+            var result = await store.ApplyFleetRetentionAsync(new WebSearchFleetOperationsConfiguration
+            {
+                SearchRunRetentionDays = 30,
+                TrafficRunRetentionDays = 30,
+                PerformanceRunRetentionDays = 30
+            }, AsOf, apply: true);
+
+            var traffic = Assert.Single(result.Kinds, value => value.Kind == "traffic");
+            Assert.Equal(1, traffic.DeletedRunCount);
+            var stream = Assert.Single((await store.ReadFleetSnapshotAsync()).Streams);
+            Assert.Empty(stream.PermanentFailures);
+            Assert.Null(stream.LatestFailureCategory);
+            Assert.Equal(date, stream.LatestCompleteDate);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Retention_DoesNotLetPostAsOfRunsDisplaceVisiblePreservationEvidence()
     {
         var root = CreateTempRoot();

@@ -117,7 +117,7 @@ public sealed class WebSearchFleetReportRow
     public string ProviderId { get; set; } = string.Empty;
     /// <summary>Provider kind.</summary>
     public string ProviderKind { get; set; } = string.Empty;
-    /// <summary>Capability represented by this row.</summary>
+    /// <summary>Capability represented by this row, or empty for a provider-level configuration error.</summary>
     public string Capability { get; set; } = string.Empty;
     /// <summary>Whether collection is enabled.</summary>
     public bool Enabled { get; set; }
@@ -299,45 +299,63 @@ public static class WebSearchFleetPlanner
         foreach (var provider in (site.Providers ?? Array.Empty<WebSearchProviderRegistration>())
                      .Where(value => value is not null)
                      .OrderBy(value => value.Id, StringComparer.Ordinal))
-        foreach (var capability in (provider.Capabilities ?? Array.Empty<string>())
+        {
+            var capabilities = (provider.Capabilities ?? Array.Empty<string>())
                      .Where(value => !string.IsNullOrWhiteSpace(value))
                      .Distinct(StringComparer.Ordinal)
-                     .OrderBy(value => value, StringComparer.Ordinal))
-        {
+                     .OrderBy(value => value, StringComparer.Ordinal)
+                     .ToArray();
             var providerState = doctor.Providers.FirstOrDefault(value =>
                 value.SiteId.Equals(site.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
                 value.ProviderId.Equals(provider.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase));
-            var actionDoctor = InspectProviderAction(configuration, site, provider);
-            var actionReady = providerState?.ConfigurationReady == true && actionDoctor.Success;
-            var capabilityAvailable = providerState?.AvailableCollectorCapabilities.Contains(capability, StringComparer.OrdinalIgnoreCase) == true;
-            var evidence = actionReady
-                ? FindStream(snapshot, site, provider, capability, actionDoctor.ConfigurationHash)
-                : null;
-            var due = schedule.WorkItems.Any(value =>
-                value.SiteId.Equals(site.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
-                value.ProviderId.Equals(provider.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
-                value.Capability.Equals(capability, StringComparison.OrdinalIgnoreCase));
-            var state = !provider.Enabled ? "disabled" :
-                !actionReady ? "configuration-error" :
-                !capabilityAvailable ? "collector-unavailable" :
-                evidence is null ? "missing" :
-                evidence.HasPartialEvidence ? "partial" :
-                evidence.LastCompleteAtUtc is null && !evidence.HasRetainedCoverage ? "missing" :
-                due ? "due" : "current";
-            rows.Add(new WebSearchFleetReportRow
+            if (capabilities.Length == 0)
             {
-                SiteId = site.Id ?? string.Empty,
-                ProviderId = provider.Id ?? string.Empty,
-                ProviderKind = provider.Kind ?? string.Empty,
-                Capability = capability,
-                Enabled = provider.Enabled,
-                ConfigurationReady = actionReady,
-                CollectorAvailable = capabilityAvailable,
-                EvidenceState = state,
-                LatestCompleteDate = evidence?.LatestCompleteDate,
-                LastCompleteAtUtc = evidence?.LastCompleteAtUtc,
-                LastAttemptAtUtc = evidence?.LastAttemptAtUtc
-            });
+                rows.Add(new WebSearchFleetReportRow
+                {
+                    SiteId = site.Id ?? string.Empty,
+                    ProviderId = provider.Id ?? string.Empty,
+                    ProviderKind = provider.Kind ?? string.Empty,
+                    Enabled = provider.Enabled,
+                    ConfigurationReady = false,
+                    CollectorAvailable = false,
+                    EvidenceState = "configuration-error"
+                });
+                continue;
+            }
+            foreach (var capability in capabilities)
+            {
+                var actionDoctor = InspectProviderAction(configuration, site, provider);
+                var actionReady = providerState?.ConfigurationReady == true && actionDoctor.Success;
+                var capabilityAvailable = providerState?.AvailableCollectorCapabilities.Contains(capability, StringComparer.OrdinalIgnoreCase) == true;
+                var evidence = actionReady
+                    ? FindStream(snapshot, site, provider, capability, actionDoctor.ConfigurationHash)
+                    : null;
+                var due = schedule.WorkItems.Any(value =>
+                    value.SiteId.Equals(site.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                    value.ProviderId.Equals(provider.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                    value.Capability.Equals(capability, StringComparison.OrdinalIgnoreCase));
+                var state = !provider.Enabled ? "disabled" :
+                    !actionReady ? "configuration-error" :
+                    !capabilityAvailable ? "collector-unavailable" :
+                    evidence is null ? "missing" :
+                    evidence.HasPartialEvidence ? "partial" :
+                    evidence.LastCompleteAtUtc is null && !evidence.HasRetainedCoverage ? "missing" :
+                    due ? "due" : "current";
+                rows.Add(new WebSearchFleetReportRow
+                {
+                    SiteId = site.Id ?? string.Empty,
+                    ProviderId = provider.Id ?? string.Empty,
+                    ProviderKind = provider.Kind ?? string.Empty,
+                    Capability = capability,
+                    Enabled = provider.Enabled,
+                    ConfigurationReady = actionReady,
+                    CollectorAvailable = capabilityAvailable,
+                    EvidenceState = state,
+                    LatestCompleteDate = evidence?.LatestCompleteDate,
+                    LastCompleteAtUtc = evidence?.LastCompleteAtUtc,
+                    LastAttemptAtUtc = evidence?.LastAttemptAtUtc
+                });
+            }
         }
 
         return new WebSearchFleetReport

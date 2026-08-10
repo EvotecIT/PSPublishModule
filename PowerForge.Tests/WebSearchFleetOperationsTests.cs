@@ -163,14 +163,22 @@ public sealed partial class WebSearchFleetOperationsTests
         Assert.Equal(0, nullSitesReport.SiteCount);
         Assert.Empty(nullSitesReport.Rows);
 
-        var nullCapabilities = CreateConfiguration();
-        nullCapabilities.Sites[0].Providers = [nullCapabilities.Sites[0].Providers[0]];
-        nullCapabilities.Sites[0].Providers[0].Capabilities = null!;
-        var nullCapabilitiesReport = WebSearchFleetPlanner.CreateReport(
-            nullCapabilities, Doctor(nullCapabilities), new WebSearchFleetEvidenceSnapshot(), AsOf);
-        Assert.False(nullCapabilitiesReport.ConfigurationValid);
-        Assert.Equal(1, nullCapabilitiesReport.ProviderCount);
-        Assert.Empty(nullCapabilitiesReport.Rows);
+        foreach (var invalidCapabilities in new string[]?[] { null, [], [" ", "\t"] })
+        {
+            var invalidCapabilityConfiguration = CreateConfiguration();
+            invalidCapabilityConfiguration.Sites[0].Providers = [invalidCapabilityConfiguration.Sites[0].Providers[0]];
+            invalidCapabilityConfiguration.Sites[0].Providers[0].Capabilities = invalidCapabilities!;
+            var invalidCapabilityReport = WebSearchFleetPlanner.CreateReport(
+                invalidCapabilityConfiguration, Doctor(invalidCapabilityConfiguration), new WebSearchFleetEvidenceSnapshot(), AsOf);
+            Assert.False(invalidCapabilityReport.ConfigurationValid);
+            Assert.Equal(1, invalidCapabilityReport.ProviderCount);
+            var row = Assert.Single(invalidCapabilityReport.Rows);
+            Assert.Equal("gsc", row.ProviderId);
+            Assert.Empty(row.Capability);
+            Assert.False(row.ConfigurationReady);
+            Assert.False(row.CollectorAvailable);
+            Assert.Equal("configuration-error", row.EvidenceState);
+        }
     }
 
     [Fact]

@@ -80,7 +80,7 @@ internal static partial class WebCliCommandHandlers
             {
                 logger.Info($"Fleet sites: {report.SiteCount}; providers: {report.ProviderCount}; evidence streams: {report.Rows.Length}.");
                 foreach (var row in report.Rows)
-                    logger.Info($"[{row.EvidenceState}] {EscapeSearchConsoleText(row.SiteId, "(site)")}/{EscapeSearchConsoleText(row.ProviderId, "(provider)")} {row.Capability}");
+                    logger.Info($"[{row.EvidenceState}] {EscapeSearchConsoleText(row.SiteId, "(site)")}/{EscapeSearchConsoleText(row.ProviderId, "(provider)")} {EscapeSearchConsoleText(row.Capability, "(no capability)")}");
             }
             return exitCode;
         }
