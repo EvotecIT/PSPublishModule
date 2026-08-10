@@ -26,4 +26,28 @@ public sealed class AppleArchiveBuildSnapshotTests
             try { root.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void RestoreDirectoryBackup_retains_previous_artifact_when_destination_was_recreated()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var destination = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcarchive"));
+            File.WriteAllText(Path.Combine(destination.FullName, "payload"), "concurrent artifact");
+            var backup = Directory.CreateDirectory(Path.Combine(root.FullName, ".App.xcarchive.powerforge-backup-test"));
+            File.WriteAllText(Path.Combine(backup.FullName, "payload"), "previous artifact");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                AppleArtifactCopy.RestoreDirectoryBackup(destination.FullName, backup.FullName));
+
+            Assert.Contains("retained", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("concurrent artifact", File.ReadAllText(Path.Combine(destination.FullName, "payload")));
+            Assert.Equal("previous artifact", File.ReadAllText(Path.Combine(backup.FullName, "payload")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }

@@ -7,7 +7,7 @@ namespace PowerForge;
 /// </summary>
 internal sealed class AppleReleaseSourceSnapshot : IDisposable
 {
-    private readonly GitClient _git = new(defaultTimeout: TimeSpan.FromMinutes(2));
+    private readonly GitClient _git = GitClient.CreateTrustedSystemClient(defaultTimeout: TimeSpan.FromMinutes(2));
     private readonly string _repositoryRoot;
     private readonly string _sourceRepositoryRoot;
     private readonly string _sourceProjectRoot;
@@ -40,7 +40,7 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
             return null;
 
         var sourceCommit = plan.SourceCommit!.Trim();
-        var git = new GitClient(defaultTimeout: TimeSpan.FromMinutes(2));
+        var git = GitClient.CreateTrustedSystemClient(defaultTimeout: TimeSpan.FromMinutes(2));
         var topLevel = Run(git, plan.ProjectRoot, new[] { "rev-parse", "--show-toplevel" }, "resolve the source repository");
         var repositoryRoot = Path.GetFullPath(topLevel.StdOut.Trim());
         var projectPrefix = Run(git, plan.ProjectRoot, new[] { "rev-parse", "--show-prefix" }, "resolve the Apple project root")

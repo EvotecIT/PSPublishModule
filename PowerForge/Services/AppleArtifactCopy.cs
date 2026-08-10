@@ -70,4 +70,21 @@ internal static class AppleArtifactCopy
 #endif
         File.SetAttributes(destinationRoot, File.GetAttributes(sourceRoot));
     }
+
+    /// <summary>
+    /// Restores a retained directory backup only when the destination is still vacant.
+    /// A concurrently recreated destination wins and the backup remains available for recovery.
+    /// </summary>
+    internal static void RestoreDirectoryBackup(string destinationPath, string backupPath)
+    {
+        if (!Directory.Exists(backupPath))
+            return;
+        if (Directory.Exists(destinationPath) || File.Exists(destinationPath))
+        {
+            throw new InvalidOperationException(
+                $"Apple artifact rollback could not restore '{destinationPath}' because the destination was recreated. " +
+                $"The previous artifact is retained at '{backupPath}'.");
+        }
+        Directory.Move(backupPath, destinationPath);
+    }
 }

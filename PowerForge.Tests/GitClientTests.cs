@@ -73,6 +73,34 @@ public sealed class GitClientTests
         Assert.True(result.Succeeded);
     }
 
+    [Fact]
+    public async Task TrustedSystemClient_UsesFixedExecutableAndIsolatedGitEnvironment()
+    {
+        ProcessRunRequest? captured = null;
+        var runner = new StubProcessRunner(request =>
+        {
+            captured = request;
+            return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        });
+        var client = GitClient.CreateTrustedSystemClient(runner, TimeSpan.FromSeconds(30));
+
+        await client.RunRawAsync(Directory.GetCurrentDirectory(), ["status", "--short"]);
+
+        Assert.NotNull(captured);
+        Assert.True(Path.IsPathFullyQualified(captured!.FileName));
+        Assert.Equal(Path.DirectorySeparatorChar == '\\' ? "git.exe" : "git", Path.GetFileName(captured.FileName));
+        if (Path.DirectorySeparatorChar != '\\')
+            Assert.Equal("/usr/bin/git", captured.FileName);
+        Assert.False(captured.InheritEnvironment);
+        Assert.NotNull(captured.EnvironmentVariables);
+        Assert.False(captured.EnvironmentVariables!.ContainsKey("PATH"));
+        Assert.False(captured.EnvironmentVariables.ContainsKey("GIT_DIR"));
+        Assert.Equal("1", captured.EnvironmentVariables["GIT_CONFIG_NOSYSTEM"]);
+        Assert.Equal("0", captured.EnvironmentVariables["GIT_TERMINAL_PROMPT"]);
+        Assert.Equal("core.hooksPath", captured.EnvironmentVariables["GIT_CONFIG_KEY_0"]);
+        Assert.Equal("core.fsmonitor", captured.EnvironmentVariables["GIT_CONFIG_KEY_1"]);
+    }
+
     private sealed class StubProcessRunner : IProcessRunner
     {
         private readonly Func<ProcessRunRequest, ProcessRunResult> _execute;

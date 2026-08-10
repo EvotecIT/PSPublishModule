@@ -33,8 +33,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         GitClient? gitClient = null,
         Func<string, string, string>? remotePackageCheckoutResolver = null)
     {
-        _git = git ?? new HomeAssistantReleaseGitService();
-        _gitClient = gitClient ?? new GitClient(defaultTimeout: TimeSpan.FromMinutes(2));
+        _gitClient = gitClient ?? GitClient.CreateTrustedSystemClient(defaultTimeout: TimeSpan.FromMinutes(2));
+        _git = git ?? new HomeAssistantReleaseGitService(_gitClient);
         _remotePackageCheckoutResolver = remotePackageCheckoutResolver;
     }
 

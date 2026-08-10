@@ -84,20 +84,28 @@ internal sealed class AppleDirectExportSnapshot : IDisposable
                 Directory.Delete(backup, recursive: true);
             return new ApplePublishedDirectExport(destination, publishedArtifact, publishedSha256);
         }
-        catch
+        catch (Exception publicationException)
         {
-            if (published && Directory.Exists(destination))
-                Directory.Delete(destination, recursive: true);
-            if (movedExisting && Directory.Exists(backup))
-                Directory.Move(backup, destination);
+            try
+            {
+                if (published && Directory.Exists(destination))
+                    Directory.Delete(destination, recursive: true);
+                if (movedExisting)
+                    AppleArtifactCopy.RestoreDirectoryBackup(destination, backup);
+            }
+            catch (Exception rollbackException)
+            {
+                throw new AggregateException(
+                    $"Developer ID export publication failed and rollback could not complete. Recovery bytes are retained at '{backup}'.",
+                    publicationException,
+                    rollbackException);
+            }
             throw;
         }
         finally
         {
             if (Directory.Exists(stage))
                 Directory.Delete(stage, recursive: true);
-            if (Directory.Exists(backup))
-                Directory.Delete(backup, recursive: true);
         }
     }
 

@@ -8,6 +8,8 @@ public sealed class GitClient
     private readonly IProcessRunner _processRunner;
     private readonly string _gitExecutable;
     private readonly TimeSpan _defaultTimeout;
+    private readonly IReadOnlyDictionary<string, string?>? _environmentVariables;
+    private readonly bool _inheritEnvironment;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GitClient"/> class.
@@ -15,14 +17,57 @@ public sealed class GitClient
     /// <param name="processRunner">Optional process runner implementation.</param>
     /// <param name="gitExecutable">Optional git executable name or path.</param>
     /// <param name="defaultTimeout">Optional default timeout.</param>
+    /// <param name="environmentVariables">Optional environment supplied to Git.</param>
+    /// <param name="inheritEnvironment">When false, Git starts from only the supplied environment.</param>
     public GitClient(
         IProcessRunner? processRunner = null,
         string gitExecutable = "git",
-        TimeSpan? defaultTimeout = null)
+        TimeSpan? defaultTimeout = null,
+        IReadOnlyDictionary<string, string?>? environmentVariables = null,
+        bool inheritEnvironment = true)
     {
         _processRunner = processRunner ?? new ProcessRunner();
         _gitExecutable = string.IsNullOrWhiteSpace(gitExecutable) ? "git" : gitExecutable;
         _defaultTimeout = defaultTimeout ?? TimeSpan.FromSeconds(10);
+        _environmentVariables = environmentVariables;
+        _inheritEnvironment = inheritEnvironment;
+    }
+
+    /// <summary>
+    /// Creates a Git client pinned to the operating-system installation with an isolated,
+    /// non-interactive environment suitable for exact-source release attestation.
+    /// </summary>
+    /// <param name="processRunner">Optional process runner implementation.</param>
+    /// <param name="defaultTimeout">Optional default timeout.</param>
+    /// <returns>A trusted-system Git client.</returns>
+    internal static GitClient CreateTrustedSystemClient(
+        IProcessRunner? processRunner = null,
+        TimeSpan? defaultTimeout = null)
+    {
+        var executable = ResolveTrustedSystemExecutable();
+        var nullDevice = Path.DirectorySeparatorChar == '\\' ? "NUL" : "/dev/null";
+        var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["GIT_CONFIG_NOSYSTEM"] = "1",
+            ["GIT_CONFIG_GLOBAL"] = nullDevice,
+            ["GIT_TERMINAL_PROMPT"] = "0",
+            ["GCM_INTERACTIVE"] = "Never",
+            ["GIT_OPTIONAL_LOCKS"] = "0",
+            ["GIT_CONFIG_COUNT"] = "2",
+            ["GIT_CONFIG_KEY_0"] = "core.hooksPath",
+            ["GIT_CONFIG_VALUE_0"] = nullDevice,
+            ["GIT_CONFIG_KEY_1"] = "core.fsmonitor",
+            ["GIT_CONFIG_VALUE_1"] = "false",
+            ["HOME"] = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ["TMPDIR"] = Path.GetTempPath(),
+            ["TMP"] = Path.GetTempPath(),
+            ["TEMP"] = Path.GetTempPath(),
+            ["LC_ALL"] = "C",
+            ["LANG"] = "C"
+        };
+        if (Path.DirectorySeparatorChar == '\\')
+            environment["SystemRoot"] = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        return new GitClient(processRunner, executable, defaultTimeout, environment, inheritEnvironment: false);
     }
 
     /// <summary>
@@ -144,7 +189,11 @@ public sealed class GitClient
                 _gitExecutable,
                 repositoryRoot,
                 arguments,
-                timeout ?? _defaultTimeout),
+                timeout ?? _defaultTimeout,
+                _environmentVariables,
+                captureOutput: true,
+                captureError: true,
+                inheritEnvironment: _inheritEnvironment),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -167,7 +216,11 @@ public sealed class GitClient
                 _gitExecutable,
                 request.WorkingDirectory,
                 arguments,
-                request.Timeout ?? _defaultTimeout),
+                request.Timeout ?? _defaultTimeout,
+                _environmentVariables,
+                captureOutput: true,
+                captureError: true,
+                inheritEnvironment: _inheritEnvironment),
             cancellationToken).ConfigureAwait(false);
 
         return new GitCommandResult(
@@ -180,6 +233,36 @@ public sealed class GitClient
             result.Executable,
             result.Duration,
             result.TimedOut);
+    }
+
+    private static string ResolveTrustedSystemExecutable()
+    {
+        string[] candidates;
+        if (Path.DirectorySeparatorChar == '\\')
+        {
+            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+            candidates = new[]
+            {
+                Path.Combine(programFiles, "Git", "cmd", "git.exe"),
+                Path.Combine(programFiles, "Git", "bin", "git.exe"),
+                Path.Combine(programFilesX86, "Git", "cmd", "git.exe"),
+                Path.Combine(programFilesX86, "Git", "bin", "git.exe")
+            };
+        }
+        else
+        {
+            candidates = new[] { "/usr/bin/git" };
+        }
+
+        var executable = candidates.FirstOrDefault(File.Exists);
+        if (executable is null)
+        {
+            throw new FileNotFoundException(
+                "Trusted exact-source Git was not found in the operating-system installation. " +
+                "Install Git in its standard system location before creating an Apple release checkpoint.");
+        }
+        return executable;
     }
 
     private static GitStatusSnapshot ParseStatus(GitCommandResult result)

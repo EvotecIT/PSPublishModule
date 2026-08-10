@@ -205,6 +205,73 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_absolute_clang_module_map_input()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ModuleMapInputRepo");
+        var project = scope.CreateDirectory(Path.Combine("ModuleMapInputRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCBuildConfiguration; buildSettings = { MODULEMAP_FILE = Config.modulemap; }; };");
+        File.WriteAllText(
+            Path.Combine(repositoryRoot, "Config.modulemap"),
+            "module Sample { private textual header \"/tmp/injected.h\" export * }");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("module map", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/tmp/injected.h", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("__DATE__")]
+    [InlineData("__TIME__")]
+    [InlineData("__TIMESTAMP__")]
+    [InlineData("__TI ## ME__")]
+    public void ResolveExactAppleSourceCommit_rejects_nondeterministic_compiler_time_macros(string macro)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("CompilerTimeMacroRepo" + macro.Length);
+        var project = scope.CreateDirectory(Path.Combine("CompilerTimeMacroRepo" + macro.Length, "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Source.m; sourceTree = \"<group>\"; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Source.m"), $"const char *buildTime = {macro};\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("nondeterministic compiler macro", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_allows_time_macro_names_in_comments_and_literals()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("CompilerTimeMacroLiteralRepo");
+        var project = scope.CreateDirectory(Path.Combine("CompilerTimeMacroLiteralRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Source.m; sourceTree = \"<group>\"; };");
+        File.WriteAllText(
+            Path.Combine(repositoryRoot, "Source.m"),
+            "// __DATE__\nconst char *documentation = \"__TIME__ and __TIMESTAMP__\";\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var sourceCommit = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(ReadFixtureHead(repositoryRoot), sourceCommit);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_parses_xcode_reference_modifiers_before_host_classification()
     {
         using var scope = new TemporaryDirectoryScope();
