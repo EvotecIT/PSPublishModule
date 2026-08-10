@@ -105,8 +105,8 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
 
     private static HttpResponseMessage CapabilityResponse(
         int maxPageSize = 1000,
-        int maxDuration = 86_400,
-        int notOlderThan = 2_678_400) => JsonResponse(new
+        int? maxDuration = 86_400,
+        int? notOlderThan = 2_678_400) => JsonResponse(new
     {
         errors = (object?)null,
         data = new

@@ -7,6 +7,46 @@ namespace PowerForge.Tests;
 
 public sealed partial class WebCloudflareAnalyticsCollectorTests
 {
+    [Theory]
+    [InlineData(-1, 2_678_400)]
+    [InlineData(0, 2_678_400)]
+    [InlineData(86_400, -1)]
+    [InlineData(86_400, 0)]
+    public async Task Probe_RejectsNonPositiveCapabilityBoundaries(int maxDuration, int notOlderThan)
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(maxDuration: maxDuration, notOlderThan: notOlderThan),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).ProbeAsync(ZoneId, "https://officeimo.com/");
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.ErrorCode);
+        Assert.Equal(2, result.RequestCount);
+    }
+
+    [Fact]
+    public async Task Probe_AllowsOmittedOptionalCapabilityBoundaries()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(maxDuration: null, notOlderThan: null),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).ProbeAsync(ZoneId, "https://officeimo.com/");
+
+        Assert.True(result.Success);
+        Assert.Null(result.MaxDurationSeconds);
+        Assert.Null(result.NotOlderThanSeconds);
+    }
+
     [Fact]
     public async Task Probe_RejectsNullCapabilityZoneElementsAsInvalidResponses()
     {

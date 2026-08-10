@@ -79,6 +79,8 @@ public sealed class CloudflareAnalyticsCollector
             return ProbeFailure(2, "dataset-unavailable", "Cloudflare httpRequestsAdaptiveGroups is not enabled for this zone.");
         if (settings.MaxPageSize is null or <= 0)
             return ProbeFailure(2, "invalid-response", "Cloudflare did not report a usable analytics page size.");
+        if (settings.MaxDuration is <= 0 || settings.NotOlderThan is <= 0)
+            return ProbeFailure(2, "invalid-response", "Cloudflare reported an invalid analytics duration or retention boundary.");
 
         return new CloudflareAnalyticsCapabilityProbeResult
         {
