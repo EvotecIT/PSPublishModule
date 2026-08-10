@@ -211,6 +211,40 @@ public sealed partial class WebSearchFleetOperationsTests
     }
 
     [Fact]
+    public async Task Snapshot_PreservesPerDateAssociationsWhenBingDimensionScopesAreOmitted()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var first = new DateOnly(2026, 8, 1);
+            var second = first.AddDays(1);
+            var batch = SearchBatch("bing-omitted-split-scopes", first, AsOf.AddMinutes(-1));
+            batch.SchemaVersion = 3;
+            batch.Provider = "bing-export";
+            batch.CollectionCoverage!.Mode = "snapshot";
+            batch.CollectionCoverage.FromDate = first;
+            batch.CollectionCoverage.ThroughDate = second;
+            batch.CollectionCoverage.CompletedDates = [first, second];
+            batch.Observations =
+            [
+                new WebSearchObservation { Date = first, Page = "https://officeimo.com/", SearchType = "web", Clicks = 1, Impressions = 2 },
+                new WebSearchObservation { Date = second, Query = "office docs", SearchType = "web", Clicks = 1, Impressions = 2 }
+            ];
+            await store.ImportAsync(WebSearchObservationNormalizer.Normalize(batch));
+
+            var stream = Assert.Single((await store.ReadFleetSnapshotAsync()).Streams);
+
+            Assert.Empty(stream.CompletedRanges);
+            Assert.Null(stream.LatestCompleteDate);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Snapshot_CreditsBingCoverageOnlyWhenPageAndQueryScopesAreCompleteTogether()
     {
         var root = CreateTempRoot();

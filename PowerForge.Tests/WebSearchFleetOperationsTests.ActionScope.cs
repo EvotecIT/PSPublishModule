@@ -5,6 +5,26 @@ namespace PowerForge.Tests;
 public sealed partial class WebSearchFleetOperationsTests
 {
     [Fact]
+    public void Planner_EmitsNonReadyWorkForRecognizedCapabilitiesWithoutAScheduler()
+    {
+        var configuration = CreateConfiguration();
+        var provider = configuration.Sites[0].Providers.Single(value => value.Id == "gsc");
+        configuration.Sites[0].Providers = [provider];
+        provider.Capabilities = [WebSearchProviderCapabilities.SearchSitemaps];
+        var doctor = Doctor(configuration);
+
+        var item = Assert.Single(WebSearchFleetPlanner.CreateSchedule(
+            configuration,
+            doctor,
+            new WebSearchFleetEvidenceSnapshot { StoreExists = true, DatabaseSchemaVersion = 7 },
+            AsOf).WorkItems);
+
+        Assert.Equal(WebSearchProviderCapabilities.SearchSitemaps, item.Capability);
+        Assert.Equal("unsupported-capability", item.Action);
+        Assert.Equal("collector-unavailable", item.Readiness);
+    }
+
+    [Fact]
     public void Planner_KeepsHealthyProviderEvidenceWhenAnUnrelatedRegistrationChanges()
     {
         var configuration = CreateConfiguration();

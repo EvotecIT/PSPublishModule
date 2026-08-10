@@ -252,6 +252,18 @@ public static class WebSearchFleetPlanner
                 AddPeriodicWork(work, site, provider, capability, "import-lighthouse", readiness ?? "input-required", evidence,
                     TimeSpan.FromDays(policy.LighthouseIntervalDays), asOf);
             }
+            else
+            {
+                work.Add(new WebSearchFleetWorkItem
+                {
+                    SiteId = site.Id ?? string.Empty,
+                    ProviderId = provider.Id ?? string.Empty,
+                    ProviderKind = provider.Kind ?? string.Empty,
+                    Capability = capability,
+                    Action = "unsupported-capability",
+                    Readiness = readiness ?? "collector-unavailable"
+                });
+            }
         }
 
         return new WebSearchFleetSchedulePlan

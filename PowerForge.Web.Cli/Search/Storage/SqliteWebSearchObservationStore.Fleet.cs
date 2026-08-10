@@ -21,11 +21,21 @@ internal sealed partial class SqliteWebSearchObservationStore
             return new WebSearchFleetEvidenceSnapshot { StoreExists = false };
 
         await using var client = new SQLite();
-        var version = await ReadCurrentFleetSchemaVersionAsync(client, cancellationToken).ConfigureAwait(false);
-        var search = await ReadSearchFleetRunsAsync(client, cancellationToken).ConfigureAwait(false);
-        var traffic = await ReadTrafficFleetRunsAsync(client, cancellationToken).ConfigureAwait(false);
-        var performance = await ReadPerformanceFleetRunsAsync(client, cancellationToken).ConfigureAwait(false);
-        var retainedCoverage = await ReadRetainedCoverageAsync(client, cancellationToken).ConfigureAwait(false);
+        await using var session = await client.OpenSessionAsync(_databasePath, cancellationToken).ConfigureAwait(false);
+        var readSet = await session.RunInTransactionAsync(async (transaction, token) =>
+        {
+            var schemaVersion = await ReadCurrentFleetSchemaVersionAsync(transaction, token).ConfigureAwait(false);
+            var searchRuns = await ReadSearchFleetRunsAsync(transaction, token).ConfigureAwait(false);
+            var trafficRuns = await ReadTrafficFleetRunsAsync(transaction, token).ConfigureAwait(false);
+            var performanceRuns = await ReadPerformanceFleetRunsAsync(transaction, token).ConfigureAwait(false);
+            var retained = await ReadRetainedCoverageAsync(transaction, token).ConfigureAwait(false);
+            return new FleetReadSet(schemaVersion, searchRuns, trafficRuns, performanceRuns, retained);
+        }, cancellationToken).ConfigureAwait(false);
+        var version = readSet.SchemaVersion;
+        var search = readSet.Search;
+        var traffic = readSet.Traffic;
+        var performance = readSet.Performance;
+        var retainedCoverage = readSet.RetainedCoverage;
         if (asOfUtc is DateTimeOffset requestedAsOf)
         {
             var cutoff = requestedAsOf.ToUniversalTime();
@@ -63,23 +73,27 @@ internal sealed partial class SqliteWebSearchObservationStore
             return new WebSearchFleetRetentionResult { StoreExists = false, Applied = apply };
 
         await using var client = new SQLite();
-        await ReadCurrentFleetSchemaVersionAsync(client, cancellationToken).ConfigureAwait(false);
-        var search = await ReadSearchFleetRunsAsync(client, cancellationToken).ConfigureAwait(false);
-        var traffic = await ReadTrafficFleetRunsAsync(client, cancellationToken).ConfigureAwait(false);
-        var performance = await ReadPerformanceFleetRunsAsync(client, cancellationToken).ConfigureAwait(false);
         var asOf = asOfUtc.ToUniversalTime();
-        var plans = new[]
+        await using var readSession = await client.OpenSessionAsync(_databasePath, cancellationToken).ConfigureAwait(false);
+        var plans = await readSession.RunInTransactionAsync(async (transaction, token) =>
         {
-            CreateRetentionPlan("search", "search_observation_runs", "search_observations",
-                search, asOf.AddDays(-policy.SearchRunRetentionDays), asOf),
-            CreateRetentionPlan("traffic", "traffic_observation_runs", "traffic_observations",
-                traffic, asOf.AddDays(-policy.TrafficRunRetentionDays), asOf),
-            CreateRetentionPlan("performance", "performance_observation_runs", "performance_observations",
-                performance, asOf.AddDays(-policy.PerformanceRunRetentionDays), asOf)
-        };
-
-        foreach (var plan in plans)
-            plan.Result.CandidateObservationCount = await CountFleetObservationsAsync(client, plan, cancellationToken).ConfigureAwait(false);
+            await ReadCurrentFleetSchemaVersionAsync(transaction, token).ConfigureAwait(false);
+            var search = await ReadSearchFleetRunsAsync(transaction, token).ConfigureAwait(false);
+            var traffic = await ReadTrafficFleetRunsAsync(transaction, token).ConfigureAwait(false);
+            var performance = await ReadPerformanceFleetRunsAsync(transaction, token).ConfigureAwait(false);
+            var snapshotPlans = new[]
+            {
+                CreateRetentionPlan("search", "search_observation_runs", "search_observations",
+                    search, asOf.AddDays(-policy.SearchRunRetentionDays), asOf),
+                CreateRetentionPlan("traffic", "traffic_observation_runs", "traffic_observations",
+                    traffic, asOf.AddDays(-policy.TrafficRunRetentionDays), asOf),
+                CreateRetentionPlan("performance", "performance_observation_runs", "performance_observations",
+                    performance, asOf.AddDays(-policy.PerformanceRunRetentionDays), asOf)
+            };
+            foreach (var plan in snapshotPlans)
+                plan.Result.CandidateObservationCount = await CountFleetObservationsAsync(transaction, plan, token).ConfigureAwait(false);
+            return snapshotPlans;
+        }, cancellationToken).ConfigureAwait(false);
 
         if (apply && plans.Any(value => value.Candidates.Length > 0))
         {
@@ -128,9 +142,9 @@ internal sealed partial class SqliteWebSearchObservationStore
         };
     }
 
-    private async Task<int> ReadCurrentFleetSchemaVersionAsync(SQLite client, CancellationToken cancellationToken)
+    private static async Task<int> ReadCurrentFleetSchemaVersionAsync(SQLiteAsyncSession session, CancellationToken cancellationToken)
     {
-        var value = await client.ExecuteScalarAsync(_databasePath, "PRAGMA user_version;", cancellationToken: cancellationToken)
+        var value = await session.ExecuteScalarAsync("PRAGMA user_version;", cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         var version = Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
         if (version != CurrentSchemaVersion)
@@ -138,9 +152,9 @@ internal sealed partial class SqliteWebSearchObservationStore
         return version;
     }
 
-    private async Task<FleetRun[]> ReadSearchFleetRunsAsync(SQLite client, CancellationToken cancellationToken)
+    private static async Task<FleetRun[]> ReadSearchFleetRunsAsync(SQLiteAsyncSession session, CancellationToken cancellationToken)
     {
-        var runs = await client.QueryAsListAsync(_databasePath,
+        var runs = await session.QueryAsListAsync(
             """
             SELECT run_id, provider, site_id, collected_at_utc, status,
                    configuration_hash,
@@ -157,7 +171,7 @@ internal sealed partial class SqliteWebSearchObservationStore
                 NullableString(record, 5), NullableString(record, 6), NullableDate(record, 7), NullableDate(record, 8),
                 NullableString(record, 9), NullableString(record, 10), NullableDate(record, 11)),
             cancellationToken: cancellationToken).ConfigureAwait(false);
-        var coverageDates = await client.QueryAsListAsync(_databasePath,
+        var coverageDates = await session.QueryAsListAsync(
             """
             SELECT r.provider, r.site_id, r.run_id, dates.value
             FROM search_observation_runs r
@@ -165,7 +179,7 @@ internal sealed partial class SqliteWebSearchObservationStore
             """,
             static record => new FleetDatedScope(record.GetString(0), record.GetString(1), record.GetString(2),
                 ParseFleetDate(record.GetString(3)), string.Empty), cancellationToken: cancellationToken).ConfigureAwait(false);
-        var observationScopes = await client.QueryAsListAsync(_databasePath,
+        var observationScopes = await session.QueryAsListAsync(
             """
             SELECT provider, site_id, run_id, observation_date,
                    COALESCE(NULLIF(LOWER(TRIM(search_type)), ''), 'web')
@@ -174,7 +188,7 @@ internal sealed partial class SqliteWebSearchObservationStore
             """,
             static record => new FleetDatedScope(record.GetString(0), record.GetString(1), record.GetString(2),
                 ParseFleetDate(record.GetString(3)), record.GetString(4)), cancellationToken: cancellationToken).ConfigureAwait(false);
-        var dimensionScopes = await client.QueryAsListAsync(_databasePath,
+        var dimensionScopes = await session.QueryAsListAsync(
             """
             SELECT r.provider, r.site_id, r.run_id, LOWER(TRIM(scopes.value))
             FROM search_observation_runs r
@@ -182,23 +196,24 @@ internal sealed partial class SqliteWebSearchObservationStore
             """,
             static record => new FleetRunScope(record.GetString(0), record.GetString(1), record.GetString(2), record.GetString(3)),
             cancellationToken: cancellationToken).ConfigureAwait(false);
-        var observationDimensionScopes = await client.QueryAsListAsync(_databasePath,
+        var observationDimensionScopes = await session.QueryAsListAsync(
             """
-            SELECT provider, site_id, run_id,
+            SELECT provider, site_id, run_id, observation_date,
                    CASE
                        WHEN page IS NOT NULL AND query IS NOT NULL THEN 'page-query'
                        WHEN page IS NOT NULL THEN 'page'
                        ELSE 'query'
                    END
             FROM search_observations
-            GROUP BY provider, site_id, run_id,
+            GROUP BY provider, site_id, run_id, observation_date,
                      CASE
                          WHEN page IS NOT NULL AND query IS NOT NULL THEN 'page-query'
                          WHEN page IS NOT NULL THEN 'page'
                          ELSE 'query'
                      END;
             """,
-            static record => new FleetRunScope(record.GetString(0), record.GetString(1), record.GetString(2), record.GetString(3)),
+            static record => new FleetDatedScope(record.GetString(0), record.GetString(1), record.GetString(2),
+                ParseFleetDate(record.GetString(3)), record.GetString(4)),
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         var coverageByRun = coverageDates.ToLookup(FleetScopeIdentity, StringComparer.Ordinal);
@@ -211,24 +226,32 @@ internal sealed partial class SqliteWebSearchObservationStore
             var identity = FleetRunIdentity(run.Provider, run.SiteId, run.RunId);
             if (run.FromDate.HasValue && run.ThroughDate.HasValue)
             {
-                var runDimensionScopes = dimensionScopesByRun[identity].Select(value => value.Scope).ToArray();
-                if (runDimensionScopes.Length == 0 && string.Equals(run.CoverageMode, "snapshot", StringComparison.Ordinal))
-                {
-                    runDimensionScopes = observationDimensionScopesByRun[identity]
-                        .Select(value => value.Scope)
-                        .Distinct(StringComparer.Ordinal)
-                        .OrderBy(value => value, StringComparer.Ordinal)
-                        .ToArray();
-                }
+                var runDimensionScopes = dimensionScopesByRun[identity]
+                    .SelectMany(value => ExpandDimensionScope(value.Scope))
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(value => value, StringComparer.Ordinal)
+                    .ToArray();
                 var explicitCoverageDates = coverageByRun[identity].Select(value => value.Date).ToArray();
+                var explicitCoverageDateSet = explicitCoverageDates.ToHashSet();
                 var explicitCoverageRanges = MergeDates(explicitCoverageDates);
-                var coversFleetCapability = SearchSnapshotCoversFleetCapability(run, runDimensionScopes);
+                var inferredDimensionRows = observationDimensionScopesByRun[identity].ToArray();
+                var coversFleetCapability = SearchSnapshotCoversFleetCapability(run, runDimensionScopes) &&
+                                            !(string.Equals(run.CoverageMode, "snapshot", StringComparison.Ordinal) &&
+                                              runDimensionScopes.Length == 0 && inferredDimensionRows.Length > 0);
                 var explicitDates = coversFleetCapability
                     ? explicitCoverageDates
                     : Enumerable.Empty<DateOnly>();
-                var dimensionRanges = coversFleetCapability
-                    ? Array.Empty<WebSearchFleetCompletedRange>()
-                    : explicitCoverageRanges;
+                var dimensionCoverage = coversFleetCapability
+                    ? Array.Empty<FleetDimensionCoverage>()
+                    : runDimensionScopes.Length > 0
+                        ? runDimensionScopes.Select(scope => new FleetDimensionCoverage(scope, explicitCoverageRanges)).ToArray()
+                        : inferredDimensionRows
+                            .Where(value => explicitCoverageDateSet.Contains(value.Date))
+                            .SelectMany(value => ExpandDimensionScope(value.Scope).Select(scope => (scope, value.Date)))
+                            .GroupBy(value => value.scope, StringComparer.Ordinal)
+                            .OrderBy(value => value.Key, StringComparer.Ordinal)
+                            .Select(group => new FleetDimensionCoverage(group.Key, MergeDates(group.Select(value => value.Date))))
+                            .ToArray();
                 if (!string.IsNullOrWhiteSpace(run.SearchType))
                 {
                     var ranges = run.Status == "complete" && string.Equals(run.CoverageMode, "daily", StringComparison.Ordinal)
@@ -236,7 +259,7 @@ internal sealed partial class SqliteWebSearchObservationStore
                         : MergeDates(explicitDates);
                     result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
                         run.SearchType.Trim().ToLowerInvariant(), ranges, run.ConfigurationHash, run.FailureCategory, run.FailureDate,
-                        DimensionScopes: runDimensionScopes, DimensionCompletedRanges: dimensionRanges));
+                        DimensionCoverage: dimensionCoverage));
                 }
                 else
                 {
@@ -250,7 +273,7 @@ internal sealed partial class SqliteWebSearchObservationStore
                             : MergeDates(explicitDates);
                         result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
                             "web", ranges, run.ConfigurationHash, run.FailureCategory, run.FailureDate,
-                            DimensionScopes: runDimensionScopes, DimensionCompletedRanges: dimensionRanges));
+                            DimensionCoverage: dimensionCoverage));
                     }
                     foreach (var scope in scopes)
                     {
@@ -261,7 +284,7 @@ internal sealed partial class SqliteWebSearchObservationStore
                             dates = dates.Concat(explicitDates);
                         result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
                             scope.Key, MergeDates(dates), run.ConfigurationHash, run.FailureCategory, run.FailureDate,
-                            DimensionScopes: runDimensionScopes, DimensionCompletedRanges: dimensionRanges));
+                            DimensionCoverage: dimensionCoverage));
                     }
                 }
                 continue;
@@ -285,9 +308,9 @@ internal sealed partial class SqliteWebSearchObservationStore
         return result.ToArray();
     }
 
-    private async Task<FleetRun[]> ReadTrafficFleetRunsAsync(SQLite client, CancellationToken cancellationToken)
+    private static async Task<FleetRun[]> ReadTrafficFleetRunsAsync(SQLiteAsyncSession session, CancellationToken cancellationToken)
     {
-        var runs = await client.QueryAsListAsync(_databasePath,
+        var runs = await session.QueryAsListAsync(
             """
             SELECT run_id, provider, site_id, collected_at_utc, status,
                    configuration_hash,
@@ -301,7 +324,7 @@ internal sealed partial class SqliteWebSearchObservationStore
                 record.GetString(0), record.GetString(1), record.GetString(2), ParseFleetTimestamp(record.GetString(3)), record.GetString(4),
                 NullableString(record, 5), NullableDate(record, 6), NullableDate(record, 7), NullableString(record, 8), NullableDate(record, 9)),
             cancellationToken: cancellationToken).ConfigureAwait(false);
-        var coverageDates = await client.QueryAsListAsync(_databasePath,
+        var coverageDates = await session.QueryAsListAsync(
             """
             SELECT r.provider, r.site_id, r.run_id, dates.value
             FROM traffic_observation_runs r
@@ -320,9 +343,9 @@ internal sealed partial class SqliteWebSearchObservationStore
         }).ToArray();
     }
 
-    private async Task<FleetRun[]> ReadPerformanceFleetRunsAsync(SQLite client, CancellationToken cancellationToken)
+    private static async Task<FleetRun[]> ReadPerformanceFleetRunsAsync(SQLiteAsyncSession session, CancellationToken cancellationToken)
     {
-        var runs = await client.QueryAsListAsync(_databasePath,
+        var runs = await session.QueryAsListAsync(
             """
             SELECT run_id, provider, site_id, collected_at_utc, status,
                    measurement_kind, target_kind, target_url, form_factor, configuration_hash
@@ -343,10 +366,9 @@ internal sealed partial class SqliteWebSearchObservationStore
             .ToArray();
     }
 
-    private async Task<FleetRetainedCoverage[]> ReadRetainedCoverageAsync(SQLite client, CancellationToken cancellationToken)
+    private static async Task<FleetRetainedCoverage[]> ReadRetainedCoverageAsync(SQLiteAsyncSession session, CancellationToken cancellationToken)
     {
-        var values = await client.QueryAsListAsync(
-            _databasePath,
+        var values = await session.QueryAsListAsync(
             """
             SELECT kind, provider, site_id, stream_key, NULLIF(configuration_hash, ''),
                    from_date, through_date, source_collected_at_utc, retained_at_utc
@@ -372,8 +394,9 @@ internal sealed partial class SqliteWebSearchObservationStore
             value.ConfigurationHash,
             null,
             IsCoverageSummary: true,
-            DimensionScopes: value.DimensionScope is null ? null : [value.DimensionScope],
-            DimensionCompletedRanges: value.DimensionScope is null ? null : ranges);
+            DimensionCoverage: value.DimensionScope is null
+                ? null
+                : [new FleetDimensionCoverage(value.DimensionScope, ranges)]);
     }
 
     private static IEnumerable<WebSearchFleetEvidenceStream> BuildSearchStreams(IEnumerable<FleetRun> runs) =>
@@ -418,7 +441,7 @@ internal sealed partial class SqliteWebSearchObservationStore
         var latestActual = actualRuns.FirstOrDefault();
         var completed = actualRuns.Where(value => value.Status == "complete" ||
                                                   value.CompletedRanges.Length > 0 ||
-                                                  value.DimensionCompletedRanges.Length > 0).ToArray();
+                                                  value.DimensionCoverage.Any(coverage => coverage.CompletedRanges.Length > 0)).ToArray();
         var permanentFailures = actualRuns
             .Where(value => value.Status == "partial" &&
                             value.FailureDate.HasValue &&
@@ -481,10 +504,10 @@ internal sealed partial class SqliteWebSearchObservationStore
             .SelectMany(value => value.CompletedRanges.Select(range => new FleetRetainedCoverage(
                     kind, value.Provider, value.SiteId, value.StreamKey, value.ConfigurationHash,
                     range.FromDate, range.ThroughDate, value.CollectedAtUtc, retainedAtUtc, null))
-                .Concat(value.DimensionScopes.SelectMany(scope => value.DimensionCompletedRanges.Select(range =>
+                .Concat(value.DimensionCoverage.SelectMany(coverage => coverage.CompletedRanges.Select(range =>
                     new FleetRetainedCoverage(
                         kind, value.Provider, value.SiteId, value.StreamKey, value.ConfigurationHash,
-                        range.FromDate, range.ThroughDate, value.CollectedAtUtc, retainedAtUtc, scope)))))
+                        range.FromDate, range.ThroughDate, value.CollectedAtUtc, retainedAtUtc, coverage.Scope)))))
             .Distinct()
             .ToArray();
         return new RetentionPlan(runTable, observationTable, candidates, coverageSummaries, new WebSearchFleetRetentionKindResult
@@ -533,12 +556,11 @@ internal sealed partial class SqliteWebSearchObservationStore
         }
     }
 
-    private async Task<int> CountFleetObservationsAsync(SQLite client, RetentionPlan plan, CancellationToken cancellationToken)
+    private static async Task<int> CountFleetObservationsAsync(SQLiteAsyncSession session, RetentionPlan plan, CancellationToken cancellationToken)
     {
         if (plan.Candidates.Length == 0)
             return 0;
-        var rows = await client.QueryAsListAsync(
-            _databasePath,
+        var rows = await session.QueryAsListAsync(
             $"SELECT provider, site_id, run_id, COUNT(*) FROM {plan.ObservationTable} GROUP BY provider, site_id, run_id;",
             static record => (Identity: FleetRunIdentity(record.GetString(0), record.GetString(1), record.GetString(2)), Count: Convert.ToInt32(record.GetInt64(3))),
             cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -553,11 +575,13 @@ internal sealed partial class SqliteWebSearchObservationStore
     {
         var runs = values.ToArray();
         var pageRanges = MergeRanges(runs
-            .Where(value => value.DimensionScopes.Contains("page", StringComparer.Ordinal))
-            .SelectMany(value => value.DimensionCompletedRanges));
+            .SelectMany(value => value.DimensionCoverage)
+            .Where(value => value.Scope == "page")
+            .SelectMany(value => value.CompletedRanges));
         var queryRanges = MergeRanges(runs
-            .Where(value => value.DimensionScopes.Contains("query", StringComparer.Ordinal))
-            .SelectMany(value => value.DimensionCompletedRanges));
+            .SelectMany(value => value.DimensionCoverage)
+            .Where(value => value.Scope == "query")
+            .SelectMany(value => value.CompletedRanges));
         var combined = new List<WebSearchFleetCompletedRange>();
         var pageIndex = 0;
         var queryIndex = 0;
@@ -607,6 +631,12 @@ internal sealed partial class SqliteWebSearchObservationStore
     private static string FleetScopeIdentity(FleetDatedScope value) => FleetRunIdentity(value.Provider, value.SiteId, value.RunId);
 
     private static string FleetScopeIdentity(FleetRunScope value) => FleetRunIdentity(value.Provider, value.SiteId, value.RunId);
+
+    private static IEnumerable<string> ExpandDimensionScope(string scope) => scope switch
+    {
+        "page-query" => ["page", "query"],
+        _ => [scope]
+    };
 
     private static bool SearchSnapshotCoversFleetCapability(SearchFleetRunMetadata run, IReadOnlyCollection<string> scopes)
     {
@@ -682,18 +712,24 @@ internal sealed partial class SqliteWebSearchObservationStore
         DateOnly? FailureDate = null,
         bool IsCoverageSummary = false,
         string? MeasurementKind = null,
-        string[]? DimensionScopes = null,
-        WebSearchFleetCompletedRange[]? DimensionCompletedRanges = null)
+        FleetDimensionCoverage[]? DimensionCoverage = null)
     {
-        public string[] DimensionScopes { get; } = DimensionScopes ?? Array.Empty<string>();
+        public FleetDimensionCoverage[] DimensionCoverage { get; } =
+            DimensionCoverage ?? Array.Empty<FleetDimensionCoverage>();
 
-        public WebSearchFleetCompletedRange[] DimensionCompletedRanges { get; } =
-            DimensionCompletedRanges ?? Array.Empty<WebSearchFleetCompletedRange>();
-
-        public string RetentionScopeKey => DimensionCompletedRanges.Length == 0
+        public string RetentionScopeKey => DimensionCoverage.Length == 0
             ? string.Empty
-            : string.Join(",", DimensionScopes);
+            : string.Join(",", DimensionCoverage.Select(value => value.Scope).OrderBy(value => value, StringComparer.Ordinal));
     }
+
+    private sealed record FleetDimensionCoverage(string Scope, WebSearchFleetCompletedRange[] CompletedRanges);
+
+    private sealed record FleetReadSet(
+        int SchemaVersion,
+        FleetRun[] Search,
+        FleetRun[] Traffic,
+        FleetRun[] Performance,
+        FleetRetainedCoverage[] RetainedCoverage);
 
     private sealed record SearchFleetRunMetadata(
         string RunId,
