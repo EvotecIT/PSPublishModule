@@ -69,6 +69,57 @@ public static partial class WebSearchProviderDoctor
         Func<string, string?>? environmentResolver = null,
         IReadOnlySet<string>? availableCollectorKinds = null)
     {
+        return InspectCore(configuration, environmentResolver, availableCollectorKinds, null);
+    }
+
+    /// <summary>Runs provider checks against the exact capabilities implemented by each collector kind.</summary>
+    /// <param name="configuration">Provider configuration to inspect.</param>
+    /// <param name="availableCollectorCapabilities">Implemented capabilities keyed by provider kind.</param>
+    /// <param name="environmentResolver">Optional environment resolver used by tests and alternate hosts.</param>
+    /// <returns>Fleet capability and readiness report.</returns>
+    public static WebSearchProviderDoctorResult InspectWithCapabilities(
+        WebSearchProviderConfiguration configuration,
+        IReadOnlyDictionary<string, IReadOnlySet<string>> availableCollectorCapabilities,
+        Func<string, string?>? environmentResolver = null)
+    {
+        ArgumentNullException.ThrowIfNull(availableCollectorCapabilities);
+        return InspectCore(configuration, environmentResolver, null, availableCollectorCapabilities);
+    }
+
+    /// <summary>Inspects one provider action without allowing unrelated fleet registrations to affect readiness or identity.</summary>
+    internal static WebSearchProviderDoctorResult InspectProviderAction(
+        WebSearchProviderConfiguration configuration,
+        WebSearchSiteProviderConfiguration site,
+        WebSearchProviderRegistration provider,
+        IReadOnlyDictionary<string, IReadOnlySet<string>> availableCollectorCapabilities,
+        Func<string, string?>? environmentResolver = null)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(site);
+        ArgumentNullException.ThrowIfNull(provider);
+        ArgumentNullException.ThrowIfNull(availableCollectorCapabilities);
+        var scopedConfiguration = new WebSearchProviderConfiguration
+        {
+            SchemaVersion = configuration.SchemaVersion,
+            Sites =
+            [
+                new WebSearchSiteProviderConfiguration
+                {
+                    Id = site.Id,
+                    BaseUrl = site.BaseUrl,
+                    Providers = [provider]
+                }
+            ]
+        };
+        return InspectCore(scopedConfiguration, environmentResolver, null, availableCollectorCapabilities);
+    }
+
+    private static WebSearchProviderDoctorResult InspectCore(
+        WebSearchProviderConfiguration configuration,
+        Func<string, string?>? environmentResolver,
+        IReadOnlySet<string>? availableCollectorKinds,
+        IReadOnlyDictionary<string, IReadOnlySet<string>>? availableCollectorCapabilities)
+    {
         ArgumentNullException.ThrowIfNull(configuration);
         environmentResolver ??= Environment.GetEnvironmentVariable;
         availableCollectorKinds ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -128,14 +179,28 @@ public static partial class WebSearchProviderDoctor
                     ValidateCredential(provider, descriptor, environmentResolver, siteId, providerId, checks);
                 }
 
-                var collectorAvailable = descriptor is not null && availableCollectorKinds.Contains(kind);
+                var implementedCapabilities = ResolveImplementedCapabilities(
+                    kind,
+                    descriptor,
+                    availableCollectorKinds,
+                    availableCollectorCapabilities);
+                var missingCollectorCapabilities = requestedCapabilities
+                    .Except(implementedCapabilities, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(capability => capability, StringComparer.Ordinal)
+                    .ToArray();
+                var collectorAvailable = descriptor is not null &&
+                                         requestedCapabilities.Length > 0 &&
+                                         missingCollectorCapabilities.Length == 0;
                 if (provider?.Enabled == true && descriptor is not null && !collectorAvailable)
                 {
+                    var missing = missingCollectorCapabilities.Length == 0
+                        ? string.Empty
+                        : $" Missing capabilities: {string.Join(", ", missingCollectorCapabilities)}.";
                     AddCheck(
                         checks,
                         "provider.collector-unavailable",
                         WebSearchProviderCheckSeverity.Warning,
-                        $"Provider '{SafeLabel(providerId)}' is configured, but collector kind '{SafeLabel(kind)}' is not available in this executable.",
+                        $"Provider '{SafeLabel(providerId)}' is configured, but collector kind '{SafeLabel(kind)}' does not implement every requested capability in this executable.{missing}",
                         siteId,
                         providerId,
                         "Install or build a PowerForge.Web version that contains this collector.");
@@ -150,7 +215,12 @@ public static partial class WebSearchProviderDoctor
                     ConfigurationReady = false,
                     CollectorAvailable = collectorAvailable,
                     RequestedCapabilities = requestedCapabilities,
-                    SupportedCapabilities = descriptor?.Capabilities.ToArray() ?? Array.Empty<string>()
+                    SupportedCapabilities = descriptor?.Capabilities.ToArray() ?? Array.Empty<string>(),
+                    AvailableCollectorCapabilities = implementedCapabilities
+                        .Where(capability => requestedCapabilities.Contains(capability, StringComparer.OrdinalIgnoreCase))
+                        .OrderBy(capability => capability, StringComparer.Ordinal)
+                        .ToArray(),
+                    MissingCollectorCapabilities = missingCollectorCapabilities
                 });
             }
         }
@@ -183,6 +253,30 @@ public static partial class WebSearchProviderDoctor
                 .ToArray(),
             Checks = orderedChecks
         };
+    }
+
+    private static string[] ResolveImplementedCapabilities(
+        string kind,
+        ProviderDescriptor? descriptor,
+        IReadOnlySet<string> availableCollectorKinds,
+        IReadOnlyDictionary<string, IReadOnlySet<string>>? availableCollectorCapabilities)
+    {
+        if (descriptor is null)
+            return Array.Empty<string>();
+        if (availableCollectorCapabilities is not null)
+        {
+            var entry = availableCollectorCapabilities.FirstOrDefault(pair =>
+                pair.Key.Equals(kind, StringComparison.OrdinalIgnoreCase));
+            if (entry.Key is null || entry.Value is null)
+                return Array.Empty<string>();
+            return descriptor.Capabilities
+                .Where(capability => entry.Value.Contains(capability, StringComparer.OrdinalIgnoreCase))
+                .ToArray();
+        }
+
+        return availableCollectorKinds.Contains(kind)
+            ? descriptor.Capabilities.ToArray()
+            : Array.Empty<string>();
     }
 
     private static void ValidateSite(

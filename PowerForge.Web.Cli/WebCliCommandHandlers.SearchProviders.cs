@@ -5,6 +5,44 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
+    private const string SelectedActionCredentialPlaceholder = "credential-not-required-by-selected-action";
+
+    internal static WebSearchProviderDoctorResult InspectProviderAction(
+        WebSearchProviderConfiguration configuration,
+        WebSearchSiteProviderConfiguration site,
+        WebSearchProviderRegistration provider,
+        string requiredCapability,
+        bool useSelectedCredential)
+    {
+        var selectedCredentialVariable = useSelectedCredential
+            ? provider.Credential?.EnvironmentVariable
+            : null;
+        var doctor = WebSearchProviderDoctor.InspectProviderAction(
+            configuration,
+            site,
+            provider,
+            WebSearchCollectorCatalog.AvailableCapabilities,
+            name => !string.IsNullOrWhiteSpace(selectedCredentialVariable) &&
+                    string.Equals(name, selectedCredentialVariable, StringComparison.Ordinal)
+                ? Environment.GetEnvironmentVariable(name)
+                : SelectedActionCredentialPlaceholder);
+        if (!doctor.Success || string.IsNullOrWhiteSpace(doctor.ConfigurationHash))
+        {
+            var firstError = doctor.Checks.FirstOrDefault(check => check.Severity == WebSearchProviderCheckSeverity.Error);
+            throw new ArgumentException(firstError?.Message ?? "Provider configuration has blocking capability errors.");
+        }
+
+        var providerState = doctor.Providers.SingleOrDefault(value =>
+            value.SiteId.Equals(site.Id, StringComparison.OrdinalIgnoreCase) &&
+            value.ProviderId.Equals(provider.Id, StringComparison.OrdinalIgnoreCase));
+        if (providerState is null ||
+            !providerState.AvailableCollectorCapabilities.Contains(requiredCapability, StringComparer.Ordinal))
+        {
+            throw new ArgumentException($"Provider collector must implement capability '{requiredCapability}'.");
+        }
+        return doctor;
+    }
+
     internal static int HandleProvider(
         string[] subArgs,
         bool outputJson,
@@ -35,7 +73,9 @@ internal static partial class WebCliCommandHandlers
         try
         {
             var loaded = WebSearchProviderConfigurationLoader.LoadWithPath(configPath, WebCliJson.Options);
-            var result = WebSearchProviderDoctor.Inspect(loaded.Configuration);
+            var result = WebSearchProviderDoctor.InspectWithCapabilities(
+                loaded.Configuration,
+                WebSearchCollectorCatalog.AvailableCapabilities);
             var exitCode = result.Success ? 0 : 1;
 
             if (outputJson)

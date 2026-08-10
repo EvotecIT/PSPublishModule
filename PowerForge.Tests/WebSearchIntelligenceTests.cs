@@ -18,6 +18,7 @@ public sealed partial class WebSearchIntelligenceTests
         var second = WebSearchObservationNormalizer.Normalize(batch);
 
         Assert.Equal(first.RunId, second.RunId);
+        Assert.Equal("41b6de26c03ea17de07c23b0af3b284bd465f141eb83a35e3b9914437a520a5d", first.RunId);
         Assert.Equal("google-search-console", first.Provider);
         Assert.Equal("officeimo", first.SiteId);
         Assert.Equal("desktop", first.Observations[0].Device);
@@ -293,6 +294,7 @@ public sealed partial class WebSearchIntelligenceTests
         {
             var databasePath = Path.Combine(root, "history", "search.db");
             var normalized = WebSearchObservationNormalizer.Normalize(CreateBatch());
+            var legacyManifest = JsonSerializer.Serialize(normalized, WebCliJson.Options);
             var store = new SqliteWebSearchObservationStore(databasePath);
 
             var first = await store.ImportAsync(normalized);
@@ -310,6 +312,9 @@ public sealed partial class WebSearchIntelligenceTests
             Assert.Equal(3, first.DatabaseSchemaVersion);
             Assert.Equal(0, second.InsertedCount);
             Assert.Equal(1, second.DuplicateCount);
+            Assert.Equal(1, normalized.SchemaVersion);
+            Assert.DoesNotContain("collectionCoverage", legacyManifest, StringComparison.Ordinal);
+            Assert.DoesNotContain("zeroDataConfirmed", legacyManifest, StringComparison.Ordinal);
             var observation = Assert.Single(observations);
             Assert.Equal(normalized.Observations[0].ObservationKey, observation.ObservationKey);
             Assert.Equal(100, observation.Impressions);
@@ -348,6 +353,94 @@ public sealed partial class WebSearchIntelligenceTests
             Assert.Equal(4, latest.Clicks);
             Assert.Equal(120, latest.Impressions);
             Assert.Equal(revised.Observations[0].ObservationKey, latest.ObservationKey);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task SqliteStore_NewerCompleteZeroDataRunSuppressesStaleDailyEvidence()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "search.db"));
+            var observed = WebSearchObservationNormalizer.Normalize(CreateBatch());
+            var zeroData = WebSearchObservationNormalizer.Normalize(new WebSearchObservationBatch
+            {
+                SchemaVersion = 2,
+                Provider = observed.Provider,
+                SiteId = observed.SiteId,
+                CollectedAtUtc = observed.CollectedAtUtc.AddDays(1),
+                SourceKind = "api",
+                Status = "complete",
+                CollectionCoverage = new WebSearchObservationCollectionCoverage
+                {
+                    FromDate = observed.Observations[0].Date,
+                    ThroughDate = observed.Observations[0].Date,
+                    SearchType = observed.Observations[0].SearchType,
+                    CompletedDates = [observed.Observations[0].Date]
+                },
+                ZeroDataConfirmed = true,
+                Observations = Array.Empty<WebSearchObservation>()
+            });
+
+            await store.ImportAsync(observed);
+            await store.ImportAsync(zeroData);
+
+            var observations = await store.QueryAsync(new WebSearchObservationQuery { SiteId = observed.SiteId });
+
+            Assert.Empty(observations);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task SqliteStore_NewerCompleteRunSupersedesTheWholeCoveredSlice()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var firstInput = CreateBatch();
+            firstInput.SchemaVersion = 2;
+            firstInput.CollectionCoverage = DailyCoverage(firstInput.Observations[0].Date, "web");
+            firstInput.Observations =
+            [
+                firstInput.Observations[0],
+                new WebSearchObservation
+                {
+                    Date = firstInput.Observations[0].Date,
+                    Page = "https://officeimo.com/removed/",
+                    Query = "removed dimension",
+                    SearchType = "web",
+                    Clicks = 1,
+                    Impressions = 5,
+                    AveragePosition = 5
+                }
+            ];
+            var revisionInput = CreateBatch();
+            revisionInput.SchemaVersion = 2;
+            revisionInput.CollectedAtUtc = firstInput.CollectedAtUtc.AddDays(1);
+            revisionInput.CollectionCoverage = DailyCoverage(revisionInput.Observations[0].Date, "web");
+            revisionInput.Observations[0].Clicks = 4;
+            revisionInput.Observations[0].Impressions = 120;
+            var first = WebSearchObservationNormalizer.Normalize(firstInput);
+            var revision = WebSearchObservationNormalizer.Normalize(revisionInput);
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "search.db"));
+
+            await store.ImportAsync(first);
+            await store.ImportAsync(revision);
+
+            var observations = await store.QueryAsync(new WebSearchObservationQuery { SiteId = "officeimo" });
+
+            var current = Assert.Single(observations);
+            Assert.Equal(revision.Observations[0].ObservationKey, current.ObservationKey);
+            Assert.DoesNotContain(observations, value => value.Query == "removed dimension");
         }
         finally
         {
@@ -637,8 +730,17 @@ public sealed partial class WebSearchIntelligenceTests
         }
     }
 
+    private static WebSearchObservationCollectionCoverage DailyCoverage(DateOnly date, string searchType) => new()
+    {
+        FromDate = date,
+        ThroughDate = date,
+        SearchType = searchType,
+        CompletedDates = [date]
+    };
+
     private static WebSearchObservationBatch CreateBatch() => new()
     {
+        SchemaVersion = 1,
         Provider = " Google-Search-Console ",
         SiteId = " OfficeIMO ",
         CollectedAtUtc = new DateTimeOffset(2026, 8, 2, 8, 0, 0, TimeSpan.Zero),

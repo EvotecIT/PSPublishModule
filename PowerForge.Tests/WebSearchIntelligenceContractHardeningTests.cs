@@ -190,6 +190,45 @@ public sealed partial class WebSearchIntelligenceTests
     }
 
     [Fact]
+    public void ObservationSchema_AcceptsVersionTwoCoverageAndRejectsItWhenMissing()
+    {
+        var batch = CreateBatch();
+        batch.SchemaVersion = 2;
+        batch.CollectionCoverage = new WebSearchObservationCollectionCoverage
+        {
+            FromDate = new DateOnly(2026, 8, 1),
+            ThroughDate = new DateOnly(2026, 8, 1),
+            SearchType = "web",
+            CompletedDates = [new DateOnly(2026, 8, 1)]
+        };
+        var documented = JsonNode.Parse(JsonSerializer.Serialize(batch))!;
+        var missingCoverage = documented.DeepClone();
+        missingCoverage.AsObject().Remove("collectionCoverage");
+        var schema = LoadObservationSchema();
+
+        Assert.True(schema.Evaluate(documented, new EvaluationOptions()).IsValid);
+        Assert.False(schema.Evaluate(missingCoverage, new EvaluationOptions()).IsValid);
+    }
+
+    [Fact]
+    public void Normalizer_RequiresCoverageSearchTypeForNonWebObservations()
+    {
+        var batch = CreateBatch();
+        batch.SchemaVersion = 2;
+        batch.Observations[0].SearchType = "image";
+        batch.CollectionCoverage = new WebSearchObservationCollectionCoverage
+        {
+            FromDate = batch.Observations[0].Date,
+            ThroughDate = batch.Observations[0].Date,
+            CompletedDates = [batch.Observations[0].Date]
+        };
+
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(batch));
+
+        Assert.Contains("coverage searchType", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SqliteStore_ScopesExternalRunIdentifiersByProviderAndSite()
     {
         var root = CreateTemporaryDirectory();

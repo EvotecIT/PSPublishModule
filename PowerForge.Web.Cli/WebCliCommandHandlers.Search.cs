@@ -15,10 +15,23 @@ internal static partial class WebCliCommandHandlers
         WebConsoleLogger logger,
         int outputSchemaVersion)
     {
-        if (subArgs.Length == 0 || !subArgs[0].Equals("import", StringComparison.OrdinalIgnoreCase))
-            return FailSearch("Observe requires the 'import' action.", outputJson, logger, "web.observe.import");
+        if (subArgs.Length == 0)
+            return FailSearch("Observe requires the 'import' or 'collect' action.", outputJson, logger, "web.observe");
 
-        var args = subArgs.Skip(1).ToArray();
+        return subArgs[0].ToLowerInvariant() switch
+        {
+            "import" => HandleObserveImport(subArgs.Skip(1).ToArray(), outputJson, logger, outputSchemaVersion),
+            "collect" => HandleObserveCollect(subArgs.Skip(1).ToArray(), outputJson, logger, outputSchemaVersion),
+            _ => FailSearch("Observe requires the 'import' or 'collect' action.", outputJson, logger, "web.observe")
+        };
+    }
+
+    private static int HandleObserveImport(
+        string[] args,
+        bool outputJson,
+        WebConsoleLogger logger,
+        int outputSchemaVersion)
+    {
         var missingValueOption = FindSearchOptionWithoutValue(
             args,
             "--input", "--database", "--provider", "--site", "--output");
