@@ -917,6 +917,8 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             // Documentation example: .unsafeFlags(["-I/tmp"]) and .systemLibrary(name: "Host")
             let documentation = ".unsafeFlags( and .systemLibrary( are rejected when used as syntax"
             let rawDocumentation = #".plugin( and .macro( are rejected when used as syntax"#
+            let escapedInterpolationDocumentation = "\\(literal documentation)"
+            let rawInterpolationDocumentation = #"\(literal raw documentation)"#
             let multilineDocumentation = """
             Nested /* comment markers */ and .macro( remain inert inside a multiline string.
             """

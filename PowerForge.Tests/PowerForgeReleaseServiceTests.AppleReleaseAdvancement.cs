@@ -108,6 +108,44 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleVersion_UsesTheSingleApprovedRemoteObservation()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.5.0", "13");
+            WriteXcodeGenVersionSource(root, "1.5.0", "13");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.VersionSourcePath = "project.yml";
+            var remoteQueries = 0;
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Version must not query release status."),
+                generateAppleProject: _ => true,
+                getHighestAppleBuildNumber: (_, _, _) => ++remoteQueries == 1 ? 13 : 99);
+
+            var result = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Version,
+                AppleMarketingVersion = "1.6.0",
+                AppleActionConfirmed = true
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(1, remoteQueries);
+            Assert.Equal("14", result.AppleReceipt!.Versioning!.BuildNumber);
+            var version = new AppleReleaseVersionSourceService().Read(Path.Combine(root, "project.yml"));
+            Assert.Equal("14", version.BuildNumber);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleVersion_UsesConfiguredPatternToAdvanceRepeatedTestFlightBuild()
     {
         var root = CreateSandbox();

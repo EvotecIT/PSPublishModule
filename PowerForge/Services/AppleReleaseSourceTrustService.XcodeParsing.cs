@@ -45,7 +45,8 @@ internal sealed partial class AppleReleaseSourceTrustService
                 var value = rawValue.Trim().TrimEnd('/');
                 while (value.EndsWith("/**", StringComparison.Ordinal))
                     value = value.Substring(0, value.Length - 3).TrimEnd('/');
-                if (string.IsNullOrWhiteSpace(value) || IsToolchainOrBuildProductPath(value))
+                if (string.IsNullOrWhiteSpace(value) ||
+                    IsValidatedToolchainOrBuildProductPath(value, key, source))
                     continue;
                 var candidate = ResolveBuildSettingPath(projectDirectory, value, key);
                 EnsurePathWithinRepository(repositoryRoot, candidate, $"Xcode build setting {key} from {source}");
@@ -197,7 +198,10 @@ internal sealed partial class AppleReleaseSourceTrustService
            token.Contains("$(", StringComparison.Ordinal) ||
            token.Contains("${", StringComparison.Ordinal);
 
-    private static bool IsToolchainOrBuildProductPath(string value)
+    private static bool IsValidatedToolchainOrBuildProductPath(
+        string value,
+        string key,
+        string source)
     {
         var known = new[]
         {
@@ -208,14 +212,47 @@ internal sealed partial class AppleReleaseSourceTrustService
             "$(CONFIGURATION_BUILD_DIR)", "${CONFIGURATION_BUILD_DIR}",
             "$(TARGET_BUILD_DIR)", "${TARGET_BUILD_DIR}"
         };
-        return known.Any(prefix => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        var prefix = known.FirstOrDefault(candidate =>
+            value.Equals(candidate, StringComparison.Ordinal) ||
+            (value.StartsWith(candidate, StringComparison.Ordinal) &&
+             value.Length > candidate.Length &&
+             (value[candidate.Length] == '/' || value[candidate.Length] == '\\')));
+        if (prefix is null)
+            return false;
+
+        var suffix = value.Substring(prefix.Length).Replace('\\', '/');
+        if (suffix.Contains("$(", StringComparison.Ordinal) ||
+            suffix.Contains("${", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Xcode build setting {key} composes multiple build roots and cannot be proven safely: {value} ({source})");
+        }
+
+        var depth = 0;
+        foreach (var segment in suffix.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".")
+                continue;
+            if (segment == "..")
+            {
+                if (depth == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Xcode build setting {key} escapes approved toolchain or build-product root '{prefix}': {value} ({source})");
+                }
+                depth--;
+                continue;
+            }
+            depth++;
+        }
+        return true;
     }
 
     private static Dictionary<string, PbxObject> ParsePbxObjects(string text)
     {
         var objects = new Dictionary<string, PbxObject>(StringComparer.OrdinalIgnoreCase);
         var syntax = RemovePbxComments(text);
-        var objectDictionary = ReadPbxDictionary(syntax, "objects") ?? syntax;
+        var objectDictionary = ReadRootPbxObjectDictionary(syntax);
         for (var index = 0; index < objectDictionary.Length; index++)
         {
             index = SkipPbxTrivia(objectDictionary, index);
@@ -257,6 +294,30 @@ internal sealed partial class AppleReleaseSourceTrustService
             index = closingBrace;
         }
         return objects;
+    }
+
+    private static string ReadRootPbxObjectDictionary(string syntax)
+    {
+        var rootStart = SkipPbxTrivia(syntax, 0);
+        if (rootStart >= syntax.Length || syntax[rootStart] != '{')
+            return syntax;
+
+        var rootEnd = FindMatchingPbxBrace(syntax, rootStart);
+        var rootBody = syntax.Substring(rootStart + 1, rootEnd - rootStart - 1);
+        var objectAssignments = ReadPbxAssignments(rootBody)
+            .Where(static assignment => assignment.Key.Equals("objects", StringComparison.Ordinal))
+            .Select(static assignment => assignment.Value)
+            .ToArray();
+        if (objectAssignments.Length != 1 ||
+            objectAssignments[0].Length < 2 ||
+            objectAssignments[0][0] != '{' ||
+            objectAssignments[0][objectAssignments[0].Length - 1] != '}')
+        {
+            throw new InvalidOperationException(
+                "Xcode project root does not contain one unambiguous top-level objects dictionary.");
+        }
+        var objects = objectAssignments[0];
+        return objects.Substring(1, objects.Length - 2);
     }
 
     /// <summary>

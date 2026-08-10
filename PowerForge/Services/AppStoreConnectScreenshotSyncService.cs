@@ -238,8 +238,12 @@ public sealed class AppStoreConnectScreenshotSyncService
 #endif
         try
         {
+            var approvedScreenshots = expected is null
+                ? null
+                : SelectApprovedScreenshotFiles(sourceSets, expected, comparer);
             var mappings = new Dictionary<string, string>(comparer);
             var sha256 = new Dictionary<string, string>(comparer);
+            var consumedApprovedFiles = new HashSet<string>(comparer);
             var sets = sourceSets.Select((set, setIndex) =>
             {
                 var setRoot = Path.Combine(root, setIndex.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -248,16 +252,18 @@ public sealed class AppStoreConnectScreenshotSyncService
                 {
                     var source = Path.GetFullPath(sourcePath);
                     string? expectedSha256 = null;
-                    if (expected is not null && !expected.TryGetValue(source, out expectedSha256))
+                    if (approvedScreenshots is not null &&
+                        !approvedScreenshots.TryGetValue(source, out expectedSha256))
                     {
                         throw new InvalidOperationException(
                             $"Screenshot '{source}' was not part of the approved Apple release plan. Review a new exact plan before upload.");
                     }
+                    consumedApprovedFiles.Add(source);
 
                     var snapshotPath = Path.Combine(setRoot, Path.GetFileName(source));
                     File.Copy(source, snapshotPath, overwrite: false);
                     var actualSha256 = ComputeSha256(snapshotPath);
-                    if (expected is not null)
+                    if (approvedScreenshots is not null)
                     {
                         if (!actualSha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
                         {
@@ -269,8 +275,26 @@ public sealed class AppStoreConnectScreenshotSyncService
                     sha256[snapshotPath] = actualSha256;
                     return snapshotPath;
                 }).ToArray();
-                return new PreflightedScreenshotSet(set.ScreenshotDisplayType, set.Folder, files);
+                return new PreflightedScreenshotSet(
+                    set.ScreenshotDisplayType,
+                    set.Folder,
+                    set.Filter,
+                    set.MaxCount,
+                    files);
             }).ToArray();
+            if (approvedScreenshots is not null)
+            {
+                var missing = approvedScreenshots.Keys
+                    .Where(path => !consumedApprovedFiles.Contains(Path.GetFullPath(path)))
+                    .OrderBy(static path => path, comparer)
+                    .ToArray();
+                if (missing.Length > 0)
+                {
+                    throw new InvalidOperationException(
+                        "Approved screenshots disappeared before the immutable upload snapshot was created: " +
+                        string.Join(", ", missing));
+                }
+            }
             return new ScreenshotSnapshot(root, sets, mappings, sha256);
         }
         catch
@@ -278,6 +302,38 @@ public sealed class AppStoreConnectScreenshotSyncService
             try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
             throw;
         }
+    }
+
+    private static Dictionary<string, string> SelectApprovedScreenshotFiles(
+        IReadOnlyCollection<PreflightedScreenshotSet> sourceSets,
+        IReadOnlyDictionary<string, string> expected,
+        StringComparer pathComparer)
+    {
+        var selected = new Dictionary<string, string>(pathComparer);
+        foreach (var set in sourceSets)
+        {
+            var approved = expected
+                .Where(item => pathComparer.Equals(
+                    Path.GetDirectoryName(Path.GetFullPath(item.Key)),
+                    set.Folder))
+                .Where(item => MatchesScreenshotFilter(Path.GetFileName(item.Key), set.Filter))
+                .OrderBy(static item => item.Key, StringComparer.OrdinalIgnoreCase)
+                .Take(set.MaxCount);
+            foreach (var item in approved)
+                selected[Path.GetFullPath(item.Key)] = item.Value;
+        }
+        return selected;
+    }
+
+    private static bool MatchesScreenshotFilter(string fileName, string filter)
+    {
+        var expression = "^" + System.Text.RegularExpressions.Regex.Escape(filter)
+            .Replace("\\*", ".*")
+            .Replace("\\?", ".") + "$";
+        var options = System.Text.RegularExpressions.RegexOptions.CultureInvariant;
+        if (Path.DirectorySeparatorChar == '\\')
+            options |= System.Text.RegularExpressions.RegexOptions.IgnoreCase;
+        return System.Text.RegularExpressions.Regex.IsMatch(fileName, expression, options);
     }
 
     private static string ComputeSha256(string filePath)
@@ -340,21 +396,37 @@ public sealed class AppStoreConnectScreenshotSyncService
         if (files.Length == 0)
             throw new InvalidOperationException($"No screenshots matched '{filter}' in '{folder}'.");
 
-        return new PreflightedScreenshotSet(setSpec.ScreenshotDisplayType.Trim(), folder, files);
+        return new PreflightedScreenshotSet(
+            setSpec.ScreenshotDisplayType.Trim(),
+            folder,
+            filter,
+            maxCount,
+            files);
     }
 
     private sealed class PreflightedScreenshotSet
     {
-        public PreflightedScreenshotSet(string screenshotDisplayType, string folder, string[] files)
+        public PreflightedScreenshotSet(
+            string screenshotDisplayType,
+            string folder,
+            string filter,
+            int maxCount,
+            string[] files)
         {
             ScreenshotDisplayType = screenshotDisplayType;
             Folder = folder;
+            Filter = filter;
+            MaxCount = maxCount;
             Files = files;
         }
 
         public string ScreenshotDisplayType { get; }
 
         public string Folder { get; }
+
+        public string Filter { get; }
+
+        public int MaxCount { get; }
 
         public string[] Files { get; }
     }

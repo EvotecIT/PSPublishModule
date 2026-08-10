@@ -1165,6 +1165,60 @@ public sealed partial class AppStoreConnectClientTests
         }
     }
 
+    [Fact]
+    public async Task ScreenshotSyncService_RejectsApprovedFileMissingFromImmutableSnapshot()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root.FullName, "iphone-6-5"));
+            var screenshotPath = Path.Combine(folder.FullName, "01-home.png");
+            await File.WriteAllBytesAsync(screenshotPath, new byte[] { 1, 2, 3 });
+            string screenshotSha256;
+            using (var stream = File.OpenRead(screenshotPath))
+            using (var sha256 = System.Security.Cryptography.SHA256.Create())
+                screenshotSha256 = BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+
+            var missingPath = Path.Combine(folder.FullName, "02-rooms.png");
+            var handler = new SequenceHandler();
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+            using var client = new AppStoreConnectClient(CreateCredential(), http);
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppStoreConnectScreenshotSyncService(client).SyncAsync(new AppStoreConnectScreenshotSyncRequest
+                {
+                    BaseDirectory = root.FullName,
+                    ExpectedFileSha256 = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [screenshotPath] = screenshotSha256,
+                        [missingPath] = new string('0', 64)
+                    },
+                    Spec = new AppStoreConnectScreenshotSyncSpec
+                    {
+                        AppId = "app-1",
+                        VersionString = "1.0.0",
+                        Platform = ApplePlatform.iOS,
+                        Locale = "en-US",
+                        ScreenshotSets =
+                        [
+                            new AppStoreConnectScreenshotSetSyncSpec
+                            {
+                                ScreenshotDisplayType = "APP_IPHONE_65",
+                                Path = "iphone-6-5"
+                            }
+                        ]
+                    }
+                }));
+
+            Assert.Contains("disappeared", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("02-rooms.png", exception.Message, StringComparison.Ordinal);
+            Assert.Empty(handler.RequestUris);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

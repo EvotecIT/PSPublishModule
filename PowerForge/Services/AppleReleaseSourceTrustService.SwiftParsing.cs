@@ -4,6 +4,44 @@ namespace PowerForge;
 
 internal sealed partial class AppleReleaseSourceTrustService
 {
+    private static void EnsureNoExecutableSwiftStringInterpolation(string packageRoot, string source)
+    {
+        for (var index = 0; index < source.Length; index++)
+        {
+            if (!TryFindSwiftStringBounds(source, index, out var contentStart, out var endExclusive, out var hashCount))
+                continue;
+
+            for (var cursor = contentStart; cursor < endExclusive; cursor++)
+            {
+                if (source[cursor] != '\\')
+                    continue;
+                var marker = cursor + 1;
+                var hashes = 0;
+                while (marker < endExclusive && source[marker] == '#')
+                {
+                    hashes++;
+                    marker++;
+                }
+                if (hashes == hashCount && marker < endExclusive && source[marker] == '(' &&
+                    (hashCount > 0 || !IsEscapedOrdinarySwiftBackslash(source, cursor)))
+                {
+                    throw new InvalidOperationException(
+                        $"Local Swift package '{packageRoot}' uses executable string interpolation, whose manifest expression cannot be proven safely. " +
+                        "Use literal manifest declarations before creating an exact-source Apple checkpoint.");
+                }
+            }
+            index = endExclusive - 1;
+        }
+    }
+
+    private static bool IsEscapedOrdinarySwiftBackslash(string source, int slashIndex)
+    {
+        var backslashes = 0;
+        for (var index = slashIndex - 1; index >= 0 && source[index] == '\\'; index--)
+            backslashes++;
+        return backslashes % 2 == 1;
+    }
+
     private static void ValidateDirectSwiftPackageDependencyFactories(string packageRoot, string manifestSyntax)
     {
         foreach (Match reference in Regex.Matches(
@@ -100,11 +138,22 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static bool TryFindSwiftStringEnd(string source, int start, out int endExclusive)
     {
+        return TryFindSwiftStringBounds(source, start, out _, out endExclusive, out _);
+    }
+
+    private static bool TryFindSwiftStringBounds(
+        string source,
+        int start,
+        out int contentStart,
+        out int endExclusive,
+        out int hashCount)
+    {
+        contentStart = start;
         endExclusive = start;
         var quoteIndex = start;
         while (quoteIndex < source.Length && source[quoteIndex] == '#')
             quoteIndex++;
-        var hashCount = quoteIndex - start;
+        hashCount = quoteIndex - start;
         if (quoteIndex >= source.Length || source[quoteIndex] != '"')
             return false;
 
@@ -114,6 +163,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             ? 3
             : 1;
         var cursor = quoteIndex + quoteCount;
+        contentStart = cursor;
         while (cursor < source.Length)
         {
             if (MatchesSwiftStringDelimiter(source, cursor, quoteCount, hashCount) &&

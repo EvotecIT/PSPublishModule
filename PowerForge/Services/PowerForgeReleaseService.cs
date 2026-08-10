@@ -747,12 +747,15 @@ internal sealed partial class PowerForgeReleaseService
                 try
                 {
                     VerifyExpectedAppleCheckpointArchives(applePlan);
-                    AssertApplePlanStillApproved(applePlan, request.AppleExpectedPlanSha256);
+                    var approvedPlan = AssertApplePlanStillApproved(applePlan, request.AppleExpectedPlanSha256);
                     PrepareAppleReceiptJournalForMutation(applePlan, request.AppleExpectedPlanSha256);
                     receiptJournalReady = true;
                     if (applePlan.Action == PowerForgeAppleReleaseAction.Version)
                     {
-                        appleVersioning = SelectAppleVersion(applePlan);
+                        appleVersioning = SelectAppleVersion(
+                            applePlan,
+                            approvedPlan?.Versioning ?? throw new InvalidOperationException(
+                                "Apple Version execution requires one approved remote version observation."));
                         appleResults = RunAppleVersion(applePlan);
                     }
                     else if (request.CheckpointAppleApps)

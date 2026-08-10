@@ -6,7 +6,7 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
-    private void AssertApplePlanStillApproved(
+    private PowerForgeAppleReleaseReceipt? AssertApplePlanStillApproved(
         PowerForgeAppleReleasePlan plan,
         string? expectedPlanSha256)
     {
@@ -15,21 +15,27 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException(
                 "Destructive App Store screenshot replacement requires the SHA-256 from a reviewed exact Apple plan.");
         }
-        if (string.IsNullOrWhiteSpace(expectedPlanSha256))
-            return;
+        if (string.IsNullOrWhiteSpace(expectedPlanSha256) &&
+            plan.Action != PowerForgeAppleReleaseAction.Version)
+            return null;
 
-        var expected = expectedPlanSha256!.Trim();
-        if (expected.Length != 64 || expected.Any(static value => !Uri.IsHexDigit(value)))
+        var expected = expectedPlanSha256?.Trim();
+        if (expected is not null &&
+            (expected.Length != 64 || expected.Any(static value => !Uri.IsHexDigit(value))))
+        {
             throw new InvalidOperationException("The expected Apple plan SHA-256 must contain exactly 64 hexadecimal characters.");
+        }
 
-        var current = CreateApplePlanReceipt(plan).PlanSha256;
-        if (!string.Equals(expected, current, StringComparison.OrdinalIgnoreCase))
+        var current = CreateApplePlanReceipt(plan);
+        if (expected is not null &&
+            !string.Equals(expected, current.PlanSha256, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
                 "Apple state or release inputs changed after plan approval. Review a new exact plan before allowing mutation.");
         }
 
         CaptureApprovedMutationInputContents(plan);
+        return current;
     }
 
     internal static void CaptureApprovedMutationInputContents(PowerForgeAppleReleasePlan plan)
@@ -554,9 +560,26 @@ internal sealed partial class PowerForgeReleaseService
         return ComputeStableSha256(canonical);
     }
 
-    private PowerForgeAppleVersionReceipt SelectAppleVersion(PowerForgeAppleReleasePlan plan)
+    private static PowerForgeAppleVersionReceipt SelectAppleVersion(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleVersionReceipt approved)
     {
-        var versioning = PlanAppleVersion(plan, whatIf: false);
+        if (string.IsNullOrWhiteSpace(plan.VersionSourcePath))
+            throw new InvalidOperationException("Apple version source path is required for Version.");
+        var source = new AppleReleaseVersionSourceService();
+        var approvedContent = ReadApprovedMutationInputText(plan, plan.VersionSourcePath!);
+        var versioning = source.Update(
+            plan.VersionSourcePath!,
+            approvedContent,
+            approved.MarketingVersion,
+            approved.BuildNumber,
+            approved.HighestRemoteBuildNumber,
+            whatIf: false);
+        versioning.RequestedMarketingVersion = approved.RequestedMarketingVersion;
+        versioning.MarketingVersionPattern = approved.MarketingVersionPattern;
+        versioning.HighestRemoteMarketingVersion = approved.HighestRemoteMarketingVersion;
+        versioning.ReusedUnreleasedMarketingVersion = approved.ReusedUnreleasedMarketingVersion;
+        versioning.SourcePath = approved.SourcePath;
         foreach (var app in plan.Apps)
         {
             app.MarketingVersion = versioning.MarketingVersion;
