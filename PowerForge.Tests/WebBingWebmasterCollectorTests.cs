@@ -6,7 +6,7 @@ using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
-public sealed class WebBingWebmasterCollectorTests
+public sealed partial class WebBingWebmasterCollectorTests
 {
     private static readonly DateTimeOffset CompletionTime = new(2026, 8, 10, 12, 34, 56, TimeSpan.Zero);
 

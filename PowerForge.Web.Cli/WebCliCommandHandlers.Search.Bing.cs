@@ -157,6 +157,8 @@ internal static partial class WebCliCommandHandlers
                 string.Equals(candidate.Id, providerId, StringComparison.OrdinalIgnoreCase));
             if (configuredSite is null || configuredProvider is null)
                 return FailSearch("Observe import-bing site or provider is not configured.", outputJson, logger, "web.observe.import-bing");
+            if (!configuredProvider.Enabled)
+                return FailSearch($"Search provider '{providerId}' is disabled.", outputJson, logger, "web.observe.import-bing");
             var doctor = WebSearchProviderDoctor.InspectWithCapabilities(
                 loaded.Configuration,
                 WebSearchCollectorCatalog.AvailableCapabilities,
