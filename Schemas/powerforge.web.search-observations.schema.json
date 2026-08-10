@@ -186,6 +186,13 @@
         "searchType": {
           "type": ["string", "null"]
         },
+        "dimensionScopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": ["page", "query", "page-query"]
+          }
+        },
         "completedDates": {
           "type": "array",
           "uniqueItems": true,

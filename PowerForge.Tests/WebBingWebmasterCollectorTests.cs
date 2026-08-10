@@ -560,6 +560,8 @@ public sealed partial class WebBingWebmasterCollectorTests
                 outputJson: true,
                 logger: new WebConsoleLogger(),
                 outputSchemaVersion: 1);
+            configuration.Sites[0].Providers[1].Settings["property"] = "sc-domain:changed.example";
+            File.WriteAllText(configPath, JsonSerializer.Serialize(configuration));
             File.SetLastWriteTimeUtc(inputPath, DateTime.UtcNow.AddHours(1));
             var repeatExitCode = WebCliCommandHandlers.HandleSubCommand(
                 "observe",

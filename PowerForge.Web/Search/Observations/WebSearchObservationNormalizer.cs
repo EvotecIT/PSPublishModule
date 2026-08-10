@@ -126,6 +126,22 @@ public static class WebSearchObservationNormalizer
         if (schemaVersion >= 3 && mode is not ("daily" or "snapshot"))
             throw new ArgumentException("Search collection coverage mode must be 'daily' or 'snapshot'.", nameof(coverage));
         var searchType = NormalizeDimension(coverage.SearchType);
+        if (coverage.DimensionScopes is null)
+            throw new ArgumentException("Search collection coverage dimensionScopes must be an array.", nameof(coverage));
+        var dimensionScopes = coverage.DimensionScopes
+            .Select(NormalizeDimension)
+            .ToArray();
+        if (dimensionScopes.Any(scope => scope is not ("page" or "query" or "page-query")) ||
+            dimensionScopes.Distinct(StringComparer.Ordinal).Count() != dimensionScopes.Length)
+        {
+            throw new ArgumentException(
+                "Search collection coverage dimensionScopes must contain unique page, query, or page-query values.",
+                nameof(coverage));
+        }
+        var normalizedDimensionScopes = dimensionScopes
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .Select(value => value!)
+            .ToArray();
         if (searchType is null && observations.Any(observation =>
                 observation.SearchType is not null &&
                 !observation.SearchType.Equals("web", StringComparison.Ordinal)))
@@ -189,6 +205,8 @@ public static class WebSearchObservationNormalizer
             }
             if (searchType is not null && !string.Equals(observation.SearchType, searchType, StringComparison.Ordinal))
                 throw new ArgumentException("Search observation type must match collection coverage.", nameof(coverage));
+            if (normalizedDimensionScopes.Length > 0 && !normalizedDimensionScopes.Contains(GetDimensionScope(observation), StringComparer.Ordinal))
+                throw new ArgumentException("Search observation dimensions must match collection coverage.", nameof(coverage));
         }
 
         var normalizedCoverage = new WebSearchObservationCollectionCoverage
@@ -196,6 +214,7 @@ public static class WebSearchObservationNormalizer
             FromDate = coverage.FromDate,
             ThroughDate = coverage.ThroughDate,
             SearchType = searchType,
+            DimensionScopes = normalizedDimensionScopes,
             CompletedDates = completedDates,
             FailedDate = coverage.FailedDate,
             FailureCategory = failureCategory
@@ -299,6 +318,11 @@ public static class WebSearchObservationNormalizer
 
     private static string? NormalizeDimension(string? value) => NormalizeOptional(value)?.ToLowerInvariant();
 
+    private static string GetDimensionScope(WebSearchObservation observation) =>
+        observation.Page is not null
+            ? observation.Query is not null ? "page-query" : "page"
+            : "query";
+
     private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static double CanonicalizeZero(double value) => value == 0d ? 0d : value;
@@ -383,6 +407,7 @@ public static class WebSearchObservationNormalizer
             coverage?.FromDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             coverage?.ThroughDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             coverage?.SearchType,
+            coverage is null ? null : string.Join(",", coverage.DimensionScopes),
             coverage is null ? null : string.Join(",", coverage.CompletedDates.Select(date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))),
             coverage?.FailedDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             coverage?.FailureCategory,

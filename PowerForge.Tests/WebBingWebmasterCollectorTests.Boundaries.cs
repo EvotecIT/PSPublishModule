@@ -1,4 +1,5 @@
 using PowerForge.Web;
+using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
@@ -28,6 +29,25 @@ public sealed partial class WebBingWebmasterCollectorTests
             Assert.Contains("siteUrl=https://officeimo.com/", query, StringComparison.Ordinal);
             Assert.DoesNotContain("%20", request.AbsoluteUri, StringComparison.OrdinalIgnoreCase);
         });
+    }
+
+    [Fact]
+    public async Task Collect_RejectsDuplicateDimensionsAfterCanonicalization()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => SitesResponse("https://officeimo.com/", true),
+            1 => StatsResponse(Stat("powerforge", 1, 10, 2), Stat(" powerforge ", 1, 10, 2)),
+            _ => throw new InvalidOperationException("Canonical duplicate rows must fail before the page request.")
+        });
+        using var httpClient = new HttpClient(handler);
+
+        var result = await new BingWebmasterCollector(httpClient, new FakeApiKeyProvider()).CollectAsync(CreateOptions());
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.ErrorCode);
+        Assert.Empty(result.Batch.Observations);
+        WebSearchObservationNormalizer.Normalize(result.Batch);
     }
 
     [Theory]
@@ -64,5 +84,45 @@ public sealed partial class WebBingWebmasterCollectorTests
         var exception = Assert.Throws<FormatException>(() => BingWebmasterCsvExportParser.Parse(csv, CreateCsvOptions()));
 
         Assert.Contains("nonzero CTR with zero impressions", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CsvExport_DimensionScopedCoverageDoesNotSupersedeAnotherExportShape()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-bing-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "search.db"));
+            var queryOptions = CreateCsvOptions();
+            queryOptions.CollectedAtUtc = CompletionTime.AddMinutes(-1);
+            var queryBatch = BingWebmasterCsvExportParser.Parse(
+                "Date,Query,Clicks,Impressions\n2026-08-01,powerforge,1,10", queryOptions);
+            var pageOptions = CreateCsvOptions();
+            pageOptions.CollectedAtUtc = CompletionTime;
+            var pageBatch = BingWebmasterCsvExportParser.Parse(
+                "Date,Page,Clicks,Impressions\n2026-08-01,https://officeimo.com/,2,20", pageOptions);
+
+            await store.ImportAsync(queryBatch);
+            await store.ImportAsync(pageBatch);
+            var observations = await store.QueryAsync(new WebSearchObservationQuery
+            {
+                SiteId = "officeimo",
+                Provider = "bing-webmaster",
+                FromDate = new DateOnly(2026, 8, 1),
+                ThroughDate = new DateOnly(2026, 8, 1)
+            });
+
+            Assert.Equal(["page"], pageBatch.CollectionCoverage!.DimensionScopes);
+            Assert.Equal(["query"], queryBatch.CollectionCoverage!.DimensionScopes);
+            Assert.Equal(2, observations.Count);
+            Assert.Contains(observations, value => value.Page == "https://officeimo.com/");
+            Assert.Contains(observations, value => value.Query == "powerforge");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
     }
 }

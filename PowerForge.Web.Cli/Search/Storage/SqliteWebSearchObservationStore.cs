@@ -236,11 +236,15 @@ internal sealed class SqliteWebSearchObservationStore
                            NULLIF(LOWER(TRIM(json_extract(
                                runs.normalized_manifest_json,
                                '$.collectionCoverage.searchType'))), ''),
-                           'web') AS search_type
+                           'web') AS search_type,
+                       COALESCE(NULLIF(LOWER(TRIM(dimension_scopes.value)), ''), '*') AS dimension_scope
                 FROM search_observation_runs AS runs
                 INNER JOIN json_each(
                     runs.normalized_manifest_json,
                     '$.collectionCoverage.completedDates') AS completed_dates
+                LEFT JOIN json_each(
+                    runs.normalized_manifest_json,
+                    '$.collectionCoverage.dimensionScopes') AS dimension_scopes ON TRUE
                 WHERE runs.status = 'complete'
             ),
             ranked_observations AS (
@@ -284,6 +288,14 @@ internal sealed class SqliteWebSearchObservationStore
                         AND coverage.site_id = observations.site_id
                         AND coverage.observation_date = observations.observation_date
                         AND coverage.search_type = COALESCE(NULLIF(LOWER(TRIM(observations.search_type)), ''), 'web')
+                        AND (
+                            coverage.dimension_scope = '*' OR
+                            coverage.dimension_scope = CASE
+                                WHEN observations.page IS NOT NULL AND observations.query IS NOT NULL THEN 'page-query'
+                                WHEN observations.page IS NOT NULL THEN 'page'
+                                ELSE 'query'
+                            END
+                        )
                         AND (
                             coverage.collected_at_utc > runs.collected_at_utc OR
                             (coverage.collected_at_utc = runs.collected_at_utc AND coverage.run_id > runs.run_id)

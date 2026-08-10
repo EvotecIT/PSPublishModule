@@ -153,6 +153,11 @@ public static class BingWebmasterCsvExportParser
                 FromDate = options.FromDate,
                 ThroughDate = options.ThroughDate,
                 SearchType = options.SearchType,
+                DimensionScopes = observations
+                    .Select(GetDimensionScope)
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(value => value, StringComparer.Ordinal)
+                    .ToArray(),
                 CompletedDates = observations.Select(observation => observation.Date)
                     .Distinct()
                     .OrderBy(date => date)
@@ -162,6 +167,11 @@ public static class BingWebmasterCsvExportParser
         };
         return WebSearchObservationNormalizer.Normalize(batch);
     }
+
+    private static string GetDimensionScope(WebSearchObservation observation) =>
+        observation.Page is not null
+            ? observation.Query is not null ? "page-query" : "page"
+            : "query";
 
     private static IReadOnlyList<string[]> ParseRows(string csv)
     {

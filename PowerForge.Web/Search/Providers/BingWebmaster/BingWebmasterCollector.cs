@@ -304,7 +304,7 @@ public sealed partial class BingWebmasterCollector
         var mapped = new List<WebSearchObservation>();
         foreach (var value in values)
         {
-            var dimension = getDimension(value);
+            var dimension = getDimension(value)?.Trim();
             var date = TryParseProviderDate(value.Date);
             if (!date.HasValue || string.IsNullOrWhiteSpace(dimension) ||
                 !value.Clicks.HasValue || !value.Impressions.HasValue ||
@@ -322,6 +322,8 @@ public sealed partial class BingWebmasterCollector
                 observations = Array.Empty<WebSearchObservation>();
                 return false;
             }
+            if (pageDimension)
+                dimension = new UriBuilder(new Uri(dimension, UriKind.Absolute)) { Fragment = string.Empty }.Uri.AbsoluteUri;
             if (date.Value < options.FromDate || date.Value > options.ThroughDate)
                 continue;
 

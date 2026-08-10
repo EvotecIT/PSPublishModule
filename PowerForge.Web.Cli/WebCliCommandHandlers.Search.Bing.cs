@@ -159,22 +159,18 @@ internal static partial class WebCliCommandHandlers
                 return FailSearch("Observe import-bing site or provider is not configured.", outputJson, logger, "web.observe.import-bing");
             if (!configuredProvider.Enabled)
                 return FailSearch($"Search provider '{providerId}' is disabled.", outputJson, logger, "web.observe.import-bing");
-            var doctor = WebSearchProviderDoctor.InspectWithCapabilities(
-                loaded.Configuration,
-                WebSearchCollectorCatalog.AvailableCapabilities,
-                _ => "credential-not-used-by-csv-import");
-            if (!doctor.Success || string.IsNullOrWhiteSpace(doctor.ConfigurationHash))
-            {
-                var firstError = doctor.Checks.FirstOrDefault(check => check.Severity == WebSearchProviderCheckSeverity.Error);
-                return FailSearch(firstError?.Message ?? "Search provider configuration has blocking capability errors.", outputJson, logger, "web.observe.import-bing");
-            }
-
             var site = configuredSite;
             var provider = configuredProvider;
             if (provider.Kind is not (BingWebmasterCollector.ProviderKind or BingWebmasterCsvExportParser.ProviderKind))
                 return FailSearch("Observe import-bing requires a Bing Webmaster provider.", outputJson, logger, "web.observe.import-bing");
             if (!provider.Capabilities.Contains(WebSearchProviderCapabilities.SearchAnalytics, StringComparer.Ordinal))
                 return FailSearch("Bing Webmaster provider must request search.analytics.", outputJson, logger, "web.observe.import-bing");
+            var doctor = InspectProviderAction(
+                loaded.Configuration,
+                site,
+                provider,
+                WebSearchProviderCapabilities.SearchAnalytics,
+                useSelectedCredential: false);
 
             var fullInputPath = ResolveExistingFilePath(inputPath);
             var batch = BingWebmasterCsvExportParser.Parse(

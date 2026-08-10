@@ -143,6 +143,13 @@ public sealed class WebSearchObservationCollectionCoverage
     public string? SearchType { get; set; }
 
     /// <summary>
+    /// Optional observation dimension shapes covered by this snapshot. Empty means every dimension shape for the
+    /// selected search type. Supported values are <c>page</c>, <c>query</c>, and <c>page-query</c>.
+    /// </summary>
+    [JsonPropertyName("dimensionScopes")]
+    public string[] DimensionScopes { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Dates whose daily partitions completed in <c>daily</c> mode, or dates explicitly present in a successful
     /// provider response in <c>snapshot</c> mode.
     /// </summary>
