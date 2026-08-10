@@ -158,8 +158,10 @@ public sealed class CruxCollector
         var observations = new List<WebPerformanceObservation>();
         foreach (var mapping in MetricMap)
         {
-            if (!metrics.TryGetProperty(mapping.Key, out var metric) || metric.ValueKind != JsonValueKind.Object)
+            if (!metrics.TryGetProperty(mapping.Key, out var metric))
                 continue;
+            if (metric.ValueKind != JsonValueKind.Object)
+                throw new ArgumentException($"CrUX metric '{mapping.Key}' must be an object.", nameof(root));
             var percentiles = RequiredObject(metric, "percentiles");
             var value = RequiredFiniteNumber(percentiles, "p75");
             var histogramElement = RequiredArray(metric, "histogram");

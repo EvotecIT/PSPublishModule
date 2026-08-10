@@ -111,6 +111,45 @@ public sealed class WebPerformanceObservationTests
         Assert.Contains("non-overlapping", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(3000d, null)]
+    [InlineData(2500d, 5000d)]
+    public void Normalizer_RejectsGappedOrBoundedFieldHistograms(double secondStart, double? finalEnd)
+    {
+        var batch = CreateFieldBatch();
+        batch.Observations[0].Histogram =
+        [
+            new WebPerformanceHistogramBin { Start = 0, End = 2500, Density = 0.8 },
+            new WebPerformanceHistogramBin { Start = secondStart, End = 4000, Density = 0.15 },
+            new WebPerformanceHistogramBin { Start = 4000, End = finalEnd, Density = 0.05 }
+        ];
+
+        Assert.Throws<ArgumentException>(() => WebPerformanceObservationNormalizer.Normalize(batch));
+    }
+
+    [Fact]
+    public void Normalizer_RequiresOneSharedFieldAggregationPeriod()
+    {
+        var batch = CreateFieldBatch();
+        var second = new WebPerformanceObservation
+        {
+            Metric = "first-contentful-paint",
+            Value = 1200,
+            Unit = "milliseconds",
+            Percentile = 75,
+            PeriodStartDate = new DateOnly(2026, 7, 11),
+            PeriodEndDate = new DateOnly(2026, 8, 7),
+            Histogram = batch.Observations[0].Histogram
+                .Select(bin => new WebPerformanceHistogramBin { Start = bin.Start, End = bin.End, Density = bin.Density })
+                .ToArray()
+        };
+        batch.Observations = [batch.Observations[0], second];
+
+        var exception = Assert.Throws<ArgumentException>(() => WebPerformanceObservationNormalizer.Normalize(batch));
+
+        Assert.Contains("same aggregation period", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task CruxCollector_MapsP75PeriodAndHistogramWithoutSendingAllAsNullDimension()
     {
@@ -175,6 +214,23 @@ public sealed class WebPerformanceObservationTests
         Assert.False(mismatch.Success);
         Assert.Equal("invalid-response", mismatch.ErrorCode);
         Assert.Contains("form factor", mismatch.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CruxCollector_RejectsAPresentRequestedMetricWithANonObjectValue()
+    {
+        var document = JsonNode.Parse(JsonSerializer.Serialize(CruxResponse()))!.AsObject();
+        document["record"]!["metrics"]!["largest_contentful_paint"] = null;
+        var handler = new ScriptedHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(document.ToJsonString(), Encoding.UTF8, "application/json")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await new CruxCollector(client, new FakeApiKeyProvider()).CollectAsync(CruxOptions());
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.ErrorCode);
     }
 
     [Fact]

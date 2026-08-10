@@ -57,6 +57,13 @@ public static class WebPerformanceObservationNormalizer
             .ToArray();
         if (observations.Select(value => value.Metric).Distinct(StringComparer.Ordinal).Count() != observations.Length)
             throw new ArgumentException("A performance batch cannot contain the same metric more than once.", nameof(batch));
+        if (measurementKind == "field" && observations.Length > 1 &&
+            observations.Skip(1).Any(value =>
+                value.PeriodStartDate != observations[0].PeriodStartDate ||
+                value.PeriodEndDate != observations[0].PeriodEndDate))
+        {
+            throw new ArgumentException("All field metrics in one batch must share the same aggregation period.", nameof(batch));
+        }
         if (status == "complete" && observations.Length == 0 && !batch.ZeroDataConfirmed)
             throw new ArgumentException("A complete empty performance batch must explicitly confirm no provider data.", nameof(batch));
         if (batch.ZeroDataConfirmed && (measurementKind != "field" || status != "complete" || observations.Length != 0))
@@ -145,12 +152,14 @@ public static class WebPerformanceObservationNormalizer
                 throw new ArgumentException("CrUX field metrics require the provider's 28-day aggregation period.", nameof(value));
             if (histogram.Length == 0)
                 throw new ArgumentException("Field metrics require provider histogram evidence.", nameof(value));
+            if (histogram[0].Start is not 0d || histogram[^1].End is not null)
+                throw new ArgumentException($"Metric '{metric}' histogram must cover the complete non-negative value domain.", nameof(value));
             for (var binIndex = 1; binIndex < histogram.Length; binIndex++)
             {
                 var previousEnd = histogram[binIndex - 1].End;
                 var currentStart = histogram[binIndex].Start;
-                if (previousEnd is null || currentStart is null || currentStart.Value < previousEnd.Value)
-                    throw new ArgumentException($"Metric '{metric}' histogram ranges must be ordered and non-overlapping.", nameof(value));
+                if (previousEnd is null || currentStart is null || currentStart.Value != previousEnd.Value)
+                    throw new ArgumentException($"Metric '{metric}' histogram ranges must be contiguous and non-overlapping.", nameof(value));
             }
             var density = histogram.Sum(bin => bin.Density);
             if (density < 0.999d || density > 1.001d)
