@@ -39,6 +39,10 @@ public sealed class ModuleSigningResult
     [JsonPropertyName("failed")]
     public int Failed { get; set; }
 
+    /// <summary>Number of failures raised while inspecting a pre-existing signature, before any signing attempt.</summary>
+    [JsonPropertyName("precheckFailure")]
+    public int PrecheckFailure { get; set; }
+
     /// <summary>Number of sign operations that returned an "UnknownError" status.</summary>
     [JsonPropertyName("unknownError")]
     public int UnknownError { get; set; }

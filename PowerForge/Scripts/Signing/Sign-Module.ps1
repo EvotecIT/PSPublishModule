@@ -74,6 +74,7 @@ function EmitSummary(
   [int]$signedNew,
   [int]$resigned,
   [int]$failed,
+  [int]$precheckFailure,
   [int]$unknownError,
   [int]$signingException,
   [string]$certThumbprint,
@@ -89,6 +90,7 @@ function EmitSummary(
     signedNew               = $signedNew
     resigned                = $resigned
     failed                  = $failed
+    precheckFailure         = $precheckFailure
     unknownError            = $unknownError
     signingException        = $signingException
     certificateThumbprint   = $certThumbprint
@@ -289,7 +291,6 @@ try {
           if (-not [string]::IsNullOrWhiteSpace($tp) -and $tp -eq $thisTp) { $alreadyByThis++ } else { $alreadyOther++ }
         } elseif ($preDisposition[$f] -eq 'Fail') {
           $precheckFailures[$f] = "precheck returned status $status"
-          if ($status -eq 'UnknownError') { $unknownError++ }
         }
       } catch {
         $preStatus[$f] = 'PrecheckFailed'
@@ -359,7 +360,6 @@ try {
           $alreadyOther++
         } elseif ($preDisposition[$f] -eq 'Fail') {
           $precheckFailures[$f] = "precheck returned status $status"
-          if ($status -eq 'UnknownError') { $unknownError++ }
         }
       } catch {
         $preStatus[$f] = 'PrecheckFailed'
@@ -420,6 +420,7 @@ try {
     -signedNew $signedNew `
     -resigned $resigned `
     -failed $failed `
+    -precheckFailure $precheckFailures.Count `
     -unknownError $unknownError `
     -signingException $signingException `
     -certThumbprint $thisTp `

@@ -2264,6 +2264,43 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
+    public void SignModuleOutput_DoesNotRetryUnknownErrorsRaisedBySignaturePrecheck()
+    {
+        var requests = new List<PowerShellRunRequest>();
+        var rootPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var modulePath = Path.Combine(rootPath, "TestModule.psm1");
+        var failedSummary = new ModuleSigningResult
+        {
+            TotalMatched = 1,
+            TotalAfterExclude = 1,
+            Attempted = 0,
+            Failed = 1,
+            PrecheckFailure = 1,
+            UnknownError = 1,
+            FailedFiles = new[] { $"{modulePath} :: precheck returned status UnknownError" },
+            FailedFilePaths = new[] { modulePath }
+        };
+        var runner = new RecordingPowerShellRunner(request =>
+        {
+            requests.Add(request);
+            return new PowerShellRunResult(2, EncodeSigningSummary(failedSummary), string.Empty, "pwsh.exe");
+        });
+
+        var operations = new PowerShellModulePipelineHostedOperations(runner, new NullLogger(), isWindows: true);
+        var exception = Assert.Throws<ModuleSigningException>(() => operations.SignModuleOutput(
+            moduleName: "TestModule",
+            rootPath: rootPath,
+            packageFilePaths: new[] { modulePath },
+            includePatterns: new[] { "*.psm1" },
+            excludeSubstrings: Array.Empty<string>(),
+            signing: new SigningOptionsConfiguration { CertificateThumbprint = "0123456789ABCDEF" }));
+
+        Assert.Single(requests);
+        Assert.Equal(1, exception.Result?.PrecheckFailure);
+        Assert.Contains("precheck returned status UnknownError", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SignModuleOutput_DoesNotRetryPfxSigningUnknownErrors()
     {
         var requests = new List<PowerShellRunRequest>();

@@ -373,7 +373,8 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         out string[] retryFilePaths)
     {
         retryFilePaths = Array.Empty<string>();
-        if (!_isWindows || summary is null || summary.Failed <= 0 || summary.UnknownError + summary.SigningException != summary.Failed)
+        if (!_isWindows || summary is null || summary.Failed <= 0 || summary.PrecheckFailure > 0 ||
+            summary.UnknownError + summary.SigningException != summary.Failed)
             return false;
         if (string.IsNullOrWhiteSpace(signing.CertificateThumbprint))
             return false;
@@ -426,6 +427,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
             SignedNew = initial.SignedNew + retry.SignedNew,
             Resigned = initial.Resigned + retry.Resigned,
             Failed = retry.Failed,
+            PrecheckFailure = retry.PrecheckFailure,
             UnknownError = retry.UnknownError,
             SigningException = retry.SigningException,
             CertificateThumbprint = retry.CertificateThumbprint ?? initial.CertificateThumbprint,
