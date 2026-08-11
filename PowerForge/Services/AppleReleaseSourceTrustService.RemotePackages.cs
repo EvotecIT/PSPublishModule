@@ -214,6 +214,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 inactiveSystemLibraryRoots.IntersectWith(manifestInactiveRoots);
             ValidateDirectSwiftPackageDependencyFactories(packageRoot, syntax);
             ValidatePackageDescriptionCalls(packageRoot, syntax);
+            ValidateSwiftPackageLinkedDependencies(packageRoot, source, syntax);
             ValidateLiteralSwiftPackagePaths(checkoutRoot, packageRoot, source, syntax);
             foreach (var dependency in ParseDirectSwiftPackageDependencyCalls(source, syntax))
             {

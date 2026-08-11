@@ -60,23 +60,41 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
     internal T CaptureExpectedProducerOutput<T>(Func<T> capture, string producerDescription) {
         if (capture is null)
             throw new ArgumentNullException(nameof(capture));
-        Thread.Sleep(250);
         if (_watcherError is not null) {
             throw new InvalidOperationException(
                 $"The {_scopeDescription} mutation monitor failed at the {producerDescription} completion boundary. {_failureInstruction}",
                 _watcherError);
         }
 
-        // All events observed before this boundary belong to the awaited producer.
-        // Keep the watcher active, reset its event baseline, and capture the output
-        // before the process runner returns control to the caller.
+        // Events already delivered belong to the awaited producer. Establish the
+        // boundary immediately, then bind its output before giving another process
+        // a deterministic replacement window.
         Interlocked.Exchange(ref _firstMutation, null);
         var output = capture();
         Thread.Sleep(250);
-        if (_watcherError is not null || !string.IsNullOrWhiteSpace(_firstMutation)) {
+        if (_watcherError is not null) {
             throw new InvalidOperationException(
                 $"The {_scopeDescription} changed while its {producerDescription} output was being bound. {_failureInstruction}",
                 _watcherError);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_firstMutation)) {
+            // FileSystemWatcher can deliver producer writes after process exit. A
+            // delayed producer notification is harmless only when the exact bound
+            // identity is unchanged. Re-establish the event fence, rebind, and then
+            // require a quiet drain so a real post-exit replacement cannot be erased.
+            Interlocked.Exchange(ref _firstMutation, null);
+            var currentOutput = capture();
+            if (!EqualityComparer<T>.Default.Equals(output, currentOutput)) {
+                throw new InvalidOperationException(
+                    $"The {_scopeDescription} changed after {producerDescription} completed. {_failureInstruction}");
+            }
+            Thread.Sleep(250);
+            if (_watcherError is not null || !string.IsNullOrWhiteSpace(_firstMutation)) {
+                throw new InvalidOperationException(
+                    $"The {_scopeDescription} changed while its {producerDescription} output was being bound. {_failureInstruction}",
+                    _watcherError);
+            }
         }
         return output;
     }

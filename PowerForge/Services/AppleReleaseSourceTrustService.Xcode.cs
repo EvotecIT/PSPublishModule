@@ -19,7 +19,10 @@ internal sealed partial class AppleReleaseSourceTrustService
         "GCC_PREFIX_HEADER",
         "CLANG_PREFIX_HEADER",
         "MODULEMAP_FILE",
-        "DEVELOPMENT_ASSET_PATHS"
+        "DEVELOPMENT_ASSET_PATHS",
+        "EXPORTED_SYMBOLS_FILE",
+        "UNEXPORTED_SYMBOLS_FILE",
+        "ORDER_FILE"
     };
 
     private static readonly HashSet<string> SearchPathBuildSettings = new(StringComparer.OrdinalIgnoreCase)

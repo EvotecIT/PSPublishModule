@@ -69,7 +69,8 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException(
                 $"Source input '{fullSourcePath}' uses nondeterministic compiler macro '{nondeterministicMacro}', which cannot be bound to one reproducible source commit.");
         }
-        ValidateLanguageModuleImports(fullSourcePath, source);
+        ValidateLanguageModuleImports(fullSourcePath, source, extension);
+        RejectPreprocessorIncludeAliases(fullSourcePath, source);
         foreach (Match directive in Regex.Matches(
                      source,
                      "(?m)^[ \\t]*(?:#|%:)[ \\t]*(?:include|include_next|import)[ \\t]+(?<operand>[^\\r\\n]+)",
@@ -244,6 +245,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         "limits.h", "locale.h", "math.h", "setjmp.h", "signal.h", "stdalign.h", "stdarg.h", "stdatomic.h",
         "stdbool.h", "stddef.h", "stdint.h", "stdio.h", "stdlib.h", "stdnoreturn.h", "string.h", "tgmath.h",
         "threads.h", "time.h", "uchar.h", "wchar.h", "wctype.h",
+        "metal_stdlib",
         "algorithm", "array", "atomic", "bit", "bitset", "cassert", "cctype", "cerrno", "cfenv", "cfloat",
         "charconv", "chrono", "cinttypes", "climits", "cmath", "complex", "concepts", "condition_variable",
         "coroutine", "cstddef", "cstdint", "cstdio", "cstdlib", "cstring", "deque", "exception", "filesystem",
@@ -258,7 +260,7 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static readonly HashSet<string> ApprovedAppleSdkHeaderRoots = new(StringComparer.Ordinal)
     {
-        "Accelerate", "AppKit", "AudioToolbox", "AVFoundation", "CFNetwork", "CloudKit", "CommonCrypto",
+        "Accelerate", "AppKit", "AuthenticationServices", "AudioToolbox", "AVFoundation", "CFNetwork", "CloudKit", "CommonCrypto",
         "Compression", "Contacts", "CoreAudio", "CoreBluetooth", "CoreData", "CoreFoundation", "CoreGraphics",
         "CoreImage", "CoreLocation", "CoreMedia", "CoreMotion", "CoreServices", "CoreText", "CoreVideo",
         "CryptoKit", "Darwin", "DeviceCheck", "Dispatch", "EventKit", "Foundation", "GameController",
@@ -269,24 +271,24 @@ internal sealed partial class AppleReleaseSourceTrustService
         "sys", "xpc"
     };
 
-    private static void ValidateLanguageModuleImports(string sourcePath, string source)
+    private static void ValidateLanguageModuleImports(string sourcePath, string source, string effectiveSourceExtension)
     {
         foreach (Match pragma in Regex.Matches(
                      source,
-                     "(?<![A-Za-z0-9_])_Pragma[ \\t]*\\([ \\t]*\\\"(?<payload>(?:\\\\.|[^\\\"\\\\])*)\\\"[ \\t]*\\)",
+                     "(?<![A-Za-z0-9_])_Pragma\\s*\\(\\s*\\\"(?<payload>(?:\\\\.|[^\\\"\\\\])*)\\\"\\s*\\)",
                      RegexOptions.CultureInvariant))
         {
             var payload = Regex.Unescape(pragma.Groups["payload"].Value);
             var moduleImport = Regex.Match(
                 payload,
-                "^[ \\t]*clang[ \\t]+module[ \\t]+import[ \\t]+(?<module>[A-Za-z_][A-Za-z0-9_.]*)[ \\t]*$",
+                "^\\s*clang\\s+module\\s+import\\s+(?<module>[A-Za-z_][A-Za-z0-9_.]*)\\s*$",
                 RegexOptions.CultureInvariant);
             if (moduleImport.Success)
                 RejectUnapprovedLanguageModule(sourcePath, moduleImport.Groups["module"].Value, "Clang _Pragma");
         }
         if (Regex.IsMatch(
                 source,
-                "(?<![A-Za-z0-9_])_Pragma[ \\t]*\\((?![ \\t]*\\\"(?:\\\\.|[^\\\"\\\\])*\\\"[ \\t]*\\))",
+                "(?<![A-Za-z0-9_])_Pragma\\s*\\((?!\\s*\\\"(?:\\\\.|[^\\\"\\\\])*\\\"\\s*\\))",
                 RegexOptions.CultureInvariant))
         {
             throw new InvalidOperationException(
@@ -295,7 +297,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         var syntax = MaskCStringAndCharacterLiterals(source);
         foreach (Match import in Regex.Matches(
                      syntax,
-                     "(?<![A-Za-z0-9_])@import[ \\t]+(?<module>[A-Za-z_][A-Za-z0-9_.]*)[ \\t]*;",
+                     "(?<![A-Za-z0-9_])@import\\s+(?<module>[A-Za-z_][A-Za-z0-9_.]*)\\s*;",
                      RegexOptions.CultureInvariant))
         {
             var moduleName = import.Groups["module"].Value;
@@ -314,10 +316,11 @@ internal sealed partial class AppleReleaseSourceTrustService
             RejectUnapprovedLanguageModule(sourcePath, import.Groups["module"].Value, "Clang pragma");
         }
 
-        var extension = Path.GetExtension(sourcePath);
+        var extension = effectiveSourceExtension;
         if (!extension.Equals(".cc", StringComparison.OrdinalIgnoreCase) &&
             !extension.Equals(".cpp", StringComparison.OrdinalIgnoreCase) &&
             !extension.Equals(".cxx", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".mm", StringComparison.OrdinalIgnoreCase) &&
             !extension.Equals(".hh", StringComparison.OrdinalIgnoreCase) &&
             !extension.Equals(".hpp", StringComparison.OrdinalIgnoreCase) &&
             !extension.Equals(".hxx", StringComparison.OrdinalIgnoreCase))
@@ -327,7 +330,7 @@ internal sealed partial class AppleReleaseSourceTrustService
 
         foreach (Match import in Regex.Matches(
                      syntax,
-                     "(?m)^[ \\t]*(?:export[ \\t]+)?import[ \\t]+(?<module>[^;\\r\\n]+)[ \\t]*;",
+                     "(?m)^[ \\t]*(?:export\\s+)?import\\s+(?<module>[^;]+?)\\s*;",
                      RegexOptions.CultureInvariant))
         {
             var moduleName = import.Groups["module"].Value.Trim();
@@ -340,6 +343,30 @@ internal sealed partial class AppleReleaseSourceTrustService
                     $"Source input '{sourcePath}' uses C++ module or header-unit import '{moduleName}', whose selected bytes cannot be bound safely to the exact source commit.");
             }
             RejectUnapprovedLanguageModule(sourcePath, moduleName, "C++");
+        }
+    }
+
+    private static void RejectPreprocessorIncludeAliases(string sourcePath, string source)
+    {
+        if (Regex.IsMatch(
+                source,
+                "(?m)^[ \\t]*(?:#|%:)[ \\t]*pragma[ \\t]+include_alias(?![A-Za-z0-9_])",
+                RegexOptions.CultureInvariant))
+        {
+            throw new InvalidOperationException(
+                $"Source input '{sourcePath}' uses pragma include_alias, whose replacement header can bypass the exact-source include graph.");
+        }
+
+        foreach (Match pragma in Regex.Matches(
+                     source,
+                     "(?<![A-Za-z0-9_])_Pragma\\s*\\(\\s*\\\"(?<payload>(?:\\\\.|[^\\\"\\\\])*)\\\"\\s*\\)",
+                     RegexOptions.CultureInvariant))
+        {
+            var payload = Regex.Unescape(pragma.Groups["payload"].Value);
+            if (!Regex.IsMatch(payload, "^\\s*include_alias(?![A-Za-z0-9_])", RegexOptions.CultureInvariant))
+                continue;
+            throw new InvalidOperationException(
+                $"Source input '{sourcePath}' uses _Pragma include_alias, whose replacement header can bypass the exact-source include graph.");
         }
     }
 

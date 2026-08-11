@@ -231,7 +231,7 @@ public sealed partial class AppleAppArchiveService
                     {
                         exportArtifactPath = PowerForgeReleaseService.ResolveDirectAppleArtifactPath(exportPath);
                         exportArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(exportArtifactPath);
-                        return true;
+                        return exportArtifactPath + "\n" + exportArtifactSha256;
                     },
                     "xcodebuild exportArchive");
             });

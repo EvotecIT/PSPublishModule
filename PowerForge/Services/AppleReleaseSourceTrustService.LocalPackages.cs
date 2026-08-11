@@ -77,6 +77,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         ValidateLocalPackageExecutableSafety(packageRoot, manifestWithoutComments, manifestSyntax);
         ValidateDirectSwiftPackageDependencyFactories(packageRoot, manifestSyntax);
         ValidatePackageDescriptionCalls(packageRoot, manifestSyntax);
+        ValidateSwiftPackageLinkedDependencies(packageRoot, manifestWithoutComments, manifestSyntax);
         ValidateSwiftPackageResources(repositoryRoot, packageRoot, manifestWithoutComments, manifestSyntax);
         var dependencyCalls = ParseDirectSwiftPackageDependencyCalls(manifestWithoutComments, manifestSyntax);
         ValidateRemotePackageDependencies(repositoryRoot, packageRoot, packageLockPaths, dependencyCalls);
@@ -310,6 +311,54 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException(
                 $"Local Swift package '{packageRoot}' executes non-declarative manifest call '{target}', " +
                 "which cannot be proven independent of host state. Use PackageDescription construction only before creating an exact-source Apple checkpoint.");
+        }
+    }
+
+    private static readonly HashSet<string> ApprovedSwiftPackageLinkedLibraries = new(StringComparer.Ordinal)
+    {
+        "c", "c++", "c++abi", "compression", "iconv", "m", "network", "resolv", "sqlite3", "xml2", "z"
+    };
+
+    private static readonly HashSet<string> ApprovedSwiftPackageLinkedFrameworks = new(StringComparer.Ordinal)
+    {
+        "Accelerate", "AppKit", "AuthenticationServices", "AudioToolbox", "AVFoundation", "CFNetwork", "CloudKit",
+        "Contacts", "CoreAudio", "CoreBluetooth", "CoreData", "CoreFoundation", "CoreGraphics", "CoreImage",
+        "CoreLocation", "CoreMedia", "CoreMotion", "CoreServices", "CoreText", "CoreVideo", "CryptoKit", "DeviceCheck",
+        "EventKit", "Foundation", "GameController", "HealthKit", "HomeKit", "ImageIO", "IOKit", "LocalAuthentication",
+        "MapKit", "Metal", "MetalKit", "Network", "NetworkExtension", "OSLog", "PassKit", "Photos", "QuartzCore",
+        "SafariServices", "Security", "StoreKit", "SystemConfiguration", "UIKit", "UniformTypeIdentifiers",
+        "UserNotifications", "VideoToolbox", "WatchKit", "WebKit"
+    };
+
+    private static void ValidateSwiftPackageLinkedDependencies(
+        string packageRoot,
+        string manifestSource,
+        string manifestSyntax)
+    {
+        foreach (Match reference in Regex.Matches(
+                     manifestSyntax,
+                     "\\.\\s*(?<factory>linkedLibrary|linkedFramework)\\s*\\(",
+                     RegexOptions.CultureInvariant))
+        {
+            var opening = reference.Index + reference.Length - 1;
+            var closing = FindMatchingSwiftDelimiter(manifestSyntax, opening, '(', ')');
+            var argumentSource = manifestSource.Substring(opening + 1, closing - opening - 1);
+            var argumentSyntax = manifestSyntax.Substring(opening + 1, closing - opening - 1);
+            var nameArgument = ReadFirstTopLevelSwiftArgument(argumentSource, argumentSyntax);
+            if (!TryReadLiteralSwiftString(nameArgument, out var name))
+            {
+                throw new InvalidOperationException(
+                    $"Swift package '{packageRoot}' uses a computed {reference.Groups["factory"].Value} name, which cannot be bound to an approved Apple SDK or toolchain input.");
+            }
+
+            var factory = reference.Groups["factory"].Value;
+            var approved = factory.Equals("linkedFramework", StringComparison.Ordinal)
+                ? ApprovedSwiftPackageLinkedFrameworks.Contains(name)
+                : ApprovedSwiftPackageLinkedLibraries.Contains(name);
+            if (approved)
+                continue;
+            throw new InvalidOperationException(
+                $"Swift package '{packageRoot}' declares {factory}('{name}'), whose selected linker bytes are not bound to an approved Apple SDK or toolchain input.");
         }
     }
 
