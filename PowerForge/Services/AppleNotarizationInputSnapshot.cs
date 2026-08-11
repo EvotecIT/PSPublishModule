@@ -4,6 +4,7 @@ namespace PowerForge;
 internal sealed class AppleNotarizationInputSnapshot : IDisposable
 {
     private readonly AppleArchiveUploadSnapshot? _directorySnapshot;
+    private readonly string? _fileMutationIdentity;
     private AppleReleaseSourceMutationMonitor? _fileSnapshotMonitor;
     private bool _disposed;
 
@@ -11,12 +12,14 @@ internal sealed class AppleNotarizationInputSnapshot : IDisposable
         string rootPath,
         string artifactPath,
         AppleArchiveUploadSnapshot? directorySnapshot,
-        AppleReleaseSourceMutationMonitor? fileSnapshotMonitor = null)
+        AppleReleaseSourceMutationMonitor? fileSnapshotMonitor = null,
+        string? fileMutationIdentity = null)
     {
         RootPath = rootPath;
         ArtifactPath = artifactPath;
         _directorySnapshot = directorySnapshot;
         _fileSnapshotMonitor = fileSnapshotMonitor;
+        _fileMutationIdentity = fileMutationIdentity;
     }
 
     internal string RootPath { get; }
@@ -35,6 +38,15 @@ internal sealed class AppleNotarizationInputSnapshot : IDisposable
             {
                 throw new InvalidOperationException(
                     $"The private Apple notarization file changed while its submission bytes were captured. Expected '{expectedSha256}', received '{actual}'.");
+            }
+            var currentMutationIdentity = ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(
+                ArtifactPath,
+                "private Apple notarization file snapshot");
+            if (!string.Equals(_fileMutationIdentity, currentMutationIdentity, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "The private Apple notarization file snapshot identity changed while its submission bytes were captured. " +
+                    "A transient write or hard-link alias invalidates the approved artifact.");
             }
         }
         finally
@@ -208,7 +220,14 @@ internal sealed class AppleNotarizationInputSnapshot : IDisposable
                 "private Apple notarization file snapshot",
                 "submission hashing",
                 "Discard the snapshot and recreate it from the approved artifact.");
-            return new AppleNotarizationInputSnapshot(root, snapshotPath, directorySnapshot: null, monitor);
+            return new AppleNotarizationInputSnapshot(
+                root,
+                snapshotPath,
+                directorySnapshot: null,
+                fileSnapshotMonitor: monitor,
+                fileMutationIdentity: ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(
+                    snapshotPath,
+                    "private Apple notarization file snapshot"));
         }
         catch
         {

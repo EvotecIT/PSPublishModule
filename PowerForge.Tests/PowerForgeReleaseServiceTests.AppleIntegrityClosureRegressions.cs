@@ -173,6 +173,88 @@ public sealed partial class PowerForgeReleaseServiceTests {
         }
     }
 
+    [Fact]
+    public void Execute_AppleUpload_rejects_transient_private_archive_hard_link_alias_mutation() {
+        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        var root = CreateSandbox();
+        string? aliasRoot = null;
+        try {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.MinimumFreeSpaceGB = 0;
+            spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            spec.AppleApps.Automation.WaitForProcessing = false;
+            string? privateArchive = null;
+
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, processingState: null),
+                    archiveAppleApp: request => {
+                        var archive = Directory.CreateDirectory(request.ArchivePath!);
+                        File.WriteAllText(Path.Combine(archive.FullName, "payload"), "approved bytes");
+                        return CreateSuccessfulArchive(request);
+                    },
+                    uploadAppleApp: request => {
+                        privateArchive = request.ArchivePath;
+                        var payload = Path.Combine(request.ArchivePath, "payload");
+                        var snapshotRoot = Directory.GetParent(request.ArchivePath)!.FullName;
+                        aliasRoot = Path.Combine(Directory.GetParent(snapshotRoot)!.FullName, $"alias-{Guid.NewGuid():N}");
+                        Directory.CreateDirectory(aliasRoot);
+                        var alias = Path.Combine(aliasRoot, "payload-alias");
+                        TestFileLink.CreateHardLink(alias, payload);
+                        File.WriteAllText(alias, "transient unapproved bytes");
+                        File.WriteAllText(alias, "approved bytes");
+                        File.Delete(alias);
+                        return CreateSuccessfulUpload(request);
+                    })
+                .Execute(spec, new PowerForgeReleaseRequest {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleSourceCommit = sourceCommit
+                });
+
+            Assert.False(result.Success);
+            Assert.NotNull(privateArchive);
+            Assert.Contains("private Apple upload archive snapshot", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(
+                new AppleReleaseReceiptStore().ReadAll(result.AppleAppPlan!),
+                receipt => receipt.OperationPhase == "UploadAttested");
+        } finally {
+            if (!string.IsNullOrWhiteSpace(aliasRoot) && Directory.Exists(aliasRoot))
+                Directory.Delete(aliasRoot, recursive: true);
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void AppleArchiveUploadSnapshot_rejects_restored_bytes_changed_through_a_removed_hard_link_alias() {
+        var root = CreateSandbox();
+        string? aliasRoot = null;
+        try {
+            var archive = Directory.CreateDirectory(Path.Combine(root, "approved.xcarchive"));
+            File.WriteAllText(Path.Combine(archive.FullName, "payload"), "approved bytes");
+            var expectedSha256 = AppleNotarizationService.ComputeArtifactSha256(archive.FullName);
+
+            using var snapshot = AppleArchiveUploadSnapshot.Create(archive.FullName, expectedSha256);
+            aliasRoot = Path.Combine(Directory.GetParent(snapshot.RootPath)!.FullName, $"alias-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(aliasRoot);
+            var alias = Path.Combine(aliasRoot, "payload-alias");
+            TestFileLink.CreateHardLink(alias, Path.Combine(snapshot.ArchivePath, "payload"));
+            File.WriteAllText(alias, "transient unapproved bytes");
+            File.WriteAllText(alias, "approved bytes");
+            File.Delete(alias);
+
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => snapshot.ValidateUnchanged(expectedSha256));
+            Assert.Contains("hard-link alias", exception.Message, StringComparison.OrdinalIgnoreCase);
+        } finally {
+            if (!string.IsNullOrWhiteSpace(aliasRoot) && Directory.Exists(aliasRoot))
+                Directory.Delete(aliasRoot, recursive: true);
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData("team")]
     [InlineData("signing")]

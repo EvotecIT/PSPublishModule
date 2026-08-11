@@ -345,6 +345,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         Assert.Equal(PowerForgeAppleReleaseAction.Configured, request.AppleAction);
         Assert.Equal("1.6", request.AppleMarketingVersion);
         Assert.Equal("0123456789abcdef0123456789abcdef01234567", request.AppleSourceCommit);
+        Assert.True(request.RequireImmutableAppleSourceSnapshot);
         Assert.Equal("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd", request.AppleExpectedPlanSha256);
         Assert.Equal(
             "1111111111111111111111111111111111111111111111111111111111111111",

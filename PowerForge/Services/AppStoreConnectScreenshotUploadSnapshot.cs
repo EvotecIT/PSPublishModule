@@ -10,19 +10,22 @@ namespace PowerForge;
 internal sealed class AppStoreConnectScreenshotUploadSnapshot : IDisposable
 {
     private bool _disposed;
+    private readonly string _mutationIdentity;
 
     private AppStoreConnectScreenshotUploadSnapshot(
         string rootPath,
         string filePath,
         long length,
         string sha256,
-        string md5)
+        string md5,
+        string mutationIdentity)
     {
         RootPath = rootPath;
         FilePath = filePath;
         Length = length;
         Sha256 = sha256;
         Md5 = md5;
+        _mutationIdentity = mutationIdentity;
     }
 
     internal string RootPath { get; }
@@ -66,12 +69,16 @@ internal sealed class AppStoreConnectScreenshotUploadSnapshot : IDisposable
                     $"Screenshot '{source}' changed after its immutable upload snapshot was captured.");
             }
 
+            var md5 = ComputeHash(snapshotPath, MD5.Create);
             return new AppStoreConnectScreenshotUploadSnapshot(
                 root,
                 snapshotPath,
                 new FileInfo(snapshotPath).Length,
                 sha256,
-                ComputeHash(snapshotPath, MD5.Create));
+                md5,
+                ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(
+                    snapshotPath,
+                    "private screenshot upload snapshot"));
         }
         catch
         {
@@ -94,6 +101,15 @@ internal sealed class AppStoreConnectScreenshotUploadSnapshot : IDisposable
         {
             throw new InvalidOperationException(
                 "The private screenshot upload snapshot changed while App Store Connect was reading it; discard the upload result and retry from approved bytes.");
+        }
+        var currentMutationIdentity = ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(
+            FilePath,
+            "private screenshot upload snapshot");
+        if (!string.Equals(_mutationIdentity, currentMutationIdentity, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "The private screenshot upload snapshot file identity changed while App Store Connect was reading it. " +
+                "A transient write or hard-link alias invalidates the approved screenshot bytes.");
         }
     }
 

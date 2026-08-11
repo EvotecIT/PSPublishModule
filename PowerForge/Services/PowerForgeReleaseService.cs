@@ -971,6 +971,9 @@ internal sealed partial class PowerForgeReleaseService
                     AppleAction = request.AppleAction,
                     AppleMarketingVersion = request.AppleMarketingVersion,
                     AppleSourceCommit = request.AppleSourceCommit,
+                    RequireImmutableAppleSourceSnapshot =
+                        request.RequireImmutableAppleSourceSnapshot ||
+                        !string.IsNullOrWhiteSpace(request.AppleSourceCommit),
                     AppleExpectedPlanSha256 = request.AppleExpectedPlanSha256,
                     AppleExpectedArchiveSha256ByTarget = new Dictionary<string, string>(
                         request.AppleExpectedArchiveSha256ByTarget,

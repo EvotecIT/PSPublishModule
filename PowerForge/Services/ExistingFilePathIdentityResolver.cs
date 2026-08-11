@@ -55,6 +55,83 @@ internal static class ExistingFilePathIdentityResolver
         internal string MutationIdentity => $"{Identity}:{ChangeToken}";
     }
 
+    /// <summary>
+    /// Returns the number of physical path aliases for each regular file without following repository or archive metadata.
+    /// </summary>
+    internal static IReadOnlyList<int> ResolveHardLinkCounts(IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0)
+            return Array.Empty<int>();
+        if (System.IO.Path.DirectorySeparatorChar == '\\')
+        {
+            return paths.Select(path =>
+            {
+                using var stream = new FileStream(
+                    path,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+                if (!GetFileInformationByHandle(stream.SafeFileHandle, out var information))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                return checked((int)information.NumberOfLinks);
+            }).ToArray();
+        }
+
+#if NET8_0_OR_GREATER
+        const int batchSize = 64;
+        var executable = "/usr/bin/stat";
+        var counts = new List<int>(paths.Count);
+        for (var offset = 0; offset < paths.Count; offset += batchSize)
+        {
+            var batch = paths.Skip(offset).Take(batchSize).ToArray();
+            var arguments = new List<string>
+            {
+                OperatingSystem.IsMacOS() ? "-f" : "-c",
+                OperatingSystem.IsMacOS() ? "%l" : "%h"
+            };
+            arguments.AddRange(batch);
+            var result = new ProcessRunner().RunAsync(new ProcessRunRequest(
+                    executable,
+                    Directory.GetCurrentDirectory(),
+                    arguments,
+                    TimeSpan.FromMinutes(1),
+                    AppleTrustedExecutionEnvironment.Create(),
+                    captureOutput: true,
+                    captureError: true,
+                    inheritEnvironment: false))
+                .GetAwaiter()
+                .GetResult();
+            if (!result.Succeeded)
+                throw new InvalidOperationException($"Failed to inspect private artifact hard-link counts: {result.StdErr}".Trim());
+            var batchCounts = result.StdOut
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => int.TryParse(value.Trim(), out var count) ? count : -1)
+                .ToArray();
+            if (batchCounts.Length != batch.Length || batchCounts.Any(static count => count < 0))
+                throw new InvalidOperationException("The private artifact hard-link inspection returned an incomplete result.");
+            counts.AddRange(batchCounts);
+        }
+        return counts;
+#else
+        throw new PlatformNotSupportedException("Hard-link inspection is not available for this runtime and operating system.");
+#endif
+    }
+
+    /// <summary>
+    /// Captures one private regular file's physical identity and rejects any second pathname to the same bytes.
+    /// </summary>
+    internal static string CapturePrivateFileMutationIdentity(string path, string description)
+    {
+        var fullPath = System.IO.Path.GetFullPath(path);
+        var hardLinkCount = ResolveHardLinkCounts(new[] { fullPath })[0];
+        if (hardLinkCount != 1)
+        {
+            throw new InvalidOperationException(
+                $"The {description} has {hardLinkCount} hard links. Private release snapshots require one pathname per regular file.");
+        }
+        return ResolveStatus(fullPath).MutationIdentity;
+    }
+
     private static ExistingFilePhysicalStatus ReadWindowsFileStatus(SafeFileHandle handle)
     {
         var identity = ReadWindowsFileIdentity(handle);
@@ -64,7 +141,6 @@ internal static class ExistingFilePathIdentityResolver
                 out var information,
                 checked((uint)Marshal.SizeOf<WindowsFileBasicInfo>())))
             throw new Win32Exception(Marshal.GetLastWin32Error());
-
         var changeToken = $"{information.ChangeTime:X16}";
         return new ExistingFilePhysicalStatus(identity, changeToken);
     }

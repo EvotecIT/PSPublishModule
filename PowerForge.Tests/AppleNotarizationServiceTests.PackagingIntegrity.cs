@@ -25,6 +25,32 @@ public sealed partial class AppleNotarizationServiceTests
     }
 
     [Fact]
+    public void FileSnapshot_rejects_a_second_hard_link_path_before_submission()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        string? aliasRoot = null;
+        try
+        {
+            var package = Path.Combine(root.FullName, "Approved.pkg");
+            File.WriteAllText(package, "approved-package");
+            var expected = AppleNotarizationService.ComputeArtifactSha256(package);
+            using var snapshot = AppleNotarizationInputSnapshot.Create(package, expected);
+            aliasRoot = Path.Combine(Directory.GetParent(snapshot.RootPath)!.FullName, $"alias-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(aliasRoot);
+            TestFileLink.CreateHardLink(Path.Combine(aliasRoot, "package-alias"), snapshot.ArtifactPath);
+
+            var exception = Assert.Throws<InvalidOperationException>(() => snapshot.CompleteSubmissionCapture(expected));
+            Assert.Contains("hard links", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(aliasRoot) && Directory.Exists(aliasRoot))
+                Directory.Delete(aliasRoot, recursive: true);
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task NotarizeAsync_RejectsTransientAppMutationWhileDittoCreatesSubmissionZip()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));

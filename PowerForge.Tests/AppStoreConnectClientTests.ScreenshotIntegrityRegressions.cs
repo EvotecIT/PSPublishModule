@@ -316,6 +316,37 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public void ScreenshotUploadSnapshot_rejects_restored_bytes_changed_through_a_removed_hard_link_alias()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? aliasRoot = null;
+        try
+        {
+            var screenshotPath = Path.Combine(root.FullName, "approved.png");
+            File.WriteAllBytes(screenshotPath, new byte[] { 1, 2, 3 });
+            using var snapshot = AppStoreConnectScreenshotUploadSnapshot.Capture(
+                screenshotPath,
+                ComputeScreenshotSha256(screenshotPath));
+            aliasRoot = Path.Combine(Directory.GetParent(snapshot.RootPath)!.FullName, $"alias-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(aliasRoot);
+            var alias = Path.Combine(aliasRoot, "screenshot-alias");
+            TestFileLink.CreateHardLink(alias, snapshot.FilePath);
+            File.WriteAllBytes(alias, new byte[] { 9, 9, 9 });
+            File.WriteAllBytes(alias, new byte[] { 1, 2, 3 });
+            File.Delete(alias);
+
+            var exception = Assert.Throws<InvalidOperationException>(snapshot.ValidateUnchanged);
+            Assert.Contains("hard-link alias", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(aliasRoot) && Directory.Exists(aliasRoot))
+                Directory.Delete(aliasRoot, recursive: true);
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task UploadScreenshotAsync_RejectsPrivateSnapshotMutationDuringReservation()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

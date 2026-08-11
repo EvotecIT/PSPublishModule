@@ -87,4 +87,42 @@ public sealed partial class PowerForgeReleaseServiceTests
             TryDelete(root);
         }
     }
+
+    [Fact]
+    public void PublishBuiltReleaseOutputs_preserves_immutable_source_validation_for_the_Apple_publish_clone()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "build/\n");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Archive = false;
+
+            var result = CreateAppleAutomationService(request => CreateReleaseState(request, "VALID"))
+                .PublishBuiltReleaseOutputs(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Status,
+                        AppleSourceCommit = "0000000000000000000000000000000000000000"
+                    },
+                    new PowerForgeReleaseResult { Success = true });
+
+            Assert.False(result.Success);
+            Assert.Contains("instead of the approved commit", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
 }

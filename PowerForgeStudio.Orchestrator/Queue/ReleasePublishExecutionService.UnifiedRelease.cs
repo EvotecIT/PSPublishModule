@@ -307,6 +307,9 @@ public sealed partial class ReleasePublishExecutionService
             ModuleRunMode = ConfigurationGateMode.Publish,
             AppleMarketingVersion = applePlan?.RequestedMarketingVersion,
             AppleSourceCommit = applePlan?.SourceCommit,
+            RequireImmutableAppleSourceSnapshot =
+                applePlan?.RequireImmutableSourceSnapshot == true ||
+                !string.IsNullOrWhiteSpace(applePlan?.SourceCommit),
             AppleExpectedPlanSha256 = builtResult.AppleReceipt?.PlanSha256,
             AppleExpectedArchiveSha256ByTarget = applePlan?.Apps
                 .Where(static app => !string.IsNullOrWhiteSpace(app.ExpectedArchiveSha256))
