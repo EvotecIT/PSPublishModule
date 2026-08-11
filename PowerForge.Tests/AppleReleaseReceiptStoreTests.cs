@@ -31,6 +31,45 @@ public sealed class AppleReleaseReceiptStoreTests
     }
 
     [Fact]
+    public async Task WriteAttempt_SerializesConcurrentWritersAcrossStoreInstances()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var plan = CreatePlan(root);
+            var seed = CreateReceipt(PowerForgeAppleReleaseAction.Upload, success: true);
+            seed.CheckedAt = DateTimeOffset.Parse("2026-08-11T18:00:00Z");
+            new AppleReleaseReceiptStore().WriteAttempt(plan, seed);
+
+            using var heldLease = AppleReleaseReceiptJournalLease.Acquire(plan);
+            var blockedWrite = Task.Factory.StartNew(
+                () => new AppleReleaseReceiptStore().WriteAttempt(
+                    plan,
+                    CreateReceipt(PowerForgeAppleReleaseAction.Status, success: true)),
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
+            await Task.Delay(150);
+            Assert.False(blockedWrite.IsCompleted);
+            heldLease.Dispose();
+            await blockedWrite.WaitAsync(TimeSpan.FromSeconds(10));
+
+            new AppleReleaseReceiptStore().WriteAttempt(
+                plan,
+                CreateReceipt(PowerForgeAppleReleaseAction.Doctor, success: true));
+
+            var receipts = new AppleReleaseReceiptStore().ReadAll(plan);
+            Assert.Equal(3, receipts.Length);
+            Assert.Equal(3, receipts.Select(receipt => receipt.ReceiptSha256).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+            Assert.Equal(2, receipts.Count(receipt => !string.IsNullOrWhiteSpace(receipt.PreviousReceiptSha256)));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ReadAll_RejectsTamperedImmutableReceipt()
     {
         var root = CreateSandbox();
@@ -295,6 +334,17 @@ public sealed class AppleReleaseReceiptStoreTests
     {
         try
         {
+            var plan = CreatePlan(path);
+            foreach (var lockPath in new[]
+                     {
+                         AppleReleaseReceiptJournalLease.CreateLockPath(plan.ReceiptPath),
+                         AppleReleaseReceiptJournalLease.CreateLockPath(plan.ReceiptHistoryPath)
+                     })
+            {
+                if (File.Exists(lockPath))
+                    File.Delete(lockPath);
+            }
+
             if (Directory.Exists(path))
                 Directory.Delete(path, recursive: true);
         }

@@ -81,7 +81,6 @@ internal sealed class AppleReleaseReceiptStore
 
         EnsureSafeOutputPath(plan.ProjectRoot, plan.ReceiptPath, "AppleApps.Automation.ReceiptPath");
         EnsureSafeOutputPath(plan.ProjectRoot, plan.ReceiptHistoryPath, "AppleApps.Automation.ReceiptHistoryPath");
-        var previousReceipt = ReadAll(plan).FirstOrDefault();
 
         var suppliedAttemptId = receipt.AttemptId;
         var normalizedAttemptId = string.IsNullOrWhiteSpace(suppliedAttemptId)
@@ -94,6 +93,8 @@ internal sealed class AppleReleaseReceiptStore
         if (receipt.CheckedAt == default)
             receipt.CheckedAt = _utcNow();
 
+        using var journalLease = AppleReleaseReceiptJournalLease.Acquire(plan);
+        var previousReceipt = ReadAll(plan).FirstOrDefault();
         var historyDirectory = Path.GetFullPath(plan.ReceiptHistoryPath);
         Directory.CreateDirectory(historyDirectory);
         EnsureUnlinkedPath(plan.ProjectRoot, historyDirectory, "Apple receipt history");
