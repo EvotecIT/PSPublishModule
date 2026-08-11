@@ -43,6 +43,10 @@ public sealed class ModuleSigningResult
     [JsonPropertyName("unknownError")]
     public int UnknownError { get; set; }
 
+    /// <summary>Number of signing operations that ended in a terminating host/provider exception.</summary>
+    [JsonPropertyName("signingException")]
+    public int SigningException { get; set; }
+
     /// <summary>Thumbprint of the certificate used for signing (if available).</summary>
     [JsonPropertyName("certificateThumbprint")]
     public string? CertificateThumbprint { get; set; }
@@ -50,6 +54,10 @@ public sealed class ModuleSigningResult
     /// <summary>List of file paths that failed signing (truncated).</summary>
     [JsonPropertyName("failedFiles")]
     public string[] FailedFiles { get; set; } = Array.Empty<string>();
+
+    /// <summary>Exact package file paths that failed signing, used for a scoped compatibility retry.</summary>
+    [JsonPropertyName("failedFilePaths")]
+    public string[] FailedFilePaths { get; set; } = Array.Empty<string>();
 
     /// <summary>Total number of files already signed (by this cert + third-party).</summary>
     [JsonIgnore]
