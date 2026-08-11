@@ -199,59 +199,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 continue;
             }
 
-            if (token.Equals("-I", StringComparison.Ordinal) ||
-                token.Equals("-F", StringComparison.Ordinal) ||
-                token.Equals("-L", StringComparison.Ordinal) ||
-                token.Equals("-B", StringComparison.Ordinal) ||
-                token.Equals("-include", StringComparison.Ordinal) ||
-                token.Equals("-imacros", StringComparison.Ordinal) ||
-                token.Equals("-include-pch", StringComparison.Ordinal) ||
-                token.Equals("-include-pth", StringComparison.Ordinal) ||
-                token.Equals("-iquote", StringComparison.Ordinal) ||
-                token.Equals("-isystem", StringComparison.Ordinal) ||
-                token.Equals("-isystem-after", StringComparison.Ordinal) ||
-                token.Equals("-idirafter", StringComparison.Ordinal) ||
-                token.Equals("-iframework", StringComparison.Ordinal) ||
-                token.Equals("-iframeworkwithsysroot", StringComparison.Ordinal) ||
-                token.Equals("-iprefix", StringComparison.Ordinal) ||
-                token.Equals("-iwithprefix", StringComparison.Ordinal) ||
-                token.Equals("-iwithprefixbefore", StringComparison.Ordinal) ||
-                token.Equals("-force_load", StringComparison.Ordinal) ||
-                token.Equals("-ivfsoverlay", StringComparison.Ordinal) ||
-                token.Equals("-vfsoverlay", StringComparison.Ordinal) ||
-                token.Equals("-fplugin", StringComparison.Ordinal) ||
-                token.Equals("-fpass-plugin", StringComparison.Ordinal) ||
-                token.Equals("-load", StringComparison.Ordinal) ||
-                token.Equals("-plugin", StringComparison.Ordinal) ||
-                token.Equals("-plugin-path", StringComparison.Ordinal) ||
-                token.Equals("-load-plugin-library", StringComparison.Ordinal) ||
-                token.Equals("-module-map-file", StringComparison.Ordinal) ||
-                token.Equals("-fmodule-map-file", StringComparison.Ordinal) ||
-                token.Equals("-fmodule-file", StringComparison.Ordinal) ||
-                token.Equals("-fprebuilt-module-path", StringComparison.Ordinal) ||
-                token.Equals("-fprofile-use", StringComparison.Ordinal) ||
-                token.Equals("-fprofile-instr-use", StringComparison.Ordinal) ||
-                token.Equals("-fprofile-sample-use", StringComparison.Ordinal) ||
-                token.Equals("-fprofile-list", StringComparison.Ordinal) ||
-                token.Equals("-fprofile-remapping-file", StringComparison.Ordinal) ||
-                token.Equals("-profile-use", StringComparison.Ordinal) ||
-                token.Equals("-profile-sample-use", StringComparison.Ordinal) ||
-                token.Equals("-fsanitize-ignorelist", StringComparison.Ordinal) ||
-                token.Equals("-fsanitize-blacklist", StringComparison.Ordinal) ||
-                token.Equals("-fsanitize-system-ignorelist", StringComparison.Ordinal) ||
-                token.Equals("-fsanitize-system-blacklist", StringComparison.Ordinal) ||
-                token.Equals("-fsanitize-coverage-allowlist", StringComparison.Ordinal) ||
-                token.Equals("-fsanitize-coverage-ignorelist", StringComparison.Ordinal) ||
-                token.Equals("-fsanitize-coverage-whitelist", StringComparison.Ordinal) ||
-                token.Equals("-fsanitize-coverage-blacklist", StringComparison.Ordinal) ||
-                token.Equals("-resource-dir", StringComparison.Ordinal) ||
-                token.Equals("-working-directory", StringComparison.Ordinal) ||
-                token.Equals("-gcc-toolchain", StringComparison.Ordinal) ||
-                token.Equals("--sysroot", StringComparison.Ordinal) ||
-                token.Equals("-install_name", StringComparison.Ordinal) ||
-                token.Equals("-rpath", StringComparison.Ordinal) ||
-                token.Equals("-isysroot", StringComparison.Ordinal) ||
-                token.Equals("-sdk", StringComparison.Ordinal))
+            if (BuildFlagPathOptions.Contains(token))
             {
                 consumeNext = true;
                 continue;
@@ -265,26 +213,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 continue;
             }
 
-            var prefixes = new[]
-            {
-                "-iframeworkwithsysroot", "-iwithprefixbefore", "-fprofile-instr-use=",
-                "-fprofile-sample-use=", "-fprofile-remapping-file=", "-fprofile-list=",
-                "-profile-sample-use=", "-profile-use=",
-                "-fmodule-map-file=", "-working-directory=",
-                "-fsanitize-system-ignorelist=", "-fsanitize-system-blacklist=",
-                "-fsanitize-coverage-allowlist=", "-fsanitize-coverage-ignorelist=",
-                "-fsanitize-coverage-whitelist=", "-fsanitize-coverage-blacklist=",
-                "-fsanitize-ignorelist=", "-fsanitize-blacklist=",
-                "-fprebuilt-module-path=",
-                "-include-pch=", "-include-pth=", "-gcc-toolchain=", "-resource-dir=",
-                "-iwithprefix", "-fprofile-use=", "-fmodule-file=", "-module-map-file=",
-                "-ivfsoverlay=", "-vfsoverlay=", "-plugin-path=", "-fpass-plugin=",
-                "-load-plugin-library=",
-                "-iframework", "-idirafter", "-imacros=", "-include=", "--sysroot=",
-                "-isystem-after", "-isystem", "-iquote", "-iprefix", "-fplugin=", "-isysroot=", "-sdk=",
-                "-I", "-F", "-L", "-B"
-            };
-            var prefix = prefixes.FirstOrDefault(candidate =>
+            var prefix = BuildFlagPathPrefixes.FirstOrDefault(candidate =>
                 token.StartsWith(candidate, StringComparison.Ordinal) && token.Length > candidate.Length);
             if (prefix is not null)
             {
@@ -463,7 +392,10 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (token.Equals("-Xcc", StringComparison.Ordinal) ||
                 token.Equals("-Xlinker", StringComparison.Ordinal) ||
                 token.Equals("-Xfrontend", StringComparison.Ordinal) ||
-                token.Equals("-Xswiftc", StringComparison.Ordinal))
+                token.Equals("-Xswiftc", StringComparison.Ordinal) ||
+                token.Equals("-Xassembler", StringComparison.Ordinal) ||
+                token.Equals("-Xpreprocessor", StringComparison.Ordinal) ||
+                token.Equals("-Xclang", StringComparison.Ordinal))
             {
                 if (++index >= tokens.Length)
                     throw new InvalidOperationException($"Xcode build setting {key} ends with forwarding option '{token}' and no argument.");
@@ -471,13 +403,19 @@ internal sealed partial class AppleReleaseSourceTrustService
                 continue;
             }
 
-            if (token.StartsWith("-Wl,", StringComparison.Ordinal))
+            if (token.StartsWith("-Wl,", StringComparison.Ordinal) ||
+                token.StartsWith("-Wp,", StringComparison.Ordinal) ||
+                token.StartsWith("-Wa,", StringComparison.Ordinal))
             {
                 expanded.AddRange(token.Substring(4).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries));
                 continue;
             }
 
-            foreach (var wrapper in new[] { "-Xcc=", "-Xlinker=", "-Xfrontend=", "-Xswiftc=" })
+            foreach (var wrapper in new[]
+                     {
+                         "-Xcc=", "-Xlinker=", "-Xfrontend=", "-Xswiftc=",
+                         "-Xassembler=", "-Xpreprocessor=", "-Xclang="
+                     })
             {
                 if (!token.StartsWith(wrapper, StringComparison.Ordinal))
                     continue;

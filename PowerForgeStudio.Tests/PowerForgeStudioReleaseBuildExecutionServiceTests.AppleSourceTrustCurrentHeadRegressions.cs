@@ -198,4 +198,177 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.Equal(expected, actual);
     }
+
+    [Theory]
+    [InlineData("-Wp,-I,External,-include,Injected.h")]
+    [InlineData("-Wa,-I,External")]
+    [InlineData("-Xpreprocessor -include -Xpreprocessor Injected.h")]
+    [InlineData("-Xassembler -I -Xassembler External")]
+    [InlineData("-Xclang -include -Xclang Injected.h")]
+    public void ResolveExactAppleSourceCommit_classifies_forwarded_preprocessor_and_assembler_inputs(string option)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "ForwardedCompilerInputRepo" + option.Length,
+            $"OTHER_CFLAGS = {option}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("-frandomize-layout-seed-file Rules")]
+    [InlineData("-frandomize-layout-seed-file=Rules")]
+    public void ResolveExactAppleSourceCommit_classifies_randomized_layout_seed_file(string option)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "RandomizedLayoutSeedRepo" + option.Length,
+            $"OTHER_CFLAGS = {option}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("-fbuild-session-file=Session", "Session")]
+    [InlineData("-fcodegen-data-use Codegen.cgdata", "Codegen.cgdata")]
+    [InlineData("-fmemory-profile-use=Memory.profdata", "Memory.profdata")]
+    [InlineData("-iapinotes-path Notes.apinotes", "Notes.apinotes")]
+    [InlineData("-ivfsstatcache Stats.cache", "Stats.cache")]
+    [InlineData("--warning-suppression-mappings=Warnings.txt", "Warnings.txt")]
+    [InlineData("-multi-lib-config Config.yaml", "Config.yaml")]
+    [InlineData("--cuda-path Toolchain", "Toolchain")]
+    public void ResolveExactAppleSourceCommit_classifies_other_clang_filesystem_controls(
+        string option,
+        string expectedPath)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "ClangFilesystemControlRepo" + option.Length,
+            $"OTHER_CFLAGS = {option}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains(expectedPath, exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_preserves_real_include_after_cpp_raw_string()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateTrackedSourceFixture(
+            scope,
+            "CppRawStringIncludeRepo",
+            "Source.cpp",
+            "auto text = R\"tag(\" /*)tag\";\n#include \"/tmp/Injected.h\"\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("absolute preprocessor include", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_ignores_include_text_inside_cpp_raw_string()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateTrackedSourceFixture(
+            scope,
+            "CppRawStringTextRepo",
+            "Source.cpp",
+            "auto text = R\"tag(\n#include \"/tmp/NotAnInclude.h\"\n)tag\";\n");
+        var expected = CommitRepository(repositoryRoot);
+
+        var actual = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_unbound_objective_c_module_import()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateTrackedSourceFixture(
+            scope,
+            "ObjectiveCModuleImportRepo",
+            "Source.m",
+            "@import Injected;\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Objective-C module 'Injected'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("not bound", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_accepts_approved_apple_objective_c_module_import()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateTrackedSourceFixture(
+            scope,
+            "AppleObjectiveCModuleImportRepo",
+            "Source.m",
+            "@import Foundation;\n");
+        var expected = CommitRepository(repositoryRoot);
+
+        var actual = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData("Source.m", "#pragma clang module import Injected\n")]
+    [InlineData("Source.cpp", "import Injected;\n")]
+    [InlineData("Source.cpp", "import \"Injected.h\";\n")]
+    public void ResolveExactAppleSourceCommit_rejects_other_unbound_language_module_imports(
+        string sourceName,
+        string source)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateTrackedSourceFixture(
+            scope,
+            "LanguageModuleImportRepo" + sourceName.Length + source.Length,
+            sourceName,
+            source);
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("module", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("bound", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static (string RepositoryRoot, string ConfigPath) CreateTrackedSourceFixture(
+        TemporaryDirectoryScope scope,
+        string name,
+        string sourceName,
+        string source)
+    {
+        var repositoryRoot = scope.CreateDirectory(name);
+        var project = scope.CreateDirectory(Path.Combine(name, "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            $"000000000000000000000002 = {{ isa = PBXFileReference; path = {sourceName}; sourceTree = \"<group>\"; }};");
+        File.WriteAllText(Path.Combine(repositoryRoot, sourceName), source);
+        return (repositoryRoot, WriteAppleReleaseConfig(repositoryRoot, projectRoot: "."));
+    }
 }

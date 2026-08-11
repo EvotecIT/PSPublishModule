@@ -64,6 +64,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException(
                 $"Source input '{fullSourcePath}' uses nondeterministic compiler macro '{nondeterministicMacro}', which cannot be bound to one reproducible source commit.");
         }
+        ValidateLanguageModuleImports(fullSourcePath, source);
         foreach (Match directive in Regex.Matches(
                      source,
                      "(?m)^[ \\t]*(?:#|%:)[ \\t]*(?:include|include_next|import)[ \\t]+(?<operand>[^\\r\\n]+)",
@@ -259,9 +260,74 @@ internal sealed partial class AppleReleaseSourceTrustService
         "HealthKit", "HomeKit", "ImageIO", "IOKit", "LocalAuthentication", "MapKit", "Metal", "MetalKit",
         "Network", "NetworkExtension", "OSLog", "PassKit", "Photos", "QuartzCore", "SafariServices", "Security",
         "StoreKit", "SystemConfiguration", "UIKit", "UniformTypeIdentifiers", "UserNotifications", "VideoToolbox",
-        "WatchKit", "WebKit", "arpa", "dispatch", "libkern", "mach", "mach-o", "net", "netinet", "os", "simd",
+        "WatchKit", "WebKit", "ObjectiveC", "arpa", "dispatch", "libkern", "mach", "mach-o", "net", "netinet", "os", "simd",
         "sys", "xpc"
     };
+
+    private static void ValidateLanguageModuleImports(string sourcePath, string source)
+    {
+        var syntax = MaskCStringAndCharacterLiterals(source);
+        foreach (Match import in Regex.Matches(
+                     syntax,
+                     "(?<![A-Za-z0-9_])@import[ \\t]+(?<module>[A-Za-z_][A-Za-z0-9_.]*)[ \\t]*;",
+                     RegexOptions.CultureInvariant))
+        {
+            var moduleName = import.Groups["module"].Value;
+            var rootModule = moduleName.Split('.')[0];
+            if (ApprovedAppleSdkHeaderRoots.Contains(rootModule))
+                continue;
+            throw new InvalidOperationException(
+                $"Source input '{sourcePath}' imports Objective-C module '{moduleName}', whose module map and selected headers are not bound to an approved SDK, toolchain, or unique tracked module root.");
+        }
+
+        foreach (Match import in Regex.Matches(
+                     syntax,
+                     "(?m)^[ \\t]*(?:#|%:)[ \\t]*pragma[ \\t]+clang[ \\t]+module[ \\t]+import[ \\t]+(?<module>[A-Za-z_][A-Za-z0-9_.]*)",
+                     RegexOptions.CultureInvariant))
+        {
+            RejectUnapprovedLanguageModule(sourcePath, import.Groups["module"].Value, "Clang pragma");
+        }
+
+        var extension = Path.GetExtension(sourcePath);
+        if (!extension.Equals(".cc", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".cpp", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".cxx", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".hh", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".hpp", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".hxx", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        foreach (Match import in Regex.Matches(
+                     syntax,
+                     "(?m)^[ \\t]*(?:export[ \\t]+)?import[ \\t]+(?<module>[^;\\r\\n]+)[ \\t]*;",
+                     RegexOptions.CultureInvariant))
+        {
+            var moduleName = import.Groups["module"].Value.Trim();
+            if (!Regex.IsMatch(
+                    moduleName,
+                    "^[A-Za-z_][A-Za-z0-9_.]*(?::[A-Za-z_][A-Za-z0-9_.]*)?$",
+                    RegexOptions.CultureInvariant))
+            {
+                throw new InvalidOperationException(
+                    $"Source input '{sourcePath}' uses C++ module or header-unit import '{moduleName}', whose selected bytes cannot be bound safely to the exact source commit.");
+            }
+            RejectUnapprovedLanguageModule(sourcePath, moduleName, "C++");
+        }
+    }
+
+    private static void RejectUnapprovedLanguageModule(string sourcePath, string moduleName, string syntax)
+    {
+        var rootModule = moduleName.Split('.', ':')[0];
+        if (rootModule.Equals("std", StringComparison.Ordinal) ||
+            ApprovedAppleSdkHeaderRoots.Contains(rootModule))
+        {
+            return;
+        }
+        throw new InvalidOperationException(
+            $"Source input '{sourcePath}' imports {syntax} module '{moduleName}', whose module map and selected headers are not bound to an approved SDK, toolchain, or unique tracked module root.");
+    }
 
     private static void RejectCTrigraphs(string source, string sourcePath)
     {
@@ -445,134 +511,4 @@ internal sealed partial class AppleReleaseSourceTrustService
         return null;
     }
 
-    private static string MaskCStringAndCharacterLiterals(string source)
-    {
-        var result = new System.Text.StringBuilder(source.Length);
-        var quote = '\0';
-        var escaped = false;
-        foreach (var current in source)
-        {
-            if (quote == '\0')
-            {
-                if (current is '\"' or '\'')
-                {
-                    quote = current;
-                    result.Append(' ');
-                }
-                else
-                {
-                    result.Append(current);
-                }
-                continue;
-            }
-
-            result.Append(current is '\r' or '\n' ? current : ' ');
-            if (escaped)
-                escaped = false;
-            else if (current == '\\')
-                escaped = true;
-            else if (current == quote)
-                quote = '\0';
-        }
-        return result.ToString();
-    }
-
-    private static string SpliceCPreprocessingLines(string source)
-    {
-        var result = new System.Text.StringBuilder(source.Length);
-        for (var index = 0; index < source.Length; index++)
-        {
-            if (source[index] != '\\' || index + 1 >= source.Length)
-            {
-                result.Append(source[index]);
-                continue;
-            }
-
-            if (source[index + 1] == '\n')
-            {
-                index++;
-                continue;
-            }
-            if (source[index + 1] == '\r')
-            {
-                index++;
-                if (index + 1 < source.Length && source[index + 1] == '\n')
-                    index++;
-                continue;
-            }
-
-            result.Append(source[index]);
-        }
-        return result.ToString();
-    }
-
-    private static string RemoveCComments(string source)
-    {
-        var result = new System.Text.StringBuilder(source.Length);
-        var inBlockComment = false;
-        var inLineComment = false;
-        var quote = '\0';
-        var escaped = false;
-        for (var index = 0; index < source.Length; index++)
-        {
-            var current = source[index];
-            var next = index + 1 < source.Length ? source[index + 1] : '\0';
-            if (inLineComment)
-            {
-                if (current == '\r' || current == '\n')
-                {
-                    inLineComment = false;
-                    result.Append(current);
-                }
-                else
-                {
-                    result.Append(' ');
-                }
-                continue;
-            }
-            if (inBlockComment)
-            {
-                if (current == '*' && next == '/')
-                {
-                    result.Append("  ");
-                    index++;
-                    inBlockComment = false;
-                }
-                else
-                {
-                    result.Append(current == '\r' || current == '\n' ? current : ' ');
-                }
-                continue;
-            }
-            if (quote != '\0')
-            {
-                result.Append(current);
-                if (escaped)
-                    escaped = false;
-                else if (current == '\\')
-                    escaped = true;
-                else if (current == quote)
-                    quote = '\0';
-                continue;
-            }
-            if (current == '/' && next == '/')
-            {
-                result.Append("  ");
-                index++;
-                inLineComment = true;
-                continue;
-            }
-            if (current == '/' && next == '*')
-            {
-                result.Append("  ");
-                index++;
-                inBlockComment = true;
-                continue;
-            }
-            if (current == '"' || current == '\'')
-                quote = current;
-            result.Append(current);
-        }
-        return result.ToString();
-    }
 }
