@@ -129,6 +129,67 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task ScreenshotSyncService_PreservesRelativePathsForDuplicateNestedBasenames()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root.FullName, "screenshots"));
+            var phoneFolder = Directory.CreateDirectory(Path.Combine(folder.FullName, "iPhone"));
+            var tabletFolder = Directory.CreateDirectory(Path.Combine(folder.FullName, "iPad"));
+            var phone = Path.Combine(phoneFolder.FullName, "shot.png");
+            var tablet = Path.Combine(tabletFolder.FullName, "shot.png");
+            await File.WriteAllBytesAsync(phone, new byte[] { 1, 2, 3 });
+            await File.WriteAllBytesAsync(tablet, new byte[] { 4, 5, 6 });
+            var handler = new SequenceHandler(
+                new SequenceResponse(HttpStatusCode.OK, """{ "data": [{ "id": "version-1", "type": "appStoreVersions", "attributes": { "versionString": "1.0.0", "platform": "IOS" } }] }"""),
+                new SequenceResponse(HttpStatusCode.OK, """{ "data": [{ "id": "loc-1", "type": "appStoreVersionLocalizations", "attributes": { "locale": "en-US" } }] }"""),
+                new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+                new SequenceResponse(HttpStatusCode.Created, """{ "data": { "id": "set-1", "type": "appScreenshotSets", "attributes": { "screenshotDisplayType": "APP_IPHONE_65" } } }"""),
+                ScreenshotReservation("shot-phone", "shot.png", 3),
+                ScreenshotCommit("shot-phone", "shot.png", "5289df737df57326fcdd22597afb1fac"),
+                ScreenshotReservation("shot-tablet", "shot.png", 3),
+                ScreenshotCommit("shot-tablet", "shot.png", "b4a3ba90641372b4e4eaa841a5a400ec"));
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+            using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+            var result = await new AppStoreConnectScreenshotSyncService(client).SyncAsync(new AppStoreConnectScreenshotSyncRequest
+            {
+                BaseDirectory = root.FullName,
+                ExpectedFileSha256 = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [phone] = ComputeScreenshotSha256(phone),
+                    [tablet] = ComputeScreenshotSha256(tablet)
+                },
+                Spec = new AppStoreConnectScreenshotSyncSpec
+                {
+                    AppId = "app-1",
+                    VersionString = "1.0.0",
+                    Platform = ApplePlatform.iOS,
+                    Locale = "en-US",
+                    ScreenshotSets =
+                    [
+                        new AppStoreConnectScreenshotSetSyncSpec
+                        {
+                            ScreenshotDisplayType = "APP_IPHONE_65",
+                            Path = "screenshots",
+                            Filter = "*/shot.png"
+                        }
+                    ]
+                }
+            });
+
+            var uploaded = Assert.Single(result.ScreenshotSets).Uploaded;
+            Assert.Equal(2, uploaded.Length);
+            Assert.Equal(new[] { tablet, phone }, uploaded.Select(static item => item.FilePath).OrderBy(static path => path, StringComparer.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task ScreenshotUploadSnapshot_UsesPrivateFileBackedRanges()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

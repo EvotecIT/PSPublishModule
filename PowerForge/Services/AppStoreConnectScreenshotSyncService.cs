@@ -343,7 +343,15 @@ public sealed class AppStoreConnectScreenshotSyncService
                     }
                     consumedApprovedFiles.Add(source);
 
-                    var snapshotPath = Path.Combine(setRoot, Path.GetFileName(source));
+                    var relativePath = AppStoreConnectScreenshotFileSelector.GetRelativePath(set.Folder, source)
+                        ?? throw new InvalidOperationException(
+                            $"Screenshot '{source}' escapes its configured screenshot set folder '{set.Folder}'.");
+                    var snapshotPath = Path.GetFullPath(Path.Combine(
+                        setRoot,
+                        relativePath.Replace('/', Path.DirectorySeparatorChar)));
+                    var snapshotDirectory = Path.GetDirectoryName(snapshotPath)
+                        ?? throw new InvalidOperationException($"Screenshot snapshot path has no parent directory: {snapshotPath}");
+                    Directory.CreateDirectory(snapshotDirectory);
                     File.Copy(source, snapshotPath, overwrite: false);
                     var actualSha256 = ComputeSha256(snapshotPath);
                     if (approvedScreenshots is not null)
@@ -399,40 +407,16 @@ public sealed class AppStoreConnectScreenshotSyncService
                 .Select(item => new
                 {
                     Item = item,
-                    RelativePath = GetRelativeScreenshotPath(set.Folder, item.Key)
+                    RelativePath = AppStoreConnectScreenshotFileSelector.GetRelativePath(set.Folder, item.Key)
                 })
                 .Where(static item => item.RelativePath is not null)
-                .Where(item => MatchesScreenshotFilter(item.RelativePath!, set.Filter))
+                .Where(item => AppStoreConnectScreenshotFileSelector.MatchesFilter(item.RelativePath!, set.Filter))
                 .OrderBy(static item => item.Item.Key, StringComparer.OrdinalIgnoreCase)
                 .Take(set.MaxCount);
             foreach (var item in approved)
                 selected[Path.GetFullPath(item.Item.Key)] = item.Item.Value;
         }
         return selected;
-    }
-
-    private static string? GetRelativeScreenshotPath(string folder, string screenshotPath)
-    {
-        var relative = FrameworkCompatibility.GetRelativePath(folder, Path.GetFullPath(screenshotPath));
-        if (Path.IsPathRooted(relative) ||
-            relative.Equals("..", StringComparison.Ordinal) ||
-            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-        {
-            return null;
-        }
-        return relative.Replace('\\', '/');
-    }
-
-    private static bool MatchesScreenshotFilter(string relativePath, string filter)
-    {
-        var normalizedFilter = filter.Replace('\\', '/');
-        var expression = "^" + System.Text.RegularExpressions.Regex.Escape(normalizedFilter)
-            .Replace("\\*", "[^/]*")
-            .Replace("\\?", "[^/]") + "$";
-        var options = System.Text.RegularExpressions.RegexOptions.CultureInvariant;
-        if (Path.DirectorySeparatorChar == '\\')
-            options |= System.Text.RegularExpressions.RegexOptions.IgnoreCase;
-        return System.Text.RegularExpressions.Regex.IsMatch(relativePath, expression, options);
     }
 
     private static string ComputeSha256(string filePath)
@@ -487,10 +471,7 @@ public sealed class AppStoreConnectScreenshotSyncService
             throw new DirectoryNotFoundException($"Screenshot folder was not found: {folder}");
 
         var filter = string.IsNullOrWhiteSpace(setSpec.Filter) ? "*.png" : setSpec.Filter;
-        var files = Directory.GetFiles(folder, filter)
-            .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
-            .Take(maxCount)
-            .ToArray();
+        var files = AppStoreConnectScreenshotFileSelector.Select(folder, filter, maxCount);
 
         if (files.Length == 0)
             throw new InvalidOperationException($"No screenshots matched '{filter}' in '{folder}'.");

@@ -192,10 +192,7 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             }
             else
             {
-                files = Directory.GetFiles(folder, filter)
-                    .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
-                    .Take(maxCount)
-                    .ToArray();
+                files = AppStoreConnectScreenshotFileSelector.Select(folder, filter, maxCount);
                 if (files.Length == 0)
                     messages.Add($"No screenshots matched '{filter}' in '{folder}'.");
                 else if (quality.Enabled)
