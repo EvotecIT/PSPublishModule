@@ -163,13 +163,14 @@ internal sealed partial class SqliteWebSearchObservationStore
                    json_extract(normalized_manifest_json, '$.collectionCoverage.throughDate'),
                    json_extract(normalized_manifest_json, '$.collectionCoverage.searchType'),
                    json_extract(normalized_manifest_json, '$.collectionCoverage.failureCategory'),
-                   json_extract(normalized_manifest_json, '$.collectionCoverage.failedDate')
+                   json_extract(normalized_manifest_json, '$.collectionCoverage.failedDate'),
+                   source_kind
             FROM search_observation_runs;
             """,
             static record => new SearchFleetRunMetadata(
                 record.GetString(0), record.GetString(1), record.GetString(2), ParseFleetTimestamp(record.GetString(3)), record.GetString(4),
                 NullableString(record, 5), NullableString(record, 6), NullableDate(record, 7), NullableDate(record, 8),
-                NullableString(record, 9), NullableString(record, 10), NullableDate(record, 11)),
+                NullableString(record, 9), NullableString(record, 10), NullableDate(record, 11), record.GetString(12)),
             cancellationToken: cancellationToken).ConfigureAwait(false);
         var coverageDates = await session.QueryAsListAsync(
             """
@@ -236,11 +237,13 @@ internal sealed partial class SqliteWebSearchObservationStore
                 var explicitCoverageRanges = MergeDates(explicitCoverageDates);
                 var inferredDimensionRows = observationDimensionScopesByRun[identity].ToArray();
                 var snapshot = string.Equals(run.CoverageMode, "snapshot", StringComparison.Ordinal);
+                var requiresObservedDimensions = snapshot && (run.Status != "complete" ||
+                    string.Equals(run.SourceKind, "csv-import", StringComparison.Ordinal));
                 var coversFleetCapability = SearchSnapshotCoversFleetCapability(run, runDimensionScopes) &&
-                                            (!snapshot || run.Status == "complete") &&
+                                            !requiresObservedDimensions &&
                                             !(string.Equals(run.CoverageMode, "snapshot", StringComparison.Ordinal) &&
                                               runDimensionScopes.Length == 0 && inferredDimensionRows.Length > 0);
-                var observedCompleteDates = snapshot && run.Status != "complete"
+                var observedCompleteDates = requiresObservedDimensions
                     ? inferredDimensionRows.Where(value => explicitCoverageDateSet.Contains(value.Date))
                         .GroupBy(value => value.Date)
                         .Where(group => SearchSnapshotCoversFleetCapability(run,
@@ -252,7 +255,7 @@ internal sealed partial class SqliteWebSearchObservationStore
                     : observedCompleteDates;
                 var dimensionCoverage = coversFleetCapability
                     ? Array.Empty<FleetDimensionCoverage>()
-                    : run.Status == "complete" && runDimensionScopes.Length > 0
+                    : !requiresObservedDimensions && runDimensionScopes.Length > 0
                         ? runDimensionScopes.Select(scope => new FleetDimensionCoverage(scope, explicitCoverageRanges)).ToArray()
                         : inferredDimensionRows
                             .Where(value => explicitCoverageDateSet.Contains(value.Date))
@@ -686,7 +689,8 @@ internal sealed partial class SqliteWebSearchObservationStore
         DateOnly? ThroughDate,
         string? SearchType,
         string? FailureCategory,
-        DateOnly? FailureDate);
+        DateOnly? FailureDate,
+        string SourceKind);
 
     private sealed record TrafficFleetRunMetadata(
         string RunId,
