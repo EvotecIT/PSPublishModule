@@ -106,13 +106,22 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
                 throw new InvalidOperationException(
                     $"The {_scopeDescription} did not become quiet at the producer completion boundary. {_failureInstruction}");
             }
+            // Close the producer-to-consumer transition before the final comparison. A watcher
+            // event that lands after the quiet drain but before arming increments the sequence
+            // while enforcement is still disabled; comparing the sequence after the atomic arm
+            // catches that window. Events that land after the arm are retained in _firstMutation.
+            Interlocked.Exchange(ref _enforceMutations, 1);
+            if (Interlocked.Read(ref _mutationSequence) != sequence)
+            {
+                throw new InvalidOperationException(
+                    $"The {_scopeDescription} changed while its {producerDescription} output was being bound. {_failureInstruction}");
+            }
             var drainedOutput = capture();
             if (!EqualityComparer<T>.Default.Equals(output, drainedOutput))
             {
                 throw new InvalidOperationException(
                     $"The {_scopeDescription} changed while its {producerDescription} output was being bound. {_failureInstruction}");
             }
-            Interlocked.Exchange(ref _enforceMutations, 1);
         }
         else
         {

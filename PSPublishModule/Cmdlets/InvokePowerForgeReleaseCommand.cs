@@ -260,7 +260,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     public string? AppleVersion { get; set; }
 
-    /// <summary>Binds Apple release evidence to an exact 40-character source commit.</summary>
+    /// <summary>Binds Apple release evidence to a full 40-character SHA-1 or 64-character SHA-256 source commit.</summary>
     [Parameter]
     public string? AppleSourceCommit { get; set; }
 

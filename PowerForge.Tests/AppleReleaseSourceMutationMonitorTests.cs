@@ -110,4 +110,47 @@ public sealed class AppleReleaseSourceMutationMonitorTests
             try { root.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void CaptureExpectedProducerOutput_rejects_write_and_restore_during_final_arm_transition()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.SourceMonitorTests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var artifact = Path.Combine(root.FullName, "Artifact.zip");
+            File.WriteAllText(artifact, "producer-output");
+            using var monitor = new AppleReleaseSourceMutationMonitor(
+                root.FullName,
+                "producer output root",
+                "test producer",
+                "Discard the output.",
+                enableImmediately: false);
+            var captures = 0;
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                monitor.CaptureExpectedProducerOutput(
+                    () =>
+                    {
+                        captures++;
+                        if (captures == 2)
+                        {
+                            File.WriteAllText(artifact, "replacement-output");
+                            File.WriteAllText(artifact, "producer-output");
+                            Thread.Sleep(250);
+                        }
+                        return AppleNotarizationService.ComputeArtifactSha256(artifact);
+                    },
+                    "test producer"));
+
+            Assert.Contains("changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("bound", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }

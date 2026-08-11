@@ -38,8 +38,14 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
 
     internal static AppleReleaseSourceSnapshot? CreateIfRequired(PowerForgeAppleReleasePlan plan)
     {
-        if (!plan.Archive || !plan.RequireImmutableSourceSnapshot || string.IsNullOrWhiteSpace(plan.SourceCommit))
+        if (!plan.RequireImmutableSourceSnapshot || string.IsNullOrWhiteSpace(plan.SourceCommit))
             return null;
+
+        if (!plan.Archive)
+        {
+            ValidateCurrentSource(plan);
+            return null;
+        }
 
         var sourceCommit = plan.SourceCommit!.Trim();
         var git = GitClient.CreateTrustedSystemClient(defaultTimeout: TimeSpan.FromMinutes(2));
@@ -93,6 +99,37 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
                 }
             }
             throw;
+        }
+    }
+
+    private static void ValidateCurrentSource(PowerForgeAppleReleasePlan plan)
+    {
+        var sourceCommit = plan.SourceCommit!.Trim();
+        var git = GitClient.CreateTrustedSystemClient(defaultTimeout: TimeSpan.FromMinutes(2));
+        var topLevel = Run(git, plan.ProjectRoot, new[] { "rev-parse", "--show-toplevel" }, "resolve the source repository");
+        var repositoryRoot = Path.GetFullPath(topLevel.StdOut.Trim());
+
+        string observedCommit;
+        if (!string.IsNullOrWhiteSpace(plan.ExactSourceConfigPath) && File.Exists(plan.ExactSourceConfigPath))
+        {
+            var configPath = Path.GetFullPath(plan.ExactSourceConfigPath!);
+            EnsureContained(repositoryRoot, configPath, "Apple exact-source config path");
+            observedCommit = new AppleReleaseSourceTrustService()
+                .Capture(repositoryRoot, configPath)
+                .SourceCommit;
+        }
+        else
+        {
+            new HomeAssistantReleaseGitService(git).EnsureClean(repositoryRoot);
+            observedCommit = Run(git, repositoryRoot, new[] { "rev-parse", "HEAD" }, "verify the Apple source commit")
+                .StdOut.Trim();
+        }
+
+        if (!observedCommit.Equals(sourceCommit, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The current Apple release source resolved commit '{observedCommit}' instead of the approved commit '{sourceCommit}'. " +
+                "Run the action from the exact clean source commit or omit the source binding.");
         }
     }
 

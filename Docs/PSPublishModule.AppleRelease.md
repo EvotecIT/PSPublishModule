@@ -343,9 +343,10 @@ even when the matching receipt is present. This prevents a writable local journa
 silently authorizing a remote release mutation.
 
 Run real publication through `scripts/Invoke-PinnedPowerForge.ps1`; it supplies the exact
-consumer commit automatically. Direct CLI callers should pass the same 40-character SHA
-with `--apple-source-commit`. If an older binary must be recovered and independent evidence
-has already established its identity, adoption is available as an explicit exception:
+consumer commit automatically. Direct CLI callers should pass the same full 40-character
+SHA-1 or 64-character SHA-256 Git object ID with `--apple-source-commit`. If an older binary
+must be recovered and independent evidence has already established its identity, adoption
+is available as an explicit exception:
 
 ```text
 powerforge apple-release Upload --config powerforge.release.json --apple-source-commit <exact-commit> --apple-adopt-existing-build --plan --summary --output json
