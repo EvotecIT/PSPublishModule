@@ -220,9 +220,12 @@ internal sealed partial class AppleReleaseSourceTrustService
         if (preprocess)
         {
             var logical = RemoveCComments(SpliceCPreprocessingLines(contents));
+            RejectPreprocessorFileSelectionAliases(
+                $"preprocessed INFOPLIST_FILE '{plistPath}'",
+                MaskCStringAndCharacterLiterals(logical));
             if (Regex.IsMatch(
                     logical,
-                    "(?m)^[ \\t]*(?:#|%:)[ \\t]*(?:include|include_next|import|embed)(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])__has_(?:include(?:_next)?|embed)[ \\t]*\\(",
+                    "(?m)^[ \\t\\v\\f]*(?:#|%:)[ \\t\\v\\f]*(?:include|include_next|import|embed)(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])__has_(?:include(?:_next)?|embed)[ \\t\\v\\f]*\\(",
                     RegexOptions.CultureInvariant) ||
                 FindTokenPastedPreprocessorFileSelectionOperator(logical) is not null)
             {

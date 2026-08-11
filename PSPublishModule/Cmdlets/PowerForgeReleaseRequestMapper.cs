@@ -46,6 +46,8 @@ internal static class PowerForgeReleaseRequestMapper
         request.AppleAdoptExistingBuild = request.AppleAdoptExistingBuild || options.AppleAdoptExistingBuild;
         request.AppleMarketingVersion = ChooseString(request.AppleMarketingVersion, options.AppleMarketingVersion);
         request.AppleSourceCommit = ChooseString(request.AppleSourceCommit, options.AppleSourceCommit);
+        request.RequireImmutableAppleSourceSnapshot = request.RequireImmutableAppleSourceSnapshot ||
+                                                      !string.IsNullOrWhiteSpace(request.AppleSourceCommit);
         request.AppleExpectedPlanSha256 = ChooseString(request.AppleExpectedPlanSha256, options.AppleExpectedPlanSha256);
 
         request.SkipWorkspaceValidation = request.SkipWorkspaceValidation || options.SkipWorkspaceValidation;
@@ -214,6 +216,7 @@ internal static class PowerForgeReleaseRequestMapper
             AppleAction = source.AppleAction,
             AppleMarketingVersion = source.AppleMarketingVersion,
             AppleSourceCommit = source.AppleSourceCommit,
+            RequireImmutableAppleSourceSnapshot = source.RequireImmutableAppleSourceSnapshot,
             AppleExpectedPlanSha256 = source.AppleExpectedPlanSha256,
             AppleActionConfirmed = source.AppleActionConfirmed,
             AppleAdoptExistingBuild = source.AppleAdoptExistingBuild,

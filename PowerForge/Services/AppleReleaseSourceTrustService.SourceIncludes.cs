@@ -59,7 +59,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         var source = RemoveCComments(SpliceCPreprocessingLines(physicalSource));
         var embedDirective = Regex.Match(
             source,
-            "(?m)^[ \\t]*(?:#|%:)[ \\t]*embed(?![A-Za-z0-9_])",
+            "(?m)^[ \\t\\v\\f]*(?:#|%:)[ \\t\\v\\f]*embed(?![A-Za-z0-9_])",
             RegexOptions.CultureInvariant);
         if (embedDirective.Success)
         {
@@ -77,10 +77,10 @@ internal sealed partial class AppleReleaseSourceTrustService
         RejectPreprocessorIncludeAliases(fullSourcePath, source);
         foreach (Match directive in Regex.Matches(
                      source,
-                     "(?m)^[ \\t]*(?:#|%:)[ \\t]*(?:include|include_next|import)[ \\t]+(?<operand>[^\\r\\n]+)",
+                     "(?m)^[ \\t\\v\\f]*(?:#|%:)[ \\t\\v\\f]*(?:include|include_next|import)[ \\t\\v\\f]+(?<operand>[^\\r\\n]+)",
                      RegexOptions.CultureInvariant))
         {
-            var operand = Regex.Replace(directive.Groups["operand"].Value, "[ \\t]*(?://.*)?$", string.Empty).Trim();
+            var operand = Regex.Replace(directive.Groups["operand"].Value, "[ \\t\\v\\f]*(?://.*)?$", string.Empty).Trim();
             var quoted = operand.Length >= 2 && operand[0] == '"' && operand[operand.Length - 1] == '"';
             var angled = operand.Length >= 2 && operand[0] == '<' && operand[operand.Length - 1] == '>';
             if (!quoted && !angled)
@@ -200,6 +200,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     private void ValidatePreprocessorFileExistenceProbes(string repositoryRoot, string sourcePath, string source)
     {
         var syntax = MaskCStringAndCharacterLiterals(source);
+        RejectPreprocessorFileSelectionAliases(sourcePath, syntax);
         var tokenPastedOperator = FindTokenPastedPreprocessorFileSelectionOperator(syntax);
         if (tokenPastedOperator is not null)
         {
@@ -208,7 +209,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
         var embedProbe = Regex.Match(
             syntax,
-            "(?<![A-Za-z0-9_])__has_embed[ \\t]*\\(",
+            "(?<![A-Za-z0-9_])__has_embed[ \\t\\v\\f]*\\(",
             RegexOptions.CultureInvariant);
         if (embedProbe.Success)
         {
@@ -217,7 +218,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
         foreach (Match probe in Regex.Matches(
                      syntax,
-                     "(?<![A-Za-z0-9_])__has_include(?:_next)?[ \\t]*\\(",
+                     "(?<![A-Za-z0-9_])__has_include(?:_next)?[ \\t\\v\\f]*\\(",
                      RegexOptions.CultureInvariant))
         {
             var opening = probe.Index + probe.Length - 1;
@@ -250,7 +251,7 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static string? FindTokenPastedPreprocessorFileSelectionOperator(string syntax)
     {
-        var tokenPastedSyntax = Regex.Replace(syntax, "[ \\t\\r\\n]*(?:##|%:%:)[ \\t\\r\\n]*", string.Empty);
+        var tokenPastedSyntax = Regex.Replace(syntax, "[ \\t\\v\\f\\r\\n]*(?:##|%:%:)[ \\t\\v\\f\\r\\n]*", string.Empty);
         foreach (var operatorName in new[] { "__has_include", "__has_include_next", "__has_embed" })
         {
             if (!syntax.Contains(operatorName, StringComparison.Ordinal) &&
@@ -260,6 +261,54 @@ internal sealed partial class AppleReleaseSourceTrustService
             }
         }
         return null;
+    }
+
+    private static void RejectPreprocessorFileSelectionAliases(string sourcePath, string syntax)
+    {
+        var objectMacros = Regex.Matches(
+                syntax,
+                "(?m)^[ \\t\\v\\f]*(?:#|%:)[ \\t\\v\\f]*define[ \\t\\v\\f]+(?<name>[A-Za-z_][A-Za-z0-9_]*)(?!\\()[ \\t\\v\\f]+(?<body>[^\\r\\n]*)",
+                RegexOptions.CultureInvariant)
+            .Cast<Match>()
+            .GroupBy(match => match.Groups["name"].Value, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => string.Join("\n", group.Select(match => match.Groups["body"].Value)),
+                StringComparer.Ordinal);
+        if (objectMacros.Count == 0)
+            return;
+
+        var fileSelectionAliases = new HashSet<string>(StringComparer.Ordinal);
+        var changed = true;
+        while (changed)
+        {
+            changed = false;
+            foreach (var macro in objectMacros)
+            {
+                if (fileSelectionAliases.Contains(macro.Key))
+                    continue;
+                var referencesFileSelection = Regex.IsMatch(
+                    macro.Value,
+                    "(?<![A-Za-z0-9_])__has_(?:include(?:_next)?|embed)(?![A-Za-z0-9_])",
+                    RegexOptions.CultureInvariant);
+                if (!referencesFileSelection)
+                {
+                    referencesFileSelection = fileSelectionAliases.Any(alias =>
+                        Regex.IsMatch(
+                            macro.Value,
+                            $"(?<![A-Za-z0-9_]){Regex.Escape(alias)}(?![A-Za-z0-9_])",
+                            RegexOptions.CultureInvariant));
+                }
+                if (referencesFileSelection)
+                    changed = fileSelectionAliases.Add(macro.Key) || changed;
+            }
+        }
+
+        if (fileSelectionAliases.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Source input '{sourcePath}' aliases a preprocessor file-selection operator through object-like macro '{fileSelectionAliases.OrderBy(static alias => alias, StringComparer.Ordinal).First()}', which cannot be bound to exact source.");
+        }
     }
 
     private static readonly HashSet<string> ApprovedToolchainHeaders = new(StringComparer.Ordinal)
@@ -337,7 +386,7 @@ internal sealed partial class AppleReleaseSourceTrustService
 
         foreach (Match import in Regex.Matches(
                      syntax,
-                     "(?m)^[ \\t]*(?:#|%:)[ \\t]*pragma[ \\t]+clang[ \\t]+module[ \\t]+import[ \\t]+(?<module>[A-Za-z_][A-Za-z0-9_.]*)",
+                     "(?m)^[ \\t\\v\\f]*(?:#|%:)[ \\t\\v\\f]*pragma[ \\t\\v\\f]+clang[ \\t\\v\\f]+module[ \\t\\v\\f]+import[ \\t\\v\\f]+(?<module>[A-Za-z_][A-Za-z0-9_.]*)",
                      RegexOptions.CultureInvariant))
         {
             RejectUnapprovedLanguageModule(sourcePath, import.Groups["module"].Value, "Clang pragma");
@@ -378,7 +427,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         var syntax = MaskCStringAndCharacterLiterals(source);
         if (Regex.IsMatch(
                 syntax,
-                "(?m)^[ \\t]*(?:#|%:)[ \\t]*pragma[ \\t]+comment[ \\t]*\\([ \\t]*lib[ \\t]*,",
+                "(?m)^[ \\t\\v\\f]*(?:#|%:)[ \\t\\v\\f]*pragma[ \\t\\v\\f]+comment[ \\t\\v\\f]*\\([ \\t\\v\\f]*lib[ \\t\\v\\f]*,",
                 RegexOptions.CultureInvariant))
         {
             throw new InvalidOperationException(
@@ -413,7 +462,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     {
         if (Regex.IsMatch(
                 source,
-                "(?m)^[ \\t]*(?:#|%:)[ \\t]*pragma[ \\t]+include_alias(?![A-Za-z0-9_])",
+                "(?m)^[ \\t\\v\\f]*(?:#|%:)[ \\t\\v\\f]*pragma[ \\t\\v\\f]+include_alias(?![A-Za-z0-9_])",
                 RegexOptions.CultureInvariant))
         {
             throw new InvalidOperationException(
@@ -535,7 +584,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         if (found is not null)
             return found;
 
-        var tokenPasted = Regex.Replace(masked, "[ \\t\\r\\n]*(?:##|%:%:)[ \\t\\r\\n]*", string.Empty);
+        var tokenPasted = Regex.Replace(masked, "[ \\t\\v\\f\\r\\n]*(?:##|%:%:)[ \\t\\v\\f\\r\\n]*", string.Empty);
         return FindNondeterministicCompilerIdentifier(tokenPasted);
     }
 

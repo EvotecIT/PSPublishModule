@@ -175,6 +175,47 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("Injected.h", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("\v")]
+    [InlineData("\f")]
+    public void ResolveExactAppleSourceCommit_recognizes_all_non_newline_preprocessor_whitespace(string whitespace)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateTrackedSourceFixture(
+            scope,
+            "PreprocessorWhitespaceRepo" + ((int)whitespace[0]),
+            "Source.c",
+            $"#{whitespace}include \"/tmp/Injected.h\"\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("absolute preprocessor include", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("#define PROBE __has_include\n#if PROBE(\"/tmp/Injected.h\")\n#endif\n", "PROBE")]
+    [InlineData("#define FILE_PROBE __has_include\n#define PROBE FILE_PROBE\n#if PROBE(\"/tmp/Injected.h\")\n#endif\n", "FILE_PROBE")]
+    public void ResolveExactAppleSourceCommit_rejects_object_like_file_probe_aliases(
+        string source,
+        string expectedAlias)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateTrackedSourceFixture(
+            scope,
+            "PreprocessorProbeAliasRepo" + source.Length,
+            "Source.c",
+            source);
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains(expectedAlias, exception.Message, StringComparison.Ordinal);
+        Assert.Contains("aliases", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void ResolveExactAppleSourceCommit_validates_effective_info_plist_preprocessor_flags()
     {
@@ -254,6 +295,29 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("-fxray-always-instrument Rules", "Rules")]
+    [InlineData("-fxray-always-instrument=Rules", "Rules")]
+    [InlineData("-fxray-never-instrument Rules", "Rules")]
+    [InlineData("-fxray-never-instrument=Rules", "Rules")]
+    public void ResolveExactAppleSourceCommit_classifies_xray_instrumentation_lists(
+        string option,
+        string expectedPath)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "XRayInstrumentationListRepo" + option.Length,
+            $"OTHER_CFLAGS = {option}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains(expectedPath, exception.Message, StringComparison.Ordinal);
         Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 

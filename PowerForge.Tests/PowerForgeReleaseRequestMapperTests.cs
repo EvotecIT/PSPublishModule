@@ -104,6 +104,7 @@ public sealed class PowerForgeReleaseRequestMapperTests
         Assert.Equal(PowerForgeAppleReleaseAction.Upload, request.AppleAction);
         Assert.Equal("1.6", request.AppleMarketingVersion);
         Assert.Equal("0123456789abcdef0123456789abcdef01234567", request.AppleSourceCommit);
+        Assert.True(request.RequireImmutableAppleSourceSnapshot);
         Assert.Equal("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd", request.AppleExpectedPlanSha256);
         Assert.True(request.AppleActionConfirmed);
         Assert.True(request.AppleAdoptExistingBuild);
@@ -112,6 +113,20 @@ public sealed class PowerForgeReleaseRequestMapperTests
         Assert.Equal(900, request.AppleProcessingTimeoutSeconds);
         Assert.Equal(15, request.ApplePollIntervalSeconds);
         Assert.True(request.AppleSummaryOnly);
+    }
+
+    [Fact]
+    public void Build_PreservesImmutableAppleSourceSnapshotFromDefaults()
+    {
+        var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+            "/repo/powerforge.release.json",
+            new PowerForgeReleaseRequest
+            {
+                RequireImmutableAppleSourceSnapshot = true
+            },
+            new PSPublishModule.PowerForgeReleaseInvocationOptions());
+
+        Assert.True(request.RequireImmutableAppleSourceSnapshot);
     }
 
     [Fact]
