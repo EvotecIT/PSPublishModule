@@ -70,6 +70,31 @@ public sealed class AppleReleaseReceiptStoreTests
     }
 
     [Fact]
+    public void CreateLockPath_UsesTheProtectedResourceNamespace()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var plan = CreatePlan(root);
+
+            var receiptLock = AppleReleaseReceiptJournalLease.CreateLockPath(plan.ReceiptPath);
+            var historyLock = AppleReleaseReceiptJournalLease.CreateLockPath(plan.ReceiptHistoryPath);
+
+            Assert.Equal(
+                Path.GetDirectoryName(Path.GetFullPath(plan.ReceiptPath)),
+                Path.GetDirectoryName(Path.GetDirectoryName(receiptLock)!));
+            Assert.Equal(
+                Path.GetDirectoryName(Path.GetFullPath(plan.ReceiptHistoryPath)),
+                Path.GetDirectoryName(Path.GetDirectoryName(historyLock)!));
+            Assert.NotEqual(receiptLock, historyLock);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ReadAll_RejectsTamperedImmutableReceipt()
     {
         var root = CreateSandbox();

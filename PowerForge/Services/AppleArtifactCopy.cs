@@ -287,6 +287,7 @@ internal static class AppleArtifactCopy
 
             if (isDirectory)
             {
+                PrepareOwnedDirectoryForDeletion(quarantinedArtifactPath);
                 Directory.Delete(quarantinedArtifactPath, recursive: true);
                 Directory.Delete(quarantinePath);
             }
@@ -312,6 +313,45 @@ internal static class AppleArtifactCopy
                 }
             }
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Makes a verified private directory tree deletable without traversing symbolic links.
+    /// This completes before recursive deletion starts so read-only bundle metadata cannot leave
+    /// a partially deleted backup that a publication rollback could mistake for the original.
+    /// </summary>
+    private static void PrepareOwnedDirectoryForDeletion(string directoryPath)
+    {
+        var pending = new Stack<string>();
+        pending.Push(directoryPath);
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            var attributes = File.GetAttributes(current);
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+                continue;
+
+            var isDirectory = (attributes & FileAttributes.Directory) != 0;
+#if NET8_0_OR_GREATER
+            if (isDirectory && !OperatingSystem.IsWindows())
+            {
+                var mode = File.GetUnixFileMode(current);
+                File.SetUnixFileMode(
+                    current,
+                    mode | UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+            else
+#endif
+            if ((attributes & FileAttributes.ReadOnly) != 0)
+            {
+                File.SetAttributes(current, attributes & ~FileAttributes.ReadOnly);
+            }
+
+            if (!isDirectory)
+                continue;
+            foreach (var child in Directory.EnumerateFileSystemEntries(current))
+                pending.Push(child);
         }
     }
 

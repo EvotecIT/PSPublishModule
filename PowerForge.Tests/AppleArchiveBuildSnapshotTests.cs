@@ -123,6 +123,49 @@ public sealed class AppleArchiveBuildSnapshotTests
     }
 
     [Fact]
+    public void RemoveBackupIfUnchanged_deletes_verified_backup_with_read_only_nested_directory()
+    {
+#if NET8_0_OR_GREATER
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var backupParent = Directory.CreateDirectory(Path.Combine(root.FullName, ".App.powerforge-backup-test"));
+        var backup = Directory.CreateDirectory(Path.Combine(backupParent.FullName, "App.xcarchive"));
+        var readOnly = Directory.CreateDirectory(Path.Combine(backup.FullName, "Products"));
+        File.WriteAllText(Path.Combine(readOnly.FullName, "payload"), "previous archive");
+        File.SetUnixFileMode(
+            readOnly.FullName,
+            UnixFileMode.UserRead | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        var observed = AppleArtifactCopy.CaptureRegularPathIdentity(backup.FullName, "Apple archive")!;
+        var quarantine = Path.Combine(root.FullName, ".App.powerforge-rollback-test");
+        try
+        {
+            AppleArtifactCopy.RemoveBackupIfUnchanged(
+                backup.FullName,
+                quarantine,
+                observed,
+                "Apple archive");
+
+            Assert.False(Directory.Exists(backupParent.FullName));
+            Assert.False(Directory.Exists(quarantine));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(readOnly.FullName))
+                    File.SetUnixFileMode(readOnly.FullName, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                root.Delete(recursive: true);
+            }
+            catch { }
+        }
+#endif
+    }
+
+    [Fact]
     public void DirectExport_publish_rejects_artifact_replaced_after_xcodebuild_identity_was_observed()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

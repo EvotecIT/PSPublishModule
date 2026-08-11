@@ -134,10 +134,12 @@ internal sealed class AppleReleaseReceiptJournalLease : IDisposable
         using var sha256 = SHA256.Create();
         var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(fullPath));
         var key = BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+        var resourceDirectory = Path.GetDirectoryName(fullPath)
+                                ?? throw new InvalidOperationException(
+                                    $"Apple receipt journal resource path has no parent: {resourcePath}");
         return Path.Combine(
-            Path.GetTempPath(),
-            "PowerForge",
-            "apple-receipt-journal-locks",
+            resourceDirectory,
+            ".powerforge-receipt-journal-locks",
             $"{key}.lock");
     }
 
