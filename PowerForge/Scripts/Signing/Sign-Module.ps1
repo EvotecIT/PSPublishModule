@@ -108,22 +108,23 @@ function Invoke-WithFileRetry {
   param(
     [Parameter(Mandatory = $true)] [scriptblock]$ScriptBlock,
     [Parameter(Mandatory = $true)] [string]$FilePath,
-    [Parameter(Mandatory = $true)] [string]$Action
+    [Parameter(Mandatory = $true)] [string]$Action,
+    [int]$MaxAttempts = 15
   )
 
-  $maxAttempts = 15
+  if ($MaxAttempts -lt 1) { throw 'MaxAttempts must be at least 1.' }
   $delay = 200
-  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
     try {
       return & $ScriptBlock
     } catch {
-      if ($attempt -ge $maxAttempts) {
+      if ($attempt -ge $MaxAttempts) {
         $message = $_.Exception.Message
         if ([string]::IsNullOrWhiteSpace($message)) {
           $message = 'unknown error'
         }
 
-        throw ('{0} failed for ''{1}'' after {2} attempt(s): {3}' -f $Action, $FilePath, $maxAttempts, $message)
+        throw ('{0} failed for ''{1}'' after {2} attempt(s): {3}' -f $Action, $FilePath, $MaxAttempts, $message)
       }
 
       Start-Sleep -Milliseconds $delay
@@ -264,6 +265,17 @@ try {
   $failedFiles = New-Object 'System.Collections.Generic.List[string]'
   $failedFilePaths = New-Object 'System.Collections.Generic.List[string]'
   $precheckFailures = @{}
+  $useWindowsPowerShellCompatibility = `
+    [System.IO.Path]::DirectorySeparatorChar -eq '\' -and `
+    $PSVersionTable.PSEdition -eq 'Core' -and `
+    -not [string]::IsNullOrWhiteSpace($Thumbprint) -and `
+    [string]::IsNullOrWhiteSpace($PfxPath) -and `
+    [string]::IsNullOrWhiteSpace($PfxBase64)
+  $signingMaxAttempts = 15
+  $canDeferToWindowsPowerShell = $false
+  $hasNonCompatibilitySigningFailure = $false
+  $deferRemainingSigningTargets = $false
+  $compatibilityFailureMessage = $null
 
   if ($IsWindows -or $PSVersionTable.PSVersion.Major -le 5) {
     if (-not (Get-Command Get-AuthenticodeSignature -ErrorAction SilentlyContinue)) {
@@ -299,19 +311,28 @@ try {
       }
     }
 
+    $canDeferToWindowsPowerShell = $useWindowsPowerShellCompatibility -and $precheckFailures.Count -eq 0
+    $signingMaxAttempts = if ($canDeferToWindowsPowerShell) { 3 } else { 15 }
     $targets = $all | Where-Object { $preDisposition[$_] -eq 'Target' }
     $attempted = $targets.Count
 
     foreach ($f in $targets) {
       if ($precheckFailures.ContainsKey($f)) { [void]$precheckFailures.Remove($f) }
       $wasSigned = $preStatus[$f] -ne 'NotSigned'
+      if ($deferRemainingSigningTargets) {
+        $failed++
+        $signingException++
+        Add-FailedFile -List $failedFiles -FilePath $f -Message ("deferred to Windows PowerShell compatibility retry after provider failure: " + $compatibilityFailureMessage)
+        $failedFilePaths.Add($f) | Out-Null
+        continue
+      }
       try {
         if ($overwrite) {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -ScriptBlock {
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -MaxAttempts $signingMaxAttempts -ScriptBlock {
             Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -Force -ErrorAction Stop
           }
         } else {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -ScriptBlock {
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -MaxAttempts $signingMaxAttempts -ScriptBlock {
             Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -ErrorAction Stop
           }
         }
@@ -323,6 +344,10 @@ try {
           if ($wasSigned) { $resigned++ } else { $signedNew++ }
         } else {
           $failed++
+          if ($status -ne 'UnknownError') {
+            $hasNonCompatibilitySigningFailure = $true
+            $signingMaxAttempts = 15
+          }
           $statusMessage = if ($r) { [string]$r.StatusMessage } else { '' }
           Add-FailedFile -List $failedFiles -FilePath $f -Message ("signing returned status " + $status + " " + $statusMessage)
           $failedFilePaths.Add($f) | Out-Null
@@ -332,6 +357,10 @@ try {
         $signingException++
         Add-FailedFile -List $failedFiles -FilePath $f -Message $_.Exception.Message
         $failedFilePaths.Add($f) | Out-Null
+        if ($canDeferToWindowsPowerShell -and -not $hasNonCompatibilitySigningFailure) {
+          $deferRemainingSigningTargets = $true
+          $compatibilityFailureMessage = $_.Exception.Message
+        }
       }
     }
 
