@@ -99,7 +99,8 @@ internal sealed partial class AppleReleaseSourceTrustService
                     EnsureTrackedDirectoryTree(repositoryRoot, candidate, $"Xcode build setting {key}");
                     if (baseKey.Equals("HEADER_SEARCH_PATHS", StringComparison.OrdinalIgnoreCase) ||
                         baseKey.Equals("USER_HEADER_SEARCH_PATHS", StringComparison.OrdinalIgnoreCase) ||
-                        baseKey.Equals("SYSTEM_HEADER_SEARCH_PATHS", StringComparison.OrdinalIgnoreCase))
+                        baseKey.Equals("SYSTEM_HEADER_SEARCH_PATHS", StringComparison.OrdinalIgnoreCase) ||
+                        baseKey.Equals("MTL_HEADER_SEARCH_PATHS", StringComparison.OrdinalIgnoreCase))
                         _approvedHeaderSearchRoots.Add(candidate);
                 }
                 else

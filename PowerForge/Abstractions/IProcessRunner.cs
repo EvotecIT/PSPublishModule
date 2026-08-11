@@ -198,8 +198,17 @@ public sealed class ProcessRunRequest
     internal void SetCompletionBoundary(Action<ProcessRunResult> completionBoundary)
         => _completionBoundary = completionBoundary ?? throw new ArgumentNullException(nameof(completionBoundary));
 
-    internal void InvokeCompletionBoundary(ProcessRunResult result)
+    /// <summary>
+    /// Signals that the external process has completed and its final result is available.
+    /// Custom <see cref="IProcessRunner"/> implementations must invoke this method immediately
+    /// after observing process exit and before returning or performing any post-exit mutation.
+    /// The callback is invoked at most once, so service-level fallback calls are safe.
+    /// </summary>
+    /// <param name="result">The final process result.</param>
+    public void InvokeCompletionBoundary(ProcessRunResult result)
     {
+        if (result is null)
+            throw new ArgumentNullException(nameof(result));
         if (_completionBoundary is null || Interlocked.Exchange(ref _completionBoundaryInvoked, 1) != 0)
             return;
         _completionBoundary(result);
@@ -283,6 +292,11 @@ public interface IProcessRunner
     /// <param name="request">Process execution request.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Structured process execution result.</returns>
+    /// <remarks>
+    /// Implementations must call <see cref="ProcessRunRequest.InvokeCompletionBoundary"/> immediately
+    /// after the process exits and the final result is constructed, before returning from this method
+    /// or performing any post-exit mutation of producer outputs.
+    /// </remarks>
     Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default);
 }
 

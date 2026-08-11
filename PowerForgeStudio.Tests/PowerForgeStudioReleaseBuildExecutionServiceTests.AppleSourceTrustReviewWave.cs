@@ -235,4 +235,62 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.Equal(expected, actual);
     }
+
+    [Theory]
+    [InlineData("-access-notes-path MissingRules")]
+    [InlineData("-access-notes-path=MissingRules")]
+    public void ResolveExactAppleSourceCommit_attests_swift_access_note_inputs(string flag)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "SwiftAccessNotesRepo" + flag.Length,
+            $"OTHER_SWIFT_FLAGS = {flag}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_attests_private_module_map_build_setting()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "PrivateModuleMapRepo",
+            "MODULEMAP_PRIVATE_FILE = /tmp/Injected.modulemap\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("MODULEMAP_PRIVATE_FILE", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("absolute", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_resolves_metal_headers_through_metal_search_roots()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("MetalSearchRootRepo");
+        var project = scope.CreateDirectory(Path.Combine("MetalSearchRootRepo", "Sample.xcodeproj"));
+        var sources = scope.CreateDirectory(Path.Combine("MetalSearchRootRepo", "Sources"));
+        var headers = scope.CreateDirectory(Path.Combine("MetalSearchRootRepo", "MetalHeaders"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Sources/Shader.metal; sourceTree = SOURCE_ROOT; }; " +
+            "000000000000000000000003 = { isa = XCBuildConfiguration; buildSettings = { MTL_HEADER_SEARCH_PATHS = MetalHeaders; }; };");
+        File.WriteAllText(Path.Combine(sources, "Shader.metal"), "#include \"Shared.metal\"\n");
+        File.WriteAllText(Path.Combine(headers, "Shared.metal"), "// tracked Metal header\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var expected = CommitRepository(repositoryRoot);
+
+        var actual = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(expected, actual);
+    }
 }

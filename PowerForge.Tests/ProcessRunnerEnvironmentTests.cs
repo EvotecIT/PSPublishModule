@@ -1,7 +1,19 @@
+using System.Reflection;
+
 namespace PowerForge.Tests;
 
 public sealed class ProcessRunnerEnvironmentTests
 {
+    [Fact]
+    public void Completion_boundary_is_available_to_external_process_runners()
+    {
+        var method = typeof(ProcessRunRequest).GetMethod(
+            "InvokeCompletionBoundary",
+            BindingFlags.Instance | BindingFlags.Public);
+
+        Assert.NotNull(method);
+    }
+
     [Fact]
     public async Task RunAsync_can_start_from_an_explicit_environment_allowlist()
     {

@@ -19,6 +19,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         "GCC_PREFIX_HEADER",
         "CLANG_PREFIX_HEADER",
         "MODULEMAP_FILE",
+        "MODULEMAP_PRIVATE_FILE",
         "DEVELOPMENT_ASSET_PATHS",
         "EXPORTED_SYMBOLS_FILE",
         "UNEXPORTED_SYMBOLS_FILE",
@@ -30,6 +31,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         "HEADER_SEARCH_PATHS",
         "USER_HEADER_SEARCH_PATHS",
         "SYSTEM_HEADER_SEARCH_PATHS",
+        "MTL_HEADER_SEARCH_PATHS",
         "FRAMEWORK_SEARCH_PATHS",
         "LIBRARY_SEARCH_PATHS",
         "SWIFT_INCLUDE_PATHS"
