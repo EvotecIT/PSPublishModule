@@ -54,6 +54,35 @@ public sealed partial class AppleNotarizationServiceTests
         }
     }
 
+    [Fact]
+    public async Task NotarizeAsync_BindsDittoZipAtProcessCompletionBoundary()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "DittoBoundary.app"));
+            await File.WriteAllTextAsync(Path.Combine(app.FullName, "payload"), "approved-app");
+            var checkpointed = false;
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(new MutatingDittoOutputAfterCompletionRunner()).NotarizeAsync(new AppleNotarizationRequest
+                {
+                    ArtifactPath = app.FullName,
+                    KeychainProfile = "powerforge-notary",
+                    Staple = false,
+                    Assess = false,
+                    AcceptedCheckpoint = _ => checkpointed = true
+                }));
+
+            Assert.Contains("changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(checkpointed);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -223,6 +252,22 @@ public sealed partial class AppleNotarizationServiceTests
                 request.FileName,
                 TimeSpan.Zero,
                 false));
+        }
+    }
+
+    private sealed class MutatingDittoOutputAfterCompletionRunner : IProcessRunner
+    {
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            var result = new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, false);
+            if (request.FileName.Contains("ditto", StringComparison.OrdinalIgnoreCase))
+            {
+                var zip = request.Arguments[^1];
+                File.WriteAllText(zip, "approved-zip");
+                request.InvokeCompletionBoundary(result);
+                File.WriteAllText(zip, "replacement-after-process-completion");
+            }
+            return Task.FromResult(result);
         }
     }
 }

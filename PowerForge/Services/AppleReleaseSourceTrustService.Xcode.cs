@@ -271,7 +271,12 @@ internal sealed partial class AppleReleaseSourceTrustService
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .Select(static value => value!.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0])
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var shippingSources = ResolveShippingSourceOwnership(objects, metadataPath);
+        var shippingSources = ResolveShippingSourceOwnership(
+            repositoryRoot,
+            projectDirectory,
+            objects,
+            metadataPath,
+            generatedOutputPaths);
         var cache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var validatedLocalPackageRoots = new HashSet<string>(GetPathComparer());
 
@@ -405,93 +410,6 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
     }
 
-    private void ValidateBuildConfiguration(
-        string repositoryRoot,
-        string projectDirectory,
-        PbxObject item,
-        IReadOnlyDictionary<string, PbxObject> objects,
-        IReadOnlyDictionary<string, string> parents,
-        IDictionary<string, string?> cache,
-        string metadataPath,
-        IReadOnlyCollection<string> generatedOutputPaths)
-    {
-        var baseConfigurationReference = ReadPbxScalar(item.Body, "baseConfigurationReference")?
-            .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(baseConfigurationReference))
-        {
-            var baseConfigurationPath = ResolvePbxObjectPath(
-                projectDirectory,
-                baseConfigurationReference!,
-                objects,
-                parents,
-                cache,
-                new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-            if (baseConfigurationPath is null)
-                throw new InvalidOperationException($"Xcode base configuration uses an external source tree: {metadataPath}");
-            EnsureNoGeneratedOutputOverlap(baseConfigurationPath, generatedOutputPaths, "Xcode base configuration");
-            EnsureTrackedFile(repositoryRoot, baseConfigurationPath, "Xcode base configuration");
-            EnsureTrackedXcconfigGraph(
-                repositoryRoot,
-                projectDirectory,
-                baseConfigurationPath,
-                generatedOutputPaths,
-                new HashSet<string>(GetPathComparer()));
-        }
-
-        var buildSettings = ReadPbxDictionary(item.Body, "buildSettings");
-        if (buildSettings is null)
-            return;
-        ValidateBuildSettingAssignments(
-            repositoryRoot,
-            projectDirectory,
-            ReadPbxAssignments(buildSettings),
-            generatedOutputPaths,
-            "PBX build settings");
-    }
-
-    private void EnsureTrackedXcconfigGraph(
-        string repositoryRoot,
-        string projectDirectory,
-        string configPath,
-        IReadOnlyCollection<string> generatedOutputPaths,
-        ISet<string> visited)
-    {
-        var fullPath = Path.GetFullPath(configPath);
-        if (!visited.Add(fullPath))
-            return;
-        var contents = File.ReadAllText(fullPath);
-        ValidateBuildSettingAssignments(
-            repositoryRoot,
-            projectDirectory,
-            ReadXcconfigAssignments(contents),
-            generatedOutputPaths,
-            $"xcconfig '{fullPath}'");
-        foreach (Match include in Regex.Matches(
-                     contents,
-                     "(?m)^[ \\t]*#include(?<optional>\\?)?[ \\t]+[\\\"<](?<path>[^\\\">]+)[\\\">]",
-                     RegexOptions.CultureInvariant))
-        {
-            var value = include.Groups["path"].Value.Trim();
-            var includedPath = ResolvePbxPath(
-                Path.GetDirectoryName(fullPath)!,
-                value,
-                "xcconfig include");
-            EnsurePathWithinRepository(repositoryRoot, includedPath, "Xcode xcconfig include");
-            EnsureNoGeneratedOutputOverlap(includedPath, generatedOutputPaths, "Xcode xcconfig include");
-            if (!File.Exists(includedPath))
-            {
-                if (include.Groups["optional"].Success)
-                    continue;
-                throw new FileNotFoundException(
-                    $"Xcode xcconfig include cannot be proven at the exact source commit: {includedPath}",
-                    includedPath);
-            }
-            EnsureTrackedFile(repositoryRoot, includedPath, "Xcode xcconfig include");
-            EnsureTrackedXcconfigGraph(repositoryRoot, projectDirectory, includedPath, generatedOutputPaths, visited);
-        }
-    }
-
     private static void ValidateExternalXcodeBuildInput(
         PbxObject item,
         string metadataPath,
@@ -585,17 +503,19 @@ internal sealed partial class AppleReleaseSourceTrustService
         {
             EnsureNoGeneratedOutputOverlap(candidate, generatedOutputPaths, $"Xcode {item.Isa} input");
         }
-        var isShippingSource = shippingSources.FileReferences.Contains(item.Id) ||
+        var isShippingSource = shippingSources.FileReferences.ContainsKey(item.Id) ||
                                shippingSources.SynchronizedRoots.Contains(item.Id);
         if (File.Exists(candidate))
         {
+            var effectiveSourceExtension = isShippingSource
+                ? shippingSources.ResolveEffectiveExtension(item.Id, candidate, item, metadataPath)
+                : null;
             EnsureTrackedFile(
                 repositoryRoot,
                 candidate,
                 $"Xcode {item.Isa} input",
-                validateSwiftDeterminism: false);
-            if (isShippingSource && Path.GetExtension(candidate).Equals(".swift", StringComparison.OrdinalIgnoreCase))
-                ValidateSourceLevelIncludes(repositoryRoot, candidate, validateSwiftDeterminism: true);
+                validateSwiftDeterminism: effectiveSourceExtension?.Equals(".swift", StringComparison.OrdinalIgnoreCase) == true,
+                effectiveSourceExtension: effectiveSourceExtension);
         }
         else if (Directory.Exists(candidate))
         {

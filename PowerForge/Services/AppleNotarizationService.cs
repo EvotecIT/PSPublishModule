@@ -88,17 +88,19 @@ public sealed class AppleNotarizationService
                 "ditto",
                 "Discard the package and create a new notarization snapshot.")
             : null;
-        var submittedPath = resumed
-            ? artifactPath
+        var preparedSubmission = resumed
+            ? new PreparedSubmission(artifactPath, request.AcceptedSubmissionSha256?.Trim())
             : await PrepareSubmissionAsync(
                     request,
                     dittoExecutable,
                     toolEnvironment,
                     submissionArtifactPath,
                     submissionSnapshot.RootPath,
+                    packagingMonitor,
                     timeout,
                     cancellationToken)
                 .ConfigureAwait(false);
+        var submittedPath = preparedSubmission.Path;
         if (packagingMonitor is not null)
         {
             packagingMonitor.ValidateNoChanges();
@@ -112,7 +114,7 @@ public sealed class AppleNotarizationService
         }
         var submissionSha256 = resumed
             ? request.AcceptedSubmissionSha256?.Trim()
-            : ComputeFileSha256(submittedPath);
+            : preparedSubmission.Sha256;
         ProcessRunResult submission;
         string? submissionId;
         string? status;
@@ -339,32 +341,64 @@ public sealed class AppleNotarizationService
         };
     }
 
-    private async Task<string> PrepareSubmissionAsync(
+    private async Task<PreparedSubmission> PrepareSubmissionAsync(
         AppleNotarizationRequest request,
         string dittoExecutable,
         IReadOnlyDictionary<string, string?>? toolEnvironment,
         string artifactPath,
         string privateRoot,
+        AppleReleaseSourceMutationMonitor? inputMonitor,
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
         if (!Path.GetExtension(artifactPath).Equals(".app", StringComparison.OrdinalIgnoreCase))
-            return artifactPath;
+            return new PreparedSubmission(artifactPath, ComputeFileSha256(artifactPath));
 
         var submissionPath = Path.Combine(
             privateRoot,
             Path.GetFileNameWithoutExtension(artifactPath) + ".notarization.zip");
         Directory.CreateDirectory(Path.GetDirectoryName(submissionPath)!);
+        using var producerMonitor = new AppleReleaseSourceMutationMonitor(
+            privateRoot,
+            "private Apple notarization packaging root",
+            "ditto",
+            "Discard the package and create a new notarization snapshot.");
+        string? packagedSha256 = null;
         var package = await RunAsync(
             dittoExecutable,
             artifactPath,
             new[] { "-c", "-k", "--keepParent", artifactPath, submissionPath },
             timeout,
             toolEnvironment,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            completionResult =>
+            {
+                if (!completionResult.Succeeded)
+                    return;
+                inputMonitor?.ValidateNoChanges();
+                packagedSha256 = producerMonitor.CaptureExpectedProducerOutput(
+                    () => ComputeFileSha256(submissionPath),
+                    "ditto");
+            }).ConfigureAwait(false);
         if (!package.Succeeded)
             throw new InvalidOperationException($"ditto failed to package '{artifactPath}' for notarization with exit code {package.ExitCode}: {package.StdErr}");
-        return submissionPath;
+        producerMonitor.ValidateNoChanges();
+        if (string.IsNullOrWhiteSpace(packagedSha256))
+            throw new InvalidOperationException("ditto completed without binding the exact notarization ZIP at its process completion boundary.");
+        return new PreparedSubmission(submissionPath, packagedSha256);
+    }
+
+    private sealed class PreparedSubmission
+    {
+        internal PreparedSubmission(string path, string? sha256)
+        {
+            Path = path;
+            Sha256 = sha256;
+        }
+
+        internal string Path { get; }
+
+        internal string? Sha256 { get; }
     }
 
     private static string ResolveRetainedSubmissionPath(

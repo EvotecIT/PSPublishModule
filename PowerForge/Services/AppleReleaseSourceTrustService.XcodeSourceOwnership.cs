@@ -2,9 +2,12 @@ namespace PowerForge;
 
 internal sealed partial class AppleReleaseSourceTrustService
 {
-    private static ShippingSourceOwnership ResolveShippingSourceOwnership(
+    private ShippingSourceOwnership ResolveShippingSourceOwnership(
+        string repositoryRoot,
+        string projectDirectory,
         IReadOnlyDictionary<string, PbxObject> objects,
-        string metadataPath)
+        string metadataPath,
+        IReadOnlyCollection<string> generatedOutputPaths)
     {
         var sourcePhaseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var synchronizedRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -35,7 +38,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             }
         }
 
-        var fileReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var fileReferences = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         foreach (var phaseId in sourcePhaseIds)
         {
             var phase = objects[phaseId];
@@ -60,12 +63,92 @@ internal sealed partial class AppleReleaseSourceTrustService
                 {
                     throw new InvalidOperationException($"PBX sources build file '{buildFileId}' references invalid source file '{fileReference}': {metadataPath}");
                 }
-                fileReferences.Add(fileReference);
+                var effectiveExtension = ResolveShippingSourceExtension(
+                    repositoryRoot,
+                    projectDirectory,
+                    source,
+                    buildFile,
+                    metadataPath,
+                    generatedOutputPaths);
+                if (fileReferences.TryGetValue(fileReference, out var priorExtension) &&
+                    !string.Equals(priorExtension, effectiveExtension, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"Shipping source '{fileReference}' is compiled with conflicting effective languages in {metadataPath}.");
+                }
+                fileReferences[fileReference] = effectiveExtension;
             }
         }
 
         return new ShippingSourceOwnership(fileReferences, synchronizedRoots);
     }
+
+    private string? ResolveShippingSourceExtension(
+        string repositoryRoot,
+        string projectDirectory,
+        PbxObject source,
+        PbxObject buildFile,
+        string metadataPath,
+        IReadOnlyCollection<string> generatedOutputPaths)
+    {
+        string? language = null;
+        var settings = ReadPbxDictionary(buildFile.Body, "settings");
+        if (settings is not null)
+        {
+            var compilerFlags = ReadPbxAssignments(settings)
+                .Where(static assignment => assignment.Key.Equals("COMPILER_FLAGS", StringComparison.OrdinalIgnoreCase))
+                .Select(static assignment => assignment.Value)
+                .ToArray();
+            if (compilerFlags.Length > 1)
+                throw new InvalidOperationException($"PBXBuildFile '{buildFile.Id}' repeats COMPILER_FLAGS: {metadataPath}");
+            if (compilerFlags.Length == 1)
+            {
+                var tokens = ExpandCompilerResponseFileTokens(
+                        repositoryRoot,
+                        projectDirectory,
+                        ExpandForwardedBuildFlagTokens(SplitBuildSettingPaths(compilerFlags[0]).ToArray(), "COMPILER_FLAGS"),
+                        "COMPILER_FLAGS",
+                        generatedOutputPaths,
+                        $"PBXBuildFile '{buildFile.Id}' in {metadataPath}",
+                        new HashSet<string>(GetPathComparer()))
+                    .ToArray();
+                TryReadCompilerLanguageOverride(tokens, out language);
+            }
+        }
+
+        if (string.Equals(language, "none", StringComparison.OrdinalIgnoreCase))
+            language = null;
+        var mapped = language is null
+            ? MapPbxSourceType(ReadPbxScalar(source.Body, "explicitFileType") ?? ReadPbxScalar(source.Body, "lastKnownFileType"))
+            : MapCompilerLanguage(language);
+        return mapped;
+    }
+
+    private static string? MapPbxSourceType(string? fileType)
+        => fileType?.Trim() switch
+        {
+            "sourcecode.c.c" => ".c",
+            "sourcecode.c.objc" => ".m",
+            "sourcecode.cpp.cpp" => ".cpp",
+            "sourcecode.cpp.objcpp" => ".mm",
+            "sourcecode.asm" => ".s",
+            "sourcecode.metal" => ".metal",
+            "sourcecode.swift" => ".swift",
+            _ => null
+        };
+
+    private static string MapCompilerLanguage(string language)
+        => language.Trim().ToLowerInvariant() switch
+        {
+            "c" or "c-header" => ".c",
+            "objective-c" or "objective-c-header" => ".m",
+            "c++" or "c++-header" => ".cpp",
+            "objective-c++" or "objective-c++-header" => ".mm",
+            "assembler" or "assembler-with-cpp" => ".s",
+            "metal" => ".metal",
+            _ => throw new InvalidOperationException(
+                $"PBX per-file compiler language '{language}' is not supported by exact-source Apple validation.")
+        };
 
     private static bool IsTestProductType(string productType)
         => productType.Equals("com.apple.product-type.bundle.unit-test", StringComparison.OrdinalIgnoreCase) ||
@@ -73,14 +156,33 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private sealed class ShippingSourceOwnership
     {
-        internal ShippingSourceOwnership(ISet<string> fileReferences, ISet<string> synchronizedRoots)
+        internal ShippingSourceOwnership(
+            IReadOnlyDictionary<string, string?> fileReferences,
+            ISet<string> synchronizedRoots)
         {
             FileReferences = fileReferences;
             SynchronizedRoots = synchronizedRoots;
         }
 
-        internal ISet<string> FileReferences { get; }
+        internal IReadOnlyDictionary<string, string?> FileReferences { get; }
 
         internal ISet<string> SynchronizedRoots { get; }
+
+        internal string? ResolveEffectiveExtension(
+            string fileReference,
+            string sourcePath,
+            PbxObject source,
+            string metadataPath)
+        {
+            if (!FileReferences.TryGetValue(fileReference, out var configuredExtension))
+                return null;
+            if (!string.IsNullOrWhiteSpace(configuredExtension))
+                return configuredExtension;
+            var extension = Path.GetExtension(sourcePath);
+            if (SourceIncludeExtensions.Contains(extension))
+                return extension;
+            throw new InvalidOperationException(
+                $"Shipping source '{source.Path ?? sourcePath}' has no exact compiler language in PBX metadata or per-file flags: {metadataPath}");
+        }
     }
 }

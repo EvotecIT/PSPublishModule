@@ -10,12 +10,12 @@ internal sealed partial class AppleReleaseSourceTrustService
         string projectDirectory,
         IEnumerable<KeyValuePair<string, string>> assignments,
         IReadOnlyCollection<string> generatedOutputPaths,
-        string source)
+        string source,
+        bool? effectiveInfoPlistPreprocess = null)
     {
         var assignmentArray = assignments.ToArray();
-        var preprocessInfoPlist = assignmentArray.Any(static assignment =>
-            assignment.Key.Split('[')[0].Trim().Equals("INFOPLIST_PREPROCESS", StringComparison.OrdinalIgnoreCase) &&
-            assignment.Value.Trim().Equals("YES", StringComparison.OrdinalIgnoreCase));
+        var preprocessInfoPlist = effectiveInfoPlistPreprocess ??
+                                  ResolveInfoPlistPreprocessSetting(assignmentArray) == true;
         foreach (var assignment in assignmentArray)
         {
             var key = assignment.Key.Trim();
@@ -108,6 +108,37 @@ internal sealed partial class AppleReleaseSourceTrustService
                         candidate);
             }
         }
+    }
+
+    private static bool? ResolveInfoPlistPreprocessSetting(
+        IEnumerable<KeyValuePair<string, string>> assignments)
+    {
+        bool? unconditional = null;
+        var conditionedEnabled = false;
+        var foundUnconditional = false;
+        foreach (var assignment in assignments)
+        {
+            var key = assignment.Key.Trim();
+            if (!key.Split('[')[0].Trim().Equals("INFOPLIST_PREPROCESS", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var value = assignment.Value.Trim();
+            if (!value.Equals("YES", StringComparison.OrdinalIgnoreCase) &&
+                !value.Equals("NO", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Xcode build setting {key} must be YES or NO for an exact-source Apple build; received '{assignment.Value}'.");
+            }
+            if (key.IndexOf('[') >= 0)
+                conditionedEnabled |= value.Equals("YES", StringComparison.OrdinalIgnoreCase);
+            else
+            {
+                foundUnconditional = true;
+                unconditional = value.Equals("YES", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        if (!foundUnconditional && !conditionedEnabled)
+            return null;
+        return conditionedEnabled || unconditional == true;
     }
 
     private static void ValidateUnclassifiedBuildSettingReferences(

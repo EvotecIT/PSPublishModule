@@ -14,20 +14,25 @@ internal sealed partial class AppleReleaseSourceTrustService
         string repositoryRoot,
         string sourcePath,
         bool validateSwiftDeterminism = false,
-        string? sourceBlob = null)
+        string? sourceBlob = null,
+        string? effectiveSourceExtension = null)
     {
-        if (!SourceIncludeExtensions.Contains(Path.GetExtension(sourcePath)))
+        var sourceExtension = string.IsNullOrWhiteSpace(effectiveSourceExtension)
+            ? Path.GetExtension(sourcePath)
+            : effectiveSourceExtension!;
+        if (!SourceIncludeExtensions.Contains(sourceExtension))
             return;
         var fullSourcePath = Path.GetFullPath(sourcePath);
-        var extension = Path.GetExtension(fullSourcePath);
+        var extension = sourceExtension;
         if (extension.Equals(".swift", StringComparison.OrdinalIgnoreCase) && !validateSwiftDeterminism)
             return;
-        if (!_validatedSourceIncludeFiles.Add(fullSourcePath))
+        var validationKey = fullSourcePath + "|" + extension + "|" + validateSwiftDeterminism;
+        if (!_validatedSourceIncludeFiles.Add(validationKey))
             return;
         if (!string.IsNullOrWhiteSpace(sourceBlob))
         {
             var semanticPath = ResolveSourceSemanticPath(fullSourcePath);
-            var semanticKey = sourceBlob + "|" + semanticPath + "|" + validateSwiftDeterminism;
+            var semanticKey = sourceBlob + "|" + semanticPath + "|" + extension + "|" + validateSwiftDeterminism;
             if (!_validatedSourceSemanticInputs.Add(semanticKey))
                 return;
         }
@@ -266,6 +271,27 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static void ValidateLanguageModuleImports(string sourcePath, string source)
     {
+        foreach (Match pragma in Regex.Matches(
+                     source,
+                     "(?<![A-Za-z0-9_])_Pragma[ \\t]*\\([ \\t]*\\\"(?<payload>(?:\\\\.|[^\\\"\\\\])*)\\\"[ \\t]*\\)",
+                     RegexOptions.CultureInvariant))
+        {
+            var payload = Regex.Unescape(pragma.Groups["payload"].Value);
+            var moduleImport = Regex.Match(
+                payload,
+                "^[ \\t]*clang[ \\t]+module[ \\t]+import[ \\t]+(?<module>[A-Za-z_][A-Za-z0-9_.]*)[ \\t]*$",
+                RegexOptions.CultureInvariant);
+            if (moduleImport.Success)
+                RejectUnapprovedLanguageModule(sourcePath, moduleImport.Groups["module"].Value, "Clang _Pragma");
+        }
+        if (Regex.IsMatch(
+                source,
+                "(?<![A-Za-z0-9_])_Pragma[ \\t]*\\((?![ \\t]*\\\"(?:\\\\.|[^\\\"\\\\])*\\\"[ \\t]*\\))",
+                RegexOptions.CultureInvariant))
+        {
+            throw new InvalidOperationException(
+                $"Source input '{sourcePath}' uses a computed _Pragma operand whose compiler behavior cannot be bound to the exact source commit.");
+        }
         var syntax = MaskCStringAndCharacterLiterals(source);
         foreach (Match import in Regex.Matches(
                      syntax,

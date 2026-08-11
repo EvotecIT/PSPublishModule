@@ -20,6 +20,12 @@ internal sealed partial class AppleReleaseSourceTrustService
                 source,
                 responseFiles)
             .ToArray();
+        if (!key.Split('[')[0].Trim().Equals("COMPILER_FLAGS", StringComparison.OrdinalIgnoreCase) &&
+            TryReadCompilerLanguageOverride(expandedTokens, out _))
+        {
+            throw new InvalidOperationException(
+                $"Xcode build setting {key} uses a compiler language override outside a source-owned PBXBuildFile and cannot be bound safely.");
+        }
         ValidateLinkerFileLists(
             repositoryRoot,
             projectDirectory,
@@ -48,6 +54,58 @@ internal sealed partial class AppleReleaseSourceTrustService
                     candidate);
         }
     }
+
+    private static bool TryReadCompilerLanguageOverride(string[] tokens, out string? language)
+    {
+        language = null;
+        for (var index = 0; index < tokens.Length; index++)
+        {
+            var token = tokens[index];
+            string? candidate = null;
+            if (token.Equals("-x", StringComparison.Ordinal))
+            {
+                if (++index >= tokens.Length)
+                    throw new InvalidOperationException("Compiler option '-x' is missing its language argument.");
+                candidate = tokens[index];
+            }
+            else if (token.StartsWith("-x", StringComparison.Ordinal) &&
+                     token.Length > 2 &&
+                     IsCompilerLanguageName(token.Substring(2)))
+            {
+                candidate = token.Substring(2);
+            }
+            if (candidate is null)
+                continue;
+            if (language is not null && !language.Equals(candidate, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("PBX per-file compiler flags contain conflicting '-x' language overrides.");
+            language = candidate;
+        }
+        return language is not null;
+    }
+
+    private static bool IsCompilerLanguageName(string value)
+        => value.Equals("none", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("c", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("c-header", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("cpp-output", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("c-cpp-output", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("objective-c", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("objective-c-header", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("objective-c-cpp-output", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("c++", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("c++-header", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("c++-cpp-output", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("objective-c++", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("objective-c++-header", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("objective-c++-cpp-output", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("assembler", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("assembler-with-cpp", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("cuda", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("hip", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("ir", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("cl", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("clcpp", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("renderscript", StringComparison.OrdinalIgnoreCase);
 
     private void ValidateLinkerFileLists(
         string repositoryRoot,

@@ -482,7 +482,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         string path,
         string name,
         string? capturedWorktreeBlob = null,
-        bool validateSwiftDeterminism = false)
+        bool validateSwiftDeterminism = false,
+        string? effectiveSourceExtension = null)
     {
         var candidate = Path.GetFullPath(path);
         EnsurePathWithinRepository(repositoryRoot, candidate, name);
@@ -508,7 +509,12 @@ internal sealed partial class AppleReleaseSourceTrustService
         var worktreeBlob = capturedWorktreeBlob ?? ComputeRawGitBlobId(repositoryRoot, candidate);
         if (!headBlob.StdOut.Trim().Equals(worktreeBlob, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"{name} differs from the exact source commit: {relative}");
-        ValidateSourceLevelIncludes(repositoryRoot, candidate, validateSwiftDeterminism, worktreeBlob);
+        ValidateSourceLevelIncludes(
+            repositoryRoot,
+            candidate,
+            validateSwiftDeterminism,
+            worktreeBlob,
+            effectiveSourceExtension);
     }
 
     private string ComputeRawGitBlobId(string repositoryRoot, string filePath)
