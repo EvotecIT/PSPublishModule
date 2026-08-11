@@ -134,8 +134,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         catch
         {
             monitor?.Dispose();
-            if (Directory.Exists(root))
-                Directory.Delete(root, recursive: true);
+            try { AppleArtifactCopy.DeleteOwnedDirectory(root); } catch { /* best effort private cleanup */ }
             throw;
         }
     }
@@ -239,8 +238,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             return;
         _disposed = true;
         _monitor.Dispose();
-        if (Directory.Exists(RootPath))
-            Directory.Delete(RootPath, recursive: true);
+        try { AppleArtifactCopy.DeleteOwnedDirectory(RootPath); } catch { /* best effort after archive */ }
     }
 
     private static IEnumerable<string> DiscoverApprovedPackageLocks(string repositoryRoot, string projectPath)

@@ -151,8 +151,7 @@ internal sealed class AppleDirectExportSnapshot : IDisposable
         }
         finally
         {
-            if (Directory.Exists(stage))
-                Directory.Delete(stage, recursive: true);
+            try { AppleArtifactCopy.DeleteOwnedDirectory(stage); } catch { /* best effort private cleanup */ }
         }
     }
 
@@ -201,8 +200,7 @@ internal sealed class AppleDirectExportSnapshot : IDisposable
         if (_disposed)
             return;
         _disposed = true;
-        if (Directory.Exists(RootPath))
-            Directory.Delete(RootPath, recursive: true);
+        try { AppleArtifactCopy.DeleteOwnedDirectory(RootPath); } catch { /* best effort after publication */ }
     }
 }
 

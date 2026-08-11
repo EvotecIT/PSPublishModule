@@ -129,10 +129,11 @@ internal sealed class AppleReleaseReceiptJournalLease : IDisposable
     {
         var fullPath = Path.GetFullPath(resourcePath)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (Path.DirectorySeparatorChar == '\\')
-            fullPath = fullPath.ToUpperInvariant();
+        var hashPath = FrameworkCompatibility.GetPathStringComparisonForPath(fullPath) == StringComparison.OrdinalIgnoreCase
+            ? fullPath.ToUpperInvariant()
+            : fullPath;
         using var sha256 = SHA256.Create();
-        var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(fullPath));
+        var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(hashPath));
         var key = BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
         var resourceDirectory = Path.GetDirectoryName(fullPath)
                                 ?? throw new InvalidOperationException(

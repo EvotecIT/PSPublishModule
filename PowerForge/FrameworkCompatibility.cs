@@ -50,7 +50,26 @@ internal static class FrameworkCompatibility
             // fall back to the platform default below
         }
 
-        return PathStringComparison();
+        return IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : PathStringComparison();
+    }
+
+    public static StringComparison GetPathStringComparisonForPath(string path)
+    {
+        var current = Path.GetFullPath(path);
+        if (!Directory.Exists(current))
+            current = Path.GetDirectoryName(current) ?? current;
+
+        while (!Directory.Exists(current))
+        {
+            var parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, StringComparison.Ordinal))
+                return PathStringComparison();
+            current = parent;
+        }
+
+        return GetPathStringComparison(current);
     }
 
     public static string GetRelativePath(string relativeTo, string path)
@@ -84,6 +103,15 @@ internal static class FrameworkCompatibility
             TryDeleteFile(probePath);
             TryDeleteFile(alternatePath);
         }
+    }
+
+    private static bool IsMacOS()
+    {
+#if NET472
+        return false;
+#else
+        return OperatingSystem.IsMacOS();
+#endif
     }
 
     private static void TryDeleteFile(string path)

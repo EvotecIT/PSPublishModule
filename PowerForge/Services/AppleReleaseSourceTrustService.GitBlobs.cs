@@ -2,6 +2,20 @@ namespace PowerForge;
 
 internal sealed partial class AppleReleaseSourceTrustService
 {
+    private void EnsureNoCustomGitFilter(string repositoryRoot, string relativePath, string name)
+    {
+        var attributes = RunGit(repositoryRoot, "check-attr", "-z", "filter", "--", relativePath)
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        var value = attributes.Length >= 3 ? attributes[2] : "unspecified";
+        if (!value.Equals("unspecified", StringComparison.Ordinal) &&
+            !value.Equals("unset", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"{name} uses custom Git filter '{value}' and cannot be attested to the exact source commit: {relativePath}. " +
+                "Exact Apple source inputs may use Git text/EOL normalization but not repository-configuration-dependent clean or smudge filters.");
+        }
+    }
+
     private string ComputeRawGitBlobId(string repositoryRoot, string filePath)
     {
         var objectFormat = ReadGitObjectFormat(repositoryRoot);

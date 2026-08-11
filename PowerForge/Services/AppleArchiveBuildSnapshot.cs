@@ -104,8 +104,7 @@ internal sealed class AppleArchiveBuildSnapshot : IDisposable {
             }
             throw;
         } finally {
-            if (Directory.Exists(stageRoot))
-                Directory.Delete(stageRoot, recursive: true);
+            try { AppleArtifactCopy.DeleteOwnedDirectory(stageRoot); } catch { /* best effort private cleanup */ }
         }
     }
 
@@ -138,7 +137,6 @@ internal sealed class AppleArchiveBuildSnapshot : IDisposable {
         if (_disposed)
             return;
         _disposed = true;
-        if (Directory.Exists(RootPath))
-            Directory.Delete(RootPath, recursive: true);
+        try { AppleArtifactCopy.DeleteOwnedDirectory(RootPath); } catch { /* best effort after publication */ }
     }
 }

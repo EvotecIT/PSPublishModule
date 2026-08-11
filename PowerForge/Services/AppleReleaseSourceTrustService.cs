@@ -563,6 +563,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         var headBlob = RunGitAllowFailure(repositoryRoot, "rev-parse", "--verify", $"HEAD:{relative}");
         if (!headBlob.Succeeded || string.IsNullOrWhiteSpace(headBlob.StdOut))
             throw new InvalidOperationException($"{name} is not present in the exact source commit: {relative}");
+        EnsureNoCustomGitFilter(repositoryRoot, relative, name);
         var worktreeBlob = capturedWorktreeBlob ?? ComputeRawGitBlobId(repositoryRoot, candidate);
         var expectedBlob = headBlob.StdOut.Trim();
         if (!expectedBlob.Equals(worktreeBlob, StringComparison.OrdinalIgnoreCase))

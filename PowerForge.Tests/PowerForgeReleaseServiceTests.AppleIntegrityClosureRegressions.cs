@@ -255,6 +255,35 @@ public sealed partial class PowerForgeReleaseServiceTests {
         }
     }
 
+    [Fact]
+    public void AppleArchiveUploadSnapshot_disposes_read_only_nested_directories_without_failing() {
+        var root = CreateSandbox();
+        try {
+            var archive = Directory.CreateDirectory(Path.Combine(root, "approved.xcarchive"));
+            var nested = Directory.CreateDirectory(Path.Combine(archive.FullName, "Products", "ReadOnly.app"));
+            File.WriteAllText(Path.Combine(nested.FullName, "payload"), "approved bytes");
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(nested.FullName, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+#endif
+            var expectedSha256 = AppleNotarizationService.ComputeArtifactSha256(archive.FullName);
+            var snapshot = AppleArchiveUploadSnapshot.Create(archive.FullName, expectedSha256);
+            var snapshotRoot = snapshot.RootPath;
+
+            var exception = Record.Exception(snapshot.Dispose);
+
+            Assert.Null(exception);
+            Assert.False(Directory.Exists(snapshotRoot));
+        } finally {
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows() && Directory.Exists(root))
+                File.SetUnixFileMode(Path.Combine(root, "approved.xcarchive", "Products", "ReadOnly.app"),
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+#endif
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData("team")]
     [InlineData("signing")]

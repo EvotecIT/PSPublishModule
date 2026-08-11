@@ -321,6 +321,14 @@ internal static class AppleArtifactCopy
     /// This completes before recursive deletion starts so read-only bundle metadata cannot leave
     /// a partially deleted backup that a publication rollback could mistake for the original.
     /// </summary>
+    internal static void DeleteOwnedDirectory(string directoryPath)
+    {
+        if (!Directory.Exists(directoryPath))
+            return;
+        PrepareOwnedDirectoryForDeletion(directoryPath);
+        Directory.Delete(directoryPath, recursive: true);
+    }
+
     private static void PrepareOwnedDirectoryForDeletion(string directoryPath)
     {
         var pending = new Stack<string>();

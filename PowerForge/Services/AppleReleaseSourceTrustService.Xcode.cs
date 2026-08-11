@@ -593,6 +593,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             {
                 var fullPath = Path.GetFullPath(entry);
                 var relativePath = FrameworkCompatibility.GetRelativePath(repositoryRoot, fullPath).Replace('\\', '/');
+                EnsureNoCustomGitFilter(repositoryRoot, relativePath, name);
                 var worktreeBlob = ComputeRawGitBlobId(repositoryRoot, fullPath);
                 if (!headBlobs.TryGetValue(fullPath, out var expectedBlob))
                 {

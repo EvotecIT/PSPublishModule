@@ -396,6 +396,40 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_ApplePlan_RejectsCaseEquivalentNestedOutputsOnCaseInsensitiveVolume()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparison(root) != StringComparison.OrdinalIgnoreCase)
+                return;
+
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.ReceiptPath = "build/powerforge/apple/state";
+            spec.AppleApps.Automation.PlanReceiptPath = "build/powerforge/apple/STATE/plan.json";
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new PowerForgeReleaseService(new NullLogger()).Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        PlanOnly = true,
+                        AppleAction = PowerForgeAppleReleaseAction.Archive
+                    }));
+
+            Assert.Contains("automation output files", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_DirectNotarizationCrash_PersistsAcceptedSubmissionBeforeLocalPostProcessing()
     {
         const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";

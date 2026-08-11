@@ -95,6 +95,28 @@ public sealed class AppleReleaseReceiptStoreTests
     }
 
     [Fact]
+    public void CreateLockPath_UsesVolumeCaseSemanticsForEquivalentResources()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var upper = Path.Combine(root, "Receipt.json");
+            var lower = Path.Combine(root, "receipt.json");
+            var upperLock = AppleReleaseReceiptJournalLease.CreateLockPath(upper);
+            var lowerLock = AppleReleaseReceiptJournalLease.CreateLockPath(lower);
+
+            if (FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.OrdinalIgnoreCase)
+                Assert.Equal(upperLock, lowerLock);
+            else
+                Assert.NotEqual(upperLock, lowerLock);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ReadAll_RejectsTamperedImmutableReceipt()
     {
         var root = CreateSandbox();

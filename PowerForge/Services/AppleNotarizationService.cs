@@ -478,8 +478,50 @@ public sealed class AppleNotarizationService
         if (!Path.GetExtension(originalArtifactPath).Equals(".app", StringComparison.OrdinalIgnoreCase))
             return;
 
-        Directory.CreateDirectory(Path.GetDirectoryName(retainedPath)!);
-        File.Copy(submittedPath, retainedPath, overwrite: true);
+        var directory = Path.GetDirectoryName(retainedPath)!;
+        Directory.CreateDirectory(directory);
+        var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(retainedPath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var source = new FileStream(submittedPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var destination = new FileStream(
+                       temporaryPath,
+                       FileMode.CreateNew,
+                       FileAccess.Write,
+                       FileShare.None,
+                       bufferSize: 16 * 1024,
+                       options: FileOptions.WriteThrough))
+            {
+                source.CopyTo(destination);
+                destination.Flush(flushToDisk: true);
+            }
+
+            var temporarySha256 = ComputeFileSha256(temporaryPath);
+            if (!temporarySha256.Equals(expectedSubmissionSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"The staged retained Apple notarization submission does not match the exact accepted file. Expected SHA-256 " +
+                    $"'{expectedSubmissionSha256}', received '{temporarySha256}'.");
+            }
+
+            if (Directory.Exists(retainedPath))
+                throw new IOException($"The retained Apple notarization submission path is a directory: {retainedPath}");
+            if (File.Exists(retainedPath))
+            {
+                if ((File.GetAttributes(retainedPath) & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidOperationException($"The retained Apple notarization submission path must not be linked: {retainedPath}");
+                File.Replace(temporaryPath, retainedPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            }
+            else
+            {
+                File.Move(temporaryPath, retainedPath);
+            }
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
         var retainedSha256 = ComputeFileSha256(retainedPath);
         if (!retainedSha256.Equals(expectedSubmissionSha256, StringComparison.OrdinalIgnoreCase))
         {

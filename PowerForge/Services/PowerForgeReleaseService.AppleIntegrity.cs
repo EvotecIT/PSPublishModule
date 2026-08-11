@@ -9,9 +9,6 @@ internal sealed partial class PowerForgeReleaseService
         string lockPath,
         IEnumerable<(string Name, string Path, bool IsDirectory)> protectedPaths)
     {
-        var comparison = Path.DirectorySeparatorChar == '\\'
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
         var history = Path.GetFullPath(receiptHistoryPath)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var files = new[]
@@ -35,6 +32,7 @@ internal sealed partial class PowerForgeReleaseService
 
         foreach (var file in files)
         {
+            var comparison = GetAppleOutputPathComparison(file.Path, history);
             var candidate = file.Path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             if (candidate.Equals(history, comparison) ||
                 candidate.StartsWith(history + Path.DirectorySeparatorChar, comparison) ||
@@ -64,15 +62,19 @@ internal sealed partial class PowerForgeReleaseService
 
     private static bool PathsOverlap(string first, string second)
     {
-        var comparison = Path.DirectorySeparatorChar == '\\'
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
+        var comparison = GetAppleOutputPathComparison(first, second);
         var left = Path.GetFullPath(first).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var right = Path.GetFullPath(second).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return left.Equals(right, comparison) ||
                left.StartsWith(right + Path.DirectorySeparatorChar, comparison) ||
                right.StartsWith(left + Path.DirectorySeparatorChar, comparison);
     }
+
+    private static StringComparison GetAppleOutputPathComparison(string first, string second)
+        => FrameworkCompatibility.GetPathStringComparisonForPath(first) == StringComparison.OrdinalIgnoreCase ||
+           FrameworkCompatibility.GetPathStringComparisonForPath(second) == StringComparison.OrdinalIgnoreCase
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
 
     private static void VerifyExpectedAppleCheckpointArchives(PowerForgeAppleReleasePlan plan)
     {
