@@ -7,6 +7,12 @@ namespace PowerForge;
 /// </summary>
 internal sealed class PowerForgeReleaseSpec
 {
+    [JsonIgnore]
+    internal string? LoadedConfigurationPath { get; set; }
+
+    [JsonIgnore]
+    internal string? LoadedConfigurationSha256 { get; set; }
+
     [JsonPropertyName("$schema")]
     public string? Schema { get; set; }
 
@@ -38,6 +44,7 @@ internal sealed class PowerForgeReleaseRequest
     internal IPowerForgeReleaseProgressReporter? Progress { get; set; }
     internal CancellationToken CancellationToken { get; set; }
     internal string? ExactConfigurationContent { get; set; }
+    internal string? LoadedConfigurationSha256 { get; set; }
 
     public string ConfigPath { get; set; } = string.Empty;
 
@@ -544,6 +551,8 @@ internal sealed class PowerForgeAppleReleasePlan
     internal Dictionary<string, string> ApprovedMutationInputContents { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     internal string? ExactSourceConfigPath { get; set; }
+
+    internal string? ExactSourceConfigSha256 { get; set; }
 
     public string? MetadataConfigPath { get; set; }
 

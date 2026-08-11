@@ -256,6 +256,12 @@ internal sealed partial class PowerForgeReleaseService
             throw new ArgumentException("ConfigPath is required.", nameof(request));
 
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
+        request.LoadedConfigurationSha256 = null;
+        if (!string.IsNullOrWhiteSpace(spec.LoadedConfigurationPath) &&
+            AppleReleasePathsEqual(Path.GetFullPath(spec.LoadedConfigurationPath!), configPath))
+        {
+            request.LoadedConfigurationSha256 = spec.LoadedConfigurationSha256;
+        }
         if (spec.GitHub is { Publish: true } configuredGitHub &&
             request.PublishProjectGitHub != false &&
             IsVerifiedGitHubRecoveryRequested(configuredGitHub))
@@ -929,7 +935,16 @@ internal sealed partial class PowerForgeReleaseService
         if (!File.Exists(fullPath))
             throw new FileNotFoundException($"Unified release config was not found: {fullPath}", fullPath);
 
-        return LoadConfigurationContent(File.ReadAllText(fullPath), fullPath);
+        var bytes = File.ReadAllBytes(fullPath);
+        string content;
+        using (var stream = new MemoryStream(bytes, writable: false))
+        using (var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+            content = reader.ReadToEnd();
+
+        var spec = LoadConfigurationContent(content, fullPath);
+        spec.LoadedConfigurationPath = fullPath;
+        spec.LoadedConfigurationSha256 = ComputeConfigurationSha256(bytes);
+        return spec;
     }
 
     internal static PowerForgeReleaseSpec LoadConfigurationContent(string content, string sourcePath)
@@ -938,6 +953,12 @@ internal sealed partial class PowerForgeReleaseService
             throw new ArgumentNullException(nameof(content));
         var spec = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(content, CreateJsonOptions());
         return spec ?? throw new InvalidOperationException($"Unable to deserialize unified release config: {sourcePath}");
+    }
+
+    private static string ComputeConfigurationSha256(byte[] bytes)
+    {
+        using var algorithm = SHA256.Create();
+        return BitConverter.ToString(algorithm.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
     }
 
     internal PowerForgeReleaseResult PublishBuiltReleaseOutputs(
@@ -1766,6 +1787,11 @@ internal sealed partial class PowerForgeReleaseService
             ExactSourceConfigPath = request.RequireImmutableAppleSourceSnapshot && File.Exists(request.ConfigPath)
                 ? request.ConfigPath
                 : null,
+            ExactSourceConfigSha256 = request.RequireImmutableAppleSourceSnapshot &&
+                                      !string.IsNullOrWhiteSpace(request.ConfigPath) &&
+                                      !string.IsNullOrWhiteSpace(request.LoadedConfigurationSha256)
+                ? request.LoadedConfigurationSha256
+                : null,
             AdoptExistingBuild = request.AppleAdoptExistingBuild,
             Archive = options.Archive,
             Upload = options.Upload,
@@ -2502,6 +2528,7 @@ internal sealed partial class PowerForgeReleaseService
             SourceCommit = plan.SourceCommit,
             RequireImmutableSourceSnapshot = plan.RequireImmutableSourceSnapshot,
             ExactSourceConfigPath = plan.ExactSourceConfigPath,
+            ExactSourceConfigSha256 = plan.ExactSourceConfigSha256,
             Archive = true,
             Upload = false,
             XcodeBuildExecutable = plan.XcodeBuildExecutable,

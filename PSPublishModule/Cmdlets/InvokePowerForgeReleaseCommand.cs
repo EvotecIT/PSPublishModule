@@ -4,8 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using PowerForge;
 using PowerForge.ConsoleShared;
 
@@ -683,22 +681,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     }
 
     private static PowerForgeReleaseSpec LoadConfig(string configPath)
-    {
-        var json = File.ReadAllText(configPath);
-        var options = new JsonSerializerOptions
-        {
-            AllowTrailingCommas = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            PropertyNameCaseInsensitive = true
-        };
-        options.Converters.Add(new JsonStringEnumConverter());
-
-        var spec = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(json, options);
-        if (spec is null)
-            throw new InvalidOperationException($"Unable to deserialize unified release config: {configPath}");
-
-        return spec;
-    }
+        => PowerForgeReleaseService.LoadConfiguration(configPath);
 
     private static bool? ResolveRequestedFlag(IDictionary<string, object>? boundParameters, string parameterName)
     {

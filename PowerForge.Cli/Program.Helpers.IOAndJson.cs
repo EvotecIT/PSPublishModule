@@ -408,8 +408,7 @@ internal static partial class Program
     static (PowerForgeReleaseSpec Value, string FullPath) LoadPowerForgeReleaseSpecWithPath(string path)
     {
         var full = ResolveExistingFilePath(path);
-        var json = File.ReadAllText(full);
-        var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.PowerForgeReleaseSpec, full);
+        var spec = PowerForgeReleaseService.LoadConfiguration(full);
         return (spec, full);
     }
 

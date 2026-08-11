@@ -16,6 +16,7 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
     private IReadOnlyDictionary<string, string> _trackedFileMutationIdentities =
         new Dictionary<string, string>(StringComparer.Ordinal);
     private string? _snapshotConfigPath;
+    private string? _expectedConfigSha256;
     private bool _disposed;
 
     private AppleReleaseSourceSnapshot(
@@ -82,7 +83,7 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
             snapshot._trackedFileMutationIdentities = snapshot.CaptureTrackedFileMutationIdentities();
             snapshot.ValidateUnchanged();
             if (!string.IsNullOrWhiteSpace(plan.ExactSourceConfigPath))
-                snapshot.ValidateExactSourceInputs(plan.ExactSourceConfigPath!);
+                snapshot.ValidateExactSourceInputs(plan.ExactSourceConfigPath!, plan.ExactSourceConfigSha256);
             return snapshot;
         }
         catch
@@ -114,9 +115,9 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
         {
             var configPath = Path.GetFullPath(plan.ExactSourceConfigPath!);
             EnsureContained(repositoryRoot, configPath, "Apple exact-source config path");
-            observedCommit = new AppleReleaseSourceTrustService()
-                .Capture(repositoryRoot, configPath)
-                .SourceCommit;
+            var trust = new AppleReleaseSourceTrustService().Capture(repositoryRoot, configPath);
+            ValidateExpectedConfigurationSha256(trust.ExactConfigurationSha256, plan.ExactSourceConfigSha256);
+            observedCommit = trust.SourceCommit;
         }
         else
         {
@@ -159,19 +160,34 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
         return mapped;
     }
 
-    private void ValidateExactSourceInputs(string configPath)
+    private void ValidateExactSourceInputs(string configPath, string? expectedSha256)
     {
         _snapshotConfigPath = MapRepositoryPath(configPath);
+        _expectedConfigSha256 = expectedSha256;
         ValidateMappedExactSourceInputs();
     }
 
     private void ValidateMappedExactSourceInputs()
     {
         var trust = new AppleReleaseSourceTrustService().Capture(RootPath, _snapshotConfigPath!);
+        ValidateExpectedConfigurationSha256(trust.ExactConfigurationSha256, _expectedConfigSha256);
         if (!trust.SourceCommit.Equals(_sourceCommit, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
                 $"The isolated Apple build snapshot resolved commit '{trust.SourceCommit}' instead of '{_sourceCommit}'.");
+        }
+    }
+
+    private static void ValidateExpectedConfigurationSha256(string? actualSha256, string? expectedSha256)
+    {
+        if (string.IsNullOrWhiteSpace(expectedSha256))
+            return;
+        if (string.IsNullOrWhiteSpace(actualSha256) ||
+            !string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The parsed Apple release configuration does not match the exact source configuration bytes. " +
+                $"Expected SHA-256 '{expectedSha256}', received '{actualSha256}'. Reload the configuration from the approved source snapshot.");
         }
     }
 

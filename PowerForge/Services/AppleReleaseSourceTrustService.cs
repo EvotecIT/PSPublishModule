@@ -91,7 +91,11 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException(
                 "Repository HEAD changed while Apple release inputs were being validated. Rebuild from the new exact source commit.");
         }
-        return new AppleReleaseSourceTrustSnapshot(sourceCommitAfterValidation, generatedOutputs, releaseConfigContent);
+        return new AppleReleaseSourceTrustSnapshot(
+            sourceCommitAfterValidation,
+            generatedOutputs,
+            releaseConfigContent,
+            ComputeSha256(releaseConfigBytes));
     }
 
     internal void ValidateAfterBuild(
@@ -728,6 +732,12 @@ internal sealed partial class AppleReleaseSourceTrustService
             .GetAwaiter()
             .GetResult();
 
+    private static string ComputeSha256(byte[] bytes)
+    {
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
     private static StringComparer GetPathComparer()
         => Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 }
@@ -737,11 +747,13 @@ internal sealed class AppleReleaseSourceTrustSnapshot
     internal AppleReleaseSourceTrustSnapshot(
         string sourceCommit,
         string[] generatedOutputPaths,
-        string? exactConfigurationContent = null)
+        string? exactConfigurationContent = null,
+        string? exactConfigurationSha256 = null)
     {
         SourceCommit = sourceCommit;
         GeneratedOutputPaths = generatedOutputPaths;
         ExactConfigurationContent = exactConfigurationContent;
+        ExactConfigurationSha256 = exactConfigurationSha256;
     }
 
     internal string SourceCommit { get; }
@@ -749,4 +761,6 @@ internal sealed class AppleReleaseSourceTrustSnapshot
     internal string[] GeneratedOutputPaths { get; }
 
     internal string? ExactConfigurationContent { get; }
+
+    internal string? ExactConfigurationSha256 { get; }
 }

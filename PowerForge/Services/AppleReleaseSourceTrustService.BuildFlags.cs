@@ -20,6 +20,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 source,
                 responseFiles)
             .ToArray();
+        ValidateHeaderSearchPathInputs(projectDirectory, expandedTokens, key);
         if (!key.Split('[')[0].Trim().Equals("COMPILER_FLAGS", StringComparison.OrdinalIgnoreCase) &&
             TryReadCompilerLanguageOverride(expandedTokens, out _))
         {
@@ -44,6 +45,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             var candidate = ResolveBuildSettingPath(projectDirectory, normalizedValue, key);
             EnsurePathWithinRepository(repositoryRoot, candidate, $"Xcode build setting {key} from {source}");
             EnsureNoGeneratedOutputOverlap(candidate, generatedOutputPaths, $"Xcode build setting {key}");
+            RejectHeaderMapInput(candidate, key);
             if (File.Exists(candidate))
                 EnsureTrackedFile(repositoryRoot, candidate, $"Xcode build setting {key}");
             else if (Directory.Exists(candidate))
@@ -391,6 +393,12 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (linkerFlags && token.StartsWith("-dylib_file=", StringComparison.Ordinal))
             {
                 yield return ReadDylibOverrideCurrentPath(token.Substring("-dylib_file=".Length), key);
+                continue;
+            }
+            if (linkerFlags && TryReadLinkerFileInputPaths(tokens, ref index, token, key, out var linkerInputPaths))
+            {
+                foreach (var linkerInputPath in linkerInputPaths)
+                    yield return linkerInputPath;
                 continue;
             }
 

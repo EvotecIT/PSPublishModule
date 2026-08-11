@@ -1,3 +1,4 @@
+using PowerForge;
 using PowerForgeStudio.Orchestrator.Queue;
 
 namespace PowerForgeStudio.Tests;
@@ -518,6 +519,77 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.Contains("module", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("bound", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_classifies_dash_prefixed_linker_order_file()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "DashPrefixedLinkerOrderFileRepo",
+            "OTHER_LDFLAGS = -Wl,-order_file,-Rules\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("-Rules", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_file_backed_header_search_map()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "HeaderMapSearchRootRepo",
+            "OTHER_CFLAGS = -I Rules.hmap\n");
+        File.WriteAllBytes(Path.Combine(repositoryRoot, "Rules.hmap"), new byte[] { 0x68, 0x6d, 0x61, 0x70 });
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("header map", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("exact source", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AppleSourceSnapshot_rejects_configuration_bytes_different_from_the_parsed_plan()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ParsedConfigurationBindingRepo");
+        var project = scope.CreateDirectory(Path.Combine("ParsedConfigurationBindingRepo", "Sample.xcodeproj"));
+        File.WriteAllText(Path.Combine(project, "project.pbxproj"), "// exact project\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var committedContent = File.ReadAllText(configPath);
+        var sourceCommit = CommitRepository(repositoryRoot);
+        File.WriteAllText(
+            configPath,
+            committedContent.Replace(
+                "\"ProjectRoot\": \".\",",
+                "\"ProjectRoot\": \".\",\n    \"Configuration\": \"Debug\","));
+        var parsed = PowerForgeReleaseService.LoadConfiguration(configPath);
+        File.WriteAllText(configPath, committedContent);
+        var plan = new PowerForgeAppleReleasePlan
+        {
+            ProjectRoot = repositoryRoot,
+            Archive = true,
+            SourceCommit = sourceCommit,
+            RequireImmutableSourceSnapshot = true,
+            ExactSourceConfigPath = configPath,
+            ExactSourceConfigSha256 = parsed.LoadedConfigurationSha256
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+        {
+            using var _ = AppleReleaseSourceSnapshot.CreateIfRequired(plan);
+        });
+
+        Assert.Contains("parsed Apple release configuration", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("exact source configuration bytes", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static (string RepositoryRoot, string ConfigPath) CreateTrackedSourceFixture(

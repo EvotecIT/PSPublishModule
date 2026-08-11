@@ -86,6 +86,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 var candidate = ResolveBuildSettingPath(projectDirectory, value, key);
                 EnsurePathWithinRepository(repositoryRoot, candidate, $"Xcode build setting {key} from {source}");
                 EnsureNoGeneratedOutputOverlap(candidate, generatedOutputPaths, $"Xcode build setting {key}");
+                RejectHeaderMapInput(candidate, key);
                 if (File.Exists(candidate))
                 {
                     EnsureTrackedFile(repositoryRoot, candidate, $"Xcode build setting {key}");
