@@ -322,6 +322,26 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Theory]
+    [InlineData("-fprofile-instrument-use-path Rules")]
+    [InlineData("-fprofile-instrument-use-path=Rules")]
+    [InlineData("-Xclang -fprofile-instrument-use-path=Rules")]
+    public void ResolveExactAppleSourceCommit_classifies_clang_instrumentation_profile_inputs(string option)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "ClangInstrumentationProfileRepo" + option.Length,
+            $"OTHER_CFLAGS = {option}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
     [InlineData("-fbuild-session-file=Session", "Session")]
     [InlineData("-fcodegen-data-use Codegen.cgdata", "Codegen.cgdata")]
     [InlineData("-fmemory-profile-use=Memory.profdata", "Memory.profdata")]

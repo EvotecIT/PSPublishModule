@@ -8,40 +8,22 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
     private readonly AppleReleaseSourceTrustService _sourceTrust = new();
     private readonly IReadOnlyDictionary<string, string> _approvedPackageRevisions;
     private readonly IReadOnlyDictionary<string, string?> _environmentVariables;
-    private readonly AppleReleaseSourceMutationMonitor? _monitor;
-    private readonly string? _artifactSha256;
+    private readonly AppleReleaseSourceMutationMonitor _monitor;
+    private readonly string _materializedPackagesSha256;
     private bool _disposed;
 
     private AppleSwiftPackageBuildSnapshot(
         string rootPath,
         IReadOnlyDictionary<string, string> approvedPackageRevisions,
-        IReadOnlyDictionary<string, string?> environmentVariables)
+        IReadOnlyDictionary<string, string?> environmentVariables,
+        AppleReleaseSourceMutationMonitor monitor,
+        string materializedPackagesSha256)
     {
         RootPath = rootPath;
         _approvedPackageRevisions = approvedPackageRevisions;
         _environmentVariables = environmentVariables;
-        _monitor = Directory.Exists(SourcePackagesPath)
-            ? new AppleReleaseSourceMutationMonitor(
-                SourcePackagesPath,
-                "materialized Swift package root",
-                "xcodebuild archive",
-                "Discard the archive and resolve the exact package graph again.")
-            : null;
-        try
-        {
-            _sourceTrust.ValidateMaterializedPackageCheckouts(SourcePackagesPath, _approvedPackageRevisions);
-            var artifactsPath = Path.Combine(SourcePackagesPath, "artifacts");
-            if (Directory.Exists(artifactsPath))
-            {
-                ValidateNoEscapingArtifactLinks(artifactsPath);
-                _artifactSha256 = AppleNotarizationService.ComputeArtifactSha256(artifactsPath);
-            }
-        }
-        catch
-        {
-            _monitor?.Dispose();
-            throw;
-        }
+        _monitor = monitor;
+        _materializedPackagesSha256 = materializedPackagesSha256;
     }
 
     internal string RootPath { get; }
@@ -65,6 +47,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         Directory.CreateDirectory(parent);
         var root = Path.Combine(parent, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
+        AppleReleaseSourceMutationMonitor? monitor = null;
 #if NET8_0_OR_GREATER
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -95,29 +78,62 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 "-disableAutomaticPackageResolution",
                 "-skipPackageUpdates"
             };
-            var result = await processRunner.RunAsync(
-                    new ProcessRunRequest(
-                        xcodeBuildExecutable,
-                        Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
-                        arguments,
-                        timeout,
-                        environmentVariables,
-                        captureOutput: true,
-                        captureError: true,
-                        inheritEnvironment: false),
-                    cancellationToken)
-                .ConfigureAwait(false);
+            var sourceTrust = new AppleReleaseSourceTrustService();
+            monitor = new AppleReleaseSourceMutationMonitor(
+                sourcePackagesPath,
+                "materialized Swift package root",
+                "xcodebuild archive",
+                "Discard the archive and resolve the exact package graph again.",
+                enableImmediately: false);
+            string? materializedPackagesSha256 = null;
+            var processRequest = new ProcessRunRequest(
+                xcodeBuildExecutable,
+                Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
+                arguments,
+                timeout,
+                environmentVariables,
+                captureOutput: true,
+                captureError: true,
+                inheritEnvironment: false);
+            processRequest.SetCompletionBoundary(completionResult =>
+            {
+                if (!completionResult.Succeeded)
+                    return;
+                materializedPackagesSha256 = monitor.CaptureExpectedProducerOutput(
+                    () => CaptureMaterializedPackageIdentity(
+                        sourceTrust,
+                        sourcePackagesPath,
+                        approvedPackageRevisions),
+                    "xcodebuild -resolvePackageDependencies");
+            });
+            var result = await processRunner.RunAsync(processRequest, cancellationToken).ConfigureAwait(false);
+            processRequest.InvokeCompletionBoundary(result);
             if (!result.Succeeded)
             {
+                monitor.Dispose();
                 throw new InvalidOperationException(
                     $"xcodebuild failed to resolve the exact Swift package graph with exit code {result.ExitCode}: " +
                     (string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr));
             }
+            if (string.IsNullOrWhiteSpace(materializedPackagesSha256))
+            {
+                monitor.Dispose();
+                throw new InvalidOperationException(
+                    "xcodebuild completed without binding the exact materialized Swift package graph at its process completion boundary.");
+            }
 
-            return new AppleSwiftPackageBuildSnapshot(root, approvedPackageRevisions, environmentVariables);
+            var snapshot = new AppleSwiftPackageBuildSnapshot(
+                root,
+                approvedPackageRevisions,
+                environmentVariables,
+                monitor,
+                materializedPackagesSha256!);
+            monitor = null;
+            return snapshot;
         }
         catch
         {
+            monitor?.Dispose();
             if (Directory.Exists(root))
                 Directory.Delete(root, recursive: true);
             throw;
@@ -137,22 +153,25 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 
     internal void ValidateUnchanged()
     {
-        _sourceTrust.ValidateMaterializedPackageCheckouts(SourcePackagesPath, _approvedPackageRevisions);
-        var artifactsPath = Path.Combine(SourcePackagesPath, "artifacts");
-        if (_artifactSha256 is not null)
-        {
-            if (!Directory.Exists(artifactsPath))
-                throw new InvalidOperationException("The materialized Swift binary-artifact tree disappeared before xcodebuild archive.");
+        var actual = CaptureMaterializedPackageIdentity(
+            _sourceTrust,
+            SourcePackagesPath,
+            _approvedPackageRevisions);
+        if (!actual.Equals(_materializedPackagesSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The materialized Swift package root changed before xcodebuild archive.");
+        _monitor.ValidateNoChanges();
+    }
+
+    private static string CaptureMaterializedPackageIdentity(
+        AppleReleaseSourceTrustService sourceTrust,
+        string sourcePackagesPath,
+        IReadOnlyDictionary<string, string> approvedPackageRevisions)
+    {
+        sourceTrust.ValidateMaterializedPackageCheckouts(sourcePackagesPath, approvedPackageRevisions);
+        var artifactsPath = Path.Combine(sourcePackagesPath, "artifacts");
+        if (Directory.Exists(artifactsPath))
             ValidateNoEscapingArtifactLinks(artifactsPath);
-            var actual = AppleNotarizationService.ComputeArtifactSha256(artifactsPath);
-            if (!actual.Equals(_artifactSha256, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("The materialized Swift binary-artifact tree changed before xcodebuild archive.");
-        }
-        else if (Directory.Exists(artifactsPath) && Directory.EnumerateFileSystemEntries(artifactsPath).Any())
-        {
-            throw new InvalidOperationException("A materialized Swift binary-artifact tree appeared after package approval.");
-        }
-        _monitor?.ValidateNoChanges();
+        return AppleNotarizationService.ComputeArtifactSha256(sourcePackagesPath);
     }
 
     private static void ValidateNoEscapingArtifactLinks(string artifactsRoot)
@@ -219,7 +238,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         if (_disposed)
             return;
         _disposed = true;
-        _monitor?.Dispose();
+        _monitor.Dispose();
         if (Directory.Exists(RootPath))
             Directory.Delete(RootPath, recursive: true);
     }
