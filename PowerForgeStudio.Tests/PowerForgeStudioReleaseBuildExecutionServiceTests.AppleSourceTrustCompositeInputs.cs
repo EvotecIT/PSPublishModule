@@ -51,6 +51,30 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Theory]
+    [InlineData("-remap-file Source.c;Alias.c")]
+    [InlineData("-remap-file=Source.c;Alias.c")]
+    [InlineData("-Xclang -remap-file -Xclang Source.c;Alias.c")]
+    [InlineData("@Remap.rsp")]
+    public void ResolveExactAppleSourceCommit_attests_both_clang_remap_paths(string option)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "ClangRemapRepo" + option.Length,
+            $"OTHER_CFLAGS = {option}\n");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Source.c"), "int source;\n");
+        if (option.StartsWith("@", StringComparison.Ordinal))
+            File.WriteAllText(Path.Combine(repositoryRoot, "Remap.rsp"), "-remap-file Source.c;Alias.c\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Equal(Path.Combine(repositoryRoot, "Alias.c"), exception.FileName);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
     [InlineData("#define PAYLOAD .incbin \"/tmp/payload.bin\"\nPAYLOAD\n")]
     [InlineData("#define JOIN(a, b) a ## b\nJOIN(.inc, bin) \"/tmp/payload.bin\"\n")]
     [InlineData("#define DIRECTIVE(op, path) . op path\nDIRECTIVE(incbin, \"/tmp/payload.bin\")\n")]

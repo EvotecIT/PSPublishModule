@@ -61,6 +61,7 @@ internal sealed class AppleNotarizationInputSnapshot : IDisposable
         var stageRoot = Path.Combine(parent, $".powerforge-stage-{Guid.NewGuid():N}");
         var stage = Path.Combine(stageRoot, name);
         var backup = Path.Combine(parent, $".{name}.powerforge-backup-{Guid.NewGuid():N}");
+        var rollbackCandidate = Path.Combine(parent, $".{name}.powerforge-failed-publication-{Guid.NewGuid():N}");
         var sourceIsDirectory = Directory.Exists(ArtifactPath);
         var movedExisting = false;
         var published = false;
@@ -115,16 +116,24 @@ internal sealed class AppleNotarizationInputSnapshot : IDisposable
             TryDeletePath(backup);
             return publishedSha256;
         }
-        catch
+        catch (Exception publicationException)
         {
-            if (published)
-                DeletePath(destination);
-            if (movedExisting)
+            try
             {
-                if (Directory.Exists(backup))
-                    Directory.Move(backup, destination);
-                else if (File.Exists(backup))
-                    File.Move(backup, destination);
+                RollbackPublication(
+                    destination,
+                    backup,
+                    rollbackCandidate,
+                    sourceSha256,
+                    published,
+                    movedExisting);
+            }
+            catch (Exception rollbackException)
+            {
+                throw new AggregateException(
+                    $"Apple notarization artifact publication failed and rollback could not complete. Recovery bytes are retained at '{backup}'.",
+                    publicationException,
+                    rollbackException);
             }
             throw;
         }
@@ -132,6 +141,26 @@ internal sealed class AppleNotarizationInputSnapshot : IDisposable
         {
             TryDeletePath(stageRoot);
         }
+    }
+
+    internal static void RollbackPublication(
+        string destination,
+        string backup,
+        string rollbackCandidate,
+        string publishedSha256,
+        bool published,
+        bool movedExisting)
+    {
+        if (published && (Directory.Exists(destination) || File.Exists(destination)))
+        {
+            AppleArtifactCopy.RemovePublishedPathIfUnchanged(
+                destination,
+                rollbackCandidate,
+                publishedSha256,
+                "Apple notarization artifact");
+        }
+        if (movedExisting)
+            AppleArtifactCopy.RestorePathBackup(destination, backup);
     }
 
     internal static AppleNotarizationInputSnapshot Create(string artifactPath, string expectedSha256)

@@ -45,4 +45,15 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
         return value.Substring(separator + 1);
     }
+
+    private static string[] ReadClangRemapFilePaths(string value, string key)
+    {
+        var parts = value.Split(new[] { ';' }, StringSplitOptions.None);
+        if (parts.Length != 2 || parts.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new InvalidOperationException(
+                $"Xcode build setting {key} contains malformed Clang remap input '{value}'. Expected <source-path>;<replacement-path>.");
+        }
+        return parts;
+    }
 }

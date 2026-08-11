@@ -212,6 +212,20 @@ internal sealed partial class AppleReleaseSourceTrustService
                     yield return path;
                 continue;
             }
+            if (token.Equals("-remap-file", StringComparison.Ordinal))
+            {
+                if (++index >= tokens.Length)
+                    throw new InvalidOperationException($"Xcode build setting {key} ends with Clang option '-remap-file' and no argument.");
+                foreach (var path in ReadClangRemapFilePaths(tokens[index], key))
+                    yield return path;
+                continue;
+            }
+            if (token.StartsWith("-remap-file=", StringComparison.Ordinal))
+            {
+                foreach (var path in ReadClangRemapFilePaths(token.Substring("-remap-file=".Length), key))
+                    yield return path;
+                continue;
+            }
             if (linkerFlags && token.Equals("-dylib_file", StringComparison.Ordinal))
             {
                 if (++index >= tokens.Length)

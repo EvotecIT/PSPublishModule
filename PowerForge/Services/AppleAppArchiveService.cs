@@ -83,6 +83,7 @@ public sealed partial class AppleAppArchiveService
 
         AppleSwiftPackageBuildSnapshot? packageSnapshot = null;
         ProcessRunResult result;
+        string? archiveSha256 = null;
         try
         {
             var timeout = request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout;
@@ -101,8 +102,7 @@ public sealed partial class AppleAppArchiveService
                 packageSnapshot.AppendArchiveArguments(args);
             }
 
-            result = await _processRunner.RunAsync(
-                new ProcessRunRequest(
+            var processRequest = new ProcessRunRequest(
                     xcodeBuildExecutable,
                     Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
                     args,
@@ -110,18 +110,30 @@ public sealed partial class AppleAppArchiveService
                     packageSnapshot?.EnvironmentVariables,
                     captureOutput: true,
                     captureError: true,
-                    inheritEnvironment: packageSnapshot is null),
-                cancellationToken).ConfigureAwait(false);
+                    inheritEnvironment: packageSnapshot is null);
+            processRequest.SetCompletionBoundary(completionResult =>
+            {
+                if (completionResult.Succeeded && Directory.Exists(archivePath))
+                    archiveSha256 = AppleNotarizationService.ComputeArtifactSha256(archivePath);
+            });
+            result = await _processRunner.RunAsync(processRequest, cancellationToken).ConfigureAwait(false);
+            processRequest.InvokeCompletionBoundary(result);
             packageSnapshot?.ValidateUnchanged();
+            if (!string.IsNullOrWhiteSpace(archiveSha256) && Directory.Exists(archivePath))
+            {
+                var currentArchiveSha256 = AppleNotarizationService.ComputeArtifactSha256(archivePath);
+                if (!currentArchiveSha256.Equals(archiveSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"The private Apple archive changed after xcodebuild completed. Expected '{archiveSha256}', received '{currentArchiveSha256}'.");
+                }
+            }
         }
         finally
         {
             packageSnapshot?.Dispose();
         }
 
-        var archiveSha256 = result.Succeeded && Directory.Exists(archivePath)
-            ? AppleNotarizationService.ComputeArtifactSha256(archivePath)
-            : null;
         return new AppleAppArchiveResult
         {
             ArchivePath = archivePath,

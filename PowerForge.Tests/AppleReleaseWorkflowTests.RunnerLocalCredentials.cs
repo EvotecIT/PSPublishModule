@@ -14,6 +14,7 @@ public sealed partial class AppleReleaseWorkflowTests
         var root = FindRepoRoot();
         var script = Read(root, "scripts", "Invoke-PinnedPowerForge.ps1");
         var evidence = Read(root, "scripts", "Invoke-PinnedPowerForge.Evidence.ps1");
+        Assert.Contains("^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$", script, StringComparison.Ordinal);
         Assert.Contains("RequiredCommit $ExpectedCommit", script, StringComparison.Ordinal);
         Assert.Contains("ExpectedConsumerRepository", script, StringComparison.Ordinal);
         Assert.Contains("symbolic-ref', '--short', 'HEAD", script, StringComparison.Ordinal);

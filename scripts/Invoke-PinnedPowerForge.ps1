@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory)]
-    [ValidatePattern('^[0-9A-Fa-f]{40}$')]
+    [ValidatePattern('^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$')]
     [string] $ExpectedCommit,
 
     [Parameter(Mandatory)]

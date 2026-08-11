@@ -54,6 +54,155 @@ public sealed partial class AppleNotarizationServiceTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PublicationRollback_preserves_concurrently_replaced_notarization_artifact(bool directoryArtifact)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var destination = Path.Combine(root.FullName, directoryArtifact ? "Published.app" : "Published.pkg");
+            var backup = Path.Combine(root.FullName, directoryArtifact ? "Previous.app" : "Previous.pkg");
+            var quarantine = Path.Combine(root.FullName, directoryArtifact ? "Failed.app" : "Failed.pkg");
+            if (directoryArtifact)
+            {
+                Directory.CreateDirectory(destination);
+                File.WriteAllText(Path.Combine(destination, "payload"), "published");
+                Directory.CreateDirectory(backup);
+                File.WriteAllText(Path.Combine(backup, "payload"), "previous");
+            }
+            else
+            {
+                File.WriteAllText(destination, "published");
+                File.WriteAllText(backup, "previous");
+            }
+            var publishedSha256 = AppleNotarizationService.ComputeArtifactSha256(destination);
+            if (directoryArtifact)
+                File.WriteAllText(Path.Combine(destination, "payload"), "concurrent replacement");
+            else
+                File.WriteAllText(destination, "concurrent replacement");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                AppleNotarizationInputSnapshot.RollbackPublication(
+                    destination,
+                    backup,
+                    quarantine,
+                    publishedSha256,
+                    published: true,
+                    movedExisting: true));
+
+            Assert.Contains("replacement bytes", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(directoryArtifact ? Directory.Exists(destination) : File.Exists(destination));
+            Assert.True(directoryArtifact ? Directory.Exists(backup) : File.Exists(backup));
+            var destinationPayload = directoryArtifact
+                ? File.ReadAllText(Path.Combine(destination, "payload"))
+                : File.ReadAllText(destination);
+            Assert.Equal("concurrent replacement", destinationPayload);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PublicationRollback_removes_owned_bytes_and_restores_previous_notarization_artifact(bool directoryArtifact)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var destination = Path.Combine(root.FullName, directoryArtifact ? "Published.app" : "Published.pkg");
+            var backup = Path.Combine(root.FullName, directoryArtifact ? "Previous.app" : "Previous.pkg");
+            var quarantine = Path.Combine(root.FullName, directoryArtifact ? "Failed.app" : "Failed.pkg");
+            if (directoryArtifact)
+            {
+                Directory.CreateDirectory(destination);
+                File.WriteAllText(Path.Combine(destination, "payload"), "published");
+                Directory.CreateDirectory(backup);
+                File.WriteAllText(Path.Combine(backup, "payload"), "previous");
+            }
+            else
+            {
+                File.WriteAllText(destination, "published");
+                File.WriteAllText(backup, "previous");
+            }
+            var publishedSha256 = AppleNotarizationService.ComputeArtifactSha256(destination);
+
+            AppleNotarizationInputSnapshot.RollbackPublication(
+                destination,
+                backup,
+                quarantine,
+                publishedSha256,
+                published: true,
+                movedExisting: true);
+
+            var destinationPayload = directoryArtifact
+                ? File.ReadAllText(Path.Combine(destination, "payload"))
+                : File.ReadAllText(destination);
+            Assert.Equal("previous", destinationPayload);
+            Assert.False(directoryArtifact ? Directory.Exists(backup) : File.Exists(backup));
+            Assert.False(directoryArtifact ? Directory.Exists(quarantine) : File.Exists(quarantine));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PublicationRollback_preserves_linked_notarization_replacement(bool directoryArtifact)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var destination = Path.Combine(root.FullName, directoryArtifact ? "Published.app" : "Published.pkg");
+            var backup = Path.Combine(root.FullName, directoryArtifact ? "Previous.app" : "Previous.pkg");
+            var quarantine = Path.Combine(root.FullName, directoryArtifact ? "Failed.app" : "Failed.pkg");
+            var external = Path.Combine(root.FullName, directoryArtifact ? "External.app" : "External.pkg");
+            if (directoryArtifact)
+            {
+                Directory.CreateDirectory(external);
+                File.WriteAllText(Path.Combine(external, "payload"), "external replacement");
+                Directory.CreateDirectory(backup);
+                File.WriteAllText(Path.Combine(backup, "payload"), "previous");
+                Directory.CreateSymbolicLink(destination, external);
+            }
+            else
+            {
+                File.WriteAllText(external, "external replacement");
+                File.WriteAllText(backup, "previous");
+                File.CreateSymbolicLink(destination, external);
+            }
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                AppleNotarizationInputSnapshot.RollbackPublication(
+                    destination,
+                    backup,
+                    quarantine,
+                    new string('a', 64),
+                    published: true,
+                    movedExisting: true));
+
+            Assert.Contains("linked replacement", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True((File.GetAttributes(destination) & FileAttributes.ReparsePoint) != 0);
+            Assert.True(directoryArtifact ? Directory.Exists(backup) : File.Exists(backup));
+            var externalPayload = directoryArtifact
+                ? File.ReadAllText(Path.Combine(external, "payload"))
+                : File.ReadAllText(external);
+            Assert.Equal("external replacement", externalPayload);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private sealed class MutatingDittoInputRunner : IProcessRunner
     {
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)

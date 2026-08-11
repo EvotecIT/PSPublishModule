@@ -98,31 +98,97 @@ internal static class AppleArtifactCopy
         string quarantinePath,
         string expectedSha256,
         string artifactDescription)
+        => RemovePublishedPathIfUnchanged(destinationPath, quarantinePath, expectedSha256, artifactDescription);
+
+    /// <summary>
+    /// Quarantines a published file or directory and deletes it only when its exact artifact hash
+    /// still matches the bytes owned by the current publication. Concurrent or linked replacements
+    /// are restored to their observed pathname when possible and are never deleted.
+    /// </summary>
+    internal static void RemovePublishedPathIfUnchanged(
+        string destinationPath,
+        string quarantinePath,
+        string expectedSha256,
+        string artifactDescription)
     {
-        Directory.Move(destinationPath, quarantinePath);
+        var attributes = File.GetAttributes(destinationPath);
+        var isDirectory = (attributes & FileAttributes.Directory) != 0;
+        var quarantinedArtifactPath = quarantinePath;
+        if (isDirectory)
+            Directory.Move(destinationPath, quarantinePath);
+        else
+        {
+            try
+            {
+                Directory.CreateDirectory(quarantinePath);
+#if NET8_0_OR_GREATER
+                if (!OperatingSystem.IsWindows())
+                    File.SetUnixFileMode(quarantinePath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+#endif
+                quarantinedArtifactPath = Path.Combine(quarantinePath, Path.GetFileName(destinationPath));
+                File.Move(destinationPath, quarantinedArtifactPath);
+            }
+            catch
+            {
+                if (Directory.Exists(quarantinePath) && !Directory.EnumerateFileSystemEntries(quarantinePath).Any())
+                    Directory.Delete(quarantinePath);
+                throw;
+            }
+        }
         try
         {
-            var attributes = File.GetAttributes(quarantinePath);
-            if ((attributes & FileAttributes.ReparsePoint) != 0)
+            var quarantinedAttributes = File.GetAttributes(quarantinedArtifactPath);
+            if ((quarantinedAttributes & FileAttributes.ReparsePoint) != 0)
             {
                 throw new InvalidOperationException(
                     $"{artifactDescription} rollback found a linked replacement at '{destinationPath}'.");
             }
 
-            var observedSha256 = AppleNotarizationService.ComputeArtifactSha256(quarantinePath);
+            var observedSha256 = AppleNotarizationService.ComputeArtifactSha256(quarantinedArtifactPath);
             if (!observedSha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
                     $"{artifactDescription} rollback found replacement bytes at '{destinationPath}'.");
             }
 
-            Directory.Delete(quarantinePath, recursive: true);
+            if (isDirectory)
+                Directory.Delete(quarantinePath, recursive: true);
+            else
+            {
+                File.Delete(quarantinedArtifactPath);
+                Directory.Delete(quarantinePath);
+            }
         }
         catch
         {
             if (!Directory.Exists(destinationPath) && !File.Exists(destinationPath))
-                Directory.Move(quarantinePath, destinationPath);
+            {
+                if (isDirectory)
+                    Directory.Move(quarantinePath, destinationPath);
+                else
+                {
+                    File.Move(quarantinedArtifactPath, destinationPath);
+                    Directory.Delete(quarantinePath);
+                }
+            }
             throw;
         }
+    }
+
+    /// <summary>Restores a retained file or directory backup only when the destination is vacant.</summary>
+    internal static void RestorePathBackup(string destinationPath, string backupPath)
+    {
+        if (!Directory.Exists(backupPath) && !File.Exists(backupPath))
+            return;
+        if (Directory.Exists(destinationPath) || File.Exists(destinationPath))
+        {
+            throw new InvalidOperationException(
+                $"Apple artifact rollback could not restore '{destinationPath}' because the destination was recreated. " +
+                $"The previous artifact is retained at '{backupPath}'.");
+        }
+        if (Directory.Exists(backupPath))
+            Directory.Move(backupPath, destinationPath);
+        else
+            File.Move(backupPath, destinationPath);
     }
 }
