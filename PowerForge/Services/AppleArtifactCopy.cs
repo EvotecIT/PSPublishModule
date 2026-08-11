@@ -388,12 +388,23 @@ internal static class AppleArtifactCopy
     {
         var parent = Path.GetDirectoryName(backupPath);
         if (string.IsNullOrWhiteSpace(parent) ||
-            !Path.GetFileName(parent).Contains(".powerforge-backup-", StringComparison.Ordinal) ||
-            !Directory.Exists(parent) ||
-            Directory.EnumerateFileSystemEntries(parent).Any())
+            !Path.GetFileName(parent).Contains(".powerforge-backup-", StringComparison.Ordinal))
         {
             return;
         }
-        Directory.Delete(parent);
+        try
+        {
+            if (Directory.Exists(parent) && !Directory.EnumerateFileSystemEntries(parent).Any())
+                Directory.Delete(parent);
+        }
+        catch (IOException)
+        {
+            // The verified backup is already gone. Empty-parent cleanup is best effort and must
+            // not turn a successful publication into a destructive rollback after this boundary.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // See above. A retained empty private parent is safer than rolling back published bytes.
+        }
     }
 }

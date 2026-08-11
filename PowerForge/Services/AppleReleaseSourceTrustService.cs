@@ -75,7 +75,8 @@ internal sealed partial class AppleReleaseSourceTrustService
             root,
             releaseConfigPath,
             "Apple release configuration",
-            ComputeRawGitBlobId(root, releaseConfigBytes));
+            ComputeRawGitBlobId(root, releaseConfigBytes),
+            releaseConfigBytes);
         var releaseConfigContent = DecodeTrackedText(releaseConfigBytes);
         var spec = PowerForgeReleaseService.LoadConfigurationContent(releaseConfigContent, releaseConfigPath);
         var options = spec.AppleApps
@@ -536,6 +537,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         string path,
         string name,
         string? capturedWorktreeBlob = null,
+        byte[]? capturedWorktreeBytes = null,
         bool validateSwiftDeterminism = false,
         string? effectiveSourceExtension = null,
         string? assemblerWorkingDirectory = null)
@@ -562,8 +564,15 @@ internal sealed partial class AppleReleaseSourceTrustService
         if (!headBlob.Succeeded || string.IsNullOrWhiteSpace(headBlob.StdOut))
             throw new InvalidOperationException($"{name} is not present in the exact source commit: {relative}");
         var worktreeBlob = capturedWorktreeBlob ?? ComputeRawGitBlobId(repositoryRoot, candidate);
-        if (!headBlob.StdOut.Trim().Equals(worktreeBlob, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"{name} differs from the exact source commit: {relative}");
+        var expectedBlob = headBlob.StdOut.Trim();
+        if (!expectedBlob.Equals(worktreeBlob, StringComparison.OrdinalIgnoreCase))
+        {
+            var filteredWorktreeBlob = capturedWorktreeBytes is null
+                ? ComputePathAwareGitBlobId(repositoryRoot, candidate, relative)
+                : ComputePathAwareGitBlobId(repositoryRoot, capturedWorktreeBytes, relative);
+            if (!expectedBlob.Equals(filteredWorktreeBlob, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"{name} differs from the exact source commit: {relative}");
+        }
         ValidateSourceLevelIncludes(
             repositoryRoot,
             candidate,
@@ -571,40 +580,6 @@ internal sealed partial class AppleReleaseSourceTrustService
             worktreeBlob,
             effectiveSourceExtension,
             assemblerWorkingDirectory);
-    }
-
-    private string ComputeRawGitBlobId(string repositoryRoot, string filePath)
-    {
-        var objectFormat = ReadGitObjectFormat(repositoryRoot);
-        using System.Security.Cryptography.HashAlgorithm hash = objectFormat.Equals("sha256", StringComparison.OrdinalIgnoreCase)
-            ? System.Security.Cryptography.SHA256.Create()
-            : objectFormat.Equals("sha1", StringComparison.OrdinalIgnoreCase)
-                ? System.Security.Cryptography.SHA1.Create()
-                : throw new InvalidOperationException($"Unsupported Git object format '{objectFormat}'.");
-        var length = new FileInfo(filePath).Length;
-        var prefix = System.Text.Encoding.ASCII.GetBytes($"blob {length}\0");
-        hash.TransformBlock(prefix, 0, prefix.Length, prefix, 0);
-        using var stream = File.OpenRead(filePath);
-        var buffer = new byte[81920];
-        int read;
-        while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
-            hash.TransformBlock(buffer, 0, read, buffer, 0);
-        hash.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-        return BitConverter.ToString(hash.Hash!).Replace("-", string.Empty).ToLowerInvariant();
-    }
-
-    private string ComputeRawGitBlobId(string repositoryRoot, byte[] content)
-    {
-        var objectFormat = ReadGitObjectFormat(repositoryRoot);
-        using System.Security.Cryptography.HashAlgorithm hash = objectFormat.Equals("sha256", StringComparison.OrdinalIgnoreCase)
-            ? System.Security.Cryptography.SHA256.Create()
-            : objectFormat.Equals("sha1", StringComparison.OrdinalIgnoreCase)
-                ? System.Security.Cryptography.SHA1.Create()
-                : throw new InvalidOperationException($"Unsupported Git object format '{objectFormat}'.");
-        var prefix = System.Text.Encoding.ASCII.GetBytes($"blob {content.LongLength}\0");
-        hash.TransformBlock(prefix, 0, prefix.Length, prefix, 0);
-        hash.TransformFinalBlock(content, 0, content.Length);
-        return BitConverter.ToString(hash.Hash!).Replace("-", string.Empty).ToLowerInvariant();
     }
 
     private static string DecodeTrackedText(byte[] content)

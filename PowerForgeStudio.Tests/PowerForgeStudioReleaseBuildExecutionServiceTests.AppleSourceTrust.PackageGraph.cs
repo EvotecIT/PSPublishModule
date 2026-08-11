@@ -304,7 +304,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
-    public void ResolveExactAppleSourceCommit_rejects_clean_smudge_filtered_worktree_bytes()
+    public void ResolveExactAppleSourceCommit_accepts_clean_smudge_filtered_worktree_bytes()
     {
         using var scope = new TemporaryDirectoryScope();
         var repositoryRoot = scope.CreateDirectory("FilteredAppleInputRepo");
@@ -316,19 +316,18 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         RunGit(repositoryRoot, "config", "filter.attested.clean", "sed 's/worktree/committed/g'");
         RunGit(repositoryRoot, "config", "filter.attested.smudge", "sed 's/committed/worktree/g'");
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
-        CommitRepository(repositoryRoot);
+        var sourceCommit = CommitRepository(repositoryRoot);
         File.Delete(projectFile);
         RunGit(repositoryRoot, "checkout", "--", "Sample.xcodeproj/project.pbxproj");
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+        var commit = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
 
-        Assert.Contains("differs from the exact source commit", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("project.pbxproj", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(sourceCommit, commit);
+        Assert.Contains("worktree", File.ReadAllText(projectFile), StringComparison.Ordinal);
     }
 
     [Fact]
-    public void AppleSourceSnapshot_rejects_smudged_bytes_created_only_in_detached_checkout()
+    public void AppleSourceSnapshot_accepts_and_binds_smudged_bytes_created_in_detached_checkout()
     {
         using var scope = new TemporaryDirectoryScope();
         var repositoryRoot = scope.CreateDirectory("FilteredSnapshotAppleRepo");
@@ -351,17 +350,19 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             RequireImmutableSourceSnapshot = true,
             ExactSourceConfigPath = configPath
         };
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        using (var snapshot = AppleReleaseSourceSnapshot.CreateIfRequired(plan))
         {
-            using var _ = AppleReleaseSourceSnapshot.CreateIfRequired(plan);
-        });
-
-        Assert.Contains("differs from the exact source commit", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("project.pbxproj", exception.Message, StringComparison.Ordinal);
+            Assert.NotNull(snapshot);
+            Assert.NotEqual(repositoryRoot, snapshot!.RootPath);
+            Assert.Contains(
+                "worktree",
+                File.ReadAllText(Path.Combine(snapshot.RootPath, "Sample.xcodeproj", "project.pbxproj")),
+                StringComparison.Ordinal);
+        }
     }
 
     [Fact]
-    public void ResolveExactAppleSourceCommit_rejects_filtered_bytes_in_synchronized_tree()
+    public void ResolveExactAppleSourceCommit_accepts_and_validates_filtered_bytes_in_synchronized_tree()
     {
         using var scope = new TemporaryDirectoryScope();
         var repositoryRoot = scope.CreateDirectory("FilteredSynchronizedTreeRepo");
@@ -383,15 +384,14 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         RunGit(repositoryRoot, "config", "filter.attested.clean", "sed 's/worktree/committed/g'");
         RunGit(repositoryRoot, "config", "filter.attested.smudge", "sed 's/committed/worktree/g'");
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
-        CommitRepository(repositoryRoot);
+        var sourceCommit = CommitRepository(repositoryRoot);
         File.Delete(sourceFile);
         RunGit(repositoryRoot, "checkout", "--", "Sources/Filtered.swift");
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+        var commit = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
 
-        Assert.Contains("differs from the exact source commit", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Filtered.swift", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(sourceCommit, commit);
+        Assert.Contains("worktree", File.ReadAllText(sourceFile), StringComparison.Ordinal);
     }
 
     [Fact]

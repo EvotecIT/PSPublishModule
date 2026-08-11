@@ -592,18 +592,28 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (File.Exists(entry))
             {
                 var fullPath = Path.GetFullPath(entry);
-                if (!headBlobs.TryGetValue(fullPath, out var expectedBlob) ||
-                    !expectedBlob.Equals(ComputeRawGitBlobId(repositoryRoot, fullPath), StringComparison.OrdinalIgnoreCase))
+                var relativePath = FrameworkCompatibility.GetRelativePath(repositoryRoot, fullPath).Replace('\\', '/');
+                var worktreeBlob = ComputeRawGitBlobId(repositoryRoot, fullPath);
+                if (!headBlobs.TryGetValue(fullPath, out var expectedBlob))
                 {
                     throw new InvalidOperationException(
                         $"{name} differs from the exact source commit: " +
-                        FrameworkCompatibility.GetRelativePath(repositoryRoot, entry).Replace('\\', '/'));
+                        relativePath);
+                }
+                if (!expectedBlob.Equals(worktreeBlob, StringComparison.OrdinalIgnoreCase) &&
+                    !expectedBlob.Equals(
+                        ComputePathAwareGitBlobId(repositoryRoot, fullPath, relativePath),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"{name} differs from the exact source commit: " +
+                        relativePath);
                 }
                 ValidateSourceLevelIncludes(
                     repositoryRoot,
                     fullPath,
                     validateSwiftDeterminism,
-                    expectedBlob,
+                    worktreeBlob,
                     assemblerWorkingDirectory: assemblerWorkingDirectory);
             }
         }

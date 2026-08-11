@@ -12,9 +12,6 @@ internal sealed partial class PowerForgeReleaseService
         var comparison = Path.DirectorySeparatorChar == '\\'
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
-        var comparer = Path.DirectorySeparatorChar == '\\'
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal;
         var history = Path.GetFullPath(receiptHistoryPath)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var files = new[]
@@ -24,13 +21,16 @@ internal sealed partial class PowerForgeReleaseService
             (Name: "LockPath", Path: Path.GetFullPath(lockPath))
         };
 
-        var duplicate = files
-            .GroupBy(static entry => entry.Path, comparer)
-            .FirstOrDefault(static group => group.Count() > 1);
-        if (duplicate is not null)
+        for (var index = 0; index < files.Length; index++)
         {
-            throw new InvalidOperationException(
-                $"Apple automation output files must use distinct paths: {string.Join(", ", duplicate.Select(static entry => entry.Name))}.");
+            for (var siblingIndex = index + 1; siblingIndex < files.Length; siblingIndex++)
+            {
+                if (!PathsOverlap(files[index].Path, files[siblingIndex].Path))
+                    continue;
+                throw new InvalidOperationException(
+                    $"Apple automation output files must not equal, contain, or be contained by each other: " +
+                    $"{files[index].Name}, {files[siblingIndex].Name}.");
+            }
         }
 
         foreach (var file in files)

@@ -328,6 +328,8 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("history-contains-plan")]
     [InlineData("history-under-lock")]
     [InlineData("receipt-equals-plan")]
+    [InlineData("receipt-contains-plan")]
+    [InlineData("lock-under-plan")]
     [InlineData("history-under-archive-root")]
     [InlineData("plan-overwrites-project")]
     public void Execute_ApplePlan_RejectsOverlappingAutomationOutputPaths(string scenario)
@@ -354,6 +356,14 @@ public sealed partial class PowerForgeReleaseServiceTests
                     break;
                 case "receipt-equals-plan":
                     automation.PlanReceiptPath = automation.ReceiptPath;
+                    break;
+                case "receipt-contains-plan":
+                    automation.ReceiptPath = "build/powerforge/apple/state";
+                    automation.PlanReceiptPath = "build/powerforge/apple/state/plan.json";
+                    break;
+                case "lock-under-plan":
+                    automation.PlanReceiptPath = "build/powerforge/apple/plan";
+                    automation.LockPath = "build/powerforge/apple/plan/release.lock";
                     break;
                 case "history-under-archive-root":
                     automation.ReceiptHistoryPath = "build/powerforge/apple/archives/receipts";
