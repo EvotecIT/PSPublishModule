@@ -299,7 +299,12 @@ internal sealed class PowerShellModulePipelineHostedOperations :
                 retryArgs[1] = retryPackageFileListPath;
                 retryArgs[8] = "1";
 
-                result = RunScript(script, retryArgs, TimeSpan.FromMinutes(10), preferPwsh: false);
+                result = RunScript(
+                    script,
+                    retryArgs,
+                    TimeSpan.FromMinutes(10),
+                    preferPwsh: false,
+                    hostRequirement: PowerShellHostRequirement.WindowsPowerShell);
                 attemptSummary = TryExtractSigningSummary(result.StdOut);
                 if (attemptSummary is null && result.ExitCode == 0)
                 {
@@ -477,7 +482,12 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
     }
 
-    private PowerShellRunResult RunScript(string scriptText, IReadOnlyList<string> args, TimeSpan timeout, bool preferPwsh)
+    private PowerShellRunResult RunScript(
+        string scriptText,
+        IReadOnlyList<string> args,
+        TimeSpan timeout,
+        bool preferPwsh,
+        PowerShellHostRequirement hostRequirement = PowerShellHostRequirement.Any)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "modulepipeline");
         Directory.CreateDirectory(tempDir);
@@ -485,7 +495,9 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         File.WriteAllText(scriptPath, scriptText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         try
         {
-            return _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh));
+            return _runner.Run(hostRequirement == PowerShellHostRequirement.Any
+                ? new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh)
+                : new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh, hostRequirement));
         }
         finally
         {

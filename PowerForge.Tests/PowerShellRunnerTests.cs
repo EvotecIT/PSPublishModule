@@ -203,6 +203,98 @@ public sealed class PowerShellRunnerTests
         }
     }
 
+    [Fact]
+    public void Run_WindowsPowerShellRequired_RejectsPwshOverrideWithoutFallback()
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return;
+
+        using var directory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "pwsh.exe"), string.Empty);
+
+        var pwshPath = Path.Combine(directory.Path, "pwsh.exe");
+        var processRunner = new StubProcessRunner(request =>
+            throw new InvalidOperationException($"Unexpected process invocation: {request.FileName}"));
+        var runner = new PowerShellRunner(processRunner);
+
+        var result = runner.Run(new PowerShellRunRequest(
+            scriptPath: @"C:\repo\sign.ps1",
+            arguments: Array.Empty<string>(),
+            timeout: TimeSpan.FromMinutes(1),
+            preferPwsh: false,
+            hostRequirement: PowerShellHostRequirement.WindowsPowerShell,
+            executableOverride: pwshPath));
+
+        Assert.Equal(127, result.ExitCode);
+        Assert.Empty(result.Executable);
+        Assert.Contains("is not powershell.exe", result.StdErr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Run_WindowsPowerShellRequired_RejectsPowerShellCoreRenamedAsPowerShell()
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return;
+
+        using var directory = new TemporaryDirectory();
+        var executablePath = Path.Combine(directory.Path, "powershell.exe");
+        File.WriteAllText(executablePath, string.Empty);
+        var requests = new List<ProcessRunRequest>();
+        var processRunner = new StubProcessRunner(request =>
+        {
+            requests.Add(request);
+            return new ProcessRunResult(0, "Core", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        });
+        var runner = new PowerShellRunner(processRunner);
+
+        var result = runner.Run(new PowerShellRunRequest(
+            scriptPath: @"C:\repo\sign.ps1",
+            arguments: Array.Empty<string>(),
+            timeout: TimeSpan.FromMinutes(1),
+            preferPwsh: false,
+            hostRequirement: PowerShellHostRequirement.WindowsPowerShell,
+            executableOverride: executablePath));
+
+        Assert.Equal(127, result.ExitCode);
+        Assert.Empty(result.Executable);
+        Assert.Contains("did not identify as Windows PowerShell Desktop", result.StdErr, StringComparison.Ordinal);
+        var probe = Assert.Single(requests);
+        Assert.Contains("$PSVersionTable.PSEdition", probe.Arguments);
+    }
+
+    [Fact]
+    public void Run_WindowsPowerShellRequired_UsesVerifiedDesktopHost()
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return;
+
+        using var directory = new TemporaryDirectory();
+        var executablePath = Path.Combine(directory.Path, "powershell.exe");
+        File.WriteAllText(executablePath, string.Empty);
+        var requests = new List<ProcessRunRequest>();
+        var processRunner = new StubProcessRunner(request =>
+        {
+            requests.Add(request);
+            var output = request.Arguments.Contains("$PSVersionTable.PSEdition") ? "Desktop" : "signed";
+            return new ProcessRunResult(0, output, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        });
+        var runner = new PowerShellRunner(processRunner);
+
+        var result = runner.Run(new PowerShellRunRequest(
+            scriptPath: @"C:\repo\sign.ps1",
+            arguments: Array.Empty<string>(),
+            timeout: TimeSpan.FromMinutes(1),
+            preferPwsh: false,
+            hostRequirement: PowerShellHostRequirement.WindowsPowerShell,
+            executableOverride: executablePath));
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(executablePath, result.Executable);
+        Assert.Equal(2, requests.Count);
+        Assert.Contains("$PSVersionTable.PSEdition", requests[0].Arguments);
+        Assert.Contains("-File", requests[1].Arguments);
+    }
+
     private static string CreateStubExecutablePath()
     {
         var path = Path.Combine(Path.GetTempPath(), "powerforge-pwsh-stub.exe");

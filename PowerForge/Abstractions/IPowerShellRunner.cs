@@ -22,6 +22,18 @@ public enum PowerShellInvocationMode
 }
 
 /// <summary>
+/// Optional PowerShell host requirement for an out-of-process invocation.
+/// </summary>
+public enum PowerShellHostRequirement
+{
+    /// <summary>Use the normal preferred-host resolution and fallback behavior.</summary>
+    Any = 0,
+
+    /// <summary>Require Windows PowerShell and never fall back to PowerShell Core.</summary>
+    WindowsPowerShell = 1
+}
+
+/// <summary>
 /// Request to execute a PowerShell script out-of-process.
 /// </summary>
 public sealed class PowerShellRunRequest
@@ -36,6 +48,8 @@ public sealed class PowerShellRunRequest
     public TimeSpan Timeout { get; }
     /// <summary>When true, prefer <c>pwsh</c>; otherwise use Windows PowerShell first on Windows.</summary>
     public bool PreferPwsh { get; }
+    /// <summary>Gets the required PowerShell host, if the request must not use normal fallback behavior.</summary>
+    public PowerShellHostRequirement HostRequirement { get; }
     /// <summary>
     /// Minimum .NET runtime major version required from a PowerShell Core host.
     /// A value of zero allows the normal preferred-host fallback behavior.
@@ -86,6 +100,49 @@ public sealed class PowerShellRunRequest
     }
 
     /// <summary>
+    /// Creates a file-based request with a strict PowerShell host requirement.
+    /// </summary>
+    /// <param name="scriptPath">Path to the script to execute with <c>-File</c>.</param>
+    /// <param name="arguments">Arguments passed to the script.</param>
+    /// <param name="timeout">Maximum allowed execution time.</param>
+    /// <param name="preferPwsh">When true, prefer <c>pwsh</c> when the requirement permits it.</param>
+    /// <param name="hostRequirement">Strict host requirement that disables normal fallback.</param>
+    /// <param name="workingDirectory">Optional working directory.</param>
+    /// <param name="environmentVariables">Optional environment variable overrides.</param>
+    /// <param name="executableOverride">Optional explicit executable.</param>
+    /// <param name="captureOutput">When true, capture standard output.</param>
+    /// <param name="captureError">When true, capture standard error.</param>
+    public PowerShellRunRequest(
+        string scriptPath,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        bool preferPwsh,
+        PowerShellHostRequirement hostRequirement,
+        string? workingDirectory = null,
+        IReadOnlyDictionary<string, string?>? environmentVariables = null,
+        string? executableOverride = null,
+        bool captureOutput = true,
+        bool captureError = true)
+        : this(
+            scriptPath: scriptPath,
+            commandText: null,
+            arguments: arguments,
+            timeout: timeout,
+            preferPwsh: preferPwsh,
+            workingDirectory: workingDirectory,
+            environmentVariables: environmentVariables,
+            executableOverride: executableOverride,
+            captureOutput: captureOutput,
+            captureError: captureError,
+            outputLineReceived: null,
+            errorLineReceived: null,
+            requiredRuntimeMajor: 0,
+            hostRequirement: hostRequirement,
+            invocationMode: PowerShellInvocationMode.File)
+    {
+    }
+
+    /// <summary>
     /// Creates a new streaming file-based request while retaining captured output.
     /// </summary>
     /// <param name="scriptPath">Path to the script to execute with <c>-File</c>.</param>
@@ -117,6 +174,7 @@ public sealed class PowerShellRunRequest
         Arguments = arguments;
         Timeout = timeout;
         PreferPwsh = preferPwsh;
+        HostRequirement = PowerShellHostRequirement.Any;
         WorkingDirectory = workingDirectory;
         EnvironmentVariables = environmentVariables;
         ExecutableOverride = executableOverride;
@@ -204,6 +262,7 @@ public sealed class PowerShellRunRequest
             outputLineReceived: outputLineReceived,
             errorLineReceived: errorLineReceived,
             requiredRuntimeMajor: 0,
+            hostRequirement: PowerShellHostRequirement.Any,
             invocationMode: PowerShellInvocationMode.Command);
     }
 
@@ -285,6 +344,7 @@ public sealed class PowerShellRunRequest
             outputLineReceived: outputLineReceived,
             errorLineReceived: errorLineReceived,
             requiredRuntimeMajor: requiredRuntimeMajor,
+            hostRequirement: PowerShellHostRequirement.Any,
             invocationMode: PowerShellInvocationMode.Command);
     }
 
@@ -302,6 +362,7 @@ public sealed class PowerShellRunRequest
         Action<string>? outputLineReceived,
         Action<string>? errorLineReceived,
         int requiredRuntimeMajor,
+        PowerShellHostRequirement hostRequirement,
         PowerShellInvocationMode invocationMode)
     {
         ScriptPath = scriptPath;
@@ -309,6 +370,7 @@ public sealed class PowerShellRunRequest
         Arguments = arguments;
         Timeout = timeout;
         PreferPwsh = preferPwsh;
+        HostRequirement = hostRequirement;
         WorkingDirectory = workingDirectory;
         EnvironmentVariables = environmentVariables;
         ExecutableOverride = executableOverride;
@@ -386,9 +448,11 @@ public sealed class PowerShellRunner : IPowerShellRunner, ICancellablePowerShell
         CancellationToken cancellationToken)
     {
         string? resolutionError = null;
-        var exe = request.RequiredRuntimeMajor > 0
-            ? ResolveCompatiblePwsh(request, out resolutionError)
-            : ResolveExecutable(request.PreferPwsh, request.ExecutableOverride);
+        var exe = request.HostRequirement == PowerShellHostRequirement.WindowsPowerShell
+            ? ResolveRequiredWindowsPowerShell(request, out resolutionError)
+            : request.RequiredRuntimeMajor > 0
+                ? ResolveCompatiblePwsh(request, out resolutionError)
+                : ResolveExecutable(request.PreferPwsh, request.ExecutableOverride);
         if (exe is null)
         {
             var error = resolutionError ?? "No PowerShell executable found (pwsh or powershell.exe).";
@@ -486,6 +550,68 @@ public sealed class PowerShellRunner : IPowerShellRunner, ICancellablePowerShell
         }
 
         return false;
+    }
+
+    private string? ResolveRequiredWindowsPowerShell(PowerShellRunRequest request, out string? error)
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+        {
+            error = "Windows PowerShell was required, but the current platform is not Windows.";
+            return null;
+        }
+
+        var executable = string.IsNullOrWhiteSpace(request.ExecutableOverride)
+            ? ResolveOnPath("powershell.exe")
+            : ResolveOnPath(request.ExecutableOverride!) ??
+              (File.Exists(request.ExecutableOverride) ? request.ExecutableOverride : null);
+        if (executable is null)
+        {
+            error = "Windows PowerShell was required, but powershell.exe was not found.";
+            return null;
+        }
+
+        if (!string.Equals(
+                Path.GetFileNameWithoutExtension(executable),
+                "powershell",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"Windows PowerShell was required, but executable '{executable}' is not powershell.exe.";
+            return null;
+        }
+
+        if (!IsWindowsPowerShellDesktop(executable, request))
+        {
+            error = $"Windows PowerShell was required, but executable '{executable}' did not identify as Windows PowerShell Desktop.";
+            return null;
+        }
+
+        error = null;
+        return executable;
+    }
+
+    private bool IsWindowsPowerShellDesktop(string executable, PowerShellRunRequest request)
+    {
+        var probeArguments = new[] {
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "$PSVersionTable.PSEdition"
+        };
+        var probeResult = _processRunner.RunAsync(
+            new ProcessRunRequest(
+                executable,
+                request.WorkingDirectory ?? Environment.CurrentDirectory,
+                probeArguments,
+                TimeSpan.FromSeconds(15),
+                request.EnvironmentVariables,
+                captureOutput: true,
+                captureError: true)).GetAwaiter().GetResult();
+
+        return probeResult.Succeeded && probeResult.StdOut
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Any(line => string.Equals(line.Trim(), "Desktop", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

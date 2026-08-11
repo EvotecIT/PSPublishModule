@@ -2209,6 +2209,7 @@ public sealed class ModulePipelineHostedOperationsTests
         Assert.Equal(2, requests.Count);
         Assert.True(requests[0].PreferPwsh);
         Assert.False(requests[1].PreferPwsh);
+        Assert.Equal(PowerShellHostRequirement.WindowsPowerShell, requests[1].HostRequirement);
         Assert.Equal("0", requests[0].Arguments[8]);
         Assert.Equal("1", requests[1].Arguments[8]);
         Assert.Equal(new[] { manifestPath, modulePath }, requestedPackageFiles[0]);
@@ -2259,6 +2260,7 @@ public sealed class ModulePipelineHostedOperationsTests
 
         Assert.Equal(2, requests.Count);
         Assert.False(requests[1].PreferPwsh);
+        Assert.Equal(PowerShellHostRequirement.WindowsPowerShell, requests[1].HostRequirement);
         Assert.Equal("1", requests[1].Arguments[8]);
         Assert.Equal(1, result.SignedNew);
     }
