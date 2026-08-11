@@ -6,6 +6,78 @@ namespace PowerForgeStudio.Tests;
 public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 {
     [Fact]
+    public void Capture_scopes_remote_package_validation_cache_to_each_repository_lock_graph()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        const string parentUrl = "https://example.invalid/ParentPackage.git";
+        const string childUrl = "https://example.invalid/ChildPackage.git";
+
+        var childRoot = scope.CreateDirectory("CacheScopedChildPackage");
+        RunGit(childRoot, "init", "--quiet");
+        File.WriteAllText(
+            Path.Combine(childRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"Child\")");
+        var childRevision = CommitRepository(childRoot);
+
+        var parentRoot = scope.CreateDirectory("CacheScopedParentPackage");
+        RunGit(parentRoot, "init", "--quiet");
+        File.WriteAllText(
+            Path.Combine(parentRoot, "Package.swift"),
+            $"// swift-tools-version: 6.0\nimport PackageDescription\n" +
+            $"let package = Package(name: \"Parent\", dependencies: [.package(url: \"{childUrl}\", exact: \"1.0.0\")])");
+        var parentRevision = CommitRepository(parentRoot);
+
+        string CreateConsumer(string name, bool includeChildLock, out string configPath)
+        {
+            var repositoryRoot = scope.CreateDirectory(name);
+            var project = scope.CreateDirectory(Path.Combine(name, "Sample.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project, "project.pbxproj"),
+                $"000000000000000000000001 = {{ isa = XCRemoteSwiftPackageReference; repositoryURL = \"{parentUrl}\"; requirement = {{ kind = revision; revision = {parentRevision}; }}; }};");
+            var lockDirectory = Path.Combine(project, "project.xcworkspace", "xcshareddata", "swiftpm");
+            Directory.CreateDirectory(lockDirectory);
+            var pins = new List<object>
+            {
+                new
+                {
+                    identity = "parent-package",
+                    kind = "remoteSourceControl",
+                    location = parentUrl,
+                    state = new { revision = parentRevision, version = "1.0.0" }
+                }
+            };
+            if (includeChildLock)
+            {
+                pins.Add(new
+                {
+                    identity = "child-package",
+                    kind = "remoteSourceControl",
+                    location = childUrl,
+                    state = new { revision = childRevision, version = "1.0.0" }
+                });
+            }
+            File.WriteAllText(
+                Path.Combine(lockDirectory, "Package.resolved"),
+                System.Text.Json.JsonSerializer.Serialize(new { pins, version = 3 }));
+            configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+            CommitRepository(repositoryRoot);
+            return repositoryRoot;
+        }
+
+        var firstRepository = CreateConsumer("CacheScopedFirstConsumer", includeChildLock: true, out var firstConfig);
+        var secondRepository = CreateConsumer("CacheScopedSecondConsumer", includeChildLock: false, out var secondConfig);
+        var service = new AppleReleaseSourceTrustService(
+            remotePackageCheckoutResolver: (url, _) =>
+                url.Equals(parentUrl, StringComparison.OrdinalIgnoreCase) ? parentRoot : childRoot);
+
+        _ = service.Capture(firstRepository, firstConfig);
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Capture(secondRepository, secondConfig));
+
+        Assert.Contains(childUrl, exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Package.resolved", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Capture_revalidates_remote_package_after_failed_inspection()
     {
         using var scope = new TemporaryDirectoryScope();

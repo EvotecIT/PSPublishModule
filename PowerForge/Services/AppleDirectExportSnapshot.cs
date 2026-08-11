@@ -76,15 +76,16 @@ internal sealed class AppleDirectExportSnapshot : IDisposable
         var parent = Path.GetDirectoryName(destination)
             ?? throw new InvalidOperationException($"Developer ID export path has no parent: {destination}");
         Directory.CreateDirectory(parent);
-        if (File.Exists(destination) ||
-            (Directory.Exists(destination) && (File.GetAttributes(destination) & FileAttributes.ReparsePoint) != 0))
-        {
-            throw new InvalidOperationException($"Developer ID export path must be a regular directory: {destination}");
-        }
+        var existingDestination = AppleArtifactCopy.CaptureRegularPathIdentity(
+            destination,
+            "Developer ID export path",
+            requireDirectory: true);
 
         var name = Path.GetFileName(destination);
         var stage = Path.Combine(parent, $".{name}.powerforge-stage-{Guid.NewGuid():N}");
-        var backup = Path.Combine(parent, $".{name}.powerforge-backup-{Guid.NewGuid():N}");
+        var backupRoot = Path.Combine(parent, $".{name}.powerforge-backup-{Guid.NewGuid():N}");
+        var backup = Path.Combine(backupRoot, name);
+        var backupDeletionCandidate = Path.Combine(parent, $".{name}.powerforge-backup-deletion-{Guid.NewGuid():N}");
         var rollbackCandidate = Path.Combine(parent, $".{name}.powerforge-failed-publication-{Guid.NewGuid():N}");
         var movedExisting = false;
         var published = false;
@@ -104,11 +105,11 @@ internal sealed class AppleDirectExportSnapshot : IDisposable
                 throw new InvalidOperationException(
                     $"The staged Developer ID export changed during publication. Expected '{sourceArtifactSha256}', received '{stagedSha256}'.");
             }
-            if (Directory.Exists(destination))
-            {
-                Directory.Move(destination, backup);
-                movedExisting = true;
-            }
+            movedExisting = AppleArtifactCopy.MoveExistingPathToBackupIfUnchanged(
+                destination,
+                backup,
+                existingDestination,
+                "Developer ID export");
             Directory.Move(stage, destination);
             published = true;
 
@@ -125,8 +126,12 @@ internal sealed class AppleDirectExportSnapshot : IDisposable
                 throw new InvalidOperationException(
                     $"The published Developer ID export tree changed before notarization. Expected '{sourceExportSha256}', received '{observedPublishedExportSha256}'.");
             }
-            if (movedExisting && Directory.Exists(backup))
-                Directory.Delete(backup, recursive: true);
+            if (movedExisting)
+                AppleArtifactCopy.RemoveBackupIfUnchanged(
+                    backup,
+                    backupDeletionCandidate,
+                    existingDestination!,
+                    "Previous Developer ID export");
             return new ApplePublishedDirectExport(destination, publishedArtifact, publishedSha256);
         }
         catch (Exception publicationException)

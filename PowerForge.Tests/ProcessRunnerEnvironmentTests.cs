@@ -5,6 +5,28 @@ namespace PowerForge.Tests;
 public sealed class ProcessRunnerEnvironmentTests
 {
     [Fact]
+    public async Task RunAsync_invokes_completion_boundary_before_inherited_output_pipe_drain()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var boundary = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var request = new ProcessRunRequest(
+            "/bin/sh",
+            Path.GetTempPath(),
+            new[] { "-c", "sleep 2 &" },
+            TimeSpan.FromSeconds(10),
+            captureOutput: true,
+            captureError: true);
+        request.SetCompletionBoundary(_ => boundary.TrySetResult());
+
+        var run = new ProcessRunner().RunAsync(request);
+        await boundary.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.False(run.IsCompleted);
+        var result = await run;
+        Assert.True(result.Succeeded, result.StdErr);
+    }
+
+    [Fact]
     public void Completion_boundary_is_available_to_external_process_runners()
     {
         var method = typeof(ProcessRunRequest).GetMethod(

@@ -214,7 +214,8 @@ public sealed class AppleNotarizationService
                 submissionSnapshot.RootPath,
                 "validated private Apple notarization artifact",
                 "stapler production, validation, Gatekeeper assessment, and final publication",
-                "Discard the private artifact and resume from the last durable notarization checkpoint.")
+                "Discard the private artifact and resume from the last durable notarization checkpoint.",
+                enableImmediately: staplingCompleted)
             : null;
         if (submission.Succeeded && string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) && request.Staple)
         {
@@ -362,7 +363,8 @@ public sealed class AppleNotarizationService
             privateRoot,
             "private Apple notarization packaging root",
             "ditto",
-            "Discard the package and create a new notarization snapshot.");
+            "Discard the package and create a new notarization snapshot.",
+            enableImmediately: false);
         string? packagedSha256 = null;
         var package = await RunAsync(
             dittoExecutable,
@@ -375,10 +377,10 @@ public sealed class AppleNotarizationService
             {
                 if (!completionResult.Succeeded)
                     return;
-                inputMonitor?.ValidateNoChanges();
                 packagedSha256 = producerMonitor.CaptureExpectedProducerOutput(
                     () => ComputeFileSha256(submissionPath),
                     "ditto");
+                inputMonitor?.ValidateNoChanges();
             }).ConfigureAwait(false);
         if (!package.Succeeded)
             throw new InvalidOperationException($"ditto failed to package '{artifactPath}' for notarization with exit code {package.ExitCode}: {package.StdErr}");

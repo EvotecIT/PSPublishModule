@@ -57,10 +57,15 @@ internal sealed class AppleNotarizationInputSnapshot : IDisposable
         var parent = Path.GetDirectoryName(destination)
             ?? throw new InvalidOperationException($"Apple notarization artifact path has no parent: {destination}");
         Directory.CreateDirectory(parent);
+        var existingDestination = AppleArtifactCopy.CaptureRegularPathIdentity(
+            destination,
+            "Apple notarization artifact path");
         var name = Path.GetFileName(destination);
         var stageRoot = Path.Combine(parent, $".powerforge-stage-{Guid.NewGuid():N}");
         var stage = Path.Combine(stageRoot, name);
-        var backup = Path.Combine(parent, $".{name}.powerforge-backup-{Guid.NewGuid():N}");
+        var backupRoot = Path.Combine(parent, $".{name}.powerforge-backup-{Guid.NewGuid():N}");
+        var backup = Path.Combine(backupRoot, name);
+        var backupDeletionCandidate = Path.Combine(parent, $".{name}.powerforge-backup-deletion-{Guid.NewGuid():N}");
         var rollbackCandidate = Path.Combine(parent, $".{name}.powerforge-failed-publication-{Guid.NewGuid():N}");
         var sourceIsDirectory = Directory.Exists(ArtifactPath);
         var movedExisting = false;
@@ -89,16 +94,11 @@ internal sealed class AppleNotarizationInputSnapshot : IDisposable
                     $"The staged notarized Apple artifact changed during publication. Expected '{sourceSha256}', received '{stagedSha256}'.");
             }
 
-            if (Directory.Exists(destination))
-            {
-                Directory.Move(destination, backup);
-                movedExisting = true;
-            }
-            else if (File.Exists(destination))
-            {
-                File.Move(destination, backup);
-                movedExisting = true;
-            }
+            movedExisting = AppleArtifactCopy.MoveExistingPathToBackupIfUnchanged(
+                destination,
+                backup,
+                existingDestination,
+                "Apple notarization artifact");
 
             if (sourceIsDirectory)
                 Directory.Move(stage, destination);
@@ -113,7 +113,12 @@ internal sealed class AppleNotarizationInputSnapshot : IDisposable
                     $"The published notarized Apple artifact changed during publication. Expected '{sourceSha256}', received '{publishedSha256}'.");
             }
 
-            TryDeletePath(backup);
+            if (movedExisting)
+                AppleArtifactCopy.RemoveBackupIfUnchanged(
+                    backup,
+                    backupDeletionCandidate,
+                    existingDestination!,
+                    "Previous Apple notarization artifact");
             return publishedSha256;
         }
         catch (Exception publicationException)

@@ -2,6 +2,87 @@ namespace PowerForge.Tests;
 
 public sealed class AppleArchiveBuildSnapshotTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MoveExistingPathToBackupIfUnchanged_preserves_concurrent_replacement(bool directory)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var destination = Path.Combine(root.FullName, directory ? "App.xcarchive" : "App.zip");
+            if (directory)
+            {
+                Directory.CreateDirectory(destination);
+                File.WriteAllText(Path.Combine(destination, "payload"), "observed artifact");
+            }
+            else
+            {
+                File.WriteAllText(destination, "observed artifact");
+            }
+            var observed = AppleArtifactCopy.CaptureRegularPathIdentity(destination, "Apple artifact");
+            if (directory)
+            {
+                Directory.Delete(destination, recursive: true);
+                Directory.CreateDirectory(destination);
+                File.WriteAllText(Path.Combine(destination, "payload"), "concurrent replacement");
+            }
+            else
+            {
+                File.WriteAllText(destination, "concurrent replacement");
+            }
+            var backup = Path.Combine(root.FullName, ".backup", Path.GetFileName(destination));
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                AppleArtifactCopy.MoveExistingPathToBackupIfUnchanged(
+                    destination,
+                    backup,
+                    observed,
+                    "Apple artifact"));
+
+            Assert.Contains("changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(backup));
+            Assert.False(File.Exists(backup));
+            var payload = directory
+                ? File.ReadAllText(Path.Combine(destination, "payload"))
+                : File.ReadAllText(destination);
+            Assert.Equal("concurrent replacement", payload);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void RemoveBackupIfUnchanged_preserves_concurrent_backup_replacement()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var backup = Directory.CreateDirectory(Path.Combine(root.FullName, ".backup"));
+            File.WriteAllText(Path.Combine(backup.FullName, "payload"), "observed artifact");
+            var observed = AppleArtifactCopy.CaptureRegularPathIdentity(backup.FullName, "Apple artifact")!;
+            File.WriteAllText(Path.Combine(backup.FullName, "payload"), "concurrent replacement");
+            var quarantine = Path.Combine(root.FullName, ".quarantine");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                AppleArtifactCopy.RemoveBackupIfUnchanged(
+                    backup.FullName,
+                    quarantine,
+                    observed,
+                    "Apple artifact"));
+
+            Assert.Contains("retained", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("concurrent replacement", File.ReadAllText(Path.Combine(backup.FullName, "payload")));
+            Assert.False(Directory.Exists(quarantine));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void DirectExport_publish_rejects_artifact_replaced_after_xcodebuild_identity_was_observed()
     {

@@ -46,15 +46,17 @@ internal sealed class AppleArchiveBuildSnapshot : IDisposable {
         var parent = Path.GetDirectoryName(destination)
             ?? throw new InvalidOperationException($"Apple archive path has no parent: {destination}");
         Directory.CreateDirectory(parent);
-        if (File.Exists(destination) ||
-            (Directory.Exists(destination) && (File.GetAttributes(destination) & FileAttributes.ReparsePoint) != 0)) {
-            throw new InvalidOperationException($"Apple archive path must be a regular directory: {destination}");
-        }
+        var existingDestination = AppleArtifactCopy.CaptureRegularPathIdentity(
+            destination,
+            "Apple archive path",
+            requireDirectory: true);
 
         var name = Path.GetFileName(destination);
         var stageRoot = Path.Combine(parent, $".{name}.powerforge-stage-{Guid.NewGuid():N}");
         var stage = Path.Combine(stageRoot, name);
-        var backup = Path.Combine(parent, $".{name}.powerforge-backup-{Guid.NewGuid():N}");
+        var backupRoot = Path.Combine(parent, $".{name}.powerforge-backup-{Guid.NewGuid():N}");
+        var backup = Path.Combine(backupRoot, name);
+        var backupDeletionCandidate = Path.Combine(parent, $".{name}.powerforge-backup-deletion-{Guid.NewGuid():N}");
         var rollbackCandidate = Path.Combine(parent, $".{name}.powerforge-failed-publication-{Guid.NewGuid():N}");
         var movedExisting = false;
         var published = false;
@@ -71,10 +73,11 @@ internal sealed class AppleArchiveBuildSnapshot : IDisposable {
                     $"The staged Apple archive changed during publication. Expected '{sourceSha256}', received '{stagedSha256}'.");
             }
 
-            if (Directory.Exists(destination)) {
-                Directory.Move(destination, backup);
-                movedExisting = true;
-            }
+            movedExisting = AppleArtifactCopy.MoveExistingPathToBackupIfUnchanged(
+                destination,
+                backup,
+                existingDestination,
+                "Apple archive");
             Directory.Move(stage, destination);
             published = true;
 
@@ -83,8 +86,12 @@ internal sealed class AppleArchiveBuildSnapshot : IDisposable {
                 throw new InvalidOperationException(
                     $"The published Apple archive changed before release processing. Expected '{sourceSha256}', received '{publishedSha256}'.");
             }
-            if (movedExisting && Directory.Exists(backup))
-                Directory.Delete(backup, recursive: true);
+            if (movedExisting)
+                AppleArtifactCopy.RemoveBackupIfUnchanged(
+                    backup,
+                    backupDeletionCandidate,
+                    existingDestination!,
+                    "Previous Apple archive");
             return publishedSha256;
         } catch (Exception publicationException) {
             try {

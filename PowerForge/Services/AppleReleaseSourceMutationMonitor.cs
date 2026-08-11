@@ -17,7 +17,8 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         string rootPath,
         string scopeDescription = "exact-source Apple build snapshot",
         string readerDescription = "xcodebuild",
-        string failureInstruction = "Discard the archive and rebuild from a new snapshot.") {
+        string failureInstruction = "Discard the archive and rebuild from a new snapshot.",
+        bool enableImmediately = true) {
         _scopeDescription = scopeDescription;
         _readerDescription = readerDescription;
         _failureInstruction = failureInstruction;
@@ -37,7 +38,7 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         _watcher.Deleted += OnMutation;
         _watcher.Renamed += OnMutation;
         _watcher.Error += OnError;
-        _watcher.EnableRaisingEvents = true;
+        _watcher.EnableRaisingEvents = enableImmediately;
     }
 
     internal void ValidateNoChanges() {
@@ -66,10 +67,15 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
                 _watcherError);
         }
 
-        // Events already delivered belong to the awaited producer. Establish the
-        // boundary immediately, then bind its output before giving another process
-        // a deterministic replacement window.
-        Interlocked.Exchange(ref _firstMutation, null);
+        // Producer-output monitors are armed only at the process completion boundary.
+        // No producer events are cleared: the first identity is captured while every
+        // later write, rename, or metadata change remains observable.
+        if (!_watcher.EnableRaisingEvents)
+            _watcher.EnableRaisingEvents = true;
+        if (!string.IsNullOrWhiteSpace(_firstMutation)) {
+            throw new InvalidOperationException(
+                $"The {_scopeDescription} changed before its {producerDescription} output could be bound. {_failureInstruction}");
+        }
         var output = capture();
         Thread.Sleep(250);
         if (_watcherError is not null) {
@@ -77,24 +83,15 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
                 $"The {_scopeDescription} changed while its {producerDescription} output was being bound. {_failureInstruction}",
                 _watcherError);
         }
+        var currentOutput = capture();
+        if (!EqualityComparer<T>.Default.Equals(output, currentOutput)) {
+            throw new InvalidOperationException(
+                $"The {_scopeDescription} changed after {producerDescription} completed. {_failureInstruction}");
+        }
 
         if (!string.IsNullOrWhiteSpace(_firstMutation)) {
-            // FileSystemWatcher can deliver producer writes after process exit. A
-            // delayed producer notification is harmless only when the exact bound
-            // identity is unchanged. Re-establish the event fence, rebind, and then
-            // require a quiet drain so a real post-exit replacement cannot be erased.
-            Interlocked.Exchange(ref _firstMutation, null);
-            var currentOutput = capture();
-            if (!EqualityComparer<T>.Default.Equals(output, currentOutput)) {
-                throw new InvalidOperationException(
-                    $"The {_scopeDescription} changed after {producerDescription} completed. {_failureInstruction}");
-            }
-            Thread.Sleep(250);
-            if (_watcherError is not null || !string.IsNullOrWhiteSpace(_firstMutation)) {
-                throw new InvalidOperationException(
-                    $"The {_scopeDescription} changed while its {producerDescription} output was being bound. {_failureInstruction}",
-                    _watcherError);
-            }
+            throw new InvalidOperationException(
+                $"The {_scopeDescription} changed after {producerDescription} completed. {_failureInstruction}");
         }
         return output;
     }

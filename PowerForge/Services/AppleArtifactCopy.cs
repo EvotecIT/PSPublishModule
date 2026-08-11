@@ -3,6 +3,19 @@ namespace PowerForge;
 /// <summary>Copies Apple artifacts without following symbolic links outside their owning tree.</summary>
 internal static class AppleArtifactCopy
 {
+    internal sealed class PathIdentity
+    {
+        internal PathIdentity(bool isDirectory, string sha256)
+        {
+            IsDirectory = isDirectory;
+            Sha256 = sha256;
+        }
+
+        internal bool IsDirectory { get; }
+
+        internal string Sha256 { get; }
+    }
+
     internal static void CopyDirectory(string sourceRoot, string destinationRoot)
     {
         Directory.CreateDirectory(destinationRoot);
@@ -72,6 +85,115 @@ internal static class AppleArtifactCopy
     }
 
     /// <summary>
+    /// Captures the stable content identity of an existing regular artifact path.
+    /// Missing paths return <see langword="null"/>; linked paths are never accepted.
+    /// </summary>
+    internal static PathIdentity? CaptureRegularPathIdentity(
+        string path,
+        string artifactDescription,
+        bool? requireDirectory = null)
+    {
+        if (!Directory.Exists(path) && !File.Exists(path))
+            return null;
+
+        var attributes = File.GetAttributes(path);
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException($"{artifactDescription} must not be a linked path: {path}");
+        var isDirectory = (attributes & FileAttributes.Directory) != 0;
+        if (requireDirectory.HasValue && isDirectory != requireDirectory.Value)
+        {
+            var expected = requireDirectory.Value ? "directory" : "file";
+            throw new InvalidOperationException($"{artifactDescription} must be a regular {expected}: {path}");
+        }
+
+        return new PathIdentity(isDirectory, AppleNotarizationService.ComputeArtifactSha256(path));
+    }
+
+    /// <summary>
+    /// Atomically stages the destination as a backup only when it still matches the
+    /// identity observed before publication. A concurrently created or replaced path
+    /// is left at the destination and causes publication to fail closed.
+    /// </summary>
+    internal static bool MoveExistingPathToBackupIfUnchanged(
+        string destinationPath,
+        string backupPath,
+        PathIdentity? expectedIdentity,
+        string artifactDescription)
+    {
+        var currentExists = Directory.Exists(destinationPath) || File.Exists(destinationPath);
+        if (expectedIdentity is null)
+        {
+            if (currentExists)
+            {
+                throw new InvalidOperationException(
+                    $"{artifactDescription} destination was created concurrently before publication: {destinationPath}");
+            }
+            return false;
+        }
+        if (!currentExists)
+        {
+            throw new InvalidOperationException(
+                $"{artifactDescription} destination disappeared concurrently before publication: {destinationPath}");
+        }
+
+        var currentAttributes = File.GetAttributes(destinationPath);
+        var currentIsDirectory = (currentAttributes & FileAttributes.Directory) != 0;
+        if ((currentAttributes & FileAttributes.ReparsePoint) != 0 || currentIsDirectory != expectedIdentity.IsDirectory)
+        {
+            throw new InvalidOperationException(
+                $"{artifactDescription} destination was replaced concurrently before publication: {destinationPath}");
+        }
+
+        CreatePrivateBackupParent(backupPath);
+        try
+        {
+            if (currentIsDirectory)
+                Directory.Move(destinationPath, backupPath);
+            else
+                File.Move(destinationPath, backupPath);
+        }
+        catch
+        {
+            TryDeleteOwnedBackupParent(backupPath);
+            throw;
+        }
+
+        var backupIdentity = CaptureRegularPathIdentity(backupPath, artifactDescription);
+        if (backupIdentity is null ||
+            backupIdentity.IsDirectory != expectedIdentity.IsDirectory ||
+            !backupIdentity.Sha256.Equals(expectedIdentity.Sha256, StringComparison.OrdinalIgnoreCase))
+        {
+            RestorePathBackup(destinationPath, backupPath);
+            throw new InvalidOperationException(
+                $"{artifactDescription} destination changed while it was being staged for publication: {destinationPath}");
+        }
+        return true;
+    }
+
+    /// <summary>Deletes a retained backup only while it still matches the pre-publication identity.</summary>
+    internal static void RemoveBackupIfUnchanged(
+        string backupPath,
+        string quarantinePath,
+        PathIdentity expectedIdentity,
+        string artifactDescription)
+    {
+        var current = CaptureRegularPathIdentity(backupPath, artifactDescription);
+        if (current is null ||
+            current.IsDirectory != expectedIdentity.IsDirectory ||
+            !current.Sha256.Equals(expectedIdentity.Sha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"{artifactDescription} backup was replaced concurrently and has been retained: {backupPath}");
+        }
+        RemovePublishedPathIfUnchanged(
+            backupPath,
+            quarantinePath,
+            expectedIdentity.Sha256,
+            artifactDescription);
+        TryDeleteOwnedBackupParent(backupPath);
+    }
+
+    /// <summary>
     /// Restores a retained directory backup only when the destination is still vacant.
     /// A concurrently recreated destination wins and the backup remains available for recovery.
     /// </summary>
@@ -86,6 +208,7 @@ internal static class AppleArtifactCopy
                 $"The previous artifact is retained at '{backupPath}'.");
         }
         Directory.Move(backupPath, destinationPath);
+        TryDeleteOwnedBackupParent(backupPath);
     }
 
     /// <summary>
@@ -113,27 +236,24 @@ internal static class AppleArtifactCopy
     {
         var attributes = File.GetAttributes(destinationPath);
         var isDirectory = (attributes & FileAttributes.Directory) != 0;
-        var quarantinedArtifactPath = quarantinePath;
-        if (isDirectory)
-            Directory.Move(destinationPath, quarantinePath);
-        else
+        var quarantinedArtifactPath = Path.Combine(quarantinePath, Path.GetFileName(destinationPath));
+        try
         {
-            try
-            {
-                Directory.CreateDirectory(quarantinePath);
+            Directory.CreateDirectory(quarantinePath);
 #if NET8_0_OR_GREATER
-                if (!OperatingSystem.IsWindows())
-                    File.SetUnixFileMode(quarantinePath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(quarantinePath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 #endif
-                quarantinedArtifactPath = Path.Combine(quarantinePath, Path.GetFileName(destinationPath));
+            if (isDirectory)
+                Directory.Move(destinationPath, quarantinedArtifactPath);
+            else
                 File.Move(destinationPath, quarantinedArtifactPath);
-            }
-            catch
-            {
-                if (Directory.Exists(quarantinePath) && !Directory.EnumerateFileSystemEntries(quarantinePath).Any())
-                    Directory.Delete(quarantinePath);
-                throw;
-            }
+        }
+        catch
+        {
+            if (Directory.Exists(quarantinePath) && !Directory.EnumerateFileSystemEntries(quarantinePath).Any())
+                Directory.Delete(quarantinePath);
+            throw;
         }
         try
         {
@@ -152,7 +272,10 @@ internal static class AppleArtifactCopy
             }
 
             if (isDirectory)
-                Directory.Delete(quarantinePath, recursive: true);
+            {
+                Directory.Delete(quarantinedArtifactPath, recursive: true);
+                Directory.Delete(quarantinePath);
+            }
             else
             {
                 File.Delete(quarantinedArtifactPath);
@@ -164,7 +287,10 @@ internal static class AppleArtifactCopy
             if (!Directory.Exists(destinationPath) && !File.Exists(destinationPath))
             {
                 if (isDirectory)
-                    Directory.Move(quarantinePath, destinationPath);
+                {
+                    Directory.Move(quarantinedArtifactPath, destinationPath);
+                    Directory.Delete(quarantinePath);
+                }
                 else
                 {
                     File.Move(quarantinedArtifactPath, destinationPath);
@@ -190,5 +316,30 @@ internal static class AppleArtifactCopy
             Directory.Move(backupPath, destinationPath);
         else
             File.Move(backupPath, destinationPath);
+        TryDeleteOwnedBackupParent(backupPath);
+    }
+
+    private static void CreatePrivateBackupParent(string backupPath)
+    {
+        var parent = Path.GetDirectoryName(backupPath)
+            ?? throw new InvalidOperationException($"Apple artifact backup path has no parent: {backupPath}");
+        Directory.CreateDirectory(parent);
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(parent, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+#endif
+    }
+
+    private static void TryDeleteOwnedBackupParent(string backupPath)
+    {
+        var parent = Path.GetDirectoryName(backupPath);
+        if (string.IsNullOrWhiteSpace(parent) ||
+            !Path.GetFileName(parent).Contains(".powerforge-backup-", StringComparison.Ordinal) ||
+            !Directory.Exists(parent) ||
+            Directory.EnumerateFileSystemEntries(parent).Any())
+        {
+            return;
+        }
+        Directory.Delete(parent);
     }
 }

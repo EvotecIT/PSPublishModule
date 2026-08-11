@@ -207,7 +207,8 @@ public sealed partial class AppleAppArchiveService
                 exportPath,
                 "private Developer ID export",
                 "xcodebuild exportArchive",
-                "Discard the export and run xcodebuild exportArchive again.")
+                "Discard the export and run xcodebuild exportArchive again.",
+                enableImmediately: false)
             : null;
         string? exportArtifactPath = null;
         string? exportArtifactSha256 = null;

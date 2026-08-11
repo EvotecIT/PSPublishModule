@@ -22,6 +22,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     private readonly HomeAssistantReleaseGitService _git;
     private readonly GitClient _gitClient;
     private readonly Func<string, string, string>? _remotePackageCheckoutResolver;
+    private readonly object _validationGate = new();
     private readonly Dictionary<string, string> _gitObjectFormats = new(
         Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private readonly HashSet<string> _remotePackagesUnderValidation = new(StringComparer.OrdinalIgnoreCase);
@@ -47,6 +48,22 @@ internal sealed partial class AppleReleaseSourceTrustService
         => Capture(repositoryRoot, configPath).SourceCommit;
 
     internal AppleReleaseSourceTrustSnapshot Capture(string repositoryRoot, string configPath)
+    {
+        lock (_validationGate)
+        {
+            ResetValidationState();
+            try
+            {
+                return CaptureCore(repositoryRoot, configPath);
+            }
+            finally
+            {
+                ResetValidationState();
+            }
+        }
+    }
+
+    private AppleReleaseSourceTrustSnapshot CaptureCore(string repositoryRoot, string configPath)
     {
         var root = Path.GetFullPath(repositoryRoot);
         var releaseConfigPath = Path.GetFullPath(configPath);
@@ -85,6 +102,26 @@ internal sealed partial class AppleReleaseSourceTrustService
         if (snapshot is null)
             throw new ArgumentNullException(nameof(snapshot));
 
+        lock (_validationGate)
+        {
+            ResetValidationState();
+            try
+            {
+                ValidateAfterBuildCore(repositoryRoot, configPath, snapshot);
+            }
+            finally
+            {
+                ResetValidationState();
+            }
+        }
+    }
+
+    private void ValidateAfterBuildCore(
+        string repositoryRoot,
+        string configPath,
+        AppleReleaseSourceTrustSnapshot snapshot)
+    {
+
         var root = Path.GetFullPath(repositoryRoot);
         var releaseConfigPath = Path.GetFullPath(configPath);
         EnsureNoGitReplacementRefs(root);
@@ -115,6 +152,18 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException(
                 "Repository HEAD changed while the Apple release checkpoint was being built. Rebuild from the new exact source commit.");
         }
+    }
+
+    private void ResetValidationState()
+    {
+        _remotePackagesUnderValidation.Clear();
+        _validatedRemotePackages.Clear();
+        _validatedSourceIncludeFiles.Clear();
+        _validatedAssemblerInputFiles.Clear();
+        _validatedSourceSemanticInputs.Clear();
+        _inactiveRemoteSystemLibraryRoots.Clear();
+        _approvedHeaderSearchRoots.Clear();
+        _approvedAssemblerSearchRoots.Clear();
     }
 
     private void EnsureNoGitReplacementRefs(string repositoryRoot)

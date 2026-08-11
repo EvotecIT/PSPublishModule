@@ -202,7 +202,8 @@ public sealed class ProcessRunRequest
     /// Signals that the external process has completed and its final result is available.
     /// Custom <see cref="IProcessRunner"/> implementations must invoke this method immediately
     /// after observing process exit and before returning or performing any post-exit mutation.
-    /// The callback is invoked at most once, so service-level fallback calls are safe.
+    /// The exit state is final, but captured output may still be draining. The callback is invoked
+    /// at most once, so service-level fallback calls are safe.
     /// </summary>
     /// <param name="result">The final process result.</param>
     public void InvokeCompletionBoundary(ProcessRunResult result)
@@ -360,6 +361,19 @@ public sealed class ProcessRunner : IProcessRunner
             // Best-effort wait only.
         }
 
+        // Bind producer-owned filesystem output at the first observable process-exit
+        // boundary. Stream drainage happens afterward so a blocked or inherited pipe
+        // cannot create an unmonitored post-exit replacement window.
+        var exitCode = timedOut ? 124 : SafeGetExitCode(process);
+        var boundaryResult = new ProcessRunResult(
+            exitCode,
+            string.Empty,
+            timedOut ? "Timeout" : string.Empty,
+            process.StartInfo.FileName ?? request.FileName,
+            stopwatch.Elapsed,
+            timedOut);
+        request.InvokeCompletionBoundary(boundaryResult);
+
         var stdout = request.CaptureOutput
             ? await DrainAsync(stdoutTask).ConfigureAwait(false)
             : string.Empty;
@@ -371,7 +385,6 @@ public sealed class ProcessRunner : IProcessRunner
         if (timedOut && string.IsNullOrWhiteSpace(stderr))
             stderr = "Timeout";
 
-        var exitCode = timedOut ? 124 : SafeGetExitCode(process);
         var result = new ProcessRunResult(exitCode, stdout, stderr, process.StartInfo.FileName ?? request.FileName, stopwatch.Elapsed, timedOut);
         request.InvokeCompletionBoundary(result);
         return result;
