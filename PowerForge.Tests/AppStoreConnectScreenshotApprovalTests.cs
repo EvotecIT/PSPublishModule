@@ -220,6 +220,52 @@ public sealed class AppStoreConnectScreenshotApprovalTests
         }
     }
 
+    [Fact]
+    public void Validate_MatchesRecursiveApprovalEntriesBySetRelativePath()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.ScreenshotApproval", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var screenshotFolder = Directory.CreateDirectory(Path.Combine(root.FullName, "screenshots"));
+            var phoneFolder = Directory.CreateDirectory(Path.Combine(screenshotFolder.FullName, "iPhone"));
+            var tabletFolder = Directory.CreateDirectory(Path.Combine(screenshotFolder.FullName, "iPad"));
+            var phone = Path.Combine(phoneFolder.FullName, "shot.png");
+            var tablet = Path.Combine(tabletFolder.FullName, "shot.png");
+            var png = Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII=");
+            File.WriteAllBytes(phone, png);
+            File.WriteAllBytes(tablet, png.Concat(new byte[] { 1 }).ToArray());
+            var spec = CreateSpec();
+            spec.ScreenshotSets[0].Filter = "*/shot.png";
+
+            var manifest = new AppStoreConnectScreenshotApprovalService().Create(
+                new AppStoreConnectScreenshotApprovalRequest
+                {
+                    Spec = spec,
+                    BaseDirectory = root.FullName,
+                    AllowedRoot = screenshotFolder.FullName,
+                    VersionString = "1.5.0",
+                    SourceCommit = ApprovedSourceCommit,
+                    ApprovedBy = "release-owner"
+                });
+            Assert.Equal(2, manifest.Screenshots.Length);
+            Assert.Contains(manifest.Screenshots, entry => entry.File == "screenshots/iPhone/shot.png");
+            Assert.Contains(manifest.Screenshots, entry => entry.File == "screenshots/iPad/shot.png");
+            File.WriteAllText(Path.Combine(root.FullName, "approval.json"), JsonSerializer.Serialize(manifest));
+
+            var result = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
+                spec,
+                root.FullName,
+                expectedSourceCommit: ApprovedSourceCommit);
+
+            Assert.True(result.IsValid, string.Join(Environment.NewLine, result.Messages));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private static AppStoreConnectScreenshotSyncSpec CreateSpec()
         => new()
         {

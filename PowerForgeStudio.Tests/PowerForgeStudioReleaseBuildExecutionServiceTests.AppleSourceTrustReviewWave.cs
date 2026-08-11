@@ -172,4 +172,67 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.Equal(expected, actual);
     }
+
+    [Theory]
+    [InlineData("-includeMissingRules")]
+    [InlineData("-imacrosMissingRules")]
+    public void ResolveExactAppleSourceCommit_classifies_joined_forced_include_inputs(string flag)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "JoinedForcedIncludeRepo" + flag.Length,
+            $"OTHER_CFLAGS = {flag}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("-ivfsoverlay Overlay.yaml")]
+    [InlineData("-vfsoverlay=Overlay.yaml")]
+    public void ResolveExactAppleSourceCommit_rejects_vfs_overlays(string flag)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "VfsOverlayRepo" + flag.Length,
+            $"OTHER_CFLAGS = {flag}\n");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Overlay.yaml"), "{ 'version': 0, 'roots': [] }\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("VFS overlay", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("exact-source", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_resolves_quoted_headers_through_tracked_search_roots()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("QuotedSearchRootRepo");
+        var project = scope.CreateDirectory(Path.Combine("QuotedSearchRootRepo", "Sample.xcodeproj"));
+        var sources = scope.CreateDirectory(Path.Combine("QuotedSearchRootRepo", "Sources"));
+        var headers = scope.CreateDirectory(Path.Combine("QuotedSearchRootRepo", "Headers"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Sources/Source.m; sourceTree = SOURCE_ROOT; }; " +
+            "000000000000000000000003 = { isa = XCBuildConfiguration; buildSettings = { HEADER_SEARCH_PATHS = Headers; }; };");
+        File.WriteAllText(
+            Path.Combine(sources, "Source.m"),
+            "#include \"Foo.h\"\n#if __has_include(\"Foo.h\")\nint found;\n#endif\n");
+        File.WriteAllText(Path.Combine(headers, "Foo.h"), "// tracked header\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var expected = CommitRepository(repositoryRoot);
+
+        var actual = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(expected, actual);
+    }
 }

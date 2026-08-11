@@ -27,10 +27,10 @@ internal sealed partial class AppleReleaseSourceTrustService
         "-iapinotes-modules", "-iapinotes-path", "-idirafter", "-iframework", "-iframeworkwithsysroot",
         "-imacros", "-include", "-include-pch", "-include-pth", "-index-store-path",
         "-index-unit-output-path", "-install_name", "-iprefix", "-iquote", "-isysroot", "-isystem",
-        "-isystem-after", "-ivfsoverlay", "-ivfsstatcache", "-iwithprefix", "-iwithprefixbefore",
+        "-isystem-after", "-ivfsstatcache", "-iwithprefix", "-iwithprefixbefore",
         "-iwithsysroot", "-load", "-load-plugin-library", "-module-file-info", "-module-map-file",
         "-multi-lib-config", "-plugin", "-plugin-path", "-profile-sample-use", "-profile-use",
-        "-resource-dir", "-rpath", "-sdk", "-stdlib++-isystem", "-vfsoverlay", "-working-directory"
+        "-resource-dir", "-rpath", "-sdk", "-stdlib++-isystem", "-working-directory"
     };
 
     /// <summary>Joined forms of path-bearing compiler, assembler, and linker options, longest prefixes first.</summary>
@@ -59,11 +59,11 @@ internal sealed partial class AppleReleaseSourceTrustService
         "-working-directory=", "-ccc-gcc-name=", "-dependency-file=", "-dependency-dot=",
         "-iapinotes-modules=", "-iapinotes-path=", "-index-store-path=", "-multi-lib-config=",
         "-object-file-name=", "-profile-use=", "-fxray-attr-list=", "-include-pch=",
-        "-include-pth=", "-gcc-toolchain=", "-resource-dir=", "-ivfsoverlay=",
-        "-ivfsstatcache=", "-vfsoverlay=", "-plugin-path=", "-fplugin=", "-force_load=",
+        "-include-pth=", "-gcc-toolchain=", "-resource-dir=", "-ivfsstatcache=",
+        "-plugin-path=", "-fplugin=", "-force_load=",
         "-stdlib++-isystem", "-iframeworkwithsysroot", "-iwithprefixbefore", "-cxx-isystem",
         "-iwithsysroot", "-iwithprefix", "-isystem-after", "-iframework", "-idirafter",
-        "-imacros=", "-include=", "-isystem", "-iquote", "-iprefix", "-isysroot=",
+        "-imacros=", "-include=", "-imacros", "-include", "-isystem", "-iquote", "-iprefix", "-isysroot=",
         "-load=", "-plugin=", "-sdk=", "-MF", "-I", "-F", "-L", "-B"
     };
 }

@@ -139,8 +139,7 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             {
                 var entry = entries.FirstOrDefault(candidate =>
                     string.Equals(candidate.ScreenshotDisplayType, set.ScreenshotDisplayType, StringComparison.OrdinalIgnoreCase) &&
-                    (string.Equals(Path.GetFileName(candidate.File), Path.GetFileName(file), StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(ResolvePath(baseDirectory, candidate.File), Path.GetFullPath(file), StringComparison.OrdinalIgnoreCase)));
+                    PathsEqual(ResolvePath(baseDirectory, candidate.File), Path.GetFullPath(file)));
                 if (entry is null)
                 {
                     messages.Add($"Screenshot '{Path.GetFileName(file)}' in '{set.ScreenshotDisplayType}' is not present in the approval manifest.");
@@ -322,4 +321,10 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
         => System.IO.Path.IsPathRooted(path)
             ? System.IO.Path.GetFullPath(path)
             : System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDirectory, path));
+
+    private static bool PathsEqual(string left, string right)
+        => string.Equals(
+            left,
+            right,
+            Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 }

@@ -230,6 +230,17 @@ internal sealed partial class AppleReleaseSourceTrustService
                     $"Clang configuration-file option '{token}' in Xcode build setting {key} cannot be used by an exact-source Apple build.");
             }
 
+            if (token.Equals("-ivfsoverlay", StringComparison.Ordinal) ||
+                token.Equals("-vfsoverlay", StringComparison.Ordinal) ||
+                token.StartsWith("-ivfsoverlay=", StringComparison.Ordinal) ||
+                token.StartsWith("-vfsoverlay=", StringComparison.Ordinal) ||
+                (token.StartsWith("-ivfsoverlay", StringComparison.Ordinal) && token.Length > "-ivfsoverlay".Length) ||
+                (token.StartsWith("-vfsoverlay", StringComparison.Ordinal) && token.Length > "-vfsoverlay".Length))
+            {
+                throw new InvalidOperationException(
+                    $"VFS overlay option '{token}' in Xcode build setting {key} cannot be used by an exact-source Apple build because its backing-file graph is not independently attested.");
+            }
+
             if (token.Equals("-load-plugin-executable", StringComparison.Ordinal))
             {
                 if (++index >= tokens.Length)

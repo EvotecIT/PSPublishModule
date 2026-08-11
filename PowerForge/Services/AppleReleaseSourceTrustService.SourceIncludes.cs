@@ -104,16 +104,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                     "Use a tracked quoted include or a validated Xcode module/framework reference instead.");
             }
 
-            var candidate = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(fullSourcePath)!, include));
-            EnsurePathWithinRepository(repositoryRoot, candidate, $"preprocessor include from {fullSourcePath}");
-            if (!File.Exists(candidate))
-            {
-                throw new FileNotFoundException(
-                    $"Quoted preprocessor include '{include}' from '{fullSourcePath}' was not found beside the including source. " +
-                    "Its compiler search-path selection cannot be bound to the exact source commit; use an adjacent tracked include or an approved module/framework reference.",
-                    candidate);
-            }
-            EnsureTrackedFile(repositoryRoot, candidate, $"preprocessor include from {fullSourcePath}");
+            ResolveQuotedSourceInclude(repositoryRoot, fullSourcePath, include, "preprocessor include");
         }
 
         ValidatePreprocessorFileExistenceProbes(repositoryRoot, fullSourcePath, source);
@@ -170,6 +161,38 @@ internal sealed partial class AppleReleaseSourceTrustService
         return true;
     }
 
+    private string ResolveQuotedSourceInclude(
+        string repositoryRoot,
+        string sourcePath,
+        string include,
+        string inputDescription)
+    {
+        var roots = new List<string> { Path.GetDirectoryName(sourcePath)! };
+        roots.AddRange(_approvedHeaderSearchRoots);
+        var candidates = new List<string>();
+        foreach (var root in roots.Distinct(GetPathComparer()))
+        {
+            var candidate = Path.GetFullPath(Path.Combine(root, include));
+            EnsurePathWithinRepository(repositoryRoot, candidate, $"{inputDescription} from {sourcePath}");
+            if (File.Exists(candidate) && !candidates.Contains(candidate, GetPathComparer()))
+                candidates.Add(candidate);
+        }
+
+        if (candidates.Count == 0)
+        {
+            throw new FileNotFoundException(
+                $"Quoted {inputDescription} '{include}' from '{sourcePath}' was not found beside the including source or in an approved tracked header search root.");
+        }
+        if (candidates.Count > 1)
+        {
+            throw new InvalidOperationException(
+                $"Quoted {inputDescription} '{include}' from '{sourcePath}' resolves to multiple approved tracked inputs and cannot be bound unambiguously: {string.Join(", ", candidates)}");
+        }
+
+        EnsureTrackedFile(repositoryRoot, candidates[0], $"{inputDescription} from {sourcePath}");
+        return candidates[0];
+    }
+
     private void ValidatePreprocessorFileExistenceProbes(string repositoryRoot, string sourcePath, string source)
     {
         var syntax = MaskCStringAndCharacterLiterals(source);
@@ -217,11 +240,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 continue;
             }
 
-            var candidate = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourcePath)!, include));
-            EnsurePathWithinRepository(repositoryRoot, candidate, $"preprocessor file-existence probe from {sourcePath}");
-            if (!File.Exists(candidate))
-                throw new FileNotFoundException($"Preprocessor file-existence probe input was not found: {candidate}", candidate);
-            EnsureTrackedFile(repositoryRoot, candidate, $"preprocessor file-existence probe from {sourcePath}");
+            ResolveQuotedSourceInclude(repositoryRoot, sourcePath, include, "preprocessor file-existence probe");
         }
     }
 
