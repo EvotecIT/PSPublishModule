@@ -4,7 +4,11 @@ namespace PowerForge;
 
 internal sealed partial class AppleReleaseSourceTrustService
 {
-    private void ValidateInlineAssemblerInputs(string repositoryRoot, string sourcePath, string source)
+    private void ValidateInlineAssemblerInputs(
+        string repositoryRoot,
+        string sourcePath,
+        string source,
+        string assemblerWorkingDirectory)
     {
         var syntax = MaskCStringAndCharacterLiterals(source);
         foreach (Match invocation in Regex.Matches(
@@ -22,7 +26,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                     $"Source input '{sourcePath}' uses computed inline assembler text, whose file directives cannot be bound to the exact source commit. " +
                     "Use literal inline assembler text or a tracked standalone assembler source.");
             }
-            ValidateAssemblerDirectives(repositoryRoot, sourcePath, assemblerSource);
+            ValidateAssemblerDirectives(repositoryRoot, sourcePath, assemblerSource, assemblerWorkingDirectory);
         }
     }
 

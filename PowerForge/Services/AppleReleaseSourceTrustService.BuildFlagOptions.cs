@@ -28,7 +28,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         "-imacros", "-include", "-include-pch", "-include-pth", "-index-store-path",
         "-index-unit-output-path", "-install_name", "-iprefix", "-iquote", "-isysroot", "-isystem",
         "-isystem-after", "-ivfsstatcache", "-iwithprefix", "-iwithprefixbefore",
-        "-iwithsysroot", "-load", "-load-plugin-library", "-module-file-info", "-module-map-file",
+        "-iwithsysroot", "-load", "-load-pass-plugin", "-load-plugin-library", "-module-file-info", "-module-map-file",
         "-multi-lib-config", "-plugin", "-plugin-path", "-profile-sample-use", "-profile-use",
         "-resource-dir", "-rpath", "-sdk", "-stdlib++-isystem", "-working-directory"
     };
@@ -55,7 +55,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         "-fcodegen-data-use=", "-fmemory-profile-use=", "-fmodules-cache-path=",
         "-fprebuilt-module-path=", "-fsanitize-ignorelist=", "-fsanitize-blacklist=",
         "-fthinlto-distributor=", "-gen-cdb-fragment-path=", "-index-unit-output-path=",
-        "-load-plugin-library=", "-fprofile-list=", "-fmodule-map-file=", "-fmodule-file=",
+        "-load-plugin-library=", "-load-pass-plugin=", "-fprofile-list=", "-fmodule-map-file=", "-fmodule-file=",
         "-fpass-plugin=", "-fprofile-use=", "-module-map-file=", "-profile-sample-use=",
         "-working-directory=", "-ccc-gcc-name=", "-dependency-file=", "-dependency-dot=",
         "-iapinotes-modules=", "-iapinotes-path=", "-index-store-path=", "-multi-lib-config=",

@@ -31,6 +31,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     private readonly HashSet<string> _validatedSourceSemanticInputs = new(StringComparer.Ordinal);
     private readonly HashSet<string> _inactiveRemoteSystemLibraryRoots = new(GetPathComparer());
     private readonly HashSet<string> _approvedHeaderSearchRoots = new(GetPathComparer());
+    private readonly Dictionary<string, List<string>> _approvedAssemblerSearchRoots = new(GetPathComparer());
 
     internal AppleReleaseSourceTrustService(
         HomeAssistantReleaseGitService? git = null,
@@ -483,7 +484,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         string name,
         string? capturedWorktreeBlob = null,
         bool validateSwiftDeterminism = false,
-        string? effectiveSourceExtension = null)
+        string? effectiveSourceExtension = null,
+        string? assemblerWorkingDirectory = null)
     {
         var candidate = Path.GetFullPath(path);
         EnsurePathWithinRepository(repositoryRoot, candidate, name);
@@ -514,7 +516,8 @@ internal sealed partial class AppleReleaseSourceTrustService
             candidate,
             validateSwiftDeterminism,
             worktreeBlob,
-            effectiveSourceExtension);
+            effectiveSourceExtension,
+            assemblerWorkingDirectory);
     }
 
     private string ComputeRawGitBlobId(string repositoryRoot, string filePath)

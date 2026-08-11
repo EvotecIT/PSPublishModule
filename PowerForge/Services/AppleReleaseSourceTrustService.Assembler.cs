@@ -4,14 +4,19 @@ namespace PowerForge;
 
 internal sealed partial class AppleReleaseSourceTrustService
 {
-    private void ValidateAssemblerInputs(string repositoryRoot, string sourcePath, string source)
+    private void ValidateAssemblerInputs(
+        string repositoryRoot,
+        string sourcePath,
+        string source,
+        string assemblerWorkingDirectory)
     {
         var fullSourcePath = Path.GetFullPath(sourcePath);
-        if (!_validatedAssemblerInputFiles.Add(fullSourcePath))
+        var fullWorkingDirectory = Path.GetFullPath(assemblerWorkingDirectory);
+        if (!_validatedAssemblerInputFiles.Add(fullSourcePath + "|" + fullWorkingDirectory))
             return;
 
         RejectUnboundAssemblerPreprocessorMacros(fullSourcePath, source);
-        ValidateAssemblerDirectives(repositoryRoot, fullSourcePath, source);
+        ValidateAssemblerDirectives(repositoryRoot, fullSourcePath, source, fullWorkingDirectory);
     }
 
     private static void RejectUnboundAssemblerPreprocessorMacros(string sourcePath, string source)
@@ -74,7 +79,11 @@ internal sealed partial class AppleReleaseSourceTrustService
                 RegexOptions.CultureInvariant));
     }
 
-    private void ValidateAssemblerDirectives(string repositoryRoot, string sourcePath, string source)
+    private void ValidateAssemblerDirectives(
+        string repositoryRoot,
+        string sourcePath,
+        string source,
+        string assemblerWorkingDirectory)
     {
         source = NormalizeAssemblerStatementBoundaries(source);
         foreach (Match directive in Regex.Matches(
@@ -97,19 +106,49 @@ internal sealed partial class AppleReleaseSourceTrustService
                     $"Assembler source input '{sourcePath}' references absolute .{directive.Groups["kind"].Value} input '{input}', which is outside the exact-source graph.");
             }
 
-            var candidate = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourcePath)!, input));
-            EnsurePathWithinRepository(repositoryRoot, candidate, $"assembler .{directive.Groups["kind"].Value} input from {sourcePath}");
-            if (!File.Exists(candidate))
-                throw new FileNotFoundException($"Assembler input was not found inside the exact checked-out source: {candidate}", candidate);
+            var candidate = ResolveAssemblerInput(
+                repositoryRoot,
+                sourcePath,
+                input,
+                assemblerWorkingDirectory,
+                directive.Groups["kind"].Value);
             EnsureTrackedFile(repositoryRoot, candidate, $"assembler .{directive.Groups["kind"].Value} input from {sourcePath}");
             if (directive.Groups["kind"].Value.Equals("include", StringComparison.OrdinalIgnoreCase))
             {
                 var nestedPhysicalSource = File.ReadAllText(candidate);
                 RejectCTrigraphs(nestedPhysicalSource, candidate);
                 var nestedSource = RemoveCComments(SpliceCPreprocessingLines(nestedPhysicalSource));
-                ValidateAssemblerInputs(repositoryRoot, candidate, nestedSource);
+                ValidateAssemblerInputs(repositoryRoot, candidate, nestedSource, assemblerWorkingDirectory);
             }
         }
+    }
+
+    private string ResolveAssemblerInput(
+        string repositoryRoot,
+        string sourcePath,
+        string input,
+        string assemblerWorkingDirectory,
+        string directiveKind)
+    {
+        var fullWorkingDirectory = Path.GetFullPath(assemblerWorkingDirectory);
+        var roots = new[] { fullWorkingDirectory }
+            .Concat(_approvedAssemblerSearchRoots.TryGetValue(fullWorkingDirectory, out var approvedRoots)
+                ? approvedRoots
+                : Array.Empty<string>())
+            .Distinct(GetPathComparer());
+        var candidates = roots
+            .Select(root => Path.GetFullPath(Path.Combine(root, input)))
+            .Where(candidate => IsPathAtOrWithin(candidate, repositoryRoot) && File.Exists(candidate))
+            .Distinct(GetPathComparer())
+            .ToArray();
+        if (candidates.Length == 0)
+        {
+            var expected = Path.GetFullPath(Path.Combine(assemblerWorkingDirectory, input));
+            throw new FileNotFoundException(
+                $"Assembler .{directiveKind} input '{input}' from '{sourcePath}' was not found in the compiler working directory or a validated -I root.",
+                expected);
+        }
+        return candidates[0];
     }
 
     private static string NormalizeAssemblerStatementBoundaries(string source)

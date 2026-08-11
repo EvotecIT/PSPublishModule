@@ -258,7 +258,11 @@ internal sealed partial class AppleReleaseSourceTrustService
                  })
         {
             if (Directory.Exists(conventionalInput))
-                EnsureTrackedDirectoryTree(checkoutRoot, conventionalInput, "remote Swift package source input");
+                EnsureTrackedDirectoryTree(
+                    checkoutRoot,
+                    conventionalInput,
+                    "remote Swift package source input",
+                    assemblerWorkingDirectory: packageRoot);
         }
     }
 

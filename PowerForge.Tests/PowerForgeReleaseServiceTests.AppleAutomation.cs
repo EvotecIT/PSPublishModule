@@ -543,7 +543,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             spec.AppleApps.ScreenshotConfigPath = "screenshots.json";
 
             var result = CreateAppleAutomationService(
-                    request => CreateReleaseState(request, "VALID"),
+                    request => CreateReleaseState(request, processingState: null),
                     checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request))
                 .Execute(
                     spec,
@@ -562,6 +562,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(plan.CheckReleaseReadiness);
             Assert.False(plan.Archive);
             Assert.False(plan.Upload);
+            Assert.Null(Assert.Single(result.AppleReceipt!.Targets).BuildId);
         }
         finally
         {

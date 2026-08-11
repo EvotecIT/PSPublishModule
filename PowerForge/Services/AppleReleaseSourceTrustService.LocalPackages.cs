@@ -52,7 +52,11 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (File.Exists(conventionalInput))
                 EnsureTrackedFile(repositoryRoot, conventionalInput, "Xcode local Swift package input");
             else if (Directory.Exists(conventionalInput))
-                EnsureTrackedDirectoryTree(repositoryRoot, conventionalInput, "Xcode local Swift package input");
+                EnsureTrackedDirectoryTree(
+                    repositoryRoot,
+                    conventionalInput,
+                    "Xcode local Swift package input",
+                    assemblerWorkingDirectory: packageRoot);
         }
 
         foreach (var manifestPath in manifestPaths)

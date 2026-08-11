@@ -300,6 +300,17 @@ internal sealed partial class AppleReleaseSourceTrustService
                 generatedOutputPaths);
         }
 
+        foreach (var buildFile in objects.Values.Where(static value =>
+                     value.Isa.Equals("PBXBuildFile", StringComparison.OrdinalIgnoreCase)))
+        {
+            ValidateBuildFileSettings(
+                repositoryRoot,
+                projectDirectory,
+                buildFile,
+                generatedOutputPaths,
+                metadataPath);
+        }
+
         foreach (var item in objects.Values)
         {
             if (item.Isa.Equals("PBXShellScriptBuildPhase", StringComparison.OrdinalIgnoreCase))
@@ -322,12 +333,6 @@ internal sealed partial class AppleReleaseSourceTrustService
 
             if (item.Isa.Equals("PBXBuildFile", StringComparison.OrdinalIgnoreCase))
             {
-                ValidateBuildFileSettings(
-                    repositoryRoot,
-                    projectDirectory,
-                    item,
-                    generatedOutputPaths,
-                    metadataPath);
                 continue;
             }
 
@@ -521,7 +526,8 @@ internal sealed partial class AppleReleaseSourceTrustService
                 candidate,
                 $"Xcode {item.Isa} input",
                 validateSwiftDeterminism: effectiveSourceExtension?.Equals(".swift", StringComparison.OrdinalIgnoreCase) == true,
-                effectiveSourceExtension: effectiveSourceExtension);
+                effectiveSourceExtension: effectiveSourceExtension,
+                assemblerWorkingDirectory: Path.GetDirectoryName(Path.GetDirectoryName(metadataPath)!)!);
         }
         else if (Directory.Exists(candidate))
         {
@@ -533,7 +539,8 @@ internal sealed partial class AppleReleaseSourceTrustService
                     repositoryRoot,
                     candidate,
                     $"Xcode {item.Isa} input",
-                    validateSwiftDeterminism: isShippingSource);
+                    validateSwiftDeterminism: isShippingSource,
+                    assemblerWorkingDirectory: Path.GetDirectoryName(Path.GetDirectoryName(metadataPath)!)!);
             }
             else
             {
@@ -554,7 +561,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         string repositoryRoot,
         string path,
         string name,
-        bool validateSwiftDeterminism = false)
+        bool validateSwiftDeterminism = false,
+        string? assemblerWorkingDirectory = null)
     {
         EnsureDirectoryWithinRepository(repositoryRoot, path, name);
         var relativeRoot = FrameworkCompatibility.GetRelativePath(repositoryRoot, path).Replace('\\', '/');
@@ -591,7 +599,12 @@ internal sealed partial class AppleReleaseSourceTrustService
                         $"{name} differs from the exact source commit: " +
                         FrameworkCompatibility.GetRelativePath(repositoryRoot, entry).Replace('\\', '/'));
                 }
-                ValidateSourceLevelIncludes(repositoryRoot, fullPath, validateSwiftDeterminism, expectedBlob);
+                ValidateSourceLevelIncludes(
+                    repositoryRoot,
+                    fullPath,
+                    validateSwiftDeterminism,
+                    expectedBlob,
+                    assemblerWorkingDirectory: assemblerWorkingDirectory);
             }
         }
     }

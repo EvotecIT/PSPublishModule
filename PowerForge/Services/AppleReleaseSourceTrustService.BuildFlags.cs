@@ -53,6 +53,39 @@ internal sealed partial class AppleReleaseSourceTrustService
                     $"Xcode build setting {key} references a missing exact-source input: {candidate}",
                     candidate);
         }
+        foreach (var searchPath in ReadAssemblerSearchPaths(expandedTokens, key))
+        {
+            var candidate = ResolveBuildSettingPath(projectDirectory, searchPath, key);
+            if (Directory.Exists(candidate))
+            {
+                var workingDirectory = Path.GetFullPath(projectDirectory);
+                if (!_approvedAssemblerSearchRoots.TryGetValue(workingDirectory, out var roots))
+                {
+                    roots = new List<string>();
+                    _approvedAssemblerSearchRoots.Add(workingDirectory, roots);
+                }
+                var fullCandidate = Path.GetFullPath(candidate);
+                if (!roots.Contains(fullCandidate, GetPathComparer()))
+                    roots.Add(fullCandidate);
+            }
+        }
+    }
+
+    private static IEnumerable<string> ReadAssemblerSearchPaths(string[] tokens, string key)
+    {
+        for (var index = 0; index < tokens.Length; index++)
+        {
+            var token = tokens[index];
+            if (token.Equals("-I", StringComparison.Ordinal))
+            {
+                if (++index >= tokens.Length)
+                    throw new InvalidOperationException($"Xcode build setting {key} ends with '-I' and no search path.");
+                yield return tokens[index];
+                continue;
+            }
+            if (token.StartsWith("-I", StringComparison.Ordinal) && token.Length > 2)
+                yield return token.Substring(2);
+        }
     }
 
     private static bool TryReadCompilerLanguageOverride(string[] tokens, out string? language)

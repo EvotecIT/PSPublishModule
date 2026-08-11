@@ -428,9 +428,10 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
             var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.TestFlightBetaGroupNames = ["Internal"];
 
             var result = CreateAppleAutomationService(
-                    request => CreateReleaseState(request, "VALID"),
+                    request => CreateReleaseState(request, processingState: null),
                     checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request))
                 .Execute(spec, new PowerForgeReleaseRequest
                 {
@@ -446,12 +447,13 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(plan.PrepareDistribution);
             Assert.True(plan.SelectBuildForDistribution);
             Assert.True(plan.CheckReleaseReadiness);
+            Assert.True(plan.DistributeTestFlight);
             Assert.False(plan.SubmitTestFlightBetaReview);
             Assert.False(plan.SubmitForReview);
             Assert.False(plan.ReleaseApprovedVersion);
             var target = Assert.Single(result.AppleReceipt!.Targets);
-            Assert.Equal("build-id", target.BuildId);
-            Assert.Equal("VALID", target.BuildProcessingState);
+            Assert.Null(target.BuildId);
+            Assert.Null(target.BuildProcessingState);
         }
         finally
         {

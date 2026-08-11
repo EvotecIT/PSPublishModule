@@ -15,7 +15,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         string sourcePath,
         bool validateSwiftDeterminism = false,
         string? sourceBlob = null,
-        string? effectiveSourceExtension = null)
+        string? effectiveSourceExtension = null,
+        string? assemblerWorkingDirectory = null)
     {
         var sourceExtension = string.IsNullOrWhiteSpace(effectiveSourceExtension)
             ? Path.GetExtension(sourcePath)
@@ -26,13 +27,15 @@ internal sealed partial class AppleReleaseSourceTrustService
         var extension = sourceExtension;
         if (extension.Equals(".swift", StringComparison.OrdinalIgnoreCase) && !validateSwiftDeterminism)
             return;
-        var validationKey = fullSourcePath + "|" + extension + "|" + validateSwiftDeterminism;
+        var effectiveAssemblerWorkingDirectory = Path.GetFullPath(
+            assemblerWorkingDirectory ?? Path.GetDirectoryName(fullSourcePath)!);
+        var validationKey = fullSourcePath + "|" + extension + "|" + validateSwiftDeterminism + "|" + effectiveAssemblerWorkingDirectory;
         if (!_validatedSourceIncludeFiles.Add(validationKey))
             return;
         if (!string.IsNullOrWhiteSpace(sourceBlob))
         {
             var semanticPath = ResolveSourceSemanticPath(fullSourcePath);
-            var semanticKey = sourceBlob + "|" + semanticPath + "|" + extension + "|" + validateSwiftDeterminism;
+            var semanticKey = sourceBlob + "|" + semanticPath + "|" + extension + "|" + validateSwiftDeterminism + "|" + effectiveAssemblerWorkingDirectory;
             if (!_validatedSourceSemanticInputs.Add(semanticKey))
                 return;
         }
@@ -111,10 +114,10 @@ internal sealed partial class AppleReleaseSourceTrustService
         ValidatePreprocessorFileExistenceProbes(repositoryRoot, fullSourcePath, source);
 
         if (IsCInlineAssemblySource(extension))
-            ValidateInlineAssemblerInputs(repositoryRoot, fullSourcePath, source);
+            ValidateInlineAssemblerInputs(repositoryRoot, fullSourcePath, source, effectiveAssemblerWorkingDirectory);
 
         if (extension.Equals(".s", StringComparison.OrdinalIgnoreCase))
-            ValidateAssemblerInputs(repositoryRoot, fullSourcePath, source);
+            ValidateAssemblerInputs(repositoryRoot, fullSourcePath, source, effectiveAssemblerWorkingDirectory);
     }
 
     private static string ResolveSourceSemanticPath(string sourcePath)

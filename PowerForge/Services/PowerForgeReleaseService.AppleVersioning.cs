@@ -302,14 +302,13 @@ internal sealed partial class PowerForgeReleaseService
     private static bool RequiresSelectedApplePlanBuild(PowerForgeAppleReleasePlan plan)
         => plan.Action is PowerForgeAppleReleaseAction.SubmitTestFlightReview or
                PowerForgeAppleReleaseAction.SubmitAppReview or
-               PowerForgeAppleReleaseAction.Prepare or
                PowerForgeAppleReleaseAction.TestFlight or
-               PowerForgeAppleReleaseAction.Advance ||
+               PowerForgeAppleReleaseAction.Release ||
            plan.AdoptExistingBuild ||
-           plan.PrepareDistribution ||
-           plan.DistributeTestFlight ||
+           (plan.DistributeTestFlight && !IsUploadExecution(plan)) ||
            plan.SubmitTestFlightBetaReview ||
-           plan.SubmitForReview;
+           plan.SubmitForReview ||
+           plan.ReleaseApprovedVersion;
 
     private static string ComputeApplePlanSha256(PowerForgeAppleReleaseReceipt receipt)
     {
