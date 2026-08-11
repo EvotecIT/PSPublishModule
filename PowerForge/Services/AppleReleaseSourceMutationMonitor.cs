@@ -57,6 +57,30 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         }
     }
 
+    internal T CaptureExpectedProducerOutput<T>(Func<T> capture, string producerDescription) {
+        if (capture is null)
+            throw new ArgumentNullException(nameof(capture));
+        Thread.Sleep(250);
+        if (_watcherError is not null) {
+            throw new InvalidOperationException(
+                $"The {_scopeDescription} mutation monitor failed at the {producerDescription} completion boundary. {_failureInstruction}",
+                _watcherError);
+        }
+
+        // All events observed before this boundary belong to the awaited producer.
+        // Keep the watcher active, reset its event baseline, and capture the output
+        // before the process runner returns control to the caller.
+        Interlocked.Exchange(ref _firstMutation, null);
+        var output = capture();
+        Thread.Sleep(250);
+        if (_watcherError is not null || !string.IsNullOrWhiteSpace(_firstMutation)) {
+            throw new InvalidOperationException(
+                $"The {_scopeDescription} changed while its {producerDescription} output was being bound. {_failureInstruction}",
+                _watcherError);
+        }
+        return output;
+    }
+
     private void OnMutation(object sender, FileSystemEventArgs args)
         => Interlocked.CompareExchange(ref _firstMutation, args.FullPath, null);
 

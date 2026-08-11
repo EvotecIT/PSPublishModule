@@ -203,7 +203,17 @@ public sealed class AppleNotarizationService
         ProcessRunResult? validation = null;
         ProcessRunResult? assessment = null;
         var stapledThisInvocation = false;
+        string? stapledArtifactSha256 = staplingCompleted ? artifactSha256 : null;
         string? validatedStapledArtifactSha256 = null;
+        using var postStapleMonitor = submission.Succeeded &&
+                                      string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) &&
+                                      request.Staple
+            ? new AppleReleaseSourceMutationMonitor(
+                submissionSnapshot.RootPath,
+                "validated private Apple notarization artifact",
+                "stapler production, validation, Gatekeeper assessment, and final publication",
+                "Discard the private artifact and resume from the last durable notarization checkpoint.")
+            : null;
         if (submission.Succeeded && string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) && request.Staple)
         {
             if (staplingCompleted)
@@ -218,17 +228,26 @@ public sealed class AppleNotarizationService
             }
             else
             {
-                staple = await RunAsync(xcrunExecutable, submissionArtifactPath, new[] { "stapler", "staple", submissionArtifactPath }, timeout, toolEnvironment, cancellationToken).ConfigureAwait(false);
+                staple = await RunAsync(
+                        xcrunExecutable,
+                        submissionArtifactPath,
+                        new[] { "stapler", "staple", submissionArtifactPath },
+                        timeout,
+                        toolEnvironment,
+                        cancellationToken,
+                        result =>
+                        {
+                            if (result.Succeeded)
+                            {
+                                stapledArtifactSha256 = postStapleMonitor!.CaptureExpectedProducerOutput(
+                                    () => ComputeArtifactSha256(submissionArtifactPath),
+                                    "stapler");
+                            }
+                        })
+                    .ConfigureAwait(false);
                 stapledThisInvocation = staple.Succeeded;
             }
         }
-        using var postStapleMonitor = staple?.Succeeded == true
-            ? new AppleReleaseSourceMutationMonitor(
-                submissionSnapshot.RootPath,
-                "validated private Apple notarization artifact",
-                "stapler validation, Gatekeeper assessment, and final publication",
-                "Discard the private artifact and resume from the last durable notarization checkpoint.")
-            : null;
         if (staple?.Succeeded == true)
         {
             validation = await RunAsync(
@@ -240,7 +259,16 @@ public sealed class AppleNotarizationService
                     cancellationToken)
                 .ConfigureAwait(false);
             if (validation.Succeeded)
+            {
                 validatedStapledArtifactSha256 = ComputeArtifactSha256(submissionArtifactPath);
+                if (!string.IsNullOrWhiteSpace(stapledArtifactSha256) &&
+                    !validatedStapledArtifactSha256.Equals(stapledArtifactSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"The private Apple notarization artifact changed after stapler completed. Expected SHA-256 '{stapledArtifactSha256}', " +
+                        $"received '{validatedStapledArtifactSha256}'. Discard the private artifact and resume from the last durable notarization checkpoint.");
+                }
+            }
         }
         if (submission.Succeeded && string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) && request.Assess)
         {
@@ -387,15 +415,16 @@ public sealed class AppleNotarizationService
         return new[] { "--key", keyPath, "--key-id", request.ApiKeyId!.Trim(), "--issuer", request.ApiIssuerId!.Trim() };
     }
 
-    private Task<ProcessRunResult> RunAsync(
+    private async Task<ProcessRunResult> RunAsync(
         string executable,
         string artifactPath,
         IReadOnlyList<string> arguments,
         TimeSpan timeout,
         IReadOnlyDictionary<string, string?>? environmentVariables,
-        CancellationToken cancellationToken)
-        => _processRunner.RunAsync(
-            new ProcessRunRequest(
+        CancellationToken cancellationToken,
+        Action<ProcessRunResult>? completionBoundary = null)
+    {
+        var processRequest = new ProcessRunRequest(
                 executable,
                 Path.GetDirectoryName(artifactPath) ?? Directory.GetCurrentDirectory(),
                 arguments,
@@ -403,8 +432,13 @@ public sealed class AppleNotarizationService
                 environmentVariables,
                 captureOutput: true,
                 captureError: true,
-                inheritEnvironment: environmentVariables is null),
-            cancellationToken);
+                inheritEnvironment: environmentVariables is null);
+        if (completionBoundary is not null)
+            processRequest.SetCompletionBoundary(completionBoundary);
+        var result = await _processRunner.RunAsync(processRequest, cancellationToken).ConfigureAwait(false);
+        processRequest.InvokeCompletionBoundary(result);
+        return result;
+    }
 
     private static string ResolveAppleToolExecutable(
         string? executable,

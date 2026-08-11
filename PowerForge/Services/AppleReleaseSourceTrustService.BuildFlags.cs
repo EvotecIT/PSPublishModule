@@ -161,6 +161,17 @@ internal sealed partial class AppleReleaseSourceTrustService
                 continue;
             }
 
+            if (token.Equals("--config", StringComparison.Ordinal) ||
+                token.Equals("--config-user-dir", StringComparison.Ordinal) ||
+                token.Equals("--config-system-dir", StringComparison.Ordinal) ||
+                token.StartsWith("--config=", StringComparison.Ordinal) ||
+                token.StartsWith("--config-user-dir=", StringComparison.Ordinal) ||
+                token.StartsWith("--config-system-dir=", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Clang configuration-file option '{token}' in Xcode build setting {key} cannot be used by an exact-source Apple build.");
+            }
+
             if (token.Equals("-load-plugin-executable", StringComparison.Ordinal))
             {
                 if (++index >= tokens.Length)

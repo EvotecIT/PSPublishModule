@@ -8,6 +8,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class ProcessRunRequest
 {
+    private int _completionBoundaryInvoked;
+    private Action<ProcessRunResult>? _completionBoundary;
     /// <summary>
     /// Initializes a new instance of the <see cref="ProcessRunRequest"/> class.
     /// </summary>
@@ -192,6 +194,16 @@ public sealed class ProcessRunRequest
 
     /// <summary>Optional callback invoked for each captured standard-error line.</summary>
     public Action<string>? ErrorLineReceived { get; }
+
+    internal void SetCompletionBoundary(Action<ProcessRunResult> completionBoundary)
+        => _completionBoundary = completionBoundary ?? throw new ArgumentNullException(nameof(completionBoundary));
+
+    internal void InvokeCompletionBoundary(ProcessRunResult result)
+    {
+        if (_completionBoundary is null || Interlocked.Exchange(ref _completionBoundaryInvoked, 1) != 0)
+            return;
+        _completionBoundary(result);
+    }
 }
 
 /// <summary>
@@ -301,7 +313,9 @@ public sealed class ProcessRunner : IProcessRunner
         catch (Exception ex)
         {
             stopwatch.Stop();
-            return new ProcessRunResult(127, string.Empty, ex.Message, request.FileName, stopwatch.Elapsed, timedOut: false);
+            var failedStart = new ProcessRunResult(127, string.Empty, ex.Message, request.FileName, stopwatch.Elapsed, timedOut: false);
+            request.InvokeCompletionBoundary(failedStart);
+            return failedStart;
         }
 
         var stdoutTask = request.CaptureOutput
@@ -344,7 +358,9 @@ public sealed class ProcessRunner : IProcessRunner
             stderr = "Timeout";
 
         var exitCode = timedOut ? 124 : SafeGetExitCode(process);
-        return new ProcessRunResult(exitCode, stdout, stderr, process.StartInfo.FileName ?? request.FileName, stopwatch.Elapsed, timedOut);
+        var result = new ProcessRunResult(exitCode, stdout, stderr, process.StartInfo.FileName ?? request.FileName, stopwatch.Elapsed, timedOut);
+        request.InvokeCompletionBoundary(result);
+        return result;
     }
 
     private static async Task<string> ReadOutputAsync(

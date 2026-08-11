@@ -112,4 +112,90 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("Server", exception.Message, StringComparison.Ordinal);
         Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Theory]
+    [InlineData("--config Rules")]
+    [InlineData("--config=Rules")]
+    [InlineData("--config-user-dir Config")]
+    [InlineData("--config-user-dir=Config")]
+    [InlineData("--config-system-dir Config")]
+    [InlineData("--config-system-dir=Config")]
+    public void ResolveExactAppleSourceCommit_rejects_clang_configuration_file_controls(string option)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "ClangConfigurationControlRepo" + option.Length,
+            $"OTHER_CFLAGS = {option}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Clang configuration-file option", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(".byte 0; .incbin \"/tmp/payload.bin\"")]
+    [InlineData(".byte 0; label: .include \"/tmp/payload.inc\"")]
+    public void ResolveExactAppleSourceCommit_rejects_assembler_inputs_after_statement_separator(string source)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("AssemblerStatementSeparatorRepo" + source.Length);
+        var project = scope.CreateDirectory(Path.Combine(Path.GetFileName(repositoryRoot), "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Source.s; sourceTree = \"<group>\"; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Source.s"), source + "\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("outside the exact-source graph", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_validates_effective_info_plist_preprocessor_flags()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("InfoPlistPreprocessorFlagsRepo");
+        var project = scope.CreateDirectory(Path.Combine("InfoPlistPreprocessorFlagsRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCBuildConfiguration; buildSettings = { " +
+            "INFOPLIST_PREPROCESS = YES; INFOPLIST_FILE = Info.plist; " +
+            "INFOPLIST_OTHER_PREPROCESSOR_FLAGS = \"-include /tmp/Injected.h\"; }; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Info.plist"), "<plist><dict /></plist>\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("INFOPLIST_OTHER_PREPROCESSOR_FLAGS", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("absolute path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_ignores_inactive_info_plist_preprocessor_flags()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("InactiveInfoPlistPreprocessorFlagsRepo");
+        var project = scope.CreateDirectory(Path.Combine("InactiveInfoPlistPreprocessorFlagsRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCBuildConfiguration; buildSettings = { " +
+            "INFOPLIST_PREPROCESS = NO; INFOPLIST_FILE = Info.plist; " +
+            "INFOPLIST_OTHER_PREPROCESSOR_FLAGS = \"-include /tmp/Inactive.h\"; }; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Info.plist"), "<plist><dict /></plist>\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var expected = CommitRepository(repositoryRoot);
+
+        var actual = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(expected, actual);
+    }
 }

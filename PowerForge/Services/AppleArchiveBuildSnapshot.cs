@@ -111,13 +111,13 @@ internal sealed class AppleArchiveBuildSnapshot : IDisposable {
         bool movedExisting)
     {
         if (published && Directory.Exists(destination)) {
-            Directory.Move(destination, rollbackCandidate);
-            var rollbackSha256 = AppleNotarizationService.ComputeArtifactSha256(rollbackCandidate);
-            if (rollbackSha256.Equals(publishedSha256, StringComparison.OrdinalIgnoreCase)) {
-                Directory.Delete(rollbackCandidate, recursive: true);
-            } else {
-                if (!Directory.Exists(destination) && !File.Exists(destination))
-                    Directory.Move(rollbackCandidate, destination);
+            try {
+                AppleArtifactCopy.RemovePublishedDirectoryIfUnchanged(
+                    destination,
+                    rollbackCandidate,
+                    publishedSha256,
+                    "Apple archive");
+            } catch {
                 throw new InvalidOperationException(
                     $"Apple archive rollback found a concurrently replaced destination at '{destination}'. " +
                     $"The previous artifact remains at '{backup}' and no unrecognized archive bytes were deleted.");

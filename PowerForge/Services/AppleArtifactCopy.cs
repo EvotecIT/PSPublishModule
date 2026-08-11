@@ -87,4 +87,42 @@ internal static class AppleArtifactCopy
         }
         Directory.Move(backupPath, destinationPath);
     }
+
+    /// <summary>
+    /// Quarantines a published directory and deletes it only when its complete artifact hash still
+    /// matches the bytes owned by the current publication. Unknown, unreadable, or linked replacement
+    /// bytes are restored to the destination when possible and are never recursively traversed or deleted.
+    /// </summary>
+    internal static void RemovePublishedDirectoryIfUnchanged(
+        string destinationPath,
+        string quarantinePath,
+        string expectedSha256,
+        string artifactDescription)
+    {
+        Directory.Move(destinationPath, quarantinePath);
+        try
+        {
+            var attributes = File.GetAttributes(quarantinePath);
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException(
+                    $"{artifactDescription} rollback found a linked replacement at '{destinationPath}'.");
+            }
+
+            var observedSha256 = AppleNotarizationService.ComputeArtifactSha256(quarantinePath);
+            if (!observedSha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"{artifactDescription} rollback found replacement bytes at '{destinationPath}'.");
+            }
+
+            Directory.Delete(quarantinePath, recursive: true);
+        }
+        catch
+        {
+            if (!Directory.Exists(destinationPath) && !File.Exists(destinationPath))
+                Directory.Move(quarantinePath, destinationPath);
+            throw;
+        }
+    }
 }

@@ -53,6 +53,12 @@ internal sealed partial class AppleReleaseSourceTrustService
             }
             else if (FlagBuildSettings.Contains(baseKey))
             {
+                if (baseKey.Equals("INFOPLIST_OTHER_PREPROCESSOR_FLAGS", StringComparison.OrdinalIgnoreCase) &&
+                    !preprocessInfoPlist)
+                {
+                    ValidateUnclassifiedBuildSettingReferences(key, assignment.Value, source);
+                    continue;
+                }
                 ValidateBuildFlagInputPaths(
                     repositoryRoot,
                     projectDirectory,

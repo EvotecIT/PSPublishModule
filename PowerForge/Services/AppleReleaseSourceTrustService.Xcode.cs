@@ -37,7 +37,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         "OTHER_CFLAGS",
         "OTHER_CPLUSPLUSFLAGS",
         "OTHER_LDFLAGS",
-        "OTHER_SWIFT_FLAGS"
+        "OTHER_SWIFT_FLAGS",
+        "INFOPLIST_OTHER_PREPROCESSOR_FLAGS"
     };
 
     private static readonly HashSet<string> DefinitionBuildSettings = new(StringComparer.OrdinalIgnoreCase)

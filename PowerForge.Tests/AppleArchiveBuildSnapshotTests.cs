@@ -112,4 +112,82 @@ public sealed class AppleArchiveBuildSnapshotTests
             try { root.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void DirectExportRollback_preserves_concurrently_replaced_export_and_previous_backup()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var approved = Directory.CreateDirectory(Path.Combine(root.FullName, "approved-export"));
+            File.WriteAllText(Path.Combine(approved.FullName, "payload"), "published export");
+            var publishedSha256 = AppleNotarizationService.ComputeArtifactSha256(approved.FullName);
+            approved.Delete(recursive: true);
+            var destination = Directory.CreateDirectory(Path.Combine(root.FullName, "export"));
+            File.WriteAllText(Path.Combine(destination.FullName, "payload"), "concurrent export");
+            var backup = Directory.CreateDirectory(Path.Combine(root.FullName, ".export.powerforge-backup-test"));
+            File.WriteAllText(Path.Combine(backup.FullName, "payload"), "previous export");
+            var rollbackCandidate = Path.Combine(root.FullName, ".export.powerforge-failed-test");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                AppleDirectExportSnapshot.RollbackPublication(
+                    destination.FullName,
+                    backup.FullName,
+                    rollbackCandidate,
+                    publishedSha256,
+                    published: true,
+                    movedExisting: true));
+
+            Assert.Contains("no unrecognized export bytes were deleted", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("concurrent export", File.ReadAllText(Path.Combine(destination.FullName, "payload")));
+            Assert.Equal("previous export", File.ReadAllText(Path.Combine(backup.FullName, "payload")));
+            Assert.False(Directory.Exists(rollbackCandidate));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void DirectExportRollback_preserves_concurrently_replaced_directory_link_without_traversing_it()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var approved = Directory.CreateDirectory(Path.Combine(root.FullName, "approved-export"));
+            File.WriteAllText(Path.Combine(approved.FullName, "payload"), "published export");
+            var publishedSha256 = AppleNotarizationService.ComputeArtifactSha256(approved.FullName);
+            approved.Delete(recursive: true);
+            var concurrentTarget = Directory.CreateDirectory(Path.Combine(root.FullName, "concurrent-export"));
+            File.WriteAllText(Path.Combine(concurrentTarget.FullName, "payload"), "concurrent export");
+            var destination = Path.Combine(root.FullName, "export");
+            Directory.CreateSymbolicLink(destination, concurrentTarget.FullName);
+            var backup = Directory.CreateDirectory(Path.Combine(root.FullName, ".export.powerforge-backup-test"));
+            File.WriteAllText(Path.Combine(backup.FullName, "payload"), "previous export");
+            var rollbackCandidate = Path.Combine(root.FullName, ".export.powerforge-failed-test");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                AppleDirectExportSnapshot.RollbackPublication(
+                    destination,
+                    backup.FullName,
+                    rollbackCandidate,
+                    publishedSha256,
+                    published: true,
+                    movedExisting: true));
+
+            Assert.Contains("no unrecognized export bytes were deleted", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(concurrentTarget.FullName, new DirectoryInfo(destination).LinkTarget);
+            Assert.Equal("concurrent export", File.ReadAllText(Path.Combine(concurrentTarget.FullName, "payload")));
+            Assert.Equal("previous export", File.ReadAllText(Path.Combine(backup.FullName, "payload")));
+            Assert.False(Directory.Exists(rollbackCandidate));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }

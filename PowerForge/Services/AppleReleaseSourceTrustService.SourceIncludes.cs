@@ -283,7 +283,7 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private void ValidateAssemblerDirectives(string repositoryRoot, string sourcePath, string source)
     {
-
+        source = NormalizeAssemblerStatementBoundaries(source);
         foreach (Match directive in Regex.Matches(
                      source,
                      "(?im)^[ \\t]*(?:(?:[A-Za-z_.$][A-Za-z0-9_.$]*|[0-9]+):[ \\t]*)*\\.(?<kind>include|incbin)(?![A-Za-z0-9_])[ \\t]+(?<operand>[^\\r\\n]+)",
@@ -317,6 +317,28 @@ internal sealed partial class AppleReleaseSourceTrustService
                 ValidateAssemblerInputs(repositoryRoot, candidate, nestedSource);
             }
         }
+    }
+
+    private static string NormalizeAssemblerStatementBoundaries(string source)
+    {
+        var normalized = source.ToCharArray();
+        var insideString = false;
+        var escaped = false;
+        for (var index = 0; index < normalized.Length; index++)
+        {
+            var value = normalized[index];
+            if (insideString && value == '\\' && !escaped)
+            {
+                escaped = true;
+                continue;
+            }
+            if (value == '"' && !escaped)
+                insideString = !insideString;
+            if (value == ';' && !insideString)
+                normalized[index] = '\n';
+            escaped = false;
+        }
+        return new string(normalized);
     }
 
     private static void ValidateSwiftSourceDeterminism(string sourcePath)
