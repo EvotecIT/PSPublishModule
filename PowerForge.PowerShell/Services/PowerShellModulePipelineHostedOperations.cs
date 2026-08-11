@@ -12,11 +12,18 @@ internal sealed class PowerShellModulePipelineHostedOperations :
 {
     private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
+    private readonly bool _isWindows;
 
     internal PowerShellModulePipelineHostedOperations(IPowerShellRunner runner, ILogger logger)
+        : this(runner, logger, Path.DirectorySeparatorChar == '\\')
+    {
+    }
+
+    internal PowerShellModulePipelineHostedOperations(IPowerShellRunner runner, ILogger logger, bool isWindows)
     {
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _logger = logger ?? new NullLogger();
+        _isWindows = isWindows;
     }
 
     internal PowerShellModulePipelineHostedOperations(ILogger logger)
@@ -246,6 +253,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         SigningOptionsConfiguration signing)
     {
         var packageFileListPath = WriteTemporaryLineFile(packageFilePaths);
+        var temporaryPackageFileLists = new List<string> { packageFileListPath };
         var args = new List<string>(9)
         {
             rootPath,
@@ -261,24 +269,77 @@ internal sealed class PowerShellModulePipelineHostedOperations :
 
         var script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
         PowerShellRunResult result;
+        ModuleSigningResult? summary;
+        ModuleSigningResult? attemptSummary;
+        PowerShellRunResult? initialFailedResult = null;
+        ModuleSigningResult? initialFailedSummary = null;
         try
         {
             result = RunScript(script, args, TimeSpan.FromMinutes(10), preferPwsh: true);
+            attemptSummary = TryExtractSigningSummary(result.StdOut);
+            summary = attemptSummary;
+
+            if (TryGetWindowsPowerShellRetryFiles(
+                    result,
+                    attemptSummary,
+                    signing,
+                    rootPath,
+                    packageFilePaths,
+                    out var retryFilePaths))
+            {
+                initialFailedResult = result;
+                initialFailedSummary = summary;
+                _logger.Warn(
+                    $"Authenticode signing with '{DescribePowerShellHost(result.Executable)}' returned a retryable provider result for every failed file. " +
+                    "Retrying once with Windows PowerShell preferred for compatibility with the Windows certificate provider.");
+
+                var retryPackageFileListPath = WriteTemporaryLineFile(retryFilePaths);
+                temporaryPackageFileLists.Add(retryPackageFileListPath);
+                var retryArgs = args.ToArray();
+                retryArgs[1] = retryPackageFileListPath;
+                retryArgs[8] = "1";
+
+                result = RunScript(
+                    script,
+                    retryArgs,
+                    TimeSpan.FromMinutes(10),
+                    preferPwsh: false,
+                    hostRequirement: PowerShellHostRequirement.WindowsPowerShell);
+                attemptSummary = TryExtractSigningSummary(result.StdOut);
+                if (attemptSummary is null && result.ExitCode == 0)
+                {
+                    attemptSummary = new ModuleSigningResult
+                    {
+                        Attempted = retryFilePaths.Length,
+                        SignedNew = ParseSignedCount(result.StdOut)
+                    };
+                }
+
+                summary = attemptSummary is null
+                    ? initialFailedSummary
+                    : MergeSigningRetrySummaries(initialFailedSummary!, attemptSummary);
+            }
         }
         finally
         {
-            try { File.Delete(packageFileListPath); } catch { /* best effort */ }
+            foreach (var path in temporaryPackageFileLists)
+            {
+                try { File.Delete(path); } catch { /* best effort */ }
+            }
         }
-        var summary = TryExtractSigningSummary(result.StdOut);
 
-        if (result.ExitCode != 0 || (summary?.Failed ?? 0) > 0)
+        if (result.ExitCode != 0 || (attemptSummary?.Failed ?? 0) > 0)
         {
-            var message = TryExtractSigningError(result.StdOut) ?? result.StdErr;
-            var extra = summary is null ? string.Empty : $" {FormatSigningSummary(summary)}";
-            var full = $"Signing failed (exit {result.ExitCode}). {message}{extra}".Trim();
+            var full = FormatSigningFailure(result, attemptSummary);
+            if (initialFailedResult is not null)
+            {
+                full = $"Signing failed after the Windows PowerShell compatibility retry. " +
+                       $"Initial attempt: {FormatSigningFailure(initialFailedResult, initialFailedSummary)} " +
+                       $"Retry: {full}";
+                LogSigningDiagnostics(initialFailedResult);
+            }
 
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            LogSigningDiagnostics(result);
 
             throw new ModuleSigningException(full, summary);
         }
@@ -288,6 +349,9 @@ internal sealed class PowerShellModulePipelineHostedOperations :
             Attempted = ParseSignedCount(result.StdOut),
             SignedNew = ParseSignedCount(result.StdOut)
         };
+
+        _logger.Verbose(
+            $"Authenticode signing for '{moduleName}' used '{DescribePowerShellHost(result.Executable)}'.");
 
         if (summary.SignedTotal > 0)
         {
@@ -304,6 +368,94 @@ internal sealed class PowerShellModulePipelineHostedOperations :
 
         return summary;
     }
+
+    private bool TryGetWindowsPowerShellRetryFiles(
+        PowerShellRunResult result,
+        ModuleSigningResult? summary,
+        SigningOptionsConfiguration signing,
+        string rootPath,
+        IReadOnlyList<string> packageFilePaths,
+        out string[] retryFilePaths)
+    {
+        retryFilePaths = Array.Empty<string>();
+        if (!_isWindows || summary is null || summary.Failed <= 0 || summary.PrecheckFailure > 0 ||
+            summary.UnknownError + summary.SigningException != summary.Failed)
+            return false;
+        if (string.IsNullOrWhiteSpace(signing.CertificateThumbprint))
+            return false;
+        if (!string.IsNullOrWhiteSpace(signing.CertificatePFXPath) || !string.IsNullOrWhiteSpace(signing.CertificatePFXBase64))
+            return false;
+
+        if (!string.Equals(
+                Path.GetFileNameWithoutExtension(result.Executable),
+                "pwsh",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (summary.FailedFilePaths is not { } failedFilePaths || failedFilePaths.Length != summary.Failed)
+            return false;
+
+        try
+        {
+            var packageSet = new HashSet<string>(
+                packageFilePaths
+                    .Where(static path => !string.IsNullOrWhiteSpace(path))
+                    .Select(path => Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(rootPath, path))),
+                StringComparer.OrdinalIgnoreCase);
+            retryFilePaths = failedFilePaths
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Select(Path.GetFullPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            return retryFilePaths.Length == summary.Failed && retryFilePaths.All(packageSet.Contains);
+        }
+        catch
+        {
+            retryFilePaths = Array.Empty<string>();
+            return false;
+        }
+    }
+
+    private static ModuleSigningResult MergeSigningRetrySummaries(
+        ModuleSigningResult initial,
+        ModuleSigningResult retry)
+        => new()
+        {
+            TotalMatched = initial.TotalMatched,
+            TotalAfterExclude = initial.TotalAfterExclude,
+            AlreadySignedByThisCert = initial.AlreadySignedByThisCert,
+            AlreadySignedOther = initial.AlreadySignedOther,
+            Attempted = initial.Attempted,
+            SignedNew = initial.SignedNew + retry.SignedNew,
+            Resigned = initial.Resigned + retry.Resigned,
+            Failed = retry.Failed,
+            PrecheckFailure = retry.PrecheckFailure,
+            UnknownError = retry.UnknownError,
+            SigningException = retry.SigningException,
+            CertificateThumbprint = retry.CertificateThumbprint ?? initial.CertificateThumbprint,
+            FailedFiles = retry.FailedFiles ?? Array.Empty<string>(),
+            FailedFilePaths = retry.FailedFilePaths ?? Array.Empty<string>()
+        };
+
+    private void LogSigningDiagnostics(PowerShellRunResult result)
+    {
+        if (!_logger.IsVerbose) return;
+        if (!string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
+        if (!string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+    }
+
+    private static string FormatSigningFailure(PowerShellRunResult result, ModuleSigningResult? summary)
+    {
+        var message = TryExtractSigningError(result.StdOut) ?? result.StdErr;
+        var extra = summary is null ? string.Empty : $" {FormatSigningSummary(summary)}";
+        return $"Signing failed using '{DescribePowerShellHost(result.Executable)}' (exit {result.ExitCode}). {message}{extra}".Trim();
+    }
+
+    private static string DescribePowerShellHost(string? executable)
+        => string.IsNullOrWhiteSpace(executable) ? "unknown PowerShell host" : Path.GetFileName(executable);
 
     private static string WriteTemporaryLineFile(IEnumerable<string> lines)
     {
@@ -330,7 +482,12 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
     }
 
-    private PowerShellRunResult RunScript(string scriptText, IReadOnlyList<string> args, TimeSpan timeout, bool preferPwsh)
+    private PowerShellRunResult RunScript(
+        string scriptText,
+        IReadOnlyList<string> args,
+        TimeSpan timeout,
+        bool preferPwsh,
+        PowerShellHostRequirement hostRequirement = PowerShellHostRequirement.Any)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "modulepipeline");
         Directory.CreateDirectory(tempDir);
@@ -338,7 +495,9 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         File.WriteAllText(scriptPath, scriptText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         try
         {
-            return _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh));
+            return _runner.Run(hostRequirement == PowerShellHostRequirement.Any
+                ? new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh)
+                : new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh, hostRequirement));
         }
         finally
         {

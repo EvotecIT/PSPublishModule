@@ -39,9 +39,17 @@ public sealed class ModuleSigningResult
     [JsonPropertyName("failed")]
     public int Failed { get; set; }
 
+    /// <summary>Number of failures raised while inspecting a pre-existing signature, before any signing attempt.</summary>
+    [JsonPropertyName("precheckFailure")]
+    public int PrecheckFailure { get; set; }
+
     /// <summary>Number of sign operations that returned an "UnknownError" status.</summary>
     [JsonPropertyName("unknownError")]
     public int UnknownError { get; set; }
+
+    /// <summary>Number of signing operations that ended in a terminating host/provider exception.</summary>
+    [JsonPropertyName("signingException")]
+    public int SigningException { get; set; }
 
     /// <summary>Thumbprint of the certificate used for signing (if available).</summary>
     [JsonPropertyName("certificateThumbprint")]
@@ -50,6 +58,10 @@ public sealed class ModuleSigningResult
     /// <summary>List of file paths that failed signing (truncated).</summary>
     [JsonPropertyName("failedFiles")]
     public string[] FailedFiles { get; set; } = Array.Empty<string>();
+
+    /// <summary>Exact package file paths that failed signing, used for a scoped compatibility retry.</summary>
+    [JsonPropertyName("failedFilePaths")]
+    public string[] FailedFilePaths { get; set; } = Array.Empty<string>();
 
     /// <summary>Total number of files already signed (by this cert + third-party).</summary>
     [JsonIgnore]

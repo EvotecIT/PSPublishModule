@@ -50,6 +50,16 @@ function Test-ExcludedPackagePath([string]$relativePath, [string[]]$exclusions) 
   return $false
 }
 
+function Get-SigningPrecheckDisposition([string]$status, [bool]$overwrite) {
+  if ($status -eq 'Valid') {
+    if ($overwrite) { return 'Target' }
+    return 'Accept'
+  }
+  if ($status -eq 'NotSigned') { return 'Target' }
+  if ($overwrite) { return 'Target' }
+  return 'Fail'
+}
+
 function EmitError([string]$msg) {
   $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string]$msg)))
   Write-Output ('PFSIGN::ERROR::' + $b64)
@@ -64,9 +74,12 @@ function EmitSummary(
   [int]$signedNew,
   [int]$resigned,
   [int]$failed,
+  [int]$precheckFailure,
   [int]$unknownError,
+  [int]$signingException,
   [string]$certThumbprint,
-  [object[]]$failedFiles
+  [object[]]$failedFiles,
+  [object[]]$failedFilePaths
 ) {
   $summary = [ordered]@{
     totalMatched            = $totalMatched
@@ -77,9 +90,12 @@ function EmitSummary(
     signedNew               = $signedNew
     resigned                = $resigned
     failed                  = $failed
+    precheckFailure         = $precheckFailure
     unknownError            = $unknownError
+    signingException        = $signingException
     certificateThumbprint   = $certThumbprint
     failedFiles             = @($failedFiles | Select-Object -First 25)
+    failedFilePaths         = @($failedFilePaths)
   }
 
   $json = $summary | ConvertTo-Json -Compress -Depth 6
@@ -92,22 +108,23 @@ function Invoke-WithFileRetry {
   param(
     [Parameter(Mandatory = $true)] [scriptblock]$ScriptBlock,
     [Parameter(Mandatory = $true)] [string]$FilePath,
-    [Parameter(Mandatory = $true)] [string]$Action
+    [Parameter(Mandatory = $true)] [string]$Action,
+    [int]$MaxAttempts = 15
   )
 
-  $maxAttempts = 15
+  if ($MaxAttempts -lt 1) { throw 'MaxAttempts must be at least 1.' }
   $delay = 200
-  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
     try {
       return & $ScriptBlock
     } catch {
-      if ($attempt -ge $maxAttempts) {
+      if ($attempt -ge $MaxAttempts) {
         $message = $_.Exception.Message
         if ([string]::IsNullOrWhiteSpace($message)) {
           $message = 'unknown error'
         }
 
-        throw ('{0} failed for ''{1}'' after {2} attempt(s): {3}' -f $Action, $FilePath, $maxAttempts, $message)
+        throw ('{0} failed for ''{1}'' after {2} attempt(s): {3}' -f $Action, $FilePath, $MaxAttempts, $message)
       }
 
       Start-Sleep -Milliseconds $delay
@@ -238,13 +255,27 @@ try {
   $alreadyByThis = 0
   $alreadyOther = 0
   $preStatus = @{}
+  $preDisposition = @{}
   $attempted = 0
   $signedNew = 0
   $resigned = 0
   $failed = 0
   $unknownError = 0
+  $signingException = 0
   $failedFiles = New-Object 'System.Collections.Generic.List[string]'
+  $failedFilePaths = New-Object 'System.Collections.Generic.List[string]'
   $precheckFailures = @{}
+  $useWindowsPowerShellCompatibility = `
+    [System.IO.Path]::DirectorySeparatorChar -eq '\' -and `
+    $PSVersionTable.PSEdition -eq 'Core' -and `
+    -not [string]::IsNullOrWhiteSpace($Thumbprint) -and `
+    [string]::IsNullOrWhiteSpace($PfxPath) -and `
+    [string]::IsNullOrWhiteSpace($PfxBase64)
+  $signingMaxAttempts = 15
+  $canDeferToWindowsPowerShell = $false
+  $hasNonCompatibilitySigningFailure = $false
+  $deferRemainingSigningTargets = $false
+  $compatibilityFailureMessage = $null
 
   if ($IsWindows -or $PSVersionTable.PSVersion.Major -le 5) {
     if (-not (Get-Command Get-AuthenticodeSignature -ErrorAction SilentlyContinue)) {
@@ -261,31 +292,47 @@ try {
         }
         $status = [string]$sig.Status
         $preStatus[$f] = $status
+        $preDisposition[$f] = Get-SigningPrecheckDisposition -status $status -overwrite $overwrite
 
-        if ($status -ne 'NotSigned') {
-          $tp = $sig.SignerCertificate?.Thumbprint
+        if ($status -eq 'Valid') {
+          $tp = $null
+          if ($null -ne $sig -and $null -ne $sig.SignerCertificate) {
+            $tp = [string]$sig.SignerCertificate.Thumbprint
+          }
           if (-not [string]::IsNullOrWhiteSpace($tp)) { $tp = ($tp -replace '\s','').ToUpperInvariant() }
           if (-not [string]::IsNullOrWhiteSpace($tp) -and $tp -eq $thisTp) { $alreadyByThis++ } else { $alreadyOther++ }
+        } elseif ($preDisposition[$f] -eq 'Fail') {
+          $precheckFailures[$f] = "precheck returned status $status"
         }
       } catch {
         $preStatus[$f] = 'PrecheckFailed'
+        $preDisposition[$f] = 'Fail'
         $precheckFailures[$f] = "precheck failed: " + $_.Exception.Message
       }
     }
 
-    $targets = if ($overwrite) { $all } else { $all | Where-Object { $preStatus[$_] -eq 'NotSigned' } }
+    $canDeferToWindowsPowerShell = $useWindowsPowerShellCompatibility -and $precheckFailures.Count -eq 0
+    $signingMaxAttempts = if ($canDeferToWindowsPowerShell) { 3 } else { 15 }
+    $targets = $all | Where-Object { $preDisposition[$_] -eq 'Target' }
     $attempted = $targets.Count
 
     foreach ($f in $targets) {
       if ($precheckFailures.ContainsKey($f)) { [void]$precheckFailures.Remove($f) }
       $wasSigned = $preStatus[$f] -ne 'NotSigned'
+      if ($deferRemainingSigningTargets) {
+        $failed++
+        $signingException++
+        Add-FailedFile -List $failedFiles -FilePath $f -Message ("deferred to Windows PowerShell compatibility retry after provider failure: " + $compatibilityFailureMessage)
+        $failedFilePaths.Add($f) | Out-Null
+        continue
+      }
       try {
         if ($overwrite) {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -ScriptBlock {
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -MaxAttempts $signingMaxAttempts -ScriptBlock {
             Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -Force -ErrorAction Stop
           }
         } else {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -ScriptBlock {
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -MaxAttempts $signingMaxAttempts -ScriptBlock {
             Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -ErrorAction Stop
           }
         }
@@ -297,18 +344,30 @@ try {
           if ($wasSigned) { $resigned++ } else { $signedNew++ }
         } else {
           $failed++
+          if ($status -ne 'UnknownError') {
+            $hasNonCompatibilitySigningFailure = $true
+            $signingMaxAttempts = 15
+          }
           $statusMessage = if ($r) { [string]$r.StatusMessage } else { '' }
           Add-FailedFile -List $failedFiles -FilePath $f -Message ("signing returned status " + $status + " " + $statusMessage)
+          $failedFilePaths.Add($f) | Out-Null
         }
       } catch {
         $failed++
+        $signingException++
         Add-FailedFile -List $failedFiles -FilePath $f -Message $_.Exception.Message
+        $failedFilePaths.Add($f) | Out-Null
+        if ($canDeferToWindowsPowerShell -and -not $hasNonCompatibilitySigningFailure) {
+          $deferRemainingSigningTargets = $true
+          $compatibilityFailureMessage = $_.Exception.Message
+        }
       }
     }
 
     foreach ($entry in $precheckFailures.GetEnumerator()) {
       $failed++
       Add-FailedFile -List $failedFiles -FilePath $entry.Key -Message $entry.Value
+      $failedFilePaths.Add([string]$entry.Key) | Out-Null
     }
   } else {
     if (-not (Get-Command Set-OpenAuthenticodeSignature -ErrorAction SilentlyContinue)) {
@@ -325,14 +384,20 @@ try {
         }
         $status = [string]$sig.SStatus
         $preStatus[$f] = $status
-        if ($status -ne 'NotSigned') { $alreadyOther++ }
+        $preDisposition[$f] = Get-SigningPrecheckDisposition -status $status -overwrite $overwrite
+        if ($status -eq 'Valid') {
+          $alreadyOther++
+        } elseif ($preDisposition[$f] -eq 'Fail') {
+          $precheckFailures[$f] = "precheck returned status $status"
+        }
       } catch {
         $preStatus[$f] = 'PrecheckFailed'
+        $preDisposition[$f] = 'Fail'
         $precheckFailures[$f] = "precheck failed: " + $_.Exception.Message
       }
     }
 
-    $targets = if ($overwrite) { $all } else { $all | Where-Object { $preStatus[$_] -eq 'NotSigned' } }
+    $targets = $all | Where-Object { $preDisposition[$_] -eq 'Target' }
     $attempted = $targets.Count
 
     foreach ($f in $targets) {
@@ -358,16 +423,20 @@ try {
           $failed++
           $statusMessage = if ($r) { [string]$r.StatusMessage } else { '' }
           Add-FailedFile -List $failedFiles -FilePath $f -Message ("signing returned status " + $status + " " + $statusMessage)
+          $failedFilePaths.Add($f) | Out-Null
         }
       } catch {
         $failed++
+        $signingException++
         Add-FailedFile -List $failedFiles -FilePath $f -Message $_.Exception.Message
+        $failedFilePaths.Add($f) | Out-Null
       }
     }
 
     foreach ($entry in $precheckFailures.GetEnumerator()) {
       $failed++
       Add-FailedFile -List $failedFiles -FilePath $entry.Key -Message $entry.Value
+      $failedFilePaths.Add([string]$entry.Key) | Out-Null
     }
   }
 
@@ -380,9 +449,12 @@ try {
     -signedNew $signedNew `
     -resigned $resigned `
     -failed $failed `
+    -precheckFailure $precheckFailures.Count `
     -unknownError $unknownError `
+    -signingException $signingException `
     -certThumbprint $thisTp `
-    -failedFiles @($failedFiles)
+    -failedFiles @($failedFiles) `
+    -failedFilePaths @($failedFilePaths)
 
   if ($failed -gt 0) { exit 2 } else { exit 0 }
 } catch {
