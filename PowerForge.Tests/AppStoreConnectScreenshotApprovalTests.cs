@@ -266,6 +266,70 @@ public sealed class AppStoreConnectScreenshotApprovalTests
         }
     }
 
+    [Theory]
+    [InlineData("deleted")]
+    [InlineData("filtered")]
+    [InlineData("limited")]
+    public void Validate_RequiresEveryApprovedScreenshotToRemainSelected(string mutation)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.ScreenshotApproval", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var screenshotFolder = Directory.CreateDirectory(Path.Combine(root.FullName, "screenshots"));
+            var first = Path.Combine(screenshotFolder.FullName, "01-home.png");
+            var second = Path.Combine(screenshotFolder.FullName, "02-rooms.png");
+            var png = Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII=");
+            File.WriteAllBytes(first, png);
+            File.WriteAllBytes(second, png.Concat(new byte[] { 1 }).ToArray());
+            var spec = CreateSpec();
+            var manifest = new AppStoreConnectScreenshotApprovalService().Create(
+                new AppStoreConnectScreenshotApprovalRequest
+                {
+                    Spec = spec,
+                    BaseDirectory = root.FullName,
+                    AllowedRoot = screenshotFolder.FullName,
+                    VersionString = "1.5.0",
+                    SourceCommit = ApprovedSourceCommit,
+                    ApprovedBy = "release-owner"
+                });
+            Assert.Equal(2, manifest.Screenshots.Length);
+            File.WriteAllText(
+                Path.Combine(root.FullName, "approval.json"),
+                JsonSerializer.Serialize(manifest));
+
+            switch (mutation)
+            {
+                case "deleted":
+                    File.Delete(second);
+                    break;
+                case "filtered":
+                    spec.ScreenshotSets[0].Filter = "01-*.png";
+                    break;
+                case "limited":
+                    spec.ScreenshotSets[0].MaxCount = 1;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(mutation));
+            }
+
+            var result = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
+                spec,
+                root.FullName,
+                expectedSourceCommit: ApprovedSourceCommit);
+
+            Assert.False(result.IsValid);
+            Assert.Contains(
+                result.Messages,
+                message => message.Contains("approved screenshot", StringComparison.OrdinalIgnoreCase) &&
+                           message.Contains("not selected", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private static AppStoreConnectScreenshotSyncSpec CreateSpec()
         => new()
         {
