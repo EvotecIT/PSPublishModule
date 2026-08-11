@@ -322,6 +322,45 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Theory]
+    [InlineData("-fthinlto-index Rules")]
+    [InlineData("-fthinlto-index=Rules")]
+    [InlineData("-Xclang -fthinlto-index -Xclang Rules")]
+    [InlineData("-Xclang -fthinlto-index=Rules")]
+    public void ResolveExactAppleSourceCommit_classifies_thin_lto_index_files(string option)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "ThinLtoIndexRepo" + option.Length,
+            $"OTHER_CFLAGS = {option}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_classifies_thin_lto_index_from_response_file()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "ThinLtoResponseFileRepo",
+            "OTHER_CFLAGS = @Compiler.rsp\n");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Compiler.rsp"), "-fthinlto-index=Rules\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
     [InlineData("-fxray-always-instrument Rules", "Rules")]
     [InlineData("-fxray-always-instrument=Rules", "Rules")]
     [InlineData("-fxray-never-instrument Rules", "Rules")]
