@@ -13,6 +13,8 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
     private readonly string _sourceProjectRoot;
     private readonly string _snapshotProjectRoot;
     private readonly string _sourceCommit;
+    private IReadOnlyDictionary<string, string> _trackedFileMutationIdentities =
+        new Dictionary<string, string>(StringComparer.Ordinal);
     private string? _snapshotConfigPath;
     private bool _disposed;
 
@@ -71,6 +73,7 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
                 snapshotRoot,
                 snapshotProjectRoot,
                 sourceCommit);
+            snapshot._trackedFileMutationIdentities = snapshot.CaptureTrackedFileMutationIdentities();
             snapshot.ValidateUnchanged();
             if (!string.IsNullOrWhiteSpace(plan.ExactSourceConfigPath))
                 snapshot.ValidateExactSourceInputs(plan.ExactSourceConfigPath!);
@@ -145,6 +148,17 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
                 $"The isolated Apple build snapshot changed commits. Expected '{_sourceCommit}', received '{head}'.");
         }
 
+        var currentMutationIdentities = CaptureTrackedFileMutationIdentities();
+        if (_trackedFileMutationIdentities.Count != currentMutationIdentities.Count ||
+            _trackedFileMutationIdentities.Any(pair =>
+                !currentMutationIdentities.TryGetValue(pair.Key, out var current) ||
+                !pair.Value.Equals(current, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                "The isolated Apple build snapshot file identity changed while xcodebuild was running. " +
+                "A transient write or hard-link alias invalidates exact-source evidence. Discard the archive and rebuild from a new snapshot.");
+        }
+
         var status = Run(
             _git,
             RootPath,
@@ -158,6 +172,134 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
         if (!string.IsNullOrWhiteSpace(_snapshotConfigPath))
             ValidateMappedExactSourceInputs();
     }
+
+    private IReadOnlyDictionary<string, string> CaptureTrackedFileMutationIdentities()
+    {
+        var tracked = Run(
+                _git,
+                RootPath,
+                new[] { "ls-files", "--stage", "-z" },
+                "enumerate the Apple build snapshot files")
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        var result = new Dictionary<string, string>(GetPathComparer());
+        var trackedFiles = new List<(string RelativePath, string FullPath)>();
+        foreach (var entry in tracked)
+        {
+            var separator = entry.IndexOf('\t');
+            if (separator < 0 || !entry.StartsWith("100", StringComparison.Ordinal))
+                continue;
+            var relativePath = entry.Substring(separator + 1);
+            var fullPath = Path.GetFullPath(Path.Combine(
+                RootPath,
+                relativePath.Replace('/', Path.DirectorySeparatorChar)));
+            EnsureContained(RootPath, fullPath, "Apple snapshot tracked file");
+            trackedFiles.Add((relativePath, fullPath));
+            var status = ExistingFilePathIdentityResolver.ResolveStatus(fullPath);
+            result.Add(relativePath, status.MutationIdentity);
+        }
+
+        var hardLinkCounts = ReadHardLinkCounts(trackedFiles.Select(static file => file.FullPath).ToArray());
+        for (var index = 0; index < trackedFiles.Count; index++)
+        {
+            if (hardLinkCounts[index] != 1)
+            {
+                throw new InvalidOperationException(
+                    $"The isolated Apple build snapshot tracked file '{trackedFiles[index].RelativePath}' has {hardLinkCounts[index]} hard links. " +
+                    "Exact-source builds require one private pathname per tracked file.");
+            }
+        }
+        return result;
+    }
+
+    private IReadOnlyList<int> ReadHardLinkCounts(IReadOnlyList<string> paths)
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+        {
+            return paths.Select(path =>
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                return ReadWindowsHardLinkCount(stream.SafeFileHandle);
+            }).ToArray();
+        }
+
+        const int batchSize = 64;
+        var executable = "/usr/bin/stat";
+#if NET8_0_OR_GREATER
+        var isMacOs = OperatingSystem.IsMacOS();
+#else
+        var isMacOs = true;
+#endif
+        var counts = new List<int>(paths.Count);
+        for (var offset = 0; offset < paths.Count; offset += batchSize)
+        {
+            var batch = paths.Skip(offset).Take(batchSize).ToArray();
+            var arguments = new List<string>
+            {
+                isMacOs ? "-f" : "-c",
+                isMacOs ? "%l" : "%h"
+            };
+            arguments.AddRange(batch);
+            var result = new ProcessRunner().RunAsync(new ProcessRunRequest(
+                    executable,
+                    RootPath,
+                    arguments,
+                    TimeSpan.FromMinutes(1),
+                    AppleTrustedExecutionEnvironment.Create(),
+                    captureOutput: true,
+                    captureError: true,
+                    inheritEnvironment: false))
+                .GetAwaiter()
+                .GetResult();
+            if (!result.Succeeded)
+                throw new InvalidOperationException($"Failed to inspect Apple snapshot hard-link counts: {result.StdErr}".Trim());
+            var batchCounts = result.StdOut
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => int.TryParse(value.Trim(), out var count) ? count : -1)
+                .ToArray();
+            if (batchCounts.Length != batch.Length || batchCounts.Any(static count => count < 0))
+                throw new InvalidOperationException("The Apple snapshot hard-link inspection returned an incomplete result.");
+            counts.AddRange(batchCounts);
+        }
+        return counts;
+    }
+
+    private static int ReadWindowsHardLinkCount(Microsoft.Win32.SafeHandles.SafeFileHandle handle)
+    {
+        if (!GetFileInformationByHandle(handle, out var information))
+            throw new System.ComponentModel.Win32Exception(System.Runtime.InteropServices.Marshal.GetLastWin32Error());
+        return checked((int)information.NumberOfLinks);
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct WindowsFileTime
+    {
+        internal uint LowDateTime;
+        internal uint HighDateTime;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct WindowsFileInformation
+    {
+        internal uint FileAttributes;
+        internal WindowsFileTime CreationTime;
+        internal WindowsFileTime LastAccessTime;
+        internal WindowsFileTime LastWriteTime;
+        internal uint VolumeSerialNumber;
+        internal uint FileSizeHigh;
+        internal uint FileSizeLow;
+        internal uint NumberOfLinks;
+        internal uint FileIndexHigh;
+        internal uint FileIndexLow;
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool GetFileInformationByHandle(
+        Microsoft.Win32.SafeHandles.SafeFileHandle file,
+        out WindowsFileInformation information);
+
+    private static StringComparer GetPathComparer()
+        => Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     public void Dispose()
     {

@@ -5,6 +5,23 @@ namespace PowerForge.Tests;
 public sealed class GitClientTests
 {
     [Fact]
+    public void ExistingFilePhysicalStatus_reports_identity_and_metadata_change_token()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var status = ExistingFilePathIdentityResolver.ResolveStatus(path);
+
+            Assert.False(string.IsNullOrWhiteSpace(status.ChangeToken));
+            Assert.False(string.IsNullOrWhiteSpace(status.Identity));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task GetStatusAsync_ParsesBranchAheadBehindAndChangeCounts()
     {
         const string output = """
@@ -99,6 +116,34 @@ public sealed class GitClientTests
         Assert.Equal("0", captured.EnvironmentVariables["GIT_TERMINAL_PROMPT"]);
         Assert.Equal("core.hooksPath", captured.EnvironmentVariables["GIT_CONFIG_KEY_0"]);
         Assert.Equal("core.fsmonitor", captured.EnvironmentVariables["GIT_CONFIG_KEY_1"]);
+    }
+
+    [Fact]
+    public async Task TrustedSystemClient_ForwardsSshAgentSocketWithoutInheritingOtherEnvironment()
+    {
+        const string expectedSocket = "/private/tmp/powerforge-test-ssh-agent.sock";
+        var previousSocket = Environment.GetEnvironmentVariable("SSH_AUTH_SOCK");
+        ProcessRunRequest? captured = null;
+        try
+        {
+            Environment.SetEnvironmentVariable("SSH_AUTH_SOCK", expectedSocket);
+            var runner = new StubProcessRunner(request =>
+            {
+                captured = request;
+                return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            });
+            var client = GitClient.CreateTrustedSystemClient(runner, TimeSpan.FromSeconds(30));
+
+            await client.RunRawAsync(Directory.GetCurrentDirectory(), ["status", "--short"]);
+
+            Assert.NotNull(captured);
+            Assert.False(captured!.InheritEnvironment);
+            Assert.Equal(expectedSocket, captured.EnvironmentVariables!["SSH_AUTH_SOCK"]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SSH_AUTH_SOCK", previousSocket);
+        }
     }
 
     private sealed class StubProcessRunner : IProcessRunner

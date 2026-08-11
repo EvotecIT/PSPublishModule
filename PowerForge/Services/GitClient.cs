@@ -67,6 +67,9 @@ public sealed class GitClient
         };
         if (Path.DirectorySeparatorChar == '\\')
             environment["SystemRoot"] = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        var sshAuthSocket = Environment.GetEnvironmentVariable("SSH_AUTH_SOCK");
+        if (!string.IsNullOrWhiteSpace(sshAuthSocket))
+            environment["SSH_AUTH_SOCK"] = sshAuthSocket;
         return new GitClient(processRunner, executable, defaultTimeout, environment, inheritEnvironment: false);
     }
 

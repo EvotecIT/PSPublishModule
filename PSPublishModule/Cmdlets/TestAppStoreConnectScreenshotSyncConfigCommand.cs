@@ -30,7 +30,7 @@ public sealed class TestAppStoreConnectScreenshotSyncConfigCommand : PSCmdlet
 
     /// <summary>Exact source commit expected by the reviewed approval manifest.</summary>
     [Parameter]
-    [ValidatePattern("^[0-9A-Fa-f]{40}$")]
+    [ValidatePattern("^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$")]
     public string? SourceCommit { get; set; }
 
     /// <summary>Validates the screenshot sync configuration.</summary>

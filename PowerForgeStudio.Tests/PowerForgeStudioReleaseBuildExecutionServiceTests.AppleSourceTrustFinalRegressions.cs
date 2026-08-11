@@ -422,6 +422,66 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("injected.h", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void AppleSourceSnapshot_rejects_transient_external_hard_link_mutation()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("HardLinkedSnapshotRepo");
+        var project = scope.CreateDirectory(Path.Combine("HardLinkedSnapshotRepo", "Sample.xcodeproj"));
+        File.WriteAllText(Path.Combine(project, "project.pbxproj"), "// exact project\n");
+        var sourcePath = Path.Combine(repositoryRoot, "Input.swift");
+        const string sourceBytes = "let value = 1\n";
+        File.WriteAllText(sourcePath, sourceBytes);
+        RunGit(repositoryRoot, "init", "--quiet");
+        var sourceCommit = CommitRepository(repositoryRoot);
+        var plan = new PowerForgeAppleReleasePlan
+        {
+            ProjectRoot = repositoryRoot,
+            Archive = true,
+            SourceCommit = sourceCommit,
+            RequireImmutableSourceSnapshot = true
+        };
+
+        using var snapshot = AppleReleaseSourceSnapshot.CreateIfRequired(plan)!;
+        var snapshotSource = snapshot.MapPath(sourcePath);
+        var aliasPath = Path.Combine(scope.RootPath, "outside-snapshot-alias.swift");
+        CreateSnapshotHardLink(aliasPath, snapshotSource);
+        File.WriteAllText(aliasPath, "let value = 2\n");
+        File.WriteAllText(aliasPath, sourceBytes);
+        File.Delete(aliasPath);
+
+        var exception = Assert.Throws<InvalidOperationException>(snapshot.ValidateUnchanged);
+
+        Assert.Contains("hard-link alias", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void CreateSnapshotHardLink(string linkPath, string existingPath)
+    {
+        var succeeded = Path.DirectorySeparatorChar == '\\'
+            ? CreateSnapshotHardLinkWindows(linkPath, existingPath, IntPtr.Zero)
+            : CreateSnapshotHardLinkUnix(existingPath, linkPath) == 0;
+        if (!succeeded)
+        {
+            var error = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
+            throw new IOException(
+                $"Unable to create hard-link test artifact: {new System.ComponentModel.Win32Exception(error).Message}");
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport(
+        "kernel32.dll",
+        EntryPoint = "CreateHardLinkW",
+        CharSet = System.Runtime.InteropServices.CharSet.Unicode,
+        SetLastError = true)]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool CreateSnapshotHardLinkWindows(
+        string fileName,
+        string existingFileName,
+        IntPtr securityAttributes);
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "link", SetLastError = true)]
+    private static extern int CreateSnapshotHardLinkUnix(string existingPath, string newPath);
+
     private static string ReadFixtureHead(string repositoryRoot)
     {
         var startInfo = new System.Diagnostics.ProcessStartInfo("git")

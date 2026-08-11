@@ -266,8 +266,9 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
     }
 
-    private void EnsureRemotePackageMirror(string mirrorPath, string repositoryUrl, string revision)
+    internal void EnsureRemotePackageMirror(string mirrorPath, string repositoryUrl, string revision)
     {
+        using var mirrorLease = AcquireRemotePackageMirrorLease(mirrorPath);
         var createdMirror = false;
         if (!Directory.Exists(mirrorPath))
         {
@@ -307,12 +308,50 @@ internal sealed partial class AppleReleaseSourceTrustService
             catch
             {
                 var concurrentlyAvailable = RunGitAllowFailure(mirrorPath, "cat-file", "-e", revision + "^{commit}");
-                if (createdMirror && !concurrentlyAvailable.Succeeded && Directory.Exists(mirrorPath))
+                if (concurrentlyAvailable.Succeeded)
+                    return;
+                if (createdMirror && Directory.Exists(mirrorPath))
                     Directory.Delete(mirrorPath, recursive: true);
                 throw;
             }
         }
         RunGit(mirrorPath, "cat-file", "-e", revision + "^{commit}");
+    }
+
+    internal static FileStream AcquireRemotePackageMirrorLease(string mirrorPath)
+    {
+        var lockPath = mirrorPath + ".lock";
+        var deadline = DateTime.UtcNow.AddMinutes(2);
+        while (true)
+        {
+            try
+            {
+                var lease = new FileStream(
+                    lockPath,
+                    FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite,
+                    FileShare.None,
+                    bufferSize: 1,
+                    FileOptions.None);
+                try
+                {
+#if NET8_0_OR_GREATER
+                    if (!OperatingSystem.IsWindows())
+                        File.SetUnixFileMode(lockPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+#endif
+                    return lease;
+                }
+                catch
+                {
+                    lease.Dispose();
+                    throw;
+                }
+            }
+            catch (IOException) when (DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(50);
+            }
+        }
     }
 
     private static string ResolveRemotePackageCacheRoot()

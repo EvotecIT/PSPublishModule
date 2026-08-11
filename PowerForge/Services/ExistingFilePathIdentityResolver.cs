@@ -16,6 +16,12 @@ internal static class ExistingFilePathIdentityResolver
     /// <param name="path">Existing file whose identity should be resolved.</param>
     /// <returns>A volume/device-qualified file identifier suitable for in-process equality checks.</returns>
     internal static string Resolve(string path)
+        => ResolveStatus(path).Identity;
+
+    /// <summary>
+    /// Returns the physical identity and metadata-change token for an existing file.
+    /// </summary>
+    internal static ExistingFilePhysicalStatus ResolveStatus(string path)
     {
         var fullPath = System.IO.Path.GetFullPath(path);
         using var stream = new FileStream(
@@ -25,13 +31,42 @@ internal static class ExistingFilePathIdentityResolver
             FileShare.ReadWrite | FileShare.Delete);
 
         if (System.IO.Path.DirectorySeparatorChar == '\\')
-            return ReadWindowsFileIdentity(stream.SafeFileHandle);
+            return ReadWindowsFileStatus(stream.SafeFileHandle);
 
 #if NET8_0_OR_GREATER
-        return ReadUnixFileIdentity(stream.SafeFileHandle);
+        return ReadUnixFileStatus(stream.SafeFileHandle);
 #else
         throw new PlatformNotSupportedException("Physical file identity is not available for this runtime and operating system.");
 #endif
+    }
+
+    internal readonly struct ExistingFilePhysicalStatus
+    {
+        internal ExistingFilePhysicalStatus(string identity, string changeToken)
+        {
+            Identity = identity;
+            ChangeToken = changeToken;
+        }
+
+        internal string Identity { get; }
+
+        internal string ChangeToken { get; }
+
+        internal string MutationIdentity => $"{Identity}:{ChangeToken}";
+    }
+
+    private static ExistingFilePhysicalStatus ReadWindowsFileStatus(SafeFileHandle handle)
+    {
+        var identity = ReadWindowsFileIdentity(handle);
+        if (!GetFileBasicInformationByHandleEx(
+                handle,
+                WindowsFileInfoByHandleClass.FileBasicInfo,
+                out var information,
+                checked((uint)Marshal.SizeOf<WindowsFileBasicInfo>())))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+
+        var changeToken = $"{information.ChangeTime:X16}";
+        return new ExistingFilePhysicalStatus(identity, changeToken);
     }
 
     private static string ReadWindowsFileIdentity(SafeFileHandle handle)
@@ -100,12 +135,14 @@ internal static class ExistingFilePathIdentityResolver
             !string.Equals(fileSystemName, "ReFS", StringComparison.OrdinalIgnoreCase));
 
 #if NET8_0_OR_GREATER
-    private static string ReadUnixFileIdentity(SafeFileHandle handle)
+    private static ExistingFilePhysicalStatus ReadUnixFileStatus(SafeFileHandle handle)
     {
         if (SystemNativeFStat(handle, out var status) != 0)
             throw new Win32Exception(Marshal.GetLastWin32Error());
 
-        return $"unix:{unchecked((ulong)status.Device):X16}:{unchecked((ulong)status.Inode):X16}";
+        var identity = $"unix:{unchecked((ulong)status.Device):X16}:{unchecked((ulong)status.Inode):X16}";
+        var changeToken = $"{status.ChangeTime:X16}:{status.ChangeTimeNanoseconds:X16}";
+        return new ExistingFilePhysicalStatus(identity, changeToken);
     }
 #endif
 
@@ -145,8 +182,19 @@ internal static class ExistingFilePathIdentityResolver
         internal uint FileIndexLow;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowsFileBasicInfo
+    {
+        internal long CreationTime;
+        internal long LastAccessTime;
+        internal long LastWriteTime;
+        internal long ChangeTime;
+        internal uint FileAttributes;
+    }
+
     private enum WindowsFileInfoByHandleClass
     {
+        FileBasicInfo = 0,
         FileIdInfo = 18
     }
 
@@ -182,6 +230,14 @@ internal static class ExistingFilePathIdentityResolver
         SafeFileHandle file,
         WindowsFileInfoByHandleClass fileInformationClass,
         out WindowsFileIdInfo information,
+        uint bufferSize);
+
+    [DllImport("kernel32.dll", EntryPoint = "GetFileInformationByHandleEx", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFileBasicInformationByHandleEx(
+        SafeFileHandle file,
+        WindowsFileInfoByHandleClass fileInformationClass,
+        out WindowsFileBasicInfo information,
         uint bufferSize);
 
     [DllImport("kernel32.dll", SetLastError = true)]
