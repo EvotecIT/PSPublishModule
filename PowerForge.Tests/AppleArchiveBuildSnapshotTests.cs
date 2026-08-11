@@ -2,6 +2,45 @@ namespace PowerForge.Tests;
 
 public sealed class AppleArchiveBuildSnapshotTests
 {
+    [Fact]
+    public void CopyDirectory_restores_read_only_directory_modes_after_copying_descendants()
+    {
+#if NET8_0_OR_GREATER
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var source = Directory.CreateDirectory(Path.Combine(root.FullName, "source"));
+        var readOnly = Directory.CreateDirectory(Path.Combine(source.FullName, "Contents"));
+        File.WriteAllText(Path.Combine(readOnly.FullName, "payload"), "approved artifact");
+        File.SetUnixFileMode(
+            readOnly.FullName,
+            UnixFileMode.UserRead | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        var destination = Path.Combine(root.FullName, "destination");
+        try
+        {
+            AppleArtifactCopy.CopyDirectory(source.FullName, destination);
+
+            Assert.Equal("approved artifact", File.ReadAllText(Path.Combine(destination, "Contents", "payload")));
+            Assert.Equal(File.GetUnixFileMode(readOnly.FullName), File.GetUnixFileMode(Path.Combine(destination, "Contents")));
+        }
+        finally
+        {
+            try
+            {
+                File.SetUnixFileMode(readOnly.FullName, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                var copiedReadOnly = Path.Combine(destination, "Contents");
+                if (Directory.Exists(copiedReadOnly))
+                    File.SetUnixFileMode(copiedReadOnly, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                root.Delete(recursive: true);
+            }
+            catch { }
+        }
+#endif
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

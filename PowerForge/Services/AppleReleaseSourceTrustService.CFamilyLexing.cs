@@ -99,13 +99,8 @@ internal sealed partial class AppleReleaseSourceTrustService
             {
                 if (current == '*' && next == '/')
                 {
-                    result.Append("  ");
                     index++;
                     inBlockComment = false;
-                }
-                else
-                {
-                    result.Append(current == '\r' || current == '\n' ? current : ' ');
                 }
                 continue;
             }
@@ -136,7 +131,9 @@ internal sealed partial class AppleReleaseSourceTrustService
             }
             if (current == '/' && next == '*')
             {
-                result.Append("  ");
+                // Translation phase 3 replaces one complete block comment with one space.
+                // In particular, newlines inside the comment do not terminate a directive.
+                result.Append(' ');
                 index++;
                 inBlockComment = true;
                 continue;

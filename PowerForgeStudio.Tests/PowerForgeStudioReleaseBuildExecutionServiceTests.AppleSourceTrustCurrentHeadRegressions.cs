@@ -120,6 +120,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     [InlineData("--config-user-dir=Config")]
     [InlineData("--config-system-dir Config")]
     [InlineData("--config-system-dir=Config")]
+    [InlineData("--config-user-dir=Config --config=Rules.cfg")]
     public void ResolveExactAppleSourceCommit_rejects_clang_configuration_file_controls(string option)
     {
         using var scope = new TemporaryDirectoryScope();
@@ -155,6 +156,23 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("outside the exact-source graph", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_collapses_multiline_block_comment_inside_preprocessor_directive()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateTrackedSourceFixture(
+            scope,
+            "MultilineBlockCommentDirectiveRepo",
+            "Source.c",
+            "# /* comment\ncontinued */ include \"/tmp/Injected.h\"\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Injected.h", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

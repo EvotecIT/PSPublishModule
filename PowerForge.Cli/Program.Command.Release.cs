@@ -378,6 +378,8 @@ internal static partial class Program
         request.AppleAction = ParseAppleReleaseAction(TryGetOptionValue(argv, "--apple-action"));
         request.AppleMarketingVersion = ChooseString(request.AppleMarketingVersion, TryGetOptionValue(argv, "--apple-version"));
         request.AppleSourceCommit = ChooseString(request.AppleSourceCommit, TryGetOptionValue(argv, "--apple-source-commit"));
+        request.RequireImmutableAppleSourceSnapshot = request.RequireImmutableAppleSourceSnapshot ||
+                                                      !string.IsNullOrWhiteSpace(request.AppleSourceCommit);
         request.AppleExpectedPlanSha256 = ChooseString(request.AppleExpectedPlanSha256, TryGetOptionValue(argv, "--apple-expected-plan-sha256"));
         request.AppleActionConfirmed = argv.Any(a => a.Equals("--confirm-apple-action", StringComparison.OrdinalIgnoreCase));
         request.AppleAdoptExistingBuild = argv.Any(a => a.Equals("--apple-adopt-existing-build", StringComparison.OrdinalIgnoreCase));

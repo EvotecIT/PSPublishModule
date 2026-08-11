@@ -9,6 +9,8 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
     private readonly string _scopeDescription;
     private readonly string _readerDescription;
     private readonly string _failureInstruction;
+    private int _enforceMutations;
+    private long _mutationSequence;
     private string? _firstMutation;
     private Exception? _watcherError;
     private bool _disposed;
@@ -38,7 +40,11 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         _watcher.Deleted += OnMutation;
         _watcher.Renamed += OnMutation;
         _watcher.Error += OnError;
-        _watcher.EnableRaisingEvents = enableImmediately;
+        // Keep the watcher subscribed for the complete producer lifetime. Producer-owned writes are
+        // tolerated until the process completion boundary, but the watcher itself is never started
+        // late: the boundary transition therefore cannot create an unobserved activation window.
+        _enforceMutations = enableImmediately ? 1 : 0;
+        _watcher.EnableRaisingEvents = true;
     }
 
     internal void ValidateNoChanges() {
@@ -70,13 +76,52 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         // Producer-output monitors are armed only at the process completion boundary.
         // No producer events are cleared: the first identity is captured while every
         // later write, rename, or metadata change remains observable.
-        if (!_watcher.EnableRaisingEvents)
-            _watcher.EnableRaisingEvents = true;
+        T output;
+        if (Volatile.Read(ref _enforceMutations) == 0)
+        {
+            output = capture();
+            // FileSystemWatcher delivery is asynchronous. The producer's own final writes may still
+            // be queued when the process-exit callback runs, so let the already-active observer drain
+            // to a quiet sequence before changing those events from producer activity to tampering.
+            // The output identity is bound before this drain and must remain identical afterward, so
+            // a persistent replacement during the drain cannot become the accepted producer output.
+            var sequence = Interlocked.Read(ref _mutationSequence);
+            var stablePasses = 0;
+            for (var pass = 0; pass < 10 && stablePasses < 5; pass++)
+            {
+                Thread.Sleep(50);
+                var current = Interlocked.Read(ref _mutationSequence);
+                if (current == sequence)
+                {
+                    stablePasses++;
+                }
+                else
+                {
+                    sequence = current;
+                    stablePasses = 0;
+                }
+            }
+            if (stablePasses < 5)
+            {
+                throw new InvalidOperationException(
+                    $"The {_scopeDescription} did not become quiet at the producer completion boundary. {_failureInstruction}");
+            }
+            var drainedOutput = capture();
+            if (!EqualityComparer<T>.Default.Equals(output, drainedOutput))
+            {
+                throw new InvalidOperationException(
+                    $"The {_scopeDescription} changed while its {producerDescription} output was being bound. {_failureInstruction}");
+            }
+            Interlocked.Exchange(ref _enforceMutations, 1);
+        }
+        else
+        {
+            output = capture();
+        }
         if (!string.IsNullOrWhiteSpace(_firstMutation)) {
             throw new InvalidOperationException(
                 $"The {_scopeDescription} changed before its {producerDescription} output could be bound. {_failureInstruction}");
         }
-        var output = capture();
         Thread.Sleep(250);
         if (_watcherError is not null) {
             throw new InvalidOperationException(
@@ -97,7 +142,11 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
     }
 
     private void OnMutation(object sender, FileSystemEventArgs args)
-        => Interlocked.CompareExchange(ref _firstMutation, args.FullPath, null);
+    {
+        Interlocked.Increment(ref _mutationSequence);
+        if (Volatile.Read(ref _enforceMutations) != 0)
+            Interlocked.CompareExchange(ref _firstMutation, args.FullPath, null);
+    }
 
     private void OnError(object sender, ErrorEventArgs args)
         => Interlocked.CompareExchange(ref _watcherError, args.GetException(), null);

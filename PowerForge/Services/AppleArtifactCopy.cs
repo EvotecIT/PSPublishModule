@@ -19,6 +19,10 @@ internal static class AppleArtifactCopy
     internal static void CopyDirectory(string sourceRoot, string destinationRoot)
     {
         Directory.CreateDirectory(destinationRoot);
+        var directoryMetadata = new List<(string Source, string Destination)>
+        {
+            (sourceRoot, destinationRoot)
+        };
         var pending = new Stack<(string Source, string Destination)>();
         pending.Push((sourceRoot, destinationRoot));
         while (pending.Count > 0)
@@ -59,6 +63,7 @@ internal static class AppleArtifactCopy
                 else if (isDirectory)
                 {
                     Directory.CreateDirectory(destinationPath);
+                    directoryMetadata.Add((sourcePath, destinationPath));
                     pending.Push((sourcePath, destinationPath));
                 }
                 else
@@ -66,22 +71,31 @@ internal static class AppleArtifactCopy
                     File.Copy(sourcePath, destinationPath, overwrite: false);
                 }
 
-                if (!isLink)
-                {
-#if NET8_0_OR_GREATER
-                    if (!OperatingSystem.IsWindows())
-                        File.SetUnixFileMode(destinationPath, File.GetUnixFileMode(sourcePath));
-#endif
-                    File.SetAttributes(destinationPath, attributes);
-                }
+                if (!isLink && !isDirectory)
+                    ApplyMetadata(sourcePath, destinationPath, attributes);
             }
         }
 
+        // Directory permissions must be restored only after every descendant has been copied.
+        // Applying a source mode such as 0555 at creation time makes the destination unwritable
+        // and prevents ordinary release users from materializing the remaining bundle contents.
+        for (var index = directoryMetadata.Count - 1; index >= 0; index--)
+        {
+            var directory = directoryMetadata[index];
+            ApplyMetadata(
+                directory.Source,
+                directory.Destination,
+                File.GetAttributes(directory.Source));
+        }
+    }
+
+    private static void ApplyMetadata(string sourcePath, string destinationPath, FileAttributes attributes)
+    {
 #if NET8_0_OR_GREATER
         if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(destinationRoot, File.GetUnixFileMode(sourceRoot));
+            File.SetUnixFileMode(destinationPath, File.GetUnixFileMode(sourcePath));
 #endif
-        File.SetAttributes(destinationRoot, File.GetAttributes(sourceRoot));
+        File.SetAttributes(destinationPath, attributes);
     }
 
     /// <summary>
