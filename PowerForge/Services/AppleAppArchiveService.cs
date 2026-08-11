@@ -201,8 +201,17 @@ public sealed partial class AppleAppArchiveService
         var toolEnvironment = request.RequireTrustedSystemTools
             ? AppleTrustedExecutionEnvironment.Create()
             : null;
-        var result = await _processRunner.RunAsync(
-            new ProcessRunRequest(
+        var directExport = request.Destination.Equals("export", StringComparison.OrdinalIgnoreCase);
+        using var exportMonitor = directExport
+            ? new AppleReleaseSourceMutationMonitor(
+                exportPath,
+                "private Developer ID export",
+                "xcodebuild exportArchive",
+                "Discard the export and run xcodebuild exportArchive again.")
+            : null;
+        string? exportArtifactPath = null;
+        string? exportArtifactSha256 = null;
+        var processRequest = new ProcessRunRequest(
                 xcodeBuildExecutable,
                 Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory(),
                 args,
@@ -210,15 +219,30 @@ public sealed partial class AppleAppArchiveService
                 toolEnvironment,
                 captureOutput: true,
                 captureError: true,
-                inheritEnvironment: toolEnvironment is null),
-            cancellationToken).ConfigureAwait(false);
-
-        string? exportArtifactPath = null;
-        string? exportArtifactSha256 = null;
-        if (result.Succeeded && request.Destination.Equals("export", StringComparison.OrdinalIgnoreCase))
+                inheritEnvironment: toolEnvironment is null);
+        if (directExport)
         {
-            exportArtifactPath = PowerForgeReleaseService.ResolveDirectAppleArtifactPath(exportPath);
-            exportArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(exportArtifactPath);
+            processRequest.SetCompletionBoundary(completionResult =>
+            {
+                if (!completionResult.Succeeded)
+                    return;
+                exportMonitor!.CaptureExpectedProducerOutput(
+                    () =>
+                    {
+                        exportArtifactPath = PowerForgeReleaseService.ResolveDirectAppleArtifactPath(exportPath);
+                        exportArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(exportArtifactPath);
+                        return true;
+                    },
+                    "xcodebuild exportArchive");
+            });
+        }
+        var result = await _processRunner.RunAsync(processRequest, cancellationToken).ConfigureAwait(false);
+        processRequest.InvokeCompletionBoundary(result);
+        if (result.Succeeded && directExport)
+        {
+            exportMonitor!.ValidateNoChanges();
+            if (string.IsNullOrWhiteSpace(exportArtifactPath) || string.IsNullOrWhiteSpace(exportArtifactSha256))
+                throw new InvalidOperationException("xcodebuild completed without binding the exact Developer ID export at its process completion boundary.");
         }
         var diagnostics = ResolveUploadDiagnostics(result);
 

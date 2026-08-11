@@ -270,6 +270,19 @@ internal sealed partial class AppleReleaseSourceTrustService
                     yield return path;
                 continue;
             }
+            if (token.StartsWith("-swift-module-file=", StringComparison.Ordinal))
+            {
+                yield return ReadSwiftModuleFilePath(token.Substring("-swift-module-file=".Length), key);
+                continue;
+            }
+            if (token.Equals("-swift-module-cross-import", StringComparison.Ordinal))
+            {
+                if (index + 2 >= tokens.Length)
+                    throw new InvalidOperationException($"Xcode build setting {key} ends before Swift option '-swift-module-cross-import' receives its module and overlay path.");
+                var moduleName = tokens[++index];
+                yield return ReadSwiftCrossImportPath(moduleName, tokens[++index], key);
+                continue;
+            }
             if (token.Equals("-remap-file", StringComparison.Ordinal))
             {
                 if (++index >= tokens.Length)

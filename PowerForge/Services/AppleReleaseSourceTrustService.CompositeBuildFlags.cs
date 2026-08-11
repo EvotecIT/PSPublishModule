@@ -35,6 +35,36 @@ internal sealed partial class AppleReleaseSourceTrustService
         return new[] { parts[0], parts[1] };
     }
 
+    private static string ReadSwiftModuleFilePath(string value, string key)
+    {
+        var separator = value.IndexOf('=');
+        if (separator <= 0 || separator == value.Length - 1)
+        {
+            throw new InvalidOperationException(
+                $"Xcode build setting {key} contains malformed Swift module input '{value}'. Expected <module-name>=<module-path>.");
+        }
+        var moduleName = value.Substring(0, separator);
+        if (moduleName.Any(char.IsWhiteSpace) || IsPathLikeBuildFlagToken(moduleName))
+        {
+            throw new InvalidOperationException(
+                $"Xcode build setting {key} contains an invalid Swift module name in '{value}'.");
+        }
+        return value.Substring(separator + 1);
+    }
+
+    private static string ReadSwiftCrossImportPath(string moduleName, string value, string key)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName) ||
+            moduleName.Any(char.IsWhiteSpace) ||
+            IsPathLikeBuildFlagToken(moduleName) ||
+            string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException(
+                $"Xcode build setting {key} contains malformed Swift cross-import input. Expected <module-name> <overlay-path>.");
+        }
+        return value;
+    }
+
     private static string ReadDylibOverrideCurrentPath(string value, string key)
     {
         var separator = value.IndexOf(':');

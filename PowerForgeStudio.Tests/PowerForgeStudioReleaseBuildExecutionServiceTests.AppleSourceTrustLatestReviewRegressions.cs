@@ -157,4 +157,29 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.Contains("compiler language", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Theory]
+    [InlineData("-swift-module-file=Rules=Injected.swiftmodule", "Injected.swiftmodule")]
+    [InlineData("-Xfrontend -swift-module-file=Rules=Injected.swiftmodule", "Injected.swiftmodule")]
+    [InlineData("-swift-module-cross-import Rules Injected.swiftoverlay", "Injected.swiftoverlay")]
+    [InlineData("-candidate-module-file Injected.swiftmodule", "Injected.swiftmodule")]
+    [InlineData("-explicit-swift-module-map-file Injected.json", "Injected.json")]
+    [InlineData("@Module.rsp", "Injected.swiftmodule")]
+    public void ResolveExactAppleSourceCommit_attests_swift_module_injection_inputs(string option, string expectedPath)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "SwiftModuleInjectionRepo" + option.Length,
+            $"OTHER_SWIFT_FLAGS = {option}\n");
+        if (option.StartsWith("@", StringComparison.Ordinal))
+            File.WriteAllText(Path.Combine(repositoryRoot, "Module.rsp"), "-swift-module-file=Rules=Injected.swiftmodule\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Equal(Path.Combine(repositoryRoot, expectedPath), exception.FileName);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }
