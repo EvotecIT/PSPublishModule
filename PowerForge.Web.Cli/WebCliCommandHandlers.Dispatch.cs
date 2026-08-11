@@ -64,6 +64,7 @@ collection: {{collection}}
             "opportunity" => HandleOpportunity(subArgs, outputJson, logger, outputSchemaVersion),
             "traffic" => HandleTraffic(subArgs, outputJson, logger, outputSchemaVersion),
             "performance" => HandlePerformance(subArgs, outputJson, logger, outputSchemaVersion),
+            "fleet" => HandleFleet(subArgs, outputJson, logger, outputSchemaVersion),
             _ => HandleUnknownCommand()
         };
     }

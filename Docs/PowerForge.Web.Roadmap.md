@@ -87,10 +87,10 @@ Legend:
   - Code: `PowerForge.Web/Services/WebSiteBuilder.Seo.cs`, `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`, `PowerForge.Web/Services/WebSiteBuilder.StructuredDataProfiles.cs`
 - **Have**: specialized sitemap family includes news/image/video sitemap outputs + sitemap index.
   - Code: `PowerForge.Web/Services/WebSitemapGenerator.cs`, `PowerForge.Web/Services/WebSitemapGenerator.Specialized.cs`
-- **Partial**: Search Intelligence now has versioned provider-neutral search, traffic and performance contracts; deterministic observation identity; idempotent DbaClientX SQLite history; evidence-linked weak-page/CTR opportunity reports; fleet provider configuration with a credential-safe capability doctor; authenticated Google Search Console and Bing Webmaster collection with Bing CSV fallback; Cloudflare traffic collection; Lighthouse import; and CrUX field-data collection through `powerforge-web`.
-  - Code: `PowerForge.Web/Search/`, `PowerForge.Web.Cli/Search/`
+- **Partial**: Search Intelligence now has versioned provider-neutral search, traffic and performance contracts; deterministic observation identity; idempotent DbaClientX SQLite history; evidence-linked weak-page/CTR opportunity reports; fleet provider configuration with a credential-safe capability doctor; authenticated Google Search Console and Bing Webmaster collection with Bing CSV fallback; Cloudflare traffic collection; Lighthouse import; CrUX field-data collection; and portable scheduling, bounded backfill, dry-run retention and static fleet reports through `powerforge-web`.
+  - Code: `PowerForge.Web/Search/`, `PowerForge.Web.Cli/Search/`, `PowerForge.Web.Cli/WebCliCommandHandlers.Fleet.cs`
   - Docs: `Docs/PowerForge.Web.SearchIntelligence.md`
-  - Remaining: scheduling/backfill/retention, competitor evidence, briefs, outcomes, Google sitemap/URL-inspection workflows, and fleet UI.
+  - Remaining: external scheduler/runner hosting, competitor evidence, briefs, outcome tracking, Google sitemap/URL-inspection workflows, and fleet UI.
 
 ### Themes + Contracts
 

@@ -41,6 +41,9 @@ internal static partial class WebCliHelpers
         Console.WriteLine("                     [--scope <origin|url>] [--target <url>] [--form-factor <all|phone|desktop|tablet>] [--evidence <reference>] [--output json]");
         Console.WriteLine("  powerforge-web performance list --database <search.db> --site <id> [--provider <id>] [--kind <lab|field>]");
         Console.WriteLine("                     [--target <url>] [--form-factor <all|phone|desktop|tablet>] [--output json]");
+        Console.WriteLine("  powerforge-web fleet schedule --config <search-providers.json> --database <search.db> [--as-of <ISO-8601-with-offset>] [--output json]");
+        Console.WriteLine("  powerforge-web fleet report --config <search-providers.json> --database <search.db> [--as-of <ISO-8601-with-offset>] [--output json]");
+        Console.WriteLine("  powerforge-web fleet prune --config <search-providers.json> --database <search.db> [--as-of <ISO-8601-with-offset>] [--apply] [--output json]");
         Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
         Console.WriteLine("  powerforge-web verify --config <site.json> [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
         Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");

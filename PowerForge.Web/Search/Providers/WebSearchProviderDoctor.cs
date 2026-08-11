@@ -134,6 +134,19 @@ public static partial class WebSearchProviderDoctor
                 WebSearchProviderCheckSeverity.Error,
                 $"Provider configuration schema version {configuration.SchemaVersion} is not supported; expected {WebSearchProviderConfiguration.CurrentSchemaVersion}.");
         }
+        try
+        {
+            WebSearchFleetPlanner.ValidatePolicy(configuration.Operations ?? new WebSearchFleetOperationsConfiguration());
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            AddCheck(
+                checks,
+                "configuration.operations-invalid",
+                WebSearchProviderCheckSeverity.Error,
+                ex.Message,
+                remediation: "Use the bounded scheduling and retention ranges published by the provider schema.");
+        }
 
         var sites = configuration.Sites ?? Array.Empty<WebSearchSiteProviderConfiguration>();
         if (sites.Length == 0)
@@ -239,10 +252,15 @@ public static partial class WebSearchProviderDoctor
                 (check.ProviderId is null || string.Equals(check.ProviderId, state.ProviderId, StringComparison.OrdinalIgnoreCase)));
         }
         var success = orderedChecks.All(check => check.Severity != WebSearchProviderCheckSeverity.Error);
+        var configurationCanBeFingerprinted = orderedChecks.All(check =>
+            check.Severity != WebSearchProviderCheckSeverity.Error ||
+            string.Equals(check.Code, "provider.credential-unavailable", StringComparison.Ordinal));
         return new WebSearchProviderDoctorResult
         {
             Success = success,
-            ConfigurationHash = success ? WebSearchProviderConfigurationFingerprint.Compute(configuration) : null,
+            ConfigurationHash = configurationCanBeFingerprinted
+                ? WebSearchProviderConfigurationFingerprint.Compute(configuration)
+                : null,
             SiteCount = sites.Length,
             ProviderCount = states.Count,
             ConfigurationReadyCount = states.Count(state => state.ConfigurationReady),

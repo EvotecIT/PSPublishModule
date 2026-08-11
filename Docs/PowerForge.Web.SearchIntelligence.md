@@ -2,7 +2,7 @@
 
 PowerForge.Web can collect search-performance, first-party traffic, laboratory performance and field-performance observations, keep an idempotent fleet history, and produce evidence-linked opportunities. Search, traffic and performance use separate contracts and tables so related measurements can be compared without pretending they mean the same thing.
 
-The current release supports imported Search Analytics-style data, fleet provider configuration and capability checks, authenticated Google Search Console collection, Bing Webmaster API collection with a CSV export fallback, Cloudflare end-user HTTP traffic collection, Lighthouse report import and CrUX field-data collection. It does not crawl competitors or draft articles automatically.
+The current release supports imported Search Analytics-style data, fleet provider configuration and capability checks, authenticated Google Search Console collection, Bing Webmaster API collection with a CSV export fallback, Cloudflare end-user HTTP traffic collection, Lighthouse imports, CrUX field collection, and portable fleet operations. It does not crawl competitors or draft articles automatically.
 
 ## Ownership
 
@@ -15,6 +15,7 @@ The current release supports imported Search Analytics-style data, fleet provide
 | Provider authentication and collection | Adapters in `PowerForge.Web` | Google Search Console and Bing Webmaster collectors with thin `powerforge-web` orchestration |
 | First-party traffic observations | `PowerForge.Web` | `WebTrafficObservationBatch`, Cloudflare GraphQL collector, and `traffic collect/list` |
 | Laboratory and field performance observations | `PowerForge.Web` | Lighthouse importer, CrUX collector, and `performance import-lighthouse/collect-crux/list` |
+| Scheduling, bounded backfill and retention policy | `PowerForge.Web` | `WebSearchFleetPlanner` plus `fleet schedule/report/prune` orchestration |
 | Site-specific product facts and content changes | Owning site repository | Consume evidence; normal PR review remains the publication gate |
 | Authenticated fleet UI | Future thin `Control.Web` consumer | Read the PowerForge Search service/API when that boundary is justified |
 
@@ -107,7 +108,9 @@ powerforge-web provider doctor `
     --output json
 ```
 
-The doctor validates schema version, unique fleet identities, canonical site URLs, provider kinds, requested capabilities, provider-specific non-secret settings, credential kinds and whether the referenced environment variables are visible to the current process. Property names and stable identifiers use the exact casing and whitespace accepted by the published schema. The loader rejects duplicate JSON object members before deserialization, so a later member cannot silently replace reviewed intent. The doctor never emits credential values. Secret-looking settings are rejected, and only the catalog's known non-secret setting names may contribute values to configuration identity; unsupported setting values are redacted as well. A missing credential for an enabled provider is an error; a disabled provider may keep an unavailable credential reference as a warning so fleet configuration can be prepared before a rollout. A successful report emits a deterministic `configurationHash` over normalized non-secret configuration; reports with any blocking semantic error omit it. Collectors should copy a successful report's hash into observation batches so historical runs can be tied to the configuration that produced them.
+The doctor validates schema version, unique fleet identities, canonical site URLs, provider kinds, requested capabilities, provider-specific non-secret settings, credential kinds and whether the referenced environment variables are visible to the current process. Property names and stable identifiers use the exact casing and whitespace accepted by the published schema. The loader rejects duplicate JSON object members before deserialization, so a later member cannot silently replace reviewed intent. The doctor never emits credential values. Secret-looking settings are rejected, and only the catalog's known non-secret setting names may contribute values to configuration identity; unsupported setting values are redacted as well. A missing credential for an enabled provider is an error; a disabled provider may keep an unavailable credential reference as a warning so fleet configuration can be prepared before a rollout. A structurally and semantically valid configuration emits a deterministic `configurationHash` over normalized non-secret configuration even when a runtime credential is temporarily unavailable, while `success` and provider readiness still report that operational error. Blocking configuration-shape or semantic errors omit the hash. Collectors should copy the hash into observation batches so historical runs can be tied to the configuration that produced them.
+
+The optional top-level `operations` object keeps portable scheduling policy beside the fleet provider registrations. It can define the oldest automatic backfill date, maximum daily partitions per work item, search and traffic availability lag, Lighthouse and CrUX refresh intervals, and separate search/traffic/performance run-retention windows. These values affect orchestration rather than provider collection semantics, so they receive their own `operationsHash` and do not fragment the provider `configurationHash` attached to evidence.
 
 Provider state deliberately separates `configurationReady`, `collectorAvailable` and `collectionReady`. Collector readiness is capability-specific: the current Google and Bing adapters implement `search.analytics`; sitemap and URL-inspection capabilities remain visibly incomplete. A valid registration can therefore be reviewed and deployed before every requested adapter capability ships without pretending that collection already works.
 
@@ -251,6 +254,49 @@ powerforge-web performance list `
 
 `performance list` selects one run per provider, site, measurement kind, target scope, target URL and form factor, preferring complete evidence before recency. JSON groups every metric array inside its selected run provenance so identical metric names from different targets or form factors remain unambiguous. The result distinguishes missing storage, no evidence, partial evidence and explicit CrUX no-data evidence. The structural contract is published at `Schemas/powerforge.web.performance-observations.schema.json`; runtime normalization enforces the lab/field rules that JSON Schema cannot express safely.
 
+## Operate the fleet
+
+Use one schedule command from Windows Task Scheduler, GitHub Actions, an OVH cron host, or another orchestrator. It reads only reviewed configuration and durable evidence, makes no provider requests, and emits deterministic work items:
+
+```powershell
+powerforge-web fleet schedule `
+    --config .\search-providers.json `
+    --database .\.powerforge\search.db `
+    --output json
+```
+
+Daily Search and Cloudflare work starts after the configured provider lag. Missing history, including an internal gap after the earliest known range, is split into consecutive chunks no larger than `maxBackfillDaysPerRun`; Google Search Console work is additionally capped at seven dates to match the collector's bounded in-memory batch. Future-only evidence does not move the inferred backfill start beyond the eligible reporting horizon. `hasMoreBackfill` tells the runner to schedule another chunk after the current one is imported. A permanent provider boundary such as retention or row limits marks only its exact failed partition `input-required`; it cannot block an earlier collectible gap or a later healthy partition. Search scheduling tracks the default `web` search type separately from image or other search types. CrUX scheduling tracks the fleet site's default `all`/origin scope separately from URL or device-specific evidence. Google, Bing API, Cloudflare, and CrUX work is marked `ready`; unavailable selected capabilities and credentials are surfaced as `collector-unavailable` or `configuration-error`. Readiness and evidence identity are scoped to the selected site/provider action, so an unrelated broken registration neither blocks healthy work nor invalidates its stored evidence. Bing CSV fallback and Lighthouse are marked `input-required`, because a reviewed export or browser-produced report must exist before PowerForge can import it. The plan never pretends those external inputs were collected. A failed Bing snapshot credits an aggregate reporting date only when stored page and query rows prove both dimensions; aggregate totals alone remain partial evidence. CSV imports preserve page/query associations per date even when the file-level manifest declares both dimensions. Empty legacy partial runs remain retention candidates even though they contribute no completed coverage or observation rows. A permanent-failure run stops being retention evidence after a later collection proves that same partition complete. Schema v7 retained-coverage summaries preserve the deleted run's collection timestamp, so historical `--as-of` reports neither credit future evidence nor hide evidence merely because maintenance ran later.
+
+When supplied, `--as-of` must use the canonical ISO-8601 timestamp shape `yyyy-MM-ddTHH:mm:ss[.fraction]Z` or an explicit `+/-HH:mm` offset. Schedule, report and prune reject culture-specific or offsetless timestamps before opening storage.
+
+The fleet report combines capability-doctor readiness with current durable evidence:
+
+```powershell
+powerforge-web fleet report `
+    --config .\search-providers.json `
+    --database .\.powerforge\search.db `
+    --output json
+```
+
+Each enabled capability is reported as `configuration-error`, `collector-unavailable`, `missing`, `partial`, `due`, or `current`; disabled registrations remain visible as `disabled`. Provider readiness errors are returned as rows instead of aborting the report. A provider with no valid capability still emits a provider-level `configuration-error` row with an empty `capability`, so JSON consumers can identify the broken registration. This is the static fleet surface an authenticated Control.Web page or an agent skill can consume without learning provider-specific storage details.
+
+Retention is a dry run unless the exact valueless `--apply` flag is present. Values such as `--apply false` are rejected before storage is touched:
+
+```powershell
+powerforge-web fleet prune `
+    --config .\search-providers.json `
+    --database .\.powerforge\search.db `
+    --output json
+
+powerforge-web fleet prune `
+    --config .\search-providers.json `
+    --database .\.powerforge\search.db `
+    --apply `
+    --output json
+```
+
+Retention uses collection time to find old candidates, deletes child observations and parent runs transactionally, and preserves the run with the newest completed reporting evidence for every provider/site/scope stream even when that run is older than the configured window. Completed prefixes inside partial daily runs participate in that preservation decision. Pruning validates only operations policy and the current storage schema; it does not require Google, Bing, Cloudflare, or CrUX secrets. Schedule, report, and prune require the current fleet schema and never migrate an older database as a side effect; importing current evidence performs the normal transactional migration first.
+
 ## List opportunities
 
 ```powershell
@@ -278,8 +324,8 @@ Provider adapters should preserve their raw evidence and map only stable Search 
 
 The next implementation steps are:
 
-1. scheduled collection, backfill, retention and static fleet reports;
-2. competitor evidence through RadarX/HtmlTinkerX, followed by human-approved briefs and measured outcomes;
-3. Google and Bing sitemap capabilities when their operator workflows and shared sitemap contract are defined.
+1. competitor evidence through RadarX/HtmlTinkerX, followed by human-approved briefs and measured outcomes;
+2. Google and Bing sitemap capabilities when their operator workflows and shared sitemap contract are defined;
+3. an authenticated Control.Web consumer when the static fleet contracts have enough operational history to justify a service boundary.
 
 Those additions must keep the current separation: first-party search facts, traffic facts, performance measurements, competitor evidence and recommendations are related, but they are not interchangeable datasets.
