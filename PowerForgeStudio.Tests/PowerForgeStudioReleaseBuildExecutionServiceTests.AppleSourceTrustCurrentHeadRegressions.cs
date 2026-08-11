@@ -5,6 +5,29 @@ namespace PowerForgeStudio.Tests;
 public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 {
     [Theory]
+    [InlineData("-cas-plugin-path -Rules.dylib", "-Rules.dylib")]
+    [InlineData("-cas-plugin-path=-Rules.dylib", "-Rules.dylib")]
+    [InlineData("-external-pass-pipeline-filename Rules.json", "Rules.json")]
+    [InlineData("-in-process-plugin-server-path PluginServer", "PluginServer")]
+    public void ResolveExactAppleSourceCommit_classifies_swift_tool_and_plugin_inputs(
+        string option,
+        string expectedPath)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "SwiftToolInputRepo" + option.Length,
+            $"OTHER_SWIFT_FLAGS = -cache-compile-job {option}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains(expectedPath, exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
     [InlineData("__has_embed(\"/tmp/payload.bin\")", "__has_embed")]
     [InlineData("__has_ ## embed(\"/tmp/payload.bin\")", "__has_embed")]
     [InlineData("__has_ ## include(\"/tmp/payload.bin\")", "__has_include")]

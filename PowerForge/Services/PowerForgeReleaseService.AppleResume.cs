@@ -30,7 +30,7 @@ internal sealed partial class PowerForgeReleaseService
 
                 var accepted = string.Equals(target.NotarizationStatus, "Accepted", StringComparison.OrdinalIgnoreCase);
                 var stapleCompleted = !plan.DirectDistribution.Staple ||
-                                      (target.Stapled == true && target.StapleValidated == true);
+                                      HasDurablePublishedStaple(target);
                 var assessmentCompleted = !plan.DirectDistribution.Assess ||
                                           target.GatekeeperAccepted == true;
                 if (!accepted || (stapleCompleted && assessmentCompleted) ||
@@ -358,7 +358,7 @@ internal sealed partial class PowerForgeReleaseService
         if (!File.Exists(artifactPath) && !Directory.Exists(artifactPath))
             return false;
         var stapleCompleted = !plan.DirectDistribution.Staple ||
-                              (prior.Stapled == true && prior.StapleValidated == true);
+                              HasDurablePublishedStaple(prior);
         var assessmentCompleted = !plan.DirectDistribution.Assess ||
                                   prior.GatekeeperAccepted == true;
         var completed = stapleCompleted && assessmentCompleted;
@@ -415,7 +415,7 @@ internal sealed partial class PowerForgeReleaseService
             prior.NotarizationSubmissionId,
             prior.DirectArtifactSha256,
             prior.NotarizationSubmissionSha256,
-            prior.Stapled == true);
+            HasDurablePublishedStaple(prior));
         result.ResumedAcceptedNotarization = true;
         result.SkippedSteps = MergeAppleSkippedSteps(
             result.SkippedSteps,
@@ -425,6 +425,9 @@ internal sealed partial class PowerForgeReleaseService
 
         return true;
     }
+
+    internal static bool HasDurablePublishedStaple(PowerForgeAppleReleaseTargetReceipt target)
+        => target.Stapled == true && target.StapleValidated == true;
 
     internal static bool IsMatchingDirectReceiptTarget(
         PowerForgeAppleReleasePlan plan,

@@ -118,6 +118,13 @@ public sealed class AppleNotarizationService
         ProcessRunResult submission;
         string? submissionId;
         string? status;
+        using var submissionMonitor = resumed
+            ? null
+            : new AppleReleaseSourceMutationMonitor(
+                submissionSnapshot.RootPath,
+                "private Apple notarization submission",
+                "notarytool",
+                "Do not resubmit until the accepted submission has been reconciled.");
         if (resumed)
         {
             submissionId = request.AcceptedSubmissionId!.Trim();
@@ -138,17 +145,24 @@ public sealed class AppleNotarizationService
                 "notarytool", "submit", submittedPath, "--wait", "--output-format", "json"
             };
             submitArguments.AddRange(authentication);
-            using var submissionMonitor = new AppleReleaseSourceMutationMonitor(
-                submissionSnapshot.RootPath,
-                "private Apple notarization submission",
-                "notarytool",
-                "Do not resubmit until the accepted submission has been reconciled.");
             submissionSnapshot.CompleteSubmissionCapture(artifactSha256);
             submission = await RunAsync(xcrunExecutable, submissionArtifactPath, submitArguments, timeout, toolEnvironment, cancellationToken).ConfigureAwait(false);
             (submissionId, status) = ParseSubmission(submission);
+        }
+        using var acceptedArtifactMonitor = !resumed &&
+                                            submission.Succeeded &&
+                                            string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase)
+            ? CreateArtifactMutationMonitor(
+                submissionArtifactPath,
+                "accepted private Apple notarization artifact",
+                "accepted checkpoint and retained submission capture",
+                "Do not staple or publish until the accepted submission has been reconciled.")
+            : null;
+        if (!resumed)
+        {
             try
             {
-                submissionMonitor.ValidateNoChanges();
+                submissionMonitor!.ValidateNoChanges();
                 var observedSubmissionSha256 = ComputeFileSha256(submittedPath);
                 if (!observedSubmissionSha256.Equals(submissionSha256, StringComparison.OrdinalIgnoreCase))
                 {
@@ -210,13 +224,44 @@ public sealed class AppleNotarizationService
         using var postStapleMonitor = submission.Succeeded &&
                                       string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) &&
                                       request.Staple
-            ? new AppleReleaseSourceMutationMonitor(
-                submissionSnapshot.RootPath,
+            ? CreateArtifactMutationMonitor(
+                submissionArtifactPath,
                 "validated private Apple notarization artifact",
                 "stapler production, validation, Gatekeeper assessment, and final publication",
                 "Discard the private artifact and resume from the last durable notarization checkpoint.",
                 enableImmediately: staplingCompleted)
             : null;
+        if (!resumed && acceptedArtifactMonitor is not null)
+        {
+            try
+            {
+                acceptedArtifactMonitor!.ValidateNoChanges();
+                var observedSubmissionSha256 = ComputeFileSha256(submittedPath);
+                if (!observedSubmissionSha256.Equals(submissionSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"The private Apple notarization submission changed during notarytool execution. Expected SHA-256 " +
+                        $"'{submissionSha256}', received '{observedSubmissionSha256}'.");
+                }
+                var observedArtifactSha256 = ComputeArtifactSha256(submissionArtifactPath);
+                if (!observedArtifactSha256.Equals(artifactSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"The private Apple notarization artifact changed after Apple accepted it. Expected SHA-256 " +
+                        $"'{artifactSha256}', received '{observedArtifactSha256}'.");
+                }
+            }
+            catch (Exception ex) when (
+                submission.Succeeded &&
+                string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(submissionId))
+            {
+                throw new InvalidOperationException(
+                    $"Apple accepted notarization submission '{submissionId}', but its exact submission or artifact changed before stapling. " +
+                    "Do not resubmit until the accepted submission has been reconciled.",
+                    ex);
+            }
+        }
         if (submission.Succeeded && string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) && request.Staple)
         {
             if (staplingCompleted)
@@ -231,6 +276,13 @@ public sealed class AppleNotarizationService
             }
             else
             {
+                var preStapleArtifactSha256 = ComputeArtifactSha256(submissionArtifactPath);
+                if (!preStapleArtifactSha256.Equals(artifactSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"The private Apple notarization artifact changed before stapling. Expected SHA-256 '{artifactSha256}', " +
+                        $"received '{preStapleArtifactSha256}'. Discard the private artifact and resume from the last durable notarization checkpoint.");
+                }
                 staple = await RunAsync(
                         xcrunExecutable,
                         submissionArtifactPath,
@@ -474,6 +526,25 @@ public sealed class AppleNotarizationService
         var result = await _processRunner.RunAsync(processRequest, cancellationToken).ConfigureAwait(false);
         processRequest.InvokeCompletionBoundary(result);
         return result;
+    }
+
+    private static AppleReleaseSourceMutationMonitor CreateArtifactMutationMonitor(
+        string artifactPath,
+        string scopeDescription,
+        string readerDescription,
+        string failureInstruction,
+        bool enableImmediately = true)
+    {
+        var fullPath = Path.GetFullPath(artifactPath);
+        var isDirectory = Directory.Exists(fullPath);
+        return new AppleReleaseSourceMutationMonitor(
+            Path.GetDirectoryName(fullPath)!,
+            scopeDescription,
+            readerDescription,
+            failureInstruction,
+            enableImmediately,
+            exactPath: fullPath,
+            includeExactPathDescendants: isDirectory);
     }
 
     private static string ResolveAppleToolExecutable(

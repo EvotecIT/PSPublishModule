@@ -9,6 +9,8 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
     private readonly string _scopeDescription;
     private readonly string _readerDescription;
     private readonly string _failureInstruction;
+    private readonly string? _exactPath;
+    private readonly bool _includeExactPathDescendants;
     private int _enforceMutations;
     private long _mutationSequence;
     private string? _firstMutation;
@@ -20,10 +22,14 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         string scopeDescription = "exact-source Apple build snapshot",
         string readerDescription = "xcodebuild",
         string failureInstruction = "Discard the archive and rebuild from a new snapshot.",
-        bool enableImmediately = true) {
+        bool enableImmediately = true,
+        string? exactPath = null,
+        bool includeExactPathDescendants = false) {
         _scopeDescription = scopeDescription;
         _readerDescription = readerDescription;
         _failureInstruction = failureInstruction;
+        _exactPath = string.IsNullOrWhiteSpace(exactPath) ? null : Path.GetFullPath(exactPath);
+        _includeExactPathDescendants = includeExactPathDescendants;
         _watcher = new FileSystemWatcher(rootPath) {
             IncludeSubdirectories = true,
             InternalBufferSize = 64 * 1024,
@@ -152,9 +158,40 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
 
     private void OnMutation(object sender, FileSystemEventArgs args)
     {
+        if (_exactPath is not null && !MutationTouchesExactPath(args, _exactPath, _includeExactPathDescendants))
+            return;
         Interlocked.Increment(ref _mutationSequence);
         if (Volatile.Read(ref _enforceMutations) != 0)
             Interlocked.CompareExchange(ref _firstMutation, args.FullPath, null);
+    }
+
+    private static bool MutationTouchesExactPath(
+        FileSystemEventArgs args,
+        string exactPath,
+        bool includeDescendants)
+    {
+        var comparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (PathMatches(Path.GetFullPath(args.FullPath), exactPath, includeDescendants, comparison))
+            return true;
+        return args is RenamedEventArgs renamed &&
+               PathMatches(Path.GetFullPath(renamed.OldFullPath), exactPath, includeDescendants, comparison);
+    }
+
+    private static bool PathMatches(
+        string candidate,
+        string exactPath,
+        bool includeDescendants,
+        StringComparison comparison)
+    {
+        if (candidate.Equals(exactPath, comparison))
+            return true;
+        if (!includeDescendants)
+            return false;
+        var prefix = exactPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                     Path.DirectorySeparatorChar;
+        return candidate.StartsWith(prefix, comparison);
     }
 
     private void OnError(object sender, ErrorEventArgs args)

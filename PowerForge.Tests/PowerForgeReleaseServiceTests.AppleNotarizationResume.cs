@@ -4,6 +4,24 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
 {
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, true)]
+    public void DirectNotarizationResume_ReusesStapleOnlyAfterDurableValidation(
+        bool stapled,
+        bool stapleValidated,
+        bool expected)
+    {
+        var receipt = new PowerForgeAppleReleaseTargetReceipt
+        {
+            Stapled = stapled,
+            StapleValidated = stapleValidated
+        };
+
+        Assert.Equal(expected, PowerForgeReleaseService.HasDurablePublishedStaple(receipt));
+    }
+
     [Fact]
     public void DirectNotarizationResume_RequiresCheckpointArchiveIdentity()
     {
