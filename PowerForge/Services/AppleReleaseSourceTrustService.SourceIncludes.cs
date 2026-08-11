@@ -70,6 +70,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 $"Source input '{fullSourcePath}' uses nondeterministic compiler macro '{nondeterministicMacro}', which cannot be bound to one reproducible source commit.");
         }
         ValidateLanguageModuleImports(fullSourcePath, source, extension);
+        RejectPragmaLinkedLibraries(fullSourcePath, source);
         RejectPreprocessorIncludeAliases(fullSourcePath, source);
         foreach (Match directive in Regex.Matches(
                      source,
@@ -292,11 +293,14 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static void ValidateLanguageModuleImports(string sourcePath, string source, string effectiveSourceExtension)
     {
+        var syntax = MaskCStringAndCharacterLiterals(source);
         foreach (Match pragma in Regex.Matches(
                      source,
                      "(?<![A-Za-z0-9_])_Pragma\\s*\\(\\s*\\\"(?<payload>(?:\\\\.|[^\\\"\\\\])*)\\\"\\s*\\)",
                      RegexOptions.CultureInvariant))
         {
+            if (syntax.IndexOf("_Pragma", pragma.Index, StringComparison.Ordinal) != pragma.Index)
+                continue;
             var payload = Regex.Unescape(pragma.Groups["payload"].Value);
             var moduleImport = Regex.Match(
                 payload,
@@ -305,15 +309,16 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (moduleImport.Success)
                 RejectUnapprovedLanguageModule(sourcePath, moduleImport.Groups["module"].Value, "Clang _Pragma");
         }
-        if (Regex.IsMatch(
-                source,
-                "(?<![A-Za-z0-9_])_Pragma\\s*\\((?!\\s*\\\"(?:\\\\.|[^\\\"\\\\])*\\\"\\s*\\))",
-                RegexOptions.CultureInvariant))
+        foreach (Match computedPragma in Regex.Matches(
+                     source,
+                     "(?<![A-Za-z0-9_])_Pragma\\s*\\((?!\\s*\\\"(?:\\\\.|[^\\\"\\\\])*\\\"\\s*\\))",
+                     RegexOptions.CultureInvariant))
         {
+            if (syntax.IndexOf("_Pragma", computedPragma.Index, StringComparison.Ordinal) != computedPragma.Index)
+                continue;
             throw new InvalidOperationException(
                 $"Source input '{sourcePath}' uses a computed _Pragma operand whose compiler behavior cannot be bound to the exact source commit.");
         }
-        var syntax = MaskCStringAndCharacterLiterals(source);
         foreach (Match import in Regex.Matches(
                      syntax,
                      "(?<![A-Za-z0-9_])@import\\s+(?<module>[A-Za-z_][A-Za-z0-9_.]*)\\s*;",
@@ -362,6 +367,42 @@ internal sealed partial class AppleReleaseSourceTrustService
                     $"Source input '{sourcePath}' uses C++ module or header-unit import '{moduleName}', whose selected bytes cannot be bound safely to the exact source commit.");
             }
             RejectUnapprovedLanguageModule(sourcePath, moduleName, "C++");
+        }
+    }
+
+    private static void RejectPragmaLinkedLibraries(string sourcePath, string source)
+    {
+        var syntax = MaskCStringAndCharacterLiterals(source);
+        if (Regex.IsMatch(
+                syntax,
+                "(?m)^[ \\t]*(?:#|%:)[ \\t]*pragma[ \\t]+comment[ \\t]*\\([ \\t]*lib[ \\t]*,",
+                RegexOptions.CultureInvariant))
+        {
+            throw new InvalidOperationException(
+                $"Source input '{sourcePath}' uses pragma comment(lib), whose named library can resolve through an unbound linker search root.");
+        }
+
+        foreach (Match pragma in Regex.Matches(
+                     source,
+                     "(?<![A-Za-z0-9_])_Pragma\\s*\\(\\s*\\\"(?<payload>(?:\\\\.|[^\\\"\\\\])*)\\\"\\s*\\)",
+                     RegexOptions.CultureInvariant))
+        {
+            if (syntax.IndexOf("_Pragma", pragma.Index, StringComparison.Ordinal) != pragma.Index)
+                continue;
+            var payload = Regex.Unescape(pragma.Groups["payload"].Value);
+            if (!Regex.IsMatch(payload, "^\\s*comment\\s*\\(\\s*lib\\s*,", RegexOptions.CultureInvariant))
+                continue;
+            throw new InvalidOperationException(
+                $"Source input '{sourcePath}' uses _Pragma comment(lib), whose named library can resolve through an unbound linker search root.");
+        }
+
+        if (Regex.IsMatch(
+                syntax,
+                "(?<![A-Za-z0-9_])__pragma\\s*\\(\\s*comment\\s*\\(\\s*lib\\s*,",
+                RegexOptions.CultureInvariant))
+        {
+            throw new InvalidOperationException(
+                $"Source input '{sourcePath}' uses __pragma comment(lib), whose named library can resolve through an unbound linker search root.");
         }
     }
 

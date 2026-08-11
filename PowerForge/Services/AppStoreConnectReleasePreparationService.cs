@@ -44,6 +44,29 @@ public sealed class AppStoreConnectReleasePreparationService
         var createdVersion = false;
         var firstRemoteMutationAuthorized = false;
         AppStoreConnectVersionInfo? version = null;
+        var configuredVersionId = requiresVersion ? ResolveConfiguredVersionId(request) : null;
+        var screenshotService = request.ScreenshotSpec is null
+            ? null
+            : new AppStoreConnectScreenshotSyncService(_client);
+        var initialScreenshotSpec = request.ScreenshotSpec is null
+            ? null
+            : CreateScreenshotSpecForVersion(
+                request.ScreenshotSpec,
+                appId,
+                versionString,
+                request.Platform,
+                configuredVersionId);
+        using var approvedScreenshotSnapshot = initialScreenshotSpec is null
+            ? null
+            : screenshotService!.CreateSnapshot(new AppStoreConnectScreenshotSyncRequest
+            {
+                Spec = initialScreenshotSpec,
+                ReplaceExisting = request.ReplaceScreenshots,
+                BaseDirectory = request.BaseDirectory,
+                ExpectedSourceCommit = request.ExpectedSourceCommit,
+                ExpectedFileSha256 = request.ExpectedScreenshotFileSha256,
+                ExpectedRemoteInventorySha256 = request.ExpectedScreenshotInventorySha256
+            });
 
         async Task AuthorizeFirstRemoteMutationAsync()
         {
@@ -64,7 +87,7 @@ public sealed class AppStoreConnectReleasePreparationService
                     versionString,
                     request.Platform,
                     version.Id);
-                await new AppStoreConnectScreenshotSyncService(_client).ValidateExpectedRemoteInventoryAsync(
+                await screenshotService!.ValidateExpectedRemoteInventoryAsync(
                     screenshotSpec,
                     request.ExpectedScreenshotInventorySha256!,
                     cancellationToken).ConfigureAwait(false);
@@ -74,7 +97,6 @@ public sealed class AppStoreConnectReleasePreparationService
 
         if (requiresVersion)
         {
-            var configuredVersionId = ResolveConfiguredVersionId(request);
             if (!request.CreateVersion && configuredVersionId is not null)
             {
                 version = new AppStoreConnectVersionInfo
@@ -172,7 +194,7 @@ public sealed class AppStoreConnectReleasePreparationService
         {
             await AuthorizeFirstRemoteMutationAsync().ConfigureAwait(false);
             var screenshotSpec = CreateScreenshotSpecForVersion(request.ScreenshotSpec, appId, versionString, request.Platform, version!.Id);
-            screenshots = await new AppStoreConnectScreenshotSyncService(_client).SyncAsync(
+            screenshots = await screenshotService!.SyncAsync(
                 new AppStoreConnectScreenshotSyncRequest
                 {
                     Spec = screenshotSpec,
@@ -182,6 +204,7 @@ public sealed class AppStoreConnectReleasePreparationService
                     ExpectedFileSha256 = request.ExpectedScreenshotFileSha256,
                     ExpectedRemoteInventorySha256 = request.ExpectedScreenshotInventorySha256
                 },
+                approvedScreenshotSnapshot!,
                 cancellationToken).ConfigureAwait(false);
             messages.Add("Synchronized App Store screenshots.");
         }
@@ -254,7 +277,7 @@ public sealed class AppStoreConnectReleasePreparationService
         string appId,
         string versionString,
         ApplePlatform platform,
-        string versionId)
+        string? versionId)
     {
         if (!string.IsNullOrWhiteSpace(source.AppId) &&
             !string.Equals(source.AppId.Trim(), appId, StringComparison.OrdinalIgnoreCase))

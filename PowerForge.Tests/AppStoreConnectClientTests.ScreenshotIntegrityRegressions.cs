@@ -8,71 +8,163 @@ public sealed partial class AppStoreConnectClientTests
     [Fact]
     public async Task ReleasePreparationService_RejectsScreenshotInventoryDriftBeforeFirstMutation()
     {
-        var approvedInventorySha256 = AppStoreConnectScreenshotInventory.ComputeSha256(
-        [
-            new AppStoreConnectReleaseScreenshotSetReadiness
-            {
-                ScreenshotDisplayType = "APP_IPHONE_65",
-                ScreenshotSetId = "set-1",
-                Count = 1,
-                Screenshots =
-                [
-                    new AppStoreConnectReleaseScreenshotAssetReadiness
-                    {
-                        Id = "shot-before",
-                        FileName = "01-home.png",
-                        FileSize = 3,
-                        SourceFileChecksum = "approved-checksum",
-                        AssetDeliveryState = "COMPLETE"
-                    }
-                ]
-            }
-        ]);
-        var handler = new SequenceHandler(
-            new SequenceResponse(HttpStatusCode.OK,
-                """{ "data": [{ "id": "build-5", "type": "builds", "attributes": { "version": "5", "processingState": "VALID", "expired": false }, "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } } }], "included": [{ "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.0", "platform": "IOS" } }] }"""),
-            new SequenceResponse(HttpStatusCode.OK, """{ "data": null }"""),
-            new SequenceResponse(HttpStatusCode.OK,
-                """{ "data": [{ "id": "loc-1", "type": "appStoreVersionLocalizations", "attributes": { "locale": "en-US" } }] }"""),
-            new SequenceResponse(HttpStatusCode.OK,
-                """{ "data": [{ "id": "set-1", "type": "appScreenshotSets", "attributes": { "screenshotDisplayType": "APP_IPHONE_65" } }] }"""),
-            new SequenceResponse(HttpStatusCode.OK,
-                """{ "data": [{ "id": "shot-after", "type": "appScreenshots", "attributes": { "fileName": "01-home.png", "fileSize": 3, "sourceFileChecksum": "changed-checksum", "assetDeliveryState": { "state": "COMPLETE" } } }] }"""));
-        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
-        using var client = new AppStoreConnectClient(CreateCredential(), http);
-
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            new AppStoreConnectReleasePreparationService(client).PrepareAsync(new AppStoreConnectReleasePreparationRequest
-            {
-                AppId = "app-1",
-                VersionString = "1.0.0",
-                BuildNumber = "5",
-                Platform = ApplePlatform.iOS,
-                CreateVersion = false,
-                SelectBuild = true,
-                ReplaceScreenshots = true,
-                ExpectedScreenshotInventorySha256 = approvedInventorySha256,
-                ScreenshotSpec = new AppStoreConnectScreenshotSyncSpec
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var screenshotFolder = Directory.CreateDirectory(Path.Combine(root.FullName, "iphone-6-5"));
+            var screenshotPath = Path.Combine(screenshotFolder.FullName, "01-home.png");
+            await File.WriteAllBytesAsync(screenshotPath, new byte[] { 1, 2, 3 });
+            var approvedInventorySha256 = AppStoreConnectScreenshotInventory.ComputeSha256(
+            [
+                new AppStoreConnectReleaseScreenshotSetReadiness
                 {
-                    AppId = "app-1",
-                    VersionString = "1.0.0",
-                    VersionId = "version-1",
-                    Platform = ApplePlatform.iOS,
-                    Locale = "en-US",
-                    ScreenshotSets =
+                    ScreenshotDisplayType = "APP_IPHONE_65",
+                    ScreenshotSetId = "set-1",
+                    Count = 1,
+                    Screenshots =
                     [
-                        new AppStoreConnectScreenshotSetSyncSpec
+                        new AppStoreConnectReleaseScreenshotAssetReadiness
                         {
-                            ScreenshotDisplayType = "APP_IPHONE_65",
-                            Path = "not-read-before-inventory-compare"
+                            Id = "shot-before",
+                            FileName = "01-home.png",
+                            FileSize = 3,
+                            SourceFileChecksum = "approved-checksum",
+                            AssetDeliveryState = "COMPLETE"
                         }
                     ]
                 }
-            }));
+            ]);
+            var handler = new SequenceHandler(
+                new SequenceResponse(HttpStatusCode.OK,
+                    """{ "data": [{ "id": "build-5", "type": "builds", "attributes": { "version": "5", "processingState": "VALID", "expired": false }, "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } } }], "included": [{ "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.0", "platform": "IOS" } }] }"""),
+                new SequenceResponse(HttpStatusCode.OK, """{ "data": null }"""),
+                new SequenceResponse(HttpStatusCode.OK,
+                    """{ "data": [{ "id": "loc-1", "type": "appStoreVersionLocalizations", "attributes": { "locale": "en-US" } }] }"""),
+                new SequenceResponse(HttpStatusCode.OK,
+                    """{ "data": [{ "id": "set-1", "type": "appScreenshotSets", "attributes": { "screenshotDisplayType": "APP_IPHONE_65" } }] }"""),
+                new SequenceResponse(HttpStatusCode.OK,
+                    """{ "data": [{ "id": "shot-after", "type": "appScreenshots", "attributes": { "fileName": "01-home.png", "fileSize": 3, "sourceFileChecksum": "changed-checksum", "assetDeliveryState": { "state": "COMPLETE" } } }] }"""));
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+            using var client = new AppStoreConnectClient(CreateCredential(), http);
 
-        Assert.Contains("before any remote release mutation", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(5, handler.RequestUris.Count);
-        Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppStoreConnectReleasePreparationService(client).PrepareAsync(new AppStoreConnectReleasePreparationRequest
+                {
+                    AppId = "app-1",
+                    VersionString = "1.0.0",
+                    BuildNumber = "5",
+                    Platform = ApplePlatform.iOS,
+                    CreateVersion = false,
+                    SelectBuild = true,
+                    ReplaceScreenshots = true,
+                    BaseDirectory = root.FullName,
+                    ExpectedScreenshotFileSha256 = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [screenshotPath] = ComputeScreenshotSha256(screenshotPath)
+                    },
+                    ExpectedScreenshotInventorySha256 = approvedInventorySha256,
+                    ScreenshotSpec = new AppStoreConnectScreenshotSyncSpec
+                    {
+                        AppId = "app-1",
+                        VersionString = "1.0.0",
+                        VersionId = "version-1",
+                        Platform = ApplePlatform.iOS,
+                        Locale = "en-US",
+                        ScreenshotSets =
+                        [
+                            new AppStoreConnectScreenshotSetSyncSpec
+                            {
+                                ScreenshotDisplayType = "APP_IPHONE_65",
+                                Path = "iphone-6-5"
+                            }
+                        ]
+                    }
+                }));
+
+            Assert.Contains("before any remote release mutation", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(5, handler.RequestUris.Count);
+            Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ReleasePreparationService_ReusesApprovedScreenshotSnapshotAfterEarlierRemoteMutation()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var screenshotFolder = Directory.CreateDirectory(Path.Combine(root.FullName, "iphone-6-5"));
+            var screenshotPath = Path.Combine(screenshotFolder.FullName, "01-home.png");
+            var approvedBytes = new byte[] { 1, 2, 3 };
+            await File.WriteAllBytesAsync(screenshotPath, approvedBytes);
+            var handler = new SequenceHandler(
+                new SequenceResponse(HttpStatusCode.OK,
+                    """{ "data": [{ "id": "build-5", "type": "builds", "attributes": { "version": "5", "processingState": "VALID", "expired": false }, "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } } }], "included": [{ "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.0", "platform": "IOS" } }] }"""),
+                new SequenceResponse(HttpStatusCode.OK, """{ "data": null }"""),
+                new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
+                new SequenceResponse(HttpStatusCode.OK,
+                    """{ "data": [{ "id": "loc-1", "type": "appStoreVersionLocalizations", "attributes": { "locale": "en-US" } }] }"""),
+                new SequenceResponse(HttpStatusCode.OK,
+                    """{ "data": [{ "id": "set-1", "type": "appScreenshotSets", "attributes": { "screenshotDisplayType": "APP_IPHONE_65" } }] }"""),
+                new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+                ScreenshotReservation("shot-1", "01-home.png", approvedBytes.Length),
+                ScreenshotCommit("shot-1", "01-home.png", "5289df737df57326fcdd22597afb1fac"),
+                new SequenceResponse(HttpStatusCode.OK,
+                    """{ "data": [{ "id": "shot-1", "type": "appScreenshots", "attributes": { "fileName": "01-home.png", "fileSize": 3, "sourceFileChecksum": "5289df737df57326fcdd22597afb1fac", "assetDeliveryState": { "state": "UPLOAD_COMPLETE" } } }] }"""));
+            handler.OnRequest = count =>
+            {
+                if (count == 1)
+                    File.WriteAllBytes(screenshotPath, new byte[] { 9, 9, 9 });
+            };
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+            using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+            var result = await new AppStoreConnectReleasePreparationService(client).PrepareAsync(
+                new AppStoreConnectReleasePreparationRequest
+                {
+                    AppId = "app-1",
+                    VersionString = "1.0.0",
+                    BuildNumber = "5",
+                    Platform = ApplePlatform.iOS,
+                    CreateVersion = false,
+                    SelectBuild = true,
+                    ReplaceScreenshots = true,
+                    BaseDirectory = root.FullName,
+                    ExpectedScreenshotFileSha256 = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [screenshotPath] = ComputeScreenshotSha256(screenshotPath)
+                    },
+                    ScreenshotSpec = new AppStoreConnectScreenshotSyncSpec
+                    {
+                        AppId = "app-1",
+                        VersionString = "1.0.0",
+                        VersionId = "version-1",
+                        Platform = ApplePlatform.iOS,
+                        Locale = "en-US",
+                        ScreenshotSets =
+                        [
+                            new AppStoreConnectScreenshotSetSyncSpec
+                            {
+                                ScreenshotDisplayType = "APP_IPHONE_65",
+                                Path = "iphone-6-5"
+                            }
+                        ]
+                    }
+                });
+
+            Assert.True(result.SelectedBuild);
+            Assert.Equal(new HttpMethod("PATCH"), handler.Methods[2]);
+            Assert.Equal(new byte[] { 9, 9, 9 }, File.ReadAllBytes(screenshotPath));
+            Assert.Equal(screenshotPath, Assert.Single(Assert.Single(result.Screenshots!.ScreenshotSets).Uploaded).FilePath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
     }
 
     [Fact]

@@ -293,4 +293,80 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.Equal(expected, actual);
     }
+
+    [Theory]
+    [InlineData("-foverride-record-layout=MissingLayout")]
+    [InlineData("-foverride-record-layout MissingLayout")]
+    public void ResolveExactAppleSourceCommit_attests_clang_record_layout_override_inputs(string flag)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "RecordLayoutOverrideRepo" + flag.Length,
+            $"OTHER_CFLAGS = -Xclang {flag}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("MissingLayout", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("#pragma comment(lib, \"Injected\")")]
+    [InlineData("_Pragma(\"comment(lib, \\\"Injected\\\")\")")]
+    [InlineData("__pragma(comment(lib, \"Injected\"))")]
+    public void ResolveExactAppleSourceCommit_rejects_pragma_linked_libraries(string source)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateTrackedSourceFixture(
+            scope,
+            "PragmaLinkedLibraryRepo" + source.Length,
+            "Source.m",
+            source + "\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("comment(lib)", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unbound linker search root", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("const char *value = \"#pragma comment(lib, \\\"NotExecutable\\\")\";")]
+    [InlineData("const char *value = \"_Pragma(\\\"comment(lib, \\\\\\\"NotExecutable\\\\\\\")\\\")\";")]
+    [InlineData("const char *value = \"__pragma(comment(lib, \\\"NotExecutable\\\"))\";")]
+    public void ResolveExactAppleSourceCommit_ignores_pragma_link_text_inside_literals(string source)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateTrackedSourceFixture(
+            scope,
+            "PragmaLinkedLibraryLiteralRepo" + source.Length,
+            "Source.m",
+            source + "\n");
+        var expected = CommitRepository(repositoryRoot);
+
+        var actual = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_attests_static_libtool_file_lists()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "StaticLibtoolFileListRepo",
+            "OTHER_LIBTOOLFLAGS = -D -filelist /tmp/InjectedInputs\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("OTHER_LIBTOOLFLAGS", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("absolute", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

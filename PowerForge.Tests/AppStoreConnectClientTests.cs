@@ -800,8 +800,7 @@ public sealed partial class AppStoreConnectClientTests
                 }));
 
             Assert.Contains("duplicate", exception.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Single(handler.Methods);
-            Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+            Assert.Empty(handler.Methods);
         }
         finally
         {

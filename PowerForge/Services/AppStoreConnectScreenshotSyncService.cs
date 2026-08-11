@@ -85,6 +85,12 @@ public sealed class AppStoreConnectScreenshotSyncService
         AppStoreConnectScreenshotSyncRequest request,
         CancellationToken cancellationToken = default)
     {
+        using var screenshotSnapshot = CreateSnapshot(request);
+        return await SyncAsync(request, screenshotSnapshot, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal ScreenshotSnapshot CreateSnapshot(AppStoreConnectScreenshotSyncRequest request)
+    {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
 
@@ -124,7 +130,20 @@ public sealed class AppStoreConnectScreenshotSyncService
         var sourceSets = spec.ScreenshotSets
             .Select(setSpec => PreflightScreenshotSet(request.BaseDirectory, setSpec))
             .ToArray();
-        using var screenshotSnapshot = CreateScreenshotSnapshot(sourceSets, request.ExpectedFileSha256);
+        return CreateScreenshotSnapshot(sourceSets, request.ExpectedFileSha256);
+    }
+
+    internal async Task<AppStoreConnectScreenshotSyncResult> SyncAsync(
+        AppStoreConnectScreenshotSyncRequest request,
+        ScreenshotSnapshot screenshotSnapshot,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (screenshotSnapshot is null)
+            throw new ArgumentNullException(nameof(screenshotSnapshot));
+
+        var spec = request.Spec ?? throw new ArgumentException("Spec is required.", nameof(request));
         var preflightedSets = screenshotSnapshot.Sets;
 
         var version = !string.IsNullOrWhiteSpace(spec.VersionId)
@@ -484,7 +503,7 @@ public sealed class AppStoreConnectScreenshotSyncService
             files);
     }
 
-    private sealed class PreflightedScreenshotSet
+    internal sealed class PreflightedScreenshotSet
     {
         public PreflightedScreenshotSet(
             string screenshotDisplayType,
@@ -530,7 +549,7 @@ public sealed class AppStoreConnectScreenshotSyncService
         public AppStoreConnectScreenshotInfo[] ExistingScreenshots { get; }
     }
 
-    private sealed class ScreenshotSnapshot : IDisposable
+    internal sealed class ScreenshotSnapshot : IDisposable
     {
         private readonly string _root;
         private readonly IReadOnlyDictionary<string, string> _sourcePaths;

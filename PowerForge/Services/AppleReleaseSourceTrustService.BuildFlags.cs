@@ -207,7 +207,9 @@ internal sealed partial class AppleReleaseSourceTrustService
     private static IEnumerable<string> ExtractBuildFlagInputPaths(string[] inputTokens, string key)
     {
         var tokens = ExpandForwardedBuildFlagTokens(inputTokens, key);
-        var linkerFlags = key.Split('[')[0].Trim().Equals("OTHER_LDFLAGS", StringComparison.OrdinalIgnoreCase);
+        var baseKey = key.Split('[')[0].Trim();
+        var linkerFlags = baseKey.Equals("OTHER_LDFLAGS", StringComparison.OrdinalIgnoreCase);
+        var libtoolFlags = baseKey.Equals("OTHER_LIBTOOLFLAGS", StringComparison.OrdinalIgnoreCase);
         var consumeNext = false;
         for (var index = 0; index < tokens.Length; index++)
         {
@@ -215,6 +217,44 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (consumeNext)
             {
                 consumeNext = false;
+                yield return token;
+                continue;
+            }
+
+            if (libtoolFlags)
+            {
+                if (token.Equals("-filelist", StringComparison.Ordinal))
+                {
+                    if (++index >= tokens.Length)
+                        throw new InvalidOperationException($"Xcode build setting {key} ends with libtool option '-filelist' and no input.");
+                    continue;
+                }
+                if (token.Equals("-arch_only", StringComparison.Ordinal))
+                {
+                    if (++index >= tokens.Length)
+                        throw new InvalidOperationException($"Xcode build setting {key} ends with libtool option '-arch_only' and no architecture.");
+                    if (IsPathLikeBuildFlagToken(tokens[index]))
+                    {
+                        throw new InvalidOperationException(
+                            $"Libtool architecture in Xcode build setting {key} contains a path-like value: {tokens[index]}");
+                    }
+                    continue;
+                }
+                if (token is "-static" or "-no_warning_for_no_symbols" or "-toc64" or "-c" or "-s" or "-a" or "-D" or "-V" or "-encode_sdk_libraries_as_references")
+                    continue;
+                if (token.Equals("-o", StringComparison.Ordinal) ||
+                    token.Equals("-dependency_info", StringComparison.Ordinal) ||
+                    token.Equals("-ref-framework", StringComparison.Ordinal) ||
+                    token.StartsWith("-ref-l", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Libtool option '{token}' in Xcode build setting {key} cannot be bound safely as an exact-source input. Let Xcode own output and auto-link controls.");
+                }
+                if (token.StartsWith("-", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Libtool option '{token}' in Xcode build setting {key} cannot be classified safely for an exact-source Apple build.");
+                }
                 yield return token;
                 continue;
             }
