@@ -54,6 +54,8 @@ public sealed class AppleRemotePackageMirrorLeaseTests
                 }
                 if (request.Arguments.Contains("cat-file"))
                     return revisionAvailable ? Success(request) : Failure(request, "missing revision");
+                if (request.Arguments.Contains("--show-object-format"))
+                    return Success(request, "sha1\n");
                 return Success(request);
             });
             var git = new GitClient(runner, "/usr/bin/git", TimeSpan.FromSeconds(30));
@@ -76,6 +78,9 @@ public sealed class AppleRemotePackageMirrorLeaseTests
 
     private static ProcessRunResult Success(ProcessRunRequest request)
         => new(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+
+    private static ProcessRunResult Success(ProcessRunRequest request, string output)
+        => new(0, output, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
 
     private static ProcessRunResult Failure(ProcessRunRequest request, string error)
         => new(1, string.Empty, error, request.FileName, TimeSpan.Zero, timedOut: false);

@@ -3,17 +3,17 @@ namespace PowerForge;
 /// <summary>Copies one approved archive into a private upload input so exporters cannot observe transient source changes.</summary>
 internal sealed class AppleArchiveUploadSnapshot : IDisposable
 {
-    private readonly IReadOnlyDictionary<string, string> _fileMutationIdentities;
+    private readonly SnapshotIdentity _identity;
     private bool _disposed;
 
     private AppleArchiveUploadSnapshot(
         string rootPath,
         string archivePath,
-        IReadOnlyDictionary<string, string> fileMutationIdentities)
+        SnapshotIdentity identity)
     {
         RootPath = rootPath;
         ArchivePath = archivePath;
-        _fileMutationIdentities = fileMutationIdentities;
+        _identity = identity;
     }
 
     internal string RootPath { get; }
@@ -36,16 +36,16 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         try
         {
             AppleArtifactCopy.CopyDirectory(source, snapshotPath);
-            var actual = AppleNotarizationService.ComputeArtifactSha256(snapshotPath);
-            if (!actual.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+            var identity = CaptureCompleteIdentity(snapshotPath);
+            if (!identity.Sha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    $"The private Apple upload snapshot does not match the approved archive. Expected '{expectedSha256}', received '{actual}'.");
+                    $"The private Apple upload snapshot does not match the approved archive. Expected '{expectedSha256}', received '{identity.Sha256}'.");
             }
             return new AppleArchiveUploadSnapshot(
                 root,
                 snapshotPath,
-                CaptureFileMutationIdentities(snapshotPath));
+                identity);
         }
         catch
         {
@@ -56,18 +56,14 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
 
     internal void ValidateUnchanged(string expectedSha256)
     {
-        var actual = AppleNotarizationService.ComputeArtifactSha256(ArchivePath);
-        if (!actual.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+        var current = CaptureCompleteIdentity(ArchivePath);
+        if (!current.Sha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"The private Apple upload snapshot changed while xcodebuild was reading it. Expected '{expectedSha256}', received '{actual}'. Discard the upload/export result and inspect remote state before retrying.");
+                $"The private Apple upload snapshot changed while xcodebuild was reading it. Expected '{expectedSha256}', received '{current.Sha256}'. Discard the upload/export result and inspect remote state before retrying.");
         }
 
-        var currentMutationIdentities = CaptureFileMutationIdentities(ArchivePath);
-        if (_fileMutationIdentities.Count != currentMutationIdentities.Count ||
-            _fileMutationIdentities.Any(pair =>
-                !currentMutationIdentities.TryGetValue(pair.Key, out var current) ||
-                !string.Equals(pair.Value, current, StringComparison.Ordinal)))
+        if (!_identity.MutationDigest.Equals(current.MutationDigest, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 "The private Apple upload archive snapshot file identity changed while xcodebuild was reading it. " +
@@ -75,9 +71,26 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         }
     }
 
+    internal static SnapshotIdentity CaptureCompleteIdentity(string archivePath)
+    {
+        var sha256 = AppleNotarizationService.ComputeArtifactSha256(archivePath);
+        var identities = CaptureFileMutationIdentities(archivePath);
+        var canonical = new System.Text.StringBuilder();
+        foreach (var pair in identities.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
+        {
+            canonical.Append(pair.Key.Length).Append(':').Append(pair.Key);
+            canonical.Append(pair.Value.Length).Append(':').Append(pair.Value);
+        }
+        using var hash = System.Security.Cryptography.SHA256.Create();
+        var digest = BitConverter.ToString(hash.ComputeHash(System.Text.Encoding.UTF8.GetBytes(canonical.ToString())))
+            .Replace("-", string.Empty)
+            .ToLowerInvariant();
+        return new SnapshotIdentity(sha256, digest);
+    }
+
     private static IReadOnlyDictionary<string, string> CaptureFileMutationIdentities(string archivePath)
     {
-        var result = new Dictionary<string, string>(GetPathComparer());
+        var result = new Dictionary<string, string>(GetPathComparer(archivePath));
         var files = new List<(string RelativePath, string FullPath)>();
         var pending = new Stack<string>();
         pending.Push(archivePath);
@@ -125,8 +138,44 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         return result;
     }
 
-    private static StringComparer GetPathComparer()
-        => Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    private static StringComparer GetPathComparer(string path)
+    {
+        // Probe the containing volume outside the monitored artifact. The case-semantics probe creates
+        // and removes a temporary file; doing that inside a private archive/app would itself invalidate
+        // the physical-identity snapshot and produce a false mutation event.
+        var fullPath = Path.GetFullPath(path);
+        var containingDirectory = Path.GetDirectoryName(fullPath);
+        var probePath = containingDirectory is null
+            ? fullPath
+            : Path.GetDirectoryName(containingDirectory) ?? containingDirectory;
+        return FrameworkCompatibility.GetPathStringComparisonForPath(probePath) == StringComparison.OrdinalIgnoreCase
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+    }
+
+    internal sealed class SnapshotIdentity : IEquatable<SnapshotIdentity>
+    {
+        internal SnapshotIdentity(string sha256, string mutationDigest)
+        {
+            Sha256 = sha256;
+            MutationDigest = mutationDigest;
+        }
+
+        internal string Sha256 { get; }
+
+        internal string MutationDigest { get; }
+
+        public bool Equals(SnapshotIdentity? other)
+            => other is not null &&
+               Sha256.Equals(other.Sha256, StringComparison.OrdinalIgnoreCase) &&
+               MutationDigest.Equals(other.MutationDigest, StringComparison.Ordinal);
+
+        public override bool Equals(object? obj) => Equals(obj as SnapshotIdentity);
+
+        public override int GetHashCode()
+            => StringComparer.OrdinalIgnoreCase.GetHashCode(Sha256) ^
+               StringComparer.Ordinal.GetHashCode(MutationDigest);
+    }
 
     public void Dispose()
     {

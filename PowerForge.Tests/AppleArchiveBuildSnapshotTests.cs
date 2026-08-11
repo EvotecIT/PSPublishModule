@@ -211,6 +211,51 @@ public sealed class AppleArchiveBuildSnapshotTests
     }
 
     [Fact]
+    public void RemoveBackupIfUnchanged_does_not_roll_back_after_quarantine_cleanup_is_denied()
+    {
+#if NET8_0_OR_GREATER
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var backupParent = Directory.CreateDirectory(Path.Combine(root.FullName, ".App.powerforge-backup-test"));
+        var backup = Directory.CreateDirectory(Path.Combine(backupParent.FullName, "App.xcarchive"));
+        File.WriteAllText(Path.Combine(backup.FullName, "payload"), "previous archive");
+        var observed = AppleArtifactCopy.CaptureRegularPathIdentity(backup.FullName, "Apple archive")!;
+        var quarantineRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var quarantine = Directory.CreateDirectory(Path.Combine(quarantineRoot.FullName, ".App.powerforge-rollback-test"));
+        try
+        {
+            File.SetUnixFileMode(
+                quarantineRoot.FullName,
+                UnixFileMode.UserRead | UnixFileMode.UserExecute |
+                UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+
+            AppleArtifactCopy.RemoveBackupIfUnchanged(
+                backup.FullName,
+                quarantine.FullName,
+                observed,
+                "Apple archive");
+
+            Assert.False(Directory.Exists(backup.FullName));
+            Assert.True(Directory.Exists(quarantine.FullName));
+            Assert.Empty(Directory.EnumerateFileSystemEntries(quarantine.FullName));
+        }
+        finally
+        {
+            try
+            {
+                File.SetUnixFileMode(quarantineRoot.FullName, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                root.Delete(recursive: true);
+                quarantineRoot.Delete(recursive: true);
+            }
+            catch { }
+        }
+#endif
+    }
+
+    [Fact]
     public void DirectExport_publish_rejects_artifact_replaced_after_xcodebuild_identity_was_observed()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

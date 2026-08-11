@@ -28,6 +28,11 @@ internal sealed class AppleNotarizationInputSnapshot : IDisposable
 
     internal void CompleteSubmissionCapture(string expectedSha256)
     {
+        if (_directorySnapshot is not null)
+        {
+            _directorySnapshot.ValidateUnchanged(expectedSha256);
+            return;
+        }
         if (_fileSnapshotMonitor is null)
             return;
         try

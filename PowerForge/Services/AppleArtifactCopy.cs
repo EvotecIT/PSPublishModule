@@ -265,8 +265,7 @@ internal static class AppleArtifactCopy
         }
         catch
         {
-            if (Directory.Exists(quarantinePath) && !Directory.EnumerateFileSystemEntries(quarantinePath).Any())
-                Directory.Delete(quarantinePath);
+            TryDeleteEmptyDirectory(quarantinePath);
             throw;
         }
         try
@@ -289,12 +288,12 @@ internal static class AppleArtifactCopy
             {
                 PrepareOwnedDirectoryForDeletion(quarantinedArtifactPath);
                 Directory.Delete(quarantinedArtifactPath, recursive: true);
-                Directory.Delete(quarantinePath);
+                TryDeleteEmptyDirectory(quarantinePath);
             }
             else
             {
                 File.Delete(quarantinedArtifactPath);
-                Directory.Delete(quarantinePath);
+                TryDeleteEmptyDirectory(quarantinePath);
             }
         }
         catch
@@ -304,12 +303,12 @@ internal static class AppleArtifactCopy
                 if (isDirectory)
                 {
                     Directory.Move(quarantinedArtifactPath, destinationPath);
-                    Directory.Delete(quarantinePath);
+                    TryDeleteEmptyDirectory(quarantinePath);
                 }
                 else
                 {
                     File.Move(quarantinedArtifactPath, destinationPath);
-                    Directory.Delete(quarantinePath);
+                    TryDeleteEmptyDirectory(quarantinePath);
                 }
             }
             throw;
@@ -413,6 +412,24 @@ internal static class AppleArtifactCopy
         catch (UnauthorizedAccessException)
         {
             // See above. A retained empty private parent is safer than rolling back published bytes.
+        }
+    }
+
+    private static void TryDeleteEmptyDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path) && !Directory.EnumerateFileSystemEntries(path).Any())
+                Directory.Delete(path);
+        }
+        catch (IOException)
+        {
+            // Empty private-container cleanup is best effort after its owned artifact has moved or
+            // been irreversibly deleted. It must not trigger rollback of successfully published bytes.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // See above. Leaving an empty private quarantine is safer than destructive rollback.
         }
     }
 }

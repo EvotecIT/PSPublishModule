@@ -22,7 +22,35 @@ public sealed partial class AppleAppArchiveServiceTests
                         XcodeBuildExecutable = "xcodebuild-test"
                     }));
 
-            Assert.Contains("changed after xcodebuild completed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("private Apple archive output changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task CreateArchiveAsync_rejects_restored_bytes_changed_through_external_alias_after_completion()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var archivePath = Path.Combine(root.FullName, "App.xcarchive");
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleAppArchiveService(new PostCompletionArchiveAliasMutationRunner()).CreateArchiveAsync(
+                    new AppleAppArchiveRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "App",
+                        ArchivePath = archivePath,
+                        XcodeBuildExecutable = "xcodebuild-test"
+                    }));
+
+            Assert.Contains("private Apple archive output changed", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -69,6 +97,27 @@ public sealed partial class AppleAppArchiveServiceTests
             var result = new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, false);
             request.InvokeCompletionBoundary(result);
             File.WriteAllText(payload, "concurrent replacement");
+            return Task.FromResult(result);
+        }
+    }
+
+    private sealed class PostCompletionArchiveAliasMutationRunner : IProcessRunner
+    {
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            var archiveIndex = request.Arguments.ToList().IndexOf("-archivePath");
+            var archive = Directory.CreateDirectory(request.Arguments[archiveIndex + 1]);
+            var payload = Path.Combine(archive.FullName, "payload");
+            File.WriteAllText(payload, "archive produced by xcodebuild");
+            var result = new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, false);
+            request.InvokeCompletionBoundary(result);
+
+            var aliasRoot = Directory.CreateDirectory(Path.Combine(Directory.GetParent(archive.FullName)!.FullName, "external-alias"));
+            var alias = Path.Combine(aliasRoot.FullName, "payload-alias");
+            TestFileLink.CreateHardLink(alias, payload);
+            File.WriteAllText(alias, "transient attacker bytes");
+            File.WriteAllText(alias, "archive produced by xcodebuild");
+            File.Delete(alias);
             return Task.FromResult(result);
         }
     }

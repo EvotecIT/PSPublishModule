@@ -276,7 +276,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             Directory.CreateDirectory(temporary);
             try
             {
-                RunGit(temporary, "init", "--bare");
+                InitializeRemotePackageMirror(temporary, revision);
                 try
                 {
                     Directory.Move(temporary, mirrorPath);
@@ -292,6 +292,15 @@ internal sealed partial class AppleReleaseSourceTrustService
                 if (Directory.Exists(temporary))
                     Directory.Delete(temporary, recursive: true);
             }
+        }
+
+        var expectedObjectFormat = GetObjectFormatForRevision(revision);
+        var observedObjectFormat = RunGit(mirrorPath, "rev-parse", "--show-object-format").StdOut.Trim();
+        if (!observedObjectFormat.Equals(expectedObjectFormat, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Remote Swift package mirror '{mirrorPath}' uses Git object format '{observedObjectFormat}', " +
+                $"but revision '{revision}' requires '{expectedObjectFormat}'. Remove the incompatible private mirror and retry.");
         }
 
         var exists = RunGitAllowFailure(mirrorPath, "cat-file", "-e", revision + "^{commit}");
@@ -317,6 +326,15 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
         RunGit(mirrorPath, "cat-file", "-e", revision + "^{commit}");
     }
+
+    internal void InitializeRemotePackageMirror(string mirrorPath, string revision)
+    {
+        var objectFormat = GetObjectFormatForRevision(revision);
+        RunGit(mirrorPath, "init", "--bare", $"--object-format={objectFormat}");
+    }
+
+    private static string GetObjectFormatForRevision(string revision)
+        => revision.Trim().Length == 64 ? "sha256" : "sha1";
 
     internal static FileStream AcquireRemotePackageMirrorLease(string mirrorPath)
     {

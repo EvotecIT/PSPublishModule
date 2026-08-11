@@ -51,6 +51,37 @@ public sealed partial class AppleNotarizationServiceTests
     }
 
     [Fact]
+    public void DirectorySnapshot_rejects_restored_bytes_changed_through_external_alias_before_submission()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        string? aliasRoot = null;
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Approved.app"));
+            File.WriteAllText(Path.Combine(app.FullName, "payload"), "approved-app");
+            var expected = AppleNotarizationService.ComputeArtifactSha256(app.FullName);
+            using var snapshot = AppleNotarizationInputSnapshot.Create(app.FullName, expected);
+            aliasRoot = Path.Combine(Directory.GetParent(snapshot.RootPath)!.FullName, $"alias-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(aliasRoot);
+            var privatePayload = Path.Combine(snapshot.ArtifactPath, "payload");
+            var alias = Path.Combine(aliasRoot, "payload-alias");
+            TestFileLink.CreateHardLink(alias, privatePayload);
+            File.WriteAllText(alias, "transient attacker bytes");
+            File.WriteAllText(alias, "approved-app");
+            File.Delete(alias);
+
+            var exception = Assert.Throws<InvalidOperationException>(() => snapshot.CompleteSubmissionCapture(expected));
+            Assert.Contains("hard-link alias", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(aliasRoot) && Directory.Exists(aliasRoot))
+                Directory.Delete(aliasRoot, recursive: true);
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task NotarizeAsync_RejectsTransientAppMutationWhileDittoCreatesSubmissionZip()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));

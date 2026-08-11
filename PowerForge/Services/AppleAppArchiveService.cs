@@ -82,8 +82,10 @@ public sealed partial class AppleAppArchiveService
         args.AddRange(additionalArguments);
 
         AppleSwiftPackageBuildSnapshot? packageSnapshot = null;
+        AppleReleaseSourceMutationMonitor? archiveOutputMonitor = null;
         ProcessRunResult result;
         string? archiveSha256 = null;
+        AppleArchiveUploadSnapshot.SnapshotIdentity? archiveIdentity = null;
         try
         {
             var timeout = request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout;
@@ -102,6 +104,18 @@ public sealed partial class AppleAppArchiveService
                 packageSnapshot.AppendArchiveArguments(args);
             }
 
+            var archiveParent = Path.GetDirectoryName(archivePath)
+                ?? throw new InvalidOperationException($"Apple archive path has no parent: {archivePath}");
+            Directory.CreateDirectory(archiveParent);
+            archiveOutputMonitor = new AppleReleaseSourceMutationMonitor(
+                archiveParent,
+                "private Apple archive output",
+                "xcodebuild archive",
+                "Discard the archive and rebuild it from the approved exact source.",
+                enableImmediately: false,
+                exactPath: archivePath,
+                includeExactPathDescendants: true);
+
             var processRequest = new ProcessRunRequest(
                     xcodeBuildExecutable,
                     Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
@@ -114,23 +128,30 @@ public sealed partial class AppleAppArchiveService
             processRequest.SetCompletionBoundary(completionResult =>
             {
                 if (completionResult.Succeeded && Directory.Exists(archivePath))
-                    archiveSha256 = AppleNotarizationService.ComputeArtifactSha256(archivePath);
+                {
+                    archiveIdentity = archiveOutputMonitor!.CaptureExpectedProducerOutput(
+                        () => AppleArchiveUploadSnapshot.CaptureCompleteIdentity(archivePath),
+                        "xcodebuild archive");
+                    archiveSha256 = archiveIdentity.Sha256;
+                }
             });
             result = await _processRunner.RunAsync(processRequest, cancellationToken).ConfigureAwait(false);
             processRequest.InvokeCompletionBoundary(result);
             packageSnapshot?.ValidateUnchanged();
+            archiveOutputMonitor.ValidateNoChanges();
             if (!string.IsNullOrWhiteSpace(archiveSha256) && Directory.Exists(archivePath))
             {
-                var currentArchiveSha256 = AppleNotarizationService.ComputeArtifactSha256(archivePath);
-                if (!currentArchiveSha256.Equals(archiveSha256, StringComparison.OrdinalIgnoreCase))
+                var currentArchiveIdentity = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(archivePath);
+                if (archiveIdentity is null || !archiveIdentity.Equals(currentArchiveIdentity))
                 {
                     throw new InvalidOperationException(
-                        $"The private Apple archive changed after xcodebuild completed. Expected '{archiveSha256}', received '{currentArchiveSha256}'.");
+                        $"The private Apple archive changed after xcodebuild completed. Expected '{archiveSha256}', received '{currentArchiveIdentity.Sha256}'.");
                 }
             }
         }
         finally
         {
+            archiveOutputMonitor?.Dispose();
             packageSnapshot?.Dispose();
         }
 
