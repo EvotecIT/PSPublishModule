@@ -13,7 +13,6 @@ internal static class CloudflareCachePolicyBuilder
     private const int HtmlBrowserTtlSeconds = 300;
     private const int StaticEdgeTtlSeconds = 2592000;
     private const int StaticBrowserTtlSeconds = 86400;
-    private const int ImmutableTtlSeconds = 31536000;
 
     private static readonly string[] DefaultHtmlPaths =
     {
@@ -62,17 +61,12 @@ internal static class CloudflareCachePolicyBuilder
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.woff")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.woff2")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.pdf")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.zip"))
-        }) + "))";
-
-        var immutableExpression = $"({hostFilter}(" + string.Join(" or ", new[]
-        {
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/_framework/*.*.wasm")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/*/_framework/*.*.wasm")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/_framework/*.*.webcil")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/*/_framework/*.*.webcil")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/_framework/*.*.dat")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/*/_framework/*.*.dat"))
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.zip")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.wasm")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.webcil")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.dat")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.dll")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.pdb"))
         }) + "))";
 
         var dataExpression = $"({hostFilter}(" + string.Join(" or ", new[]
@@ -94,7 +88,6 @@ internal static class CloudflareCachePolicyBuilder
         var htmlExpression = $"({hostFilter}(" + string.Join(" or ", routeClauses) + "))";
 
         ValidateExpressionLength("static assets", staticExpression);
-        ValidateExpressionLength("immutable framework assets", immutableExpression);
         ValidateExpressionLength("data files", dataExpression);
         ValidateExpressionLength("HTML docs and API", htmlExpression);
 
@@ -102,8 +95,7 @@ internal static class CloudflareCachePolicyBuilder
         {
             BuildOverrideRule($"PowerForge {policyName}: HTML docs and API", htmlExpression, HtmlEdgeTtlSeconds, HtmlBrowserTtlSeconds),
             BuildRespectOriginRule($"PowerForge {policyName}: data files", dataExpression),
-            BuildOverrideRule($"PowerForge {policyName}: static assets", staticExpression, StaticEdgeTtlSeconds, StaticBrowserTtlSeconds),
-            BuildOverrideRule($"PowerForge {policyName}: immutable framework assets", immutableExpression, ImmutableTtlSeconds, ImmutableTtlSeconds)
+            BuildOverrideRule($"PowerForge {policyName}: static assets", staticExpression, StaticEdgeTtlSeconds, StaticBrowserTtlSeconds)
         };
     }
 

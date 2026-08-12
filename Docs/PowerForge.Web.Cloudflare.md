@@ -38,7 +38,7 @@ its environment-variable name to the CLI.
 
 The command manages two Cloudflare ruleset phases:
 
-- `http_request_cache_settings`: four cache rules
+- `http_request_cache_settings`: three cache rules
 - `http_response_headers_transform`: one response-header rule when security headers are enabled
 
 Rules outside the site's `PowerForge <Name>:` description prefix retain their
@@ -84,14 +84,14 @@ The policy uses Free-plan-compatible Rules language (`eq`, `wildcard`,
 | --- | ---: | ---: | --- |
 | HTML, docs, and API | 2 hours | 5 minutes | Includes directory routes and `.html`; does not cache 3xx/4xx/5xx responses. |
 | Data and discovery | Origin-controlled | Origin-controlled | Covers JSON, XML, text, sitemap, and LLM discovery files. |
-| Static assets | 30 days | 1 day | Covers CSS, JavaScript, images, fonts, maps, PDFs, and archives. |
-| Immutable framework assets | 1 year | 1 year | Covers fingerprinted Blazor WASM, Webcil, and data files. Stable loader names keep the shorter static-asset policy. |
+| Static assets | 30 days | 1 day | Covers CSS, JavaScript, images, fonts, maps, PDFs, archives, and Blazor binaries. |
 
 Query strings remain part of the normal cache key. This avoids serving the wrong
 representation when an application uses query parameters for behavior rather
-than cache busting. Strong ETags remain enabled. Later matching rules override
-the relevant TTL fields, so immutable Blazor assets receive the one-year policy
-even though they also match the general static-asset rule.
+than cache busting. Strong ETags remain enabled. Deployments should purge changed
+paths after the origin update. PowerForge does not infer one-year immutability
+from filename shape. Generated `_headers` grants that policy only to exact asset
+paths whose content hash PowerForge created.
 
 Large documentation navigation trees do not produce one expression clause per
 directory. PowerForge represents trailing-slash and `.html` routes compactly and

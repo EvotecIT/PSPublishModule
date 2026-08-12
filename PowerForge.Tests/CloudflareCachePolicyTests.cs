@@ -16,20 +16,16 @@ public sealed class CloudflareCachePolicyTests
             "Tactra",
             ["/privacy/", "/support/", "/sitemap.xml"]);
 
-        Assert.Equal(4, rules.Count);
+        Assert.Equal(3, rules.Count);
         var htmlRule = Assert.IsType<JsonObject>(rules[0]);
         var staticRule = Assert.IsType<JsonObject>(rules[2]);
-        var immutableRule = Assert.IsType<JsonObject>(rules[3]);
         Assert.Equal("PowerForge Tactra: static assets", staticRule["description"]!.GetValue<string>());
         Assert.Contains("http.host eq \"tactra.dev\"", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("/*.wasm", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("/*.webcil", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Equal("override_origin", staticRule["action_parameters"]!["edge_ttl"]!["mode"]!.GetValue<string>());
         Assert.Equal(2592000, staticRule["action_parameters"]!["edge_ttl"]!["default"]!.GetValue<int>());
         Assert.Null(staticRule["action_parameters"]!["cache_key"]);
-        Assert.Contains("/*/_framework/*.*.wasm", immutableRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.DoesNotContain("/_framework/*\"", immutableRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.DoesNotContain("/*.br", immutableRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.DoesNotContain("/*.gz", immutableRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.Equal(31536000, immutableRule["action_parameters"]!["edge_ttl"]!["default"]!.GetValue<int>());
 
         var htmlExpression = htmlRule["expression"]!.GetValue<string>();
         Assert.DoesNotContain("/privacy/*", htmlExpression, StringComparison.Ordinal);
@@ -50,10 +46,9 @@ public sealed class CloudflareCachePolicyTests
         var htmlExpression = rules[0]!["expression"]!.GetValue<string>();
         var dataExpression = rules[1]!["expression"]!.GetValue<string>();
         var staticExpression = rules[2]!["expression"]!.GetValue<string>();
-        var immutableExpression = rules[3]!["expression"]!.GetValue<string>();
         Assert.Contains("/project/css/*", staticExpression, StringComparison.Ordinal);
         Assert.Contains("/project/*.css", staticExpression, StringComparison.Ordinal);
-        Assert.Contains("/project/*/_framework/*.*.wasm", immutableExpression, StringComparison.Ordinal);
+        Assert.Contains("/project/*.wasm", staticExpression, StringComparison.Ordinal);
         Assert.Contains("/project/sitemap.xml", dataExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("/project/docs/*", htmlExpression, StringComparison.Ordinal);
         Assert.Contains("starts_with(http.request.uri.path, \"/project/\")", htmlExpression, StringComparison.Ordinal);
@@ -88,7 +83,7 @@ public sealed class CloudflareCachePolicyTests
 
         Assert.True(result.Success, result.Message);
         Assert.True(result.Changed);
-        Assert.Equal(4, result.ManagedRuleCount);
+        Assert.Equal(3, result.ManagedRuleCount);
         Assert.Equal(1, result.PreservedRuleCount);
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal(HttpMethod.Put, handler.Requests[1].Method);
@@ -97,14 +92,13 @@ public sealed class CloudflareCachePolicyTests
 
         var payload = JsonNode.Parse(handler.Requests[1].Body)!.AsObject();
         var rules = payload["rules"]!.AsArray();
-        Assert.Equal(5, rules.Count);
+        Assert.Equal(4, rules.Count);
         Assert.Equal("managed-html-id", rules[0]!["id"]!.GetValue<string>());
         Assert.Contains("ends_with(http.request.uri.path, \"/\")", rules[0]!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.Equal("managed-immutable-id", rules[3]!["id"]!.GetValue<string>());
-        Assert.Equal("Operator custom bypass", rules[4]!["description"]!.GetValue<string>());
-        Assert.Equal("custom-id", rules[4]!["id"]!.GetValue<string>());
-        Assert.Null(rules[4]!["version"]);
-        Assert.Null(rules[4]!["last_updated"]);
+        Assert.Equal("Operator custom bypass", rules[3]!["description"]!.GetValue<string>());
+        Assert.Equal("custom-id", rules[3]!["id"]!.GetValue<string>());
+        Assert.Null(rules[3]!["version"]);
+        Assert.Null(rules[3]!["last_updated"]);
     }
 
     [Fact]
@@ -138,7 +132,7 @@ public sealed class CloudflareCachePolicyTests
         Assert.True(result.Success, result.Message);
         var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
         Assert.Equal(
-            ["Operator before", "PowerForge Example: HTML docs and API", "Operator between", "PowerForge Example: data files", "PowerForge Example: static assets", "PowerForge Example: immutable framework assets", "Operator after"],
+            ["Operator before", "PowerForge Example: HTML docs and API", "Operator between", "PowerForge Example: data files", "PowerForge Example: static assets", "Operator after"],
             rules.Select(rule => rule!["description"]!.GetValue<string>()).ToArray());
     }
 
@@ -168,7 +162,7 @@ public sealed class CloudflareCachePolicyTests
         var payload = JsonNode.Parse(handler.Requests[1].Body)!.AsObject();
         Assert.Equal("zone", payload["kind"]!.GetValue<string>());
         Assert.Equal("http_request_cache_settings", payload["phase"]!.GetValue<string>());
-        Assert.Equal(4, payload["rules"]!.AsArray().Count);
+        Assert.Equal(3, payload["rules"]!.AsArray().Count);
     }
 
     [Fact]
