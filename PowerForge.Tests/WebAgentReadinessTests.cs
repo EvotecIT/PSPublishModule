@@ -1793,6 +1793,78 @@ public class WebAgentReadinessTests
     }
 
     [Fact]
+    public async Task Scan_ResolvesRootRelativeDiscoveryLinksAgainstOriginForSubpathSites()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/project/custom/catalog"] = ("{\"linkset\":[{\"anchor\":\"/project/\"}]}", "application/linkset+json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(
+            responses,
+            "</project/custom/catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\"",
+            homepagePath: "/project");
+
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test/project/",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = true,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/catalog" },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                A2AAgentCard = new AgentA2ACardSpec { Enabled = false },
+                McpServerCard = new AgentMcpServerCardSpec { Enabled = false },
+                OpenApi = new AgentOpenApiSpec { Enabled = false },
+                MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        });
+
+        Assert.Equal("pass", Assert.Single(result.Checks, check => check.Id == "link-headers").Status);
+        Assert.Contains("/project/custom/catalog", handler.Requests);
+    }
+
+    [Fact]
+    public async Task Scan_DoesNotTreatLlmsFallbackAsConfiguredLinkDiscovery()
+    {
+        var handler = new ConfiguredDiscoveryScanHandler(
+            new Dictionary<string, (string Content, string MediaType)>(),
+            "</llms.txt>; rel=\"service-doc\"; type=\"text/plain\"");
+
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = true,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                A2AAgentCard = new AgentA2ACardSpec { Enabled = false },
+                McpServerCard = new AgentMcpServerCardSpec { Enabled = false },
+                OpenApi = new AgentOpenApiSpec { Enabled = false },
+                MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        });
+
+        var linkHeaders = Assert.Single(result.Checks, check => check.Id == "link-headers");
+        Assert.Equal("info", linkHeaders.Status);
+        Assert.Contains("No enabled discovery resources", linkHeaders.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Scan_ChecksCorsOnEnabledDiscoveryResourcesInsteadOfHomepage()
     {
         var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
@@ -2104,7 +2176,8 @@ public class WebAgentReadinessTests
         string? linkHeader = null,
         string? corsOrigin = null,
         string? homepageCorsOrigin = null,
-        IReadOnlyCollection<string>? corsPaths = null) : HttpMessageHandler
+        IReadOnlyCollection<string>? corsPaths = null,
+        string homepagePath = "/") : HttpMessageHandler
     {
         internal List<string> Requests { get; } = [];
         internal HashSet<string> HomepageHeaders { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -2113,7 +2186,7 @@ public class WebAgentReadinessTests
         {
             var path = request.RequestUri!.AbsolutePath;
             Requests.Add(path);
-            if (path == "/")
+            if (path == homepagePath)
             {
                 var response = Response(
                     HttpStatusCode.OK,

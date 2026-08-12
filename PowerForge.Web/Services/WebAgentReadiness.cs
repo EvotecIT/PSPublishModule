@@ -452,12 +452,15 @@ public static partial class WebAgentReadiness
             openApi.Success ? $"OpenAPI document detected at {openApi.Url}." : "No OpenAPI document found at the configured or common static paths.",
             openApi.Url ?? ResolveRemoteUrl(baseUrl, spec.OpenApi?.Path, "/openapi.json"));
 
-        var linkHeadersPresent = root.Success && HasExpectedDiscoveryLink(linkHeader, baseUrl, spec, openApi.Url);
+        var discoveryLinksExpected = HasEnabledDiscoveryLinkTargets(spec);
+        var linkHeadersPresent = discoveryLinksExpected && root.Success && HasExpectedDiscoveryLink(linkHeader, baseUrl, spec, openApi.Url);
         AddCheck(checks, "link-headers", "discoverability", "Link headers (RFC 8288)",
-            linkHeadersPresent ? "pass" : (spec.LinkHeaders ? "fail" : "info"),
+            linkHeadersPresent ? "pass" : (spec.LinkHeaders && discoveryLinksExpected ? "fail" : "info"),
             linkHeadersPresent
                 ? "Homepage response includes Link headers for every enabled discovery resource."
-                : (spec.LinkHeaders
+                : (!discoveryLinksExpected
+                    ? "No enabled discovery resources require Link headers."
+                    : spec.LinkHeaders
                     ? "Homepage response does not include Link headers for every enabled discovery resource."
                     : "Link header verification is disabled by site policy."),
             baseUrl);
@@ -1645,10 +1648,25 @@ public static partial class WebAgentReadiness
     }
 
     private static string EscapeLinkUriReference(string value)
-        => StripHeaderControlCharacters(value)
-            .Replace("<", "%3C", StringComparison.Ordinal)
-            .Replace(">", "%3E", StringComparison.Ordinal)
-            .Replace("\"", "%22", StringComparison.Ordinal);
+    {
+        var sanitized = StripHeaderControlCharacters(value);
+        if (Uri.TryCreate(sanitized, UriKind.Absolute, out var absolute))
+            return absolute.AbsoluteUri;
+
+        return string.Join("/", sanitized.Split('/').Select(EscapeLinkPathSegment));
+    }
+
+    private static string EscapeLinkPathSegment(string value)
+    {
+        try
+        {
+            return Uri.EscapeDataString(Uri.UnescapeDataString(value));
+        }
+        catch (UriFormatException)
+        {
+            return Uri.EscapeDataString(value);
+        }
+    }
 
     private static string EscapeLinkParameterValue(string value)
         => StripHeaderControlCharacters(value)
@@ -2332,11 +2350,17 @@ public static partial class WebAgentReadiness
             expectationGroups.Add([new RemoteLinkExpectation(
                 ResolveRemoteOutputUrl(baseUrl, "/index" + NormalizeMarkdownExtension(spec.MarkdownArtifacts.Extension), "/index.md"), "alternate")]);
 
-        if (expectationGroups.Count == 0)
-            expectationGroups.Add([new RemoteLinkExpectation(ResolveRemoteOutputUrl(baseUrl, "/llms.txt", "/llms.txt"), "service-doc")]);
-
         return expectationGroups.All(group => group.Any(expectation => LinkHeaderContainsTarget(linkHeader, baseUrl, expectation)));
     }
+
+    private static bool HasEnabledDiscoveryLinkTargets(AgentReadinessSpec spec) =>
+        spec.ApiCatalog?.Enabled == true ||
+        spec.AgentSkills?.Enabled == true ||
+        spec.AgentsJson?.Enabled == true ||
+        spec.A2AAgentCard?.Enabled == true ||
+        spec.McpServerCard?.Enabled == true ||
+        spec.OpenApi?.Enabled == true ||
+        spec.MarkdownArtifacts?.Enabled == true;
 
     private static bool LinkHeaderContainsTarget(string linkHeader, string baseUrl, RemoteLinkExpectation expectation)
     {
@@ -2349,12 +2373,24 @@ public static partial class WebAgentReadiness
                 continue;
 
             var href = segment.Substring(start + 1, end - start - 1).Trim();
-            var actualUrl = ResolveRemoteUrl(baseUrl, href, "/");
+            var actualUrl = ResolveLinkTargetUrl(baseUrl, href);
             if (SameRemoteUrl(actualUrl, expectation.TargetUrl))
                 return true;
         }
 
         return false;
+    }
+
+    private static string ResolveLinkTargetUrl(string baseUrl, string href)
+    {
+        if (Uri.TryCreate(href, UriKind.Absolute, out var absolute))
+            return absolute.AbsoluteUri;
+
+        if (Uri.TryCreate(baseUrl.TrimEnd('/') + "/", UriKind.Absolute, out var homepage) &&
+            Uri.TryCreate(homepage, href, out var resolved))
+            return resolved.AbsoluteUri;
+
+        return ResolveRemoteUrl(baseUrl, href, "/");
     }
 
     private static bool SameRemoteUrl(string actualUrl, string expectedUrl)

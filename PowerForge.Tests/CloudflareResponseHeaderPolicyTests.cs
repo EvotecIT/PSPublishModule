@@ -122,10 +122,56 @@ public sealed class CloudflareResponseHeaderPolicyTests
             "(http.host eq \"example.com\" and (http.request.uri.path eq \"/project\" or http.request.uri.path eq \"/project/\"))",
             linkRule["expression"]!.GetValue<string>());
         var link = linkRule["action_parameters"]!["headers"]!["Link"]!["value"]!.GetValue<string>();
+        Assert.Equal("add", linkRule["action_parameters"]!["headers"]!["Link"]!["operation"]!.GetValue<string>());
         Assert.Contains("</project/discovery/catalog.json>; rel=\"api-catalog\"; type=\"application/linkset+json\"", link, StringComparison.Ordinal);
         Assert.Contains("</project/skills/index.json>; rel=\"describedby\"; type=\"application/json\"", link, StringComparison.Ordinal);
         Assert.Contains("</project/.well-known/agent-card.json>; rel=\"service-desc\"; type=\"application/json\"", link, StringComparison.Ordinal);
         Assert.Contains("</project/cards/mcp.json>; rel=\"service-desc\"; type=\"application/json\"", link, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildManagedRules_ShouldNotAdvertiseLlmsFallbackWhenDiscoveryResourcesAreDisabled()
+    {
+        var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com",
+            "Docs",
+            new AgentSecurityHeadersSpec { Enabled = false, Hsts = false },
+            agentReadiness: new AgentReadinessSpec
+            {
+                Enabled = true,
+                LinkHeaders = true,
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                A2AAgentCard = new AgentA2ACardSpec { Enabled = false },
+                McpServerCard = new AgentMcpServerCardSpec { Enabled = false },
+                OpenApi = new AgentOpenApiSpec { Enabled = false },
+                MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = false }
+            });
+
+        Assert.Empty(rules);
+    }
+
+    [Fact]
+    public void BuildManagedRules_ShouldPercentEncodeDiscoveryLinkPaths()
+    {
+        var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com",
+            "Docs",
+            new AgentSecurityHeadersSpec { Enabled = false, Hsts = false },
+            agentReadiness: new AgentReadinessSpec
+            {
+                Enabled = true,
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "discovery/api catalog.json" },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false }
+            });
+
+        var linkRule = Assert.IsType<JsonObject>(rules.Single(rule =>
+            rule!["description"]!.GetValue<string>().EndsWith("discovery Link headers", StringComparison.Ordinal)));
+        var link = linkRule["action_parameters"]!["headers"]!["Link"]!["value"]!.GetValue<string>();
+        Assert.Contains("</discovery/api%20catalog.json>", link, StringComparison.Ordinal);
+        Assert.DoesNotContain("api catalog.json", link, StringComparison.Ordinal);
     }
 
     [Fact]

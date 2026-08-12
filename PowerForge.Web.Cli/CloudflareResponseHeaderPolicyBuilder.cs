@@ -67,7 +67,7 @@ internal static class CloudflareResponseHeaderPolicyBuilder
                 {
                     ["headers"] = new JsonObject
                     {
-                        ["Link"] = new JsonObject { ["operation"] = "set", ["value"] = linkHeader }
+                        ["Link"] = new JsonObject { ["operation"] = "add", ["value"] = linkHeader }
                     }
                 },
                 ["enabled"] = true
@@ -185,16 +185,28 @@ internal static class CloudflareResponseHeaderPolicyBuilder
                 extension = "." + extension;
             Add("index" + (extension == "." ? ".md" : extension), "index.md", "alternate", "text/markdown");
         }
-        if (links.Count == 0)
-            Add("llms.txt", "llms.txt", "service-doc", "text/plain");
-
         return string.Join(", ", links.Distinct(StringComparer.Ordinal));
     }
 
-    private static string EscapeLinkUriReference(string value) =>
-        value.Replace("<", "%3C", StringComparison.Ordinal)
-            .Replace(">", "%3E", StringComparison.Ordinal)
-            .Replace("\"", "%22", StringComparison.Ordinal);
+    private static string EscapeLinkUriReference(string value)
+    {
+        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
+            return absolute.AbsoluteUri;
+
+        return string.Join("/", value.Split('/').Select(EscapeLinkPathSegment));
+    }
+
+    private static string EscapeLinkPathSegment(string value)
+    {
+        try
+        {
+            return Uri.EscapeDataString(Uri.UnescapeDataString(value));
+        }
+        catch (UriFormatException)
+        {
+            return Uri.EscapeDataString(value);
+        }
+    }
 
     private static (string Name, string ContentType, string[] Paths)[] BuildDiscoveryHeaderGroups(
         AgentReadinessSpec? readiness,
