@@ -832,6 +832,30 @@ public partial class WebAgentReadinessTests
         Assert.Equal("https://example.test/agent.md", url);
     }
 
+    [Theory]
+    [InlineData("file:///tmp/agent.md")]
+    [InlineData("ftp://outside.example/agent.md")]
+    public void ResolveMarkdownAlternateUrl_RejectsNonHttpTargets(string href)
+    {
+        var linkHeader = $"<{href}>; rel=\"alternate\"; type=\"text/markdown\"";
+
+        var url = WebAgentReadiness.ResolveMarkdownAlternateUrl("https://example.test", linkHeader);
+
+        Assert.Null(url);
+    }
+
+    [Fact]
+    public void ResolveMarkdownAlternateUrl_SkipsRejectedTargetAndUsesLaterHttpTarget()
+    {
+        const string linkHeader =
+            "<file:///tmp/agent.md>; rel=\"alternate\"; type=\"text/markdown\", " +
+            "</agent.md>; rel=\"alternate\"; type=\"text/markdown\"";
+
+        var url = WebAgentReadiness.ResolveMarkdownAlternateUrl("https://example.test", linkHeader);
+
+        Assert.Equal("https://example.test/agent.md", url);
+    }
+
     [Fact]
     public void Prepare_ReplacesExistingApacheManagedBlock()
     {
@@ -2214,6 +2238,85 @@ public partial class WebAgentReadinessTests
 
         Assert.Contains("must be relative", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(handler.Requests, path => path.Contains("outside", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("/skills/index.json")]
+    [InlineData("\\skills\\index.json")]
+    public async Task Scan_RejectsRootedOutputPathsAcrossPlatforms(string outputPath)
+    {
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = new AgentReadinessScanHandler(),
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true, IndexPath = outputPath },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        }));
+
+        Assert.Contains("must be relative", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("safe/%2e%2e/agents.json")]
+    [InlineData("safe/a%20b/agents.json")]
+    public async Task Scan_RejectsPercentEncodedOutputPathSegments(string outputPath)
+    {
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = new AgentReadinessScanHandler(),
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true, IndexPath = outputPath },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        }));
+
+        Assert.Contains("unescaped filesystem characters", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("%2e%2emd")]
+    [InlineData("md/path")]
+    public async Task Scan_RejectsMarkdownExtensionsWithUriOrPathSyntax(string extension)
+    {
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = new AgentReadinessScanHandler(),
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = true, Extension = extension },
+                MarkdownNegotiation = false
+            }
+        }));
+
+        Assert.Contains("without path or URI syntax", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class AgentReadinessScanHandler(string? body = null) : HttpMessageHandler

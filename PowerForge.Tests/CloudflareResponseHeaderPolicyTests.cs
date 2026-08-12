@@ -84,7 +84,7 @@ public sealed class CloudflareResponseHeaderPolicyTests
         {
             Enabled = true,
             ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "discovery/catalog.json" },
-            AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true, IndexPath = "/skills/index.json" },
+            AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true, IndexPath = "skills/index.json" },
             AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
             A2AAgentCard = new AgentA2ACardSpec { Enabled = true },
             McpServerCard = new AgentMcpServerCardSpec { Enabled = true, OutputPath = "cards/mcp.json" }
@@ -182,6 +182,39 @@ public sealed class CloudflareResponseHeaderPolicyTests
             rule!["description"]!.GetValue<string>().EndsWith("security headers", StringComparison.Ordinal)));
         Assert.Contains("starts_with(http.request.uri.path, \"/product%20docs/\")",
             securityRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildManagedRules_ShouldPreserveRootRelativeDiscoveryLinksAcrossPlatforms()
+    {
+        var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com",
+            "Root",
+            new AgentSecurityHeadersSpec { Enabled = true, Hsts = false },
+            basePath: "/",
+            agentReadiness: new AgentReadinessSpec
+            {
+                Enabled = true,
+                ApiCatalog = new AgentApiCatalogSpec
+                {
+                    Enabled = true,
+                    OutputPath = ".well-known/api-catalog"
+                },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec
+                {
+                    Enabled = true,
+                    OutputPath = "agents.json"
+                }
+            });
+
+        var linkRule = Assert.IsType<JsonObject>(rules.Single(rule =>
+            rule!["description"]!.GetValue<string>().EndsWith("discovery Link headers", StringComparison.Ordinal)));
+        var link = linkRule["action_parameters"]!["headers"]!["Link"]!["value"]!.GetValue<string>();
+
+        Assert.Contains("</.well-known/api-catalog>; rel=\"api-catalog\"", link, StringComparison.Ordinal);
+        Assert.Contains("</agents.json>; rel=\"describedby\"", link, StringComparison.Ordinal);
+        Assert.DoesNotContain("file:", link, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
