@@ -252,7 +252,8 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         string[] excludeSubstrings,
         SigningOptionsConfiguration signing)
     {
-        var packageFileListPath = WriteTemporaryLineFile(packageFilePaths);
+        var normalizedPackageFilePaths = NormalizePackageFilePaths(packageFilePaths);
+        var packageFileListPath = WriteTemporaryLineFile(normalizedPackageFilePaths);
         var temporaryPackageFileLists = new List<string> { packageFileListPath };
         var args = new List<string>(9)
         {
@@ -275,7 +276,11 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         ModuleSigningResult? initialFailedSummary = null;
         try
         {
-            result = RunScript(script, args, TimeSpan.FromMinutes(10), preferPwsh: true);
+            result = RunScript(
+                script,
+                args,
+                CalculateSigningTimeout(normalizedPackageFilePaths.Length),
+                preferPwsh: true);
             attemptSummary = TryExtractSigningSummary(result.StdOut);
             summary = attemptSummary;
 
@@ -284,7 +289,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
                     attemptSummary,
                     signing,
                     rootPath,
-                    packageFilePaths,
+                    normalizedPackageFilePaths,
                     out var retryFilePaths))
             {
                 initialFailedResult = result;
@@ -302,7 +307,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
                 result = RunScript(
                     script,
                     retryArgs,
-                    TimeSpan.FromMinutes(10),
+                    CalculateSigningTimeout(retryFilePaths.Length),
                     preferPwsh: false,
                     hostRequirement: PowerShellHostRequirement.WindowsPowerShell);
                 attemptSummary = TryExtractSigningSummary(result.StdOut);
@@ -457,6 +462,23 @@ internal sealed class PowerShellModulePipelineHostedOperations :
     private static string DescribePowerShellHost(string? executable)
         => string.IsNullOrWhiteSpace(executable) ? "unknown PowerShell host" : Path.GetFileName(executable);
 
+    internal static TimeSpan CalculateSigningTimeout(int packageFileCount)
+    {
+        const int minimumTimeoutSeconds = 10 * 60;
+        const int secondsPerPackageFile = 5;
+        const int maximumTimeoutSeconds = 60 * 60;
+
+        var boundedFileCount = Math.Max(0, packageFileCount);
+        var scaledTimeoutSeconds = minimumTimeoutSeconds + ((long)boundedFileCount * secondsPerPackageFile);
+        return TimeSpan.FromSeconds(Math.Min(scaledTimeoutSeconds, maximumTimeoutSeconds));
+    }
+
+    private static string[] NormalizePackageFilePaths(IEnumerable<string> paths)
+        => (paths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
     private static string WriteTemporaryLineFile(IEnumerable<string> lines)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "modulepipeline");
@@ -464,9 +486,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         var path = Path.Combine(tempDir, $"modulepackage_{Guid.NewGuid():N}.txt");
         File.WriteAllLines(
             path,
-            (lines ?? Array.Empty<string>())
-                .Where(static line => !string.IsNullOrWhiteSpace(line))
-                .Distinct(StringComparer.OrdinalIgnoreCase),
+            lines ?? Array.Empty<string>(),
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         return path;
     }
