@@ -316,6 +316,12 @@ internal sealed partial class AppleReleaseSourceTrustService
                     $"VFS overlay option '{token}' in Xcode build setting {key} cannot be used by an exact-source Apple build because its backing-file graph is not independently attested.");
             }
 
+            if (IsUnsupportedOffloadToolForwardingOption(token))
+            {
+                throw new InvalidOperationException(
+                    $"Offload tool forwarding option '{token}' in Xcode build setting {key} cannot be classified safely for an exact-source Apple build.");
+            }
+
             if (token.Equals("-load-plugin-executable", StringComparison.Ordinal))
             {
                 if (++index >= tokens.Length)
@@ -508,6 +514,13 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
         return true;
     }
+
+    private static bool IsUnsupportedOffloadToolForwardingOption(string token)
+        => token.Equals("-Xcuda-fatbinary", StringComparison.Ordinal) ||
+           token.Equals("-Xcuda-ptxas", StringComparison.Ordinal) ||
+           token.StartsWith("-Xoffload-linker", StringComparison.Ordinal) ||
+           token.StartsWith("-Xopenmp-target", StringComparison.Ordinal) ||
+           token.StartsWith("-Xsycl-target-", StringComparison.Ordinal);
 
     private static bool TrySkipNonInputLinkerOption(string[] tokens, ref int index, string token, string key)
     {
