@@ -97,6 +97,11 @@ returns HTML for `Accept: text/markdown`, PowerForge reports the negotiation as
 a warning instead of a failure so sites without header-aware edge caching can
 still pass on the portable direct-artifact path.
 
+When `MarkdownArtifacts.Enabled` is `true`, the direct homepage artifact is a
+required deployed resource. The live scan fetches it even when content
+negotiation succeeds, requires a `text/markdown` media type, and includes it in
+the configured discovery-resource CORS check.
+
 ## Site Configuration
 
 Add an `agentReadiness` block to `site.json`:

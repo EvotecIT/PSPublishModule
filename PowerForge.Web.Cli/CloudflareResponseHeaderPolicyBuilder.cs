@@ -122,15 +122,18 @@ internal static class CloudflareResponseHeaderPolicyBuilder
         if (basePath == "/")
             return $"({hostExpression})";
 
-        var root = CloudflareCachePolicyBuilder.EscapeExpressionString(basePath.TrimEnd('/'));
-        var prefix = CloudflareCachePolicyBuilder.EscapeExpressionString(basePath);
+        var root = CloudflareCachePolicyBuilder.EscapeExpressionString(
+            CloudflareCachePolicyBuilder.EncodeUriPathForExpression(basePath.TrimEnd('/')));
+        var prefix = CloudflareCachePolicyBuilder.EscapeExpressionString(
+            CloudflareCachePolicyBuilder.EncodeUriPathForExpression(basePath));
         return $"({hostExpression} and (http.request.uri.path eq \"{root}\" or starts_with(http.request.uri.path, \"{prefix}\")))";
     }
 
     private static string BuildHomepageExpression(string hostname, string basePath)
     {
-        var homepage = basePath == "/" ? "/" : basePath.TrimEnd('/');
-        var slashHomepage = basePath;
+        var homepage = CloudflareCachePolicyBuilder.EncodeUriPathForExpression(
+            basePath == "/" ? "/" : basePath.TrimEnd('/'));
+        var slashHomepage = CloudflareCachePolicyBuilder.EncodeUriPathForExpression(basePath);
         return homepage == slashHomepage
             ? $"(http.host eq \"{hostname}\" and http.request.uri.path eq \"{homepage}\")"
             : $"(http.host eq \"{hostname}\" and (http.request.uri.path eq \"{homepage}\" or http.request.uri.path eq \"{slashHomepage}\"))";
@@ -193,19 +196,7 @@ internal static class CloudflareResponseHeaderPolicyBuilder
         if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
             return absolute.AbsoluteUri;
 
-        return string.Join("/", value.Split('/').Select(EscapeLinkPathSegment));
-    }
-
-    private static string EscapeLinkPathSegment(string value)
-    {
-        try
-        {
-            return Uri.EscapeDataString(Uri.UnescapeDataString(value));
-        }
-        catch (UriFormatException)
-        {
-            return Uri.EscapeDataString(value);
-        }
+        return CloudflareCachePolicyBuilder.EncodeUriPathForExpression(value);
     }
 
     private static DiscoveryHeaderGroup[] BuildDiscoveryHeaderGroups(
@@ -270,7 +261,7 @@ internal static class CloudflareResponseHeaderPolicyBuilder
     private static string BuildExactPathExpression(string hostname, IReadOnlyCollection<string> paths)
     {
         var clauses = paths.Select(path =>
-            $"http.request.uri.path eq \"{CloudflareCachePolicyBuilder.EscapeExpressionString(path)}\"");
+            $"http.request.uri.path eq \"{CloudflareCachePolicyBuilder.EscapeExpressionString(CloudflareCachePolicyBuilder.EncodeUriPathForExpression(path))}\"");
         return $"(http.host eq \"{hostname}\" and ({string.Join(" or ", clauses)}))";
     }
 
@@ -279,11 +270,13 @@ internal static class CloudflareResponseHeaderPolicyBuilder
         if (string.IsNullOrWhiteSpace(group.PathSuffix))
             return BuildExactPathExpression(hostname, group.Paths);
 
-        var suffix = CloudflareCachePolicyBuilder.EscapeExpressionString(group.PathSuffix);
+        var suffix = CloudflareCachePolicyBuilder.EscapeExpressionString(
+            CloudflareCachePolicyBuilder.EncodeUriPathForExpression(group.PathSuffix));
         if (basePath == "/")
             return $"(http.host eq \"{hostname}\" and ends_with(http.request.uri.path, \"{suffix}\"))";
 
-        var prefix = CloudflareCachePolicyBuilder.EscapeExpressionString(basePath);
+        var prefix = CloudflareCachePolicyBuilder.EscapeExpressionString(
+            CloudflareCachePolicyBuilder.EncodeUriPathForExpression(basePath));
         return $"(http.host eq \"{hostname}\" and starts_with(http.request.uri.path, \"{prefix}\") and ends_with(http.request.uri.path, \"{suffix}\"))";
     }
 

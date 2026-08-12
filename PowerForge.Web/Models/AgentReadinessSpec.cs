@@ -106,7 +106,7 @@ public sealed class AgentSecurityHeadersSpec
     /// <summary>Permissions-Policy value.</summary>
     public string? PermissionsPolicyValue { get; set; } =
         "camera=(), geolocation=(), microphone=(), payment=(), usb=()";
-    /// <summary>Emit permissive CORS only for agent well-known JSON resources.</summary>
+    /// <summary>Emit CORS for configured agent discovery resources.</summary>
     public bool CorsForWellKnown { get; set; } = true;
     /// <summary>Access-Control-Allow-Origin value for agent discovery resources.</summary>
     public string? CorsAllowOrigin { get; set; } = "*";

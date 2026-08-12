@@ -74,6 +74,22 @@ public sealed class CloudflareCachePolicyTests
     }
 
     [Fact]
+    public void BuildManagedRules_ShouldEncodeConfiguredPathsForCloudflareMatching()
+    {
+        var rules = CloudflareCachePolicyBuilder.BuildManagedRules(
+            "example.com",
+            "Project",
+            ["/release notes/zażółć"],
+            basePath: "/product docs/");
+
+        Assert.Contains("/product%20docs/css/*", rules[2]!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("uri.path eq \"/product%20docs/release%20notes/za%C5%BC%C3%B3%C5%82%C4%87\"",
+            rules[0]!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("starts_with(http.request.uri.path, \"/product%20docs/\")",
+            rules[0]!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Apply_ShouldReplaceManagedRulesAndPreserveUnrelatedRules()
     {
         var existingRules = new JsonArray

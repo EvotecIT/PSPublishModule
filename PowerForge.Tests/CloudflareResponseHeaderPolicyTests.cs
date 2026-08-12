@@ -158,7 +158,8 @@ public sealed class CloudflareResponseHeaderPolicyTests
         var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
             "example.com",
             "Docs",
-            new AgentSecurityHeadersSpec { Enabled = false, Hsts = false },
+            new AgentSecurityHeadersSpec { Enabled = true, Hsts = false },
+            basePath: "/product docs/",
             agentReadiness: new AgentReadinessSpec
             {
                 Enabled = true,
@@ -170,8 +171,17 @@ public sealed class CloudflareResponseHeaderPolicyTests
         var linkRule = Assert.IsType<JsonObject>(rules.Single(rule =>
             rule!["description"]!.GetValue<string>().EndsWith("discovery Link headers", StringComparison.Ordinal)));
         var link = linkRule["action_parameters"]!["headers"]!["Link"]!["value"]!.GetValue<string>();
-        Assert.Contains("</discovery/api%20catalog.json>", link, StringComparison.Ordinal);
+        Assert.Contains("</product%20docs/discovery/api%20catalog.json>", link, StringComparison.Ordinal);
         Assert.DoesNotContain("api catalog.json", link, StringComparison.Ordinal);
+        Assert.Contains("uri.path eq \"/product%20docs\"", linkRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        var apiRule = Assert.IsType<JsonObject>(rules.Single(rule =>
+            rule!["description"]!.GetValue<string>().EndsWith("discovery API catalog headers", StringComparison.Ordinal)));
+        Assert.Contains("uri.path eq \"/product%20docs/discovery/api%20catalog.json\"",
+            apiRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        var securityRule = Assert.IsType<JsonObject>(rules.Single(rule =>
+            rule!["description"]!.GetValue<string>().EndsWith("security headers", StringComparison.Ordinal)));
+        Assert.Contains("starts_with(http.request.uri.path, \"/product%20docs/\")",
+            securityRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
     }
 
     [Fact]

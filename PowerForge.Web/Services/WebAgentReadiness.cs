@@ -405,21 +405,11 @@ public static partial class WebAgentReadiness
         var markdown = await TryGetTextAsync(http, baseUrl, "text/markdown", cancellationToken).ConfigureAwait(false);
         var markdownContentType = markdown.Response?.Content.Headers.ContentType?.MediaType ?? string.Empty;
         var markdownNegotiated = markdown.Success && IsMarkdownContentType(markdownContentType);
-        var markdownAlternateUrl = ResolveMarkdownAlternateUrl(baseUrl, linkHeader) ?? CombineUrl(baseUrl, "/index.md");
-        HttpTextResult? markdownAlternate = null;
-        var markdownAlternateContentType = string.Empty;
-        var markdownAlternateFetched = false;
-        var markdownAlternateAvailableAsMarkdown = false;
-        if (!markdownNegotiated && !string.IsNullOrWhiteSpace(markdownAlternateUrl))
-        {
-            markdownAlternate = await TryGetTextAsync(http, markdownAlternateUrl, null, cancellationToken).ConfigureAwait(false);
-            markdownAlternateContentType = markdownAlternate.Response?.Content.Headers.ContentType?.MediaType ?? string.Empty;
-            markdownAlternateFetched = markdownAlternate.Success;
-            markdownAlternateAvailableAsMarkdown = markdownAlternateFetched && IsMarkdownContentType(markdownAlternateContentType);
-        }
+        var markdownArtifact = await ScanRemoteMarkdownArtifactAsync(
+            http, baseUrl, linkHeader, spec, markdownNegotiated, cancellationToken).ConfigureAwait(false);
 
         AddCheck(checks, "markdown-negotiation", "content", "Markdown for Agents",
-            spec.MarkdownNegotiation ? GetMarkdownNegotiationStatus(markdownNegotiated, markdownAlternateAvailableAsMarkdown) : "info",
+            spec.MarkdownNegotiation ? GetMarkdownNegotiationStatus(markdownNegotiated, markdownArtifact.AvailableAsMarkdown) : "info",
             spec.MarkdownNegotiation
                 ? BuildMarkdownNegotiationMessage(
                     markdownNegotiated,
@@ -428,23 +418,13 @@ public static partial class WebAgentReadiness
                     GetHeaderValue(markdown.Response, "Vary"),
                     GetHeaderValue(markdown.Response, "CF-Cache-Status"),
                     GetHeaderValue(markdown.Response, "Cache-Control"),
-                    markdownAlternateAvailableAsMarkdown,
-                    markdownAlternateUrl,
-                    markdownAlternateFetched,
-                    markdownAlternateContentType)
+                    markdownArtifact.AvailableAsMarkdown,
+                    markdownArtifact.Url,
+                    markdownArtifact.Fetched,
+                    markdownArtifact.ContentType)
                 : "Markdown negotiation verification is disabled by site policy.",
             baseUrl);
-        if (!markdownNegotiated)
-        {
-            AddCheck(checks, "markdown-artifact-public", "content", "Direct Markdown artifact",
-                markdownAlternateAvailableAsMarkdown ? "pass" : (markdownAlternateFetched ? "warn" : "info"),
-                markdownAlternateAvailableAsMarkdown
-                    ? $"Direct Markdown artifact is available at {markdownAlternateUrl}."
-                    : (markdownAlternateFetched
-                        ? $"Direct Markdown artifact was fetched at {markdownAlternateUrl}, but returned {FormatContentTypeForMessage(markdownAlternateContentType)}. Configure the host MIME type as text/markdown."
-                        : $"Direct Markdown artifact was not found at {markdownAlternateUrl}."),
-                markdownAlternateUrl);
-        }
+        AddRemoteMarkdownArtifactCheck(checks, markdownArtifact, markdownNegotiated);
 
         var apiCatalogUrl = ResolveRemoteOutputUrl(baseUrl, spec.ApiCatalog?.OutputPath, "/.well-known/api-catalog");
         var apiCatalog = await TryGetTextAsync(http, apiCatalogUrl, null, cancellationToken).ConfigureAwait(false);
@@ -528,7 +508,8 @@ public static partial class WebAgentReadiness
             (spec.AgentsJson?.Enabled == true, agentsJsonUrl, agentsJson.Response),
             (spec.AgentsJson?.Enabled == true, agentsWellKnownUrl, agentsWellKnown?.Response),
             (spec.A2AAgentCard?.Enabled == true, a2aUrl, a2a.Response),
-            (spec.McpServerCard?.Enabled == true, mcpUrl, mcp.Response)
+            (spec.McpServerCard?.Enabled == true, mcpUrl, mcp.Response),
+            (markdownArtifact.Expected, markdownArtifact.Url, markdownArtifact.Result?.Response)
         ]);
 
         return new WebAgentReadinessResult
@@ -1573,7 +1554,9 @@ public static partial class WebAgentReadiness
         if (string.IsNullOrWhiteSpace(route))
             return;
 
-        sb.Append("  <If \"%{REQUEST_URI} == '").Append(EscapeApacheExpressionString(NormalizeRoute(route))).AppendLine("'\">");
+        sb.Append("  <If \"%{REQUEST_URI} == '")
+            .Append(EscapeApacheExpressionString(EscapeLinkUriReference(NormalizeRoute(route))))
+            .AppendLine("'\">");
         AppendApacheHeaderSet(sb, "Content-Type", contentType, indent: "    ", always: true);
         if (security.Enabled && security.CorsForWellKnown && !string.IsNullOrWhiteSpace(security.CorsAllowOrigin))
             AppendApacheHeaderSet(sb, "Access-Control-Allow-Origin", security.CorsAllowOrigin, indent: "    ", always: true);
@@ -1592,7 +1575,7 @@ public static partial class WebAgentReadiness
         if (string.IsNullOrWhiteSpace(route))
             return;
 
-        sb.AppendLine(NormalizeRoute(route));
+        sb.AppendLine(EscapeLinkUriReference(NormalizeRoute(route)));
         sb.Append("  Content-Type: ").Append(contentType).AppendLine();
         AppendCorsHeaders(sb, security);
     }
@@ -2744,16 +2727,20 @@ public static partial class WebAgentReadiness
     private static string CombineUrl(string baseUrl, string route)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
-            return NormalizeRoute(route);
-        return baseUrl.TrimEnd('/') + "/" + NormalizeRoute(route).TrimStart('/');
+            return EscapeLinkUriReference(NormalizeRoute(route));
+
+        var combined = baseUrl.TrimEnd('/') + "/" + NormalizeRoute(route).TrimStart('/');
+        return Uri.TryCreate(combined, UriKind.Absolute, out var absolute)
+            ? absolute.AbsoluteUri
+            : combined;
     }
 
     private static string ToAbsoluteUrl(string? baseUrl, string value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
-        if (Uri.TryCreate(value, UriKind.Absolute, out _))
-            return value.Trim();
+        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
+            return absolute.AbsoluteUri;
         return string.IsNullOrWhiteSpace(baseUrl) ? NormalizeRoute(value) : CombineUrl(baseUrl!, value);
     }
 

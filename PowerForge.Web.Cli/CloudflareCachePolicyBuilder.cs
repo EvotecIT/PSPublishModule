@@ -212,14 +212,14 @@ internal static class CloudflareCachePolicyBuilder
     }
 
     private static string BuildPathClause(string operation, string path) =>
-        $"http.request.uri.path {operation} \"{EscapeExpressionString(path)}\"";
+        $"http.request.uri.path {operation} \"{EscapeExpressionString(EncodeUriPathForExpression(path))}\"";
 
     private static string BuildScopedPathFunctionClause(string basePath, string functionName, string suffix)
     {
-        var function = $"{functionName}(http.request.uri.path, \"{EscapeExpressionString(suffix)}\")";
+        var function = $"{functionName}(http.request.uri.path, \"{EscapeExpressionString(EncodeUriPathForExpression(suffix))}\")";
         return basePath == "/"
             ? function
-            : $"(starts_with(http.request.uri.path, \"{EscapeExpressionString(basePath)}\") and {function})";
+            : $"(starts_with(http.request.uri.path, \"{EscapeExpressionString(EncodeUriPathForExpression(basePath))}\") and {function})";
     }
 
     internal static void ValidateExpressionLength(string ruleName, string expression)
@@ -313,4 +313,21 @@ internal static class CloudflareCachePolicyBuilder
 
     internal static string EscapeExpressionString(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+
+    /// <summary>Encodes configured URI path segments for Cloudflare Rules matching while preserving wildcard operators.</summary>
+    internal static string EncodeUriPathForExpression(string value) =>
+        string.Join("/", value.Split('/').Select(static segment =>
+        {
+            string decoded;
+            try
+            {
+                decoded = Uri.UnescapeDataString(segment);
+            }
+            catch (UriFormatException)
+            {
+                decoded = segment;
+            }
+
+            return Uri.EscapeDataString(decoded).Replace("%2A", "*", StringComparison.OrdinalIgnoreCase);
+        }));
 }

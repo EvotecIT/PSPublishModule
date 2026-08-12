@@ -6,7 +6,7 @@ using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
-public class WebAgentReadinessTests
+public partial class WebAgentReadinessTests
 {
     [Fact]
     public void Prepare_WritesDiscoveryFilesAndHeaders()
@@ -2254,7 +2254,8 @@ public class WebAgentReadinessTests
         string? corsOrigin = null,
         string? homepageCorsOrigin = null,
         IReadOnlyCollection<string>? corsPaths = null,
-        string homepagePath = "/") : HttpMessageHandler
+        string homepagePath = "/",
+        bool negotiateMarkdown = false) : HttpMessageHandler
     {
         internal List<string> Requests { get; } = [];
         internal HashSet<string> HomepageHeaders { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -2265,6 +2266,13 @@ public class WebAgentReadinessTests
             Requests.Add(path);
             if (path == homepagePath)
             {
+                if (negotiateMarkdown &&
+                    request.Headers.Accept.Any(value =>
+                        string.Equals(value.MediaType, "text/markdown", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return Task.FromResult(Response(HttpStatusCode.OK, "# Example", "text/markdown"));
+                }
+
                 var response = Response(
                     HttpStatusCode.OK,
                     """<!doctype html><html lang="en"><head><meta name="robots" content="index,follow"></head><body><main><h1>Example</h1></main></body></html>""",
