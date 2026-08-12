@@ -199,7 +199,9 @@ internal sealed partial class PowerForgeReleaseService
         string moduleVersion,
         string? preRelease)
     {
-        var configuredPath = configuration.RequiredModules?.ModulesPath;
+        var configuredPath = FirstNonEmpty(
+            configuration.RequiredModules?.ModulesPath,
+            configuration.RequiredModules?.Path);
         if (string.IsNullOrWhiteSpace(configuredPath))
             return null;
 

@@ -246,6 +246,39 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
     }
 
     [Fact]
+    public void ResolvePackedModuleRoots_UsesRequiredModulesPathWhenModulesPathIsOmitted()
+    {
+        var roots = PowerForgeReleaseService.ResolvePackedModuleRoots(
+            new ModulePipelineConfigurationContext
+            {
+                ProjectRoot = Path.GetTempPath(),
+                Spec = new ModulePipelineSpec
+                {
+                    Segments =
+                    [
+                        new ConfigurationArtefactSegment
+                        {
+                            ArtefactType = ArtefactType.Packed,
+                            Configuration = new ArtefactConfiguration
+                            {
+                                Enabled = true,
+                                RequiredModules = new ArtefactRequiredModulesConfiguration
+                                {
+                                    Path = "Payload/RequiredModules"
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            "ExampleModule",
+            "1.2.3",
+            preRelease: null);
+
+        Assert.Equal(new[] { "Payload/RequiredModules" }, roots);
+    }
+
+    [Fact]
     public void ResolveProducedModuleArtifacts_OnlyReturnsNewOrChangedFiles()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));

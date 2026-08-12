@@ -76,15 +76,18 @@ internal sealed class VirusTotalMonitorPublisher
                         .ConfigureAwait(false);
                 }
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (Exception exception) when (
+                exception is not OperationCanceledException ||
+                !cancellationToken.IsCancellationRequested)
             {
                 var failure = await WriteCheckpointAsync(
                         request,
                         receipts,
                         success: false,
                         errorMessage: RedactApiKey(exception.Message, request.ApiKey),
-                        cancellationToken)
+                        CancellationToken.None)
                     .ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
                 return failure;
             }
         }

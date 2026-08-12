@@ -36,6 +36,8 @@ internal static class VirusTotalReleaseArtifactSelector
         {
             throw new InvalidOperationException("VirusTotal ApiKey must be a single-line secret.");
         }
+        if (!string.IsNullOrWhiteSpace(options.ProjectName))
+            ValidatePathSegment(options.ProjectName!.Trim(), nameof(options.ProjectName));
 
         var kinds = options.ArtifactKinds ?? Array.Empty<VirusTotalArtifactKind>();
         if (kinds.Length == 0)

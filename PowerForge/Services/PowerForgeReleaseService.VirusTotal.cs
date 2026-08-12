@@ -23,7 +23,7 @@ internal sealed partial class PowerForgeReleaseService
             return false;
         }
 
-        if (publishUnifiedGitHub)
+        if (publishUnifiedGitHub && (runModule || runPackages || runTools))
             return true;
 
         if (runModule && spec.Module is not null)
