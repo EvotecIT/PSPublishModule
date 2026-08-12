@@ -218,4 +218,48 @@ public class WebSiteAuditFileBudgetTests
                 Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void Audit_MaxFileBytes_ReportsEveryOversizedArtifact()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-all-byte-budgets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "assets"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><html><head><title>Home</title></head><body></body></html>");
+            File.WriteAllBytes(Path.Combine(root, "assets", "largest.bin"), new byte[150]);
+            File.WriteAllBytes(Path.Combine(root, "assets", "new-oversized.bin"), new byte[120]);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                MaxFileBytes = 100,
+                CheckLinks = false,
+                CheckAssets = false,
+                CheckNavConsistency = false,
+                NavRequired = false,
+                CheckTitles = false,
+                CheckDuplicateIds = false,
+                CheckHtmlStructure = false,
+                CheckHeadingOrder = false,
+                CheckLinkPurposeConsistency = false,
+                CheckNetworkHints = false,
+                CheckRenderBlockingResources = false,
+                CheckUtf8 = false,
+                CheckMetaCharset = false,
+                CheckUnicodeReplacementChars = false
+            });
+
+            var issues = result.Issues.Where(issue => issue.Hint == "max-file-bytes").ToArray();
+            Assert.Equal(2, issues.Length);
+            Assert.Contains(issues, issue => issue.Path == "assets/largest.bin");
+            Assert.Contains(issues, issue => issue.Path == "assets/new-oversized.bin");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
 }

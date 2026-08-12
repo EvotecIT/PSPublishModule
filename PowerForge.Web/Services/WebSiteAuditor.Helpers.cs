@@ -63,17 +63,15 @@ public static partial class WebSiteAuditor
         return count;
     }
 
-    private static bool TryFindLargestBudgetFile(
+    private static IReadOnlyList<(string RelativePath, long Bytes)> FindOverBudgetFiles(
         string root,
         string[] budgetExcludePatterns,
-        out string? relativePath,
-        out long bytes)
+        long maxFileBytes)
     {
-        relativePath = null;
-        bytes = 0;
         // HTML-audit defaults suppress implementation fragments from page checks,
         // but every deployed artifact still counts toward the file-size budget.
         var excludes = NormalizePatterns(budgetExcludePatterns ?? Array.Empty<string>());
+        var overBudget = new List<(string RelativePath, long Bytes)>();
 
         try
         {
@@ -84,11 +82,8 @@ public static partial class WebSiteAuditor
                     continue;
 
                 var length = new FileInfo(file).Length;
-                if (relativePath is not null && length <= bytes)
-                    continue;
-
-                relativePath = relative;
-                bytes = length;
+                if (length > maxFileBytes)
+                    overBudget.Add((relative, length));
             }
         }
         catch
@@ -96,7 +91,9 @@ public static partial class WebSiteAuditor
             // Keep artifact metrics best-effort, consistent with the existing file-count budget.
         }
 
-        return relativePath is not null;
+        return overBudget
+            .OrderBy(static item => item.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static IEnumerable<string> EnumerateHtmlFiles(string root, string[] includePatterns, string[] excludePatterns, bool useDefaultExcludes)

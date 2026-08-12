@@ -119,14 +119,17 @@ public static partial class WebSiteAuditor
             AddIssue("warning", "budget", null, $"total file count under site root exceeds budget: {countLabel} (budget {maxTotalFiles}).", "max-total-files");
         }
 
-        if (maxFileBytes > 0 && TryFindLargestBudgetFile(siteRoot, options.BudgetExclude, out var largestFile, out var largestFileBytes) && largestFileBytes > maxFileBytes)
+        if (maxFileBytes > 0)
         {
-            AddIssue(
-                "warning",
-                "budget",
-                largestFile,
-                $"file size exceeds budget: {largestFileBytes} bytes (budget {maxFileBytes} bytes).",
-                "max-file-bytes");
+            foreach (var (relativePath, bytes) in FindOverBudgetFiles(siteRoot, options.BudgetExclude, maxFileBytes))
+            {
+                AddIssue(
+                    "warning",
+                    "budget",
+                    relativePath,
+                    $"file size exceeds budget: {bytes} bytes (budget {maxFileBytes} bytes).",
+                    "max-file-bytes");
+            }
         }
 
         var baselineNavSignatures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
