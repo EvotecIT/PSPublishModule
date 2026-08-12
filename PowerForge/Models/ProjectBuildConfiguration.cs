@@ -11,6 +11,7 @@ internal sealed class ProjectBuildConfiguration
     public string? ExpectedVersion { get; set; }
     public Dictionary<string, string>? ExpectedVersionMap { get; set; }
     public Dictionary<string, ProjectBuildVersionTrack>? VersionTracks { get; set; }
+    public ProjectVersionBinding[]? VersionBindings { get; set; }
     public bool ExpectedVersionMapAsInclude { get; set; }
     public bool ExpectedVersionMapUseWildcards { get; set; }
     public bool AlignPackageVersions { get; set; }

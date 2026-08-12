@@ -170,6 +170,9 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
     /// <summary>Shared version tracks keyed by track name.</summary>
     [Parameter] public IDictionary? VersionTracks { get; set; }
 
+    /// <summary>Repository files whose embedded versions follow a resolved project version.</summary>
+    [Parameter] public ProjectVersionBinding[]? VersionBindings { get; set; }
+
     /// <summary>When true, <c>ExpectedVersionMap</c> acts as an include list.</summary>
     [Parameter] public SwitchParameter ExpectedVersionMapAsInclude { get; set; }
 
@@ -357,6 +360,7 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
                 ExpectedVersion = Normalize(ExpectedVersion),
                 ExpectedVersionMap = PackageBuildConfiguration.ToStringDictionary(ExpectedVersionMap),
                 VersionTracks = PackageBuildConfiguration.ToVersionTracksDictionary(VersionTracks),
+                VersionBindings = VersionBindings,
                 ExpectedVersionMapAsInclude = ExpectedVersionMapAsInclude.IsPresent,
                 ExpectedVersionMapUseWildcards = ExpectedVersionMapUseWildcards.IsPresent,
                 AlignPackageVersions = AlignPackageVersions.IsPresent,

@@ -155,6 +155,15 @@ public sealed class PowerForgeProjectCmdletTests
                     ["IncludePrerelease"] = true
                 }
             })
+            .AddParameter("VersionBindings", new[]
+            {
+                new ProjectVersionBinding
+                {
+                    Path = "tool.json",
+                    Project = "HtmlTinkerX",
+                    Pattern = @"(?<=HtmlTinkerX@)\d+\.\d+\.\d+"
+                }
+            })
             .AddParameter("AlignPackageVersions")
             .AddParameter("BuildBeforeModule")
             .AddParameter("IncludeSymbols")
@@ -180,6 +189,8 @@ public sealed class PowerForgeProjectCmdletTests
         Assert.True(segment.Configuration.UseGitHubPackages);
         Assert.Equal("EvotecIT", segment.Configuration.GitHubPackagesOwner);
         Assert.False(segment.Configuration.GitHubIncludeProjectNameInTag);
+        var binding = Assert.Single(segment.Configuration.VersionBindings!);
+        Assert.Equal("tool.json", binding.Path);
         Assert.NotNull(segment.Configuration.VersionTracks);
         var track = segment.Configuration.VersionTracks!["Core"];
         Assert.Equal("2.0.X", track.ExpectedVersion);

@@ -119,6 +119,9 @@ public sealed class PackageBuildConfiguration
     /// <summary>Shared version tracks keyed by track name.</summary>
     public Dictionary<string, PackageBuildVersionTrackConfiguration>? VersionTracks { get; set; }
 
+    /// <summary>Repository files whose embedded versions follow a resolved project version.</summary>
+    public ProjectVersionBinding[]? VersionBindings { get; set; }
+
     /// <summary>When true, <see cref="ExpectedVersionMap"/> acts as an include list.</summary>
     public bool ExpectedVersionMapAsInclude { get; set; }
 

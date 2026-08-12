@@ -53,6 +53,12 @@ public sealed class DotNetRepositoryReleaseSpec
     public bool AlignPackageVersions { get; set; }
 
     /// <summary>
+    /// Repository files whose embedded versions follow a resolved project version.
+    /// Bindings are validated during plan mode and applied only when <see cref="UpdateVersions"/> is enabled.
+    /// </summary>
+    public IReadOnlyList<ProjectVersionBinding>? VersionBindings { get; set; }
+
+    /// <summary>
     /// Project-build version tracks that need package-version alignment after project discovery.
     /// </summary>
     internal IReadOnlyList<ProjectBuildVersionAlignmentGroup>? VersionAlignmentGroups { get; set; }
