@@ -263,6 +263,7 @@ public sealed partial class DotNetRepositoryReleaseService
             var versionItems = CreateVersionProgressItems(packable, detailedProgress);
             progress?.PhaseStarted(ProjectBuildProgressPhase.Versioning, packable.Length, "Resolving project versions");
             var versionProgress = 0;
+            var pendingVersionUpdates = new List<KeyValuePair<DotNetRepositoryProjectResult, RepositoryTextFileUpdate>>();
             foreach (var project in packable)
             {
                 var versionItem = versionItems[project];
@@ -359,11 +360,9 @@ public sealed partial class DotNetRepositoryReleaseService
 
                 if (!string.Equals(content, updated, StringComparison.Ordinal))
                 {
-                    File.WriteAllText(project.CsprojPath, updated);
-                    if (!string.IsNullOrWhiteSpace(project.OldVersion))
-                        _logger.Success($"{project.ProjectName}: {project.OldVersion} -> {resolvedVersion}");
-                    else
-                        _logger.Success($"{project.ProjectName}: set version {resolvedVersion}");
+                    pendingVersionUpdates.Add(new KeyValuePair<DotNetRepositoryProjectResult, RepositoryTextFileUpdate>(
+                        project,
+                        new RepositoryTextFileUpdate(project.CsprojPath, content, updated)));
                 }
                 else
                 {
@@ -379,7 +378,53 @@ public sealed partial class DotNetRepositoryReleaseService
             if (packable.Any(project => !string.IsNullOrWhiteSpace(project.ErrorMessage)))
                 progress?.PhaseFailed(ProjectBuildProgressPhase.Versioning, "One or more project versions could not be resolved");
             else
+            {
+                var versionBindingService = new ProjectVersionBindingService(_logger);
+                var pathComparer = FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.OrdinalIgnoreCase
+                    ? StringComparer.OrdinalIgnoreCase
+                    : StringComparer.Ordinal;
+                var plannedProjectContents = pendingVersionUpdates.ToDictionary(
+                    static item => Path.GetFullPath(item.Value.FilePath),
+                    static item => item.Value.UpdatedContent,
+                    pathComparer);
+                var versionBindingPlan = spec.UpdateVersions
+                    ? versionBindingService.Plan(
+                        root,
+                        result.ResolvedVersionsByProject,
+                        spec.VersionBindings,
+                        plannedProjectContents)
+                    : Array.Empty<ProjectVersionBindingFileUpdate>();
+
+                if (spec.WhatIf)
+                {
+                    versionBindingService.LogPlanned(versionBindingPlan);
+                }
+                else
+                {
+                    var boundPaths = new HashSet<string>(
+                        versionBindingPlan.Select(static item => Path.GetFullPath(item.Update.FilePath)),
+                        pathComparer);
+                    var fileUpdates = pendingVersionUpdates
+                        .Where(item => !boundPaths.Contains(Path.GetFullPath(item.Value.FilePath)))
+                        .Select(static item => item.Value)
+                        .Concat(versionBindingPlan.Select(static item => item.Update))
+                        .ToArray();
+                    new RepositoryTextFileTransactionService().Apply(fileUpdates);
+
+                    foreach (var pendingUpdate in pendingVersionUpdates)
+                    {
+                        var project = pendingUpdate.Key;
+                        if (!string.IsNullOrWhiteSpace(project.OldVersion))
+                            _logger.Success($"{project.ProjectName}: {project.OldVersion} -> {project.NewVersion}");
+                        else
+                            _logger.Success($"{project.ProjectName}: set version {project.NewVersion}");
+                    }
+
+                    versionBindingService.LogApplied(versionBindingPlan);
+                }
+
                 progress?.PhaseCompleted(ProjectBuildProgressPhase.Versioning, $"{packable.Length} project version(s) resolved");
+            }
             if (spec.Pack)
             {
                 progress?.PhaseStarted(ProjectBuildProgressPhase.PackageBuild, packable.Length, "Building and packing projects");

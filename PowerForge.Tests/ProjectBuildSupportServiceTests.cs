@@ -70,6 +70,39 @@ public sealed class ProjectBuildSupportServiceTests
     }
 
     [Fact]
+    public void LoadConfig_deserializes_version_bindings()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-bindings-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var configPath = Path.Combine(root.FullName, "project.build.json");
+            File.WriteAllText(configPath, """
+{
+  "VersionBindings": [
+    {
+      "Path": "tool.json",
+      "Project": "Example.Tool",
+      "Pattern": "(?<=Example\\.Tool@)\\d+\\.\\d+\\.\\d+"
+    }
+  ]
+}
+""");
+
+            var config = new ProjectBuildSupportService(new NullLogger()).LoadConfig(configPath);
+            var binding = Assert.Single(config.VersionBindings!);
+
+            Assert.Equal("tool.json", binding.Path);
+            Assert.Equal("Example.Tool", binding.Project);
+            Assert.Equal("{Version}", binding.Replacement);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void LoadConfig_reads_packages_from_unified_release_configuration()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-release-" + Guid.NewGuid().ToString("N")));

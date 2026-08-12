@@ -290,6 +290,13 @@ Example configuration
       ]
     }
   },
+  "VersionBindings": [
+    {
+      "Path": ".agents/plugins/example/.mcp.json",
+      "Project": "ExampleSuite.Tool",
+      "Pattern": "(?<=ExampleSuite\\.Tool@)\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?"
+    }
+  ],
   "ExpectedVersionMapAsInclude": true,
   "ExpectedVersionMapUseWildcards": false,
   "ExcludeProjects": [ "ExampleSuite.Legacy", "ExampleSuite.Experimental" ],
@@ -336,6 +343,7 @@ Versioning
 - `VersionTracks.<Name>.AnchorPackageId`: optional explicit package identity when it differs from the project name.
 - `VersionTracks.<Name>.Projects`: sibling projects that should be stamped to the same resolved version. `AnchorProject` is included automatically.
 - When `AnchorPackageId` is used, also set `AnchorProject` so the anchor project itself is stamped automatically.
+- `VersionBindings`: keeps an explicitly configured repository file synchronized with a resolved project version. Each binding names a repository-relative `Path`, a source `Project`, and a regular-expression `Pattern` that must match exactly once. `Replacement` defaults to `{Version}` and may add surrounding text, but it must contain that token. Bindings are validated in plan mode and are applied only when `UpdateVersions` is enabled. Missing files or project versions, paths outside the repository, symbolic links/junctions, invalid patterns, and zero/multiple matches fail the release. Project and binding updates are prepared together and use rollback-backed replacements so a failed write does not knowingly leave a partial version set.
 - `AlignPackageVersions`: defaults to false. When true, ordinary projects using the same X-pattern are stepped from the highest current package version found for any project in that group. For example, if one `2.0.X` package is at `2.0.5` and another is new, both plan `2.0.6`. Ordinary exact-version overrides outside a version track remain exact. `VersionTracks` already coordinate their members when alignment is false and remain explicit, separate group boundaries when it is true. This does not assign one universal version to every project. See [Unified Module And Project Releases](PSPublishModule.UnifiedModuleProjectRelease.md) for complete aligned, non-aligned, and version-track behavior.
 - In a module pipeline with `Release.SynchronizeModuleVersion`, the next available module version is also a floor for `Release.PrimaryProject`. If that project belongs to an aligned X-pattern group, the whole group is raised to the floor. A higher numeric NuGet-derived package candidate still wins. At the same numeric version, a stable X-pattern candidate does not erase the configured module prerelease; explicit prerelease versions retain normal semantic-version ordering. The module and primary package patterns must describe the same version line.
 - When no expected version is provided for a project, the existing csproj version is used.

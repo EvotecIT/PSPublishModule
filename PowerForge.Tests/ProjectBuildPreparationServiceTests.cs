@@ -43,6 +43,29 @@ public sealed class ProjectBuildPreparationServiceTests
     }
 
     [Fact]
+    public void Prepare_propagates_version_bindings()
+    {
+        var service = new ProjectBuildPreparationService();
+        var binding = new ProjectVersionBinding
+        {
+            Path = "tool.json",
+            Project = "Example.Tool",
+            Pattern = @"(?<=Example\.Tool@)\d+\.\d+\.\d+"
+        };
+
+        var context = service.Prepare(
+            new ProjectBuildConfiguration
+            {
+                VersionBindings = new[] { binding }
+            },
+            Directory.GetCurrentDirectory(),
+            null,
+            new ProjectBuildRequestedActions());
+
+        Assert.Same(binding, Assert.Single(context.Spec.VersionBindings!));
+    }
+
+    [Fact]
     public void Prepare_propagates_internal_release_version_floor()
     {
         var service = new ProjectBuildPreparationService();

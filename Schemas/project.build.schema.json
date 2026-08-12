@@ -34,6 +34,16 @@
         "$ref": "#/definitions/versionTrack"
       }
     },
+    "VersionBindings": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "description": "Repository files whose embedded versions follow a resolved project version. Every binding must match exactly once.",
+      "items": {
+        "$ref": "#/definitions/versionBinding"
+      }
+    },
     "ExpectedVersionMapAsInclude": {
       "type": "boolean"
     },
@@ -327,6 +337,38 @@
     }
   },
   "definitions": {
+    "versionBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Path",
+        "Project",
+        "Pattern"
+      ],
+      "properties": {
+        "Path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repository-relative path of the file to update."
+        },
+        "Project": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project name whose resolved release version is used."
+        },
+        "Pattern": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Regular expression that must match exactly once in the target file."
+        },
+        "Replacement": {
+          "type": "string",
+          "minLength": 1,
+          "default": "{Version}",
+          "description": "Replacement text containing the {Version} token."
+        }
+      }
+    },
     "versionTrack": {
       "type": "object",
       "additionalProperties": false,

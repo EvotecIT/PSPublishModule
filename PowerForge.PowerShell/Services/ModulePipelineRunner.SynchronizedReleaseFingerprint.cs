@@ -400,6 +400,7 @@ public sealed partial class ModulePipelineRunner
             configuration.ExpectedVersion,
             SerializeSynchronizedReleaseStringMap(configuration.ExpectedVersionMap),
             SerializeSynchronizedReleaseVersionTracks(configuration.VersionTracks),
+            SerializeSynchronizedReleaseVersionBindings(configuration.VersionBindings),
             configuration.ExpectedVersionMapAsInclude.ToString(),
             configuration.ExpectedVersionMapUseWildcards.ToString(),
             configuration.AlignPackageVersions.ToString(),
@@ -473,6 +474,18 @@ public sealed partial class ModulePipelineRunner
                     entry.Value?.IncludePrerelease?.ToString() ?? string.Empty
                 })
                 .ToArray());
+
+    private static string SerializeSynchronizedReleaseVersionBindings(
+        IReadOnlyList<ProjectVersionBinding>? bindings)
+        => bindings is null
+            ? string.Empty
+            : JsonSerializer.Serialize(bindings.Select(static binding => new[]
+            {
+                binding?.Path?.Trim() ?? string.Empty,
+                binding?.Project?.Trim() ?? string.Empty,
+                binding?.Pattern ?? string.Empty,
+                binding?.Replacement ?? string.Empty
+            }).ToArray());
 
     private static string SerializeSynchronizedReleaseValues(IEnumerable<string>? values)
         => values is null
