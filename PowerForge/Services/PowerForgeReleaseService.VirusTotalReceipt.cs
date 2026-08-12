@@ -73,10 +73,11 @@ internal sealed partial class PowerForgeReleaseService
             var item = artifacts[index];
             if (item is null ||
                 string.IsNullOrWhiteSpace(item.DestinationPath) ||
-                string.IsNullOrWhiteSpace(item.MonitorId))
+                string.IsNullOrWhiteSpace(item.MonitorId) ||
+                item.MonitorId.IndexOfAny(new[] { '\r', '\n' }) >= 0)
             {
                 throw new InvalidDataException(
-                    $"VirusTotal Monitor resume receipt artifact {index} must contain destinationPath and monitorId.");
+                    $"VirusTotal Monitor resume receipt artifact {index} must contain destinationPath and monitorId; monitorId must be single-line.");
             }
             if (!Enum.IsDefined(typeof(VirusTotalArtifactKind), item.Kind) ||
                 !Enum.IsDefined(typeof(VirusTotalMonitorVerificationStatus), item.VerificationStatus))

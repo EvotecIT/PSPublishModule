@@ -119,9 +119,7 @@ internal sealed partial class PowerForgeReleaseService
                     name.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase) ||
                     name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
                     name.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ||
-                    name.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase) ||
-                    name.EndsWith(".props", StringComparison.OrdinalIgnoreCase) ||
-                    name.EndsWith(".targets", StringComparison.OrdinalIgnoreCase)))
+                    name.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase)))
             {
                 return false;
             }

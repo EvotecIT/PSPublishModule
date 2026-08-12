@@ -337,13 +337,14 @@ internal static class VirusTotalReleaseArtifactSelector
         return normalized;
     }
 
-    private static void ValidatePathSegment(string value, string parameterName)
+    internal static void ValidatePathSegment(string value, string parameterName)
     {
         if (string.IsNullOrWhiteSpace(value) ||
             value.IndexOf('/') >= 0 ||
             value.IndexOf('\\') >= 0 ||
             value.IndexOf('{') >= 0 ||
             value.IndexOf('}') >= 0 ||
+            value.Any(char.IsControl) ||
             value is "." or "..")
         {
             throw new ArgumentException("VirusTotal path token values must be non-empty single path segments.", parameterName);

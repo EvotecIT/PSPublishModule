@@ -210,7 +210,8 @@ internal sealed partial class PowerForgeReleaseService
             publishResult.ErrorMessage = VirusTotalMonitorPublisher.RedactApiKey(
                 publishResult.ErrorMessage,
                 apiKey);
-            result.VirusTotalMonitorReceiptPath = PersistReceipt(publishResult);
+            if (!receiptWriteFailed)
+                result.VirusTotalMonitorReceiptPath = PersistReceipt(publishResult);
             if (!publishResult.Success)
             {
                 var failureMessage = publishResult.ErrorMessage ?? "VirusTotal Monitor did not accept every selected artifact.";
@@ -231,11 +232,14 @@ internal sealed partial class PowerForgeReleaseService
         {
             var errorMessage = VirusTotalMonitorPublisher.RedactApiKey(exception.Message, apiKey);
             request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.VirusTotal, errorMessage);
+            var retainedArtifacts = result.VirusTotalMonitor?.Artifacts is { Length: > 0 } acceptedArtifacts
+                ? acceptedArtifacts
+                : resumeReceipts;
             result.VirusTotalMonitor = new VirusTotalMonitorPublishResult
             {
                 Success = false,
                 ErrorMessage = errorMessage,
-                Artifacts = resumeReceipts
+                Artifacts = retainedArtifacts
             };
             if (receiptWritable &&
                 resumeReceiptSafeToReplace &&
@@ -294,6 +298,7 @@ internal sealed partial class PowerForgeReleaseService
             normalized = normalized.Substring(0, normalized.Length - 4);
         if (string.IsNullOrWhiteSpace(normalized))
             throw new InvalidOperationException("VirusTotal Monitor publishing resolved an empty project name.");
+        VirusTotalReleaseArtifactSelector.ValidatePathSegment(normalized, nameof(options.ProjectName));
         return normalized;
     }
 

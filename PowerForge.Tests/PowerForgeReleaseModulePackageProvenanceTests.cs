@@ -181,6 +181,38 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
     }
 
     [Fact]
+    public void CreateModuleAssetEntries_ProducerBuiltModuleWithMsBuildAssets_IsVerifiedFinalPackage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var archivePath = Path.Combine(root, "ExampleModule.v1.0.0.zip");
+        try
+        {
+            using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                archive.CreateEntry("ExampleModule/ExampleModule.psd1");
+                archive.CreateEntry("ExampleModule/ExampleModule.psm1");
+                archive.CreateEntry("ExampleModule/build/ExampleModule.props");
+                archive.CreateEntry("ExampleModule/build/ExampleModule.targets");
+            }
+
+            var entry = Assert.Single(PowerForgeReleaseService.CreateModuleAssetEntries(
+                archivePath,
+                new PowerForgeModuleReleasePlanSummary
+                {
+                    ManifestPath = Path.Combine(root, "ExampleModule.psd1")
+                },
+                [archivePath]));
+
+            Assert.True(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void CreateModuleAssetEntries_PackedModuleUnderConfiguredRoot_IsVerifiedFinalPackage()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));

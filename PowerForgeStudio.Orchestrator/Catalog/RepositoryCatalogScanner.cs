@@ -187,7 +187,9 @@ public sealed class RepositoryCatalogScanner
             var hasAppleApps = TryGetPropertyIgnoreCase(document.RootElement, "AppleApps", out var appleApps) &&
                                appleApps.ValueKind == JsonValueKind.Object;
             var hasVirusTotal = TryGetPropertyIgnoreCase(document.RootElement, "VirusTotal", out var virusTotal) &&
-                                virusTotal.ValueKind == JsonValueKind.Object;
+                                virusTotal.ValueKind == JsonValueKind.Object &&
+                                TryGetPropertyIgnoreCase(virusTotal, "Enabled", out var virusTotalEnabled) &&
+                                virusTotalEnabled.ValueKind == JsonValueKind.True;
             return hasModule || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps || hasVirusTotal
                 ? new ReleaseBuildContract(
                     releaseConfigPath,

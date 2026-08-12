@@ -63,8 +63,15 @@ internal sealed class VirusTotalMonitorPublisher
                     CurrentDetectionCount = response.CurrentDetectionCount,
                     UploadedAtUtc = _utcNow()
                 });
-                await WriteCheckpointAsync(request, receipts, success: false, errorMessage: null, CancellationToken.None)
+                var checkpoint = await WriteCheckpointAsync(
+                        request,
+                        receipts,
+                        success: false,
+                        errorMessage: null,
+                        CancellationToken.None)
                     .ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(checkpoint.ErrorMessage))
+                    return checkpoint;
                 cancellationToken.ThrowIfCancellationRequested();
                 if (request.VerifySha256 &&
                     response.VerificationStatus != VirusTotalMonitorVerificationStatus.Verified)
@@ -114,7 +121,22 @@ internal sealed class VirusTotalMonitorPublisher
             Artifacts = receipts.ToArray()
         };
         if (request.CheckpointAsync is not null)
-            await request.CheckpointAsync(result, cancellationToken).ConfigureAwait(false);
+        {
+            try
+            {
+                await request.CheckpointAsync(result, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (
+                exception is not OperationCanceledException ||
+                !cancellationToken.IsCancellationRequested)
+            {
+                result.Success = false;
+                var persistenceError = RedactApiKey(exception.Message, request.ApiKey);
+                result.ErrorMessage = string.IsNullOrWhiteSpace(errorMessage)
+                    ? $"VirusTotal Monitor checkpoint could not be persisted: {persistenceError}"
+                    : $"{errorMessage} VirusTotal Monitor checkpoint could not be persisted: {persistenceError}";
+            }
+        }
         return result;
     }
 

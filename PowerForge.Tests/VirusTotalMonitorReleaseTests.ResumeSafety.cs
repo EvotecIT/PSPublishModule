@@ -3,6 +3,40 @@ namespace PowerForge.Tests;
 public sealed partial class VirusTotalMonitorReleaseTests
 {
     [Fact]
+    public async Task Publisher_AcceptedUploadCheckpointFailure_ReturnsAcceptedMonitorIdWithoutRetry()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var artifactPath = Path.Combine(root, "App.msi");
+        await File.WriteAllTextAsync(artifactPath, "installer");
+        var checkpointCalls = 0;
+        try
+        {
+            var publisher = new VirusTotalMonitorPublisher((_, _) => new SequencedClient());
+
+            var result = await publisher.PublishAsync(new VirusTotalMonitorPublishRequest
+            {
+                ApiKey = "secret",
+                Artifacts = [Artifact(artifactPath, "/Example/1.0.0/MsiPackage/App.msi")],
+                CheckpointAsync = (_, _) =>
+                {
+                    checkpointCalls++;
+                    throw new IOException("receipt storage full");
+                }
+            });
+
+            Assert.False(result.Success);
+            Assert.Contains("checkpoint", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("item-1", Assert.Single(result.Artifacts).MonitorId);
+            Assert.Equal(1, checkpointCalls);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Publisher_FailureBeforeFirstResume_RetainsEveryPriorMonitorId()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
