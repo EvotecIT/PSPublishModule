@@ -61,20 +61,27 @@ public static partial class WebLlmsGenerator
                 nameof(options.ContentKind),
                 options.ContentKind,
                 "Unsupported LLMS content kind. Expected Package or Site.");
+        if (!Enum.IsDefined(options.ApiDetailLevel))
+            throw new ArgumentOutOfRangeException(
+                nameof(options.ApiDetailLevel),
+                options.ApiDetailLevel,
+                "Unsupported LLMS API detail level. Expected None, Summary, or Full.");
 
         var siteRoot = Path.GetFullPath(options.SiteRoot);
         if (!Directory.Exists(siteRoot))
             throw new DirectoryNotFoundException($"Site root not found: {siteRoot}");
 
-        var projectInfo = ReadProjectInfo(options.ProjectFile);
         var includePackageContent = options.ContentKind == WebLlmsContentKind.Package;
+        var projectInfo = ReadProjectInfo(options.ProjectFile, includePackageContent);
         var packages = includePackageContent
             ? ResolvePackages(options.PackageFiles)
             : new List<PackageInfo>();
-        var name = options.Name ?? projectInfo.Name ?? options.PackageId ?? projectInfo.PackageId ??
-                   packages.FirstOrDefault()?.Id ?? Path.GetFileName(siteRoot);
+        var name = options.Name ?? projectInfo.Name ??
+                   (includePackageContent ? options.PackageId ?? projectInfo.PackageId ?? packages.FirstOrDefault()?.Id : TryReadNameFromHomepage(siteRoot));
+        if (string.IsNullOrWhiteSpace(name))
+            throw new InvalidOperationException("LLMS content name could not be resolved. Configure name or provide usable project/homepage metadata.");
         var packageId = includePackageContent
-            ? options.PackageId ?? projectInfo.PackageId ?? name
+            ? options.PackageId ?? projectInfo.PackageId ?? packages.FirstOrDefault()?.Id ?? name
             : null;
         var version = includePackageContent
             ? options.Version ?? ResolveSuiteVersion(packages) ?? projectInfo.Version ?? "unknown"
@@ -100,7 +107,7 @@ public static partial class WebLlmsGenerator
         var legacyInstallCommand = includePackageContent
             ? CreateInstallCommand(packageId!, projectInfo.IsPowerShellModule, projectInfo.IsDotNetTool)
             : null;
-        var overview = ResolveOverview(options, projectInfo, siteRoot, name);
+        var overview = ResolveOverview(options, projectInfo, siteRoot, name, apiCatalogs.Count > 0);
         WriteLlmsTxt(llmsTxtPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart, options.DiscoveryContentPath, includePackageContent);
         WriteLlmsJson(llmsJsonPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, quickstart, includePackageContent);
         WriteLlmsFull(llmsFullPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart, options, includePackageContent);
@@ -119,7 +126,12 @@ public static partial class WebLlmsGenerator
         };
     }
 
-    private static string ResolveOverview(WebLlmsOptions options, ProjectInfo projectInfo, string siteRoot, string name)
+    private static string ResolveOverview(
+        WebLlmsOptions options,
+        ProjectInfo projectInfo,
+        string siteRoot,
+        string name,
+        bool hasApiCatalogs)
     {
         if (!string.IsNullOrWhiteSpace(options.Overview))
             return options.Overview.Trim();
@@ -129,6 +141,11 @@ public static partial class WebLlmsGenerator
 
         if (TryReadOverviewFromHomepage(siteRoot, out var homepageOverview))
             return homepageOverview;
+
+        if (!hasApiCatalogs)
+            return options.ContentKind == WebLlmsContentKind.Site
+                ? $"{name} website."
+                : $"{name} documentation.";
 
         return $"{name} documentation site and API reference.";
     }
@@ -143,7 +160,7 @@ public static partial class WebLlmsGenerator
         if (configuredPaths.Count == 0)
         {
             var defaultIndexPath = Path.Combine(siteRoot, "api", "index.json");
-            if (options.ContentKind == WebLlmsContentKind.Package || File.Exists(defaultIndexPath))
+            if (File.Exists(defaultIndexPath))
                 configuredPaths.Add(defaultIndexPath);
         }
 
@@ -155,6 +172,9 @@ public static partial class WebLlmsGenerator
         var catalogs = new List<ApiCatalogInfo>(fullPaths.Length);
         foreach (var fullPath in fullPaths)
         {
+            if (!File.Exists(fullPath))
+                throw new FileNotFoundException($"Configured LLMS API index not found: {fullPath}", fullPath);
+
             var apiBase = multipleCatalogs
                 ? InferApiBase(siteRoot, fullPath)
                 : NormalizeApiBase(options.ApiBase);
@@ -172,8 +192,6 @@ public static partial class WebLlmsGenerator
             ApiBase = apiBase,
             Name = Path.GetFileName(Path.GetDirectoryName(fullPath)) ?? "API"
         };
-        if (!File.Exists(fullPath)) return catalog;
-
         try
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(fullPath));
@@ -193,9 +211,9 @@ public static partial class WebLlmsGenerator
                     catalog.Name = Regex.Replace(title, @"\s+(API|Cmdlet)\s+Reference$", string.Empty, RegexOptions.IgnoreCase);
             }
         }
-        catch
+        catch (JsonException ex)
         {
-            // Keep the catalog link even when optional metadata cannot be read.
+            throw new InvalidDataException($"Configured LLMS API index is not valid JSON: {fullPath}", ex);
         }
 
         return catalog;
@@ -205,8 +223,10 @@ public static partial class WebLlmsGenerator
     {
         var directory = Path.GetDirectoryName(apiIndexPath) ?? siteRoot;
         var relative = Path.GetRelativePath(siteRoot, directory).Replace('\\', '/').Trim('/');
-        if (string.IsNullOrWhiteSpace(relative) || relative.StartsWith("..", StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(relative))
             return "/api";
+        if (relative.StartsWith("..", StringComparison.Ordinal))
+            throw new InvalidOperationException($"Cannot infer a published API route for external catalog '{apiIndexPath}'. Place multiple API indexes under the site root.");
         return "/" + relative;
     }
 
@@ -261,6 +281,38 @@ public static partial class WebLlmsGenerator
         return false;
     }
 
+    private static string? TryReadNameFromHomepage(string siteRoot)
+    {
+        var indexPath = Path.Combine(siteRoot, "index.html");
+        if (!File.Exists(indexPath))
+            return null;
+
+        string html;
+        try
+        {
+            html = File.ReadAllText(indexPath);
+        }
+        catch
+        {
+            return null;
+        }
+
+        foreach (var pattern in new[]
+                 {
+                     @"<title\b[^>]*>(?<content>.*?)</title>",
+                     @"<h1\b[^>]*>(?<content>.*?)</h1>"
+                 })
+        {
+            var match = Regex.Match(html, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!match.Success) continue;
+            var name = NormalizeHtmlSnippet(match.Groups["content"].Value);
+            if (!string.IsNullOrWhiteSpace(name))
+                return name;
+        }
+
+        return null;
+    }
+
     private static string? TryMatchMetaContent(string html, string attributeName, string attributeValue)
     {
         var pattern = $@"<meta\b[^>]*\b{attributeName}\s*=\s*[""']{Regex.Escape(attributeValue)}[""'][^>]*\bcontent\s*=\s*[""'](?<content>.*?)[""'][^>]*>";
@@ -306,6 +358,8 @@ public static partial class WebLlmsGenerator
                 throw new FileNotFoundException($"LLMS quickstart file not found: {full}", full);
 
             var text = File.ReadAllText(full).TrimEnd();
+            if (string.IsNullOrWhiteSpace(text))
+                throw new InvalidDataException($"LLMS quickstart file is empty: {full}");
             return new QuickstartInfo
             {
                 Language = Path.GetExtension(full).Equals(".ps1", StringComparison.OrdinalIgnoreCase)
@@ -355,14 +409,15 @@ public static partial class WebLlmsGenerator
 
         if (content.Contains("Import-Module", StringComparison.OrdinalIgnoreCase) ||
             content.Contains("Get-Command", StringComparison.OrdinalIgnoreCase) ||
-            Regex.IsMatch(content, @"(?m)^\s*(Get|Set|New|Add|Remove|Invoke|Connect|Disconnect|Start|Stop|Test)-[A-Za-z0-9]+"))
+            Regex.IsMatch(content, @"(?m)^\s*(Get|Set|New|Add|Remove|Install|Update|Export|Import|Invoke|Connect|Disconnect|Start|Stop|Test)-[A-Za-z0-9]+"))
             return "powershell";
 
         if (Regex.IsMatch(content, @"(?m)^\s*(using\s+[A-Za-z_][A-Za-z0-9_.]*\s*;|namespace\s+[A-Za-z_]|(?:var|await|new)\s+.+;)"))
             return "csharp";
 
         if (content.StartsWith("#!", StringComparison.Ordinal) ||
-            Regex.IsMatch(content, @"(?m)^\s*\S+\s+--?[A-Za-z0-9]"))
+            Regex.IsMatch(content, @"(?m)^\s*\S+\s+--?[A-Za-z0-9]") ||
+            Regex.IsMatch(content, @"(?m)^\s*(dotnet|npm|npx|pnpm|yarn|node|python3?|pip3?|bash|sh|pwsh|powershell|curl|wget|git|docker|kubectl|helm)\s+\S+", RegexOptions.IgnoreCase))
             return "shell";
 
         // Preserve the historical non-PowerShell fallback for ambiguous curated snippets.

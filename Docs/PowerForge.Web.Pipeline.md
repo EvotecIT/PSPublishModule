@@ -810,7 +810,10 @@ Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
 Notes:
 - `contentKind`: `Package` (default) for installable packages/modules/tools, or `Site` for portals that must not emit package, version, or installation metadata
 - `Site` content can still include an explicitly configured `quickstart`; package content omits the quickstart section when no meaningful snippet is available
-- `Site` content emits API resource metadata only when an API index is configured or exists under the generated site root
+- API resource metadata is emitted only for an index that exists and contains valid JSON; a configured missing or invalid index fails the step
+- use `apiIndexes` for multiple catalogs under the generated site root, where their published routes can be derived without guessing
+- configured project and quickstart files must exist; an empty quickstart or package identity that cannot be resolved from project metadata fails the step
+- when `Site` has no explicit `name`, the generator reads the site title or first heading from `index.html` instead of using the output directory name
 - `apiLevel`: `None` (default), `Summary`, or `Full`
 - `apiMaxTypes` / `apiMaxMembers` cap the size of API detail sections in `llms-full.txt`
 

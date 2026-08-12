@@ -1674,7 +1674,7 @@ internal static partial class WebPipelineRunner
             PackageFiles = packageFiles,
             ApiIndexPath = ResolvePath(baseDir, GetString(step, "apiIndex") ?? GetString(step, "api-index")),
             ApiIndexPaths = apiIndexPaths,
-            ApiBase = GetString(step, "apiBase") ?? "/api",
+            ApiBase = GetString(step, "apiBase") ?? GetString(step, "api-base") ?? "/api",
             Name = GetString(step, "name"),
             PackageId = GetString(step, "package") ?? GetString(step, "packageId"),
             Version = GetString(step, "version"),

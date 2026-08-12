@@ -540,9 +540,13 @@ internal static partial class WebCliCommandHandlers
             return Fail("Missing required --site-root.", outputJson, logger, "web.llms");
 
         var apiLevel = WebApiDetailLevel.None;
-        if (!string.IsNullOrWhiteSpace(apiLevelText) &&
-            Enum.TryParse<WebApiDetailLevel>(apiLevelText, true, out var parsedLevel))
+        if (!string.IsNullOrWhiteSpace(apiLevelText))
+        {
+            if (!Enum.TryParse<WebApiDetailLevel>(apiLevelText, true, out var parsedLevel) ||
+                !Enum.IsDefined(parsedLevel))
+                return Fail("Invalid --api-level. Expected None, Summary, or Full.", outputJson, logger, "web.llms");
             apiLevel = parsedLevel;
+        }
         var apiMaxTypes = ParseIntOption(apiMaxTypesText, 200);
         var apiMaxMembers = ParseIntOption(apiMaxMembersText, 2000);
         var contentKind = WebLlmsContentKind.Package;

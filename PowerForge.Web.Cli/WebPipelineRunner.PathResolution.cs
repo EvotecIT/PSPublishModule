@@ -135,7 +135,9 @@ internal static partial class WebPipelineRunner
     private static WebApiDetailLevel ParseApiDetailLevel(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return WebApiDetailLevel.None;
-        return Enum.TryParse<WebApiDetailLevel>(value, true, out var parsed) ? parsed : WebApiDetailLevel.None;
+        if (Enum.TryParse<WebApiDetailLevel>(value, true, out var parsed) && Enum.IsDefined(parsed))
+            return parsed;
+        throw new InvalidOperationException($"Unsupported LLMS API detail level '{value}'. Expected None, Summary, or Full.");
     }
 
     private static WebLlmsContentKind ParseLlmsContentKind(string? value)

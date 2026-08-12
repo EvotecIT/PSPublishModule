@@ -81,6 +81,41 @@ public sealed class WebPipelineLlmsContractTests
     }
 
     [Fact]
+    public void Llms_pipeline_rejects_unknown_api_detail_level()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-pipeline-api-level-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "llms",
+                      "siteRoot": "_site",
+                      "contentKind": "Site",
+                      "name": "Example Portal",
+                      "apiLevel": "Everything"
+                    }
+                  ]
+                }
+                """);
+
+            Directory.CreateDirectory(Path.Combine(root, "_site"));
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.False(result.Success);
+            Assert.Contains("Expected None, Summary, or Full", Assert.Single(result.Steps).Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void LlmsStep_schema_declares_package_manifest_arrays()
     {
         var schemaDocument = JsonNode.Parse(File.ReadAllText(GetRepoPath(
@@ -109,6 +144,23 @@ public sealed class WebPipelineLlmsContractTests
                 .Select(static value => value!.GetValue<string>())
                 .ToArray();
             Assert.Equal(new[] { "Package", "Site" }, values);
+        }
+    }
+
+    [Fact]
+    public void LlmsStep_schema_declares_supported_path_aliases_and_api_index_arrays()
+    {
+        var schemaDocument = JsonNode.Parse(File.ReadAllText(GetRepoPath(
+            "Schemas",
+            "powerforge.web.pipelinespec.schema.json")))!;
+        var properties = schemaDocument["$defs"]!["LlmsStep"]!["properties"]!;
+
+        foreach (var propertyName in new[] { "siteRoot", "site-root", "apiIndex", "api-index", "apiBase", "api-base", "apiLevel", "api-level" })
+            Assert.NotNull(properties[propertyName]);
+        foreach (var propertyName in new[] { "apiIndexes", "api-indexes" })
+        {
+            Assert.Equal("array", properties[propertyName]!["type"]!.GetValue<string>());
+            Assert.Equal("string", properties[propertyName]!["items"]!["type"]!.GetValue<string>());
         }
     }
 
@@ -141,6 +193,46 @@ public sealed class WebPipelineLlmsContractTests
             File.WriteAllText(manifestPath, "@{ ModuleVersion = '1.0.0'; Description = 'Changed' }");
             var second = (string)method.Invoke(null, new object?[] { root, document.RootElement, null })!;
 
+            Assert.NotEqual(first, second);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("apiIndex")]
+    [InlineData("api-index")]
+    [InlineData("apiIndexes")]
+    [InlineData("api-indexes")]
+    public void Llms_fingerprint_changes_when_api_index_changes(string propertyName)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-api-fingerprint-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var indexPath = Path.Combine(root, "api", "index.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(indexPath)!);
+            File.WriteAllText(indexPath, "{\"typeCount\":1}");
+            var value = propertyName.EndsWith("es", StringComparison.Ordinal) ? "[\"api/index.json\"]" : "\"api/index.json\"";
+            using var document = JsonDocument.Parse(
+                $$"""
+                {
+                  "task": "llms",
+                  "siteRoot": "_site",
+                  "{{propertyName}}": {{value}}
+                }
+                """);
+            var method = typeof(WebPipelineRunner).GetMethod(
+                "ComputeStepFingerprint",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var first = (string)method!.Invoke(null, new object?[] { root, document.RootElement, null })!;
+            File.WriteAllText(indexPath, "{\"typeCount\":22}");
+            var second = (string)method.Invoke(null, new object?[] { root, document.RootElement, null })!;
             Assert.NotEqual(first, second);
         }
         finally
