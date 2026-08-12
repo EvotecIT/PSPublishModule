@@ -210,6 +210,34 @@ public sealed partial class ReleasePublishExecutionService
                 repository.UnifiedReleaseConfigPath!,
                 buildResult.UnifiedReleaseConfigSha256);
             var spec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
+            if (spec.VirusTotal is { Enabled: true })
+            {
+                try
+                {
+                    PowerForgeReleaseService.ValidateVirusTotalPublishPreflight(
+                        spec,
+                        repository.UnifiedReleaseConfigPath!);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    return [
+                        ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                            repository.RootPath,
+                            repository.Name,
+                            "UnifiedRelease",
+                            "VirusTotal Monitor",
+                            "VirusTotal",
+                            "Configured VirusTotal Monitor project",
+                            ReleasePublishReceiptStatus.Failed,
+                            FirstLine(ex.Message) ?? "VirusTotal Monitor preflight failed.",
+                            sourcePath: null)
+                    ];
+                }
+            }
             cancellationToken.ThrowIfCancellationRequested();
             var result = await Task.Run(
                     () => _publishUnifiedRelease(

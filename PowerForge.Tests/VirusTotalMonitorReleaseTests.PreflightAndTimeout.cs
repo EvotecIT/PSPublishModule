@@ -7,6 +7,8 @@ public sealed partial class VirusTotalMonitorReleaseTests
     [InlineData("..")]
     [InlineData("owner/project")]
     [InlineData("owner\\project")]
+    [InlineData("{FileName}")]
+    [InlineData("Example{Version}")]
     public void ValidateConfiguration_InvalidExplicitProjectName_FailsBeforeRelease(string projectName)
     {
         var exception = Assert.Throws<ArgumentException>(() =>

@@ -82,6 +82,44 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
         Assert.Contains("no configured final release artifacts matched", output, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void InteractiveRelease_AppleOnlyTarget_DoesNotShowVirusTotalPhase()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer);
+        var spec = new PowerForgeReleaseSpec
+        {
+            Tools = new PowerForgeToolReleaseSpec
+            {
+                GitHub = new PowerForgeToolReleaseGitHubOptions { Publish = true },
+                Targets = [new PowerForgeToolReleaseTarget { Name = "WindowsTool" }]
+            },
+            AppleApps = new PowerForgeAppleReleaseOptions
+            {
+                Apps = [new AppleAppConfiguration { Enabled = true, Name = "MacApp" }]
+            },
+            VirusTotal = new PowerForgeVirusTotalOptions
+            {
+                Enabled = true,
+                ApiKeyEnvName = "VIRUSTOTAL_MONITOR_API_KEY",
+                ArtifactKinds = [VirusTotalArtifactKind.Executable]
+            }
+        };
+        var request = new PowerForgeReleaseRequest
+        {
+            ConfigPath = "release.json",
+            Targets = ["MacApp"]
+        };
+
+        _ = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
+            console,
+            spec,
+            request,
+            _ => new PowerForgeReleaseResult { Success = true });
+
+        Assert.DoesNotContain("VirusTotal Monitor registration", writer.ToString(), StringComparison.Ordinal);
+    }
+
     private static IAnsiConsole CreateConsole(TextWriter writer)
         => AnsiConsole.Create(new AnsiConsoleSettings
         {

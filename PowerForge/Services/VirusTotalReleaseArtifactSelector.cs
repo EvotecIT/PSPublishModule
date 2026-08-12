@@ -290,15 +290,18 @@ internal static class VirusTotalReleaseArtifactSelector
         string relativePath,
         PowerForgeReleaseAssetEntry entry)
     {
-        var output = template
-            .Replace("{Project}", project)
-            .Replace("{Version}", version)
-            .Replace("{Kind}", kind.ToString())
-            .Replace("{FileName}", fileName)
-            .Replace("{RelativePath}", relativePath)
-            .Replace("{Target}", entry.Target ?? string.Empty)
-            .Replace("{Runtime}", entry.Runtime ?? string.Empty)
-            .Replace("{Framework}", entry.Framework ?? string.Empty);
+        var output = TemplateTokenPattern.Replace(template, match => match.Groups[1].Value switch
+        {
+            "Project" => project,
+            "Version" => version,
+            "Kind" => kind.ToString(),
+            "FileName" => fileName,
+            "RelativePath" => relativePath,
+            "Target" => entry.Target ?? string.Empty,
+            "Runtime" => entry.Runtime ?? string.Empty,
+            "Framework" => entry.Framework ?? string.Empty,
+            _ => match.Value
+        });
 
         if (Regex.IsMatch(output, "\\{[A-Za-z][A-Za-z0-9]*\\}"))
             throw new InvalidOperationException($"VirusTotal template contains an unsupported token: '{template}'.");
@@ -334,6 +337,8 @@ internal static class VirusTotalReleaseArtifactSelector
         if (string.IsNullOrWhiteSpace(value) ||
             value.IndexOf('/') >= 0 ||
             value.IndexOf('\\') >= 0 ||
+            value.IndexOf('{') >= 0 ||
+            value.IndexOf('}') >= 0 ||
             value is "." or "..")
         {
             throw new ArgumentException("VirusTotal path token values must be non-empty single path segments.", parameterName);

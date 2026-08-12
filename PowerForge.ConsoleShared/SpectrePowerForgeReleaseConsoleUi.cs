@@ -154,7 +154,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                           !request.ToolsOnly;
         if (hasTargetAwareSelection)
             runPackages = false;
-        var runTools = spec.Tools is not null && !request.ModuleOnly && !request.PackagesOnly;
+        var runTools = PowerForgeReleaseService.ShouldRunToolsForProgress(spec, request);
         var phases = new List<PowerForgeReleaseProgressPhase>();
 
         var coordinated = runModule && runPackages && spec.Module?.SynchronizeVersionWithPackages == true;

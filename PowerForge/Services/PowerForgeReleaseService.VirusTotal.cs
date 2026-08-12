@@ -84,6 +84,60 @@ internal sealed partial class PowerForgeReleaseService
             VirusTotalReleaseArtifactSelector.ValidateConfiguration(options);
     }
 
+    internal static void ValidateVirusTotalPublishPreflight(
+        PowerForgeReleaseSpec spec,
+        string configPath)
+    {
+        if (spec is null)
+            throw new ArgumentNullException(nameof(spec));
+        if (string.IsNullOrWhiteSpace(configPath))
+            throw new ArgumentException("ConfigPath is required.", nameof(configPath));
+
+        ValidateVirusTotalConfiguration(spec.VirusTotal);
+        var fullPath = Path.GetFullPath(configPath.Trim().Trim('"'));
+        ResolveVirusTotalApiKeyForExecution(
+            spec.VirusTotal,
+            Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory(),
+            planOrValidation: false);
+    }
+
+    internal static bool ShouldRunToolsForProgress(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request)
+    {
+        if (spec.Tools is null || request.ModuleOnly || request.PackagesOnly || request.AppleOnly)
+            return false;
+
+        var selectedTargets = NormalizeStrings(request.Targets);
+        if (selectedTargets.Length == 0 || spec.AppleApps is null || request.SkipAppleApps || request.ToolsOnly)
+            return true;
+
+        var appleMatches = ResolveAppleTargetMatches(spec.AppleApps, selectedTargets);
+        if (appleMatches.Length == 0)
+            return true;
+
+        string[] toolMatches;
+        if (UsesDotNetToolWorkflow(spec.Tools))
+        {
+            ApplyDotNetPublishProfileOverride(spec.Tools);
+            toolMatches = ResolveOptionalDotNetToolTargetMatches(spec.Tools.DotNetPublish, selectedTargets);
+            if (toolMatches.Length == 0 &&
+                DotNetToolsConfigExists(spec.Tools, request.ConfigPath) &&
+                AppleTargetSelectionUsesNameOrScheme(spec.AppleApps, selectedTargets))
+            {
+                toolMatches = ResolveDotNetToolTargetMatches(
+                    LoadDotNetToolsSpec(spec.Tools, request.ConfigPath).Spec,
+                    selectedTargets);
+            }
+        }
+        else
+        {
+            toolMatches = ResolveLegacyToolTargetMatches(spec.Tools, selectedTargets);
+        }
+
+        return ShouldRunSectionForTargets(selectedTargets, toolMatches, true, appleMatches);
+    }
+
     private static string? ResolveVirusTotalApiKeyForExecution(
         PowerForgeVirusTotalOptions? options,
         string configDirectory,
