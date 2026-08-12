@@ -12,7 +12,9 @@ public enum PowerForgeReleaseProgressPhase
     /// <summary>Portable executable, installer, and store packaging lane.</summary>
     Tools,
     /// <summary>Unified GitHub release and asset upload lane.</summary>
-    GitHub
+    GitHub,
+    /// <summary>Opt-in VirusTotal Monitor publisher registration lane.</summary>
+    VirusTotal
 }
 
 /// <summary>Receives structured high-level progress for a unified release.</summary>

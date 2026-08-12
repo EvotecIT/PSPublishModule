@@ -51,6 +51,16 @@
           "System.ValueTuple": "4.6.2"
         }
       },
+      "VirusTotalAnalyzer": {
+        "type": "Direct",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "ypnCefDNRHblcj8glXeqFor/IE/dU9ndpY4UUMHR8/F/rf6fmqjl7V0Nvfgft8nWDmB8KPd0AuRN6YF/pBLD7A==",
+        "dependencies": {
+          "Microsoft.Bcl.AsyncInterfaces": "10.0.10",
+          "System.Text.Json": "10.0.10"
+        }
+      },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
         "resolved": "10.0.10",
@@ -175,6 +185,12 @@
         "resolved": "10.0.10",
         "contentHash": "BKt0SQgq2lq3ESE68jkeLwv95ypANrPDtkTOIFGcnhg2aRUeUUBDrQlkVDZctrg1WenVcvn5P5XZnuYI7q6rFQ=="
       },
+      "VirusTotalAnalyzer": {
+        "type": "Direct",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "ypnCefDNRHblcj8glXeqFor/IE/dU9ndpY4UUMHR8/F/rf6fmqjl7V0Nvfgft8nWDmB8KPd0AuRN6YF/pBLD7A=="
+      },
       "NuGet.Common": {
         "type": "Transitive",
         "resolved": "7.6.0",
@@ -221,6 +237,12 @@
         "requested": "[10.0.10, )",
         "resolved": "10.0.10",
         "contentHash": "BKt0SQgq2lq3ESE68jkeLwv95ypANrPDtkTOIFGcnhg2aRUeUUBDrQlkVDZctrg1WenVcvn5P5XZnuYI7q6rFQ=="
+      },
+      "VirusTotalAnalyzer": {
+        "type": "Direct",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "ypnCefDNRHblcj8glXeqFor/IE/dU9ndpY4UUMHR8/F/rf6fmqjl7V0Nvfgft8nWDmB8KPd0AuRN6YF/pBLD7A=="
       },
       "NuGet.Common": {
         "type": "Transitive",

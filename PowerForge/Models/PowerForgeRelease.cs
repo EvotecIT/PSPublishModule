@@ -32,6 +32,8 @@ internal sealed class PowerForgeReleaseSpec
 
     public PowerForgeReleaseGitHubOptions? GitHub { get; set; }
 
+    public PowerForgeVirusTotalOptions? VirusTotal { get; set; }
+
     public PowerForgeReleaseWingetOptions? Winget { get; set; }
 }
 
@@ -277,6 +279,8 @@ internal sealed class PowerForgeReleaseResult
 
     public string[] ModuleAssets { get; set; } = Array.Empty<string>();
 
+    public string[] ModuleProducedAssets { get; set; } = Array.Empty<string>();
+
     public PowerForgeModulePackageReleaseCheckpoint[] ModulePackagePlans { get; set; } =
         Array.Empty<PowerForgeModulePackageReleaseCheckpoint>();
 
@@ -309,6 +313,10 @@ internal sealed class PowerForgeReleaseResult
     public PowerForgeReleaseAssetEntry[] ReleaseAssetEntries { get; set; } = Array.Empty<PowerForgeReleaseAssetEntry>();
 
     public PowerForgeUnifiedGitHubReleaseResult? UnifiedGitHubRelease { get; set; }
+
+    public VirusTotalMonitorPublishResult? VirusTotalMonitor { get; set; }
+
+    public string? VirusTotalMonitorReceiptPath { get; set; }
 
     public string? ReleaseManifestPath { get; set; }
 
@@ -1131,6 +1139,8 @@ internal sealed class PowerForgeReleaseAssetEntry
     public string? RelativeStagePath { get; set; }
 
     public string? StagedPath { get; set; }
+
+    public bool IsFinalPackageOutput { get; set; }
 }
 
 internal sealed class PowerForgeWorkspaceValidationOptions

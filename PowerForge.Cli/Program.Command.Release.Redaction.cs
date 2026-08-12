@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 
 internal static partial class Program
 {
-    private static string[] CollectAppleCredentialMetadata(PowerForgeReleaseSpec? spec, PowerForgeReleaseResult? result)
+    private static string[] CollectReleaseCredentialMetadata(PowerForgeReleaseSpec? spec, PowerForgeReleaseResult? result)
     {
         var values = new List<string?>
         {
@@ -14,7 +14,8 @@ internal static partial class Program
             spec?.AppleApps?.AppStoreConnectApiIssuerId,
             result?.AppleAppPlan?.AppStoreConnectApiKeyPath,
             result?.AppleAppPlan?.AppStoreConnectApiKeyId,
-            result?.AppleAppPlan?.AppStoreConnectApiIssuerId
+            result?.AppleAppPlan?.AppStoreConnectApiIssuerId,
+            spec?.VirusTotal?.ApiKey
         };
         foreach (var name in new[]
                  {
@@ -32,7 +33,7 @@ internal static partial class Program
             .ToArray();
     }
 
-    private static string RedactAppleCredentialText(string? text, IEnumerable<string> sensitiveValues)
+    private static string RedactReleaseCredentialText(string? text, IEnumerable<string> sensitiveValues)
     {
         var safe = text ?? string.Empty;
         foreach (var value in sensitiveValues)
@@ -58,7 +59,7 @@ internal static partial class Program
         return safe;
     }
 
-    private static string RedactAppleCredentialJson(string json, IEnumerable<string> sensitiveValues)
+    private static string RedactReleaseCredentialJson(string json, IEnumerable<string> sensitiveValues)
     {
         var root = JsonNode.Parse(json) ?? throw new InvalidOperationException("Release JSON output could not be parsed for redaction.");
         var values = sensitiveValues.ToArray();
@@ -74,7 +75,7 @@ internal static partial class Program
             {
                 var child = jsonObject[name];
                 if (child is JsonValue value && value.TryGetValue<string>(out var text))
-                    jsonObject[name] = RedactAppleCredentialText(text, sensitiveValues);
+                    jsonObject[name] = RedactReleaseCredentialText(text, sensitiveValues);
                 else if (child is not null)
                     RedactJsonStringValues(child, sensitiveValues);
             }
@@ -85,13 +86,13 @@ internal static partial class Program
         {
             var child = jsonArray[index];
             if (child is JsonValue value && value.TryGetValue<string>(out var text))
-                jsonArray[index] = RedactAppleCredentialText(text, sensitiveValues);
+                jsonArray[index] = RedactReleaseCredentialText(text, sensitiveValues);
             else if (child is not null)
                 RedactJsonStringValues(child, sensitiveValues);
         }
     }
 
-    private static void RedactAppleCredentialMetadata(PowerForgeReleaseSpec spec, PowerForgeReleaseResult result)
+    private static void RedactReleaseCredentialMetadata(PowerForgeReleaseSpec spec, PowerForgeReleaseResult result)
     {
         if (spec.AppleApps is not null)
         {
@@ -105,5 +106,7 @@ internal static partial class Program
             result.AppleAppPlan.AppStoreConnectApiKeyId = null;
             result.AppleAppPlan.AppStoreConnectApiIssuerId = null;
         }
+        if (spec.VirusTotal is not null)
+            spec.VirusTotal.ApiKey = null;
     }
 }

@@ -684,7 +684,8 @@ public sealed partial class PowerForgeReleaseServiceTests
         Action<ModuleBuildHostBuildRequest>? onModuleExecution = null,
         Func<GitHubReleasePublishRequest, GitHubReleasePublishResult>? publishGitHubRelease = null,
         Func<string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedNuGetAssets = null,
-        Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedModuleAssets = null)
+        Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedModuleAssets = null,
+        Func<VirusTotalMonitorPublishRequest, CancellationToken, VirusTotalMonitorPublishResult>? publishVirusTotalMonitor = null)
         => new(
             new NullLogger(),
             executePackages: (_, _, _) =>
@@ -709,6 +710,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 throw new InvalidOperationException("GitHub should not run.")),
             restorePublishedNuGetAssets: restorePublishedNuGetAssets,
             restorePublishedModuleAssets: restorePublishedModuleAssets,
+            publishVirusTotalMonitor: publishVirusTotalMonitor,
             executeModuleBuild: (request, cancellationToken) =>
             {
                 cancellationToken.ThrowIfCancellationRequested();

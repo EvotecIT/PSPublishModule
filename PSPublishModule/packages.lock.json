@@ -265,13 +265,23 @@
         "resolved": "4.6.2",
         "contentHash": "yQgmjfFximrNm9LIV3mL6T5MzjeC+epeE5rl4hXxAlYmxby7RM1dPSkIKXk9HNkl6G54h2JHOmLD46+Pey+IRg=="
       },
+      "VirusTotalAnalyzer": {
+        "type": "Transitive",
+        "resolved": "1.0.0",
+        "contentHash": "ypnCefDNRHblcj8glXeqFor/IE/dU9ndpY4UUMHR8/F/rf6fmqjl7V0Nvfgft8nWDmB8KPd0AuRN6YF/pBLD7A==",
+        "dependencies": {
+          "Microsoft.Bcl.AsyncInterfaces": "10.0.10",
+          "System.Text.Json": "10.0.10"
+        }
+      },
       "powerforge": {
         "type": "Project",
         "dependencies": {
           "NuGet.Configuration": "[7.6.0, )",
           "System.Reflection.Metadata": "[10.0.10, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
-          "System.Text.Json": "[10.0.10, )"
+          "System.Text.Json": "[10.0.10, )",
+          "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
       "powerforge.powershell": {
@@ -1050,13 +1060,19 @@
         "resolved": "10.0.5",
         "contentHash": "5hVP2TIgEqqA590MnKmMN5+Fgzl6xBRjR1wbgC3M1znrZZJe63TwBPN+ymaMgwT0vjsiXk95AjMAe8SAhhJSTg=="
       },
+      "VirusTotalAnalyzer": {
+        "type": "Transitive",
+        "resolved": "1.0.0",
+        "contentHash": "ypnCefDNRHblcj8glXeqFor/IE/dU9ndpY4UUMHR8/F/rf6fmqjl7V0Nvfgft8nWDmB8KPd0AuRN6YF/pBLD7A=="
+      },
       "powerforge": {
         "type": "Project",
         "dependencies": {
           "NuGet.Configuration": "[7.6.0, )",
           "System.IO.Packaging": "[10.0.10, )",
           "System.Reflection.MetadataLoadContext": "[10.0.10, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.10, )"
+          "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
+          "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
       "powerforge.powershell": {
@@ -1794,13 +1810,19 @@
         "resolved": "8.0.0",
         "contentHash": "Obg3a90MkOw9mYKxrardLpY2u0axDMrSmy4JCdq2cYbelM2cUwmUir5Bomvd1yxmPL9h5LVHU1tuKBZpUjfASg=="
       },
+      "VirusTotalAnalyzer": {
+        "type": "Transitive",
+        "resolved": "1.0.0",
+        "contentHash": "ypnCefDNRHblcj8glXeqFor/IE/dU9ndpY4UUMHR8/F/rf6fmqjl7V0Nvfgft8nWDmB8KPd0AuRN6YF/pBLD7A=="
+      },
       "powerforge": {
         "type": "Project",
         "dependencies": {
           "NuGet.Configuration": "[7.6.0, )",
           "System.IO.Packaging": "[10.0.10, )",
           "System.Reflection.MetadataLoadContext": "[10.0.10, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.10, )"
+          "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
+          "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
       "powerforge.powershell": {

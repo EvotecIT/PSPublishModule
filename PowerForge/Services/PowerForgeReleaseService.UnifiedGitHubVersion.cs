@@ -86,6 +86,78 @@ internal sealed partial class PowerForgeReleaseService
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
+    internal static bool IsFinalPowerShellModulePackage(
+        string path,
+        PowerForgeModuleReleasePlanSummary? plan)
+    {
+        if (!File.Exists(path) ||
+            !string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var archive = ZipFile.OpenRead(path);
+            if (archive.Entries.Count == 0 || archive.Entries.Count > 50000)
+                return false;
+
+            var files = archive.Entries
+                .Where(static entry => !string.IsNullOrWhiteSpace(entry.Name))
+                .Select(static entry => entry.FullName.Replace('\\', '/').TrimStart('/'))
+                .ToArray();
+            if (files.Length == 0 ||
+                files.Any(static name =>
+                    name.Split('/').Any(static segment => segment is "." or "..") ||
+                    name.StartsWith(".git/", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("/.git/", StringComparison.OrdinalIgnoreCase) ||
+                    name.StartsWith(".github/", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("/.github/", StringComparison.OrdinalIgnoreCase) ||
+                    name.StartsWith("tests/", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("/tests/", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".csx", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".fs", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".vb", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".props", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".targets", StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+
+            var roots = files
+                .Select(static name => name.Split('/')[0])
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (roots.Length != 1)
+                return false;
+
+            var root = roots[0];
+            var expectedManifestName = Path.GetFileName(plan?.ManifestPath);
+            if (string.IsNullOrWhiteSpace(expectedManifestName))
+                expectedManifestName = root + ".psd1";
+            var expectedManifestPath = root + "/" + expectedManifestName;
+            return files.Contains(expectedManifestPath, StringComparer.OrdinalIgnoreCase);
+        }
+        catch (InvalidDataException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     private static string? ResolveModuleManifestVersion(string manifestText)
     {
         if (!ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, "ModuleVersion", out var value))

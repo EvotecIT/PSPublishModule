@@ -204,6 +204,65 @@ public sealed class PowerForgeReleaseSchemaTests
     }
 
     [Fact]
+    public void Release_schema_and_runtime_accept_opt_in_VirusTotal_Monitor_configuration()
+    {
+        const string json = """
+            {
+              "Enabled": true,
+              "ProjectName": "ExampleApp",
+              "ApiKeyEnvName": "VIRUSTOTAL_MONITOR_API_KEY",
+              "ArtifactKinds": [ "PowerShellModule", "NuGetPackage", "MsiPackage" ],
+              "DestinationPathTemplate": "/{Project}/{Version}/{Kind}/{RelativePath}",
+              "VerifySha256": true
+            }
+            """;
+        var schemaDocument = JsonNode.Parse(File.ReadAllText(GetSchemaPath("powerforge.release.schema.json")))!;
+        var virusTotalSchema = JsonSchema.FromText(schemaDocument["properties"]!["VirusTotal"]!.ToJsonString());
+
+        Assert.True(virusTotalSchema.Evaluate(
+            JsonNode.Parse(json)!,
+            new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
+
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(path, $$"""{ "VirusTotal": {{json}} }""");
+            var options = Assert.IsType<PowerForgeVirusTotalOptions>(
+                PowerForgeReleaseService.LoadConfiguration(path).VirusTotal);
+
+            Assert.True(options.Enabled);
+            Assert.Equal("VIRUSTOTAL_MONITOR_API_KEY", options.ApiKeyEnvName);
+            Assert.Equal(
+                new[]
+                {
+                    VirusTotalArtifactKind.PowerShellModule,
+                    VirusTotalArtifactKind.NuGetPackage,
+                    VirusTotalArtifactKind.MsiPackage
+                },
+                options.ArtifactKinds);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData("""{ "Enabled": true, "ArtifactKinds": [ "MsiPackage" ] }""")]
+    [InlineData("""{ "Enabled": true, "ApiKey": "one", "ApiKeyEnvName": "TWO", "ArtifactKinds": [ "MsiPackage" ] }""")]
+    [InlineData("""{ "Enabled": true, "ApiKeyEnvName": "KEY", "ArtifactKinds": [] }""")]
+    [InlineData("""{ "Enabled": true, "ApiKeyEnvName": "KEY", "ArtifactKinds": [ "SourceArchive" ] }""")]
+    public void Release_schema_rejects_incomplete_or_unsupported_VirusTotal_configuration(string json)
+    {
+        var schemaDocument = JsonNode.Parse(File.ReadAllText(GetSchemaPath("powerforge.release.schema.json")))!;
+        var virusTotalSchema = JsonSchema.FromText(schemaDocument["properties"]!["VirusTotal"]!.ToJsonString());
+
+        Assert.False(virusTotalSchema.Evaluate(
+            JsonNode.Parse(json)!,
+            new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
+    }
+
+    [Fact]
     public void Release_runtime_loads_pre_github_registry_recovery_binding()
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");

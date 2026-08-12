@@ -163,6 +163,78 @@
         "ReleaseNameTemplate": { "type": [ "string", "null" ] }
       }
     },
+    "VirusTotal": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Opt-in VirusTotal Monitor registration for final packed release artifacts. This is asynchronous publisher monitoring, not an immediate clean antivirus verdict.",
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "ProjectName": {
+          "type": [ "string", "null" ],
+          "description": "Optional Monitor project path segment. Defaults to the configured repository or module name."
+        },
+        "ApiKey": {
+          "type": [ "string", "null" ],
+          "description": "Inline VirusTotal API key. Prefer ApiKeyEnvName or ApiKeyFilePath so the secret is not committed."
+        },
+        "ApiKeyFilePath": { "type": [ "string", "null" ] },
+        "ApiKeyEnvName": { "type": [ "string", "null" ] },
+        "ArtifactKinds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [ "PowerShellModule", "NuGetPackage", "ZipArchive", "MsiPackage", "MsixPackage", "Executable" ]
+          },
+          "description": "Explicit allowlist of final packed artifact kinds. Source and metadata artifacts are never eligible."
+        },
+        "DestinationPathTemplate": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Versioned VirusTotal Monitor path. Supported tokens: {Project}, {Version}, {Kind}, {FileName}, {RelativePath}, {Target}, {Runtime}, {Framework}."
+        },
+        "DetailsTemplate": { "type": [ "string", "null" ] },
+        "VerifySha256": { "type": "boolean" },
+        "VerificationTimeoutSeconds": { "type": "integer", "minimum": 0 },
+        "PollingIntervalSeconds": { "type": "integer", "minimum": 1 },
+        "RequestTimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "RequireMatchingArtifacts": { "type": "boolean" },
+        "ReceiptPath": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required checkpoint and final JSON receipt path. Receipts contain hashes and Monitor identifiers, never the API key."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [ "Enabled" ],
+            "properties": { "Enabled": { "const": true } }
+          },
+          "then": {
+            "required": [ "ArtifactKinds" ],
+            "properties": { "ArtifactKinds": { "minItems": 1 } },
+            "oneOf": [
+                {
+                  "required": [ "ApiKey" ],
+                  "properties": { "ApiKey": { "type": "string", "minLength": 1 } },
+                  "not": { "anyOf": [ { "required": [ "ApiKeyFilePath" ] }, { "required": [ "ApiKeyEnvName" ] } ] }
+                },
+                {
+                  "required": [ "ApiKeyFilePath" ],
+                  "properties": { "ApiKeyFilePath": { "type": "string", "minLength": 1 } },
+                  "not": { "anyOf": [ { "required": [ "ApiKey" ] }, { "required": [ "ApiKeyEnvName" ] } ] }
+                },
+                {
+                  "required": [ "ApiKeyEnvName" ],
+                  "properties": { "ApiKeyEnvName": { "type": "string", "minLength": 1 } },
+                  "not": { "anyOf": [ { "required": [ "ApiKey" ] }, { "required": [ "ApiKeyFilePath" ] } ] }
+                }
+            ]
+          }
+        }
+      ]
+    },
     "Winget": {
       "type": "object",
       "additionalProperties": false,

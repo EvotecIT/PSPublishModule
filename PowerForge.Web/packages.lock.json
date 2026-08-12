@@ -282,13 +282,19 @@
         "resolved": "10.0.10",
         "contentHash": "BKt0SQgq2lq3ESE68jkeLwv95ypANrPDtkTOIFGcnhg2aRUeUUBDrQlkVDZctrg1WenVcvn5P5XZnuYI7q6rFQ=="
       },
+      "VirusTotalAnalyzer": {
+        "type": "Transitive",
+        "resolved": "1.0.0",
+        "contentHash": "ypnCefDNRHblcj8glXeqFor/IE/dU9ndpY4UUMHR8/F/rf6fmqjl7V0Nvfgft8nWDmB8KPd0AuRN6YF/pBLD7A=="
+      },
       "powerforge": {
         "type": "Project",
         "dependencies": {
           "NuGet.Configuration": "[7.6.0, )",
           "System.IO.Packaging": "[10.0.10, )",
           "System.Reflection.MetadataLoadContext": "[10.0.10, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.10, )"
+          "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
+          "VirusTotalAnalyzer": "[1.0.0, )"
         }
       }
     },
@@ -584,13 +590,19 @@
         "resolved": "10.0.10",
         "contentHash": "BKt0SQgq2lq3ESE68jkeLwv95ypANrPDtkTOIFGcnhg2aRUeUUBDrQlkVDZctrg1WenVcvn5P5XZnuYI7q6rFQ=="
       },
+      "VirusTotalAnalyzer": {
+        "type": "Transitive",
+        "resolved": "1.0.0",
+        "contentHash": "ypnCefDNRHblcj8glXeqFor/IE/dU9ndpY4UUMHR8/F/rf6fmqjl7V0Nvfgft8nWDmB8KPd0AuRN6YF/pBLD7A=="
+      },
       "powerforge": {
         "type": "Project",
         "dependencies": {
           "NuGet.Configuration": "[7.6.0, )",
           "System.IO.Packaging": "[10.0.10, )",
           "System.Reflection.MetadataLoadContext": "[10.0.10, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.10, )"
+          "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
+          "VirusTotalAnalyzer": "[1.0.0, )"
         }
       }
     }

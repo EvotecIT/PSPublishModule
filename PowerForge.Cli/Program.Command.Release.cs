@@ -110,8 +110,8 @@ internal static partial class Program
 
             if (outputJson)
             {
-                var sensitiveValues = CollectAppleCredentialMetadata(spec, result);
-                RedactAppleCredentialMetadata(spec, result);
+                var sensitiveValues = CollectReleaseCredentialMetadata(spec, result);
+                RedactReleaseCredentialMetadata(spec, result);
                 var compactResult = request.AppleSummaryOnly
                     ? CreateAppleSummaryElement(result, request)
                     : CliJson.SerializeToElement(result, CliJson.Context.PowerForgeReleaseResult);
@@ -129,7 +129,7 @@ internal static partial class Program
                         Result = compactResult,
                         Logs = request.AppleSummaryOnly ? null : LogsToJsonElement(logBuffer)
                     },
-                    redactOutput: text => RedactAppleCredentialJson(text, sensitiveValues));
+                    redactOutput: text => RedactReleaseCredentialJson(text, sensitiveValues));
                 return exitCode;
             }
 
@@ -294,7 +294,7 @@ internal static partial class Program
                 outputJson,
                 commandName,
                 1,
-                RedactAppleCredentialText(ex.Message, CollectAppleCredentialMetadata(specForRedaction, null)),
+                RedactReleaseCredentialText(ex.Message, CollectReleaseCredentialMetadata(specForRedaction, null)),
                 logger);
         }
     }
