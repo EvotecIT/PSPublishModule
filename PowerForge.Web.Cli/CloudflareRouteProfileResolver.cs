@@ -14,6 +14,7 @@ internal sealed class CloudflareSiteRouteProfile
     public string[] VerifyPaths { get; init; } = Array.Empty<string>();
     public string[] PurgePaths { get; init; } = Array.Empty<string>();
     public AgentSecurityHeadersSpec? SecurityHeaders { get; init; }
+    public AgentReadinessSpec? AgentReadiness { get; init; }
 }
 
 internal static class CloudflareRouteProfileResolver
@@ -52,6 +53,7 @@ internal static class CloudflareRouteProfileResolver
             BaseUrl = baseUrl,
             VerifyPaths = verifyPaths,
             PurgePaths = purgePaths,
+            AgentReadiness = spec.AgentReadiness,
             SecurityHeaders = spec.AgentReadiness?.Enabled == false
                 ? new AgentSecurityHeadersSpec { Enabled = false, Hsts = false }
                 : spec.AgentReadiness?.SecurityHeaders

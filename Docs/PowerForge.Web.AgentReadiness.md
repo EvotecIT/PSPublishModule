@@ -69,7 +69,7 @@ PowerForge.Web can prepare and verify the common static-site subset:
 - static host `_headers` with Link headers and well-known content types
 - optional Apache `.htaccess` rules with homepage Link headers and Markdown
   negotiation for Apache-hosted static sites
-- static security headers for opt-in HSTS, CSP, X-Content-Type-Options,
+- static security headers for default-on (explicitly opt-out) HSTS, CSP, X-Content-Type-Options,
   X-Frame-Options, Referrer-Policy, Permissions-Policy, and discovery-resource CORS
 - optional static Markdown artifacts generated from rendered HTML
 - API catalog Linkset generation

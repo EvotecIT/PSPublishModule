@@ -257,6 +257,56 @@ public class WebPipelineRunnerCloudflareTests
         }
     }
 
+    [Fact]
+    public async Task RunPipeline_CloudflareVerify_ResolvesRootDiscoveryPathUnderConfiguredSiteBase()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-cloudflare-base-path-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
+        RequestCounter? requestCounter = null;
+        try
+        {
+            var port = GetFreePort();
+            const string appPath = "/project/";
+            const string assetPath = "/project/_framework/app.abc123.js";
+            var html = """<html><body><script src="_framework/app.abc123.js"></script></body></html>""";
+            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(port, "HIT", appPath, html);
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "cloudflare",
+                      "operation": "verify",
+                      "baseUrl": "http://127.0.0.1:{{port}}/project/",
+                      "warmupRequests": 0,
+                      "allowStatuses": "HIT",
+                      "discoverAssetsFrom": "/",
+                      "assetPathPatterns": "{{assetPath}}"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success, result.Steps.Single().Message);
+            Assert.NotNull(requestCounter);
+            Assert.Contains(appPath, requestCounter!.Paths);
+            Assert.Contains(assetPath, requestCounter.Paths);
+            Assert.DoesNotContain("/", requestCounter.Paths);
+        }
+        finally
+        {
+            await StopServerAsync(listener, cts, serverTask);
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static (HttpListener listener, CancellationTokenSource cts, Task serverTask, RequestCounter requestCounter) StartCloudflareStatusServer(
         int port,
         string cacheStatus,

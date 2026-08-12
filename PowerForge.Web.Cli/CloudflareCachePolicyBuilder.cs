@@ -11,8 +11,6 @@ internal static class CloudflareCachePolicyBuilder
     private const int MaxRuleExpressionLength = 4096;
     private const int HtmlEdgeTtlSeconds = 7200;
     private const int HtmlBrowserTtlSeconds = 300;
-    private const int StaticEdgeTtlSeconds = 2592000;
-    private const int StaticBrowserTtlSeconds = 86400;
 
     private static readonly string[] DefaultHtmlPaths =
     {
@@ -96,7 +94,11 @@ internal static class CloudflareCachePolicyBuilder
         {
             BuildOverrideRule($"{descriptionPrefix} HTML docs and API", htmlExpression, HtmlEdgeTtlSeconds, HtmlBrowserTtlSeconds),
             BuildRespectOriginRule($"{descriptionPrefix} data files", dataExpression),
-            BuildOverrideRule($"{descriptionPrefix} static assets", staticExpression, StaticEdgeTtlSeconds, StaticBrowserTtlSeconds)
+            // Stable asset names are common (including Blazor framework files).
+            // Respect origin validators/TTLs so a managed rule cannot pin an old
+            // deployment in edge or browser caches. Fingerprinted assets can still
+            // carry immutable Cache-Control from the generated origin output.
+            BuildRespectOriginRule($"{descriptionPrefix} static assets", staticExpression)
         };
     }
 

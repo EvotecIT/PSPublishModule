@@ -41,8 +41,8 @@ public sealed class CloudflareCachePolicyTests
         Assert.Contains("http.host eq \"tactra.dev\"", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Contains("/*.wasm", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Contains("/*.webcil", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.Equal("override_origin", staticRule["action_parameters"]!["edge_ttl"]!["mode"]!.GetValue<string>());
-        Assert.Equal(2592000, staticRule["action_parameters"]!["edge_ttl"]!["default"]!.GetValue<int>());
+        Assert.Equal("respect_origin", staticRule["action_parameters"]!["edge_ttl"]!["mode"]!.GetValue<string>());
+        Assert.Equal("respect_origin", staticRule["action_parameters"]!["browser_ttl"]!["mode"]!.GetValue<string>());
         Assert.Null(staticRule["action_parameters"]!["cache_key"]);
 
         var htmlExpression = htmlRule["expression"]!.GetValue<string>();

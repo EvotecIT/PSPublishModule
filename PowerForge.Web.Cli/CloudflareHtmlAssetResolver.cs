@@ -17,8 +17,10 @@ internal static class CloudflareHtmlAssetResolver
         IReadOnlyCollection<string> assetPathPatterns,
         int timeoutMs)
     {
-        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var siteBase))
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var siteBase) ||
+            (siteBase.Scheme != Uri.UriSchemeHttp && siteBase.Scheme != Uri.UriSchemeHttps))
             throw new InvalidOperationException($"cloudflare: invalid baseUrl '{baseUrl}' for HTML asset discovery.");
+        siteBase = EnsureDirectoryUri(siteBase);
 
         var sources = htmlSources
             .Where(static value => !string.IsNullOrWhiteSpace(value))
@@ -107,9 +109,32 @@ internal static class CloudflareHtmlAssetResolver
 
     private static Uri ResolveSameOriginUri(Uri siteBase, string value, string label)
     {
-        if (!Uri.TryCreate(siteBase, value.Trim(), out var resolved) || !HasSameOrigin(siteBase, resolved))
+        var candidate = value.Trim();
+        Uri? resolved;
+        if (Uri.TryCreate(candidate, UriKind.Absolute, out var absolute))
+        {
+            resolved = absolute;
+        }
+        else
+        {
+            // Pipeline paths are site-relative: a leading slash means the root of
+            // the configured deployment, not the hostname root. This matters for
+            // GitHub Pages project sites such as https://host/project/.
+            var relative = candidate.TrimStart('/');
+            resolved = relative.Length == 0 ? siteBase : new Uri(siteBase, relative);
+        }
+
+        if (!HasSameOrigin(siteBase, resolved))
             throw new InvalidOperationException($"cloudflare: {label} '{value}' must resolve under {siteBase.GetLeftPart(UriPartial.Authority)}.");
         return resolved;
+    }
+
+    private static Uri EnsureDirectoryUri(Uri value)
+    {
+        var builder = new UriBuilder(value) { Fragment = string.Empty, Query = string.Empty };
+        if (!builder.Path.EndsWith("/", StringComparison.Ordinal))
+            builder.Path += "/";
+        return builder.Uri;
     }
 
     private static string NormalizePattern(string value)

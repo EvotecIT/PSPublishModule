@@ -339,7 +339,8 @@ internal static partial class WebCliCommandHandlers
             htmlPaths,
             siteProfile.SecurityHeaders,
             dryRun,
-            basePath: basePath);
+            basePath: basePath,
+            agentReadiness: siteProfile.AgentReadiness);
         if (!result.Success)
             return Fail(result.Message, outputJson, logger, command);
 

@@ -84,14 +84,15 @@ The policy uses Free-plan-compatible Rules language (`eq`, `wildcard`,
 | --- | ---: | ---: | --- |
 | HTML, docs, and API | 2 hours | 5 minutes | Includes directory routes and `.html`; does not cache 3xx/4xx/5xx responses. |
 | Data and discovery | Origin-controlled | Origin-controlled | Covers JSON, XML, text, sitemap, and LLM discovery files. |
-| Static assets | 30 days | 1 day | Covers CSS, JavaScript, images, fonts, maps, PDFs, archives, and Blazor binaries. |
+| Static assets | Origin-controlled | Origin-controlled | Covers CSS, JavaScript, images, fonts, maps, PDFs, archives, and Blazor binaries without pinning stable filenames to a long TTL. |
 
 Query strings remain part of the normal cache key. This avoids serving the wrong
 representation when an application uses query parameters for behavior rather
 than cache busting. Strong ETags remain enabled. Deployments should purge changed
-paths after the origin update. PowerForge does not infer one-year immutability
-from filename shape. Generated `_headers` grants that policy only to exact asset
-paths whose content hash PowerForge created.
+HTML and discovery paths after the origin update. PowerForge does not infer
+immutability from filename shape or override origin TTLs for stable asset URLs.
+Generated `_headers` grants a long immutable policy only to exact asset paths
+whose content hash PowerForge created.
 
 Large documentation navigation trees do not produce one expression clause per
 directory. PowerForge represents trailing-slash and `.html` routes compactly and

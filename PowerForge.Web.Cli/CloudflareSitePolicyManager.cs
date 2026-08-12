@@ -28,7 +28,8 @@ internal static class CloudflareSitePolicyManager
         AgentSecurityHeadersSpec? securityHeaders,
         bool dryRun,
         string? basePath = null,
-        HttpClient? httpClient = null)
+        HttpClient? httpClient = null,
+        AgentReadinessSpec? agentReadiness = null)
     {
         var ownsHttpClient = httpClient is null;
         httpClient ??= new HttpClient { BaseAddress = new Uri("https://api.cloudflare.com/client/v4/") };
@@ -40,7 +41,7 @@ internal static class CloudflareSitePolicyManager
                 return Failure(dryRun, cachePreflight.Message);
 
             var headerPreflight = CloudflareResponseHeaderPolicyManager.Apply(
-                zoneId, apiToken, hostname, policyName, securityHeaders, dryRun: true, httpClient, basePath);
+                zoneId, apiToken, hostname, policyName, securityHeaders, dryRun: true, httpClient, basePath, agentReadiness);
             if (!headerPreflight.Success)
                 return Failure(dryRun, $"No changes were made. {headerPreflight.Message}");
 
@@ -67,7 +68,7 @@ internal static class CloudflareSitePolicyManager
             }
 
             var headerResult = CloudflareResponseHeaderPolicyManager.Apply(
-                zoneId, apiToken, hostname, policyName, securityHeaders, dryRun: false, httpClient, basePath);
+                zoneId, apiToken, hostname, policyName, securityHeaders, dryRun: false, httpClient, basePath, agentReadiness);
             if (headerResult.Success)
                 return Success(cacheResult, headerResult, cacheResult.Changed || headerResult.Changed, $"{headerResult.Message} {cacheResult.Message}");
 

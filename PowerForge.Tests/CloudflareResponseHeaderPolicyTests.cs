@@ -78,6 +78,56 @@ public sealed class CloudflareResponseHeaderPolicyTests
     }
 
     [Fact]
+    public void BuildManagedRules_ShouldScopeConfiguredDiscoveryCorsToEnabledResourcePaths()
+    {
+        var readiness = new AgentReadinessSpec
+        {
+            Enabled = true,
+            ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "discovery/catalog.json" },
+            AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true, IndexPath = "/skills/index.json" },
+            AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+            A2AAgentCard = new AgentA2ACardSpec { Enabled = true },
+            McpServerCard = new AgentMcpServerCardSpec { Enabled = true, OutputPath = "cards/mcp.json" }
+        };
+        var security = new AgentSecurityHeadersSpec
+        {
+            Hsts = false,
+            CorsForWellKnown = true,
+            CorsAllowOrigin = "https://client.example"
+        };
+
+        var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com", "Docs", security, "/project/", readiness);
+
+        Assert.Equal(2, rules.Count);
+        var corsRule = Assert.IsType<JsonObject>(rules[1]);
+        var expression = corsRule["expression"]!.GetValue<string>();
+        Assert.Contains("/project/discovery/catalog.json", expression, StringComparison.Ordinal);
+        Assert.Contains("/project/skills/index.json", expression, StringComparison.Ordinal);
+        Assert.Contains("/project/.well-known/agent-card.json", expression, StringComparison.Ordinal);
+        Assert.Contains("/project/cards/mcp.json", expression, StringComparison.Ordinal);
+        Assert.DoesNotContain("agents.json", expression, StringComparison.Ordinal);
+        Assert.Equal("https://client.example",
+            corsRule["action_parameters"]!["headers"]!["Access-Control-Allow-Origin"]!["value"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void BuildManagedRules_ShouldNotEmitDiscoveryCorsWhenDisabled()
+    {
+        var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com",
+            "Docs",
+            new AgentSecurityHeadersSpec { Hsts = false, CorsForWellKnown = false },
+            agentReadiness: new AgentReadinessSpec
+            {
+                Enabled = true,
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = true }
+            });
+
+        Assert.Single(rules);
+    }
+
+    [Fact]
     public void RouteProfile_ShouldDisableCloudflareHeadersWhenAgentReadinessIsDisabled()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-cloudflare-disabled-" + Guid.NewGuid().ToString("N"));
