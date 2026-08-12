@@ -6,6 +6,20 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeCliDotNetPublishTests
 {
     [Fact]
+    public async Task ReleaseArtifactVerify_MissingEvidenceReturnsStructuredFailure()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var (exitCode, stdout, stderr) = await RunCliAsync(
+            repoRoot,
+            $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --output json");
+
+        Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+        using var document = JsonDocument.Parse(stdout);
+        Assert.False(document.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal("dotnet.release-artifact.verify", document.RootElement.GetProperty("command").GetString());
+    }
+
+    [Fact]
     public async Task DotNetPublish_CliProjectRootOverrideWinsOverExplicitConfigRoot()
     {
         var repoRoot = FindRepositoryRoot();

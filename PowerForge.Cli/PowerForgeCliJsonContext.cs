@@ -34,6 +34,7 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(DotNetPublishSpec))]
 [JsonSerializable(typeof(DotNetPublishPlan))]
 [JsonSerializable(typeof(DotNetPublishResult))]
+[JsonSerializable(typeof(DotNetPublishReleaseArtifact))]
 [JsonSerializable(typeof(DotNetPublishFailure))]
 [JsonSerializable(typeof(DotNetPublishConfigScaffoldResult))]
 [JsonSerializable(typeof(DotNetPublishAppInstallerOptions))]

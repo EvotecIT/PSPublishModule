@@ -68,6 +68,55 @@ internal static class WindowsAuthenticodeSignatureInspector
         }
     }
 
+    internal static int Verify(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath) || !IsWindows())
+            return TrustENoSignature;
+
+        var fileInfoPointer = IntPtr.Zero;
+        var trustDataPointer = IntPtr.Zero;
+        try
+        {
+            var fileInfo = new WinTrustFileInfo
+            {
+                StructSize = (uint)Marshal.SizeOf<WinTrustFileInfo>(),
+                FilePath = filePath,
+                FileHandle = IntPtr.Zero,
+                KnownSubject = IntPtr.Zero
+            };
+            fileInfoPointer = Marshal.AllocHGlobal(Marshal.SizeOf<WinTrustFileInfo>());
+            Marshal.StructureToPtr(fileInfo, fileInfoPointer, fDeleteOld: false);
+
+            var trustData = new WinTrustData
+            {
+                StructSize = (uint)Marshal.SizeOf<WinTrustData>(),
+                UiChoice = 2,
+                RevocationChecks = 1,
+                UnionChoice = 1,
+                FileInfo = fileInfoPointer,
+                StateAction = 0,
+                ProviderFlags = 0x00000040,
+                UiContext = 0
+            };
+            trustDataPointer = Marshal.AllocHGlobal(Marshal.SizeOf<WinTrustData>());
+            Marshal.StructureToPtr(trustData, trustDataPointer, fDeleteOld: false);
+            return WinVerifyTrust(new IntPtr(-1), GenericVerifyV2, trustDataPointer);
+        }
+        finally
+        {
+            if (trustDataPointer != IntPtr.Zero)
+            {
+                Marshal.DestroyStructure<WinTrustData>(trustDataPointer);
+                Marshal.FreeHGlobal(trustDataPointer);
+            }
+            if (fileInfoPointer != IntPtr.Zero)
+            {
+                Marshal.DestroyStructure<WinTrustFileInfo>(fileInfoPointer);
+                Marshal.FreeHGlobal(fileInfoPointer);
+            }
+        }
+    }
+
     internal static bool IsNoSignatureStatus(int status)
         => status == TrustENoSignature ||
            status == TrustEProviderUnknown ||
