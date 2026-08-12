@@ -130,19 +130,21 @@ internal sealed partial class PowerForgeReleaseService
                 return false;
             }
 
+            var expectedManifestName = Path.GetFileName(plan?.ManifestPath);
+            if (!string.IsNullOrWhiteSpace(expectedManifestName))
+            {
+                return files.Count(name =>
+                    name.Count(character => character == '/') == 1 &&
+                    string.Equals(Path.GetFileName(name), expectedManifestName, StringComparison.OrdinalIgnoreCase)) == 1;
+            }
+
             var roots = files
                 .Select(static name => name.Split('/')[0])
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            if (roots.Length != 1)
-                return false;
-
-            var root = roots[0];
-            var expectedManifestName = Path.GetFileName(plan?.ManifestPath);
-            if (string.IsNullOrWhiteSpace(expectedManifestName))
-                expectedManifestName = root + ".psd1";
-            var expectedManifestPath = root + "/" + expectedManifestName;
-            return files.Contains(expectedManifestPath, StringComparer.OrdinalIgnoreCase);
+            var moduleRoots = roots.Count(root =>
+                files.Contains(root + "/" + root + ".psd1", StringComparer.OrdinalIgnoreCase));
+            return moduleRoots == 1;
         }
         catch (InvalidDataException)
         {

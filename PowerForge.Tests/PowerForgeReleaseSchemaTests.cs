@@ -247,6 +247,26 @@ public sealed class PowerForgeReleaseSchemaTests
         }
     }
 
+    [Fact]
+    public void Release_schema_accepts_null_unused_VirusTotal_credentials()
+    {
+        const string json = """
+            {
+              "Enabled": true,
+              "ApiKey": null,
+              "ApiKeyFilePath": null,
+              "ApiKeyEnvName": "VIRUSTOTAL_MONITOR_API_KEY",
+              "ArtifactKinds": [ "MsiPackage" ]
+            }
+            """;
+        var schemaDocument = JsonNode.Parse(File.ReadAllText(GetSchemaPath("powerforge.release.schema.json")))!;
+        var virusTotalSchema = JsonSchema.FromText(schemaDocument["properties"]!["VirusTotal"]!.ToJsonString());
+
+        Assert.True(virusTotalSchema.Evaluate(
+            JsonNode.Parse(json)!,
+            new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
+    }
+
     [Theory]
     [InlineData("""{ "Enabled": true, "ArtifactKinds": [ "MsiPackage" ] }""")]
     [InlineData("""{ "Enabled": true, "ApiKey": "one", "ApiKeyEnvName": "TWO", "ArtifactKinds": [ "MsiPackage" ] }""")]

@@ -149,19 +149,17 @@ public sealed partial class PowerForgeReleaseServiceTests
             runTools: false,
             publishUnifiedGitHub: false));
 
-        Assert.False(PowerForgeReleaseService.ShouldCaptureVirusTotalModuleArtifactProvenance(
+        Assert.True(PowerForgeReleaseService.ShouldCaptureVirusTotalModuleArtifactProvenance(
             spec,
             new PowerForgeReleaseRequest
             {
                 ModuleRunMode = ConfigurationGateMode.Build,
                 PublishNuget = true
             },
-            runModule: true,
-            publishVirusTotalMonitor: true));
+            runModule: true));
         Assert.True(PowerForgeReleaseService.ShouldCaptureVirusTotalModuleArtifactProvenance(
             spec,
             new PowerForgeReleaseRequest { ModuleRunMode = ConfigurationGateMode.Publish },
-            runModule: true,
-            publishVirusTotalMonitor: true));
+            runModule: true));
     }
 }

@@ -186,13 +186,15 @@ public sealed class RepositoryCatalogScanner
                             winget.ValueKind == JsonValueKind.Object;
             var hasAppleApps = TryGetPropertyIgnoreCase(document.RootElement, "AppleApps", out var appleApps) &&
                                appleApps.ValueKind == JsonValueKind.Object;
-            return hasModule || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps
+            var hasVirusTotal = TryGetPropertyIgnoreCase(document.RootElement, "VirusTotal", out var virusTotal) &&
+                                virusTotal.ValueKind == JsonValueKind.Object;
+            return hasModule || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps || hasVirusTotal
                 ? new ReleaseBuildContract(
                     releaseConfigPath,
                     moduleBuildInputPath,
                     includesPackages,
                     moduleIncludesPackages,
-                    RequiresUnifiedExecution: hasModule || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps)
+                    RequiresUnifiedExecution: hasModule || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps || hasVirusTotal)
                 : null;
         }
         catch (Exception ex) when (

@@ -6,6 +6,10 @@ internal static class VirusTotalReleaseArtifactSelector
 {
     private static readonly HashSet<VirusTotalArtifactKind> DefinedKinds =
         new(Enum.GetValues(typeof(VirusTotalArtifactKind)).Cast<VirusTotalArtifactKind>());
+    private static readonly HashSet<string> SupportedTemplateTokens = new(
+        ["Project", "Version", "Kind", "FileName", "RelativePath", "Target", "Runtime", "Framework"],
+        StringComparer.Ordinal);
+    private static readonly Regex TemplateTokenPattern = new("\\{([^{}]+)\\}", RegexOptions.CultureInvariant);
 
     public static void ValidateConfiguration(PowerForgeVirusTotalOptions options)
     {
@@ -46,6 +50,9 @@ internal static class VirusTotalReleaseArtifactSelector
             throw new InvalidOperationException(
                 "VirusTotal DestinationPathTemplate must contain {RelativePath} or {FileName} so artifacts cannot overwrite each other implicitly.");
         }
+        ValidateTemplateTokens(options.DestinationPathTemplate, nameof(options.DestinationPathTemplate));
+        if (!string.IsNullOrWhiteSpace(options.DetailsTemplate))
+            ValidateTemplateTokens(options.DetailsTemplate!, nameof(options.DetailsTemplate));
 
         if (options.VerificationTimeoutSeconds < 0)
             throw new InvalidOperationException("VirusTotal VerificationTimeoutSeconds must not be negative.");
@@ -57,6 +64,26 @@ internal static class VirusTotalReleaseArtifactSelector
         {
             throw new InvalidOperationException(
                 "VirusTotal ReceiptPath is required so partial Monitor uploads can be checkpointed and resumed safely.");
+        }
+    }
+
+    private static void ValidateTemplateTokens(string template, string settingName)
+    {
+        var matches = TemplateTokenPattern.Matches(template);
+        foreach (Match match in matches)
+        {
+            if (!SupportedTemplateTokens.Contains(match.Groups[1].Value))
+            {
+                throw new InvalidOperationException(
+                    $"VirusTotal {settingName} contains an unsupported token: '{match.Value}'.");
+            }
+        }
+
+        var withoutTokens = TemplateTokenPattern.Replace(template, string.Empty);
+        if (withoutTokens.IndexOf('{') >= 0 || withoutTokens.IndexOf('}') >= 0)
+        {
+            throw new InvalidOperationException(
+                $"VirusTotal {settingName} contains an unsupported token or unmatched brace.");
         }
     }
 

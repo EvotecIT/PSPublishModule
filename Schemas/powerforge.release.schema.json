@@ -217,18 +217,15 @@
             "oneOf": [
                 {
                   "required": [ "ApiKey" ],
-                  "properties": { "ApiKey": { "type": "string", "minLength": 1 } },
-                  "not": { "anyOf": [ { "required": [ "ApiKeyFilePath" ] }, { "required": [ "ApiKeyEnvName" ] } ] }
+                  "properties": { "ApiKey": { "type": "string", "minLength": 1 } }
                 },
                 {
                   "required": [ "ApiKeyFilePath" ],
-                  "properties": { "ApiKeyFilePath": { "type": "string", "minLength": 1 } },
-                  "not": { "anyOf": [ { "required": [ "ApiKey" ] }, { "required": [ "ApiKeyEnvName" ] } ] }
+                  "properties": { "ApiKeyFilePath": { "type": "string", "minLength": 1 } }
                 },
                 {
                   "required": [ "ApiKeyEnvName" ],
-                  "properties": { "ApiKeyEnvName": { "type": "string", "minLength": 1 } },
-                  "not": { "anyOf": [ { "required": [ "ApiKey" ] }, { "required": [ "ApiKeyFilePath" ] } ] }
+                  "properties": { "ApiKeyEnvName": { "type": "string", "minLength": 1 } }
                 }
             ]
           }

@@ -55,7 +55,7 @@ public sealed class PowerForgeCliVirusTotalTests
     {
         var startInfo = new ProcessStartInfo
         {
-            FileName = "dotnet.exe",
+            FileName = "dotnet",
             Arguments = arguments,
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,

@@ -36,7 +36,7 @@ Configure exactly one API-key source:
 - `ApiKeyFilePath` reads a secret file at publish time.
 - `ApiKey` accepts an inline value for temporary use, but should not be committed.
 
-Planning, configuration validation, build/checkpoint runs, and explicit Apple status, doctor, or cleanup actions do not read the secret or upload files. Secret resolution happens only when an actual release reaches the VirusTotal publishing phase.
+Planning, configuration validation, build/checkpoint runs, and explicit Apple status, doctor, or cleanup actions do not read the secret or upload files. When `PowerShellModule` is selected, a checkpoint build still records the packed-module provenance needed by a later signed publication. Secret resolution happens only when an actual release reaches the VirusTotal publishing phase.
 
 ## Select eligible artifacts
 
@@ -64,5 +64,7 @@ The default destination path is:
 Available template tokens are `{Project}`, `{Version}`, `{Kind}`, `{FileName}`, `{RelativePath}`, `{Target}`, `{Runtime}`, and `{Framework}`. A template must include `{RelativePath}` or `{FileName}`, and resolved paths must be unique.
 
 The JSON receipt is written atomically after every accepted artifact. It records the Monitor identifier, destination, local and remote hashes, verification state, upload time, and current detection count when VirusTotal supplies one. It never includes the API key. A retry for the same project, version, and destination resumes accepted items by Monitor item id instead of creating duplicate paths.
+
+PowerForge Studio shows VirusTotal Monitor as an explicit publish target for enabled projects. Its publish receipt reports success or failure and links the durable Monitor receipt so an operator can inspect or retry the post-release step.
 
 Configuration and secret-source errors are checked before the release starts, so they cannot fail after a registry or tool publication. VirusTotal Monitor access, entitlements, and API quotas are controlled by the project's VirusTotal account. A rejected upload, timeout, or hash mismatch is recorded as a failed Monitor receipt and warning. It does not roll back or retroactively fail the primary release because Monitor registration and analysis are asynchronous post-release integrations; rerun the release publisher to resume from the receipt.

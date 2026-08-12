@@ -149,6 +149,18 @@ public sealed partial class ReleasePublishExecutionService
                     Destination: "Configured module package destinations"));
             }
 
+            if (spec.VirusTotal is { Enabled: true })
+            {
+                targets.Add(new ReleasePublishTarget(
+                    RootPath: item.RootPath,
+                    RepositoryName: item.RepositoryName,
+                    AdapterKind: "UnifiedRelease",
+                    TargetName: "VirusTotal Monitor registration",
+                    TargetKind: "VirusTotal",
+                    SourcePath: configPath,
+                    Destination: "Configured VirusTotal Monitor project"));
+            }
+
             var enabledAppleApps = spec.AppleApps?.Apps.Count(static app => app.Enabled) ?? 0;
             if (enabledAppleApps > 0 && HasConfiguredApplePublishAction(spec.AppleApps!))
             {
@@ -246,6 +258,22 @@ public sealed partial class ReleasePublishExecutionService
                     winget.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
                     winget.Succeeded ? "WinGet manifests submitted." : winget.ErrorMessage ?? "WinGet submission failed.",
                     result.WingetManifestPaths.FirstOrDefault()));
+            }
+
+            if (result.VirusTotalMonitor is { } virusTotal)
+            {
+                receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                    repository.RootPath,
+                    repository.Name,
+                    "UnifiedRelease",
+                    "VirusTotal Monitor",
+                    "VirusTotal",
+                    result.VirusTotalMonitorReceiptPath ?? "VirusTotal Monitor",
+                    virusTotal.Success ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
+                    virusTotal.Success
+                        ? $"Registered {virusTotal.Artifacts.Length} artifact(s) with VirusTotal Monitor. Analysis remains asynchronous."
+                        : virusTotal.ErrorMessage ?? "VirusTotal Monitor registration failed.",
+                    virusTotal.Artifacts.FirstOrDefault()?.SourcePath));
             }
 
             foreach (var apple in result.AppleApps)

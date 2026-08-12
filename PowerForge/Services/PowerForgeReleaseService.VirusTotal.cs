@@ -50,11 +50,11 @@ internal sealed partial class PowerForgeReleaseService
     internal static bool ShouldCaptureVirusTotalModuleArtifactProvenance(
         PowerForgeReleaseSpec spec,
         PowerForgeReleaseRequest request,
-        bool runModule,
-        bool publishVirusTotalMonitor)
+        bool runModule)
     {
-        if (!publishVirusTotalMonitor ||
-            !runModule ||
+        if (!runModule ||
+            request.PlanOnly ||
+            request.ValidateOnly ||
             spec.Module is null ||
             spec.VirusTotal is not { Enabled: true } options ||
             !(options.ArtifactKinds ?? Array.Empty<VirusTotalArtifactKind>())
@@ -62,12 +62,7 @@ internal sealed partial class PowerForgeReleaseService
         {
             return false;
         }
-
-        var packagePublishingRequested =
-            !request.ModuleOnly &&
-            ((request.PublishNuget ?? spec.Packages?.PublishNuget) == true ||
-             (request.PublishProjectGitHub ?? spec.Packages?.PublishGitHub) == true);
-        return ResolveModuleRunMode(spec.Module, request, packagePublishingRequested) == ConfigurationGateMode.Publish;
+        return true;
     }
 
     private static void ValidateVirusTotalConfiguration(PowerForgeVirusTotalOptions? options)
@@ -111,16 +106,39 @@ internal sealed partial class PowerForgeReleaseService
             return true;
 
         request.CancellationToken.ThrowIfCancellationRequested();
+        string? project = null;
+        string? version = null;
+        var receiptWritable = false;
+        var receiptWriteFailed = false;
+
+        string PersistReceipt(VirusTotalMonitorPublishResult publishResult)
+        {
+            try
+            {
+                return WriteVirusTotalReceipt(
+                    options,
+                    configDirectory,
+                    project!,
+                    version!,
+                    publishResult);
+            }
+            catch
+            {
+                receiptWriteFailed = true;
+                throw;
+            }
+        }
+
         try
         {
-            var version = sharedReleaseVersion?.Trim();
+            version = ResolveVirusTotalReleaseVersion(result, sharedReleaseVersion);
             if (string.IsNullOrWhiteSpace(version))
             {
                 throw new InvalidOperationException(
                     "VirusTotal Monitor publishing requires the unified release to resolve a version.");
             }
 
-            var project = ResolveVirusTotalProjectName(spec, options, configDirectory);
+            project = ResolveVirusTotalProjectName(spec, options, configDirectory);
             var artifacts = VirusTotalReleaseArtifactSelector.Select(
                 result.ReleaseAssetEntries ?? Array.Empty<PowerForgeReleaseAssetEntry>(),
                 options,
@@ -136,6 +154,7 @@ internal sealed partial class PowerForgeReleaseService
             }
 
             EnsureVirusTotalReceiptWritable(options, configDirectory);
+            receiptWritable = true;
             ApplyVirusTotalResumeReceipt(options, configDirectory, project, version!, artifacts);
 
             request.Progress?.PhaseStarted(
@@ -154,12 +173,7 @@ internal sealed partial class PowerForgeReleaseService
                     RequestTimeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds),
                     CheckpointAsync = (checkpoint, _) =>
                     {
-                        result.VirusTotalMonitorReceiptPath = WriteVirusTotalReceipt(
-                            options,
-                            configDirectory,
-                            project,
-                            version!,
-                            checkpoint);
+                        result.VirusTotalMonitorReceiptPath = PersistReceipt(checkpoint);
                         return Task.CompletedTask;
                     }
                 },
@@ -169,12 +183,7 @@ internal sealed partial class PowerForgeReleaseService
             publishResult.ErrorMessage = VirusTotalMonitorPublisher.RedactApiKey(
                 publishResult.ErrorMessage,
                 apiKey);
-            result.VirusTotalMonitorReceiptPath = WriteVirusTotalReceipt(
-                options,
-                configDirectory,
-                project,
-                version!,
-                publishResult);
+            result.VirusTotalMonitorReceiptPath = PersistReceipt(publishResult);
             if (!publishResult.Success)
             {
                 var failureMessage = publishResult.ErrorMessage ?? "VirusTotal Monitor did not accept every selected artifact.";
@@ -200,12 +209,34 @@ internal sealed partial class PowerForgeReleaseService
                 Success = false,
                 ErrorMessage = errorMessage
             };
+            if (receiptWritable &&
+                !receiptWriteFailed &&
+                !string.IsNullOrWhiteSpace(project) &&
+                !string.IsNullOrWhiteSpace(version))
+            {
+                try
+                {
+                    result.VirusTotalMonitorReceiptPath = PersistReceipt(result.VirusTotalMonitor);
+                }
+                catch (Exception receiptException) when (receiptException is not OperationCanceledException)
+                {
+                    _logger.Warn(
+                        $"VirusTotal Monitor failure receipt could not be persisted: {receiptException.Message}");
+                }
+            }
             _logger.Warn(
                 $"VirusTotal Monitor publishing did not run: {errorMessage} " +
                 "The primary release remains successful because Monitor registration is an asynchronous post-release integration.");
             return true;
         }
     }
+
+    internal static string? ResolveVirusTotalReleaseVersion(
+        PowerForgeReleaseResult result,
+        string? sharedReleaseVersion)
+        => NormalizeReleaseVersion(sharedReleaseVersion) ??
+           ResolveModuleReleaseVersion(result.ModulePlan) ??
+           ResolveUniqueAssetVersion(result.ReleaseAssetEntries ?? Array.Empty<PowerForgeReleaseAssetEntry>());
 
     private static void ApplyVirusTotalResumeReceipt(
         PowerForgeVirusTotalOptions options,
