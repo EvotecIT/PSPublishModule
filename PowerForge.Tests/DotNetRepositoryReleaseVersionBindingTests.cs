@@ -84,6 +84,46 @@ public sealed class DotNetRepositoryReleaseVersionBindingTests
         }
     }
 
+    [Fact]
+    public void Execute_plan_composes_project_version_updates_before_validating_bindings()
+    {
+        var root = CreateRepository();
+
+        try
+        {
+            var projectPath = Path.Combine(root.FullName, "Example.Tool", "Example.Tool.csproj");
+            var originalContent =
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><VersionPrefix>1.2.3</VersionPrefix><ToolVersion>1.2.3</ToolVersion></PropertyGroup></Project>";
+            File.WriteAllText(projectPath, originalContent);
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                IncludeProjects = new[] { "Example.Tool" },
+                ExpectedVersion = "1.2.4",
+                UpdateVersions = true,
+                WhatIf = true,
+                Pack = false,
+                VersionBindings = new[]
+                {
+                    new ProjectVersionBinding
+                    {
+                        Path = "Example.Tool/Example.Tool.csproj",
+                        Project = "Example.Tool",
+                        Pattern = @"\b1\.2\.3\b"
+                    }
+                }
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(originalContent, File.ReadAllText(projectPath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static DotNetRepositoryReleaseResult Execute(DirectoryInfo root, string pattern)
         => new DotNetRepositoryReleaseService(new NullLogger()).Execute(new DotNetRepositoryReleaseSpec
         {

@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace PowerForge;
 
 internal sealed class RepositoryTextFileUpdate
@@ -57,7 +59,8 @@ internal sealed class RepositoryTextFileTransactionService
                 if (!File.Exists(fullPath))
                     throw new FileNotFoundException($"Release file update target was not found: {fullPath}", fullPath);
 
-                var currentContent = File.ReadAllText(fullPath);
+                var snapshot = ReadSnapshot(fullPath);
+                var currentContent = snapshot.Content;
                 if (!string.Equals(currentContent, update.OriginalContent, StringComparison.Ordinal))
                     throw new InvalidOperationException($"Release file changed after version planning and was not modified: {fullPath}");
                 if (string.Equals(currentContent, update.UpdatedContent, StringComparison.Ordinal))
@@ -66,7 +69,7 @@ internal sealed class RepositoryTextFileTransactionService
                 var suffix = ".powerforge-" + Guid.NewGuid().ToString("N");
                 var temporaryPath = fullPath + suffix + ".tmp";
                 var backupPath = fullPath + suffix + ".bak";
-                File.WriteAllText(temporaryPath, update.UpdatedContent);
+                WriteSnapshot(temporaryPath, update.UpdatedContent, snapshot);
 #if !NET472
                 if (!OperatingSystem.IsWindows())
                     File.SetUnixFileMode(temporaryPath, File.GetUnixFileMode(fullPath));
@@ -143,6 +146,67 @@ internal sealed class RepositoryTextFileTransactionService
         }
     }
 
+    private static TextFileSnapshot ReadSnapshot(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+        Encoding encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        var preambleLength = 0;
+
+        if (StartsWith(bytes, new byte[] { 0x00, 0x00, 0xFE, 0xFF }))
+        {
+            encoding = new UTF32Encoding(bigEndian: true, byteOrderMark: true);
+            preambleLength = 4;
+        }
+        else if (StartsWith(bytes, new byte[] { 0xFF, 0xFE, 0x00, 0x00 }))
+        {
+            encoding = new UTF32Encoding(bigEndian: false, byteOrderMark: true);
+            preambleLength = 4;
+        }
+        else if (StartsWith(bytes, new byte[] { 0xEF, 0xBB, 0xBF }))
+        {
+            encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+            preambleLength = 3;
+        }
+        else if (StartsWith(bytes, new byte[] { 0xFE, 0xFF }))
+        {
+            encoding = new UnicodeEncoding(bigEndian: true, byteOrderMark: true);
+            preambleLength = 2;
+        }
+        else if (StartsWith(bytes, new byte[] { 0xFF, 0xFE }))
+        {
+            encoding = new UnicodeEncoding(bigEndian: false, byteOrderMark: true);
+            preambleLength = 2;
+        }
+
+        return new TextFileSnapshot(
+            encoding.GetString(bytes, preambleLength, bytes.Length - preambleLength),
+            encoding,
+            preambleLength == 0 ? Array.Empty<byte>() : encoding.GetPreamble());
+    }
+
+    private static void WriteSnapshot(string path, string content, TextFileSnapshot snapshot)
+    {
+        var contentBytes = snapshot.Encoding.GetBytes(content);
+        var bytes = new byte[snapshot.Preamble.Length + contentBytes.Length];
+        Buffer.BlockCopy(snapshot.Preamble, 0, bytes, 0, snapshot.Preamble.Length);
+        Buffer.BlockCopy(contentBytes, 0, bytes, snapshot.Preamble.Length, contentBytes.Length);
+        File.WriteAllBytes(path, bytes);
+    }
+
+    private static bool StartsWith(byte[] bytes, byte[] prefix)
+    {
+        if (bytes.Length < prefix.Length)
+            return false;
+
+        for (var index = 0; index < prefix.Length; index++)
+        {
+            if (bytes[index] != prefix[index])
+                return false;
+        }
+
+        return true;
+    }
+
     private sealed class PreparedUpdate
     {
         public PreparedUpdate(string filePath, string temporaryPath, string backupPath)
@@ -155,5 +219,19 @@ internal sealed class RepositoryTextFileTransactionService
         public string FilePath { get; }
         public string TemporaryPath { get; }
         public string BackupPath { get; }
+    }
+
+    private sealed class TextFileSnapshot
+    {
+        public TextFileSnapshot(string content, Encoding encoding, byte[] preamble)
+        {
+            Content = content;
+            Encoding = encoding;
+            Preamble = preamble;
+        }
+
+        public string Content { get; }
+        public Encoding Encoding { get; }
+        public byte[] Preamble { get; }
     }
 }

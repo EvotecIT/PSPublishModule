@@ -1,3 +1,4 @@
+using System.Text;
 using PowerForge;
 
 namespace PowerForge.Tests;
@@ -117,6 +118,63 @@ public sealed class RepositoryTextFileTransactionServiceTests
         {
             TryDelete(root);
         }
+    }
+
+    [Theory]
+    [InlineData("utf8")]
+    [InlineData("utf8-bom")]
+    [InlineData("utf16-le")]
+    [InlineData("utf16-be")]
+    [InlineData("utf32-le")]
+    [InlineData("utf32-be")]
+    public void Apply_preserves_text_encoding_and_bom(string format)
+    {
+        var root = CreateTemporaryDirectory();
+
+        try
+        {
+            var path = Path.Combine(root.FullName, "version.txt");
+            var encoding = CreateEncoding(format);
+            WriteEncodedFile(path, "Example.Tool@1.2.3", encoding);
+            var expectedPreamble = encoding.GetPreamble();
+
+            new RepositoryTextFileTransactionService().Apply(new[]
+            {
+                new RepositoryTextFileUpdate(path, "Example.Tool@1.2.3", "Example.Tool@1.2.4")
+            });
+
+            var bytes = File.ReadAllBytes(path);
+            Assert.Equal(expectedPreamble, bytes.Take(expectedPreamble.Length));
+            Assert.Equal(
+                "Example.Tool@1.2.4",
+                encoding.GetString(bytes, expectedPreamble.Length, bytes.Length - expectedPreamble.Length));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    private static Encoding CreateEncoding(string format)
+        => format switch
+        {
+            "utf8" => new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            "utf8-bom" => new UTF8Encoding(encoderShouldEmitUTF8Identifier: true),
+            "utf16-le" => new UnicodeEncoding(bigEndian: false, byteOrderMark: true),
+            "utf16-be" => new UnicodeEncoding(bigEndian: true, byteOrderMark: true),
+            "utf32-le" => new UTF32Encoding(bigEndian: false, byteOrderMark: true),
+            "utf32-be" => new UTF32Encoding(bigEndian: true, byteOrderMark: true),
+            _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Unknown encoding fixture.")
+        };
+
+    private static void WriteEncodedFile(string path, string content, Encoding encoding)
+    {
+        var preamble = encoding.GetPreamble();
+        var contentBytes = encoding.GetBytes(content);
+        var bytes = new byte[preamble.Length + contentBytes.Length];
+        Buffer.BlockCopy(preamble, 0, bytes, 0, preamble.Length);
+        Buffer.BlockCopy(contentBytes, 0, bytes, preamble.Length, contentBytes.Length);
+        File.WriteAllBytes(path, bytes);
     }
 
     private static DirectoryInfo CreateTemporaryDirectory()

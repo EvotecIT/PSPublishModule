@@ -347,7 +347,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 }
 
                 project.NewVersion = resolvedVersion;
-                if (spec.WhatIf || !shouldUpdateProjectVersion)
+                if (!shouldUpdateProjectVersion)
                 {
                     detailedProgress?.ItemUpdated(versionItem, ProjectBuildProgressItemState.Completed, resolvedVersion);
                     versionProgress++;
