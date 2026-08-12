@@ -118,6 +118,7 @@ public sealed class AppleNotarizationService
         ProcessRunResult submission;
         string? submissionId;
         string? status;
+        string? submittedFileMutationIdentity = null;
         using var submissionMonitor = resumed
             ? null
             : new AppleReleaseSourceMutationMonitor(
@@ -146,6 +147,9 @@ public sealed class AppleNotarizationService
             };
             submitArguments.AddRange(authentication);
             submissionSnapshot.CompleteSubmissionCapture(artifactSha256);
+            submittedFileMutationIdentity = ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(
+                submittedPath,
+                "private Apple notarization submitted file");
             submission = await RunAsync(xcrunExecutable, submissionArtifactPath, submitArguments, timeout, toolEnvironment, cancellationToken).ConfigureAwait(false);
             (submissionId, status) = ParseSubmission(submission);
         }
@@ -158,30 +162,6 @@ public sealed class AppleNotarizationService
                 "accepted checkpoint and retained submission capture",
                 "Do not staple or publish until the accepted submission has been reconciled.")
             : null;
-        if (!resumed)
-        {
-            try
-            {
-                submissionMonitor!.ValidateNoChanges();
-                var observedSubmissionSha256 = ComputeFileSha256(submittedPath);
-                if (!observedSubmissionSha256.Equals(submissionSha256, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException(
-                        $"The private Apple notarization submission changed during notarytool execution. Expected SHA-256 " +
-                        $"'{submissionSha256}', received '{observedSubmissionSha256}'.");
-                }
-            }
-            catch (Exception ex) when (
-                submission.Succeeded &&
-                string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(submissionId))
-            {
-                throw new InvalidOperationException(
-                    $"Apple accepted notarization submission '{submissionId}', but the exact submitted file changed while notarytool was reading it. " +
-                    "Do not resubmit until the accepted submission has been reconciled.",
-                    ex);
-            }
-        }
         var submissionPath = resumed
             ? artifactPath
             : ResolveRetainedSubmissionPath(request, artifactPath);
@@ -209,6 +189,42 @@ public sealed class AppleNotarizationService
                     $"Apple accepted notarization submission '{submissionId}', but its local recovery checkpoint could not be persisted. " +
                     "Do not resubmit the artifact until the accepted submission has been reconciled.",
                     ex);
+            }
+        }
+        if (!resumed)
+        {
+            try
+            {
+                submissionMonitor!.ValidateNoChanges();
+                var observedSubmittedFileMutationIdentity = ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(
+                    submittedPath,
+                    "private Apple notarization submitted file");
+                if (!string.Equals(
+                        submittedFileMutationIdentity,
+                        observedSubmittedFileMutationIdentity,
+                        StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "The private Apple notarization submitted file identity changed during notarytool execution. " +
+                        "A transient write or hard-link alias invalidates the submitted bytes.");
+                }
+                var observedSubmissionSha256 = ComputeFileSha256(submittedPath);
+                if (!observedSubmissionSha256.Equals(submissionSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"The private Apple notarization submission changed during notarytool execution. Expected SHA-256 " +
+                        $"'{submissionSha256}', received '{observedSubmissionSha256}'.");
+                }
+            }
+            catch (Exception ex) when (
+                submission.Succeeded &&
+                string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(submissionId))
+            {
+                throw new InvalidOperationException(
+                    $"Apple accepted notarization submission '{submissionId}', but the exact submitted file changed while notarytool was reading it. " +
+                    "Do not resubmit until the accepted submission has been reconciled.",
+                ex);
             }
         }
 

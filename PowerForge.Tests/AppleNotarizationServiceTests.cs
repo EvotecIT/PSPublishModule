@@ -143,7 +143,7 @@ public sealed partial class AppleNotarizationServiceTests
         try
         {
             var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Mutable.app"));
-            var checkpointed = false;
+            AppleNotarizationAcceptedCheckpoint? checkpoint = null;
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 new AppleNotarizationService(new MutatingSubmissionRunner()).NotarizeAsync(new AppleNotarizationRequest
                 {
@@ -151,12 +151,13 @@ public sealed partial class AppleNotarizationServiceTests
                     KeychainProfile = "powerforge-notary",
                     Staple = false,
                     Assess = false,
-                    AcceptedCheckpoint = _ => checkpointed = true
+                    AcceptedCheckpoint = accepted => checkpoint = accepted
                 }));
 
             Assert.Contains("exact submitted file changed", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Do not resubmit", exception.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.False(checkpointed);
+            Assert.NotNull(checkpoint);
+            Assert.Equal("submission-mutated", checkpoint.SubmissionId);
         }
         finally
         {

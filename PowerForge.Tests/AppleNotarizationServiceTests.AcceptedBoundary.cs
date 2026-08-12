@@ -30,7 +30,8 @@ public sealed partial class AppleNotarizationServiceTests
                     }
                 }));
 
-            Assert.Contains("changed before stapling", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("exact submitted file changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Do not resubmit", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(runner.Commands, command => command.StartsWith("stapler staple", StringComparison.Ordinal));
             Assert.Equal("approved-app", await File.ReadAllTextAsync(Path.Combine(app.FullName, "payload")));
         }
@@ -64,7 +65,8 @@ public sealed partial class AppleNotarizationServiceTests
                         "replacement-after-acceptance")
                 }));
 
-            Assert.Contains("changed before stapling", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("exact submitted file changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Do not resubmit", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(runner.Commands, command => command.StartsWith("stapler staple", StringComparison.Ordinal));
             Assert.Equal("approved-package", await File.ReadAllTextAsync(package));
         }

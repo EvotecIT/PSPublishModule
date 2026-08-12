@@ -140,6 +140,39 @@ public sealed partial class AppleNotarizationServiceTests
         }
     }
 
+    [Fact]
+    public async Task NotarizeAsync_rejects_restored_submitted_bytes_changed_through_external_hard_link()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        var runner = new RestoringSubmissionHardLinkRunner();
+        try
+        {
+            var package = Path.Combine(root.FullName, "Approved.pkg");
+            await File.WriteAllTextAsync(package, "approved-package");
+            AppleNotarizationAcceptedCheckpoint? checkpoint = null;
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
+                {
+                    ArtifactPath = package,
+                    KeychainProfile = "powerforge-notary",
+                    Staple = false,
+                    Assess = false,
+                    AcceptedCheckpoint = accepted => checkpoint = accepted
+                }));
+
+            Assert.Contains("submitted file changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Do not resubmit", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(checkpoint);
+            Assert.Equal("submission-hard-link", checkpoint.SubmissionId);
+        }
+        finally
+        {
+            runner.Dispose();
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -325,6 +358,45 @@ public sealed partial class AppleNotarizationServiceTests
                 File.WriteAllText(zip, "replacement-after-process-completion");
             }
             return Task.FromResult(result);
+        }
+    }
+
+    private sealed class RestoringSubmissionHardLinkRunner : IProcessRunner, IDisposable
+    {
+        private readonly string _aliasRoot = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.NotaryTests",
+            $"external-alias-{Guid.NewGuid():N}");
+
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            var isSubmission = request.Arguments.Count > 2 && request.Arguments[0] == "notarytool";
+            if (isSubmission)
+            {
+                Directory.CreateDirectory(_aliasRoot);
+                var submittedPath = request.Arguments[2];
+                var approvedBytes = File.ReadAllBytes(submittedPath);
+                var alias = Path.Combine(_aliasRoot, "submitted-alias");
+                TestFileLink.CreateHardLink(alias, submittedPath);
+                File.WriteAllText(alias, "attacker-bytes");
+                File.WriteAllBytes(alias, approvedBytes);
+                File.Delete(alias);
+            }
+
+            var result = new ProcessRunResult(
+                0,
+                isSubmission ? "{\"id\":\"submission-hard-link\",\"status\":\"Accepted\"}" : "ok",
+                string.Empty,
+                request.FileName,
+                TimeSpan.Zero,
+                false);
+            request.InvokeCompletionBoundary(result);
+            return Task.FromResult(result);
+        }
+
+        public void Dispose()
+        {
+            try { Directory.Delete(_aliasRoot, recursive: true); } catch { }
         }
     }
 }
