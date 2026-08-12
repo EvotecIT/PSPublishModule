@@ -25,7 +25,7 @@ public sealed class AppStoreConnectScreenshotApprovalTests
                     BaseDirectory = root.FullName,
                     AllowedRoot = screenshotFolder.FullName,
                     VersionString = "1.5.0",
-                    SourceCommit = ApprovedSourceCommit,
+                    SourceCommit = new string('a', 64),
                     ApprovedBy = "release-owner",
                     InitiatedBy = "workflow-initiator",
                     ApprovalEvidence = "https://github.example/actions/runs/123",
@@ -44,6 +44,7 @@ public sealed class AppStoreConnectScreenshotApprovalTests
             Assert.Equal("release-owner", manifest.ApprovedBy);
             Assert.Equal("workflow-initiator", manifest.InitiatedBy);
             Assert.Equal("https://github.example/actions/runs/123", manifest.ApprovalEvidence);
+            Assert.Equal(new string('a', 64), manifest.SourceCommit);
             Assert.Equal(2, manifest.SchemaVersion);
             Assert.Equal("6778025328", manifest.AppId);
             Assert.Equal(ApplePlatform.iOS, manifest.Platform);
@@ -212,6 +213,168 @@ public sealed class AppStoreConnectScreenshotApprovalTests
                 expectedSourceCommit: ApprovedSourceCommit);
             Assert.False(changed.IsValid);
             Assert.Contains(changed.Messages, message => message.Contains("changed after approval", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Validate_MatchesRecursiveApprovalEntriesBySetRelativePath()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.ScreenshotApproval", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var screenshotFolder = Directory.CreateDirectory(Path.Combine(root.FullName, "screenshots"));
+            var phoneFolder = Directory.CreateDirectory(Path.Combine(screenshotFolder.FullName, "iPhone"));
+            var tabletFolder = Directory.CreateDirectory(Path.Combine(screenshotFolder.FullName, "iPad"));
+            var phone = Path.Combine(phoneFolder.FullName, "shot.png");
+            var tablet = Path.Combine(tabletFolder.FullName, "shot.png");
+            var png = Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII=");
+            File.WriteAllBytes(phone, png);
+            File.WriteAllBytes(tablet, png.Concat(new byte[] { 1 }).ToArray());
+            var spec = CreateSpec();
+            spec.ScreenshotSets[0].Filter = "*/shot.png";
+
+            var manifest = new AppStoreConnectScreenshotApprovalService().Create(
+                new AppStoreConnectScreenshotApprovalRequest
+                {
+                    Spec = spec,
+                    BaseDirectory = root.FullName,
+                    AllowedRoot = screenshotFolder.FullName,
+                    VersionString = "1.5.0",
+                    SourceCommit = ApprovedSourceCommit,
+                    ApprovedBy = "release-owner"
+                });
+            Assert.Equal(2, manifest.Screenshots.Length);
+            Assert.Contains(manifest.Screenshots, entry => entry.File == "screenshots/iPhone/shot.png");
+            Assert.Contains(manifest.Screenshots, entry => entry.File == "screenshots/iPad/shot.png");
+            File.WriteAllText(Path.Combine(root.FullName, "approval.json"), JsonSerializer.Serialize(manifest));
+
+            var result = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
+                spec,
+                root.FullName,
+                expectedSourceCommit: ApprovedSourceCommit);
+
+            Assert.True(result.IsValid, string.Join(Environment.NewLine, result.Messages));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData("deleted")]
+    [InlineData("filtered")]
+    [InlineData("limited")]
+    public void Validate_RequiresEveryApprovedScreenshotToRemainSelected(string mutation)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.ScreenshotApproval", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var screenshotFolder = Directory.CreateDirectory(Path.Combine(root.FullName, "screenshots"));
+            var first = Path.Combine(screenshotFolder.FullName, "01-home.png");
+            var second = Path.Combine(screenshotFolder.FullName, "02-rooms.png");
+            var png = Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII=");
+            File.WriteAllBytes(first, png);
+            File.WriteAllBytes(second, png.Concat(new byte[] { 1 }).ToArray());
+            var spec = CreateSpec();
+            var manifest = new AppStoreConnectScreenshotApprovalService().Create(
+                new AppStoreConnectScreenshotApprovalRequest
+                {
+                    Spec = spec,
+                    BaseDirectory = root.FullName,
+                    AllowedRoot = screenshotFolder.FullName,
+                    VersionString = "1.5.0",
+                    SourceCommit = ApprovedSourceCommit,
+                    ApprovedBy = "release-owner"
+                });
+            Assert.Equal(2, manifest.Screenshots.Length);
+            File.WriteAllText(
+                Path.Combine(root.FullName, "approval.json"),
+                JsonSerializer.Serialize(manifest));
+
+            switch (mutation)
+            {
+                case "deleted":
+                    File.Delete(second);
+                    break;
+                case "filtered":
+                    spec.ScreenshotSets[0].Filter = "01-*.png";
+                    break;
+                case "limited":
+                    spec.ScreenshotSets[0].MaxCount = 1;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(mutation));
+            }
+
+            var result = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
+                spec,
+                root.FullName,
+                expectedSourceCommit: ApprovedSourceCommit);
+
+            Assert.False(result.IsValid);
+            Assert.Contains(
+                result.Messages,
+                message => message.Contains("approved screenshot", StringComparison.OrdinalIgnoreCase) &&
+                           message.Contains("not selected", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Validate_UsesOwningVolumeCaseSemanticsForApprovalPaths()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.ScreenshotApproval", Guid.NewGuid().ToString("N")));
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparison(root.FullName) != StringComparison.OrdinalIgnoreCase)
+                return;
+
+            var screenshotFolder = Directory.CreateDirectory(Path.Combine(root.FullName, "Screenshots"));
+            var screenshotPath = Path.Combine(screenshotFolder.FullName, "01-Home.png");
+            File.WriteAllBytes(screenshotPath, Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII="));
+            var spec = CreateSpec();
+            spec.ScreenshotSets[0].Path = "Screenshots";
+            File.WriteAllText(
+                Path.Combine(root.FullName, "approval.json"),
+                JsonSerializer.Serialize(new AppStoreConnectScreenshotApprovalManifest
+                {
+                    AppId = spec.AppId,
+                    Platform = spec.Platform,
+                    VersionString = spec.VersionString!,
+                    SourceCommit = ApprovedSourceCommit,
+                    Locale = spec.Locale,
+                    ApprovedAt = DateTimeOffset.Parse("2026-08-12T00:00:00Z"),
+                    ApprovedBy = "release-owner",
+                    Screenshots =
+                    [
+                        new AppStoreConnectScreenshotApprovalEntry
+                        {
+                            ScreenshotDisplayType = spec.ScreenshotSets[0].ScreenshotDisplayType,
+                            File = "screenshots/01-home.png",
+                            Sha256 = ComputeSha256(screenshotPath),
+                            Width = 1,
+                            Height = 1
+                        }
+                    ]
+                }));
+
+            var result = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
+                spec,
+                root.FullName,
+                expectedSourceCommit: ApprovedSourceCommit);
+
+            Assert.True(result.IsValid, string.Join(Environment.NewLine, result.Messages));
         }
         finally
         {

@@ -42,8 +42,17 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
         foreach (var set in spec.ScreenshotSets)
             setResults.Add(ValidateSet(set, spec.Quality ?? new AppStoreConnectScreenshotQualitySpec(), baseDirectory));
 
+        var approvedFileSha256 = new Dictionary<string, string>(
+            FrameworkCompatibility.GetPathStringComparisonForPath(baseDirectory) == StringComparison.OrdinalIgnoreCase
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal);
         messages.AddRange(FindDuplicateDisplayTypes(spec.ScreenshotSets));
-        messages.AddRange(ValidateApprovalManifest(spec, baseDirectory, setResults, expectedSourceCommit));
+        messages.AddRange(ValidateApprovalManifest(
+            spec,
+            baseDirectory,
+            setResults,
+            expectedSourceCommit,
+            approvedFileSha256));
         var isValid = messages.Count == 0 && setResults.All(static set => set.IsValid);
 
         return new AppStoreConnectScreenshotSyncValidationResult
@@ -51,7 +60,10 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             ConfigPath = configPath ?? string.Empty,
             IsValid = isValid,
             Messages = messages.ToArray(),
-            ScreenshotSets = setResults.ToArray()
+            ScreenshotSets = setResults.ToArray(),
+            ApprovedFileSha256 = isValid && approvedFileSha256.Count > 0
+                ? approvedFileSha256
+                : null
         };
     }
 
@@ -59,7 +71,8 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
         AppStoreConnectScreenshotSyncSpec spec,
         string baseDirectory,
         IReadOnlyCollection<AppStoreConnectScreenshotSetSyncValidationResult> sets,
-        string? expectedSourceCommit)
+        string? expectedSourceCommit,
+        IDictionary<string, string> approvedFileSha256)
     {
         var quality = spec.Quality ?? new AppStoreConnectScreenshotQualitySpec();
         if (!quality.RequireApprovalManifest)
@@ -106,17 +119,14 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             messages.Add("Screenshot approval manifest ApprovedAt is required.");
         if (string.IsNullOrWhiteSpace(manifest.ApprovedBy))
             messages.Add("Screenshot approval manifest ApprovedBy is required.");
-        if (string.IsNullOrWhiteSpace(manifest.SourceCommit) ||
-            manifest.SourceCommit.Trim().Length != 40 ||
-            !manifest.SourceCommit.Trim().All(Uri.IsHexDigit))
+        if (!GitObjectId.IsFull(manifest.SourceCommit?.Trim()))
         {
-            messages.Add("Screenshot approval manifest SourceCommit must be an exact 40-character Git commit SHA.");
+            messages.Add("Screenshot approval manifest SourceCommit must be a full SHA-1 or SHA-256 Git commit object id.");
         }
         var normalizedExpectedSourceCommit = expectedSourceCommit?.Trim() ?? string.Empty;
-        if (normalizedExpectedSourceCommit.Length != 40 ||
-            !normalizedExpectedSourceCommit.All(Uri.IsHexDigit))
+        if (!GitObjectId.IsFull(normalizedExpectedSourceCommit))
         {
-            messages.Add("ExpectedSourceCommit must be an exact 40-character Git commit SHA when an approval manifest is required.");
+            messages.Add("ExpectedSourceCommit must be a full SHA-1 or SHA-256 Git commit object id when an approval manifest is required.");
         }
         else if (!string.Equals(manifest.SourceCommit, normalizedExpectedSourceCommit, StringComparison.OrdinalIgnoreCase))
         {
@@ -136,29 +146,75 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             messages.Add($"Screenshot approval manifest locale '{manifest.Locale}' does not match config locale '{spec.Locale}'.");
 
         var entries = manifest.Screenshots ?? Array.Empty<AppStoreConnectScreenshotApprovalEntry>();
+        var resolvedEntries = new List<(AppStoreConnectScreenshotApprovalEntry Entry, string Path)>();
+        foreach (var entry in entries)
+        {
+            if (string.IsNullOrWhiteSpace(entry.ScreenshotDisplayType) || string.IsNullOrWhiteSpace(entry.File))
+            {
+                messages.Add("Screenshot approval manifest entries require ScreenshotDisplayType and File.");
+                continue;
+            }
+
+            try
+            {
+                resolvedEntries.Add((entry, ResolvePath(baseDirectory, entry.File)));
+            }
+            catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
+            {
+                messages.Add($"Screenshot approval manifest path '{entry.File}' is invalid: {exception.Message}");
+            }
+        }
+
         foreach (var set in sets)
         {
             foreach (var file in set.Files)
             {
-                var entry = entries.FirstOrDefault(candidate =>
-                    string.Equals(candidate.ScreenshotDisplayType, set.ScreenshotDisplayType, StringComparison.OrdinalIgnoreCase) &&
-                    (string.Equals(Path.GetFileName(candidate.File), Path.GetFileName(file), StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(ResolvePath(baseDirectory, candidate.File), Path.GetFullPath(file), StringComparison.OrdinalIgnoreCase)));
-                if (entry is null)
+                var matches = resolvedEntries.Where(candidate =>
+                        string.Equals(
+                            candidate.Entry.ScreenshotDisplayType,
+                            set.ScreenshotDisplayType,
+                            StringComparison.OrdinalIgnoreCase) &&
+                        PathsEqual(candidate.Path, Path.GetFullPath(file)))
+                    .ToArray();
+                if (matches.Length == 0)
                 {
                     messages.Add($"Screenshot '{Path.GetFileName(file)}' in '{set.ScreenshotDisplayType}' is not present in the approval manifest.");
                     continue;
                 }
+                if (matches.Length > 1)
+                {
+                    messages.Add(
+                        $"Screenshot '{Path.GetFileName(file)}' in '{set.ScreenshotDisplayType}' appears more than once in the approval manifest.");
+                    continue;
+                }
 
+                var entry = matches[0].Entry;
                 var sha256 = ComputeSha256(file);
                 if (!string.Equals(entry.Sha256, sha256, StringComparison.OrdinalIgnoreCase))
                     messages.Add($"Screenshot '{Path.GetFileName(file)}' changed after approval (SHA-256 mismatch).");
+                else
+                    approvedFileSha256[Path.GetFullPath(file)] = entry.Sha256.Trim();
                 if (TryReadPngDimensions(file, out var width, out var height) &&
                     (entry.Width != width || entry.Height != height))
                 {
                     messages.Add(
                         $"Screenshot '{Path.GetFileName(file)}' dimensions {width}x{height} do not match approved {entry.Width}x{entry.Height}.");
                 }
+            }
+        }
+
+        foreach (var approved in resolvedEntries)
+        {
+            var selected = sets.Any(set =>
+                string.Equals(
+                    set.ScreenshotDisplayType,
+                    approved.Entry.ScreenshotDisplayType,
+                    StringComparison.OrdinalIgnoreCase) &&
+                set.Files.Any(file => PathsEqual(Path.GetFullPath(file), approved.Path)));
+            if (!selected)
+            {
+                messages.Add(
+                    $"Approved screenshot '{approved.Entry.File}' in '{approved.Entry.ScreenshotDisplayType}' is not selected by the current screenshot configuration.");
             }
         }
 
@@ -195,10 +251,7 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             }
             else
             {
-                files = Directory.GetFiles(folder, filter)
-                    .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
-                    .Take(maxCount)
-                    .ToArray();
+                files = AppStoreConnectScreenshotFileSelector.Select(folder, filter, maxCount);
                 if (files.Length == 0)
                     messages.Add($"No screenshots matched '{filter}' in '{folder}'.");
                 else if (quality.Enabled)
@@ -328,4 +381,15 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
         => System.IO.Path.IsPathRooted(path)
             ? System.IO.Path.GetFullPath(path)
             : System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDirectory, path));
+
+    private static bool PathsEqual(string left, string right)
+    {
+        var fullLeft = Path.GetFullPath(left);
+        var fullRight = Path.GetFullPath(right);
+        var comparison = FrameworkCompatibility.GetPathStringComparisonForPath(fullLeft) == StringComparison.OrdinalIgnoreCase ||
+                         FrameworkCompatibility.GetPathStringComparisonForPath(fullRight) == StringComparison.OrdinalIgnoreCase
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return string.Equals(fullLeft, fullRight, comparison);
+    }
 }

@@ -91,6 +91,50 @@ public sealed class AppleReleaseArtifactServiceTests
     }
 
     [Fact]
+    public void RemoveStaleArtifacts_preserves_case_equivalent_protected_path_on_case_insensitive_volume()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.AppleCleanup", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparison(root) != StringComparison.OrdinalIgnoreCase)
+                return;
+
+            var archiveRoot = Path.Combine(root, "archives");
+            var exportRoot = Path.Combine(root, "exports");
+            var accepted = Directory.CreateDirectory(Path.Combine(archiveRoot, "Accepted.xcarchive"));
+            Directory.CreateDirectory(exportRoot);
+            File.WriteAllText(Path.Combine(accepted.FullName, "payload"), "accepted notarization bytes");
+            Directory.SetLastWriteTimeUtc(accepted.FullName, DateTime.UtcNow.AddDays(-30));
+            var plan = new PowerForgeAppleReleasePlan
+            {
+                ProjectRoot = root,
+                Automation = new PowerForgeAppleReleaseAutomationOptions { ArtifactRetentionDays = 7 },
+                Apps =
+                [
+                    new PowerForgeAppleAppReleaseTargetPlan
+                    {
+                        ArchivePath = Path.Combine(archiveRoot, "App.xcarchive"),
+                        ExportPath = Path.Combine(exportRoot, "App")
+                    }
+                ]
+            };
+
+            var receipt = new AppleReleaseArtifactService(_ => long.MaxValue).RemoveStaleArtifacts(
+                plan,
+                [Path.Combine(archiveRoot, "accepted.xcarchive")]);
+
+            Assert.True(Directory.Exists(accepted.FullName));
+            Assert.Empty(receipt.RemovedPaths);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void RemoveCurrentArtifacts_RefusesSymbolicLinkArtifactRoots()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.AppleCleanup", Guid.NewGuid().ToString("N"));
@@ -343,7 +387,7 @@ public sealed class AppleReleaseArtifactServiceTests
     }
 
     [Fact]
-    public void RemoveCurrentArtifacts_UsesCaseSensitiveContainmentOnUnix()
+    public void RemoveCurrentArtifacts_UsesCaseSensitiveContainmentOnCaseSensitiveUnixVolume()
     {
         if (Path.DirectorySeparatorChar == '\\')
             return;
@@ -352,9 +396,11 @@ public sealed class AppleReleaseArtifactServiceTests
         var root = Path.Combine(parent, "Project");
         var caseVariant = Path.Combine(parent, "project");
         Directory.CreateDirectory(root);
-        Directory.CreateDirectory(caseVariant);
         try
         {
+            if (FrameworkCompatibility.GetPathStringComparison(root) != StringComparison.Ordinal)
+                return;
+            Directory.CreateDirectory(caseVariant);
             var plan = new PowerForgeAppleReleasePlan
             {
                 ProjectRoot = root,

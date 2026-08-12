@@ -9,7 +9,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class AppleAppArchiveServiceTests
+public sealed partial class AppleAppArchiveServiceTests
 {
     [Fact]
     public async Task CreateArchiveAsync_resolves_default_xcodebuild_to_system_binary_on_macOS()
@@ -278,6 +278,41 @@ public sealed class AppleAppArchiveServiceTests
     }
 
     [Fact]
+    public async Task UploadArchiveAsync_captures_direct_export_identity_at_process_boundary()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var archive = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcarchive"));
+            var exportPath = Path.Combine(root.FullName, "export");
+            var runner = new CapturingProcessRunner(beforeResult: request =>
+            {
+                var exportIndex = request.Arguments.ToList().IndexOf("-exportPath");
+                var artifact = Directory.CreateDirectory(Path.Combine(request.Arguments[exportIndex + 1], "App.app"));
+                File.WriteAllText(Path.Combine(artifact.FullName, "payload"), "signed export");
+            });
+
+            var result = await new AppleAppArchiveService(runner).UploadArchiveAsync(new AppleAppArchiveUploadRequest
+            {
+                ArchivePath = archive.FullName,
+                ExportPath = exportPath,
+                Destination = "export",
+                Method = "developer-id"
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(Path.Combine(exportPath, "App.app"), result.ExportArtifactPath);
+            Assert.Equal(
+                AppleNotarizationService.ComputeArtifactSha256(result.ExportArtifactPath!),
+                result.ExportArtifactSha256);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task UploadArchiveAsync_captures_build_upload_id_from_distribution_log()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -532,10 +567,12 @@ public sealed class AppleAppArchiveServiceTests
     private sealed class CapturingProcessRunner : IProcessRunner
     {
         private readonly ProcessRunResult _result;
+        private readonly Action<ProcessRunRequest>? _beforeResult;
 
-        public CapturingProcessRunner(ProcessRunResult? result = null)
+        public CapturingProcessRunner(ProcessRunResult? result = null, Action<ProcessRunRequest>? beforeResult = null)
         {
             _result = result ?? new ProcessRunResult(0, "ok", string.Empty, "xcodebuild", TimeSpan.FromMilliseconds(1), false);
+            _beforeResult = beforeResult;
         }
 
         public List<ProcessRunRequest> Requests { get; } = new();
@@ -543,6 +580,23 @@ public sealed class AppleAppArchiveServiceTests
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            request.InvokeStartBoundary();
+            _beforeResult?.Invoke(request);
+            if (_result.Succeeded)
+            {
+                for (var index = 0; index + 1 < request.Arguments.Count; index++)
+                {
+                    if (!request.Arguments[index].Equals("-archivePath", StringComparison.Ordinal) ||
+                        !request.Arguments.Contains("archive"))
+                    {
+                        continue;
+                    }
+
+                    var archive = Directory.CreateDirectory(request.Arguments[index + 1]);
+                    File.WriteAllText(Path.Combine(archive.FullName, "archive.bin"), "archive");
+                    break;
+                }
+            }
             return Task.FromResult(_result);
         }
     }

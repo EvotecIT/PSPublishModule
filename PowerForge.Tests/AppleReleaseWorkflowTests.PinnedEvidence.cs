@@ -273,12 +273,41 @@ public sealed partial class AppleReleaseWorkflowTests
         const string planSha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         try
         {
+            Directory.CreateDirectory(parent);
+            var authenticationKeyPath = Path.Combine(parent, "apple-receipt-auth.key");
+            var authenticationKey = Enumerable.Range(1, 32).Select(static value => (byte)value).ToArray();
+            File.WriteAllBytes(authenticationKeyPath, authenticationKey);
+            string Authenticate(string receiptSha256)
+            {
+                using var hmac = new HMACSHA256(authenticationKey);
+                return Convert.ToHexString(hmac.ComputeHash(System.Text.Encoding.ASCII.GetBytes(receiptSha256))).ToLowerInvariant();
+            }
             var output = Path.Combine(sandbox, "build", "powerforge", "apple");
             Directory.CreateDirectory(output);
+            var receiptHistory = Directory.CreateDirectory(Path.Combine(output, "receipts"));
             File.WriteAllText(Path.Combine(sandbox, "powerforge.release.json"),
-                """{ "AppleApps": { "ProjectRoot": ".", "Automation": { "ReceiptPath": "build/powerforge/apple/release-receipt.json", "PlanReceiptPath": "build/powerforge/apple/release-plan.json", "LockPath": "build/powerforge/apple/release.lock" }, "Apps": [ { "Enabled": true, "DistributionRoute": "AppStore", "ProjectPath": "Sample.xcodeproj" } ] } }""");
+                """{ "AppleApps": { "ProjectRoot": ".", "Automation": { "ReceiptPath": "build/powerforge/apple/release-receipt.json", "ReceiptHistoryPath": "build/powerforge/apple/receipts", "PlanReceiptPath": "build/powerforge/apple/release-plan.json", "LockPath": "build/powerforge/apple/release.lock" }, "Apps": [ { "Enabled": true, "DistributionRoute": "AppStore", "ProjectPath": "Sample.xcodeproj" } ] } }""");
             File.WriteAllText(Path.Combine(sandbox, ".gitignore"), "build/\n");
-            File.WriteAllText(Path.Combine(output, "release-receipt.json"), JsonSerializer.Serialize(new { sourceCommit = commit }));
+            const string latestSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+            File.WriteAllText(Path.Combine(output, "release-receipt.json"), JsonSerializer.Serialize(new {
+                schemaVersion = 6, attemptId = "00000000000000000000000000000000", receiptSha256 = latestSha,
+                sourceCommit = commit }));
+            File.WriteAllText(Path.Combine(receiptHistory.FullName, "prior-upload.json"), JsonSerializer.Serialize(new
+            {
+                schemaVersion = 5,
+                attemptId = "11111111111111111111111111111111",
+                receiptSha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                receiptAuthenticationSha256 = Authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+                sourceCommit = "89abcdef0123456789abcdef0123456789abcdef"
+            }));
+            File.WriteAllText(Path.Combine(receiptHistory.FullName, "local-status.json"), JsonSerializer.Serialize(new
+            {
+                schemaVersion = 5,
+                attemptId = "22222222222222222222222222222222",
+                receiptSha256 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                receiptAuthenticationSha256 = Authenticate("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
+                action = "Status"
+            }));
             File.WriteAllText(Path.Combine(output, "release-plan.json"), JsonSerializer.Serialize(new
             {
                 planOnly = true,
@@ -299,12 +328,14 @@ public sealed partial class AppleReleaseWorkflowTests
                 $script:gitPath = '/usr/bin/git'
                 $script:allowedConsumerEvidencePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
                 $consumer = [IO.Path]::GetFullPath($Consumer)
+                $env:POWERFORGE_APPLE_RECEIPT_AUTH_KEY_PATH = '{{authenticationKeyPath.Replace("'", "''", StringComparison.Ordinal)}}'
                 $ArgumentList = @('apple-release','Advance','--config','powerforge.release.json','--apple-expected-plan-sha256','{{planSha256}}')
                 function Invoke-GitText { param([string]$Root,[string[]]$Arguments); $o=@(& $script:gitPath -c core.quotePath=false -C $Root @Arguments 2>&1); if($LASTEXITCODE -ne 0){throw 'git failed'}; return ($o -join [Environment]::NewLine).Trim() }
                 function Get-OptionValue { param([string]$Option); $i=[Array]::IndexOf($ArgumentList,$Option); if($i -ge 0 -and $i+1 -lt $ArgumentList.Count){return $ArgumentList[$i+1]}; return $null }
                 function Resolve-OptionPath { param([string]$Value); if([IO.Path]::IsPathRooted($Value)){return [IO.Path]::GetFullPath($Value)}; return [IO.Path]::GetFullPath((Join-Path $consumer $Value)) }
                 function Resolve-PathFromBase { param([string]$BasePath,[string]$Value); if([IO.Path]::IsPathRooted($Value)){return [IO.Path]::GetFullPath($Value)}; return [IO.Path]::GetFullPath((Join-Path $BasePath $Value)) }
                 function Assert-UnlinkedPath { param([string]$Path,[string]$Name,[switch]$AllowMissingLeaf) }
+                function Assert-UnlinkedDirectory { param([string]$Path,[string]$Name) }
                 . $Support
                 Register-AppleAutomationEvidence -SourceCommit '{{commit}}'
                 Assert-ConsumerRepositoryContent
@@ -316,6 +347,23 @@ public sealed partial class AppleReleaseWorkflowTests
                     Register-AppleAutomationEvidence -SourceCommit '{{commit}}'
                     Assert-ConsumerRepositoryContent
                 }
+                Set-Content -LiteralPath (Join-Path $consumer 'build/powerforge/apple/receipts/injected.bin') -Value 'not a receipt'
+                try { Register-AppleAutomationEvidence -SourceCommit '{{commit}}'; throw 'Unsupported receipt history was accepted.' }
+                catch { if ($_.Exception.Message -notlike '*unsupported entry*') { throw } }
+                Remove-Item -LiteralPath (Join-Path $consumer 'build/powerforge/apple/receipts/injected.bin')
+                $latestReceipt = Join-Path $consumer 'build/powerforge/apple/release-receipt.json'
+                $savedLatestReceipt = Get-Content -LiteralPath $latestReceipt -Raw
+                Set-Content -LiteralPath $latestReceipt -Value '{"schemaVersion":3,"sourceCommit":"89abcdef0123456789abcdef0123456789abcdef"}'
+                Register-AppleAutomationEvidence -SourceCommit '{{commit}}'
+                Set-Content -LiteralPath $latestReceipt -Value $savedLatestReceipt -NoNewline
+                $historyDirectory = Join-Path $consumer 'build/powerforge/apple/receipts'
+                $historyBackup = Join-Path (Split-Path -Parent $consumer) 'receipts-backup'
+                Move-Item -LiteralPath $historyDirectory -Destination $historyBackup
+                Set-Content -LiteralPath $latestReceipt -Value '{"schemaVersion":4,"attemptId":"ffffffffffffffffffffffffffffffff","receiptSha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","sourceCommit":"{{commit}}"}'
+                try { Register-AppleAutomationEvidence -SourceCommit '{{commit}}'; throw 'Forged self-hashed receipt was accepted.' }
+                catch { if ($_.Exception.Message -notlike '*without a supported current receipt chain*') { throw } }
+                Move-Item -LiteralPath $historyBackup -Destination $historyDirectory
+                Set-Content -LiteralPath $latestReceipt -Value $savedLatestReceipt -NoNewline
                 Set-Content -LiteralPath (Join-Path $consumer 'build/powerforge/apple/injected.bin') -Value 'not reviewed'
                 try { Assert-ConsumerRepositoryContent; throw 'Unreviewed file was accepted.' }
                 catch { if ($_.Exception.Message -notlike '*non-reviewed content*') { throw }; 'PASS' }

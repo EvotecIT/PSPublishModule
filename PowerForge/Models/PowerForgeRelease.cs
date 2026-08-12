@@ -7,6 +7,12 @@ namespace PowerForge;
 /// </summary>
 internal sealed class PowerForgeReleaseSpec
 {
+    [JsonIgnore]
+    internal string? LoadedConfigurationPath { get; set; }
+
+    [JsonIgnore]
+    internal string? LoadedConfigurationSha256 { get; set; }
+
     [JsonPropertyName("$schema")]
     public string? Schema { get; set; }
 
@@ -37,6 +43,8 @@ internal sealed class PowerForgeReleaseRequest
     internal string? ResolvedReleaseVersion { get; set; }
     internal IPowerForgeReleaseProgressReporter? Progress { get; set; }
     internal CancellationToken CancellationToken { get; set; }
+    internal string? ExactConfigurationContent { get; set; }
+    internal string? LoadedConfigurationSha256 { get; set; }
 
     public string ConfigPath { get; set; } = string.Empty;
 
@@ -58,6 +66,9 @@ internal sealed class PowerForgeReleaseRequest
     public bool SkipAppleApps { get; set; }
 
     internal bool CheckpointAppleApps { get; set; }
+
+    /// <summary>Build Apple archives from a private detached exact-commit source worktree.</summary>
+    internal bool RequireImmutableAppleSourceSnapshot { get; set; }
 
     public bool? PublishNuget { get; set; }
 
@@ -226,7 +237,13 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? AppleExpectedPlanSha256 { get; set; }
 
+    /// <summary>Checkpoint-only archive hashes keyed by stable Apple target name.</summary>
+    internal Dictionary<string, string> AppleExpectedArchiveSha256ByTarget { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public bool AppleActionConfirmed { get; set; }
+
+    /// <summary>Explicitly authorize deliberate recovery after independently verifying the remote Apple operation.</summary>
+    public bool AppleAdoptExistingBuild { get; set; }
 
     public bool? AppleResume { get; set; }
 
@@ -503,6 +520,8 @@ internal sealed class PowerForgeAppleReleasePlan
 
     public string ReceiptPath { get; set; } = string.Empty;
 
+    public string ReceiptHistoryPath { get; set; } = string.Empty;
+
     public string PlanReceiptPath { get; set; } = string.Empty;
 
     public string LockPath { get; set; } = string.Empty;
@@ -513,6 +532,10 @@ internal sealed class PowerForgeAppleReleasePlan
 
     public string? SourceCommit { get; set; }
 
+    public bool RequireImmutableSourceSnapshot { get; set; }
+
+    public bool AdoptExistingBuild { get; set; }
+
     public bool Archive { get; set; }
 
     public bool Upload { get; set; }
@@ -522,6 +545,14 @@ internal sealed class PowerForgeAppleReleasePlan
     public string? ScreenshotConfigPath { get; set; }
 
     public string[] ScreenshotConfigPaths { get; set; } = Array.Empty<string>();
+
+    public Dictionary<string, string> ApprovedMutationInputFilesSha256 { get; set; } = new(StringComparer.Ordinal);
+
+    internal Dictionary<string, string> ApprovedMutationInputContents { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    internal string? ExactSourceConfigPath { get; set; }
+
+    internal string? ExactSourceConfigSha256 { get; set; }
 
     public string? MetadataConfigPath { get; set; }
 
@@ -642,6 +673,12 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
 
     public string ExportPath { get; set; } = string.Empty;
 
+    /// <summary>SHA-256 of the exact retained archive approved by a prior build checkpoint.</summary>
+    public string? ExpectedArchiveSha256 { get; set; }
+
+    /// <summary>SHA-256 of the exact remote screenshot inventory approved for destructive replacement.</summary>
+    public string? ExpectedScreenshotInventorySha256 { get; set; }
+
     public string? TeamId { get; set; }
 
     public bool Upload { get; set; }
@@ -690,6 +727,16 @@ internal sealed class PowerForgeAppleAppReleaseResult
     public AppStoreConnectGovernancePlan? Governance { get; set; }
 
     public bool ResumedExistingBuild { get; set; }
+
+    public bool AdoptedExistingBuild { get; set; }
+
+    public string? ArchiveSha256 { get; set; }
+
+    public string? UploadAttestationAttemptId { get; set; }
+
+    public string? ResumedUploadAttestationAttemptId { get; set; }
+
+    public PowerForgeAppleReleaseTargetReceipt? ResumedUploadAttestation { get; set; }
 
     public bool ResumedAcceptedNotarization { get; set; }
 

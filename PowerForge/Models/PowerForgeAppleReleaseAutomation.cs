@@ -62,6 +62,9 @@ internal sealed class PowerForgeAppleReleaseAutomationOptions
     /// <summary>Receipt path relative to the Apple project root.</summary>
     public string ReceiptPath { get; set; } = "build/powerforge/apple/release-receipt.json";
 
+    /// <summary>Directory containing immutable Apple release attempt receipts.</summary>
+    public string ReceiptHistoryPath { get; set; } = "build/powerforge/apple/receipts";
+
     /// <summary>Plan receipt path relative to the Apple project root.</summary>
     public string PlanReceiptPath { get; set; } = "build/powerforge/apple/release-plan.json";
 
@@ -98,7 +101,7 @@ internal sealed class PowerForgeAppleReleaseAutomationOptions
     /// <summary>Remove stale release artifacts before archive creation.</summary>
     public bool CleanupBeforeArchive { get; set; }
 
-    /// <summary>Remove the exact local archive/export after the remote build is valid.</summary>
+    /// <summary>Remove expired local archive/export artifacts after the remote build is valid.</summary>
     public bool CleanupAfterProcessing { get; set; }
 
     /// <summary>Age threshold used by bounded stale-artifact cleanup.</summary>
@@ -138,7 +141,10 @@ internal sealed class PowerForgeAppleDirectDistributionOptions
 /// </summary>
 internal sealed class PowerForgeAppleReleaseReceipt
 {
-    public int SchemaVersion { get; set; } = 3;
+    public int SchemaVersion { get; set; } = 6;
+
+    /// <summary>Unique immutable attempt identity.</summary>
+    public string? AttemptId { get; set; }
 
     public PowerForgeAppleReleaseAction Action { get; set; }
 
@@ -146,16 +152,40 @@ internal sealed class PowerForgeAppleReleaseReceipt
 
     public bool PlanOnly { get; set; }
 
+    /// <summary>Durability checkpoint represented by this immutable receipt.</summary>
+    public string? OperationPhase { get; set; }
+
     public DateTimeOffset CheckedAt { get; set; } = DateTimeOffset.UtcNow;
 
     /// <summary>SHA-256 binding the stable action, source, target, and observed Apple state represented by a plan.</summary>
     public string? PlanSha256 { get; set; }
+
+    /// <summary>Canonical SHA-256 of effective mutation flags and every local payload consumed by this plan.</summary>
+    public string? MutationInputsSha256 { get; set; }
+
+    /// <summary>Project-relative content hashes for configuration and asset files consumed by this plan.</summary>
+    public Dictionary<string, string> MutationInputFiles { get; set; } = new(StringComparer.Ordinal);
 
     public bool Success { get; set; }
 
     public string? ErrorMessage { get; set; }
 
     public string? ReceiptPath { get; set; }
+
+    /// <summary>Project-relative immutable history path for this attempt.</summary>
+    public string? HistoryPath { get; set; }
+
+    /// <summary>Canonical SHA-256 of the previous immutable attempt receipt.</summary>
+    public string? PreviousReceiptSha256 { get; set; }
+
+    /// <summary>Canonical SHA-256 of this receipt with this property omitted.</summary>
+    public string? ReceiptSha256 { get; set; }
+
+    /// <summary>Legacy schema-5 machine-local HMAC retained only for reading historical receipts; it is not recovery authority.</summary>
+    public string? ReceiptAuthenticationSha256 { get; set; }
+
+    /// <summary>True when the operator explicitly authorized recovery after independently verifying the remote Apple operation.</summary>
+    public bool AdoptExistingBuild { get; set; }
 
     public PowerForgeAppleVersionReceipt? Versioning { get; set; }
 
@@ -219,6 +249,18 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public ApplePlatform Platform { get; set; }
 
+    public string Configuration { get; set; } = "Release";
+
+    public string? ProjectPath { get; set; }
+
+    public bool IsWorkspace { get; set; }
+
+    public string? Scheme { get; set; }
+
+    public AppleArchiveVariant ArchiveVariant { get; set; }
+
+    public string? Destination { get; set; }
+
     public AppleDistributionRoute DistributionRoute { get; set; }
 
     public AppleProductRole ProductRole { get; set; }
@@ -267,6 +309,8 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public string[]? ScreenshotDeliveryStates { get; set; }
 
+    public string? ScreenshotInventorySha256 { get; set; }
+
     public AppStoreConnectReleaseReadinessCheck[]? ReadinessChecks { get; set; }
 
     public string? ReadinessSha256 { get; set; }
@@ -283,11 +327,29 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public bool UploadPerformed { get; set; }
 
+    /// <summary>Project-relative archive path used for an upload attempt.</summary>
+    public string? ArchivePath { get; set; }
+
+    /// <summary>SHA-256 of the exact local archive used for an upload attempt.</summary>
+    public string? ArchiveSha256 { get; set; }
+
+    /// <summary>Attempt id that originally attested the uploaded archive.</summary>
+    public string? UploadAttestationAttemptId { get; set; }
+
+    /// <summary>SHA-256 binding the effective archive, signing, export, and App Store upload controls.</summary>
+    public string? UploadExecutionSha256 { get; set; }
+
     public string? DirectArtifactPath { get; set; }
 
     public string? DirectArtifactSha256 { get; set; }
 
+    /// <summary>SHA-256 binding the effective archive, export, signing, and notarization controls that produced the direct artifact.</summary>
+    public string? DirectExecutionSha256 { get; set; }
+
     public string? NotarizationSubmissionId { get; set; }
+
+    /// <summary>SHA-256 of the exact file accepted by Apple's notary service.</summary>
+    public string? NotarizationSubmissionSha256 { get; set; }
 
     public string? NotarizationStatus { get; set; }
 
@@ -300,6 +362,9 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
     public bool ResumedAcceptedNotarization { get; set; }
 
     public bool ResumedExistingBuild { get; set; }
+
+    /// <summary>True when an existing remote build was adopted without a matching local upload attestation.</summary>
+    public bool AdoptedExistingBuild { get; set; }
 
     public string[] SkippedSteps { get; set; } = Array.Empty<string>();
 

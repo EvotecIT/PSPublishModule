@@ -35,6 +35,9 @@ public sealed class AppleAppArchiveRequest
     /// <summary>xcodebuild executable name or path.</summary>
     public string XcodeBuildExecutable { get; set; } = "xcodebuild";
 
+    /// <summary>Resolve, validate, and monitor the exact Swift package checkouts consumed by this archive.</summary>
+    public bool RequireExactPackageSnapshot { get; set; }
+
     /// <summary>Allows Xcode to create or update signing assets during archive.</summary>
     public bool AllowProvisioningUpdates { get; set; } = true;
 
@@ -65,6 +68,9 @@ public sealed class AppleAppArchiveResult
     /// <summary>Resolved xcodebuild destination.</summary>
     public string Destination { get; set; } = string.Empty;
 
+    /// <summary>SHA-256 of the exact archive bytes observed immediately after xcodebuild completed.</summary>
+    public string? ArchiveSha256 { get; set; }
+
     /// <summary>xcodebuild process result.</summary>
     public ProcessRunResult ProcessResult { get; set; } = new(0, string.Empty, string.Empty, "xcodebuild", TimeSpan.Zero, false);
 
@@ -77,6 +83,11 @@ public sealed class AppleAppArchiveResult
 /// </summary>
 public sealed class AppleAppArchiveUploadRequest
 {
+    internal Action? RemoteMutationStarted { get; set; }
+
+    internal void InvokeRemoteMutationStarted()
+        => RemoteMutationStarted?.Invoke();
+
     /// <summary>Path to the .xcarchive to upload.</summary>
     public string ArchivePath { get; set; } = string.Empty;
 
@@ -128,6 +139,9 @@ public sealed class AppleAppArchiveUploadRequest
     /// <summary>xcodebuild executable name or path.</summary>
     public string XcodeBuildExecutable { get; set; } = "xcodebuild";
 
+    /// <summary>Requires the fixed system xcodebuild and an explicit environment allowlist.</summary>
+    public bool RequireTrustedSystemTools { get; set; }
+
     /// <summary>Additional structured arguments appended to the export command.</summary>
     public string[] AdditionalArguments { get; set; } = Array.Empty<string>();
 
@@ -154,6 +168,12 @@ public sealed class AppleAppArchiveUploadResult
 
     /// <summary>Build-upload id accepted by App Store Connect, when reported by Xcode delivery.</summary>
     public string? BuildUploadId { get; set; }
+
+    /// <summary>Developer ID artifact path observed immediately when xcodebuild export completed.</summary>
+    public string? ExportArtifactPath { get; set; }
+
+    /// <summary>SHA-256 of the exact Developer ID artifact observed immediately when xcodebuild export completed.</summary>
+    public string? ExportArtifactSha256 { get; set; }
 
     /// <summary>xcodebuild process result.</summary>
     public ProcessRunResult ProcessResult { get; set; } = new(0, string.Empty, string.Empty, "xcodebuild", TimeSpan.Zero, false);

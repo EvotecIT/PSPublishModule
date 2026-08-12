@@ -3,7 +3,7 @@ namespace PowerForge;
 /// <summary>
 /// Syncs local screenshot folders to App Store Connect screenshot sets.
 /// </summary>
-public sealed class AppStoreConnectScreenshotSyncService
+public sealed partial class AppStoreConnectScreenshotSyncService
 {
     private const int AppleScreenshotSetLimit = 10;
 
@@ -19,6 +19,63 @@ public sealed class AppStoreConnectScreenshotSyncService
     }
 
     /// <summary>
+    /// Re-reads and compares the exact ordered remote screenshot inventory without performing any remote mutation.
+    /// </summary>
+    internal async Task ValidateExpectedRemoteInventoryAsync(
+        AppStoreConnectScreenshotSyncSpec spec,
+        string expectedInventorySha256,
+        CancellationToken cancellationToken = default)
+    {
+        if (spec is null)
+            throw new ArgumentNullException(nameof(spec));
+        if (string.IsNullOrWhiteSpace(expectedInventorySha256))
+            throw new ArgumentException("Expected screenshot inventory SHA-256 is required.", nameof(expectedInventorySha256));
+
+        var version = !string.IsNullOrWhiteSpace(spec.VersionId)
+            ? new AppStoreConnectVersionInfo
+            {
+                Id = spec.VersionId!.Trim(),
+                VersionString = spec.VersionString,
+                Platform = spec.Platform.ToString()
+            }
+            : (await _client.GetVersionsAsync(
+                spec.AppId,
+                spec.VersionString,
+                spec.Platform,
+                limit: 10,
+                cancellationToken).ConfigureAwait(false)).FirstOrDefault()
+                ?? throw new InvalidOperationException($"App Store version '{spec.VersionString}' was not found before screenshot inventory validation.");
+        var localization = (await _client.GetVersionLocalizationsAsync(
+            version.Id,
+            spec.Locale,
+            limit: 10,
+            cancellationToken).ConfigureAwait(false)).FirstOrDefault()
+            ?? throw new InvalidOperationException($"Localization '{spec.Locale}' was not found before screenshot inventory validation.");
+        var existingSets = await _client.GetScreenshotSetsAsync(
+            localization.Id,
+            limit: 200,
+            cancellationToken).ConfigureAwait(false);
+        var remoteInventory = new List<AppStoreConnectReleaseScreenshotSetReadiness>();
+        foreach (var sourceSet in spec.ScreenshotSets)
+        {
+            var displayType = sourceSet.ScreenshotDisplayType.Trim();
+            var set = existingSets.FirstOrDefault(candidate =>
+                string.Equals(candidate.ScreenshotDisplayType, displayType, StringComparison.OrdinalIgnoreCase));
+            var screenshots = set is null
+                ? Array.Empty<AppStoreConnectScreenshotInfo>()
+                : await _client.GetScreenshotsAsync(set.Id, limit: 200, cancellationToken).ConfigureAwait(false);
+            remoteInventory.Add(CreateRemoteInventorySet(displayType, set?.Id, screenshots));
+        }
+
+        var actualInventorySha256 = AppStoreConnectScreenshotInventory.ComputeSha256(remoteInventory);
+        if (!actualInventorySha256.Equals(expectedInventorySha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "App Store Connect screenshots changed after Apple plan approval. Review a new exact screenshot replacement plan before any remote release mutation.");
+        }
+    }
+
+    /// <summary>
     /// Syncs screenshots from local folders to App Store Connect.
     /// </summary>
     /// <param name="request">Sync request.</param>
@@ -27,6 +84,12 @@ public sealed class AppStoreConnectScreenshotSyncService
     public async Task<AppStoreConnectScreenshotSyncResult> SyncAsync(
         AppStoreConnectScreenshotSyncRequest request,
         CancellationToken cancellationToken = default)
+    {
+        using var screenshotSnapshot = CreateSnapshot(request);
+        return await SyncAsync(request, screenshotSnapshot, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal ScreenshotSnapshot CreateSnapshot(AppStoreConnectScreenshotSyncRequest request)
     {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
@@ -64,9 +127,45 @@ public sealed class AppStoreConnectScreenshotSyncService
                 $"Screenshot preflight failed: {string.Join(" ", messages)}");
         }
 
-        var preflightedSets = spec.ScreenshotSets
+        return CreateSnapshot(request, validation);
+    }
+
+    internal ScreenshotSnapshot CreateSnapshot(
+        AppStoreConnectScreenshotSyncRequest request,
+        AppStoreConnectScreenshotSyncValidationResult validation)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (validation is null)
+            throw new ArgumentNullException(nameof(validation));
+        if (!validation.IsValid)
+            throw new InvalidOperationException("A valid screenshot preflight is required before immutable snapshot creation.");
+
+        var spec = request.Spec ?? throw new ArgumentException("Spec is required.", nameof(request));
+        var sourceSets = spec.ScreenshotSets
             .Select(setSpec => PreflightScreenshotSet(request.BaseDirectory, setSpec))
             .ToArray();
+        return CreateScreenshotSnapshot(
+            sourceSets,
+            MergeExpectedFileSha256(
+                request.BaseDirectory,
+                request.ExpectedFileSha256,
+                validation.ApprovedFileSha256));
+    }
+
+    internal async Task<AppStoreConnectScreenshotSyncResult> SyncAsync(
+        AppStoreConnectScreenshotSyncRequest request,
+        ScreenshotSnapshot screenshotSnapshot,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (screenshotSnapshot is null)
+            throw new ArgumentNullException(nameof(screenshotSnapshot));
+
+        var spec = request.Spec ?? throw new ArgumentException("Spec is required.", nameof(request));
+        screenshotSnapshot.ValidateUnchanged();
+        var preflightedSets = screenshotSnapshot.Sets;
 
         var version = !string.IsNullOrWhiteSpace(spec.VersionId)
             ? new AppStoreConnectVersionInfo
@@ -104,7 +203,7 @@ public sealed class AppStoreConnectScreenshotSyncService
             if (set is not null)
                 existingScreenshots = await _client.GetScreenshotsAsync(set.Id, limit: 200, cancellationToken).ConfigureAwait(false);
 
-            var missingFiles = FindMissingFiles(preflightedSet.Files, existingScreenshots);
+            var missingFiles = FindMissingFiles(preflightedSet.Files, existingScreenshots, screenshotSnapshot);
             if (!request.ReplaceExisting && existingScreenshots.Length + missingFiles.Length > AppleScreenshotSetLimit)
             {
                 throw new InvalidOperationException(
@@ -115,6 +214,20 @@ public sealed class AppStoreConnectScreenshotSyncService
             plannedSets.Add(new PlannedScreenshotSet(preflightedSet, set, existingScreenshots));
         }
 
+        if (request.ReplaceExisting && !string.IsNullOrWhiteSpace(request.ExpectedRemoteInventorySha256))
+        {
+            var remoteInventory = plannedSets.Select(static plannedSet => CreateRemoteInventorySet(
+                plannedSet.Preflighted.ScreenshotDisplayType,
+                plannedSet.ScreenshotSet?.Id,
+                plannedSet.ExistingScreenshots));
+            var actualInventorySha256 = AppStoreConnectScreenshotInventory.ComputeSha256(remoteInventory);
+            if (!actualInventorySha256.Equals(request.ExpectedRemoteInventorySha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "App Store Connect screenshots changed after Apple plan approval. Review a new exact screenshot replacement plan before deleting remote assets.");
+            }
+        }
+
         var results = new List<AppStoreConnectScreenshotSetSyncResult>();
         foreach (var plannedSet in plannedSets)
         {
@@ -122,39 +235,39 @@ public sealed class AppStoreConnectScreenshotSyncService
             var set = plannedSet.ScreenshotSet;
             if (set is null)
             {
+                screenshotSnapshot.ValidateUnchanged();
                 set = await _client.CreateScreenshotSetAsync(localization.Id, displayType, cancellationToken).ConfigureAwait(false);
                 existingSets = existingSets.Concat(new[] { set }).ToArray();
             }
 
             var deletedCount = 0;
-            var filesToUpload = FindMissingFiles(plannedSet.Preflighted.Files, plannedSet.ExistingScreenshots);
+            var filesToUpload = FindMissingFiles(plannedSet.Preflighted.Files, plannedSet.ExistingScreenshots, screenshotSnapshot);
             if (request.ReplaceExisting)
             {
-                var retainedIds = new HashSet<string>(StringComparer.Ordinal);
-                var prefixLength = 0;
-                while (prefixLength < plannedSet.Preflighted.Files.Length &&
-                       prefixLength < plannedSet.ExistingScreenshots.Length)
+                // MD5 is an App Store Connect transport field, not approval evidence. A destructive
+                // replacement must create fresh asset identities for every approved immutable byte set.
+                foreach (var screenshot in plannedSet.ExistingScreenshots)
                 {
-                    var expected = ComputeSourceChecksum(plannedSet.Preflighted.Files[prefixLength]);
-                    var existing = plannedSet.ExistingScreenshots[prefixLength];
-                    if (!string.Equals(expected, existing.SourceFileChecksum, StringComparison.OrdinalIgnoreCase))
-                        break;
-                    retainedIds.Add(existing.Id);
-                    prefixLength++;
-                }
-
-                foreach (var screenshot in plannedSet.ExistingScreenshots.Where(screenshot => !retainedIds.Contains(screenshot.Id)))
-                {
+                    screenshotSnapshot.ValidateUnchanged();
                     await _client.DeleteScreenshotAsync(screenshot.Id, cancellationToken).ConfigureAwait(false);
                     deletedCount++;
                 }
 
-                filesToUpload = plannedSet.Preflighted.Files.Skip(prefixLength).ToArray();
+                filesToUpload = plannedSet.Preflighted.Files;
             }
 
             var uploaded = new List<AppStoreConnectScreenshotUploadResult>();
             foreach (var file in filesToUpload)
-                uploaded.Add(await _client.UploadScreenshotAsync(set.Id, file, cancellationToken).ConfigureAwait(false));
+            {
+                screenshotSnapshot.ValidateUnchanged();
+                var upload = await _client.UploadScreenshotAsync(
+                    set.Id,
+                    file,
+                    screenshotSnapshot.GetSha256(file),
+                    cancellationToken).ConfigureAwait(false);
+                upload.FilePath = screenshotSnapshot.GetSourcePath(file);
+                uploaded.Add(upload);
+            }
 
             results.Add(new AppStoreConnectScreenshotSetSyncResult
             {
@@ -164,6 +277,35 @@ public sealed class AppStoreConnectScreenshotSyncService
                 DeletedCount = deletedCount,
                 Uploaded = uploaded.ToArray()
             });
+
+            if (request.ReplaceExisting)
+            {
+                var finalScreenshots = await _client.GetScreenshotsAsync(
+                    set.Id,
+                    limit: 200,
+                    cancellationToken).ConfigureAwait(false);
+                var expectedChecksums = plannedSet.Preflighted.Files
+                    .Select(screenshotSnapshot.GetMd5)
+                    .ToArray();
+                var finalChecksums = finalScreenshots
+                    .Select(static screenshot => screenshot.SourceFileChecksum?.Trim() ?? string.Empty)
+                    .ToArray();
+                var expectedIds = uploaded
+                    .Select(static upload => upload.Screenshot.Id)
+                    .ToArray();
+                var finalIds = finalScreenshots
+                    .Select(static screenshot => screenshot.Id)
+                    .ToArray();
+                if (finalIds.Length != expectedIds.Length ||
+                    !finalIds.SequenceEqual(expectedIds, StringComparer.Ordinal) ||
+                    finalChecksums.Length != expectedChecksums.Length ||
+                    !finalChecksums.SequenceEqual(expectedChecksums, StringComparer.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"App Store Connect screenshot inventory for '{displayType}' changed during replacement. " +
+                        "The final remote inventory does not exactly match the approved screenshot bytes; review and run a new plan before submission.");
+                }
+            }
         }
 
         return new AppStoreConnectScreenshotSyncResult
@@ -174,6 +316,26 @@ public sealed class AppStoreConnectScreenshotSyncService
         };
     }
 
+    private static AppStoreConnectReleaseScreenshotSetReadiness CreateRemoteInventorySet(
+        string displayType,
+        string? screenshotSetId,
+        AppStoreConnectScreenshotInfo[] screenshots)
+        => new()
+        {
+            ScreenshotDisplayType = displayType,
+            ScreenshotSetId = screenshotSetId,
+            Count = screenshots.Length,
+            Screenshots = screenshots.Select(static screenshot =>
+                new AppStoreConnectReleaseScreenshotAssetReadiness
+                {
+                    Id = screenshot.Id,
+                    FileName = screenshot.FileName,
+                    FileSize = screenshot.FileSize,
+                    SourceFileChecksum = screenshot.SourceFileChecksum,
+                    AssetDeliveryState = screenshot.AssetDeliveryState
+                }).ToArray()
+        };
+
     private static string ComputeSourceChecksum(string filePath)
     {
         using var stream = File.OpenRead(filePath);
@@ -181,10 +343,168 @@ public sealed class AppStoreConnectScreenshotSyncService
         return BitConverter.ToString(md5.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
     }
 
+    private static ScreenshotSnapshot CreateScreenshotSnapshot(
+        IReadOnlyCollection<PreflightedScreenshotSet> sourceSets,
+        IReadOnlyDictionary<string, string>? expectedFileSha256)
+    {
+        var comparer = sourceSets.Any(set =>
+                FrameworkCompatibility.GetPathStringComparisonForPath(set.Folder) == StringComparison.OrdinalIgnoreCase)
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var expected = expectedFileSha256 is null
+            ? null
+            : expectedFileSha256.ToDictionary(
+                static value => value.Key,
+                static value => value.Value,
+                comparer);
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge", "appstore-screenshot-snapshot", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+#endif
+        try
+        {
+            var approvedScreenshots = expected is null
+                ? null
+                : SelectApprovedScreenshotFiles(sourceSets, expected, comparer);
+            var mappings = new Dictionary<string, string>(comparer);
+            var approvedSnapshotSha256 = new Dictionary<string, string>(comparer);
+            var consumedApprovedFiles = new HashSet<string>(comparer);
+            var sets = sourceSets.Select((set, setIndex) =>
+            {
+                var setRoot = Path.Combine(root, setIndex.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                Directory.CreateDirectory(setRoot);
+                var files = set.Files.Select(sourcePath =>
+                {
+                    var source = Path.GetFullPath(sourcePath);
+                    string? expectedSha256 = null;
+                    if (approvedScreenshots is not null &&
+                        !approvedScreenshots.TryGetValue(source, out expectedSha256))
+                    {
+                        throw new InvalidOperationException(
+                            $"Screenshot '{source}' was not part of the approved Apple release plan. Review a new exact plan before upload.");
+                    }
+                    consumedApprovedFiles.Add(source);
+
+                    var relativePath = AppStoreConnectScreenshotFileSelector.GetRelativePath(set.Folder, source)
+                        ?? throw new InvalidOperationException(
+                            $"Screenshot '{source}' escapes its configured screenshot set folder '{set.Folder}'.");
+                    var snapshotPath = Path.GetFullPath(Path.Combine(
+                        setRoot,
+                        relativePath.Replace('/', Path.DirectorySeparatorChar)));
+                    var snapshotDirectory = Path.GetDirectoryName(snapshotPath)
+                        ?? throw new InvalidOperationException($"Screenshot snapshot path has no parent directory: {snapshotPath}");
+                    Directory.CreateDirectory(snapshotDirectory);
+                    File.Copy(source, snapshotPath, overwrite: false);
+                    mappings[snapshotPath] = source;
+                    if (expectedSha256 is not null)
+                        approvedSnapshotSha256[snapshotPath] = expectedSha256;
+                    return snapshotPath;
+                }).ToArray();
+                return new PreflightedScreenshotSet(
+                    set.ScreenshotDisplayType,
+                    set.Folder,
+                    set.Filter,
+                    set.MaxCount,
+                    files);
+            }).ToArray();
+            if (approvedScreenshots is not null)
+            {
+                var missing = approvedScreenshots.Keys
+                    .Where(path => !consumedApprovedFiles.Contains(Path.GetFullPath(path)))
+                    .OrderBy(static path => path, comparer)
+                    .ToArray();
+                if (missing.Length > 0)
+                {
+                    throw new InvalidOperationException(
+                        "Approved screenshots disappeared before the immutable upload snapshot was created: " +
+                        string.Join(", ", missing));
+                }
+            }
+            var mutationMonitor = new AppleReleaseSourceMutationMonitor(
+                root,
+                "private approved screenshot snapshot",
+                "screenshot selection and upload",
+                "Discard the screenshot operation and recapture the approved screenshot set.",
+                enableImmediately: false);
+            try
+            {
+                var identity = mutationMonitor.CaptureExpectedProducerOutput(
+                    () => CaptureScreenshotSnapshotIdentity(root, sets),
+                    "immutable screenshot snapshot creation");
+                foreach (var approved in approvedSnapshotSha256)
+                {
+                    var actualSha256 = identity.Files[approved.Key].Sha256;
+                    if (!actualSha256.Equals(approved.Value, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException(
+                            $"Screenshot '{mappings[approved.Key]}' changed after Apple plan approval. Review the exact replacement bytes before upload.");
+                    }
+                }
+                var sha256 = identity.Files.ToDictionary(
+                    static pair => pair.Key,
+                    static pair => pair.Value.Sha256,
+                    comparer);
+                var md5 = identity.Files.ToDictionary(
+                    static pair => pair.Key,
+                    static pair => pair.Value.Md5,
+                    comparer);
+                return new ScreenshotSnapshot(root, sets, mappings, sha256, md5, identity.Digest, mutationMonitor);
+            }
+            catch
+            {
+                mutationMonitor.Dispose();
+                throw;
+            }
+        }
+        catch
+        {
+            try { AppleArtifactCopy.DeleteOwnedDirectory(root); } catch { /* best effort private cleanup */ }
+            throw;
+        }
+    }
+
+    private static Dictionary<string, string> SelectApprovedScreenshotFiles(
+        IReadOnlyCollection<PreflightedScreenshotSet> sourceSets,
+        IReadOnlyDictionary<string, string> expected,
+        StringComparer pathComparer)
+    {
+        var selected = new Dictionary<string, string>(pathComparer);
+        foreach (var set in sourceSets)
+        {
+            var approved = expected
+                .Select(item => new
+                {
+                    Item = item,
+                    RelativePath = AppStoreConnectScreenshotFileSelector.GetRelativePath(set.Folder, item.Key)
+                })
+                .Where(static item => item.RelativePath is not null)
+                .Where(item => AppStoreConnectScreenshotFileSelector.MatchesFilter(
+                    item.RelativePath!,
+                    set.Filter,
+                    FrameworkCompatibility.GetPathStringComparisonForPath(set.Folder)))
+                .OrderBy(static item => item.Item.Key, StringComparer.OrdinalIgnoreCase)
+                .Take(set.MaxCount);
+            foreach (var item in approved)
+                selected[Path.GetFullPath(item.Item.Key)] = item.Item.Value;
+        }
+        return selected;
+    }
+
+    private static string ComputeSha256(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
     private static string[] FindMissingFiles(
         IEnumerable<string> files,
-        IEnumerable<AppStoreConnectScreenshotInfo> existingScreenshots)
+        IEnumerable<AppStoreConnectScreenshotInfo> existingScreenshots,
+        ScreenshotSnapshot screenshotSnapshot)
     {
+        screenshotSnapshot.ValidateUnchanged();
         var available = existingScreenshots
             .Where(static screenshot => !string.IsNullOrWhiteSpace(screenshot.SourceFileChecksum))
             .GroupBy(static screenshot => screenshot.SourceFileChecksum!, StringComparer.OrdinalIgnoreCase)
@@ -195,7 +515,7 @@ public sealed class AppStoreConnectScreenshotSyncService
         var missing = new List<string>();
         foreach (var file in files)
         {
-            var checksum = ComputeSourceChecksum(file);
+            var checksum = screenshotSnapshot.GetMd5(file);
             if (available.TryGetValue(checksum, out var count) && count > 0)
                 available[checksum] = count - 1;
             else
@@ -226,29 +546,42 @@ public sealed class AppStoreConnectScreenshotSyncService
             throw new DirectoryNotFoundException($"Screenshot folder was not found: {folder}");
 
         var filter = string.IsNullOrWhiteSpace(setSpec.Filter) ? "*.png" : setSpec.Filter;
-        var files = Directory.GetFiles(folder, filter)
-            .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
-            .Take(maxCount)
-            .ToArray();
+        var files = AppStoreConnectScreenshotFileSelector.Select(folder, filter, maxCount);
 
         if (files.Length == 0)
             throw new InvalidOperationException($"No screenshots matched '{filter}' in '{folder}'.");
 
-        return new PreflightedScreenshotSet(setSpec.ScreenshotDisplayType.Trim(), folder, files);
+        return new PreflightedScreenshotSet(
+            setSpec.ScreenshotDisplayType.Trim(),
+            folder,
+            filter,
+            maxCount,
+            files);
     }
 
-    private sealed class PreflightedScreenshotSet
+    internal sealed class PreflightedScreenshotSet
     {
-        public PreflightedScreenshotSet(string screenshotDisplayType, string folder, string[] files)
+        public PreflightedScreenshotSet(
+            string screenshotDisplayType,
+            string folder,
+            string filter,
+            int maxCount,
+            string[] files)
         {
             ScreenshotDisplayType = screenshotDisplayType;
             Folder = folder;
+            Filter = filter;
+            MaxCount = maxCount;
             Files = files;
         }
 
         public string ScreenshotDisplayType { get; }
 
         public string Folder { get; }
+
+        public string Filter { get; }
+
+        public int MaxCount { get; }
 
         public string[] Files { get; }
     }
@@ -270,5 +603,64 @@ public sealed class AppStoreConnectScreenshotSyncService
         public AppStoreConnectScreenshotSetInfo? ScreenshotSet { get; }
 
         public AppStoreConnectScreenshotInfo[] ExistingScreenshots { get; }
+    }
+
+    internal sealed class ScreenshotSnapshot : IDisposable
+    {
+        private readonly string _root;
+        private readonly IReadOnlyDictionary<string, string> _sourcePaths;
+        private readonly IReadOnlyDictionary<string, string> _sha256;
+        private readonly IReadOnlyDictionary<string, string> _md5;
+        private readonly string _identity;
+        private readonly AppleReleaseSourceMutationMonitor _mutationMonitor;
+        private bool _disposed;
+
+        public ScreenshotSnapshot(
+            string root,
+            PreflightedScreenshotSet[] sets,
+            IReadOnlyDictionary<string, string> sourcePaths,
+            IReadOnlyDictionary<string, string> sha256,
+            IReadOnlyDictionary<string, string> md5,
+            string identity,
+            AppleReleaseSourceMutationMonitor mutationMonitor)
+        {
+            _root = root;
+            Sets = sets;
+            _sourcePaths = sourcePaths;
+            _sha256 = sha256;
+            _md5 = md5;
+            _identity = identity;
+            _mutationMonitor = mutationMonitor;
+        }
+
+        public PreflightedScreenshotSet[] Sets { get; }
+
+        public string GetSourcePath(string snapshotPath) => _sourcePaths[snapshotPath];
+
+        public string GetSha256(string snapshotPath) => _sha256[snapshotPath];
+
+        public string GetMd5(string snapshotPath) => _md5[snapshotPath];
+
+        internal void ValidateUnchanged()
+        {
+            var currentIdentity = _mutationMonitor.CaptureExpectedProducerOutput(
+                () => CaptureScreenshotSnapshotIdentity(_root, Sets),
+                "screenshot selection or upload");
+            if (!string.Equals(_identity, currentIdentity.Digest, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "The private approved screenshot snapshot changed during screenshot selection or upload. " +
+                    "A transient write or hard-link alias invalidates the approved screenshot set.");
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+            _disposed = true;
+            _mutationMonitor.Dispose();
+            try { AppleArtifactCopy.DeleteOwnedDirectory(_root); } catch { /* best effort after remote operation */ }
+        }
     }
 }

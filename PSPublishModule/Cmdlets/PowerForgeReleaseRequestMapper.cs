@@ -43,6 +43,12 @@ internal static class PowerForgeReleaseRequestMapper
         request.EnableSigning = ChooseBool(request.EnableSigning, options.EnableSigning);
         request.AppleResume = ChooseBool(request.AppleResume, options.AppleResume);
         request.AppleWaitForProcessing = ChooseBool(request.AppleWaitForProcessing, options.AppleWaitForProcessing);
+        request.AppleAdoptExistingBuild = request.AppleAdoptExistingBuild || options.AppleAdoptExistingBuild;
+        request.AppleMarketingVersion = ChooseString(request.AppleMarketingVersion, options.AppleMarketingVersion);
+        request.AppleSourceCommit = ChooseString(request.AppleSourceCommit, options.AppleSourceCommit);
+        request.RequireImmutableAppleSourceSnapshot = request.RequireImmutableAppleSourceSnapshot ||
+                                                      !string.IsNullOrWhiteSpace(request.AppleSourceCommit);
+        request.AppleExpectedPlanSha256 = ChooseString(request.AppleExpectedPlanSha256, options.AppleExpectedPlanSha256);
 
         request.SkipWorkspaceValidation = request.SkipWorkspaceValidation || options.SkipWorkspaceValidation;
         request.SkipRestore = request.SkipRestore || options.SkipRestore;
@@ -208,7 +214,12 @@ internal static class PowerForgeReleaseRequestMapper
             ToolOutputs = source.ToolOutputs.ToArray(),
             SkipToolOutputs = source.SkipToolOutputs.ToArray(),
             AppleAction = source.AppleAction,
+            AppleMarketingVersion = source.AppleMarketingVersion,
+            AppleSourceCommit = source.AppleSourceCommit,
+            RequireImmutableAppleSourceSnapshot = source.RequireImmutableAppleSourceSnapshot,
+            AppleExpectedPlanSha256 = source.AppleExpectedPlanSha256,
             AppleActionConfirmed = source.AppleActionConfirmed,
+            AppleAdoptExistingBuild = source.AppleAdoptExistingBuild,
             AppleResume = source.AppleResume,
             AppleWaitForProcessing = source.AppleWaitForProcessing,
             AppleProcessingTimeoutSeconds = source.AppleProcessingTimeoutSeconds,

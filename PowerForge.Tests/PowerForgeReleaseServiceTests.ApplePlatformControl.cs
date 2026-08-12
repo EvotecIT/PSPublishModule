@@ -137,13 +137,15 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void AppleReleaseDoctor_FindsControlPlaneFailuresBeforeSubmission()
     {
+        var root = CreateSandbox();
+        CreateXcodeProject(root, "CasaRay.xcodeproj");
         var app = new PowerForgeAppleAppReleaseTargetPlan
         {
             Name = "CasaRay",
             BundleId = "com.evotec.casarray",
             AppStoreConnectAppId = "app-1",
             DistributionRoute = AppleDistributionRoute.AppStore,
-            ProjectPath = Path.GetTempFileName()
+            ProjectPath = Path.Combine(root, "CasaRay.xcodeproj")
         };
         try
         {
@@ -160,7 +162,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
         finally
         {
-            File.Delete(app.ProjectPath);
+            TryDelete(root);
         }
     }
 
@@ -312,7 +314,8 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(result.Success);
             var receipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt);
-            Assert.Equal(3, receipt.SchemaVersion);
+            Assert.Equal(6, receipt.SchemaVersion);
+            Assert.Null(receipt.ReceiptAuthenticationSha256);
             var target = Assert.Single(receipt.Targets);
             Assert.Equal(AppleDistributionRoute.AppStore, target.DistributionRoute);
             Assert.Equal("6778025328", target.AppId);
@@ -783,7 +786,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     notarizeAppleArtifact: request => new AppleNotarizationResult
                     {
                         ArtifactPath = request.ArtifactPath,
-                        ArtifactSha256 = "failed-artifact-sha",
+                        ArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(request.ArtifactPath),
                         SubmissionPath = request.ArtifactPath + ".zip",
                         SubmissionId = "accepted-then-staple-failed",
                         Status = "Accepted",
@@ -806,8 +809,6 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.False(target.Stapled);
             Assert.Contains("ticket stapling", target.ErrorMessage, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(sourceCommit, result.AppleReceipt.SourceCommit);
-
-            var receiptPath = Path.Combine(root, "build", "powerforge", "apple", "release-receipt.json");
 
             AppleNotarizationRequest? resumedRequest = null;
             var resumeService = CreateAppleAutomationService(
@@ -837,7 +838,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
                         AppleSourceCommit = sourceCommit,
-                        AppleAction = PowerForgeAppleReleaseAction.Configured
+                        AppleAction = PowerForgeAppleReleaseAction.Configured,
+                        AppleAdoptExistingBuild = true,
+                        AppleActionConfirmed = true
                     });
 
             Assert.True(configuredResumed.Success);
@@ -853,24 +856,32 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleSourceCommit = sourceCommit,
-                    AppleAction = PowerForgeAppleReleaseAction.Upload
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleAdoptExistingBuild = true,
+                    AppleActionConfirmed = true
                 });
 
             Assert.True(resumed.Success);
-            Assert.NotNull(resumedRequest);
-            Assert.Equal("accepted-then-staple-failed", resumedRequest!.AcceptedSubmissionId);
-            Assert.Equal("failed-artifact-sha", resumedRequest.ExpectedArtifactSha256);
+            Assert.Null(resumedRequest);
             var resumedTarget = Assert.Single(resumed.AppleReceipt!.Targets);
             Assert.True(resumedTarget.ResumedAcceptedNotarization);
+            Assert.Contains("archive", resumedTarget.SkippedSteps);
+            Assert.Contains("export", resumedTarget.SkippedSteps);
             Assert.Contains("notarySubmission", resumedTarget.SkippedSteps);
+            Assert.Contains("staple", resumedTarget.SkippedSteps);
+            Assert.Contains("stapleValidation", resumedTarget.SkippedSteps);
+            Assert.Contains("gatekeeperAssessment", resumedTarget.SkippedSteps);
 
             // Simulate another target failing after this target completed. Aggregate failure
             // must retain and reuse the fully verified direct target.
-            var successfulReceipt = File.ReadAllText(receiptPath);
-            Assert.Contains("\"success\": true", successfulReceipt, StringComparison.Ordinal);
-            File.WriteAllText(
-                receiptPath,
-                successfulReceipt.Replace("\"success\": true", "\"success\": false", StringComparison.Ordinal));
+            var aggregateFailureReceipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(resumed.AppleReceipt);
+            aggregateFailureReceipt.AttemptId = null;
+            aggregateFailureReceipt.CheckedAt = default;
+            aggregateFailureReceipt.Success = false;
+            aggregateFailureReceipt.ErrorMessage = "Another release target failed after notarization completed.";
+            aggregateFailureReceipt.ReceiptSha256 = null;
+            aggregateFailureReceipt.PreviousReceiptSha256 = null;
+            new AppleReleaseReceiptStore().WriteAttempt(resumed.AppleAppPlan!, aggregateFailureReceipt);
 
             var archiveCalls = 0;
             var exportCalls = 0;
@@ -900,7 +911,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         return new AppleNotarizationResult
                         {
                             ArtifactPath = request.ArtifactPath,
-                            ArtifactSha256 = "new-artifact-sha",
+                            ArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(request.ArtifactPath),
                             SubmissionPath = request.ArtifactPath + ".zip",
                             SubmissionId = "new-submission",
                             Status = "Accepted",
@@ -913,7 +924,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleSourceCommit = sourceCommit,
-                    AppleAction = PowerForgeAppleReleaseAction.Upload
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleAdoptExistingBuild = true,
+                    AppleActionConfirmed = true
                 });
 
             Assert.True(nextRelease.Success);
@@ -927,17 +940,22 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(retainedTarget.GatekeeperAccepted);
             Assert.Contains("gatekeeperAssessment", retainedTarget.SkippedSteps);
 
-            // Disabled post-notarization checks are complete by policy even though
-            // their receipt flags remain null. A mixed-target retry must still reuse
-            // the retained artifact instead of submitting it again.
+            // Changing post-notarization policy creates a different approved execution.
+            // The prior accepted artifact must not be reused under the new controls.
             spec.AppleApps.DirectDistribution.Staple = false;
             spec.AppleApps.DirectDistribution.Assess = false;
-            var disabledChecksReceipt = File.ReadAllText(receiptPath)
-                .Replace("\"success\": true", "\"success\": false", StringComparison.Ordinal)
-                .Replace("\"stapled\": true", "\"stapled\": null", StringComparison.Ordinal)
-                .Replace("\"stapleValidated\": true", "\"stapleValidated\": null", StringComparison.Ordinal)
-                .Replace("\"gatekeeperAccepted\": true", "\"gatekeeperAccepted\": null", StringComparison.Ordinal);
-            File.WriteAllText(receiptPath, disabledChecksReceipt);
+            var disabledChecksReceipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(nextRelease.AppleReceipt);
+            disabledChecksReceipt.AttemptId = null;
+            disabledChecksReceipt.CheckedAt = default;
+            disabledChecksReceipt.Success = false;
+            disabledChecksReceipt.ErrorMessage = "Another release target failed with post-notarization checks disabled.";
+            disabledChecksReceipt.ReceiptSha256 = null;
+            disabledChecksReceipt.PreviousReceiptSha256 = null;
+            var disabledChecksTargetEvidence = Assert.Single(disabledChecksReceipt.Targets);
+            disabledChecksTargetEvidence.Stapled = null;
+            disabledChecksTargetEvidence.StapleValidated = null;
+            disabledChecksTargetEvidence.GatekeeperAccepted = null;
+            new AppleReleaseReceiptStore().WriteAttempt(nextRelease.AppleAppPlan!, disabledChecksReceipt);
             archiveCalls = 0;
             exportCalls = 0;
             nextReleaseRequest = null;
@@ -952,26 +970,35 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
 
             Assert.True(disabledChecksRetry.Success);
-            Assert.Equal(0, archiveCalls);
-            Assert.Equal(0, exportCalls);
-            Assert.Null(nextReleaseRequest);
+            Assert.Equal(1, archiveCalls);
+            Assert.Equal(1, exportCalls);
+            Assert.NotNull(nextReleaseRequest);
             var disabledChecksTarget = Assert.Single(disabledChecksRetry.AppleReceipt!.Targets);
-            Assert.True(disabledChecksTarget.ResumedAcceptedNotarization);
+            Assert.False(disabledChecksTarget.ResumedAcceptedNotarization);
             Assert.Null(disabledChecksTarget.Stapled);
             Assert.Null(disabledChecksTarget.StapleValidated);
             Assert.Null(disabledChecksTarget.GatekeeperAccepted);
 
-            var retainedReceipt = File.ReadAllText(receiptPath)
-                .Replace("\"success\": true", "\"success\": false", StringComparison.Ordinal);
-            File.WriteAllText(receiptPath, retainedReceipt);
-            File.WriteAllText(Path.Combine(retainedTarget.DirectArtifactPath!, "changed-after-release.txt"), "changed");
+            var retainedReceipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(disabledChecksRetry.AppleReceipt);
+            retainedReceipt.AttemptId = null;
+            retainedReceipt.CheckedAt = default;
+            retainedReceipt.Success = false;
+            retainedReceipt.ErrorMessage = "Another release target failed after the artifact was retained.";
+            retainedReceipt.ReceiptSha256 = null;
+            retainedReceipt.PreviousReceiptSha256 = null;
+            new AppleReleaseReceiptStore().WriteAttempt(disabledChecksRetry.AppleAppPlan!, retainedReceipt);
+            File.WriteAllText(
+                Path.Combine(root, retainedTarget.DirectArtifactPath!, "changed-after-release.txt"),
+                "changed");
             var changedArtifact = nextReleaseService.Execute(
                 spec,
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleSourceCommit = sourceCommit,
-                    AppleAction = PowerForgeAppleReleaseAction.Upload
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleAdoptExistingBuild = true,
+                    AppleActionConfirmed = true
                 });
             Assert.False(changedArtifact.Success);
             Assert.Contains(

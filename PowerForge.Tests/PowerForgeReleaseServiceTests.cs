@@ -482,12 +482,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: request =>
                 {
@@ -530,7 +525,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 new PowerForgeReleaseRequest
                 {
-                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleWaitForProcessing = false
                 });
 
             Assert.True(result.Success);
@@ -597,7 +593,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                         Build = new AppStoreConnectBuildInfo { Id = "build-5", Version = request.BuildNumber },
                         SelectedBuild = true
                     };
-                });
+                },
+                getAppleReleaseState: request => CreateReleaseState(request, "VALID"));
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -796,7 +793,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                 }
                 """);
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"),
+                checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request));
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -948,7 +947,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
             File.WriteAllText(keyPath, "private-key");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"));
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -1003,7 +1003,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
             File.WriteAllText(keyPath, "private-key");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = CreateAppleAutomationService(request => CreateReleaseState(request, "VALID"));
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -1086,7 +1086,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                             BuildId = "build-6"
                         }
                     };
-                });
+                },
+                getAppleReleaseState: request => CreateReleaseState(request, "VALID"));
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -1145,7 +1146,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
             File.WriteAllText(keyPath, "private-key");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = CreateAppleAutomationService(request => CreateReleaseState(request, "VALID"));
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -1250,7 +1251,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                             State = "WAITING_FOR_REVIEW"
                         }
                     };
-                });
+                },
+                getAppleReleaseState: request => CreateReleaseState(request, "VALID"));
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -1306,7 +1308,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
             File.WriteAllText(keyPath, "private-key");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = CreateAppleAutomationService(request => CreateReleaseState(request, "VALID"));
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -1413,12 +1415,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     Assert.Contains("MARKETING_VERSION = 2.1.0;", content, StringComparison.Ordinal);
                     Assert.Contains("CURRENT_PROJECT_VERSION = 8;", content, StringComparison.Ordinal);
 
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -1486,12 +1483,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -1642,7 +1634,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 new PowerForgeReleaseRequest
                 {
-                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleWaitForProcessing = false
                 });
 
             Assert.False(result.Success);
@@ -1691,12 +1684,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -1851,12 +1839,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -1931,12 +1914,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -2396,12 +2374,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -2478,12 +2451,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -2555,12 +2523,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -3521,6 +3484,53 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleApps_PlanOnly_BindsExistingReuseArchiveHash()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var archivePath = Path.Combine(root, "Artifacts", "Apple", "Archives", "iOS", "Tactra.xcarchive");
+            Directory.CreateDirectory(archivePath);
+            File.WriteAllText(Path.Combine(archivePath, "payload"), "approved archive");
+
+            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Archive = false,
+                        Upload = true,
+                        Apps =
+                        [
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        ]
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.Equal(
+                AppleNotarizationService.ComputeArtifactSha256(archivePath),
+                Assert.Single(result.AppleReceipt!.Targets).ArchiveSha256);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleApps_RejectsExistingNonProjectDirectoryBeforeArchive()
     {
         var root = CreateSandbox();
@@ -3624,12 +3634,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run."),
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
-                archiveAppleApp: request => new AppleAppArchiveResult
-                {
-                    ArchivePath = archivePath,
-                    Destination = request.Destination!,
-                    ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                },
+                archiveAppleApp: CreateSuccessfulArchive,
                 uploadAppleApp: request => new AppleAppArchiveUploadResult
                 {
                     ArchivePath = request.ArchivePath,
@@ -3666,7 +3671,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 new PowerForgeReleaseRequest
                 {
-                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleWaitForProcessing = false
                 });
 
             Assert.True(result.Success);

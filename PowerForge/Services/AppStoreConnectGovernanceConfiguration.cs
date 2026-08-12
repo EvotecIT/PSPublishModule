@@ -40,8 +40,20 @@ public sealed class AppStoreConnectGovernanceConfiguration
         if (!File.Exists(fullPath)) throw new FileNotFoundException("Governance config was not found.", fullPath);
         try
         {
+            return LoadContent(File.ReadAllText(fullPath), fullPath);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException($"Governance config '{fullPath}' is not valid JSON: {ex.Message}", ex);
+        }
+    }
+
+    internal AppStoreConnectGovernanceSpec LoadContent(string content, string sourcePath)
+    {
+        try
+        {
             return JsonSerializer.Deserialize<AppStoreConnectGovernanceSpec>(
-                       File.ReadAllText(fullPath),
+                       content,
                        new JsonSerializerOptions
                        {
                            PropertyNameCaseInsensitive = true,
@@ -53,7 +65,7 @@ public sealed class AppStoreConnectGovernanceConfiguration
         }
         catch (JsonException ex)
         {
-            throw new InvalidOperationException($"Governance config '{fullPath}' is not valid JSON: {ex.Message}", ex);
+            throw new InvalidOperationException($"Governance config '{sourcePath}' is not valid JSON: {ex.Message}", ex);
         }
     }
 

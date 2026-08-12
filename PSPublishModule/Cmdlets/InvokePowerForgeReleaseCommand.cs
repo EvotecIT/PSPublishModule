@@ -4,8 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using PowerForge;
 using PowerForge.ConsoleShared;
 
@@ -256,13 +254,33 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     public PowerForgeAppleReleaseAction AppleAction { get; set; } = PowerForgeAppleReleaseAction.Configured;
 
+    /// <summary>Overrides the Apple marketing version selected for this operation.</summary>
+    [Parameter]
+    public string? AppleVersion { get; set; }
+
+    /// <summary>Binds Apple release evidence to a full 40-character SHA-1 or 64-character SHA-256 source commit.</summary>
+    [Parameter]
+    public string? AppleSourceCommit { get; set; }
+
+    /// <summary>Requires the persisted Apple plan receipt to match this exact SHA-256.</summary>
+    [Parameter]
+    public string? AppleExpectedPlanSha256 { get; set; }
+
     /// <summary>
     /// Explicitly confirms a risky Apple screenshot replacement, review submission, or public release action.
     /// </summary>
     [Parameter]
     public SwitchParameter ConfirmAppleAction { get; set; }
 
-    /// <summary>Forces exact remote-build reuse on this run.</summary>
+    /// <summary>
+    /// Explicitly adopts a verified remote Apple build or accepted notarization operation.
+    /// Local receipts provide continuity evidence but never authorize cross-process recovery by themselves;
+    /// this switch requires ConfirmAppleAction and is intended only for deliberate recovery.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter AdoptExistingAppleBuild { get; set; }
+
+    /// <summary>Enables recovery discovery; deliberate cross-process reuse also requires AdoptExistingAppleBuild and ConfirmAppleAction.</summary>
     [Parameter]
     public SwitchParameter AppleResume { get; set; }
 
@@ -663,22 +681,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     }
 
     private static PowerForgeReleaseSpec LoadConfig(string configPath)
-    {
-        var json = File.ReadAllText(configPath);
-        var options = new JsonSerializerOptions
-        {
-            AllowTrailingCommas = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            PropertyNameCaseInsensitive = true
-        };
-        options.Converters.Add(new JsonStringEnumConverter());
-
-        var spec = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(json, options);
-        if (spec is null)
-            throw new InvalidOperationException($"Unable to deserialize unified release config: {configPath}");
-
-        return spec;
-    }
+        => PowerForgeReleaseService.LoadConfiguration(configPath);
 
     private static bool? ResolveRequestedFlag(IDictionary<string, object>? boundParameters, string parameterName)
     {
@@ -811,7 +814,11 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             PackageSignStore = NormalizeNullable(PackageSignStore),
             PackageSignTimestampUrl = NormalizeNullable(PackageSignTimestampUrl),
             AppleAction = AppleAction,
+            AppleMarketingVersion = NormalizeNullable(AppleVersion),
+            AppleSourceCommit = NormalizeNullable(AppleSourceCommit),
+            AppleExpectedPlanSha256 = NormalizeNullable(AppleExpectedPlanSha256),
             AppleActionConfirmed = ConfirmAppleAction.IsPresent,
+            AppleAdoptExistingBuild = AdoptExistingAppleBuild.IsPresent,
             AppleResume = ResolveMutuallyExclusiveFlag(
                 boundParameters,
                 nameof(AppleResume),

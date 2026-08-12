@@ -8,6 +8,10 @@ namespace PowerForge;
 /// </summary>
 public sealed class ProcessRunRequest
 {
+    private int _startBoundaryInvoked;
+    private Action? _startBoundary;
+    private int _completionBoundaryInvoked;
+    private Action<ProcessRunResult>? _completionBoundary;
     /// <summary>
     /// Initializes a new instance of the <see cref="ProcessRunRequest"/> class.
     /// </summary>
@@ -35,7 +39,42 @@ public sealed class ProcessRunRequest
             captureOutput,
             captureError,
             outputLineReceived: null,
-            errorLineReceived: null)
+            errorLineReceived: null,
+            inheritEnvironment: true)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a process request that can opt out of parent-environment inheritance.
+    /// </summary>
+    /// <param name="fileName">Executable name or path.</param>
+    /// <param name="workingDirectory">Working directory for the process.</param>
+    /// <param name="arguments">Structured arguments passed to the process.</param>
+    /// <param name="timeout">Maximum runtime before the process is terminated.</param>
+    /// <param name="environmentVariables">Environment variables applied to the child.</param>
+    /// <param name="captureOutput">When true, capture standard output.</param>
+    /// <param name="captureError">When true, capture standard error.</param>
+    /// <param name="inheritEnvironment">When false, start from an empty environment.</param>
+    public ProcessRunRequest(
+        string fileName,
+        string workingDirectory,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        bool captureOutput,
+        bool captureError,
+        bool inheritEnvironment)
+        : this(
+            fileName,
+            workingDirectory,
+            arguments,
+            timeout,
+            environmentVariables,
+            captureOutput,
+            captureError,
+            outputLineReceived: null,
+            errorLineReceived: null,
+            inheritEnvironment: inheritEnvironment)
     {
     }
 
@@ -61,6 +100,44 @@ public sealed class ProcessRunRequest
         bool captureError,
         Action<string>? outputLineReceived,
         Action<string>? errorLineReceived)
+        : this(
+            fileName,
+            workingDirectory,
+            arguments,
+            timeout,
+            environmentVariables,
+            captureOutput,
+            captureError,
+            outputLineReceived,
+            errorLineReceived,
+            inheritEnvironment: true)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a streaming process request with explicit parent-environment inheritance policy.
+    /// </summary>
+    /// <param name="fileName">Executable name or path.</param>
+    /// <param name="workingDirectory">Working directory for the process.</param>
+    /// <param name="arguments">Structured arguments passed to the process.</param>
+    /// <param name="timeout">Maximum runtime before the process is terminated.</param>
+    /// <param name="environmentVariables">Environment variables applied to the child.</param>
+    /// <param name="captureOutput">When true, capture standard output.</param>
+    /// <param name="captureError">When true, capture standard error.</param>
+    /// <param name="outputLineReceived">Optional callback for each captured standard-output line.</param>
+    /// <param name="errorLineReceived">Optional callback for each captured standard-error line.</param>
+    /// <param name="inheritEnvironment">When false, start from an empty environment.</param>
+    public ProcessRunRequest(
+        string fileName,
+        string workingDirectory,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        bool captureOutput,
+        bool captureError,
+        Action<string>? outputLineReceived,
+        Action<string>? errorLineReceived,
+        bool inheritEnvironment)
     {
         FileName = fileName;
         WorkingDirectory = workingDirectory;
@@ -71,6 +148,7 @@ public sealed class ProcessRunRequest
         CaptureError = captureError;
         OutputLineReceived = outputLineReceived;
         ErrorLineReceived = errorLineReceived;
+        InheritEnvironment = inheritEnvironment;
     }
 
     /// <summary>
@@ -99,6 +177,11 @@ public sealed class ProcessRunRequest
     public IReadOnlyDictionary<string, string?>? EnvironmentVariables { get; }
 
     /// <summary>
+    /// Gets a value indicating whether the child process inherits the parent environment.
+    /// </summary>
+    public bool InheritEnvironment { get; }
+
+    /// <summary>
     /// Gets a value indicating whether standard output should be captured.
     /// </summary>
     public bool CaptureOutput { get; }
@@ -113,6 +196,41 @@ public sealed class ProcessRunRequest
 
     /// <summary>Optional callback invoked for each captured standard-error line.</summary>
     public Action<string>? ErrorLineReceived { get; }
+
+    internal void SetCompletionBoundary(Action<ProcessRunResult> completionBoundary)
+        => _completionBoundary = completionBoundary ?? throw new ArgumentNullException(nameof(completionBoundary));
+
+    internal void SetStartBoundary(Action startBoundary)
+        => _startBoundary = startBoundary ?? throw new ArgumentNullException(nameof(startBoundary));
+
+    /// <summary>
+    /// Signals that the external process was successfully started and may have begun externally
+    /// visible work. Custom <see cref="IProcessRunner"/> implementations must invoke this method
+    /// immediately after process start succeeds. The callback is invoked at most once.
+    /// </summary>
+    public void InvokeStartBoundary()
+    {
+        if (_startBoundary is null || Interlocked.Exchange(ref _startBoundaryInvoked, 1) != 0)
+            return;
+        _startBoundary();
+    }
+
+    /// <summary>
+    /// Signals that the external process has completed and its final result is available.
+    /// Custom <see cref="IProcessRunner"/> implementations must invoke this method immediately
+    /// after observing process exit and before returning or performing any post-exit mutation.
+    /// The exit state is final, but captured output may still be draining. The callback is invoked
+    /// at most once, so service-level fallback calls are safe.
+    /// </summary>
+    /// <param name="result">The final process result.</param>
+    public void InvokeCompletionBoundary(ProcessRunResult result)
+    {
+        if (result is null)
+            throw new ArgumentNullException(nameof(result));
+        if (_completionBoundary is null || Interlocked.Exchange(ref _completionBoundaryInvoked, 1) != 0)
+            return;
+        _completionBoundary(result);
+    }
 }
 
 /// <summary>
@@ -192,6 +310,13 @@ public interface IProcessRunner
     /// <param name="request">Process execution request.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Structured process execution result.</returns>
+    /// <remarks>
+    /// Implementations must call <see cref="ProcessRunRequest.InvokeStartBoundary"/> immediately
+    /// after the process starts successfully. They must also call
+    /// <see cref="ProcessRunRequest.InvokeCompletionBoundary"/> immediately
+    /// after the process exits and the final result is constructed, before returning from this method
+    /// or performing any post-exit mutation of producer outputs.
+    /// </remarks>
     Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default);
 }
 
@@ -218,11 +343,14 @@ public sealed class ProcessRunner : IProcessRunner
         try
         {
             process.Start();
+            request.InvokeStartBoundary();
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
-            return new ProcessRunResult(127, string.Empty, ex.Message, request.FileName, stopwatch.Elapsed, timedOut: false);
+            var failedStart = new ProcessRunResult(127, string.Empty, ex.Message, request.FileName, stopwatch.Elapsed, timedOut: false);
+            request.InvokeCompletionBoundary(failedStart);
+            return failedStart;
         }
 
         var stdoutTask = request.CaptureOutput
@@ -253,6 +381,19 @@ public sealed class ProcessRunner : IProcessRunner
             // Best-effort wait only.
         }
 
+        // Bind producer-owned filesystem output at the first observable process-exit
+        // boundary. Stream drainage happens afterward so a blocked or inherited pipe
+        // cannot create an unmonitored post-exit replacement window.
+        var exitCode = timedOut ? 124 : SafeGetExitCode(process);
+        var boundaryResult = new ProcessRunResult(
+            exitCode,
+            string.Empty,
+            timedOut ? "Timeout" : string.Empty,
+            process.StartInfo.FileName ?? request.FileName,
+            stopwatch.Elapsed,
+            timedOut);
+        request.InvokeCompletionBoundary(boundaryResult);
+
         var stdout = request.CaptureOutput
             ? await DrainAsync(stdoutTask).ConfigureAwait(false)
             : string.Empty;
@@ -264,8 +405,9 @@ public sealed class ProcessRunner : IProcessRunner
         if (timedOut && string.IsNullOrWhiteSpace(stderr))
             stderr = "Timeout";
 
-        var exitCode = timedOut ? 124 : SafeGetExitCode(process);
-        return new ProcessRunResult(exitCode, stdout, stderr, process.StartInfo.FileName ?? request.FileName, stopwatch.Elapsed, timedOut);
+        var result = new ProcessRunResult(exitCode, stdout, stderr, process.StartInfo.FileName ?? request.FileName, stopwatch.Elapsed, timedOut);
+        request.InvokeCompletionBoundary(result);
+        return result;
     }
 
     private static async Task<string> ReadOutputAsync(
@@ -298,6 +440,9 @@ public sealed class ProcessRunner : IProcessRunner
         };
 
         ProcessStartInfoEncoding.TryApplyUtf8(startInfo);
+
+        if (!request.InheritEnvironment)
+            startInfo.EnvironmentVariables.Clear();
 
         if (request.EnvironmentVariables is not null)
         {

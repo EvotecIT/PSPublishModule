@@ -182,8 +182,8 @@ internal static partial class Program
         var captureRunId = RequiredString(root, "captureRunId");
 
         var sourceCommit = RequiredString(root, "sourceCommit").ToLowerInvariant();
-        if (sourceCommit.Length != 40 || !sourceCommit.All(Uri.IsHexDigit))
-            throw new InvalidOperationException("Screenshot capture provenance SourceCommit must be an exact 40-character Git commit SHA.");
+        if (!GitObjectId.IsFull(sourceCommit))
+            throw new InvalidOperationException("Screenshot capture provenance SourceCommit must be a full SHA-1 or SHA-256 Git commit object id.");
 
         if (!root.TryGetProperty("screenshots", out var screenshotsElement) || screenshotsElement.ValueKind != JsonValueKind.Array)
             throw new InvalidOperationException("Screenshot capture provenance must contain an exact screenshots inventory.");

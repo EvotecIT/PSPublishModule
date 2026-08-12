@@ -13,6 +13,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
     private readonly ProjectBuildCommandHostService _projectBuildCommandHostService;
     private readonly ModuleBuildHostService _moduleBuildHostService;
     private readonly Func<string, PowerForgeReleaseRequest, PowerForgeReleaseResult> _executeUnifiedReleaseBuild;
+    private readonly Func<string, string, AppleReleaseSourceTrustSnapshot> _captureAppleSourceTrust;
+    private readonly Action<string, string, AppleReleaseSourceTrustSnapshot> _validateAppleSourceTrustAfterBuild;
 
     public ReleaseBuildExecutionService()
         : this(new RepositoryCatalogScanner(), new ProjectBuildHostService(), new ProjectBuildCommandHostService(), new ModuleBuildHostService())
@@ -24,13 +26,34 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         ProjectBuildHostService projectBuildHostService,
         ProjectBuildCommandHostService projectBuildCommandHostService,
         ModuleBuildHostService moduleBuildHostService,
-        Func<string, PowerForgeReleaseRequest, PowerForgeReleaseResult>? executeUnifiedReleaseBuild = null)
+        Func<string, PowerForgeReleaseRequest, PowerForgeReleaseResult>? executeUnifiedReleaseBuild = null,
+        Func<string, string, string>? resolveAppleSourceCommit = null,
+        Func<string, string, AppleReleaseSourceTrustSnapshot>? captureAppleSourceTrust = null,
+        Action<string, string, AppleReleaseSourceTrustSnapshot>? validateAppleSourceTrustAfterBuild = null)
     {
         _catalogScanner = catalogScanner;
         _projectBuildHostService = projectBuildHostService;
         _projectBuildCommandHostService = projectBuildCommandHostService;
         _moduleBuildHostService = moduleBuildHostService;
         _executeUnifiedReleaseBuild = executeUnifiedReleaseBuild ?? ExecuteUnifiedReleaseBuild;
+        if (resolveAppleSourceCommit is not null)
+        {
+            _captureAppleSourceTrust = (root, config) =>
+                new AppleReleaseSourceTrustSnapshot(resolveAppleSourceCommit(root, config), Array.Empty<string>());
+            _validateAppleSourceTrustAfterBuild = (root, config, snapshot) =>
+            {
+                var completed = resolveAppleSourceCommit(root, config);
+                if (!completed.Equals(snapshot.SourceCommit, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        "Repository HEAD changed while the Apple release checkpoint was being built. Rebuild from the new exact source commit.");
+            };
+        }
+        else
+        {
+            var sourceTrust = new AppleReleaseSourceTrustService();
+            _captureAppleSourceTrust = captureAppleSourceTrust ?? sourceTrust.Capture;
+            _validateAppleSourceTrustAfterBuild = validateAppleSourceTrustAfterBuild ?? sourceTrust.ValidateAfterBuild;
+        }
     }
 
     public async Task<ReleaseBuildExecutionResult> ExecuteAsync(string repositoryRoot, CancellationToken cancellationToken = default)
@@ -67,10 +90,26 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 configPath,
                 PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
                 moduleStagingPath);
+            AppleReleaseSourceTrustSnapshot? appleSourceTrust = null;
+            if (!unifiedRequest.SkipAppleApps)
+            {
+                appleSourceTrust = _captureAppleSourceTrust(repositoryRoot, configPath);
+                if (appleSourceTrust.ExactConfigurationContent is not null)
+                {
+                    unifiedRequest = CreateUnifiedReleaseBuildRequest(
+                        configPath,
+                        PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
+                        moduleStagingPath,
+                        appleSourceTrust.ExactConfigurationContent);
+                }
+                unifiedRequest.AppleSourceCommit = appleSourceTrust.SourceCommit;
+            }
             unifiedRequest.CancellationToken = cancellationToken;
             var unified = await Task.Run(
                 () => _executeUnifiedReleaseBuild(configPath, unifiedRequest),
                 cancellationToken).ConfigureAwait(false);
+            if (appleSourceTrust is not null)
+                _validateAppleSourceTrustAfterBuild(repositoryRoot, configPath, appleSourceTrust);
             var moduleExportCheckpoint =
                 await CaptureScriptModuleExportedConfigFingerprintAsync(
                     repository,
@@ -137,7 +176,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
     internal static PowerForgeReleaseRequest CreateUnifiedReleaseBuildRequest(
         string configPath,
         string moduleHostPath,
-        string moduleStagingPath)
+        string moduleStagingPath,
+        string? exactConfigurationContent = null)
     {
         var request = new PowerForgeReleaseRequest {
             ConfigPath = configPath,
@@ -153,12 +193,16 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             SkipAppleApps = true,
             SubmitWinget = false
         };
+        request.ExactConfigurationContent = exactConfigurationContent;
 
-        var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
+        var spec = exactConfigurationContent is null
+            ? PowerForgeReleaseService.LoadConfiguration(configPath)
+            : PowerForgeReleaseService.LoadConfigurationContent(exactConfigurationContent, configPath);
         if (spec.AppleApps is not null)
         {
             request.SkipAppleApps = false;
             request.CheckpointAppleApps = true;
+            request.RequireImmutableAppleSourceSnapshot = true;
             request.PlanOnly =
                 spec.Module is null &&
                 spec.Packages is null &&
@@ -171,9 +215,24 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
 
     private static PowerForgeReleaseResult ExecuteUnifiedReleaseBuild(string configPath, PowerForgeReleaseRequest request)
     {
-        var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
+        var spec = request.ExactConfigurationContent is null
+            ? PowerForgeReleaseService.LoadConfiguration(configPath)
+            : PowerForgeReleaseService.LoadConfigurationContent(request.ExactConfigurationContent, configPath);
         return new PowerForgeReleaseService(new NullLogger()).Execute(spec, request);
     }
+
+    internal static string ResolveExactGitHead(string repositoryRoot)
+    {
+        var git = new HomeAssistantReleaseGitService();
+        git.EnsureClean(repositoryRoot);
+        var sourceCommit = git.GetHeadSha(repositoryRoot).Trim();
+        if (!GitObjectId.IsFull(sourceCommit))
+            throw new InvalidOperationException("Apple release checkpoints require a full SHA-1 or SHA-256 repository HEAD.");
+        return sourceCommit.ToLowerInvariant();
+    }
+
+    internal static string ResolveExactAppleSourceCommit(string repositoryRoot, string configPath)
+        => new AppleReleaseSourceTrustService().ResolveExactCommit(repositoryRoot, configPath);
 
     private static IReadOnlyList<ReleaseBuildAdapterResult> CreateUnifiedAdapterResults(
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,

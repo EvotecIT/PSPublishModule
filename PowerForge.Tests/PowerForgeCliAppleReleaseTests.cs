@@ -102,15 +102,15 @@ public sealed class PowerForgeCliAppleReleaseTests
             var advance = await RunCliAsync(
                 repoRoot,
                 $"\"{GetCliPath(repoRoot)}\" apple-release Advance --config \"{configPath}\" --plan --summary --output json");
-            Assert.Equal(0, advance.ExitCode);
+            Assert.NotEqual(0, advance.ExitCode);
             using (var advanceDocument = JsonDocument.Parse(advance.StdOut))
             {
-                var result = advanceDocument.RootElement.GetProperty("result");
-                Assert.Equal("Advance", result.GetProperty("action").GetString());
-                Assert.True(result.GetProperty("requiresConfirmation").GetBoolean());
+                var rejected = advanceDocument.RootElement;
+                Assert.False(rejected.GetProperty("success").GetBoolean());
                 Assert.Contains(
-                    result.GetProperty("enabledSteps").EnumerateArray(),
-                    static step => step.GetString() == "stopBeforeReview");
+                    "No supported key formats",
+                    rejected.GetProperty("error").GetString(),
+                    StringComparison.OrdinalIgnoreCase);
             }
 
             var configuredDedicated = await RunCliAsync(
@@ -141,10 +141,17 @@ public sealed class PowerForgeCliAppleReleaseTests
                     StringComparison.OrdinalIgnoreCase);
             }
 
-            WriteReleaseConfig(configPath, submitForReview: true, includeInvalidModule: false);
+            WriteReleaseConfig(configPath, submitForReview: false, includeInvalidModule: false);
+            File.WriteAllText(Path.Combine(tempRoot, "screenshots.json"), "{}");
+            File.WriteAllText(
+                configPath,
+                File.ReadAllText(configPath).Replace(
+                    "\"Archive\": false,",
+                    "\"Archive\": false, \"SyncScreenshots\": true, \"ReplaceScreenshots\": true, \"ScreenshotConfigPath\": \"screenshots.json\",",
+                    StringComparison.Ordinal));
             var configured = await RunCliAsync(
                 repoRoot,
-                $"\"{GetCliPath(repoRoot)}\" release --config \"{configPath}\" --plan --summary --output json");
+                $"\"{GetCliPath(repoRoot)}\" release --config \"{configPath}\" --validate --summary --output json");
 
             Assert.True(
                 configured.ExitCode == 0,

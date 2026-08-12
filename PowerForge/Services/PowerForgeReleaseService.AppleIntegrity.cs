@@ -1,0 +1,244 @@
+namespace PowerForge;
+
+internal sealed partial class PowerForgeReleaseService
+{
+    private static void AddAppleScreenshotProtectedPaths(
+        string projectRoot,
+        IEnumerable<string> configPaths,
+        ICollection<(string Name, string Path, bool IsDirectory)> protectedPaths)
+    {
+        var comparer = FrameworkCompatibility.GetPathStringComparisonForPath(projectRoot) == StringComparison.OrdinalIgnoreCase
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        foreach (var configPath in configPaths.Distinct(comparer))
+        {
+            var bytes = File.ReadAllBytes(configPath);
+            string json;
+            using (var stream = new MemoryStream(bytes, writable: false))
+            using (var reader = new StreamReader(stream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+                json = reader.ReadToEnd();
+            var spec = System.Text.Json.JsonSerializer.Deserialize<AppStoreConnectScreenshotSyncSpec>(json, CreateJsonOptions())
+                ?? throw new InvalidOperationException($"Unable to deserialize screenshot sync config: {configPath}");
+            var baseDirectory = Path.GetDirectoryName(configPath) ?? projectRoot;
+            foreach (var set in (spec.ScreenshotSets ?? Array.Empty<AppStoreConnectScreenshotSetSyncSpec>())
+                         .Where(static set => !string.IsNullOrWhiteSpace(set.Path)))
+            {
+                var setPath = ResolveOutputPath(baseDirectory, set.Path);
+                if (!Directory.Exists(setPath))
+                    continue;
+                var filter = string.IsNullOrWhiteSpace(set.Filter) ? "*.png" : set.Filter.Trim();
+                var maxCount = set.MaxCount <= 0 ? 10 : set.MaxCount;
+                foreach (var screenshotPath in AppStoreConnectScreenshotFileSelector.Select(setPath, filter, maxCount))
+                {
+                    protectedPaths.Add((
+                        $"screenshot input {set.ScreenshotDisplayType}",
+                        screenshotPath,
+                        false));
+                }
+            }
+
+            if (spec.Quality?.RequireApprovalManifest != true ||
+                string.IsNullOrWhiteSpace(spec.Quality.ApprovalManifestPath))
+                continue;
+            var approvalPath = ResolveOutputPath(baseDirectory, spec.Quality.ApprovalManifestPath!);
+            protectedPaths.Add(("screenshot approval manifest", approvalPath, false));
+        }
+    }
+
+    private static void ValidateAppleAutomationOutputPaths(
+        string receiptPath,
+        string receiptHistoryPath,
+        string planReceiptPath,
+        string lockPath,
+        IEnumerable<(string Name, string Path, bool IsDirectory)> protectedPaths)
+    {
+        var protectedEntries = protectedPaths
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Path))
+            .Select(static entry => (entry.Name, Path: Path.GetFullPath(entry.Path), entry.IsDirectory))
+            .ToArray();
+        ValidateAppleReleasePathIsolation(protectedEntries);
+
+        var history = Path.GetFullPath(receiptHistoryPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var files = new[]
+        {
+            (Name: "ReceiptPath", Path: Path.GetFullPath(receiptPath)),
+            (Name: "PlanReceiptPath", Path: Path.GetFullPath(planReceiptPath)),
+            (Name: "LockPath", Path: Path.GetFullPath(lockPath)),
+            (Name: "ReceiptJournalLockPath", Path: AppleReleaseReceiptJournalLease.CreateLockPath(receiptPath)),
+            (Name: "ReceiptHistoryJournalLockPath", Path: AppleReleaseReceiptJournalLease.CreateLockPath(receiptHistoryPath))
+        };
+
+        for (var index = 0; index < files.Length; index++)
+        {
+            for (var siblingIndex = index + 1; siblingIndex < files.Length; siblingIndex++)
+            {
+                if (!PathsOverlap(files[index].Path, files[siblingIndex].Path))
+                    continue;
+                throw new InvalidOperationException(
+                    $"Apple automation output files must not equal, contain, or be contained by each other: " +
+                    $"{files[index].Name}, {files[siblingIndex].Name}.");
+            }
+        }
+
+        foreach (var file in files)
+        {
+            var comparison = GetAppleOutputPathComparison(file.Path, history);
+            var candidate = file.Path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (candidate.Equals(history, comparison) ||
+                candidate.StartsWith(history + Path.DirectorySeparatorChar, comparison) ||
+                history.StartsWith(candidate + Path.DirectorySeparatorChar, comparison))
+            {
+                throw new InvalidOperationException(
+                    $"AppleApps.Automation.ReceiptHistoryPath must not equal, contain, or be contained by {file.Name}.");
+            }
+        }
+
+        var outputs = files
+            .Select(static file => (file.Name, file.Path, IsDirectory: false))
+            .Append((Name: "ReceiptHistoryPath", Path: history, IsDirectory: true))
+            .ToArray();
+        foreach (var output in outputs)
+        {
+            foreach (var protectedPath in protectedEntries)
+            {
+                if (!PathsOverlap(output.Path, protectedPath.Path))
+                    continue;
+                throw new InvalidOperationException(
+                    $"Apple automation output {output.Name} must not equal, contain, or be contained by " +
+                    $"release input/artifact path {protectedPath.Name}: {Path.GetFullPath(protectedPath.Path)}");
+            }
+        }
+    }
+
+    private static void ValidateAppleReleasePathIsolation(
+        IReadOnlyList<(string Name, string Path, bool IsDirectory)> protectedPaths)
+    {
+        var archiveRoot = protectedPaths.Single(static entry => entry.Name == "archive root");
+        var exportRoot = protectedPaths.Single(static entry => entry.Name == "export root");
+        if (PathsOverlap(archiveRoot.Path, exportRoot.Path))
+        {
+            throw new InvalidOperationException(
+                "Apple archive and export roots must not equal, contain, or be contained by each other.");
+        }
+
+        var artifacts = protectedPaths
+            .Where(static entry => entry.Name.EndsWith(" archive", StringComparison.Ordinal) ||
+                                   entry.Name.EndsWith(" export", StringComparison.Ordinal))
+            .ToArray();
+        var sources = protectedPaths
+            .Where(static entry => entry.Name != "archive root" &&
+                                   entry.Name != "export root" &&
+                                   !entry.Name.EndsWith(" archive", StringComparison.Ordinal) &&
+                                   !entry.Name.EndsWith(" export", StringComparison.Ordinal))
+            .ToArray();
+
+        for (var index = 0; index < artifacts.Length; index++)
+        {
+            for (var siblingIndex = index + 1; siblingIndex < artifacts.Length; siblingIndex++)
+            {
+                if (!PathsOverlap(artifacts[index].Path, artifacts[siblingIndex].Path))
+                    continue;
+                throw new InvalidOperationException(
+                    $"Apple release artifact paths must not equal, contain, or be contained by each other: " +
+                    $"{artifacts[index].Name}, {artifacts[siblingIndex].Name}.");
+            }
+
+            foreach (var source in sources)
+            {
+                if (!PathsOverlap(artifacts[index].Path, source.Path))
+                    continue;
+                throw new InvalidOperationException(
+                    $"Apple release artifact path {artifacts[index].Name} must not equal, contain, or be contained by " +
+                    $"release input path {source.Name}: {source.Path}");
+            }
+        }
+
+        foreach (var source in sources)
+        {
+            if (PathsOverlap(archiveRoot.Path, source.Path) || PathsOverlap(exportRoot.Path, source.Path))
+            {
+                throw new InvalidOperationException(
+                    $"Apple archive/export roots must not equal, contain, or be contained by release input path " +
+                    $"{source.Name}: {source.Path}");
+            }
+        }
+    }
+
+    private static bool PathsOverlap(string first, string second)
+    {
+        var comparison = GetAppleOutputPathComparison(first, second);
+        var left = Path.GetFullPath(first).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var right = Path.GetFullPath(second).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return left.Equals(right, comparison) ||
+               left.StartsWith(right + Path.DirectorySeparatorChar, comparison) ||
+               right.StartsWith(left + Path.DirectorySeparatorChar, comparison);
+    }
+
+    private static StringComparison GetAppleOutputPathComparison(string first, string second)
+        => FrameworkCompatibility.GetPathStringComparisonForPath(first) == StringComparison.OrdinalIgnoreCase ||
+           FrameworkCompatibility.GetPathStringComparisonForPath(second) == StringComparison.OrdinalIgnoreCase
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+    private static void VerifyExpectedAppleCheckpointArchives(PowerForgeAppleReleasePlan plan)
+    {
+        foreach (var app in plan.Apps.Where(static candidate => !string.IsNullOrWhiteSpace(candidate.ExpectedArchiveSha256)))
+        {
+            if (!File.Exists(app.ArchivePath) && !Directory.Exists(app.ArchivePath))
+            {
+                throw new FileNotFoundException(
+                    $"The checkpointed Apple archive for '{app.Name}' was not found: {app.ArchivePath}",
+                    app.ArchivePath);
+            }
+
+            var actual = AppleNotarizationService.ComputeArtifactSha256(app.ArchivePath);
+            if (!actual.Equals(app.ExpectedArchiveSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"The checkpointed Apple archive for '{app.Name}' changed before publish. Expected SHA-256 " +
+                    $"'{app.ExpectedArchiveSha256}', received '{actual}'. Rebuild and approve a new exact checkpoint.");
+            }
+        }
+    }
+
+    private static string ValidateDirectRecoveryArtifactPath(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        string storedPath)
+    {
+        var artifactPath = Path.GetFullPath(Path.IsPathRooted(storedPath)
+            ? storedPath
+            : Path.Combine(plan.ProjectRoot, storedPath));
+        var exportRoot = Path.GetFullPath(app.ExportPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!AppleReleaseArtifactService.IsWithinRoot(artifactPath, exportRoot))
+        {
+            throw new InvalidOperationException(
+                $"Direct Apple recovery artifact for '{app.Name}' is outside its current export root: {artifactPath}");
+        }
+
+        EnsurePathHasNoLinkedTraversal(plan.ProjectRoot, artifactPath, $"Direct Apple recovery artifact for '{app.Name}'");
+        return artifactPath;
+    }
+
+    private static void EnsurePathHasNoLinkedTraversal(string projectRoot, string path, string name)
+    {
+        var root = Path.GetFullPath(projectRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var current = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = GetAppleOutputPathComparison(current, root);
+        if (!AppleReleaseArtifactService.IsWithinRoot(current, root))
+            throw new InvalidOperationException($"{name} is outside AppleApps.ProjectRoot: {current}");
+
+        while (true)
+        {
+            if ((File.Exists(current) || Directory.Exists(current)) &&
+                (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException($"{name} traverses a symbolic link or reparse point: {current}");
+            if (current.Equals(root, comparison))
+                break;
+            current = Path.GetDirectoryName(current)
+                ?? throw new InvalidOperationException($"Unable to validate {name}: {path}");
+        }
+    }
+}

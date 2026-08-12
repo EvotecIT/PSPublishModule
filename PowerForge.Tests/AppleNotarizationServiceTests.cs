@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace PowerForge.Tests;
 
-public sealed class AppleNotarizationServiceTests
+public sealed partial class AppleNotarizationServiceTests
 {
     [Fact]
     public async Task NotarizeAsync_PackagesSubmitsStaplesValidatesAndAssessesApp()
@@ -12,19 +12,32 @@ public sealed class AppleNotarizationServiceTests
         {
             var app = Directory.CreateDirectory(Path.Combine(root.FullName, "EasyControlX Agent.app"));
             var runner = new NotaryProcessRunner();
+            string? checkpointSubmissionSha256 = null;
             var result = await new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
             {
                 ArtifactPath = app.FullName,
                 KeychainProfile = "powerforge-notary",
                 XcrunExecutable = "xcrun-test",
                 DittoExecutable = "ditto-test",
-                SpctlExecutable = "spctl-test"
+                SpctlExecutable = "spctl-test",
+                AcceptedCheckpoint = checkpoint =>
+                {
+                    Assert.Equal("submission-1", checkpoint.SubmissionId);
+                    Assert.Equal("Accepted", checkpoint.Status);
+                    checkpointSubmissionSha256 = checkpoint.SubmissionSha256;
+                    Assert.Equal(2, runner.Requests.Count);
+                }
             });
 
             Assert.True(result.Succeeded);
             Assert.Equal("submission-1", result.SubmissionId);
             Assert.Equal("Accepted", result.Status);
             Assert.EndsWith(".notarization.zip", result.SubmissionPath, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(result.SubmissionPath));
+            Assert.Equal(64, result.SubmissionSha256?.Length);
+            Assert.Equal(result.SubmissionSha256, checkpointSubmissionSha256);
+            Assert.Equal(result.SubmissionSha256, AppleNotarizationService.ComputeFileSha256(result.SubmissionPath));
+            string? privateArtifactPath = null;
             Assert.Collection(
                 runner.Requests,
                 request => Assert.Equal("ditto-test", request.FileName),
@@ -34,13 +47,117 @@ public sealed class AppleNotarizationServiceTests
                     Assert.Equal("notarytool", request.Arguments[0]);
                     Assert.Contains("--keychain-profile", request.Arguments);
                 },
-                request => Assert.Equal(new[] { "stapler", "staple", app.FullName }, request.Arguments),
-                request => Assert.Equal(new[] { "stapler", "validate", app.FullName }, request.Arguments),
+                request =>
+                {
+                    privateArtifactPath = request.Arguments[2];
+                    Assert.NotEqual(app.FullName, privateArtifactPath);
+                    Assert.Equal(new[] { "stapler", "staple", privateArtifactPath }, request.Arguments);
+                },
+                request => Assert.Equal(new[] { "stapler", "validate", privateArtifactPath! }, request.Arguments),
                 request =>
                 {
                     Assert.Equal("spctl-test", request.FileName);
                     Assert.Contains("execute", request.Arguments);
+                    Assert.Equal(privateArtifactPath, request.Arguments[^1]);
                 });
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NotarizeAsync_ExactSourceRejectsCustomAppleToolExecutable()
+    {
+        var artifact = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(artifact, "pkg");
+        try
+        {
+            var runner = new NotaryProcessRunner();
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
+                {
+                    ArtifactPath = artifact,
+                    KeychainProfile = "powerforge-notary",
+                    XcrunExecutable = "/tmp/hostile-xcrun",
+                    RequireTrustedSystemTools = true,
+                    Staple = false,
+                    Assess = false
+                }));
+
+            Assert.Contains("trusted system tool '/usr/bin/xcrun'", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { File.Delete(artifact); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NotarizeAsync_ExactSourceUsesFixedAppleToolPathAndSanitizedPath()
+    {
+        var artifact = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(artifact, "pkg");
+        try
+        {
+            var runner = new NotaryProcessRunner();
+            var result = await new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
+            {
+                ArtifactPath = artifact,
+                KeychainProfile = "powerforge-notary",
+                RequireTrustedSystemTools = true,
+                Staple = false,
+                Assess = true
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.Collection(
+                runner.Requests,
+                request =>
+                {
+                    Assert.Equal("/usr/bin/xcrun", request.FileName);
+                    Assert.Equal("/usr/bin:/bin:/usr/sbin:/sbin", request.EnvironmentVariables?["PATH"]);
+                    Assert.False(request.InheritEnvironment);
+                    Assert.False(request.EnvironmentVariables?.ContainsKey("DEVELOPER_DIR"));
+                },
+                request =>
+                {
+                    Assert.Equal("/usr/sbin/spctl", request.FileName);
+                    Assert.Equal("/usr/bin:/bin:/usr/sbin:/sbin", request.EnvironmentVariables?["PATH"]);
+                    Assert.False(request.InheritEnvironment);
+                    Assert.False(request.EnvironmentVariables?.ContainsKey("DEVELOPER_DIR"));
+                });
+        }
+        finally
+        {
+            try { File.Delete(artifact); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NotarizeAsync_RejectsAcceptedAppSubmissionWhenPrivateZipChangesDuringUpload()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Mutable.app"));
+            AppleNotarizationAcceptedCheckpoint? checkpoint = null;
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(new MutatingSubmissionRunner()).NotarizeAsync(new AppleNotarizationRequest
+                {
+                    ArtifactPath = app.FullName,
+                    KeychainProfile = "powerforge-notary",
+                    Staple = false,
+                    Assess = false,
+                    AcceptedCheckpoint = accepted => checkpoint = accepted
+                }));
+
+            Assert.Contains("exact submitted file changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Do not resubmit", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(checkpoint);
+            Assert.Equal("submission-mutated", checkpoint.SubmissionId);
         }
         finally
         {
@@ -73,6 +190,151 @@ public sealed class AppleNotarizationServiceTests
     }
 
     [Fact]
+    public async Task NotarizeAsync_SubmitsPrivateImmutableArtifactSnapshot()
+    {
+        var artifact = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(artifact, "approved-pkg");
+        try
+        {
+            var runner = new SnapshotObservingNotaryRunner(artifact);
+            var result = await new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
+            {
+                ArtifactPath = artifact,
+                KeychainProfile = "powerforge-notary",
+                Staple = false,
+                Assess = false
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.NotEqual(artifact, runner.SubmittedPath);
+            Assert.Equal("approved-pkg", runner.SubmittedContents);
+            Assert.Equal("approved-pkg", await File.ReadAllTextAsync(artifact));
+        }
+        finally
+        {
+            try { File.Delete(artifact); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NotarizeAsync_StaplesPrivateBundleAndPublishesThoseExactBytes()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Private.app"));
+            var payload = Path.Combine(app.FullName, "payload");
+            await File.WriteAllTextAsync(payload, "approved");
+            var runner = new MutatingBundleStapleRunner(app.FullName);
+
+            var result = await new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
+            {
+                ArtifactPath = app.FullName,
+                KeychainProfile = "powerforge-notary"
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal("approved", await File.ReadAllTextAsync(payload));
+            Assert.True(File.Exists(Path.Combine(app.FullName, ".notary-ticket")));
+            Assert.NotEqual(app.FullName, runner.StapledPath);
+            Assert.Equal(runner.StapledPath, runner.AssessedPath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NotarizeAsync_RejectsTransientPrivateArtifactReplacementAfterStaplerValidation()
+    {
+        var artifact = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(artifact, "approved-pkg");
+        try
+        {
+            var checkpointed = false;
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(new TransientPostValidationMutationRunner()).NotarizeAsync(
+                    new AppleNotarizationRequest
+                    {
+                        ArtifactPath = artifact,
+                        KeychainProfile = "powerforge-notary",
+                        Assess = false,
+                        StapledCheckpoint = _ => checkpointed = true
+                    }));
+
+            Assert.Contains("validated private Apple notarization artifact changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("approved-pkg", await File.ReadAllTextAsync(artifact));
+            Assert.False(checkpointed);
+        }
+        finally
+        {
+            try { File.Delete(artifact); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NotarizeAsync_AcceptedCheckpointFailureReportsSubmissionBeforeStapling()
+    {
+        var artifact = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(artifact, "pkg");
+        try
+        {
+            var runner = new NotaryProcessRunner();
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
+                {
+                    ArtifactPath = artifact,
+                    KeychainProfile = "powerforge-notary",
+                    AcceptedCheckpoint = _ => throw new IOException("receipt storage unavailable")
+                }));
+
+            Assert.Contains("submission-1", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("Do not resubmit", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Single(runner.Requests);
+            Assert.DoesNotContain(runner.Requests, request =>
+                request.Arguments.Count > 1 && request.Arguments[0] == "stapler");
+        }
+        finally
+        {
+            try { File.Delete(artifact); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NotarizeAsync_PersistsAcceptedCheckpointBeforeRetainingAppSubmission()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "EasyControlX Agent.app"));
+            var invalidRetainedPath = Directory.CreateDirectory(Path.Combine(root.FullName, "submission-is-a-directory")).FullName;
+            var checkpointed = false;
+
+            var retentionFailure = await Record.ExceptionAsync(() =>
+                new AppleNotarizationService(new NotaryProcessRunner()).NotarizeAsync(new AppleNotarizationRequest
+                {
+                    ArtifactPath = app.FullName,
+                    SubmissionPath = invalidRetainedPath,
+                    KeychainProfile = "powerforge-notary",
+                    AcceptedCheckpoint = checkpoint =>
+                    {
+                        checkpointed = true;
+                        Assert.Equal("submission-1", checkpoint.SubmissionId);
+                        Assert.Equal(invalidRetainedPath, checkpoint.SubmissionPath);
+                    }
+                }));
+
+            Assert.NotNull(retentionFailure);
+            Assert.True(checkpointed);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task NotarizeAsync_DiskImageUsesOpenAssessmentWithPrimarySignatureContext()
     {
         var artifact = Path.GetTempFileName() + ".dmg";
@@ -87,13 +349,19 @@ public sealed class AppleNotarizationServiceTests
             });
 
             Assert.True(result.Succeeded);
+            string? privateArtifactPath = null;
             Assert.Collection(
                 runner.Requests,
                 request => Assert.Equal("notarytool", request.Arguments[0]),
-                request => Assert.Equal(new[] { "stapler", "staple", artifact }, request.Arguments),
-                request => Assert.Equal(new[] { "stapler", "validate", artifact }, request.Arguments),
+                request =>
+                {
+                    privateArtifactPath = request.Arguments[2];
+                    Assert.NotEqual(artifact, privateArtifactPath);
+                    Assert.Equal(new[] { "stapler", "staple", privateArtifactPath }, request.Arguments);
+                },
+                request => Assert.Equal(new[] { "stapler", "validate", privateArtifactPath! }, request.Arguments),
                 request => Assert.Equal(
-                    new[] { "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=4", artifact },
+                    new[] { "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=4", privateArtifactPath! },
                     request.Arguments));
         }
         finally
@@ -163,7 +431,8 @@ public sealed class AppleNotarizationServiceTests
                 {
                     ArtifactPath = artifact,
                     AcceptedSubmissionId = "submission-existing",
-                    ExpectedArtifactSha256 = new string('0', 64)
+                    ExpectedArtifactSha256 = new string('0', 64),
+                    Staple = false
                 }));
 
             Assert.Contains("artifact changed", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -262,6 +531,88 @@ public sealed class AppleNotarizationServiceTests
     }
 
     [Fact]
+    public void ComputeArtifactSha256_IsStableAcrossTimestampOnlyCopyChanges()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Portable.app"));
+            var contents = Directory.CreateDirectory(Path.Combine(app.FullName, "Contents"));
+            var payload = Path.Combine(contents.FullName, "payload");
+            File.WriteAllText(payload, "identical signed bytes");
+            var expected = AppleNotarizationService.ComputeArtifactSha256(app.FullName);
+
+            File.SetLastWriteTimeUtc(payload, DateTime.UtcNow.AddYears(-2));
+            Directory.SetLastWriteTimeUtc(contents.FullName, DateTime.UtcNow.AddYears(-1));
+            Directory.SetLastWriteTimeUtc(app.FullName, DateTime.UtcNow.AddMonths(-3));
+
+            Assert.Equal(expected, AppleNotarizationService.ComputeArtifactSha256(app.FullName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ComputeArtifactSha256_LengthFramesMetadataAndFileContents()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var original = Directory.CreateDirectory(Path.Combine(root.FullName, "Original.app"));
+            var forged = Directory.CreateDirectory(Path.Combine(root.FullName, "Forged.app"));
+            var originalA = Path.Combine(original.FullName, "a");
+            var originalB = Path.Combine(original.FullName, "b");
+            var forgedA = Path.Combine(forged.FullName, "a");
+            File.WriteAllBytes(originalA, new byte[] { 0x41 });
+            File.WriteAllBytes(originalB, new byte[] { 0x42 });
+            File.WriteAllBytes(forgedA, new byte[] { 0x41 });
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows())
+            {
+                var mode = File.GetUnixFileMode(originalA);
+                File.SetUnixFileMode(originalB, mode);
+                File.SetUnixFileMode(forgedA, mode);
+            }
+#endif
+
+            // This payload made the prior delimiter-only digest interpret one file's bytes as
+            // the entry boundary and metadata for a second file.
+            var collisionPayload = new List<byte> { 0x41, 0xff };
+            static void AppendLegacyValue(List<byte> payload, string value)
+            {
+                payload.AddRange(System.Text.Encoding.UTF8.GetBytes(value));
+                payload.Add(0);
+            }
+            AppendLegacyValue(collisionPayload, "b");
+            AppendLegacyValue(
+                collisionPayload,
+                ((int)new FileInfo(originalB).Attributes).ToString(System.Globalization.CultureInfo.InvariantCulture));
+#if NET8_0_OR_GREATER
+            AppendLegacyValue(
+                collisionPayload,
+                OperatingSystem.IsWindows()
+                    ? string.Empty
+                    : ((int)File.GetUnixFileMode(originalB)).ToString(System.Globalization.CultureInfo.InvariantCulture));
+#else
+            AppendLegacyValue(collisionPayload, string.Empty);
+#endif
+            AppendLegacyValue(collisionPayload, string.Empty);
+            collisionPayload.Add(0x42);
+            File.WriteAllBytes(forgedA, collisionPayload.ToArray());
+
+            Assert.NotEqual(
+                AppleNotarizationService.ComputeArtifactSha256(original.FullName),
+                AppleNotarizationService.ComputeArtifactSha256(forged.FullName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task NotarizeAsync_ResumeUsesPostStapleHashAndDoesNotStapleAgain()
     {
         var artifact = Path.GetTempFileName() + ".pkg";
@@ -278,6 +629,11 @@ public sealed class AppleNotarizationServiceTests
             Assert.False(first.Succeeded);
             Assert.True(first.Staple?.Succeeded);
             Assert.False(first.Assessment?.Succeeded);
+            Assert.Equal("pkg-stapled", await File.ReadAllTextAsync(artifact));
+            Assert.DoesNotContain(firstRunner.Requests, request =>
+                request.Arguments.Count > 2 &&
+                request.Arguments[0] == "stapler" &&
+                request.Arguments[2] == artifact);
 
             var resumedRunner = new MutatingStapleRunner(artifact, failAssessment: false);
             var resumed = await new AppleNotarizationService(resumedRunner).NotarizeAsync(new AppleNotarizationRequest
@@ -305,6 +661,34 @@ public sealed class AppleNotarizationServiceTests
         }
     }
 
+    [Fact]
+    public async Task NotarizeAsync_ResumeRejectsChangedArtifactEvenWhenStaplerCouldValidateIt()
+    {
+        var artifact = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(artifact, "pkg-before-stapling");
+        try
+        {
+            var acceptedHash = AppleNotarizationService.ComputeArtifactSha256(artifact);
+            await File.AppendAllTextAsync(artifact, "-ticket-stapled-before-crash");
+            var runner = new MutatingStapleRunner(artifact, failAssessment: false);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
+                {
+                    ArtifactPath = artifact,
+                    AcceptedSubmissionId = "accepted-before-crash",
+                    ExpectedArtifactSha256 = acceptedHash
+                }));
+
+            Assert.Contains("cannot prove artifact identity", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { File.Delete(artifact); } catch { }
+        }
+    }
+
     private sealed class NotaryProcessRunner : IProcessRunner
     {
         private readonly string _status;
@@ -319,10 +703,74 @@ public sealed class AppleNotarizationServiceTests
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            if (request.FileName.Contains("ditto", StringComparison.OrdinalIgnoreCase) && request.Arguments.Count > 0)
+                File.WriteAllText(request.Arguments[^1], "private notarization package");
             var output = request.Arguments.Count > 0 && request.Arguments[0] == "notarytool"
                 ? JsonSerializer.Serialize(new { id = "submission-1", status = _status })
                 : "ok";
             return Task.FromResult(new ProcessRunResult(0, output, string.Empty, request.FileName, TimeSpan.FromMilliseconds(1), false));
+        }
+    }
+
+    private sealed class MutatingSubmissionRunner : IProcessRunner
+    {
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            if (request.FileName.Contains("ditto", StringComparison.OrdinalIgnoreCase))
+                File.WriteAllText(request.Arguments[^1], "approved private notarization package");
+            if (request.Arguments.Count > 2 && request.Arguments[0] == "notarytool")
+            {
+                File.AppendAllText(request.Arguments[2], "-mutated-during-upload");
+                return Task.FromResult(new ProcessRunResult(
+                    0,
+                    JsonSerializer.Serialize(new { id = "submission-mutated", status = "Accepted" }),
+                    string.Empty,
+                    request.FileName,
+                    TimeSpan.Zero,
+                    false));
+            }
+
+            return Task.FromResult(new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, false));
+        }
+    }
+
+    private sealed class SnapshotObservingNotaryRunner : IProcessRunner
+    {
+        private readonly string _originalArtifact;
+
+        internal SnapshotObservingNotaryRunner(string originalArtifact)
+        {
+            _originalArtifact = originalArtifact;
+        }
+
+        internal string? SubmittedPath { get; private set; }
+
+        internal string? SubmittedContents { get; private set; }
+
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            if (request.Arguments.Count > 2 && request.Arguments[0] == "notarytool")
+            {
+                SubmittedPath = request.Arguments[2];
+                File.WriteAllText(_originalArtifact, "transient-pkg");
+                SubmittedContents = File.ReadAllText(SubmittedPath);
+                File.WriteAllText(_originalArtifact, "approved-pkg");
+                return Task.FromResult(new ProcessRunResult(
+                    0,
+                    JsonSerializer.Serialize(new { id = "submission-private", status = "Accepted" }),
+                    string.Empty,
+                    request.FileName,
+                    TimeSpan.FromMilliseconds(1),
+                    false));
+            }
+
+            return Task.FromResult(new ProcessRunResult(
+                0,
+                "ok",
+                string.Empty,
+                request.FileName,
+                TimeSpan.FromMilliseconds(1),
+                false));
         }
     }
 
@@ -342,11 +790,13 @@ public sealed class AppleNotarizationServiceTests
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            if (request.Arguments.Count > 0 && request.Arguments[0] == "notarytool")
+                File.WriteAllText(_artifact, "attacker-replacement");
             if (request.Arguments.Count > 1 &&
                 request.Arguments[0] == "stapler" &&
                 request.Arguments[1] == "staple")
             {
-                File.AppendAllText(_artifact, "-stapled");
+                File.AppendAllText(request.Arguments[2], "-stapled");
             }
 
             var notarySubmission = request.Arguments.Count > 0 && request.Arguments[0] == "notarytool";
@@ -359,6 +809,73 @@ public sealed class AppleNotarizationServiceTests
                 TimeSpan.FromMilliseconds(1),
                 false);
             return Task.FromResult(result);
+        }
+    }
+
+    private sealed class TransientPostValidationMutationRunner : IProcessRunner
+    {
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            var notarySubmission = request.Arguments.Count > 0 && request.Arguments[0] == "notarytool";
+            if (request.Arguments.Count > 2 &&
+                request.Arguments[0] == "stapler" &&
+                request.Arguments[1] == "staple")
+            {
+                File.AppendAllText(request.Arguments[2], "-stapled");
+            }
+            if (request.Arguments.Count > 2 &&
+                request.Arguments[0] == "stapler" &&
+                request.Arguments[1] == "validate")
+            {
+                var validatedBytes = File.ReadAllBytes(request.Arguments[2]);
+                File.WriteAllText(request.Arguments[2], "attacker-replacement");
+                File.WriteAllBytes(request.Arguments[2], validatedBytes);
+            }
+
+            var output = notarySubmission
+                ? JsonSerializer.Serialize(new { id = "submission-transient-replacement", status = "Accepted" })
+                : "ok";
+            return Task.FromResult(new ProcessRunResult(
+                0,
+                output,
+                string.Empty,
+                request.FileName,
+                TimeSpan.FromMilliseconds(1),
+                false));
+        }
+    }
+
+    private sealed class MutatingBundleStapleRunner : IProcessRunner
+    {
+        private readonly string _publicArtifact;
+
+        internal MutatingBundleStapleRunner(string publicArtifact)
+        {
+            _publicArtifact = publicArtifact;
+        }
+
+        internal string? StapledPath { get; private set; }
+
+        internal string? AssessedPath { get; private set; }
+
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            if (request.FileName.Contains("ditto", StringComparison.OrdinalIgnoreCase))
+                File.WriteAllText(request.Arguments[^1], "private notarization package");
+            if (request.Arguments.Count > 0 && request.Arguments[0] == "notarytool")
+                File.WriteAllText(Path.Combine(_publicArtifact, "payload"), "attacker");
+            if (request.Arguments.Count > 2 && request.Arguments[0] == "stapler" && request.Arguments[1] == "staple")
+            {
+                StapledPath = request.Arguments[2];
+                File.WriteAllText(Path.Combine(StapledPath, ".notary-ticket"), "accepted");
+            }
+            if (request.FileName.Contains("spctl", StringComparison.OrdinalIgnoreCase))
+                AssessedPath = request.Arguments[^1];
+
+            var output = request.Arguments.Count > 0 && request.Arguments[0] == "notarytool"
+                ? JsonSerializer.Serialize(new { id = "submission-private-bundle", status = "Accepted" })
+                : "ok";
+            return Task.FromResult(new ProcessRunResult(0, output, string.Empty, request.FileName, TimeSpan.Zero, false));
         }
     }
 }

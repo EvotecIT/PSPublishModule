@@ -306,6 +306,58 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
     }
 
     [Fact]
+    public void CreateUnifiedPublishRequest_preserves_checkpointed_Apple_provenance_and_recovery_options()
+    {
+        var built = new PowerForgeReleaseResult
+        {
+            AppleAppPlan = new PowerForgeAppleReleasePlan
+            {
+                SourceCommit = "0123456789abcdef0123456789abcdef01234567",
+                RequestedMarketingVersion = "1.6",
+                AdoptExistingBuild = true,
+                Automation = new PowerForgeAppleReleaseAutomationOptions
+                {
+                    Resume = false,
+                    WaitForProcessing = true,
+                    ProcessingTimeoutSeconds = 1200,
+                    PollIntervalSeconds = 30
+                },
+                Apps =
+                [
+                    new PowerForgeAppleAppReleaseTargetPlan
+                    {
+                        Name = "CasaRay iOS",
+                        ExpectedArchiveSha256 = "1111111111111111111111111111111111111111111111111111111111111111"
+                    }
+                ]
+            },
+            AppleReceipt = new PowerForgeAppleReleaseReceipt
+            {
+                PlanOnly = true,
+                PlanSha256 = "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+            }
+        };
+
+        var request = ReleasePublishExecutionService.CreateUnifiedPublishRequest(
+            "/repo/powerforge.release.json",
+            built);
+
+        Assert.Equal(PowerForgeAppleReleaseAction.Configured, request.AppleAction);
+        Assert.Equal("1.6", request.AppleMarketingVersion);
+        Assert.Equal("0123456789abcdef0123456789abcdef01234567", request.AppleSourceCommit);
+        Assert.True(request.RequireImmutableAppleSourceSnapshot);
+        Assert.Equal("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd", request.AppleExpectedPlanSha256);
+        Assert.Equal(
+            "1111111111111111111111111111111111111111111111111111111111111111",
+            Assert.Single(request.AppleExpectedArchiveSha256ByTarget).Value);
+        Assert.True(request.AppleAdoptExistingBuild);
+        Assert.False(request.AppleResume);
+        Assert.True(request.AppleWaitForProcessing);
+        Assert.Equal(1200, request.AppleProcessingTimeoutSeconds);
+        Assert.Equal(30, request.ApplePollIntervalSeconds);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_rethrows_cancellation_from_module_repository_publication()
     {
         var repositoryRoot = CreateReviewRepository(out var releaseConfig);

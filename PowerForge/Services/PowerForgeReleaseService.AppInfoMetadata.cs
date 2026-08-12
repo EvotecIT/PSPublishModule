@@ -4,6 +4,49 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    private static void ValidateAppleAppInfoMutationResults(
+        IReadOnlyCollection<AppStoreConnectAppInfoMetadataSpec> requested,
+        IReadOnlyCollection<AppStoreConnectAppInfoMetadataSyncResult> observed)
+    {
+        if (observed.Count != requested.Count)
+        {
+            throw new InvalidOperationException(
+                $"App Store Connect returned {observed.Count} App Information mutation result(s) for {requested.Count} requested localization(s).");
+        }
+
+        foreach (var spec in requested)
+        {
+            var result = observed.SingleOrDefault(value =>
+                string.Equals(value.After.Locale, spec.Locale, StringComparison.OrdinalIgnoreCase));
+            if (result is null ||
+                string.IsNullOrWhiteSpace(result.AppInfo.Id) ||
+                string.IsNullOrWhiteSpace(result.After.Id))
+            {
+                throw new InvalidOperationException(
+                    $"App Store Connect did not return authoritative App Information state for locale '{spec.Locale}'.");
+            }
+
+            ValidateAppleAppInfoField(spec.Locale, "name", spec.Metadata.Name, result.After.Name);
+            ValidateAppleAppInfoField(spec.Locale, "subtitle", spec.Metadata.Subtitle, result.After.Subtitle);
+            ValidateAppleAppInfoField(spec.Locale, "privacyPolicyUrl", spec.Metadata.PrivacyPolicyUrl, result.After.PrivacyPolicyUrl);
+            ValidateAppleAppInfoField(spec.Locale, "privacyChoicesUrl", spec.Metadata.PrivacyChoicesUrl, result.After.PrivacyChoicesUrl);
+            ValidateAppleAppInfoField(spec.Locale, "privacyPolicyText", spec.Metadata.PrivacyPolicyText, result.After.PrivacyPolicyText);
+        }
+    }
+
+    private static void ValidateAppleAppInfoField(
+        string locale,
+        string field,
+        string? expected,
+        string? observed)
+    {
+        if (expected is null || string.Equals(expected, observed, StringComparison.Ordinal))
+            return;
+
+        throw new InvalidOperationException(
+            $"App Store Connect did not confirm App Information field '{field}' for locale '{locale}'.");
+    }
+
     private static (AppStoreConnectAppInfoMetadataSpec Spec, string ConfigPath)[] LoadAppleAppInfoSpecs(
         PowerForgeAppleReleasePlan plan)
     {
@@ -16,7 +59,7 @@ internal sealed partial class PowerForgeReleaseService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(path =>
             {
-                var json = File.ReadAllText(path);
+                var json = ReadApprovedMutationInputText(plan, path);
                 var spec = JsonSerializer.Deserialize<AppStoreConnectAppInfoMetadataSpec>(json, CreateJsonOptions())
                     ?? throw new InvalidOperationException($"Unable to deserialize App Information metadata config: {path}");
                 if (string.IsNullOrWhiteSpace(spec.AppId))

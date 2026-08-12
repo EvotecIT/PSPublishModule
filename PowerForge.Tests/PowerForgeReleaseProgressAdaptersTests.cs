@@ -310,6 +310,23 @@ public sealed class PowerForgeReleaseProgressAdaptersTests
 public sealed class ProcessRunnerStreamingTests
 {
     [Fact]
+    public async Task RunAsync_InvokesStartBoundaryAfterSuccessfulProcessStart()
+    {
+        var starts = 0;
+        var request = new ProcessRunRequest(
+            "dotnet",
+            Directory.GetCurrentDirectory(),
+            new[] { "--version" },
+            TimeSpan.FromSeconds(30));
+        request.SetStartBoundary(() => starts++);
+
+        var result = await new ProcessRunner().RunAsync(request);
+
+        Assert.True(result.Succeeded, result.StdErr);
+        Assert.Equal(1, starts);
+    }
+
+    [Fact]
     public async Task RunAsync_CapturesOutputAndForwardsLines()
     {
         var lines = new List<string>();

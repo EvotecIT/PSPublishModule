@@ -42,10 +42,61 @@ public sealed class AppStoreConnectReleasePreparationService
         var buildNumber = request.BuildNumber?.Trim() ?? string.Empty;
         var messages = new List<string>();
         var createdVersion = false;
+        var firstRemoteMutationAuthorized = false;
         AppStoreConnectVersionInfo? version = null;
+        var configuredVersionId = requiresVersion ? ResolveConfiguredVersionId(request) : null;
+        var screenshotService = request.ScreenshotSpec is null
+            ? null
+            : new AppStoreConnectScreenshotSyncService(_client);
+        var initialScreenshotSpec = request.ScreenshotSpec is null
+            ? null
+            : CreateScreenshotSpecForVersion(
+                request.ScreenshotSpec,
+                appId,
+                versionString,
+                request.Platform,
+                configuredVersionId);
+        using var approvedScreenshotSnapshot = initialScreenshotSpec is null
+            ? null
+            : screenshotService!.CreateSnapshot(new AppStoreConnectScreenshotSyncRequest
+            {
+                Spec = initialScreenshotSpec,
+                ReplaceExisting = request.ReplaceScreenshots,
+                BaseDirectory = request.BaseDirectory,
+                ExpectedSourceCommit = request.ExpectedSourceCommit,
+                ExpectedFileSha256 = request.ExpectedScreenshotFileSha256,
+                ExpectedRemoteInventorySha256 = request.ExpectedScreenshotInventorySha256
+            });
+
+        async Task AuthorizeFirstRemoteMutationAsync()
+        {
+            if (firstRemoteMutationAuthorized)
+                return;
+            if (request.ScreenshotSpec is not null &&
+                request.ReplaceScreenshots &&
+                !string.IsNullOrWhiteSpace(request.ExpectedScreenshotInventorySha256))
+            {
+                if (version is null)
+                {
+                    throw new InvalidOperationException(
+                        "The approved screenshot inventory cannot be validated because the target App Store version does not exist. Review a new release plan before creating it.");
+                }
+                var screenshotSpec = CreateScreenshotSpecForVersion(
+                    request.ScreenshotSpec,
+                    appId,
+                    versionString,
+                    request.Platform,
+                    version.Id);
+                await screenshotService!.ValidateExpectedRemoteInventoryAsync(
+                    screenshotSpec,
+                    request.ExpectedScreenshotInventorySha256!,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            firstRemoteMutationAuthorized = true;
+        }
+
         if (requiresVersion)
         {
-            var configuredVersionId = ResolveConfiguredVersionId(request);
             if (!request.CreateVersion && configuredVersionId is not null)
             {
                 version = new AppStoreConnectVersionInfo
@@ -72,6 +123,7 @@ public sealed class AppStoreConnectReleasePreparationService
                 if (!request.CreateVersion)
                     throw new InvalidOperationException($"App Store version '{versionString}' was not found for app '{appId}' and platform '{request.Platform}'.");
 
+                await AuthorizeFirstRemoteMutationAsync().ConfigureAwait(false);
                 version = await _client.CreateVersionAsync(appId, versionString, request.Platform, cancellationToken).ConfigureAwait(false);
                 createdVersion = true;
                 messages.Add($"Created App Store version '{versionString}' for platform '{request.Platform}'.");
@@ -107,6 +159,7 @@ public sealed class AppStoreConnectReleasePreparationService
             }
             else
             {
+                await AuthorizeFirstRemoteMutationAsync().ConfigureAwait(false);
                 await _client.SetVersionBuildAsync(version.Id, build.Id, cancellationToken).ConfigureAwait(false);
                 selectedBuild = true;
                 messages.Add($"Selected build '{buildNumber}' for App Store version '{versionString}'.");
@@ -116,6 +169,7 @@ public sealed class AppStoreConnectReleasePreparationService
         AppStoreConnectVersionMetadataSyncResult? metadata = null;
         if (request.MetadataSpec is not null)
         {
+            await AuthorizeFirstRemoteMutationAsync().ConfigureAwait(false);
             var metadataSpec = CreateMetadataSpecForVersion(request.MetadataSpec, appId, versionString, request.Platform, version!.Id);
             metadata = await new AppStoreConnectVersionMetadataSyncService(_client).SyncAsync(
                 new AppStoreConnectVersionMetadataSyncRequest { Spec = metadataSpec },
@@ -126,6 +180,7 @@ public sealed class AppStoreConnectReleasePreparationService
         var appInfoMetadataResults = new List<AppStoreConnectAppInfoMetadataSyncResult>();
         foreach (var sourceSpec in request.AppInfoMetadataSpecs ?? Array.Empty<AppStoreConnectAppInfoMetadataSpec>())
         {
+            await AuthorizeFirstRemoteMutationAsync().ConfigureAwait(false);
             var appInfoMetadataSpec = CreateAppInfoMetadataSpec(sourceSpec, appId);
             var appInfoMetadata = await new AppStoreConnectAppInfoMetadataSyncService(_client).SyncAsync(
                 new AppStoreConnectAppInfoMetadataSyncRequest { Spec = appInfoMetadataSpec },
@@ -137,15 +192,19 @@ public sealed class AppStoreConnectReleasePreparationService
         AppStoreConnectScreenshotSyncResult? screenshots = null;
         if (request.ScreenshotSpec is not null)
         {
+            await AuthorizeFirstRemoteMutationAsync().ConfigureAwait(false);
             var screenshotSpec = CreateScreenshotSpecForVersion(request.ScreenshotSpec, appId, versionString, request.Platform, version!.Id);
-            screenshots = await new AppStoreConnectScreenshotSyncService(_client).SyncAsync(
+            screenshots = await screenshotService!.SyncAsync(
                 new AppStoreConnectScreenshotSyncRequest
                 {
                     Spec = screenshotSpec,
                     ReplaceExisting = request.ReplaceScreenshots,
                     BaseDirectory = request.BaseDirectory,
-                    ExpectedSourceCommit = request.ExpectedSourceCommit
+                    ExpectedSourceCommit = request.ExpectedSourceCommit,
+                    ExpectedFileSha256 = request.ExpectedScreenshotFileSha256,
+                    ExpectedRemoteInventorySha256 = request.ExpectedScreenshotInventorySha256
                 },
+                approvedScreenshotSnapshot!,
                 cancellationToken).ConfigureAwait(false);
             messages.Add("Synchronized App Store screenshots.");
         }
@@ -218,7 +277,7 @@ public sealed class AppStoreConnectReleasePreparationService
         string appId,
         string versionString,
         ApplePlatform platform,
-        string versionId)
+        string? versionId)
     {
         if (!string.IsNullOrWhiteSpace(source.AppId) &&
             !string.Equals(source.AppId.Trim(), appId, StringComparison.OrdinalIgnoreCase))

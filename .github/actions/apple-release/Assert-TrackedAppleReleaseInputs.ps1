@@ -54,7 +54,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sourceRoot)) {
 $sourceRoot = [IO.Path]::GetFullPath($sourceRoot)
 
 if (-not [string]::IsNullOrWhiteSpace($SourceCommit)) {
-    if ($SourceCommit -notmatch '^[0-9A-Fa-f]{40}$') { throw 'source-commit must be an exact 40-character commit SHA.' }
+    if ($SourceCommit -notmatch '^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$') { throw 'source-commit must be a full SHA-1 or SHA-256 Git commit object id.' }
     $actualCommit = (& $GitPath -C $sourceRoot rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $actualCommit.Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Checked-out source '$actualCommit' does not match source-commit '$SourceCommit'."

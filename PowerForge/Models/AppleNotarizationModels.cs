@@ -6,7 +6,7 @@ public sealed class AppleNotarizationRequest
     /// <summary>.app, .dmg, or .pkg artifact to notarize.</summary>
     public string ArtifactPath { get; set; } = string.Empty;
 
-    /// <summary>Optional explicit zip path used when ArtifactPath is an .app bundle.</summary>
+    /// <summary>Optional retained copy path for the exact private zip submitted when ArtifactPath is an .app bundle.</summary>
     public string? SubmissionPath { get; set; }
 
     /// <summary>xcrun executable.</summary>
@@ -17,6 +17,9 @@ public sealed class AppleNotarizationRequest
 
     /// <summary>spctl executable.</summary>
     public string SpctlExecutable { get; set; } = "spctl";
+
+    /// <summary>Require fixed system notarization, packaging, and Gatekeeper executables under a sanitized PATH.</summary>
+    public bool RequireTrustedSystemTools { get; set; }
 
     /// <summary>Optional notarytool keychain profile.</summary>
     public string? KeychainProfile { get; set; }
@@ -39,6 +42,9 @@ public sealed class AppleNotarizationRequest
     /// <summary>Expected SHA-256 of the retained artifact bytes when resuming an accepted submission.</summary>
     public string? ExpectedArtifactSha256 { get; set; }
 
+    /// <summary>SHA-256 of the exact file previously accepted by Apple's notary service.</summary>
+    public string? AcceptedSubmissionSha256 { get; set; }
+
     /// <summary>Whether stapling already succeeded and must not mutate the artifact again during resume.</summary>
     public bool StaplingCompleted { get; set; }
 
@@ -50,6 +56,56 @@ public sealed class AppleNotarizationRequest
 
     /// <summary>Run Gatekeeper assessment.</summary>
     public bool Assess { get; set; } = true;
+
+    internal Action<AppleNotarizationAcceptedCheckpoint>? AcceptedCheckpoint { get; set; }
+
+    internal Action<AppleNotarizationAmbiguousCheckpoint>? AmbiguousCheckpoint { get; set; }
+
+    internal Action<AppleNotarizationStapledCheckpoint>? StapledCheckpoint { get; set; }
+}
+
+/// <summary>Durable evidence that notarytool may have mutated remote state without returning a terminal result.</summary>
+internal sealed class AppleNotarizationAmbiguousCheckpoint
+{
+    internal string ArtifactPath { get; set; } = string.Empty;
+
+    internal string ArtifactSha256 { get; set; } = string.Empty;
+
+    internal string SubmissionPath { get; set; } = string.Empty;
+
+    internal string SubmissionSha256 { get; set; } = string.Empty;
+
+    internal string? SubmissionId { get; set; }
+
+    internal string? Status { get; set; }
+}
+
+internal sealed class AppleNotarizationAcceptedCheckpoint
+{
+    internal string ArtifactPath { get; set; } = string.Empty;
+
+    internal string ArtifactSha256 { get; set; } = string.Empty;
+
+    internal string SubmissionPath { get; set; } = string.Empty;
+
+    internal string SubmissionSha256 { get; set; } = string.Empty;
+
+    internal string SubmissionId { get; set; } = string.Empty;
+
+    internal string Status { get; set; } = "Accepted";
+}
+
+internal sealed class AppleNotarizationStapledCheckpoint
+{
+    internal string ArtifactPath { get; set; } = string.Empty;
+
+    internal string ArtifactSha256 { get; set; } = string.Empty;
+
+    internal string SubmissionSha256 { get; set; } = string.Empty;
+
+    internal string SubmissionId { get; set; } = string.Empty;
+
+    internal string Status { get; set; } = "Accepted";
 }
 
 /// <summary>Result of notarizing, stapling, and assessing a direct macOS artifact.</summary>
@@ -63,6 +119,9 @@ public sealed class AppleNotarizationResult
 
     /// <summary>File submitted to notarytool.</summary>
     public string SubmissionPath { get; set; } = string.Empty;
+
+    /// <summary>SHA-256 of the exact file read and accepted by notarytool.</summary>
+    public string? SubmissionSha256 { get; set; }
 
     /// <summary>Notary submission id.</summary>
     public string? SubmissionId { get; set; }

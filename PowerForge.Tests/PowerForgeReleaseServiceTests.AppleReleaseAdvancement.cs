@@ -108,6 +108,44 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleVersion_UsesTheSingleApprovedRemoteObservation()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.5.0", "13");
+            WriteXcodeGenVersionSource(root, "1.5.0", "13");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.VersionSourcePath = "project.yml";
+            var remoteQueries = 0;
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Version must not query release status."),
+                generateAppleProject: _ => true,
+                getHighestAppleBuildNumber: (_, _, _) => ++remoteQueries == 1 ? 13 : 99);
+
+            var result = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Version,
+                AppleMarketingVersion = "1.6.0",
+                AppleActionConfirmed = true
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(1, remoteQueries);
+            Assert.Equal("14", result.AppleReceipt!.Versioning!.BuildNumber);
+            var version = new AppleReleaseVersionSourceService().Read(Path.Combine(root, "project.yml"));
+            Assert.Equal("14", version.BuildNumber);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleVersion_UsesConfiguredPatternToAdvanceRepeatedTestFlightBuild()
     {
         var root = CreateSandbox();
@@ -390,13 +428,17 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
             var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.TestFlightBetaGroupNames = ["Internal"];
 
-            var result = new PowerForgeReleaseService(new NullLogger()).Execute(spec, new PowerForgeReleaseRequest
-            {
-                ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                AppleAction = PowerForgeAppleReleaseAction.Advance,
-                PlanOnly = true
-            });
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, processingState: null),
+                    checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request))
+                .Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Advance,
+                    PlanOnly = true
+                });
 
             Assert.True(result.Success, result.ErrorMessage);
             var plan = Assert.IsType<PowerForgeAppleReleasePlan>(result.AppleAppPlan);
@@ -405,9 +447,13 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(plan.PrepareDistribution);
             Assert.True(plan.SelectBuildForDistribution);
             Assert.True(plan.CheckReleaseReadiness);
+            Assert.True(plan.DistributeTestFlight);
             Assert.False(plan.SubmitTestFlightBetaReview);
             Assert.False(plan.SubmitForReview);
             Assert.False(plan.ReleaseApprovedVersion);
+            var target = Assert.Single(result.AppleReceipt!.Targets);
+            Assert.Null(target.BuildId);
+            Assert.Null(target.BuildProcessingState);
         }
         finally
         {
@@ -454,6 +500,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Advance,
+                    AppleAdoptExistingBuild = true,
                     AppleActionConfirmed = true
                 });
 
@@ -637,6 +684,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Advance,
+                    AppleAdoptExistingBuild = true,
                     AppleActionConfirmed = true
                 });
 
@@ -646,6 +694,46 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("group assignment failed", target.ErrorMessage);
             Assert.Equal("version-after", target.DistributionVersionId);
             Assert.True(stateCalls >= 2);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleAdvance_SuccessRefreshesReceiptFromPostMutationRemoteState()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.6.0", "14");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var stateCalls = 0;
+
+            var result = CreateAppleAutomationService(
+                    request =>
+                    {
+                        stateCalls++;
+                        var state = CreateReleaseState(request, "VALID");
+                        state.Platforms.Single().Version!.Id = stateCalls == 1 ? "version-before" : "version-after";
+                        return state;
+                    },
+                    prepareAppleDistribution: CreateSuccessfulPreparation)
+                .Execute(
+                    CreateAppleAutomationSpec(root, keyPath),
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Advance,
+                        AppleAdoptExistingBuild = true,
+                        AppleActionConfirmed = true
+                    });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.True(stateCalls >= 2);
+            Assert.Equal("version-after", Assert.Single(result.AppleReceipt!.Targets).DistributionVersionId);
         }
         finally
         {

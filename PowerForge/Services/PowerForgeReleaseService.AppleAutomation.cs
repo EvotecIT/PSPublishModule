@@ -1,6 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
 namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
@@ -15,7 +12,7 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException("The selected Apple action requires an AppleApps release configuration.");
         if (!request.PlanOnly &&
             !request.ValidateOnly &&
-            RequiresExplicitConfirmation(request.AppleAction, options) &&
+            (RequiresExplicitConfirmation(request.AppleAction, options) || request.AppleAdoptExistingBuild) &&
             !request.AppleActionConfirmed)
         {
             throw new InvalidOperationException(
@@ -186,10 +183,25 @@ internal sealed partial class PowerForgeReleaseService
             PowerForgeAppleReleaseAction.SubmitAppReview or
             PowerForgeAppleReleaseAction.Release;
 
+    private static bool RequiresAppleReleaseIdentity(PowerForgeAppleReleasePlan plan)
+        => plan.Action == PowerForgeAppleReleaseAction.Status ||
+           plan.Action == PowerForgeAppleReleaseAction.Doctor ||
+           IsUploadExecution(plan) ||
+           plan.PrepareDistribution ||
+           plan.SyncScreenshots ||
+           plan.SyncMetadata ||
+           plan.CheckReleaseReadiness ||
+           plan.DistributeTestFlight ||
+           plan.SubmitTestFlightBetaReview ||
+           plan.SubmitForReview ||
+           plan.ReleaseApprovedVersion;
+
     private static void ValidateAppleAutomation(PowerForgeAppleReleaseAutomationOptions automation)
     {
         if (string.IsNullOrWhiteSpace(automation.ReceiptPath))
             throw new InvalidOperationException("AppleApps.Automation.ReceiptPath is required.");
+        if (string.IsNullOrWhiteSpace(automation.ReceiptHistoryPath))
+            throw new InvalidOperationException("AppleApps.Automation.ReceiptHistoryPath is required.");
         if (string.IsNullOrWhiteSpace(automation.PlanReceiptPath))
             throw new InvalidOperationException("AppleApps.Automation.PlanReceiptPath is required.");
         if (string.IsNullOrWhiteSpace(automation.LockPath))
@@ -264,149 +276,6 @@ internal sealed partial class PowerForgeReleaseService
             current = Path.GetDirectoryName(current)
                 ?? throw new InvalidOperationException($"{settingName} could not be validated inside AppleApps.ProjectRoot.");
         }
-    }
-
-    private bool TryResumeAppleUpload(
-        PowerForgeAppleReleasePlan plan,
-        PowerForgeAppleAppReleaseTargetPlan app,
-        PowerForgeAppleAppReleaseResult result)
-    {
-        if (!IsUploadAction(plan.Action) || !plan.Automation.Resume)
-            return false;
-
-        var state = ReadAppleReleaseState(plan, app);
-        var platform = AssertSinglePlatformState(state, app);
-        if (platform.MatchedBuild is null)
-            return false;
-        if (IsTerminalAppleBuildFailure(platform.MatchedBuild.ProcessingState))
-        {
-            throw new AppleBuildProcessingException(
-                $"App Store Connect already contains build {state.VersionString} ({state.BuildNumber}) " +
-                $"in terminal processing state '{platform.MatchedBuild.ProcessingState}' for '{app.Name}'. " +
-                "Diagnose the processing failure and increment the build number before uploading again.",
-                state);
-        }
-
-        if (plan.Automation.WaitForProcessing &&
-            !string.Equals(platform.MatchedBuild.ProcessingState, "VALID", StringComparison.OrdinalIgnoreCase))
-        {
-            state = WaitForAppleBuild(plan, app, state);
-        }
-
-        result.RemoteState = state;
-        result.ResumedExistingBuild = true;
-        result.SkippedSteps = new[] { "archive", "upload" };
-        return true;
-    }
-
-    private bool TryResumeDirectAppleNotarization(
-        PowerForgeAppleReleasePlan plan,
-        PowerForgeAppleAppReleaseTargetPlan app,
-        PowerForgeAppleAppReleaseResult result)
-    {
-        if (!IsUploadExecution(plan) || !plan.Automation.Resume || !File.Exists(plan.ReceiptPath))
-            return false;
-
-        PowerForgeAppleReleaseReceipt? priorReceipt;
-        try
-        {
-            priorReceipt = JsonSerializer.Deserialize<PowerForgeAppleReleaseReceipt>(
-                File.ReadAllText(plan.ReceiptPath),
-                CreateJsonOptions());
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-
-        if (priorReceipt is null || priorReceipt.Success)
-            return false;
-        if (string.IsNullOrWhiteSpace(plan.SourceCommit) ||
-            !string.Equals(priorReceipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        var prior = priorReceipt.Targets.SingleOrDefault(target =>
-            target.Name.Equals(app.Name, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(target.BundleId, app.BundleId, StringComparison.OrdinalIgnoreCase) &&
-            target.Platform == app.Platform &&
-            target.DistributionRoute == AppleDistributionRoute.DirectNotarized &&
-            string.Equals(target.Version, app.MarketingVersion, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(target.Build, app.BuildNumber, StringComparison.OrdinalIgnoreCase));
-        if (prior is null ||
-            !string.Equals(prior.NotarizationStatus, "Accepted", StringComparison.OrdinalIgnoreCase) ||
-            string.IsNullOrWhiteSpace(prior.NotarizationSubmissionId) ||
-            string.IsNullOrWhiteSpace(prior.DirectArtifactPath) ||
-            string.IsNullOrWhiteSpace(prior.DirectArtifactSha256) ||
-            (!File.Exists(prior.DirectArtifactPath) && !Directory.Exists(prior.DirectArtifactPath)))
-        {
-            return false;
-        }
-
-        var artifactPath = Path.GetFullPath(prior.DirectArtifactPath);
-        var stapleCompleted = !plan.DirectDistribution.Staple ||
-                              (prior.Stapled == true && prior.StapleValidated == true);
-        var assessmentCompleted = !plan.DirectDistribution.Assess ||
-                                  prior.GatekeeperAccepted == true;
-        var completed = stapleCompleted && assessmentCompleted;
-        if (completed)
-        {
-            var artifactSha256 = AppleNotarizationService.ComputeArtifactSha256(artifactPath);
-            if (!string.Equals(artifactSha256, prior.DirectArtifactSha256, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"The completed direct Apple artifact changed after release. Expected SHA-256 " +
-                    $"'{prior.DirectArtifactSha256}', received '{artifactSha256}'. Archive, export, and notarize the changed artifact as a new release attempt.");
-            }
-
-            static ProcessRunResult CompletedStep(string message, string executable)
-                => new(0, message, string.Empty, executable, TimeSpan.Zero, false);
-
-            result.Notarization = new AppleNotarizationResult
-            {
-                ArtifactPath = artifactPath,
-                ArtifactSha256 = artifactSha256,
-                SubmissionPath = artifactPath,
-                SubmissionId = prior.NotarizationSubmissionId,
-                Status = "Accepted",
-                ResumedAcceptedSubmission = true,
-                Submission = CompletedStep("Reused the retained accepted notarization submission.", "xcrun"),
-                Staple = plan.DirectDistribution.Staple
-                    ? CompletedStep("Reused completed ticket stapling.", "xcrun")
-                    : null,
-                StapleValidation = plan.DirectDistribution.Staple
-                    ? CompletedStep("Reused completed staple validation.", "xcrun")
-                    : null,
-                Assessment = plan.DirectDistribution.Assess
-                    ? CompletedStep("Reused completed Gatekeeper assessment.", "spctl")
-                    : null
-            };
-            result.ResumedAcceptedNotarization = true;
-            result.SkippedSteps = MergeAppleSkippedSteps(
-                result.SkippedSteps,
-                new[] { "archive", "export", "notarySubmission", "staple", "stapleValidation", "gatekeeperAssessment" });
-            return true;
-        }
-
-        if (string.IsNullOrWhiteSpace(prior.ErrorMessage))
-            return false;
-
-        result.Notarization = NotarizeDirectAppleExport(
-            plan,
-            app,
-            artifactPath,
-            prior.NotarizationSubmissionId,
-            prior.DirectArtifactSha256,
-            prior.Stapled == true);
-        result.ResumedAcceptedNotarization = true;
-        result.SkippedSteps = MergeAppleSkippedSteps(
-            result.SkippedSteps,
-            new[] { "archive", "export", "notarySubmission" });
-        if (!result.Notarization.Succeeded)
-        {
-            throw CreateAppleNotarizationFailure(app, result.Notarization);
-        }
-
-        return true;
     }
 
     private AppStoreConnectReleaseStateResult ReadAppleReleaseState(
@@ -515,17 +384,22 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleReleaseCleanupReceipt cleanup,
         PowerForgeAppleVersionReceipt? versioning = null)
     {
+        var attemptId = Guid.NewGuid().ToString("N");
         var resultByName = results.ToDictionary(static result => result.Plan.Name, StringComparer.OrdinalIgnoreCase);
         var remoteAction = plan.Action != PowerForgeAppleReleaseAction.Archive &&
                            plan.Action != PowerForgeAppleReleaseAction.Version &&
                            plan.Action != PowerForgeAppleReleaseAction.Cleanup;
+        var refreshSuccessfulMutation = HasAppleReleaseStateMutation(plan);
         foreach (var app in plan.Apps.Where(UsesAppStoreConnect))
         {
             if (!resultByName.TryGetValue(app.Name, out var result))
                 continue;
             if (string.IsNullOrWhiteSpace(app.AppStoreConnectAppId))
                 continue;
-            if (remoteAction && (!result.Success || result.RemoteState is null))
+            var requiresFinalReadback = plan.Action == PowerForgeAppleReleaseAction.Configured
+                ? refreshSuccessfulMutation
+                : remoteAction && (refreshSuccessfulMutation || !result.Success || result.RemoteState is null);
+            if (requiresFinalReadback)
             {
                 try
                 {
@@ -560,9 +434,14 @@ internal sealed partial class PowerForgeReleaseService
             {
                 cleanup = MergeCleanup(
                     cleanup,
-                    _appleArtifactService.RemoveCurrentArtifacts(
+                    _appleArtifactService.RemoveStaleArtifacts(
                         plan,
-                        appStoreConnectResults.Select(static result => result.Plan)));
+                        results.SelectMany(static result => new[]
+                            {
+                                result.Plan.ArchivePath,
+                                result.Plan.ExportPath
+                            })
+                            .Concat(GetProtectedAppleRecoveryArtifactPaths(plan))));
             }
             catch (Exception exception)
             {
@@ -603,7 +482,11 @@ internal sealed partial class PowerForgeReleaseService
                         result?.VersionUpdate?.After.BuildNumber ?? app.BuildNumber);
                 }
             }
-            else if (!skippedIndependentRelease && plan.Action != PowerForgeAppleReleaseAction.Cleanup)
+            else if (!skippedIndependentRelease &&
+                     plan.Action != PowerForgeAppleReleaseAction.Cleanup &&
+                     (RequiresAppleReleaseIdentity(plan) ||
+                      !string.IsNullOrWhiteSpace(app.MarketingVersion) ||
+                      !string.IsNullOrWhiteSpace(app.BuildNumber)))
             {
                 try
                 {
@@ -635,6 +518,7 @@ internal sealed partial class PowerForgeReleaseService
                     ? AppleReleaseDoctor.Evaluate(plan, app, result?.RemoteState?.ControlPlane)
                     : Array.Empty<PowerForgeAppleReleaseDiagnostic>())
                 .Concat(CreateGovernanceDiagnostics(result?.Governance))
+                .Concat(CreateAdoptedBuildDiagnostics(result))
                 .GroupBy(static diagnostic => diagnostic.Code, StringComparer.OrdinalIgnoreCase)
                 .Select(static group => group.First())
                 .ToArray();
@@ -658,6 +542,12 @@ internal sealed partial class PowerForgeReleaseService
                 ErrorMessage = result?.ErrorMessage,
                 BundleId = app.BundleId,
                 Platform = app.Platform,
+                Configuration = app.Configuration,
+                ProjectPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'),
+                IsWorkspace = app.IsWorkspace,
+                Scheme = app.Scheme,
+                ArchiveVariant = app.ArchiveVariant,
+                Destination = app.Destination,
                 DistributionRoute = app.DistributionRoute,
                 ProductRole = app.ProductRole,
                 ParentTarget = app.ParentTarget,
@@ -669,7 +559,7 @@ internal sealed partial class PowerForgeReleaseService
                 Build = state?.BuildNumber ?? values.BuildNumber,
                 BuildId = build?.Id,
                 BuildProcessingState = build?.ProcessingState,
-                BuildUploadId = result?.Upload?.BuildUploadId,
+                BuildUploadId = result?.Upload?.BuildUploadId ?? result?.ResumedUploadAttestation?.BuildUploadId,
                 DistributionVersionId = receiptVersion?.Id,
                 DistributionState = receiptVersion?.AppStoreState ?? receiptVersion?.AppVersionState,
                 BuildSelected = platform?.MatchedBuildSelected ??
@@ -692,15 +582,33 @@ internal sealed partial class PowerForgeReleaseService
                 ArchiveCreated = result?.Archive?.Succeeded == true,
                 ProjectGenerated = result?.ProjectGenerated == true,
                 UploadPerformed = result?.Upload?.Succeeded == true,
-                DirectArtifactPath = result?.Notarization?.ArtifactPath,
+                ArchivePath = !string.IsNullOrWhiteSpace(result?.ArchiveSha256) ||
+                              !string.IsNullOrWhiteSpace(result?.ResumedUploadAttestation?.ArchiveSha256)
+                    ? FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/')
+                    : null,
+                ArchiveSha256 = result?.ArchiveSha256 ?? result?.ResumedUploadAttestation?.ArchiveSha256,
+                UploadAttestationAttemptId = result?.Upload?.Succeeded == true
+                    ? result.UploadAttestationAttemptId
+                    : result?.ResumedUploadAttestationAttemptId,
+                UploadExecutionSha256 = result?.Upload?.Succeeded == true || result?.ResumedUploadAttestation is not null
+                    ? ComputeAppleUploadExecutionSha256(plan, app)
+                    : null,
+                DirectArtifactPath = string.IsNullOrWhiteSpace(result?.Notarization?.ArtifactPath)
+                    ? null
+                    : CreatePortableDirectArtifactPath(plan, app, result!.Notarization!.ArtifactPath),
                 DirectArtifactSha256 = result?.Notarization?.ArtifactSha256,
+                DirectExecutionSha256 = result?.Notarization is null
+                    ? null
+                    : ComputeDirectExecutionSha256(plan, app),
                 NotarizationSubmissionId = result?.Notarization?.SubmissionId,
+                NotarizationSubmissionSha256 = result?.Notarization?.SubmissionSha256,
                 NotarizationStatus = result?.Notarization?.Status,
                 Stapled = result?.Notarization?.Staple?.Succeeded,
                 StapleValidated = result?.Notarization?.StapleValidation?.Succeeded,
                 GatekeeperAccepted = result?.Notarization?.Assessment?.Succeeded,
                 ResumedAcceptedNotarization = result?.ResumedAcceptedNotarization == true,
                 ResumedExistingBuild = result?.ResumedExistingBuild == true,
+                AdoptedExistingBuild = result?.AdoptedExistingBuild == true,
                 SkippedSteps = result?.SkippedSteps ?? Array.Empty<string>(),
                 Diagnostics = diagnostics,
                 NextActions = nextActions
@@ -718,9 +626,12 @@ internal sealed partial class PowerForgeReleaseService
             : Array.Empty<PowerForgeAppleReleaseDiagnostic>();
         var receipt = new PowerForgeAppleReleaseReceipt
         {
+            AttemptId = attemptId,
             Action = plan.Action,
             SourceCommit = plan.SourceCommit,
+            AdoptExistingBuild = plan.AdoptExistingBuild,
             PlanOnly = false,
+            OperationPhase = "Completed",
             CheckedAt = DateTimeOffset.UtcNow,
             Success = results.Length == plan.Apps.Length &&
                       results.All(static result => result.Success) &&
@@ -742,9 +653,46 @@ internal sealed partial class PowerForgeReleaseService
         };
 
         if (plan.Automation.WriteReceipt)
-            WriteAppleReceipt(plan.ProjectRoot, plan.ReceiptPath, receipt);
+            _appleReceiptStore.WriteAttempt(plan, receipt);
         return receipt;
     }
+
+    private static bool HasAppleRemoteMutation(PowerForgeAppleReleasePlan plan)
+        => plan.PrepareDistribution ||
+           plan.SyncScreenshots ||
+           plan.SyncMetadata ||
+           plan.SyncAppInfo ||
+           plan.DistributeTestFlight ||
+           plan.SubmitTestFlightBetaReview ||
+           plan.SubmitForReview ||
+           plan.ReleaseApprovedVersion;
+
+    private static bool HasAppleReleaseStateMutation(PowerForgeAppleReleasePlan plan)
+        => plan.PrepareDistribution ||
+           plan.SyncScreenshots ||
+           plan.SyncMetadata ||
+           plan.DistributeTestFlight ||
+           plan.SubmitTestFlightBetaReview ||
+           plan.SubmitForReview ||
+           plan.ReleaseApprovedVersion;
+
+    private static PowerForgeAppleReleaseDiagnostic[] CreateAdoptedBuildDiagnostics(
+        PowerForgeAppleAppReleaseResult? result)
+        => result?.AdoptedExistingBuild == true
+            ? new[]
+            {
+                new PowerForgeAppleReleaseDiagnostic
+                {
+                    Severity = "warning",
+                    Category = "provenance",
+                    Code = "APPLE_BUILD_ADOPTED_WITHOUT_UPLOAD_ATTESTATION",
+                    Summary = "The existing App Store Connect build was deliberately adopted without a matching local upload attestation.",
+                    Evidence = "The operator supplied --apple-adopt-existing-build and explicit Apple-action confirmation.",
+                    Action = "Retain independent evidence for the adopted binary and use a new build number for future source changes.",
+                    Retryable = false
+                }
+            }
+            : Array.Empty<PowerForgeAppleReleaseDiagnostic>();
 
     private static PowerForgeAppleReleaseDiagnostic[] CreateGovernanceDiagnostics(AppStoreConnectGovernancePlan? plan)
     {
@@ -816,38 +764,6 @@ internal sealed partial class PowerForgeReleaseService
             ReclaimedBytes = first.ReclaimedBytes + second.ReclaimedBytes,
             FreeSpaceGB = second.FreeSpaceGB ?? first.FreeSpaceGB
         };
-
-    private static void WriteAppleReceipt(
-        string projectRoot,
-        string path,
-        PowerForgeAppleReleaseReceipt receipt)
-    {
-        EnsurePathWithinProjectRoot(projectRoot, path, "AppleApps.Automation.ReceiptPath");
-        var directory = Path.GetDirectoryName(path);
-        if (!string.IsNullOrWhiteSpace(directory))
-            Directory.CreateDirectory(directory);
-        var options = CreateJsonOptions();
-        options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-        options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-        options.WriteIndented = true;
-        var payload = JsonSerializer.Serialize(receipt, options);
-        var temporaryPath = Path.Combine(
-            directory ?? projectRoot,
-            $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
-        try
-        {
-            File.WriteAllText(temporaryPath, payload);
-            if (File.Exists(path))
-                File.Replace(temporaryPath, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
-            else
-                File.Move(temporaryPath, path);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-                File.Delete(temporaryPath);
-        }
-    }
 
     private static AppStoreConnectReleaseStateResult GetAppleReleaseState(AppStoreConnectReleaseStateRequest request)
     {

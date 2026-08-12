@@ -432,6 +432,20 @@ public sealed partial class AppStoreConnectClient : IDisposable
         string screenshotSetId,
         string filePath,
         CancellationToken cancellationToken = default)
+        => await UploadScreenshotAsync(
+            screenshotSetId,
+            filePath,
+            expectedSha256: null,
+            cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Captures one immutable byte sequence, verifies its approved SHA-256 when supplied, and uses those bytes for every upload chunk and checksum.
+    /// </summary>
+    internal async Task<AppStoreConnectScreenshotUploadResult> UploadScreenshotAsync(
+        string screenshotSetId,
+        string filePath,
+        string? expectedSha256,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path is required.", nameof(filePath));
@@ -440,17 +454,26 @@ public sealed partial class AppStoreConnectClient : IDisposable
         var file = new FileInfo(fullPath);
         if (!file.Exists)
             throw new FileNotFoundException("Screenshot file was not found.", fullPath);
+        using var captured = AppStoreConnectScreenshotUploadSnapshot.Capture(fullPath, expectedSha256);
+        using var mutationMonitor = new AppleReleaseSourceMutationMonitor(
+            captured.RootPath,
+            "private screenshot upload snapshot",
+            "App Store Connect upload operations",
+            "Discard the screenshot upload result and retry from approved bytes.");
+        captured.ValidateUnchanged();
 
         var reservation = await CreateScreenshotReservationAsync(
             screenshotSetId,
             file.Name,
-            file.Length,
+            captured.Length,
             cancellationToken).ConfigureAwait(false);
 
         foreach (var operation in reservation.UploadOperations)
-            await ExecuteUploadOperationAsync(fullPath, operation, cancellationToken).ConfigureAwait(false);
+            await ExecuteUploadOperationAsync(captured, operation, cancellationToken).ConfigureAwait(false);
+        captured.ValidateUnchanged();
+        mutationMonitor.ValidateNoChanges();
 
-        var checksum = ComputeMd5Checksum(fullPath);
+        var checksum = captured.Md5;
         var committed = await CommitScreenshotUploadAsync(reservation.Id, checksum, cancellationToken).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(committed.SourceFileChecksum))
             reservation.SourceFileChecksum = committed.SourceFileChecksum;
@@ -722,7 +745,7 @@ public sealed partial class AppStoreConnectClient : IDisposable
     }
 
     private async Task ExecuteUploadOperationAsync(
-        string filePath,
+        AppStoreConnectScreenshotUploadSnapshot captured,
         AppStoreConnectUploadOperation operation,
         CancellationToken cancellationToken)
     {
@@ -730,25 +753,11 @@ public sealed partial class AppStoreConnectClient : IDisposable
             throw new InvalidOperationException("Upload operation URL is missing.");
         if (operation.Length < 0)
             throw new InvalidOperationException("Upload operation length cannot be negative.");
-        if (operation.Length > int.MaxValue)
-            throw new InvalidOperationException("Upload operation is too large for the current uploader.");
-
-        var bytes = new byte[(int)operation.Length];
-        using (var stream = File.OpenRead(filePath))
-        {
-            stream.Seek(operation.Offset, SeekOrigin.Begin);
-            var read = 0;
-            while (read < bytes.Length)
-            {
-                var count = await stream.ReadAsync(bytes, read, bytes.Length - read, cancellationToken).ConfigureAwait(false);
-                if (count == 0)
-                    throw new EndOfStreamException("Screenshot file ended before upload operation bytes were read.");
-                read += count;
-            }
-        }
+        if (operation.Offset < 0)
+            throw new InvalidOperationException("Upload operation offset is outside the captured screenshot bytes.");
 
         using var request = new HttpRequestMessage(new HttpMethod(string.IsNullOrWhiteSpace(operation.Method) ? "PUT" : operation.Method), operation.Url);
-        request.Content = new ByteArrayContent(bytes);
+        request.Content = captured.CreateRangeContent(operation.Offset, operation.Length);
         foreach (var header in operation.RequestHeaders)
         {
             if (string.Equals(header.Key, "Content-Length", StringComparison.OrdinalIgnoreCase))
@@ -1049,14 +1058,6 @@ public sealed partial class AppStoreConnectClient : IDisposable
         if (limit < 1) return 1;
         if (limit > 200) return 200;
         return limit;
-    }
-
-    private static string ComputeMd5Checksum(string filePath)
-    {
-        using var md5 = MD5.Create();
-        using var stream = File.OpenRead(filePath);
-        var bytes = md5.ComputeHash(stream);
-        return BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
     }
 
     private sealed class BuildPreReleaseVersion

@@ -41,7 +41,7 @@ public sealed class SyncAppStoreConnectScreenshotsCommand : AsyncPSCmdlet
 
     /// <summary>Exact source commit expected by the reviewed approval manifest.</summary>
     [Parameter]
-    [ValidatePattern("^[0-9A-Fa-f]{40}$")]
+    [ValidatePattern("^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$")]
     public string? SourceCommit { get; set; }
 
     /// <summary>Syncs local screenshot folders to App Store Connect screenshot sets.</summary>

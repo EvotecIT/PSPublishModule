@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace PowerForge;
 
 /// <summary>
-/// Reads and atomically updates the shared version values in an XcodeGen project specification.
+/// Reads and compare-and-write updates the shared version values in an XcodeGen project specification.
 /// </summary>
 internal sealed class AppleReleaseVersionSourceService
 {
@@ -13,11 +13,26 @@ internal sealed class AppleReleaseVersionSourceService
     private static readonly Regex MarketingVersionValuePattern = new(
         "^\\d+\\.\\d+(?:\\.\\d+)?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private readonly Action<string>? _onComparedVersionSource;
+    private readonly Action<string> _deleteFile;
+
+    internal AppleReleaseVersionSourceService(
+        Action<string>? onComparedVersionSource = null,
+        Action<string>? deleteFile = null)
+    {
+        _onComparedVersionSource = onComparedVersionSource;
+        _deleteFile = deleteFile ?? File.Delete;
+    }
 
     internal PowerForgeAppleVersionReceipt Read(string sourcePath)
     {
         var fullPath = ResolveSourcePath(sourcePath);
-        var content = File.ReadAllText(fullPath);
+        return Read(fullPath, File.ReadAllText(fullPath));
+    }
+
+    internal PowerForgeAppleVersionReceipt Read(string sourcePath, string content)
+    {
+        var fullPath = ResolveSourcePath(sourcePath);
         return new PowerForgeAppleVersionReceipt
         {
             SourcePath = fullPath,
@@ -28,6 +43,7 @@ internal sealed class AppleReleaseVersionSourceService
 
     internal PowerForgeAppleVersionReceipt Update(
         string sourcePath,
+        string approvedContent,
         string marketingVersion,
         string buildNumber,
         long highestRemoteBuildNumber,
@@ -42,7 +58,7 @@ internal sealed class AppleReleaseVersionSourceService
             throw new ArgumentException("Apple build number must be a positive integer.", nameof(buildNumber));
 
         var fullPath = ResolveSourcePath(sourcePath);
-        var content = File.ReadAllText(fullPath);
+        var content = approvedContent ?? throw new ArgumentNullException(nameof(approvedContent));
         var previousMarketingVersion = ReadSingleValue(content, MarketingVersionPattern, "MARKETING_VERSION", fullPath);
         var previousBuildNumber = ReadSingleValue(content, BuildNumberPattern, "CURRENT_PROJECT_VERSION", fullPath);
         var updated = ReplaceSingleValue(content, MarketingVersionPattern, marketingVersion.Trim());
@@ -50,7 +66,9 @@ internal sealed class AppleReleaseVersionSourceService
         var changed = !string.Equals(content, updated, StringComparison.Ordinal);
 
         if (changed && !whatIf)
-            WriteAtomic(fullPath, updated);
+        {
+            WriteIfUnchanged(fullPath, approvedContent, updated);
+        }
 
         return new PowerForgeAppleVersionReceipt
         {
@@ -99,22 +117,86 @@ internal sealed class AppleReleaseVersionSourceService
         return fullPath;
     }
 
-    private static void WriteAtomic(string path, string content)
+    private void WriteIfUnchanged(string path, string expectedContent, string content)
     {
+        var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(content);
         var directory = Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
         var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        var backupPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.previous");
         try
         {
-            File.WriteAllText(temporaryPath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            if (File.Exists(path))
-                File.Replace(temporaryPath, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
-            else
-                File.Move(temporaryPath, path);
+            using (var stream = new FileStream(
+                       temporaryPath,
+                       FileMode.CreateNew,
+                       FileAccess.Write,
+                       FileShare.None,
+                       bufferSize: 16 * 1024,
+                       options: FileOptions.WriteThrough))
+            {
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(flushToDisk: true);
+            }
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(temporaryPath, File.GetUnixFileMode(path));
+#endif
+
+            if (!string.Equals(File.ReadAllText(path), expectedContent, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Apple version source changed after plan approval: {path}");
+            }
+
+            _onComparedVersionSource?.Invoke(path);
+
+            File.Replace(temporaryPath, path, backupPath, ignoreMetadataErrors: true);
+            var replacedContent = File.ReadAllText(backupPath);
+            if (!string.Equals(replacedContent, expectedContent, StringComparison.Ordinal))
+            {
+                RestoreConcurrentVersionSource(path, backupPath, content);
+                throw new InvalidOperationException(
+                    $"Apple version source changed while applying the approved update and was restored instead of being overwritten: {path}");
+            }
+            TryDeleteCommittedBackup(backupPath);
+
+            if (!string.Equals(File.ReadAllText(path), content, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Apple version source changed while the approved update was being published: {path}");
         }
         finally
         {
             if (File.Exists(temporaryPath))
                 File.Delete(temporaryPath);
+            if (File.Exists(backupPath) && string.Equals(File.ReadAllText(backupPath), expectedContent, StringComparison.Ordinal))
+                TryDeleteCommittedBackup(backupPath);
+        }
+    }
+
+    private void TryDeleteCommittedBackup(string backupPath)
+    {
+        try { _deleteFile(backupPath); }
+        catch { /* approved replacement is already committed; retain the old bytes */ }
+    }
+
+    private static void RestoreConcurrentVersionSource(string path, string candidatePath, string expectedNamedContent)
+    {
+        var directory = Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
+        while (true)
+        {
+            var installedCandidateContent = File.ReadAllText(candidatePath);
+            var displacedPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.displaced");
+            File.Replace(candidatePath, path, displacedPath, ignoreMetadataErrors: true);
+            var displacedContent = File.ReadAllText(displacedPath);
+            if (string.Equals(displacedContent, expectedNamedContent, StringComparison.Ordinal))
+            {
+                File.Delete(displacedPath);
+                return;
+            }
+
+            // A newer pathname replacement won while the prior concurrent bytes
+            // were being restored. Promote those newer bytes on the next atomic
+            // exchange instead of silently overwriting or deleting them.
+            candidatePath = displacedPath;
+            expectedNamedContent = installedCandidateContent;
         }
     }
 }

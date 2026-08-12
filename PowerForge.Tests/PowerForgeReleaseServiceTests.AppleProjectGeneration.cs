@@ -178,7 +178,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                    AppleAction = action
+                    AppleAction = action,
+                    AppleAdoptExistingBuild = action == PowerForgeAppleReleaseAction.Upload,
+                    AppleActionConfirmed = action == PowerForgeAppleReleaseAction.Upload
                 });
 
             Assert.True(result.Success);
@@ -188,7 +190,10 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("1.2.0", target.Version);
             Assert.Equal("9", target.Build);
             if (action == PowerForgeAppleReleaseAction.Upload)
+            {
                 Assert.True(target.ResumedExistingBuild);
+                Assert.True(target.AdoptedExistingBuild);
+            }
         }
         finally
         {

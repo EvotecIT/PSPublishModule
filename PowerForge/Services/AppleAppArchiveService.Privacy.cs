@@ -49,7 +49,11 @@ public sealed partial class AppleAppArchiveService
                     break;
                 }
 
-                var archivedBundleId = await ReadPlistStringAsync(infoPlist, "CFBundleIdentifier", cancellationToken).ConfigureAwait(false);
+                var archivedBundleId = await ReadPlistStringAsync(
+                    infoPlist,
+                    "CFBundleIdentifier",
+                    request.RequireTrustedSystemTools,
+                    cancellationToken).ConfigureAwait(false);
                 if (string.Equals(archivedBundleId, expectedBundleId, StringComparison.Ordinal))
                 {
                     selectedInfoPlist = infoPlist;
@@ -68,7 +72,11 @@ public sealed partial class AppleAppArchiveService
 
         foreach (var key in requiredKeys)
         {
-            var value = await ReadPlistStringAsync(selectedInfoPlist, key, cancellationToken).ConfigureAwait(false);
+            var value = await ReadPlistStringAsync(
+                selectedInfoPlist,
+                key,
+                request.RequireTrustedSystemTools,
+                cancellationToken).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(value))
             {
                 throw new InvalidOperationException(
@@ -80,18 +88,26 @@ public sealed partial class AppleAppArchiveService
     private async Task<string?> ReadPlistStringAsync(
         string infoPlist,
         string key,
+        bool requireTrustedSystemTools,
         CancellationToken cancellationToken)
     {
         var executable = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
             System.Runtime.InteropServices.OSPlatform.OSX)
             ? "/usr/bin/plutil"
             : "plutil";
+        var toolEnvironment = requireTrustedSystemTools
+            ? AppleTrustedExecutionEnvironment.Create()
+            : null;
         var result = await _processRunner.RunAsync(
             new ProcessRunRequest(
                 executable,
                 Path.GetDirectoryName(infoPlist)!,
                 new[] { "-extract", key, "raw", "-o", "-", infoPlist },
-                TimeSpan.FromSeconds(30)),
+                TimeSpan.FromSeconds(30),
+                toolEnvironment,
+                captureOutput: true,
+                captureError: true,
+                inheritEnvironment: toolEnvironment is null),
             cancellationToken).ConfigureAwait(false);
         return result.Succeeded ? result.StdOut.Trim() : null;
     }

@@ -16,6 +16,12 @@ public sealed class AppStoreConnectScreenshotSyncValidationResult
 
     /// <summary>Per-set validation results.</summary>
     public AppStoreConnectScreenshotSetSyncValidationResult[] ScreenshotSets { get; set; } = Array.Empty<AppStoreConnectScreenshotSetSyncValidationResult>();
+
+    /// <summary>
+    /// Exact manifest-approved screenshot hashes keyed by resolved source path. This internal evidence
+    /// binds a direct screenshot sync's immutable snapshot to the same approval read used by preflight.
+    /// </summary>
+    internal IReadOnlyDictionary<string, string>? ApprovedFileSha256 { get; set; }
 }
 
 /// <summary>

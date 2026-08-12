@@ -42,6 +42,13 @@ public sealed partial class AppleAppArchiveService
             throw new FileNotFoundException("Xcode project or workspace was not found.", projectPath);
 
         var archivePath = ResolveArchivePath(request);
+        var xcodeBuildExecutable = NormalizeExecutable(request.XcodeBuildExecutable);
+        if (request.RequireExactPackageSnapshot &&
+            !xcodeBuildExecutable.Equals("/usr/bin/xcodebuild", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Exact-source Apple archives require the system Xcode build tool '/usr/bin/xcodebuild'; received '{xcodeBuildExecutable}'.");
+        }
         var destination = string.IsNullOrWhiteSpace(request.Destination)
             ? GetGenericDestination(request.Platform, request.ArchiveVariant)
             : request.Destination!.Trim();
@@ -71,20 +78,96 @@ public sealed partial class AppleAppArchiveService
             request.AllowProvisioningUpdates,
             args);
         args.Add("archive");
-        args.AddRange(request.AdditionalArguments ?? Array.Empty<string>());
+        var additionalArguments = request.AdditionalArguments ?? Array.Empty<string>();
+        args.AddRange(additionalArguments);
 
-        var result = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.XcodeBuildExecutable),
-                Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
-                args,
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout),
-            cancellationToken).ConfigureAwait(false);
+        AppleSwiftPackageBuildSnapshot? packageSnapshot = null;
+        AppleReleaseSourceMutationMonitor? archiveOutputMonitor = null;
+        ProcessRunResult result;
+        string? archiveSha256 = null;
+        AppleArchiveUploadSnapshot.SnapshotIdentity? archiveIdentity = null;
+        try
+        {
+            var timeout = request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout;
+            if (request.RequireExactPackageSnapshot)
+            {
+                AppleSwiftPackageBuildSnapshot.RejectConflictingArguments(additionalArguments);
+                packageSnapshot = await AppleSwiftPackageBuildSnapshot.CreateAsync(
+                        _processRunner,
+                        xcodeBuildExecutable,
+                        projectPath,
+                        request.IsWorkspace,
+                        request.Scheme.Trim(),
+                        timeout,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                packageSnapshot.AppendArchiveArguments(args);
+            }
+
+            var archiveParent = Path.GetDirectoryName(archivePath)
+                ?? throw new InvalidOperationException($"Apple archive path has no parent: {archivePath}");
+            Directory.CreateDirectory(archiveParent);
+            archiveOutputMonitor = new AppleReleaseSourceMutationMonitor(
+                archiveParent,
+                "private Apple archive output",
+                "xcodebuild archive",
+                "Discard the archive and rebuild it from the approved exact source.",
+                enableImmediately: false,
+                exactPath: archivePath,
+                includeExactPathDescendants: true);
+
+            var processRequest = new ProcessRunRequest(
+                    xcodeBuildExecutable,
+                    Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
+                    args,
+                    timeout,
+                    packageSnapshot?.EnvironmentVariables,
+                    captureOutput: true,
+                    captureError: true,
+                    inheritEnvironment: packageSnapshot is null);
+            processRequest.SetCompletionBoundary(completionResult =>
+            {
+                if (completionResult.Succeeded && Directory.Exists(archivePath))
+                {
+                    archiveIdentity = archiveOutputMonitor!.CaptureExpectedProducerOutput(
+                        () => AppleArchiveUploadSnapshot.CaptureCompleteIdentity(archivePath),
+                        "xcodebuild archive");
+                    archiveSha256 = archiveIdentity.Sha256;
+                }
+            });
+            result = await _processRunner.RunAsync(processRequest, cancellationToken).ConfigureAwait(false);
+            processRequest.InvokeCompletionBoundary(result);
+            packageSnapshot?.ValidateUnchanged();
+            archiveOutputMonitor.ValidateNoChanges();
+            if (result.Succeeded &&
+                (archiveIdentity is null ||
+                 string.IsNullOrWhiteSpace(archiveSha256) ||
+                 !Directory.Exists(archivePath)))
+            {
+                throw new InvalidOperationException(
+                    $"xcodebuild reported a successful archive but no exact private archive output was bound at process completion: {archivePath}");
+            }
+            if (!string.IsNullOrWhiteSpace(archiveSha256) && Directory.Exists(archivePath))
+            {
+                var currentArchiveIdentity = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(archivePath);
+                if (archiveIdentity is null || !archiveIdentity.Equals(currentArchiveIdentity))
+                {
+                    throw new InvalidOperationException(
+                        $"The private Apple archive changed after xcodebuild completed. Expected '{archiveSha256}', received '{currentArchiveIdentity.Sha256}'.");
+                }
+            }
+        }
+        finally
+        {
+            archiveOutputMonitor?.Dispose();
+            packageSnapshot?.Dispose();
+        }
 
         return new AppleAppArchiveResult
         {
             ArchivePath = archivePath,
             Destination = destination,
+            ArchiveSha256 = archiveSha256,
             ProcessResult = result
         };
     }
@@ -137,14 +220,61 @@ public sealed partial class AppleAppArchiveService
             args);
         args.AddRange(request.AdditionalArguments ?? Array.Empty<string>());
 
-        var result = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.XcodeBuildExecutable),
+        var xcodeBuildExecutable = NormalizeExecutable(request.XcodeBuildExecutable);
+        if (request.RequireTrustedSystemTools &&
+            !xcodeBuildExecutable.Equals("/usr/bin/xcodebuild", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Exact-source Apple export and upload require the system Xcode build tool '/usr/bin/xcodebuild'; received '{xcodeBuildExecutable}'.");
+        }
+        var toolEnvironment = request.RequireTrustedSystemTools
+            ? AppleTrustedExecutionEnvironment.Create()
+            : null;
+        var directExport = request.Destination.Equals("export", StringComparison.OrdinalIgnoreCase);
+        using var exportMonitor = directExport
+            ? new AppleReleaseSourceMutationMonitor(
+                exportPath,
+                "private Developer ID export",
+                "xcodebuild exportArchive",
+                "Discard the export and run xcodebuild exportArchive again.",
+                enableImmediately: false)
+            : null;
+        string? exportArtifactPath = null;
+        string? exportArtifactSha256 = null;
+        var processRequest = new ProcessRunRequest(
+                xcodeBuildExecutable,
                 Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory(),
                 args,
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout),
-            cancellationToken).ConfigureAwait(false);
-
+                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout,
+                toolEnvironment,
+                captureOutput: true,
+                captureError: true,
+                inheritEnvironment: toolEnvironment is null);
+        processRequest.SetStartBoundary(request.InvokeRemoteMutationStarted);
+        if (directExport)
+        {
+            processRequest.SetCompletionBoundary(completionResult =>
+            {
+                if (!completionResult.Succeeded)
+                    return;
+                exportMonitor!.CaptureExpectedProducerOutput(
+                    () =>
+                    {
+                        exportArtifactPath = PowerForgeReleaseService.ResolveDirectAppleArtifactPath(exportPath);
+                        exportArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(exportArtifactPath);
+                        return exportArtifactPath + "\n" + exportArtifactSha256;
+                    },
+                    "xcodebuild exportArchive");
+            });
+        }
+        var result = await _processRunner.RunAsync(processRequest, cancellationToken).ConfigureAwait(false);
+        processRequest.InvokeCompletionBoundary(result);
+        if (result.Succeeded && directExport)
+        {
+            exportMonitor!.ValidateNoChanges();
+            if (string.IsNullOrWhiteSpace(exportArtifactPath) || string.IsNullOrWhiteSpace(exportArtifactSha256))
+                throw new InvalidOperationException("xcodebuild completed without binding the exact Developer ID export at its process completion boundary.");
+        }
         var diagnostics = ResolveUploadDiagnostics(result);
 
         return new AppleAppArchiveUploadResult
@@ -154,6 +284,8 @@ public sealed partial class AppleAppArchiveService
             ExportOptionsPlistPath = plistPath,
             DistributionLogPath = diagnostics.DistributionLogPath,
             BuildUploadId = diagnostics.BuildUploadId,
+            ExportArtifactPath = exportArtifactPath,
+            ExportArtifactSha256 = exportArtifactSha256,
             ProcessResult = result
         };
     }

@@ -52,6 +52,12 @@ public sealed class AppStoreConnectReleasePreparationRequest
 
     /// <summary>Exact release source commit expected by a reviewed screenshot manifest.</summary>
     public string? ExpectedSourceCommit { get; set; }
+
+    /// <summary>Approved SHA-256 values keyed by absolute screenshot source path.</summary>
+    internal IReadOnlyDictionary<string, string>? ExpectedScreenshotFileSha256 { get; set; }
+
+    /// <summary>Approved SHA-256 of the exact ordered remote screenshot inventory.</summary>
+    internal string? ExpectedScreenshotInventorySha256 { get; set; }
 }
 
 /// <summary>

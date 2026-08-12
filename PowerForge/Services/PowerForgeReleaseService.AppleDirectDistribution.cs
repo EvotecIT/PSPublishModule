@@ -8,6 +8,7 @@ internal sealed partial class PowerForgeReleaseService
         string? artifactPath = null,
         string? acceptedSubmissionId = null,
         string? expectedArtifactSha256 = null,
+        string? acceptedSubmissionSha256 = null,
         bool staplingCompleted = false)
     {
         var result = _notarizeAppleArtifact(new AppleNotarizationRequest
@@ -16,13 +17,18 @@ internal sealed partial class PowerForgeReleaseService
             XcrunExecutable = plan.DirectDistribution.XcrunExecutable,
             DittoExecutable = plan.DirectDistribution.DittoExecutable,
             SpctlExecutable = plan.DirectDistribution.SpctlExecutable,
+            RequireTrustedSystemTools = !string.IsNullOrWhiteSpace(plan.SourceCommit),
             KeychainProfile = plan.DirectDistribution.KeychainProfile,
             ApiKeyPath = plan.AppStoreConnectApiKeyPath,
             ApiKeyId = plan.AppStoreConnectApiKeyId,
             ApiIssuerId = plan.AppStoreConnectApiIssuerId,
             AcceptedSubmissionId = acceptedSubmissionId,
             ExpectedArtifactSha256 = expectedArtifactSha256,
+            AcceptedSubmissionSha256 = acceptedSubmissionSha256,
             StaplingCompleted = staplingCompleted,
+            AmbiguousCheckpoint = checkpoint => WriteAppleNotarizationAmbiguity(plan, app, checkpoint),
+            AcceptedCheckpoint = checkpoint => WriteAppleNotarizationAcceptance(plan, app, checkpoint),
+            StapledCheckpoint = checkpoint => WriteAppleNotarizationStapled(plan, app, checkpoint),
             Timeout = TimeSpan.FromSeconds(plan.DirectDistribution.TimeoutSeconds),
             Staple = plan.DirectDistribution.Staple,
             Assess = plan.DirectDistribution.Assess
@@ -30,7 +36,7 @@ internal sealed partial class PowerForgeReleaseService
         return result;
     }
 
-    private static string ResolveDirectAppleArtifactPath(string exportPath)
+    internal static string ResolveDirectAppleArtifactPath(string exportPath)
     {
         if (!Directory.Exists(exportPath))
             throw new DirectoryNotFoundException($"Developer ID export path was not found: {exportPath}");
@@ -49,6 +55,30 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         return Path.GetFullPath(artifacts[0]);
+    }
+
+    private static string? MapDirectExportOutputPath(
+        string privateExportPath,
+        string publishedExportPath,
+        string? outputPath)
+    {
+        if (string.IsNullOrWhiteSpace(outputPath))
+            return outputPath;
+
+        var fullPrivateRoot = Path.GetFullPath(privateExportPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullOutputPath = Path.GetFullPath(outputPath!);
+        var comparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!fullOutputPath.Equals(fullPrivateRoot, comparison) &&
+            !fullOutputPath.StartsWith(fullPrivateRoot + Path.DirectorySeparatorChar, comparison))
+        {
+            return outputPath;
+        }
+
+        var relative = FrameworkCompatibility.GetRelativePath(fullPrivateRoot, fullOutputPath);
+        return Path.GetFullPath(Path.Combine(publishedExportPath, relative));
     }
 
     private static InvalidOperationException CreateAppleNotarizationFailure(

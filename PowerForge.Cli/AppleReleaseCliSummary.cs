@@ -16,6 +16,8 @@ internal sealed class AppleReleaseCliPlanSummary
 
     public bool Resume { get; set; }
 
+    public bool AdoptExistingBuild { get; set; }
+
     public bool WaitForProcessing { get; set; }
 
     public int ProcessingTimeoutSeconds { get; set; }

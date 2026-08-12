@@ -3,6 +3,54 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void Execute_AppleCheckpoint_writes_publish_shaped_plan_after_archive()
+    {
+        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Archive = true;
+            spec.AppleApps.Upload = true;
+            spec.AppleApps.Automation.MinimumFreeSpaceGB = 0;
+            spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Archive checkpoint must not query App Store Connect."),
+                    archiveAppleApp: request =>
+                    {
+                        var archive = Directory.CreateDirectory(request.ArchivePath!);
+                        File.WriteAllText(Path.Combine(archive.FullName, "payload"), "signed archive");
+                        return CreateSuccessfulArchive(request);
+                    })
+                .Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    CheckpointAppleApps = true,
+                    AppleSourceCommit = sourceCommit
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.False(result.AppleAppPlan!.Archive);
+            var receipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt);
+            Assert.True(receipt.PlanOnly);
+            Assert.Equal(sourceCommit, receipt.SourceCommit);
+            Assert.Matches("^[0-9A-Fa-f]{64}$", receipt.PlanSha256);
+            var target = Assert.Single(receipt.Targets);
+            Assert.EndsWith("/apple/archives/iOS/CasaRay-iOS.xcarchive", target.ArchivePath, StringComparison.Ordinal);
+            Assert.Matches("^[0-9A-Fa-f]{64}$", target.ArchiveSha256);
+            Assert.Equal(target.ArchiveSha256, Assert.Single(result.AppleAppPlan.Apps).ExpectedArchiveSha256);
+            Assert.True(File.Exists(result.AppleAppPlan.PlanReceiptPath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void PublishBuiltReleaseOutputs_ExecutesConfiguredAppleLane()
     {
         var root = CreateSandbox();
@@ -31,6 +79,61 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(result.Success);
             Assert.Equal(1, archiveCalls);
             Assert.True(Assert.Single(result.AppleApps).Success);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void PublishBuiltReleaseOutputs_rejects_replaced_checkpoint_archive_before_upload()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Archive = false;
+            spec.AppleApps.Upload = true;
+            spec.AppleApps.Automation.Resume = false;
+            var archivePath = Path.Combine(
+                root,
+                "build",
+                "powerforge",
+                "apple",
+                "archives",
+                "iOS",
+                "CasaRay-iOS.xcarchive");
+            Directory.CreateDirectory(archivePath);
+            File.WriteAllText(Path.Combine(archivePath, "payload"), "replacement bytes");
+            var uploadCalls = 0;
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Archive hash rejection must happen before remote state."),
+                uploadAppleApp: request =>
+                {
+                    uploadCalls++;
+                    return CreateSuccessfulUpload(request);
+                });
+
+            var result = service.PublishBuiltReleaseOutputs(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleActionConfirmed = true,
+                    AppleExpectedArchiveSha256ByTarget = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["CasaRay iOS"] = new string('1', 64)
+                    }
+                },
+                new PowerForgeReleaseResult { Success = true });
+
+            Assert.False(result.Success);
+            Assert.Equal(0, uploadCalls);
+            Assert.Contains("changed before publish", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
