@@ -1,3 +1,6 @@
+using Microsoft.Win32.SafeHandles;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -344,6 +347,11 @@ internal sealed partial class AppleReleaseSourceTrustService
         {
             try
             {
+#if NET8_0_OR_GREATER
+                if (!OperatingSystem.IsWindows())
+                    return OpenUnixRemotePackageMirrorLease(lockPath);
+#endif
+                RejectLinkedRemotePackageMirrorLock(lockPath);
                 var lease = new FileStream(
                     lockPath,
                     FileMode.OpenOrCreate,
@@ -353,10 +361,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                     FileOptions.None);
                 try
                 {
-#if NET8_0_OR_GREATER
-                    if (!OperatingSystem.IsWindows())
-                        File.SetUnixFileMode(lockPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-#endif
+                    ValidateRemotePackageMirrorLockIdentity(lockPath, lease);
                     return lease;
                 }
                 catch
@@ -371,6 +376,113 @@ internal sealed partial class AppleReleaseSourceTrustService
             }
         }
     }
+
+    private static void RejectLinkedRemotePackageMirrorLock(string lockPath)
+    {
+        if ((File.Exists(lockPath) || Directory.Exists(lockPath)) &&
+            (File.GetAttributes(lockPath) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"Remote Swift package mirror lock must not be a symbolic link or reparse point: {lockPath}");
+        }
+    }
+
+    private static void ValidateRemotePackageMirrorLockIdentity(string lockPath, FileStream lease)
+    {
+        RejectLinkedRemotePackageMirrorLock(lockPath);
+        var opened = ExistingFilePathIdentityResolver.ResolveStatus(lease.SafeFileHandle);
+        var replaced = false;
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsWindows())
+        {
+            using var currentHandle = OpenExistingUnixRemotePackageMirrorLock(lockPath);
+            var current = ExistingFilePathIdentityResolver.ResolveStatus(currentHandle);
+            replaced = !opened.Identity.Equals(current.Identity, StringComparison.Ordinal);
+        }
+#endif
+        int hardLinkCount;
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsWindows())
+            hardLinkCount = ExistingFilePathIdentityResolver.ResolveHardLinkCounts(new[] { lockPath })[0];
+        else
+#endif
+            hardLinkCount = ExistingFilePathIdentityResolver.ResolveHardLinkCount(lease.SafeFileHandle);
+        if (replaced || hardLinkCount != 1)
+        {
+            throw new InvalidOperationException(
+                $"Remote Swift package mirror lock was linked or replaced while it was being acquired " +
+                $"(replaced={replaced}, hardLinks={hardLinkCount}): {lockPath}");
+        }
+    }
+
+#if NET8_0_OR_GREATER
+    private static SafeFileHandle OpenExistingUnixRemotePackageMirrorLock(string lockPath)
+    {
+        var noFollow = OperatingSystem.IsMacOS() ? 0x0100 : 0x20000;
+        var descriptor = OpenUnix(lockPath, noFollow, 0);
+        if (descriptor >= 0)
+            return new SafeFileHandle(new IntPtr(descriptor), ownsHandle: true);
+        var error = Marshal.GetLastWin32Error();
+        if ((OperatingSystem.IsMacOS() && error == 62) || (!OperatingSystem.IsMacOS() && error == 40))
+        {
+            throw new InvalidOperationException(
+                $"Remote Swift package mirror lock must not be a symbolic link: {lockPath}");
+        }
+        throw new IOException($"Unable to verify remote Swift package mirror lock '{lockPath}'.", new Win32Exception(error));
+    }
+
+    private static FileStream OpenUnixRemotePackageMirrorLease(string lockPath)
+    {
+        var create = OperatingSystem.IsMacOS() ? 0x0200 : 0x0040;
+        var noFollow = OperatingSystem.IsMacOS() ? 0x0100 : 0x20000;
+        const int readWrite = 0x0002;
+        const uint userReadWrite = 0x0180;
+        var descriptor = OpenUnix(lockPath, readWrite | create | noFollow, userReadWrite);
+        if (descriptor < 0)
+        {
+            var error = Marshal.GetLastWin32Error();
+            if ((OperatingSystem.IsMacOS() && error == 62) || (!OperatingSystem.IsMacOS() && error == 40))
+            {
+                throw new InvalidOperationException(
+                    $"Remote Swift package mirror lock must not be a symbolic link: {lockPath}");
+            }
+            throw new IOException($"Unable to open remote Swift package mirror lock '{lockPath}'.", new Win32Exception(error));
+        }
+
+        var handle = new SafeFileHandle(new IntPtr(descriptor), ownsHandle: true);
+        FileStream? lease = null;
+        try
+        {
+            const int exclusiveNonBlocking = 0x0002 | 0x0004;
+            if (FlockUnix(descriptor, exclusiveNonBlocking) != 0)
+                throw new IOException($"Remote Swift package mirror lock is already leased: {lockPath}");
+            lease = new FileStream(handle, FileAccess.ReadWrite, bufferSize: 1, isAsync: false);
+            handle = null!;
+            ValidateRemotePackageMirrorLockIdentity(lockPath, lease);
+            if (FchmodUnix(descriptor, userReadWrite) != 0)
+                throw new IOException(
+                    $"Unable to restrict remote Swift package mirror lock permissions: {lockPath}",
+                    new Win32Exception(Marshal.GetLastWin32Error()));
+            ValidateRemotePackageMirrorLockIdentity(lockPath, lease);
+            return lease;
+        }
+        catch
+        {
+            lease?.Dispose();
+            handle?.Dispose();
+            throw;
+        }
+    }
+
+    [DllImport("libc", EntryPoint = "open", SetLastError = true)]
+    private static extern int OpenUnix(string path, int flags, uint mode);
+
+    [DllImport("libc", EntryPoint = "flock", SetLastError = true)]
+    private static extern int FlockUnix(int descriptor, int operation);
+
+    [DllImport("libc", EntryPoint = "fchmod", SetLastError = true)]
+    private static extern int FchmodUnix(int descriptor, uint mode);
+#endif
 
     private static string ResolveRemotePackageCacheRoot()
     {

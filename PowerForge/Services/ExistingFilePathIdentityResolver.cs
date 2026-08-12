@@ -40,6 +40,35 @@ internal static class ExistingFilePathIdentityResolver
 #endif
     }
 
+    /// <summary>Returns physical status for an already-open file without resolving its pathname again.</summary>
+    internal static ExistingFilePhysicalStatus ResolveStatus(SafeFileHandle handle)
+    {
+        if (handle is null || handle.IsInvalid || handle.IsClosed)
+            throw new ArgumentException("An open file handle is required.", nameof(handle));
+        if (System.IO.Path.DirectorySeparatorChar == '\\')
+            return ReadWindowsFileStatus(handle);
+#if NET8_0_OR_GREATER
+        return ReadUnixFileStatus(handle);
+#else
+        throw new PlatformNotSupportedException("Physical file identity is not available for this runtime and operating system.");
+#endif
+    }
+
+    /// <summary>Returns the hard-link count for an already-open regular file.</summary>
+    internal static int ResolveHardLinkCount(SafeFileHandle handle)
+    {
+        if (handle is null || handle.IsInvalid || handle.IsClosed)
+            throw new ArgumentException("An open file handle is required.", nameof(handle));
+        if (System.IO.Path.DirectorySeparatorChar == '\\')
+        {
+            if (!GetFileInformationByHandle(handle, out var information))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            return checked((int)information.NumberOfLinks);
+        }
+        throw new PlatformNotSupportedException(
+            "Open-handle hard-link inspection is available only on Windows; use the path batch inspector on Unix.");
+    }
+
     internal readonly struct ExistingFilePhysicalStatus
     {
         internal ExistingFilePhysicalStatus(string identity, string changeToken)

@@ -334,6 +334,8 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("archive-overlaps-receipt-journal-lock")]
     [InlineData("plan-overwrites-project")]
     [InlineData("archive-root-overlaps-export-root")]
+    [InlineData("archive-root-overlaps-screenshot-set")]
+    [InlineData("archive-root-overlaps-screenshot-approval")]
     public void Execute_ApplePlan_RejectsOverlappingAutomationOutputPaths(string scenario)
     {
         var root = CreateSandbox();
@@ -382,6 +384,22 @@ public sealed partial class PowerForgeReleaseServiceTests
                 case "archive-root-overlaps-export-root":
                     spec.AppleApps.ExportRoot = spec.AppleApps.ArchiveRoot;
                     break;
+                case "archive-root-overlaps-screenshot-set":
+                    spec.AppleApps.ScreenshotConfigPath = "screenshots.json";
+                    Directory.CreateDirectory(Path.Combine(root, "build", "powerforge", "apple", "archives", "screenshots"));
+                    File.WriteAllText(
+                        Path.Combine(root, "build", "powerforge", "apple", "archives", "screenshots", "01-home.png"),
+                        "approved screenshot");
+                    File.WriteAllText(
+                        Path.Combine(root, "screenshots.json"),
+                        """{ "ScreenshotSets": [ { "ScreenshotDisplayType": "APP_IPHONE_67", "Path": "build/powerforge/apple/archives/screenshots" } ] }""");
+                    break;
+                case "archive-root-overlaps-screenshot-approval":
+                    spec.AppleApps.ScreenshotConfigPath = "screenshots.json";
+                    File.WriteAllText(
+                        Path.Combine(root, "screenshots.json"),
+                        """{ "Quality": { "RequireApprovalManifest": true, "ApprovalManifestPath": "build/powerforge/apple/archives/approval.json" } }""");
+                    break;
             }
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
@@ -398,7 +416,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 exception.Message.Contains("ReceiptHistoryPath", StringComparison.Ordinal) ||
                 exception.Message.Contains("distinct paths", StringComparison.OrdinalIgnoreCase) ||
                 exception.Message.Contains("automation output", StringComparison.OrdinalIgnoreCase) ||
-                exception.Message.Contains("archive and export roots", StringComparison.OrdinalIgnoreCase),
+                exception.Message.Contains("archive and export roots", StringComparison.OrdinalIgnoreCase) ||
+                exception.Message.Contains("archive/export roots", StringComparison.OrdinalIgnoreCase),
                 exception.Message);
         }
         finally

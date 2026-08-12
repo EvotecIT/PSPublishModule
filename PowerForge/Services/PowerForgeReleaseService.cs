@@ -1627,6 +1627,13 @@ internal sealed partial class PowerForgeReleaseService
                 .Where(static path => path is not null)
                 .Select(static path => ("Apple mutation input", path!, false)));
         protectedApplePaths.AddRange(screenshotConfigPaths.Select(static path => ("screenshot config", path, false)));
+        AddAppleScreenshotProtectedPaths(
+            projectRoot,
+            new[] { screenshotConfigPath }
+                .Where(static path => path is not null)
+                .Select(static path => path!)
+                .Concat(screenshotConfigPaths),
+            protectedApplePaths);
         protectedApplePaths.AddRange(metadataConfigPaths.Select(static path => ("metadata config", path, false)));
         protectedApplePaths.AddRange(appInfoConfigPaths.Select(static path => ("App Information config", path, false)));
         protectedApplePaths.AddRange(governanceConfigPaths.Select(static path => ("governance config", path, false)));

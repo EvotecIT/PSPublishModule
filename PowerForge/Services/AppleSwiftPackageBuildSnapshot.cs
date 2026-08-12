@@ -30,7 +30,9 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 
     internal string SourcePackagesPath => Path.Combine(RootPath, "SourcePackages");
 
-    internal string DerivedDataPath => Path.Combine(RootPath, "DerivedData");
+    internal string ResolverDerivedDataPath => Path.Combine(RootPath, "ResolverDerivedData");
+
+    internal string ArchiveDerivedDataPath => Path.Combine(RootPath, "ArchiveDerivedData");
 
     internal IReadOnlyDictionary<string, string?> EnvironmentVariables => _environmentVariables;
 
@@ -55,7 +57,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         try
         {
             var sourcePackagesPath = Path.Combine(root, "SourcePackages");
-            var derivedDataPath = Path.Combine(root, "DerivedData");
+            var derivedDataPath = Path.Combine(root, "ResolverDerivedData");
             Directory.CreateDirectory(sourcePackagesPath);
             Directory.CreateDirectory(derivedDataPath);
             var repositoryRoot = FindRepositoryRoot(projectPath);
@@ -144,7 +146,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         arguments.Add("-clonedSourcePackagesDirPath");
         arguments.Add(SourcePackagesPath);
         arguments.Add("-derivedDataPath");
-        arguments.Add(DerivedDataPath);
+        arguments.Add(ArchiveDerivedDataPath);
         arguments.Add("-onlyUsePackageVersionsFromResolvedFile");
         arguments.Add("-disableAutomaticPackageResolution");
         arguments.Add("-skipPackageUpdates");

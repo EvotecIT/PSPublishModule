@@ -76,6 +76,39 @@ public sealed class AppleRemotePackageMirrorLeaseTests
         }
     }
 
+    [Fact]
+    public void AcquireRemotePackageMirrorLease_RejectsLinkedLockWithoutChangingTargetPermissions()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.RemotePackageMirrorLeaseTests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var mirrorPath = Path.Combine(root.FullName, "package.git");
+            var targetPath = Path.Combine(root.FullName, "unrelated.txt");
+            File.WriteAllText(targetPath, "unrelated");
+            File.SetUnixFileMode(targetPath, UnixFileMode.UserRead);
+            File.CreateSymbolicLink(mirrorPath + ".lock", targetPath);
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                AppleReleaseSourceTrustService.AcquireRemotePackageMirrorLease(mirrorPath));
+
+            Assert.Contains("symbolic link", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(UnixFileMode.UserRead, File.GetUnixFileMode(targetPath));
+        }
+        finally
+        {
+            try
+            {
+                File.SetUnixFileMode(Path.Combine(root.FullName, "unrelated.txt"), UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                root.Delete(recursive: true);
+            }
+            catch { }
+        }
+    }
+
     private static ProcessRunResult Success(ProcessRunRequest request)
         => new(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
 

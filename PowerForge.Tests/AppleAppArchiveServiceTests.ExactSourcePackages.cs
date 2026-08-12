@@ -45,7 +45,7 @@ public sealed partial class AppleAppArchiveServiceTests
             Assert.Equal(
                 resolve.Arguments[Array.IndexOf(resolve.Arguments.ToArray(), "-clonedSourcePackagesDirPath") + 1],
                 archive.Arguments[Array.IndexOf(archive.Arguments.ToArray(), "-clonedSourcePackagesDirPath") + 1]);
-            Assert.Equal(
+            Assert.NotEqual(
                 resolve.Arguments[Array.IndexOf(resolve.Arguments.ToArray(), "-derivedDataPath") + 1],
                 archive.Arguments[Array.IndexOf(archive.Arguments.ToArray(), "-derivedDataPath") + 1]);
             Assert.False(Directory.Exists(runner.SourcePackagesRoot));

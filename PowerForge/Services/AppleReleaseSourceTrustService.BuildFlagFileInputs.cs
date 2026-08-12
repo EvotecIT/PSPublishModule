@@ -85,7 +85,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
 
         if (!token.Equals("-sectorder", StringComparison.Ordinal) &&
-            !token.Equals("-sectcreate", StringComparison.Ordinal))
+            !token.Equals("-sectcreate", StringComparison.Ordinal) &&
+            !token.Equals("-segcreate", StringComparison.Ordinal))
             return false;
         if (index + 3 >= tokens.Length)
             throw new InvalidOperationException($"Xcode build setting {key} ends before linker option '{token}' receives its segment, section, and file input.");

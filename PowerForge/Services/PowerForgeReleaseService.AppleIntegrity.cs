@@ -2,6 +2,49 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    private static void AddAppleScreenshotProtectedPaths(
+        string projectRoot,
+        IEnumerable<string> configPaths,
+        ICollection<(string Name, string Path, bool IsDirectory)> protectedPaths)
+    {
+        var comparer = FrameworkCompatibility.GetPathStringComparisonForPath(projectRoot) == StringComparison.OrdinalIgnoreCase
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        foreach (var configPath in configPaths.Distinct(comparer))
+        {
+            var bytes = File.ReadAllBytes(configPath);
+            string json;
+            using (var stream = new MemoryStream(bytes, writable: false))
+            using (var reader = new StreamReader(stream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+                json = reader.ReadToEnd();
+            var spec = System.Text.Json.JsonSerializer.Deserialize<AppStoreConnectScreenshotSyncSpec>(json, CreateJsonOptions())
+                ?? throw new InvalidOperationException($"Unable to deserialize screenshot sync config: {configPath}");
+            var baseDirectory = Path.GetDirectoryName(configPath) ?? projectRoot;
+            foreach (var set in (spec.ScreenshotSets ?? Array.Empty<AppStoreConnectScreenshotSetSyncSpec>())
+                         .Where(static set => !string.IsNullOrWhiteSpace(set.Path)))
+            {
+                var setPath = ResolveOutputPath(baseDirectory, set.Path);
+                if (!Directory.Exists(setPath))
+                    continue;
+                var filter = string.IsNullOrWhiteSpace(set.Filter) ? "*.png" : set.Filter.Trim();
+                var maxCount = set.MaxCount <= 0 ? 10 : set.MaxCount;
+                foreach (var screenshotPath in AppStoreConnectScreenshotFileSelector.Select(setPath, filter, maxCount))
+                {
+                    protectedPaths.Add((
+                        $"screenshot input {set.ScreenshotDisplayType}",
+                        screenshotPath,
+                        false));
+                }
+            }
+
+            if (spec.Quality?.RequireApprovalManifest != true ||
+                string.IsNullOrWhiteSpace(spec.Quality.ApprovalManifestPath))
+                continue;
+            var approvalPath = ResolveOutputPath(baseDirectory, spec.Quality.ApprovalManifestPath!);
+            protectedPaths.Add(("screenshot approval manifest", approvalPath, false));
+        }
+    }
+
     private static void ValidateAppleAutomationOutputPaths(
         string receiptPath,
         string receiptHistoryPath,
