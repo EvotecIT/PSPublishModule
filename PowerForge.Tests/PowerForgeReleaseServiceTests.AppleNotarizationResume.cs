@@ -203,8 +203,10 @@ public sealed partial class PowerForgeReleaseServiceTests
             matches);
     }
 
-    [Fact]
-    public void Execute_AppleDirectNotarizationResume_FollowsRelativeReceiptAfterCheckoutRelocation()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Execute_AppleDirectNotarizationResume_FollowsRelativeReceiptAfterCheckoutRelocation(bool pinSource)
     {
         const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
         var originalRoot = CreateSandbox();
@@ -252,7 +254,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(originalRoot, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = pinSource ? sourceCommit : null
                 });
             Assert.False(failed.Success);
             var accepted = Assert.Single(
@@ -289,7 +291,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             {
                 ConfigPath = Path.Combine(relocatedRoot, "powerforge.release.json"),
                 AppleAction = PowerForgeAppleReleaseAction.Upload,
-                AppleSourceCommit = sourceCommit
+                AppleSourceCommit = pinSource ? sourceCommit : null
             });
             Assert.False(blocked.Success);
             Assert.Contains(
@@ -301,7 +303,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(relocatedRoot, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit,
+                    AppleSourceCommit = pinSource ? sourceCommit : null,
                     AppleAdoptExistingBuild = true,
                     AppleActionConfirmed = true
                 });

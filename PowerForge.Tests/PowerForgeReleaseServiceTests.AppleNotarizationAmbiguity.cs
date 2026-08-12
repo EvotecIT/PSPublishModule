@@ -2,8 +2,10 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
 {
-    [Fact]
-    public void Execute_AppleDirectNotarizationAmbiguityBlocksAutomaticResubmission()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Execute_AppleDirectNotarizationAmbiguityBlocksAutomaticResubmission(bool pinSource)
     {
         const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
         var root = CreateSandbox();
@@ -45,7 +47,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = pinSource ? sourceCommit : null
                 });
 
             Assert.False(initial.Success);
@@ -75,7 +77,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = pinSource ? sourceCommit : null
                 });
 
             Assert.False(resumed.Success);

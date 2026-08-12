@@ -8,6 +8,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class ProcessRunRequest
 {
+    private int _startBoundaryInvoked;
+    private Action? _startBoundary;
     private int _completionBoundaryInvoked;
     private Action<ProcessRunResult>? _completionBoundary;
     /// <summary>
@@ -198,6 +200,21 @@ public sealed class ProcessRunRequest
     internal void SetCompletionBoundary(Action<ProcessRunResult> completionBoundary)
         => _completionBoundary = completionBoundary ?? throw new ArgumentNullException(nameof(completionBoundary));
 
+    internal void SetStartBoundary(Action startBoundary)
+        => _startBoundary = startBoundary ?? throw new ArgumentNullException(nameof(startBoundary));
+
+    /// <summary>
+    /// Signals that the external process was successfully started and may have begun externally
+    /// visible work. Custom <see cref="IProcessRunner"/> implementations must invoke this method
+    /// immediately after process start succeeds. The callback is invoked at most once.
+    /// </summary>
+    public void InvokeStartBoundary()
+    {
+        if (_startBoundary is null || Interlocked.Exchange(ref _startBoundaryInvoked, 1) != 0)
+            return;
+        _startBoundary();
+    }
+
     /// <summary>
     /// Signals that the external process has completed and its final result is available.
     /// Custom <see cref="IProcessRunner"/> implementations must invoke this method immediately
@@ -294,7 +311,9 @@ public interface IProcessRunner
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Structured process execution result.</returns>
     /// <remarks>
-    /// Implementations must call <see cref="ProcessRunRequest.InvokeCompletionBoundary"/> immediately
+    /// Implementations must call <see cref="ProcessRunRequest.InvokeStartBoundary"/> immediately
+    /// after the process starts successfully. They must also call
+    /// <see cref="ProcessRunRequest.InvokeCompletionBoundary"/> immediately
     /// after the process exits and the final result is constructed, before returning from this method
     /// or performing any post-exit mutation of producer outputs.
     /// </remarks>
@@ -324,6 +343,7 @@ public sealed class ProcessRunner : IProcessRunner
         try
         {
             process.Start();
+            request.InvokeStartBoundary();
         }
         catch (Exception ex)
         {

@@ -83,6 +83,11 @@ public sealed class AppleAppArchiveResult
 /// </summary>
 public sealed class AppleAppArchiveUploadRequest
 {
+    internal Action? RemoteMutationStarted { get; set; }
+
+    internal void InvokeRemoteMutationStarted()
+        => RemoteMutationStarted?.Invoke();
+
     /// <summary>Path to the .xcarchive to upload.</summary>
     public string ArchivePath { get; set; } = string.Empty;
 

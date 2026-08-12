@@ -2266,6 +2266,7 @@ internal sealed partial class PowerForgeReleaseService
                         "xcodebuild exportArchive",
                         "Discard the upload/export result and inspect remote state before retrying.");
                 AppleAppArchiveUploadResult upload;
+                var uploadRemoteMutationStarted = false;
                 try
                 {
                     upload = _uploadAppleApp(new AppleAppArchiveUploadRequest
@@ -2286,10 +2287,11 @@ internal sealed partial class PowerForgeReleaseService
                         AppStoreConnectApiKeyPath = direct ? null : plan.AppStoreConnectApiKeyPath,
                         AppStoreConnectApiKeyId = direct ? null : plan.AppStoreConnectApiKeyId,
                         AppStoreConnectApiIssuerId = direct ? null : plan.AppStoreConnectApiIssuerId,
-                        AllowProvisioningUpdates = plan.AllowProvisioningUpdates
+                        AllowProvisioningUpdates = plan.AllowProvisioningUpdates,
+                        RemoteMutationStarted = () => uploadRemoteMutationStarted = true
                     });
                 }
-                catch (Exception ex) when (!direct)
+                catch (Exception ex) when (!direct && uploadRemoteMutationStarted)
                 {
                     try
                     {
@@ -2322,7 +2324,7 @@ internal sealed partial class PowerForgeReleaseService
                             ex);
                     }
                 }
-                else if (!direct)
+                else if (!direct && uploadRemoteMutationStarted)
                 {
                     try
                     {

@@ -250,6 +250,7 @@ public sealed partial class AppleAppArchiveService
                 captureOutput: true,
                 captureError: true,
                 inheritEnvironment: toolEnvironment is null);
+        processRequest.SetStartBoundary(request.InvokeRemoteMutationStarted);
         if (directExport)
         {
             processRequest.SetCompletionBoundary(completionResult =>

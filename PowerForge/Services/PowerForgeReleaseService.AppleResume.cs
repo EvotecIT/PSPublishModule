@@ -183,9 +183,6 @@ internal sealed partial class PowerForgeReleaseService
         AppStoreConnectReleaseStateResult state,
         AppStoreConnectBuildInfo? remoteBuild)
     {
-        if (string.IsNullOrWhiteSpace(plan.SourceCommit))
-            return null;
-
         var receipts = _appleReceiptStore.ReadAll(plan);
         foreach (var receipt in receipts)
         {
@@ -250,11 +247,6 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app)
     {
-        if (string.IsNullOrWhiteSpace(plan.SourceCommit))
-        {
-            return false;
-        }
-
         var receipts = _appleReceiptStore.ReadAll(plan);
         return receipts.Any(receipt => FindMatchingAppleUploadAttestationTarget(
             receipts,
@@ -278,7 +270,7 @@ internal sealed partial class PowerForgeReleaseService
              !string.Equals(receipt.OperationPhase, "UploadAmbiguous", StringComparison.Ordinal)) ||
             receipt.SchemaVersion < 4 ||
             string.IsNullOrWhiteSpace(receipt.ReceiptSha256) ||
-            !string.Equals(receipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))
+            !AppleSourceCommitEvidenceMatches(receipt.SourceCommit, plan.SourceCommit))
         {
             return null;
         }
@@ -367,8 +359,7 @@ internal sealed partial class PowerForgeReleaseService
                 !receipt.PlanOnly &&
                 receipt.SchemaVersion >= 4 &&
                 !string.IsNullOrWhiteSpace(receipt.ReceiptSha256) &&
-                !string.IsNullOrWhiteSpace(plan.SourceCommit) &&
-                string.Equals(receipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))
+                AppleSourceCommitEvidenceMatches(receipt.SourceCommit, plan.SourceCommit))
             .SelectMany(receipt => receipt.Targets
                 .Where(target => IsMatchingDirectReceiptTarget(plan, target, app))
                 .Select(target => new { Receipt = receipt, Target = target }))
@@ -498,6 +489,17 @@ internal sealed partial class PowerForgeReleaseService
         => !string.IsNullOrWhiteSpace(value) &&
            value!.Length == 64 &&
            value.All(static character => Uri.IsHexDigit(character));
+
+    private static bool AppleSourceCommitEvidenceMatches(string? receiptSourceCommit, string? planSourceCommit)
+    {
+        var receiptValue = string.IsNullOrWhiteSpace(receiptSourceCommit)
+            ? null
+            : receiptSourceCommit!.Trim();
+        var planValue = string.IsNullOrWhiteSpace(planSourceCommit)
+            ? null
+            : planSourceCommit!.Trim();
+        return string.Equals(receiptValue, planValue, StringComparison.OrdinalIgnoreCase);
+    }
 
     internal static bool AppleReleasePathsEqual(
         string? left,

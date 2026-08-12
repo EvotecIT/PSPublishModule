@@ -9,6 +9,12 @@ internal sealed partial class PowerForgeReleaseService
         string lockPath,
         IEnumerable<(string Name, string Path, bool IsDirectory)> protectedPaths)
     {
+        var protectedEntries = protectedPaths
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Path))
+            .Select(static entry => (entry.Name, Path: Path.GetFullPath(entry.Path), entry.IsDirectory))
+            .ToArray();
+        ValidateAppleReleasePathIsolation(protectedEntries);
+
         var history = Path.GetFullPath(receiptHistoryPath)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var files = new[]
@@ -51,13 +57,67 @@ internal sealed partial class PowerForgeReleaseService
             .ToArray();
         foreach (var output in outputs)
         {
-            foreach (var protectedPath in protectedPaths.Where(static entry => !string.IsNullOrWhiteSpace(entry.Path)))
+            foreach (var protectedPath in protectedEntries)
             {
                 if (!PathsOverlap(output.Path, protectedPath.Path))
                     continue;
                 throw new InvalidOperationException(
                     $"Apple automation output {output.Name} must not equal, contain, or be contained by " +
                     $"release input/artifact path {protectedPath.Name}: {Path.GetFullPath(protectedPath.Path)}");
+            }
+        }
+    }
+
+    private static void ValidateAppleReleasePathIsolation(
+        IReadOnlyList<(string Name, string Path, bool IsDirectory)> protectedPaths)
+    {
+        var archiveRoot = protectedPaths.Single(static entry => entry.Name == "archive root");
+        var exportRoot = protectedPaths.Single(static entry => entry.Name == "export root");
+        if (PathsOverlap(archiveRoot.Path, exportRoot.Path))
+        {
+            throw new InvalidOperationException(
+                "Apple archive and export roots must not equal, contain, or be contained by each other.");
+        }
+
+        var artifacts = protectedPaths
+            .Where(static entry => entry.Name.EndsWith(" archive", StringComparison.Ordinal) ||
+                                   entry.Name.EndsWith(" export", StringComparison.Ordinal))
+            .ToArray();
+        var sources = protectedPaths
+            .Where(static entry => entry.Name != "archive root" &&
+                                   entry.Name != "export root" &&
+                                   !entry.Name.EndsWith(" archive", StringComparison.Ordinal) &&
+                                   !entry.Name.EndsWith(" export", StringComparison.Ordinal))
+            .ToArray();
+
+        for (var index = 0; index < artifacts.Length; index++)
+        {
+            for (var siblingIndex = index + 1; siblingIndex < artifacts.Length; siblingIndex++)
+            {
+                if (!PathsOverlap(artifacts[index].Path, artifacts[siblingIndex].Path))
+                    continue;
+                throw new InvalidOperationException(
+                    $"Apple release artifact paths must not equal, contain, or be contained by each other: " +
+                    $"{artifacts[index].Name}, {artifacts[siblingIndex].Name}.");
+            }
+
+            foreach (var source in sources)
+            {
+                if (!PathsOverlap(artifacts[index].Path, source.Path))
+                    continue;
+                throw new InvalidOperationException(
+                    $"Apple release artifact path {artifacts[index].Name} must not equal, contain, or be contained by " +
+                    $"release input path {source.Name}: {source.Path}");
+            }
+        }
+
+        foreach (var source in sources)
+        {
+            if (PathsOverlap(archiveRoot.Path, source.Path) || PathsOverlap(exportRoot.Path, source.Path))
+            {
+                throw new InvalidOperationException(
+                    $"Apple archive/export roots must not equal, contain, or be contained by release input path " +
+                    $"{source.Name}: {source.Path}");
             }
         }
     }

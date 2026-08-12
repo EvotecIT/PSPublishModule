@@ -333,6 +333,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("history-under-archive-root")]
     [InlineData("archive-overlaps-receipt-journal-lock")]
     [InlineData("plan-overwrites-project")]
+    [InlineData("archive-root-overlaps-export-root")]
     public void Execute_ApplePlan_RejectsOverlappingAutomationOutputPaths(string scenario)
     {
         var root = CreateSandbox();
@@ -378,6 +379,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                 case "plan-overwrites-project":
                     automation.PlanReceiptPath = "CasaRay.xcodeproj/project.pbxproj";
                     break;
+                case "archive-root-overlaps-export-root":
+                    spec.AppleApps.ExportRoot = spec.AppleApps.ArchiveRoot;
+                    break;
             }
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
@@ -393,7 +397,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(
                 exception.Message.Contains("ReceiptHistoryPath", StringComparison.Ordinal) ||
                 exception.Message.Contains("distinct paths", StringComparison.OrdinalIgnoreCase) ||
-                exception.Message.Contains("automation output", StringComparison.OrdinalIgnoreCase),
+                exception.Message.Contains("automation output", StringComparison.OrdinalIgnoreCase) ||
+                exception.Message.Contains("archive and export roots", StringComparison.OrdinalIgnoreCase),
                 exception.Message);
         }
         finally
