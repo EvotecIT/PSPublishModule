@@ -812,7 +812,8 @@ Notes:
 - `Site` content can still include an explicitly configured `quickstart`; package content omits the quickstart section when no meaningful snippet is available
 - API resource metadata is emitted only for an index that exists and contains valid JSON; a configured missing or invalid index fails the step
 - use `apiIndexes` for multiple catalogs under the generated site root, where their published routes can be derived without guessing
-- configured project and quickstart files must exist; an empty quickstart or package identity that cannot be resolved from project metadata fails the step
+- configured project and quickstart files must exist; an empty quickstart or package identity that cannot be resolved from ordered project, `Directory.Build.props`, `Directory.Build.targets`, and explicit import metadata fails the step
+- the pipeline cache fingerprints those implicit MSBuild metadata inputs, including resolved imported files
 - when `Site` has no explicit `name`, the generator reads the site title or first heading from `index.html` instead of using the output directory name
 - `apiLevel`: `None` (default), `Summary`, or `Full`
 - `apiMaxTypes` / `apiMaxMembers` cap the size of API detail sections in `llms-full.txt`

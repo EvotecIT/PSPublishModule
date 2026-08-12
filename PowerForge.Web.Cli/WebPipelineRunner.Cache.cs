@@ -220,6 +220,24 @@ internal static partial class WebPipelineRunner
                 }
             }
         }
+
+        if (!string.Equals(GetString(step, "task"), "llms", StringComparison.OrdinalIgnoreCase))
+            yield break;
+
+        var projectFiles = new List<string?>
+        {
+            GetString(step, "project")
+        };
+        projectFiles.AddRange(GetArrayOfStrings(step, "packageFiles") ?? Array.Empty<string>());
+        projectFiles.AddRange(GetArrayOfStrings(step, "package-files") ?? Array.Empty<string>());
+        foreach (var projectFile in projectFiles.Where(static path => !string.IsNullOrWhiteSpace(path)))
+        {
+            var resolvedProject = ResolvePath(baseDir, projectFile);
+            if (string.IsNullOrWhiteSpace(resolvedProject) || !File.Exists(resolvedProject))
+                continue;
+            foreach (var input in WebLlmsGenerator.DiscoverMsBuildMetadataInputs(resolvedProject))
+                yield return input;
+        }
     }
 
     private static string BuildPathStamp(string path)

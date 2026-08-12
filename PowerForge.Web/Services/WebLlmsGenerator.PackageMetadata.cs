@@ -81,10 +81,10 @@ public static partial class WebLlmsGenerator
             };
         }
 
-        var properties = ReadMsBuildProperties(full, requirePackageMetadata);
-        var assemblyName = GetMsBuildProperty(properties, "AssemblyName", requirePackageMetadata);
-        var rootNamespace = GetMsBuildProperty(properties, "RootNamespace", requirePackageMetadata);
-        var description = GetMsBuildProperty(properties, "Description", requirePackageMetadata);
+        var properties = ReadMsBuildProperties(full);
+        var assemblyName = GetMsBuildProperty(properties, "AssemblyName", throwOnUnresolved: false);
+        var rootNamespace = GetMsBuildProperty(properties, "RootNamespace", throwOnUnresolved: false);
+        var description = GetMsBuildProperty(properties, "Description", throwOnUnresolved: false);
         var projectName = Path.GetFileNameWithoutExtension(full);
         if (!requirePackageMetadata)
         {
@@ -96,15 +96,30 @@ public static partial class WebLlmsGenerator
         }
 
         var packageId = GetMsBuildProperty(properties, "PackageId", throwOnUnresolved: true);
-        var packageVersion = GetMsBuildProperty(properties, "PackageVersion", throwOnUnresolved: true);
-        var versionValue = GetMsBuildProperty(properties, "Version", throwOnUnresolved: true);
-        var versionPrefix = GetMsBuildProperty(properties, "VersionPrefix", throwOnUnresolved: true);
-        var versionSuffix = GetMsBuildProperty(properties, "VersionSuffix", throwOnUnresolved: true);
-        var version = packageVersion ??
-                      versionValue ??
-                      CombineMsBuildVersion(versionPrefix, versionSuffix);
+        if (packageId is null)
+            assemblyName = GetMsBuildProperty(properties, "AssemblyName", throwOnUnresolved: true);
+
+        var version = GetMsBuildProperty(properties, "PackageVersion", throwOnUnresolved: true);
+        if (version is null)
+            version = GetMsBuildProperty(properties, "Version", throwOnUnresolved: true);
+        if (version is null)
+        {
+            var versionPrefix = GetMsBuildProperty(properties, "VersionPrefix", throwOnUnresolved: true);
+            var versionSuffix = versionPrefix is null
+                ? null
+                : GetMsBuildProperty(properties, "VersionSuffix", throwOnUnresolved: true);
+            version = CombineMsBuildVersion(versionPrefix, versionSuffix);
+        }
         var packAsTool = GetMsBuildProperty(properties, "PackAsTool", throwOnUnresolved: true);
-        var toolCommandName = GetMsBuildProperty(properties, "ToolCommandName", throwOnUnresolved: true);
+        var isDotNetTool = string.Equals(packAsTool, "true", StringComparison.OrdinalIgnoreCase);
+        var toolCommandName = isDotNetTool
+            ? GetMsBuildProperty(properties, "ToolCommandName", throwOnUnresolved: true)
+            : null;
+        if (isDotNetTool && toolCommandName is null)
+        {
+            assemblyName = GetMsBuildProperty(properties, "AssemblyName", throwOnUnresolved: true);
+            toolCommandName = assemblyName ?? projectName;
+        }
 
         packageId ??= assemblyName ?? projectName;
 
@@ -114,30 +129,36 @@ public static partial class WebLlmsGenerator
             PackageId = packageId,
             Version = version,
             Description = description,
-            ToolCommandName = toolCommandName ?? assemblyName ?? rootNamespace ?? packageId,
-            IsDotNetTool = string.Equals(
-                packAsTool,
-                "true",
-                StringComparison.OrdinalIgnoreCase)
+            ToolCommandName = toolCommandName,
+            IsDotNetTool = isDotNetTool
         };
     }
 
-    private static MsBuildPropertySet ReadMsBuildProperties(string projectFile, bool requirePackageMetadata)
+    internal static IReadOnlyList<string> DiscoverMsBuildMetadataInputs(string projectFile)
+    {
+        if (string.IsNullOrWhiteSpace(projectFile) || !File.Exists(projectFile))
+            return Array.Empty<string>();
+        if (!Path.GetExtension(projectFile).Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+            return new[] { Path.GetFullPath(projectFile) };
+
+        return ReadMsBuildProperties(Path.GetFullPath(projectFile)).InputPaths
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static MsBuildPropertySet ReadMsBuildProperties(string projectFile)
     {
         var properties = new MsBuildPropertySet();
         properties.Values["MSBuildProjectName"] = Path.GetFileNameWithoutExtension(projectFile);
 
         var propsPath = FindNearestBuildFile(projectFile, "Directory.Build.props");
         if (propsPath is not null)
-            ReadMsBuildPropertyFile(propsPath, properties, requirePackageMetadata);
+            ReadMsBuildPropertyFile(propsPath, properties);
 
-        ReadMsBuildPropertyFile(projectFile, properties, requirePackageMetadata);
-        if (requirePackageMetadata)
-        {
-            var targetsPath = FindNearestBuildFile(projectFile, "Directory.Build.targets");
-            if (targetsPath is not null)
-                EnsureNoPostProjectPackageMetadata(targetsPath);
-        }
+        ReadMsBuildPropertyFile(projectFile, properties);
+        var targetsPath = FindNearestBuildFile(projectFile, "Directory.Build.targets");
+        if (targetsPath is not null)
+            ReadMsBuildPropertyFile(targetsPath, properties);
         return properties;
     }
 
@@ -155,63 +176,163 @@ public static partial class WebLlmsGenerator
         return null;
     }
 
-    private static void EnsureNoPostProjectPackageMetadata(string path)
+    private static void ReadMsBuildPropertyFile(string path, MsBuildPropertySet properties)
     {
+        var fullPath = Path.GetFullPath(path);
+        if (!properties.InputPaths.Add(fullPath))
+            return;
+
         XDocument document;
         try
         {
-            document = XDocument.Load(path, LoadOptions.None);
+            document = XDocument.Load(fullPath, LoadOptions.None);
         }
         catch (Exception ex) when (ex is System.Xml.XmlException or IOException)
         {
-            throw new InvalidDataException($"Configured LLMS project metadata is invalid: {path}", ex);
+            throw new InvalidDataException($"Configured LLMS project metadata is invalid: {fullPath}", ex);
         }
 
-        var metadataName = document.Descendants()
-            .Where(element => element.Parent?.Name.LocalName == "PropertyGroup")
-            .Select(element => element.Name.LocalName)
-            .FirstOrDefault(PackageMetadataPropertyNames.Contains);
-        if (metadataName is not null)
-            throw new InvalidDataException($"Cannot prove package metadata '{metadataName}' assigned after the project in {path}.");
-    }
-
-    private static void ReadMsBuildPropertyFile(string path, MsBuildPropertySet properties, bool requirePackageMetadata)
-    {
-        XDocument document;
-        try
+        var previousThisFileDirectory = properties.Values.GetValueOrDefault("MSBuildThisFileDirectory");
+        properties.Values["MSBuildThisFileDirectory"] = (Path.GetDirectoryName(fullPath) ?? string.Empty) + Path.DirectorySeparatorChar;
+        foreach (var element in document.Root?.Elements() ?? Enumerable.Empty<XElement>())
         {
-            document = XDocument.Load(path, LoadOptions.None);
-        }
-        catch (Exception ex) when (ex is System.Xml.XmlException or IOException)
-        {
-            throw new InvalidDataException($"Configured LLMS project metadata is invalid: {path}", ex);
-        }
-
-        if (requirePackageMetadata && document.Descendants().Any(element => element.Name.LocalName == "Import"))
-            throw new InvalidDataException($"Cannot prove package metadata from project with explicit MSBuild imports: {path}");
-
-        foreach (var group in document.Descendants().Where(element => element.Name.LocalName == "PropertyGroup"))
-        {
-            foreach (var property in group.Elements())
+            var elementName = element.Name.LocalName;
+            if (elementName == "PropertyGroup")
             {
-                var name = property.Name.LocalName;
-                if (IsConditionalMsBuildScope(property))
-                {
-                    properties.ConditionalNames.Add(name);
-                    continue;
-                }
-
-                properties.Values[name] = ExpandMsBuildPropertyAtAssignment(property.Value.Trim(), properties);
-                properties.ConditionalNames.Remove(name);
+                EvaluatePropertyGroup(element, properties);
+                continue;
             }
+            if (elementName == "Import")
+                EvaluateImport(element, fullPath, properties);
+            else if (elementName == "ImportGroup")
+                foreach (var import in element.Elements().Where(static item => item.Name.LocalName == "Import"))
+                    EvaluateImport(import, fullPath, properties, inheritedCondition: element.Attribute("Condition")?.Value);
+            else if (elementName is "Choose" or "Target")
+                MarkConditionalProperties(element, properties);
+        }
+
+        if (previousThisFileDirectory is null)
+            properties.Values.Remove("MSBuildThisFileDirectory");
+        else
+            properties.Values["MSBuildThisFileDirectory"] = previousThisFileDirectory;
+    }
+
+    private static void EvaluatePropertyGroup(XElement group, MsBuildPropertySet properties)
+    {
+        var groupConditional = !string.IsNullOrWhiteSpace(group.Attribute("Condition")?.Value);
+        foreach (var property in group.Elements())
+        {
+            var name = property.Name.LocalName;
+            if (groupConditional || !string.IsNullOrWhiteSpace(property.Attribute("Condition")?.Value))
+            {
+                properties.ConditionalNames.Add(name);
+                continue;
+            }
+
+            properties.Values[name] = ExpandMsBuildPropertyAtAssignment(property.Value.Trim(), properties);
+            properties.ConditionalNames.Remove(name);
         }
     }
 
-    private static bool IsConditionalMsBuildScope(XElement property)
+    private static void EvaluateImport(XElement import, string importingFile, MsBuildPropertySet properties, string? inheritedCondition = null)
     {
-        return property.AncestorsAndSelf().Any(element =>
-            !string.IsNullOrWhiteSpace(element.Attribute("Condition")?.Value) ||
-            element.Name.LocalName is "Choose" or "When" or "Otherwise" or "Target");
+        var projectExpression = import.Attribute("Project")?.Value;
+        var isConditional = !string.IsNullOrWhiteSpace(inheritedCondition) ||
+                            !string.IsNullOrWhiteSpace(import.Attribute("Condition")?.Value);
+        var expanded = ExpandMsBuildPropertyAtAssignment(projectExpression ?? string.Empty, properties);
+        if (string.IsNullOrWhiteSpace(expanded) || expanded.Contains("$(", StringComparison.Ordinal) ||
+            expanded.Contains('*') || expanded.Contains(';'))
+        {
+            MarkAllPackageMetadataConditional(properties);
+            return;
+        }
+
+        var normalizedImportPath = expanded
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+        var importedPath = Path.GetFullPath(normalizedImportPath, Path.GetDirectoryName(importingFile) ?? string.Empty);
+        if (!File.Exists(importedPath))
+        {
+            MarkAllPackageMetadataConditional(properties);
+            return;
+        }
+
+        if (isConditional)
+        {
+            var conditionalNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            CollectImportedPropertyNames(importedPath, conditionalNames, properties.InputPaths, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            foreach (var name in conditionalNames)
+                properties.ConditionalNames.Add(name);
+            return;
+        }
+
+        ReadMsBuildPropertyFile(importedPath, properties);
+    }
+
+    private static void CollectImportedPropertyNames(
+        string path,
+        HashSet<string> names,
+        HashSet<string> inputPaths,
+        HashSet<string> visited)
+    {
+        var fullPath = Path.GetFullPath(path);
+        if (!visited.Add(fullPath)) return;
+        inputPaths.Add(fullPath);
+
+        XDocument document;
+        try
+        {
+            document = XDocument.Load(fullPath, LoadOptions.None);
+        }
+        catch (Exception ex) when (ex is System.Xml.XmlException or IOException)
+        {
+            throw new InvalidDataException($"Configured LLMS project metadata is invalid: {fullPath}", ex);
+        }
+
+        foreach (var property in document.Descendants()
+                     .Where(static element => element.Parent?.Name.LocalName == "PropertyGroup"))
+            names.Add(property.Name.LocalName);
+
+        var directory = Path.GetDirectoryName(fullPath) ?? string.Empty;
+        foreach (var import in document.Descendants().Where(static element => element.Name.LocalName == "Import"))
+        {
+            var expression = import.Attribute("Project")?.Value ?? string.Empty;
+            expression = expression.Replace("$(MSBuildThisFileDirectory)", directory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(expression) || expression.Contains("$(", StringComparison.Ordinal) ||
+                expression.Contains('*') || expression.Contains(';'))
+            {
+                foreach (var metadataName in PackageMetadataPropertyNames)
+                    names.Add(metadataName);
+                continue;
+            }
+
+            var normalizedPath = expression
+                .Replace('\\', Path.DirectorySeparatorChar)
+                .Replace('/', Path.DirectorySeparatorChar);
+            var importedPath = Path.GetFullPath(normalizedPath, directory);
+            if (!File.Exists(importedPath))
+            {
+                foreach (var metadataName in PackageMetadataPropertyNames)
+                    names.Add(metadataName);
+                continue;
+            }
+
+            CollectImportedPropertyNames(importedPath, names, inputPaths, visited);
+        }
+    }
+
+    private static void MarkConditionalProperties(XElement? root, MsBuildPropertySet properties)
+    {
+        if (root is null) return;
+        foreach (var property in root.Descendants()
+                     .Where(static element => element.Parent?.Name.LocalName == "PropertyGroup"))
+            properties.ConditionalNames.Add(property.Name.LocalName);
+    }
+
+    private static void MarkAllPackageMetadataConditional(MsBuildPropertySet properties)
+    {
+        foreach (var name in PackageMetadataPropertyNames)
+            properties.ConditionalNames.Add(name);
     }
 
     private static string ExpandMsBuildPropertyAtAssignment(string value, MsBuildPropertySet properties)
@@ -260,6 +381,7 @@ public static partial class WebLlmsGenerator
     {
         public Dictionary<string, string> Values { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> ConditionalNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> InputPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private static readonly HashSet<string> PackageMetadataPropertyNames = new(StringComparer.OrdinalIgnoreCase)

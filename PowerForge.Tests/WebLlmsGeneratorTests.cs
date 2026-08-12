@@ -1245,7 +1245,7 @@ public class WebLlmsGeneratorTests
     }
 
     [Fact]
-    public void Generate_RejectsPackageMetadataAssignedInDirectoryBuildTargets()
+    public void Generate_UsesPackageMetadataAssignedInDirectoryBuildTargets()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-late-package-metadata-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -1258,12 +1258,167 @@ public class WebLlmsGeneratorTests
             File.WriteAllText(projectPath,
                 "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>Example.Early</PackageId></PropertyGroup></Project>");
 
-            var exception = Assert.Throws<InvalidDataException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
             {
                 SiteRoot = root,
                 PackageFiles = new[] { projectPath }
-            }));
-            Assert.Contains("assigned after the project", exception.Message, StringComparison.Ordinal);
+            });
+            Assert.Contains("dotnet add package Example.Late", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_FollowsImportedPostProjectPackageMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-imported-targets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Package.targets"),
+                "<Project><PropertyGroup><PackageId>Example.Imported</PackageId></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(root, "Directory.Build.targets"),
+                "<Project><Import Project=\"Package.targets\" /></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>Example.Early</PackageId></PropertyGroup></Project>");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+            Assert.Contains("dotnet add package Example.Imported", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_AllowsUnrelatedImportBeforeFinalPackageMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-unrelated-import-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Unrelated.props"),
+                "<Project><PropertyGroup><NoWarn>CS1591</NoWarn></PropertyGroup></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <Import Project="Unrelated.props" />
+                  <PropertyGroup><PackageId>Example.Final</PackageId><Version>1.2.3</Version></PropertyGroup>
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("dotnet add package Example.Final", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("source version `1.2.3`", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_AllowsConditionalImportThatCannotAlterPackageMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-unrelated-conditional-import-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Warnings.props"),
+                "<Project><PropertyGroup><NoWarn>CS1591</NoWarn></PropertyGroup></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><PackageId>Example.Package</PackageId><Version>1.0.0</Version></PropertyGroup>
+                  <Import Project="Warnings.props" Condition="'$(IncludeWarnings)' == 'true'" />
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+            Assert.Contains("dotnet add package Example.Package", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_IgnoresUnresolvedOptionalDescriptionAndUnusedVersionFallbacks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-optional-metadata-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <PackageId>Example.Package</PackageId>
+                    <Version>2.3.4</Version>
+                    <VersionPrefix Condition="'$(Configuration)' == 'Release'">9.9.9</VersionPrefix>
+                    <Description>$(GeneratedDescription)</Description>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("dotnet add package Example.Package", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("source version `2.3.4`", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("GeneratedDescription", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_TreatsBlankConfiguredSiteNameAsAbsent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-blank-site-name-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<html><head><title>Example Portal</title></head><body></body></html>");
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                Name = "   "
+            });
+            Assert.Equal("Example Portal", result.Name);
         }
         finally
         {
