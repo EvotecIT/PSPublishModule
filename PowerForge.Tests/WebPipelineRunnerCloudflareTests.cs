@@ -273,6 +273,33 @@ public class WebPipelineRunnerCloudflareTests
     }
 
     [Fact]
+    public void CloudflareHtmlAssetResolver_RejectsNetworkPathDiscoverySource()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() => CloudflareHtmlAssetResolver.Resolve(
+            "https://example.test/",
+            ["//outside.example/apps/converter/"],
+            ["/apps/converter/_framework/*.js"],
+            timeoutMs: 5000));
+
+        Assert.Contains("must resolve under", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("/../admin/")]
+    [InlineData("/%2e%2e/admin/")]
+    [InlineData("/%252e%252e/admin/")]
+    public void CloudflareHtmlAssetResolver_RejectsDeploymentBaseTraversal(string source)
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() => CloudflareHtmlAssetResolver.Resolve(
+            "https://example.test/project/",
+            [source],
+            ["/project/_framework/*.js"],
+            timeoutMs: 5000));
+
+        Assert.Contains("must resolve under", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task RunPipeline_CloudflareVerify_RejectsCachedErrorResponse()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-cloudflare-cached-error-" + Guid.NewGuid().ToString("N"));
@@ -374,7 +401,7 @@ public class WebPipelineRunnerCloudflareTests
                       "baseUrl": "http://127.0.0.1:{{port}}/project/",
                       "warmupRequests": 0,
                       "allowStatuses": "HIT",
-                      "discoverAssetsFrom": "/",
+                      "discoverAssetsFrom": "/?next=/../admin#section/../next",
                       "assetPathPatterns": "{{assetPath}}"
                     }
                   ]
@@ -385,7 +412,7 @@ public class WebPipelineRunnerCloudflareTests
 
             Assert.True(result.Success, result.Steps.Single().Message);
             Assert.NotNull(requestCounter);
-            Assert.Contains(appPath, requestCounter!.Paths);
+            Assert.Contains("/project/?next=/../admin", requestCounter!.Paths);
             Assert.Contains(assetPath, requestCounter.Paths);
             Assert.DoesNotContain("/", requestCounter.Paths);
         }
