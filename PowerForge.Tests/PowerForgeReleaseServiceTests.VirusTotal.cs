@@ -249,6 +249,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 }
                 """);
             string? existingItemId = null;
+            VirusTotalMonitorArtifactReceipt? resumeReceipt = null;
             var service = CreateReleaseService(
                 root,
                 new List<ModuleExecutionSnapshot>(),
@@ -256,6 +257,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 publishVirusTotalMonitor: (publishRequest, _) =>
                 {
                     existingItemId = Assert.Single(publishRequest.Artifacts).ExistingItemId;
+                    resumeReceipt = Assert.Single(publishRequest.ResumeReceipts);
                     return new VirusTotalMonitorPublishResult { Success = true };
                 });
 
@@ -270,6 +272,7 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(result.Success, result.ErrorMessage);
             Assert.Equal("existing-monitor-item", existingItemId);
+            Assert.Equal("existing-monitor-item", resumeReceipt?.MonitorId);
         }
         finally
         {

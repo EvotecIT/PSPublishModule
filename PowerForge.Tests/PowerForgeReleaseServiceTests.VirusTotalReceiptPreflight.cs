@@ -189,7 +189,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void PublishBuiltReleaseOutputs_ReceiptForDifferentRelease_IsPreserved()
+    public void PublishBuiltReleaseOutputs_ReceiptForDifferentProject_IsPreserved()
     {
         var root = CreateSandbox();
         try
@@ -232,6 +232,109 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.False(uploadCalled);
             Assert.False(Assert.IsType<VirusTotalMonitorPublishResult>(result.VirusTotalMonitor).Success);
             Assert.Equal(originalReceipt, File.ReadAllText(receiptPath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void PublishBuiltReleaseOutputs_ReceiptForPreviousVersion_IsRotated()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var artifactPath = Path.Combine(root, "Example.msi");
+            var receiptPath = Path.Combine(root, "Artifacts", "Release", "virustotal-monitor-receipt.json");
+            const string originalReceipt = """
+                {
+                  "schemaVersion": 1,
+                  "provider": "VirusTotal Monitor",
+                  "project": "Example",
+                  "version": "1.2.2",
+                  "artifacts": []
+                }
+                """;
+            Directory.CreateDirectory(Path.GetDirectoryName(receiptPath)!);
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(artifactPath, "signed installer");
+            File.WriteAllText(receiptPath, originalReceipt);
+            var uploadCalled = false;
+            var service = CreateReleaseService(
+                root,
+                new List<ModuleExecutionSnapshot>(),
+                new PowerForgeToolReleaseResult { Success = true },
+                publishVirusTotalMonitor: (_, _) =>
+                {
+                    uploadCalled = true;
+                    return new VirusTotalMonitorPublishResult { Success = true };
+                });
+            var spec = CreateVirusTotalInstallerSpec();
+            spec.VirusTotal!.ReceiptPath = receiptPath;
+
+            var result = service.PublishBuiltReleaseOutputs(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ResolvedReleaseVersion = "1.2.3"
+                },
+                CreateBuiltInstallerResult(artifactPath));
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.True(uploadCalled);
+            Assert.Equal(receiptPath, result.VirusTotalMonitorReceiptPath);
+            Assert.Contains("\"version\": \"1.2.3\"", File.ReadAllText(receiptPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void PublishBuiltReleaseOutputs_SelectionFailure_PersistsFailureReceipt()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var artifactPath = Path.Combine(root, "Example.msi");
+            var receiptPath = Path.Combine(root, "Artifacts", "Release", "virustotal-monitor-receipt.json");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(artifactPath, "signed installer");
+            var uploadCalled = false;
+            var service = CreateReleaseService(
+                root,
+                new List<ModuleExecutionSnapshot>(),
+                new PowerForgeToolReleaseResult { Success = true },
+                publishVirusTotalMonitor: (_, _) =>
+                {
+                    uploadCalled = true;
+                    return new VirusTotalMonitorPublishResult { Success = true };
+                });
+            var spec = CreateVirusTotalInstallerSpec();
+            spec.VirusTotal!.ArtifactKinds = [VirusTotalArtifactKind.ZipArchive];
+            spec.VirusTotal.ReceiptPath = receiptPath;
+
+            var result = service.PublishBuiltReleaseOutputs(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ResolvedReleaseVersion = "1.2.3"
+                },
+                CreateBuiltInstallerResult(artifactPath));
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.False(uploadCalled);
+            Assert.Equal(receiptPath, result.VirusTotalMonitorReceiptPath);
+            var monitor = Assert.IsType<VirusTotalMonitorPublishResult>(result.VirusTotalMonitor);
+            Assert.False(monitor.Success);
+            Assert.Contains("no release artifacts matched", monitor.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("no release artifacts matched", File.ReadAllText(receiptPath), StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

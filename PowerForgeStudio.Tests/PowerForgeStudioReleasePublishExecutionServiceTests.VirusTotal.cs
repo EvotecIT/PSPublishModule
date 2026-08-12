@@ -313,9 +313,13 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             using var _ = new EnvironmentScope()
                 .Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true")
                 .Set(secretName, null);
+            var targets = service.BuildPendingTargets([queueItem]);
+            Assert.DoesNotContain(targets, static target =>
+                target.TargetKind.Equals("VirusTotal", StringComparison.Ordinal));
+
             var result = await service.ExecuteAsync(queueItem);
 
-            Assert.True(publishCalled);
+            Assert.False(publishCalled);
             Assert.DoesNotContain(result.Receipts, static receipt =>
                 receipt.TargetName.Equals("VirusTotal Monitor", StringComparison.Ordinal));
         }

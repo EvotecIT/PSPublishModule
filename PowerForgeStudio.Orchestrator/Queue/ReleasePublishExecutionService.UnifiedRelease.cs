@@ -149,7 +149,7 @@ public sealed partial class ReleasePublishExecutionService
                     Destination: "Configured module package destinations"));
             }
 
-            if (spec.VirusTotal is { Enabled: true })
+            if (PowerForgeReleaseService.ShouldPublishVirusTotalMonitorFromCheckpoint(spec, unified))
             {
                 targets.Add(new ReleasePublishTarget(
                     RootPath: item.RootPath,

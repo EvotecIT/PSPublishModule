@@ -130,6 +130,7 @@ internal sealed partial class PowerForgeReleaseService
         var receiptWritable = false;
         var resumeReceiptSafeToReplace = false;
         var receiptWriteFailed = false;
+        VirusTotalMonitorArtifactReceipt[] resumeReceipts = Array.Empty<VirusTotalMonitorArtifactReceipt>();
 
         string PersistReceipt(VirusTotalMonitorPublishResult publishResult)
         {
@@ -154,6 +155,14 @@ internal sealed partial class PowerForgeReleaseService
             version = ResolveVirusTotalReleaseVersion(result, sharedReleaseVersion) ?? "mixed";
 
             project = ResolveVirusTotalProjectName(spec, options, configDirectory);
+            EnsureVirusTotalReceiptWritable(options, configDirectory);
+            receiptWritable = true;
+            resumeReceipts = LoadVirusTotalResumeReceipts(
+                options,
+                configDirectory,
+                project,
+                version!);
+            resumeReceiptSafeToReplace = true;
             var artifacts = VirusTotalReleaseArtifactSelector.Select(
                 result.ReleaseAssetEntries ?? Array.Empty<PowerForgeReleaseAssetEntry>(),
                 options,
@@ -174,10 +183,7 @@ internal sealed partial class PowerForgeReleaseService
                     "VirusTotal Monitor publishing reached execution without its pre-resolved API key.");
             }
 
-            EnsureVirusTotalReceiptWritable(options, configDirectory);
-            receiptWritable = true;
-            ApplyVirusTotalResumeReceipt(options, configDirectory, project, version!, artifacts);
-            resumeReceiptSafeToReplace = true;
+            var applicableResumeReceipts = ApplyVirusTotalResumeReceipts(resumeReceipts, artifacts);
 
             request.Progress?.PhaseStarted(
                 PowerForgeReleaseProgressPhase.VirusTotal,
@@ -189,6 +195,7 @@ internal sealed partial class PowerForgeReleaseService
                 {
                     ApiKey = apiKey!,
                     Artifacts = artifacts,
+                    ResumeReceipts = applicableResumeReceipts,
                     VerifySha256 = options.VerifySha256,
                     VerificationTimeout = TimeSpan.FromSeconds(options.VerificationTimeoutSeconds),
                     PollingInterval = TimeSpan.FromSeconds(options.PollingIntervalSeconds),
@@ -229,7 +236,8 @@ internal sealed partial class PowerForgeReleaseService
             result.VirusTotalMonitor = new VirusTotalMonitorPublishResult
             {
                 Success = false,
-                ErrorMessage = errorMessage
+                ErrorMessage = errorMessage,
+                Artifacts = resumeReceipts
             };
             if (receiptWritable &&
                 resumeReceiptSafeToReplace &&
@@ -261,16 +269,15 @@ internal sealed partial class PowerForgeReleaseService
            ResolveModuleReleaseVersion(result.ModulePlan) ??
            ResolveUniqueAssetVersion(result.ReleaseAssetEntries ?? Array.Empty<PowerForgeReleaseAssetEntry>());
 
-    private static void ApplyVirusTotalResumeReceipt(
+    private static VirusTotalMonitorArtifactReceipt[] LoadVirusTotalResumeReceipts(
         PowerForgeVirusTotalOptions options,
         string configDirectory,
         string project,
-        string version,
-        VirusTotalMonitorArtifact[] artifacts)
+        string version)
     {
         var receiptPath = ResolveOutputPath(configDirectory, options.ReceiptPath!);
         if (!File.Exists(receiptPath))
-            return;
+            return Array.Empty<VirusTotalMonitorArtifactReceipt>();
 
         var serializerOptions = CreateVirusTotalReceiptSerializerOptions(writeIndented: false);
         var receipt = JsonSerializer.Deserialize<VirusTotalMonitorReceiptDocument>(
@@ -283,15 +290,17 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidDataException(
                 "VirusTotal Monitor resume receipt has an unsupported schema or provider.");
         }
-        if (!string.Equals(receipt.Project, project, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(receipt.Version, version, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(receipt.Project, project, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException(
-                "VirusTotal Monitor resume receipt belongs to a different project or version.");
+                "VirusTotal Monitor resume receipt belongs to a different project.");
         }
+        if (!string.Equals(receipt.Version, version, StringComparison.OrdinalIgnoreCase))
+            return Array.Empty<VirusTotalMonitorArtifactReceipt>();
 
-        var completedGroups = receipt.Artifacts
+        var completedGroups = (receipt.Artifacts ?? Array.Empty<VirusTotalMonitorArtifactReceipt>())
             .Where(static item =>
+                item is not null &&
                 !string.IsNullOrWhiteSpace(item.DestinationPath) &&
                 !string.IsNullOrWhiteSpace(item.MonitorId))
             .GroupBy(static item => item.DestinationPath, StringComparer.OrdinalIgnoreCase)
@@ -304,15 +313,30 @@ internal sealed partial class PowerForgeReleaseService
                 $"VirusTotal Monitor receipt maps destination '{conflictingDestination.Key}' to conflicting item ids.");
         }
 
-        var completed = completedGroups.ToDictionary(
-            static group => group.Key,
-            static group => group.Last().MonitorId,
+        return completedGroups
+            .Select(static group => group.Last())
+            .ToArray();
+    }
+
+    private static VirusTotalMonitorArtifactReceipt[] ApplyVirusTotalResumeReceipts(
+        VirusTotalMonitorArtifactReceipt[] resumeReceipts,
+        VirusTotalMonitorArtifact[] artifacts)
+    {
+        var completed = resumeReceipts.ToDictionary(
+            static receipt => receipt.DestinationPath,
+            static receipt => receipt,
             StringComparer.OrdinalIgnoreCase);
+        var applicable = new List<VirusTotalMonitorArtifactReceipt>();
         foreach (var artifact in artifacts)
         {
-            if (completed.TryGetValue(artifact.DestinationPath, out var itemId))
-                artifact.ExistingItemId = itemId;
+            if (!completed.TryGetValue(artifact.DestinationPath, out var receipt))
+                continue;
+
+            artifact.ExistingItemId = receipt.MonitorId;
+            applicable.Add(receipt);
         }
+
+        return applicable.ToArray();
     }
 
     private static void EnsureVirusTotalReceiptWritable(

@@ -37,7 +37,7 @@ internal sealed class VirusTotalMonitorPublisher
     {
         ValidateRequest(request);
         using var client = _clientFactory(request.ApiKey, request.RequestTimeout);
-        var receipts = new List<VirusTotalMonitorArtifactReceipt>(request.Artifacts.Length);
+        var receipts = new List<VirusTotalMonitorArtifactReceipt>(request.ResumeReceipts);
 
         foreach (var artifact in request.Artifacts)
         {
@@ -46,6 +46,10 @@ internal sealed class VirusTotalMonitorPublisher
             {
                 ValidateArtifact(artifact);
                 var response = await client.UploadAsync(artifact, request, cancellationToken).ConfigureAwait(false);
+                receipts.RemoveAll(receipt => string.Equals(
+                    receipt.DestinationPath,
+                    artifact.DestinationPath,
+                    StringComparison.OrdinalIgnoreCase));
                 receipts.Add(new VirusTotalMonitorArtifactReceipt
                 {
                     SourcePath = Path.GetFullPath(artifact.SourcePath),
@@ -130,6 +134,35 @@ internal sealed class VirusTotalMonitorPublisher
             throw new ArgumentOutOfRangeException(nameof(request), "PollingInterval must be positive.");
         if (request.Artifacts is null || request.Artifacts.Length == 0)
             throw new ArgumentException("VirusTotal Monitor publishing requires at least one artifact.", nameof(request));
+
+        var resumeReceipts = request.ResumeReceipts ?? Array.Empty<VirusTotalMonitorArtifactReceipt>();
+        if (resumeReceipts.Any(static receipt => receipt is null))
+            throw new ArgumentException("VirusTotal Monitor resume receipts cannot contain null entries.", nameof(request));
+        var duplicateResumePath = resumeReceipts
+            .GroupBy(receipt => receipt.DestinationPath, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateResumePath is not null)
+        {
+            throw new ArgumentException(
+                $"VirusTotal Monitor resume receipt paths must be unique: '{duplicateResumePath.Key}'.",
+                nameof(request));
+        }
+
+        foreach (var receipt in resumeReceipts)
+        {
+            var artifact = request.Artifacts.FirstOrDefault(candidate => string.Equals(
+                candidate.DestinationPath,
+                receipt.DestinationPath,
+                StringComparison.OrdinalIgnoreCase));
+            if (artifact is null ||
+                string.IsNullOrWhiteSpace(receipt.MonitorId) ||
+                !string.Equals(artifact.ExistingItemId, receipt.MonitorId, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    "VirusTotal Monitor resume receipts must match requested artifacts and their existing item ids.",
+                    nameof(request));
+            }
+        }
 
         var duplicatePath = request.Artifacts
             .GroupBy(artifact => artifact.DestinationPath, StringComparer.OrdinalIgnoreCase)

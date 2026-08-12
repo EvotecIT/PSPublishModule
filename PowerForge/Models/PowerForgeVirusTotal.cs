@@ -60,6 +60,8 @@ internal sealed class VirusTotalMonitorPublishRequest
 
     public VirusTotalMonitorArtifact[] Artifacts { get; set; } = Array.Empty<VirusTotalMonitorArtifact>();
 
+    public VirusTotalMonitorArtifactReceipt[] ResumeReceipts { get; set; } = Array.Empty<VirusTotalMonitorArtifactReceipt>();
+
     public bool VerifySha256 { get; set; } = true;
 
     public TimeSpan VerificationTimeout { get; set; } = TimeSpan.FromMinutes(2);
