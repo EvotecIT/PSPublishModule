@@ -4855,6 +4855,7 @@ internal sealed partial class PowerForgeReleaseService
                 Path = fullPath,
                 Category = PowerForgeReleaseAssetCategory.Module,
                 Source = "Module",
+                Version = ResolveModuleReleaseVersion(plan),
                 IsFinalPackageOutput = produced?.Contains(fullPath) == true &&
                                        IsFinalPowerShellModulePackage(fullPath, plan)
             };
@@ -4875,6 +4876,7 @@ internal sealed partial class PowerForgeReleaseService
                 Path = fullPath,
                 Category = PowerForgeReleaseAssetCategory.Module,
                 Source = "Module",
+                Version = ResolveModuleReleaseVersion(plan),
                 IsFinalPackageOutput = produced?.Contains(fullPath) == true &&
                                        IsFinalPowerShellModulePackage(fullPath, plan)
             };

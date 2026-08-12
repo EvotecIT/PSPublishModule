@@ -34,10 +34,12 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
     }
 
     [Theory]
-    [InlineData(true, ReleasePublishReceiptStatus.Published)]
-    [InlineData(false, ReleasePublishReceiptStatus.Failed)]
+    [InlineData(true, 1, ReleasePublishReceiptStatus.Published)]
+    [InlineData(false, 1, ReleasePublishReceiptStatus.Failed)]
+    [InlineData(true, 0, ReleasePublishReceiptStatus.Skipped)]
     public async Task ExecuteAsync_UnifiedRelease_SurfacesVirusTotalReceipt(
         bool monitorSuccess,
+        int artifactCount,
         ReleasePublishReceiptStatus expectedStatus)
     {
         var repositoryRoot = Directory.CreateDirectory(
@@ -101,14 +103,16 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 {
                     Success = monitorSuccess,
                     ErrorMessage = monitorSuccess ? null : "Monitor upload failed.",
-                    Artifacts =
-                    [
-                        new VirusTotalMonitorArtifactReceipt
-                        {
-                            SourcePath = Path.Combine(repositoryRoot, "Example.msi"),
-                            MonitorId = "monitor-id"
-                        }
-                    ]
+                    Artifacts = artifactCount == 0
+                        ? []
+                        :
+                        [
+                            new VirusTotalMonitorArtifactReceipt
+                            {
+                                SourcePath = Path.Combine(repositoryRoot, "Example.msi"),
+                                MonitorId = "monitor-id"
+                            }
+                        ]
                 }
             });
 

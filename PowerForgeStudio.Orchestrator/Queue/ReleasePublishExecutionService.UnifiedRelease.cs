@@ -262,6 +262,11 @@ public sealed partial class ReleasePublishExecutionService
 
             if (result.VirusTotalMonitor is { } virusTotal)
             {
+                var virusTotalStatus = !virusTotal.Success
+                    ? ReleasePublishReceiptStatus.Failed
+                    : virusTotal.Artifacts.Length == 0
+                        ? ReleasePublishReceiptStatus.Skipped
+                        : ReleasePublishReceiptStatus.Published;
                 receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
                     repository.RootPath,
                     repository.Name,
@@ -269,10 +274,15 @@ public sealed partial class ReleasePublishExecutionService
                     "VirusTotal Monitor",
                     "VirusTotal",
                     result.VirusTotalMonitorReceiptPath ?? "VirusTotal Monitor",
-                    virusTotal.Success ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
-                    virusTotal.Success
-                        ? $"Registered {virusTotal.Artifacts.Length} artifact(s) with VirusTotal Monitor. Analysis remains asynchronous."
-                        : virusTotal.ErrorMessage ?? "VirusTotal Monitor registration failed.",
+                    virusTotalStatus,
+                    virusTotalStatus switch
+                    {
+                        ReleasePublishReceiptStatus.Published =>
+                            $"Registered {virusTotal.Artifacts.Length} artifact(s) with VirusTotal Monitor. Analysis remains asynchronous.",
+                        ReleasePublishReceiptStatus.Skipped =>
+                            "VirusTotal Monitor registration was skipped because no configured final release artifacts matched.",
+                        _ => virusTotal.ErrorMessage ?? "VirusTotal Monitor registration failed."
+                    },
                     virusTotal.Artifacts.FirstOrDefault()?.SourcePath));
             }
 

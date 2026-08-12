@@ -77,14 +77,18 @@ internal static class SpectrePowerForgeReleaseConsoleUi
     }
 
     public static void WriteSummary(PowerForgeReleaseResult result, TimeSpan duration)
+        => WriteSummary(AnsiConsole.Console, result, duration);
+
+    internal static void WriteSummary(IAnsiConsole console, PowerForgeReleaseResult result, TimeSpan duration)
     {
+        if (console is null) throw new ArgumentNullException(nameof(console));
         if (result is null) return;
         static string Esc(string? value) => Markup.Escape(value ?? string.Empty);
 
-        var unicode = ConsoleEncoding.ShouldRenderUnicode(AnsiConsole.Profile.Capabilities.Unicode);
+        var unicode = ConsoleEncoding.ShouldRenderUnicode(console.Profile.Capabilities.Unicode);
         var icon = result.Success ? (unicode ? "✅" : "+") : (unicode ? "❌" : "x");
         var color = result.Success ? "green" : "red";
-        AnsiConsole.Write(new Rule($"[{color}]{icon} Unified release summary[/]").LeftJustified());
+        console.Write(new Rule($"[{color}]{icon} Unified release summary[/]").LeftJustified());
 
         var packageVersion = result.Packages?.Result.Release?.ResolvedVersion;
         var moduleVersion = result.ModulePlan?.ModuleVersion;
@@ -116,10 +120,21 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                     $"{result.UnifiedGitHubRelease.SkippedExistingAssets.Length} skipped, " +
                     $"{result.UnifiedGitHubRelease.ReplacedExistingAssets.Length} replaced"));
         }
+        if (result.VirusTotalMonitor is { } virusTotal)
+        {
+            var monitorSummary = !virusTotal.Success
+                ? $"[red]Failed: {Esc(virusTotal.ErrorMessage ?? "Monitor registration failed")}[/]"
+                : virusTotal.Artifacts.Length == 0
+                    ? "[yellow]Skipped: no configured final release artifacts matched[/]"
+                    : $"[green]Registered {virusTotal.Artifacts.Length} artifact(s); analysis remains asynchronous[/]";
+            table.AddRow("VirusTotal Monitor", monitorSummary);
+            if (!string.IsNullOrWhiteSpace(result.VirusTotalMonitorReceiptPath))
+                table.AddRow("VirusTotal receipt", Esc(result.VirusTotalMonitorReceiptPath));
+        }
         table.AddRow("Duration", Esc(new BufferedLogSupportService().FormatDuration(duration)));
         if (!result.Success && !string.IsNullOrWhiteSpace(result.ErrorMessage))
             table.AddRow("Error", $"[red]{Esc(result.ErrorMessage)}[/]");
-        AnsiConsole.Write(table);
+        console.Write(table);
     }
 
     private static PowerForgeReleaseProgressPhase[] ResolvePhases(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
@@ -157,10 +172,22 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             if (runPackages) phases.Add(PowerForgeReleaseProgressPhase.Packages);
             if (runTools) phases.Add(PowerForgeReleaseProgressPhase.Tools);
         }
-        if (!request.PlanOnly &&
-            !request.ValidateOnly &&
-            PowerForgeReleaseService.ShouldPublishUnifiedGitHub(spec, request, runModule))
+        var explicitAppleAction = request.AppleAction != PowerForgeAppleReleaseAction.Configured;
+        var publishUnifiedGitHub = !explicitAppleAction &&
+                                   PowerForgeReleaseService.ShouldPublishUnifiedGitHub(spec, request, runModule);
+        if (!request.PlanOnly && !request.ValidateOnly && publishUnifiedGitHub)
             phases.Add(PowerForgeReleaseProgressPhase.GitHub);
+        if (PowerForgeReleaseService.ShouldPublishVirusTotalMonitor(
+                spec,
+                request,
+                explicitAppleAction,
+                runModule,
+                runPackages,
+                runTools,
+                publishUnifiedGitHub))
+        {
+            phases.Add(PowerForgeReleaseProgressPhase.VirusTotal);
+        }
         return phases.ToArray();
     }
 
@@ -216,6 +243,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                     : "Build NuGet packages",
             PowerForgeReleaseProgressPhase.Tools => "Build executable matrix",
             PowerForgeReleaseProgressPhase.GitHub => "Publish unified GitHub release",
+            PowerForgeReleaseProgressPhase.VirusTotal => "VirusTotal Monitor registration",
             _ => phase.ToString()
         };
 

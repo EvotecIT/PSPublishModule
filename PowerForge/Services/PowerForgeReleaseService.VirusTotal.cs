@@ -128,6 +128,7 @@ internal sealed partial class PowerForgeReleaseService
         string? project = null;
         string? version = null;
         var receiptWritable = false;
+        var resumeReceiptSafeToReplace = false;
         var receiptWriteFailed = false;
 
         string PersistReceipt(VirusTotalMonitorPublishResult publishResult)
@@ -159,7 +160,13 @@ internal sealed partial class PowerForgeReleaseService
                 project,
                 string.Equals(version, "mixed", StringComparison.Ordinal) ? null : version);
             if (artifacts.Length == 0)
+            {
+                result.VirusTotalMonitor = new VirusTotalMonitorPublishResult { Success = true };
+                request.Progress?.PhaseCompleted(
+                    PowerForgeReleaseProgressPhase.VirusTotal,
+                    "Skipped because no configured final release artifacts matched");
                 return true;
+            }
 
             if (string.IsNullOrWhiteSpace(apiKey))
             {
@@ -170,6 +177,7 @@ internal sealed partial class PowerForgeReleaseService
             EnsureVirusTotalReceiptWritable(options, configDirectory);
             receiptWritable = true;
             ApplyVirusTotalResumeReceipt(options, configDirectory, project, version!, artifacts);
+            resumeReceiptSafeToReplace = true;
 
             request.Progress?.PhaseStarted(
                 PowerForgeReleaseProgressPhase.VirusTotal,
@@ -224,6 +232,7 @@ internal sealed partial class PowerForgeReleaseService
                 ErrorMessage = errorMessage
             };
             if (receiptWritable &&
+                resumeReceiptSafeToReplace &&
                 !receiptWriteFailed &&
                 !string.IsNullOrWhiteSpace(project) &&
                 !string.IsNullOrWhiteSpace(version))

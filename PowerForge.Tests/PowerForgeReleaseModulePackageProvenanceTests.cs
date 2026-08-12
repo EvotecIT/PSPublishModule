@@ -50,9 +50,11 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
 
             var entry = Assert.Single(PowerForgeReleaseService.CreateModuleAssetEntries(
                 archivePath,
+                new PowerForgeModuleReleasePlanSummary { ModuleVersion = "1.2.3" },
                 producedArtifactPaths: new[] { archivePath }));
 
             Assert.True(entry.IsFinalPackageOutput);
+            Assert.Equal("1.2.3", entry.Version);
         }
         finally
         {
