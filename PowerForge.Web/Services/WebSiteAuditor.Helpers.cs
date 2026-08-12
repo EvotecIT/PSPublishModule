@@ -63,6 +63,41 @@ public static partial class WebSiteAuditor
         return count;
     }
 
+    private static bool TryFindLargestBudgetFile(
+        string root,
+        string[] budgetExcludePatterns,
+        bool useDefaultExcludes,
+        out string? relativePath,
+        out long bytes)
+    {
+        relativePath = null;
+        bytes = 0;
+        var excludes = BuildExcludePatterns(budgetExcludePatterns ?? Array.Empty<string>(), useDefaultExcludes);
+
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+                if (excludes.Length > 0 && MatchesAny(excludes, relative))
+                    continue;
+
+                var length = new FileInfo(file).Length;
+                if (relativePath is not null && length <= bytes)
+                    continue;
+
+                relativePath = relative;
+                bytes = length;
+            }
+        }
+        catch
+        {
+            // Keep artifact metrics best-effort, consistent with the existing file-count budget.
+        }
+
+        return relativePath is not null;
+    }
+
     private static IEnumerable<string> EnumerateHtmlFiles(string root, string[] includePatterns, string[] excludePatterns, bool useDefaultExcludes)
     {
         var includes = NormalizePatterns(includePatterns);

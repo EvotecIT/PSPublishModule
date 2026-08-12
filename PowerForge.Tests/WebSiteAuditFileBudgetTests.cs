@@ -174,4 +174,48 @@ public class WebSiteAuditFileBudgetTests
                 Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void Audit_MaxFileBytes_ReportsLargestArtifactAndCanGateDeployment()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-byte-budget-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "_powerforge"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><html><head><title>Home</title></head><body></body></html>");
+            File.WriteAllBytes(Path.Combine(root, "_powerforge", "xrefmap.json"), new byte[101]);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                MaxFileBytes = 100,
+                FailOnCategories = new[] { "budget" },
+                CheckLinks = false,
+                CheckAssets = false,
+                CheckNavConsistency = false,
+                NavRequired = false,
+                CheckTitles = false,
+                CheckDuplicateIds = false,
+                CheckHtmlStructure = false,
+                CheckHeadingOrder = false,
+                CheckLinkPurposeConsistency = false,
+                CheckNetworkHints = false,
+                CheckRenderBlockingResources = false,
+                CheckUtf8 = false,
+                CheckMetaCharset = false,
+                CheckUnicodeReplacementChars = false
+            });
+
+            Assert.False(result.Success);
+            var issue = Assert.Single(result.Issues, i => i.Hint == "max-file-bytes");
+            Assert.Equal("_powerforge/xrefmap.json", issue.Path);
+            Assert.Contains("101 bytes", issue.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
 }

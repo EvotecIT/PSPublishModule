@@ -11,7 +11,7 @@ using HtmlTinkerX;
 namespace PowerForge.Web;
 
 /// <summary>Prepares and checks static-site agent-readiness discovery signals.</summary>
-public static class WebAgentReadiness
+public static partial class WebAgentReadiness
 {
     private const string AgentBlockStart = "# BEGIN PowerForge Agent Readiness";
     private const string AgentBlockEnd = "# END PowerForge Agent Readiness";
@@ -326,7 +326,7 @@ public static class WebAgentReadiness
                 ? "Homepage response includes agent discovery Link headers."
                 : "Homepage response does not include Link headers pointing to agent discovery resources.",
             baseUrl);
-        AddRemoteSecurityHeaderChecks(checks, root.Response, baseUrl);
+        AddRemoteSecurityHeaderChecks(checks, root.Response, baseUrl, options.AgentReadiness);
 
         var rootText = await TryGetTextAsync(http, baseUrl, null, cancellationToken).ConfigureAwait(false);
         if (rootText.Success)
@@ -1271,9 +1271,11 @@ public static class WebAgentReadiness
                 if (security.XContentTypeOptions)
                     AppendApacheHeaderSet(sb, "X-Content-Type-Options", "nosniff");
                 if (security.XFrameOptions)
-                    AppendApacheHeaderSet(sb, "X-Frame-Options", "DENY");
+                    AppendApacheHeaderSet(sb, "X-Frame-Options", string.IsNullOrWhiteSpace(security.XFrameOptionsValue) ? "DENY" : security.XFrameOptionsValue);
                 if (security.ReferrerPolicy)
                     AppendApacheHeaderSet(sb, "Referrer-Policy", string.IsNullOrWhiteSpace(security.ReferrerPolicyValue) ? "strict-origin-when-cross-origin" : security.ReferrerPolicyValue);
+                if (security.PermissionsPolicy && !string.IsNullOrWhiteSpace(security.PermissionsPolicyValue))
+                    AppendApacheHeaderSet(sb, "Permissions-Policy", security.PermissionsPolicyValue);
             }
 
             if (writeContentSignals)
@@ -1456,9 +1458,11 @@ public static class WebAgentReadiness
         if (security.XContentTypeOptions)
             sb.AppendLine("  X-Content-Type-Options: nosniff");
         if (security.XFrameOptions)
-            sb.AppendLine("  X-Frame-Options: DENY");
+            sb.Append("  X-Frame-Options: ").Append(string.IsNullOrWhiteSpace(security.XFrameOptionsValue) ? "DENY" : security.XFrameOptionsValue!.Trim()).AppendLine();
         if (security.ReferrerPolicy)
             sb.Append("  Referrer-Policy: ").Append(string.IsNullOrWhiteSpace(security.ReferrerPolicyValue) ? "strict-origin-when-cross-origin" : security.ReferrerPolicyValue!.Trim()).AppendLine();
+        if (security.PermissionsPolicy && !string.IsNullOrWhiteSpace(security.PermissionsPolicyValue))
+            sb.Append("  Permissions-Policy: ").Append(security.PermissionsPolicyValue!.Trim()).AppendLine();
     }
 
     private static void AppendCorsHeaders(StringBuilder sb, AgentSecurityHeadersSpec security)
@@ -1847,6 +1851,8 @@ public static class WebAgentReadiness
 
         AddConfiguredHeaderCheck(checks, "security-referrer-policy", "Referrer-Policy", headersText, headersPath, apacheText, apachePath, fallbackTarget, expected && spec!.ReferrerPolicy, "Referrer-Policy",
             "Static host headers include Referrer-Policy.", "Static host headers do not include Referrer-Policy.");
+        AddConfiguredHeaderCheck(checks, "security-permissions-policy", "Permissions-Policy", headersText, headersPath, apacheText, apachePath, fallbackTarget, expected && spec!.PermissionsPolicy, "Permissions-Policy",
+            "Static host headers include Permissions-Policy.", "Static host headers do not include Permissions-Policy.");
         AddConfiguredHeaderCheck(checks, "security-cors", "CORS", headersText, headersPath, apacheText, apachePath, fallbackTarget, expected && spec!.CorsForWellKnown, "Access-Control-Allow-Origin",
             "Agent discovery resources include CORS headers.", "No Access-Control-Allow-Origin header configured for agent discovery resources.");
     }
@@ -1923,34 +1929,6 @@ public static class WebAgentReadiness
            value.Equals("add", StringComparison.OrdinalIgnoreCase) ||
            value.Equals("append", StringComparison.OrdinalIgnoreCase) ||
            value.Equals("merge", StringComparison.OrdinalIgnoreCase);
-
-    private static void AddRemoteSecurityHeaderChecks(List<WebAgentReadinessCheck> checks, HttpResponseMessage? response, string target)
-    {
-        AddCheck(checks, "security-hsts", "security-trust", "HSTS",
-            HeaderExists(response, "Strict-Transport-Security") ? "pass" : "fail",
-            HeaderExists(response, "Strict-Transport-Security") ? "Homepage response includes HSTS." : "Homepage response does not include HSTS.",
-            target);
-        AddCheck(checks, "security-csp", "security-trust", "CSP",
-            HeaderExists(response, "Content-Security-Policy") ? "pass" : "fail",
-            HeaderExists(response, "Content-Security-Policy") ? "Homepage response includes CSP." : "Homepage response does not include CSP.",
-            target);
-        AddCheck(checks, "security-xcto", "security-trust", "X-Content-Type-Options",
-            HeaderExists(response, "X-Content-Type-Options") ? "pass" : "fail",
-            HeaderExists(response, "X-Content-Type-Options") ? "Homepage response includes X-Content-Type-Options." : "Homepage response does not include X-Content-Type-Options.",
-            target);
-        AddCheck(checks, "security-xfo", "security-trust", "X-Frame-Options",
-            HeaderExists(response, "X-Frame-Options") || HeaderContains(response, "Content-Security-Policy", "frame-ancestors") ? "pass" : "fail",
-            HeaderExists(response, "X-Frame-Options") || HeaderContains(response, "Content-Security-Policy", "frame-ancestors") ? "Homepage response includes clickjacking protection." : "Homepage response does not include X-Frame-Options or CSP frame-ancestors.",
-            target);
-        AddCheck(checks, "security-referrer-policy", "security-trust", "Referrer-Policy",
-            HeaderExists(response, "Referrer-Policy") ? "pass" : "fail",
-            HeaderExists(response, "Referrer-Policy") ? "Homepage response includes Referrer-Policy." : "Homepage response does not include Referrer-Policy.",
-            target);
-        AddCheck(checks, "security-cors", "security-trust", "CORS",
-            HeaderExists(response, "Access-Control-Allow-Origin") ? "pass" : "warn",
-            HeaderExists(response, "Access-Control-Allow-Origin") ? "Homepage response includes CORS." : "Homepage response does not include CORS; this is usually only required on API or discovery resources.",
-            target);
-    }
 
     private static void AddHtmlSemanticsChecks(List<WebAgentReadinessCheck> checks, string html, string? target)
     {
@@ -2608,4 +2586,6 @@ public sealed class WebAgentReadinessScanOptions
     public string BaseUrl { get; set; } = string.Empty;
     /// <summary>HTTP timeout in milliseconds.</summary>
     public int TimeoutMs { get; set; } = 15000;
+    /// <summary>Optional site policy used to decide which live headers are required.</summary>
+    public AgentReadinessSpec? AgentReadiness { get; set; }
 }

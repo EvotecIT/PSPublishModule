@@ -20,8 +20,13 @@ public sealed class WebAuditOptions
     /// </summary>
     public int MaxTotalFiles { get; set; }
     /// <summary>
+    /// Maximum allowed size of any single file under the site root, in bytes (0 disables).
+    /// This can enforce provider artifact limits before deployment.
+    /// </summary>
+    public long MaxFileBytes { get; set; }
+    /// <summary>
     /// Optional glob patterns to exclude from budget counters (for example <c>api/**</c>).
-    /// This is applied to file-count budgets like <see cref="MaxTotalFiles"/> without affecting
+    /// This is applied to artifact budgets like <see cref="MaxTotalFiles"/> and <see cref="MaxFileBytes"/> without affecting
     /// the HTML audit scope (<see cref="Include"/>/<see cref="Exclude"/>).
     /// </summary>
     public string[] BudgetExclude { get; set; } = Array.Empty<string>();

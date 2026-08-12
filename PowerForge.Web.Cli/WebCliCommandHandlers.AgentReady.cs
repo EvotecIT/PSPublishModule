@@ -81,9 +81,18 @@ internal static partial class WebCliCommandHandlers
 
     private static int HandleAgentReadyScan(string[] args, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
+        var configPath = TryGetOptionValue(args, "--config");
         var url = TryGetOptionValue(args, "--url") ?? TryGetOptionValue(args, "--base-url");
         var timeoutMs = TryParseInt(TryGetOptionValue(args, "--timeout-ms")) ?? 15000;
         var failOnFailures = HasOption(args, "--fail-on-failures") || HasOption(args, "--fail-on-warnings");
+        SiteSpec? siteSpec = null;
+
+        if (!string.IsNullOrWhiteSpace(configPath))
+        {
+            var loaded = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
+            siteSpec = loaded.Spec;
+            url ??= siteSpec.BaseUrl;
+        }
 
         if (string.IsNullOrWhiteSpace(url))
             return Fail("Missing required --url.", outputJson, logger, "web.agent-ready.scan");
@@ -91,7 +100,8 @@ internal static partial class WebCliCommandHandlers
         var result = WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
         {
             BaseUrl = url,
-            TimeoutMs = timeoutMs
+            TimeoutMs = timeoutMs,
+            AgentReadiness = siteSpec?.AgentReadiness
         }).GetAwaiter().GetResult();
 
         return WriteAgentReadyResult(result, outputJson, logger, outputSchemaVersion, "web.agent-ready.scan", failOnFailures);

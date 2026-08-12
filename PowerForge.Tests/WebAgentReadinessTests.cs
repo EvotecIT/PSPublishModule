@@ -57,6 +57,7 @@ public class WebAgentReadinessTests
                 {
                     Enabled = true,
                     ContentSignals = new AgentContentSignalsSpec { Search = true, AiInput = false, AiTrain = false },
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Hsts = true },
                     ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = ".well-known/custom-api-catalog" },
                     AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true },
                     A2AAgentCard = new AgentA2ACardSpec { Enabled = true }
@@ -530,6 +531,7 @@ public class WebAgentReadinessTests
                     Enabled = true,
                     LinkHeaders = false,
                     MarkdownNegotiation = false,
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Hsts = true },
                     ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
                     AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
                     AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = true }
@@ -991,6 +993,7 @@ public class WebAgentReadinessTests
                   Header set X-Content-Type-Options "nosniff"
                   Header set X-Frame-Options "DENY"
                   Header set Referrer-Policy "strict-origin-when-cross-origin"
+                  Header set Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
                   Header set Access-Control-Allow-Origin "*"
                 </IfModule>
                 """);
@@ -1004,7 +1007,7 @@ public class WebAgentReadinessTests
                     Enabled = true,
                     Robots = false,
                     LinkHeaders = false,
-                    SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = true },
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = true, Hsts = true },
                     ContentSignals = new AgentContentSignalsSpec { Enabled = false },
                     ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
                     AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },

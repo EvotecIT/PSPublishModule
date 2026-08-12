@@ -99,6 +99,7 @@ internal static partial class WebPipelineRunner
         var maxHeadBlockingResources = GetInt(step, "maxHeadBlockingResources") ?? GetInt(step, "max-head-blocking");
         var maxHtmlFiles = GetInt(step, "maxHtmlFiles") ?? GetInt(step, "max-html-files") ?? 0;
         var maxTotalFiles = GetInt(step, "maxTotalFiles") ?? GetInt(step, "max-total-files") ?? 0;
+        var maxFileBytes = GetLong(step, "maxFileBytes") ?? GetLong(step, "max-file-bytes") ?? 0;
         var suppressIssues = GetArrayOfStrings(step, "suppressIssues") ?? GetArrayOfStrings(step, "suppress-issues");
 
         EnforceExplicitAuditCheckContract(step, "audit");
@@ -172,6 +173,7 @@ internal static partial class WebPipelineRunner
             UseDefaultExcludes = useDefaultExclude,
             MaxHtmlFiles = Math.Max(0, maxHtmlFiles),
             MaxTotalFiles = Math.Max(0, maxTotalFiles),
+            MaxFileBytes = Math.Max(0, maxFileBytes),
             BudgetExclude = CliPatternHelper.SplitPatterns(budgetExclude),
             SuppressIssues = suppressIssues ?? Array.Empty<string>(),
             IgnoreNavFor = ignoreNavPatterns,

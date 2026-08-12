@@ -241,6 +241,7 @@ internal static partial class WebPipelineRunner
                 UseDefaultExcludes = useDefaultExclude,
                 MaxHtmlFiles = GetInt(step, "maxHtmlFiles") ?? GetInt(step, "max-html-files") ?? 0,
                 MaxTotalFiles = GetInt(step, "maxTotalFiles") ?? GetInt(step, "max-total-files") ?? 0,
+                MaxFileBytes = Math.Max(0, GetLong(step, "maxFileBytes") ?? GetLong(step, "max-file-bytes") ?? 0),
                 SuppressIssues = suppressIssues ?? Array.Empty<string>(),
                 IgnoreNavFor = ignoreNavPatterns,
                 IgnoreMediaFor = ignoreMediaPatterns,

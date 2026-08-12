@@ -74,7 +74,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("                     [--nav-required-link <path[,path]>]");
         Console.WriteLine("                     [--min-nav-coverage <0-100>] [--required-route <path[,path]>] [--forbidden-route <path[,path]>]");
         Console.WriteLine("                     [--nav-optional]");
-        Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>] [--fail-issue <pattern[,pattern]>] [--max-total-files <n>]");
+        Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>] [--fail-issue <pattern[,pattern]>] [--max-total-files <n>] [--max-file-bytes <n>]");
         Console.WriteLine("                     [--baseline-generate] [--baseline-update]");
         Console.WriteLine("                     [--no-utf8] [--no-meta-charset] [--no-replacement-char-check]");
         Console.WriteLine("                     [--no-network-hints] [--no-render-blocking] [--max-head-blocking <n>]");
@@ -155,7 +155,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web sitemap-schemas --out <dir> [--no-overwrite] [--output json]");
         Console.WriteLine("  powerforge-web agent-ready prepare --site-root <dir> [--config <site.json>] [--base-url <url>] [--fail-on-failures] [--output json]");
         Console.WriteLine("  powerforge-web agent-ready verify --site-root <dir> [--config <site.json>] [--base-url <url>] [--fail-on-failures] [--output json]");
-        Console.WriteLine("  powerforge-web agent-ready scan --url <url> [--timeout-ms <n>] [--fail-on-failures] [--output json]");
+        Console.WriteLine("  powerforge-web agent-ready scan [--config <site.json>] [--url <url>] [--timeout-ms <n>] [--fail-on-failures] [--output json]");
         Console.WriteLine("  powerforge-web xref-merge --out <file> --map <file|dir[,file|dir...]> [--pattern *.json] [--top-only]");
         Console.WriteLine("                     [--prefer-last] [--fail-on-duplicates] [--max-references <n>] [--max-duplicates <n>]");
         Console.WriteLine("                     [--max-reference-growth-count <n>] [--max-reference-growth-percent <n>] [--fail-on-warnings]");
@@ -498,6 +498,7 @@ internal static partial class WebCliHelpers
         var checkRenderBlocking = !HasOption(argv, "--no-render-blocking");
         var maxHeadBlockingText = TryGetOptionValue(argv, "--max-head-blocking");
         var maxTotalFilesText = TryGetOptionValue(argv, "--max-total-files") ?? TryGetOptionValue(argv, "--max-files-total");
+        var maxFileBytesText = TryGetOptionValue(argv, "--max-file-bytes");
         var suppressIssues = ReadOptionList(argv, "--suppress-issue", "--suppress-issues");
         var failIssueCodes = ReadOptionList(argv, "--fail-issue", "--fail-issues", "--fail-issue-code", "--fail-issue-codes");
         var rendered = HasOption(argv, "--rendered");
@@ -531,6 +532,7 @@ internal static partial class WebCliHelpers
         var minNavCoveragePercent = ParseIntOption(minNavCoverageText, 0);
         var maxHeadBlockingResources = ParseIntOption(maxHeadBlockingText, new WebAuditOptions().MaxHeadBlockingResources);
         var maxTotalFiles = ParseIntOption(maxTotalFilesText, 0);
+        var maxFileBytes = ParseLongOption(maxFileBytesText, 0);
         var renderedMaxPages = ParseIntOption(renderedMaxText, 20);
         var renderedTimeoutMs = ParseIntOption(renderedTimeoutText, 30000);
         var renderedPort = ParseIntOption(renderedPortText, 0);
@@ -548,6 +550,7 @@ internal static partial class WebCliHelpers
             Exclude = exclude.ToArray(),
             UseDefaultExcludes = useDefaultExclude,
             MaxTotalFiles = Math.Max(0, maxTotalFiles),
+            MaxFileBytes = Math.Max(0, maxFileBytes),
             SuppressIssues = suppressIssues.ToArray(),
             FailOnIssueCodes = failIssueCodes.ToArray(),
             IgnoreNavFor = ignoreNavPatterns,

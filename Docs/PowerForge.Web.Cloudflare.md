@@ -1,22 +1,100 @@
-# Cloudflare Cache Policy, Purge, and Verification
+# Cloudflare Site Policy, Purge, and Verification
 
-Last updated: 2026-07-16
+Last updated: 2026-08-12
 
-If your site is behind Cloudflare and you cache HTML aggressively, deploys can appear "stale"
-until Cloudflare revalidates or you hard refresh. The best long-term pattern is:
+PowerForge.Web owns the repeatable Cloudflare policy for static sites behind the
+Cloudflare proxy. It can:
 
-- hash/version static assets (CSS/JS/images) so they can be cached for a long time
-- keep HTML caching conservative, or purge HTML after deploy
+- reconcile host-scoped cache rules without replacing unrelated rules
+- set response security headers from the site's existing `AgentReadiness.SecurityHeaders` policy
+- purge deployed routes
+- verify live `CF-Cache-Status` behavior after warmup
 
-PowerForge.Web owns the repeatable Cloudflare operations used by a static site:
+GitHub Pages does not consume `_headers`. A proxied GitHub Pages site therefore
+needs the Cloudflare response transform if those headers must be present on the
+live response.
 
-- apply the standard host-scoped cache policy without replacing unrelated rules
-- purge newly deployed routes
-- verify public cache behavior after warmup
+## Apply the complete site policy
 
-## Cache Policy
+Configure the desired headers in `site.json`, then dry-run before writing:
 
-Apply the standard policy from a PowerForge `site.json`:
+```bash
+powerforge-web cloudflare site-policy apply \
+  --zone-id <ZONE_ID> \
+  --token-env CLOUDFLARE_API_TOKEN \
+  --site-config ./site.json \
+  --dry-run
+
+powerforge-web cloudflare site-policy apply \
+  --zone-id <ZONE_ID> \
+  --token-env CLOUDFLARE_API_TOKEN \
+  --site-config ./site.json
+```
+
+The token needs write access to Cache Rules and Transform Rules for the target
+zone. Add Cache Purge permission when the same token also runs the post-deploy
+purge step. Keep the token in a protected environment or secret and pass only
+its environment-variable name to the CLI.
+
+The command manages two Cloudflare ruleset phases:
+
+- `http_request_cache_settings`: four cache rules
+- `http_response_headers_transform`: one response-header rule when security headers are enabled
+
+Rules outside the site's `PowerForge <Name>:` description prefix retain their
+positions. PowerForge avoids a write when the effective policy is already
+current.
+
+## HSTS is intentionally opt-in
+
+`AgentReadiness.SecurityHeaders.Hsts` defaults to `false`. HSTS persists in
+browsers after it is received, so enable it only after HTTPS renewal and the
+recovery path have been proven for the actual production hostname.
+
+```json
+{
+  "AgentReadiness": {
+    "SecurityHeaders": {
+      "Enabled": true,
+      "Hsts": false,
+      "ContentSecurityPolicyValue": "default-src 'self'; frame-ancestors 'self'",
+      "XFrameOptionsValue": "SAMEORIGIN",
+      "PermissionsPolicy": true
+    }
+  }
+}
+```
+
+For a GitHub Pages origin behind Cloudflare, the Cloudflare edge certificate and
+the GitHub Pages origin certificate are separate concerns. Applying response
+headers or cache rules does not prove that GitHub can renew its certificate
+while DNS remains proxied. Keep HSTS disabled until that renewal path is stable,
+or until the site has moved to a host whose certificate lifecycle Cloudflare
+controls.
+
+## Standard cache policy
+
+The policy uses Free-plan-compatible Rules language (`eq`, `wildcard`,
+`starts_with()`, and `ends_with()`), not the paid `matches` operator.
+
+| Rule | Edge TTL | Browser TTL | Notes |
+| --- | ---: | ---: | --- |
+| HTML, docs, and API | 2 hours | 5 minutes | Includes directory routes and `.html`; does not cache 3xx/4xx/5xx responses. |
+| Data and discovery | Origin-controlled | Origin-controlled | Covers JSON, XML, text, sitemap, and LLM discovery files. |
+| Static assets | 30 days | 1 day | Covers CSS, JavaScript, images, fonts, maps, PDFs, and archives. |
+| Immutable framework assets | 1 year | 1 year | Covers Blazor `_framework`, WASM, Webcil, assemblies, data, and precompressed files. |
+
+Query strings remain part of the normal cache key. This avoids serving the wrong
+representation when an application uses query parameters for behavior rather
+than cache busting. Strong ETags remain enabled. Later matching rules override
+the relevant TTL fields, so immutable Blazor assets receive the one-year policy
+even though they also match the general static-asset rule.
+
+Large documentation navigation trees do not produce one expression clause per
+directory. PowerForge represents trailing-slash and `.html` routes compactly and
+reserves explicit route clauses for exceptional extensionless paths.
+
+The cache-only command remains available for existing consumers:
 
 ```bash
 powerforge-web cloudflare cache-policy apply \
@@ -25,228 +103,90 @@ powerforge-web cloudflare cache-policy apply \
   --site-config ./site.json
 ```
 
-PowerForge derives the hostname and optional deployment base path from `BaseUrl`, the
-managed description prefix from `Name`, and additional HTML routes from features and
-navigation. The policy manages exactly three rules for that site:
+## GitHub Actions
 
-- static assets, with query strings excluded from the cache key
-- data and discovery files, preserving normal query behavior
-- HTML, docs, API, and site-specific navigation routes, preserving normal query behavior
+The complete policy action rejects pull-request events before reading protected
+inputs:
 
-The command creates the phase entry-point ruleset when it is absent, preserves rules
-outside the site's `PowerForge <Name>:` prefix in their existing positions, and avoids
-a ruleset update when the effective policy is already current. Generated expressions
-are rejected locally when they exceed Cloudflare's 4,096-character limit. Use
-`--dry-run` to read the current ruleset and report whether a write would be required.
-
-If a site specification is not available, pass `--hostname`, `--policy-name`, and
-optional `--base-path` and `--html-path` values explicitly. HTML paths are relative to
-the site base path.
-
-## CLI
-
-Purge using routes inferred from `site.json` (recommended for PowerForge sites):
-
-```bash
-powerforge-web cloudflare purge --zone-id <ZONE_ID> --token-env CLOUDFLARE_API_TOKEN --site-config ./site.json
+```yaml
+- uses: EvotecIT/PSPublishModule/.github/actions/powerforge-cloudflare-site-policy@POWERFORGE_COMMIT
+  with:
+    site-config: Website/site.json
+    zone-id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+    api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 ```
 
-Purge a custom set of URLs:
+Pin `POWERFORGE_COMMIT` to an exact commit. The reusable GitHub Pages deployment
+workflow can apply the same action after a successful deployment:
 
-```bash
-powerforge-web cloudflare purge --zone-id <ZONE_ID> --token-env CLOUDFLARE_API_TOKEN --base-url https://example.com --path /,/docs/,/api/
+```yaml
+with:
+  manage_cloudflare_site_policy: true
+secrets:
+  cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+  cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 ```
 
-Purge everything (use with care):
+The existing `powerforge-cloudflare-cache-policy` action remains cache-only for
+backward compatibility.
+
+## Purge and verify after deployment
+
+Purge routes inferred from `site.json`:
 
 ```bash
-powerforge-web cloudflare purge --zone-id <ZONE_ID> --token-env CLOUDFLARE_API_TOKEN --purge-everything
+powerforge-web cloudflare purge \
+  --zone-id <ZONE_ID> \
+  --token-env CLOUDFLARE_API_TOKEN \
+  --site-config ./site.json
 ```
 
-Dry-run:
-
-```bash
-powerforge-web cloudflare purge --zone-id <ZONE_ID> --token-env CLOUDFLARE_API_TOKEN --base-url https://example.com --path /,/docs/ --dry-run
-```
-
-Verify cache status using routes inferred from `site.json`:
+Verify public cache behavior:
 
 ```bash
 powerforge-web cloudflare verify --site-config ./site.json --warmup 1
 ```
 
-Verify cache status on custom URLs (warm once, then assert expected statuses):
-
-```bash
-powerforge-web cloudflare verify --base-url https://example.com --path /,/docs/,/api/ --warmup 1
-```
-
-When `--site-config` is used, PowerForge resolves a stable route profile from features/navigation:
-
-- `features`: `/docs/`, `/api/`, `/blog/`, `/search/`
-- nav surfaces + internal menu links (for product-specific pages like `/api/powershell/`, `/showcase/`, `/playground/`)
-- always includes `/` and `/sitemap.xml`
-
-## Pipeline Step (When It Makes Sense)
-
-You can add a `cloudflare` task to `pipeline.json`, typically as a CI-only step.
-Important: purging is most correct **after** the origin content has been updated.
-
-Purge example step:
+A post-deploy pipeline should name representative HTML, API, static, and WASM
+loader paths. Do not include `DYNAMIC` in `allowStatuses`: it means the response
+did not use the intended cache policy.
 
 ```json
 {
   "task": "cloudflare",
-  "id": "purge-cloudflare",
-  "modes": ["ci"],
-  "operation": "purge",
-  "zoneId": "YOUR_ZONE_ID",
-  "tokenEnv": "CLOUDFLARE_API_TOKEN",
-  "siteConfig": "./site.json"
-}
-```
-
-Verify example step (no token/zone required):
-
-```json
-{
-  "task": "cloudflare",
-  "id": "verify-cloudflare-cache",
-  "dependsOn": "purge-cloudflare",
-  "modes": ["ci"],
   "operation": "verify",
   "siteConfig": "./site.json",
+  "paths": [
+    "/",
+    "/api/",
+    "/app/app.css",
+    "/app/_framework/blazor.webassembly.js"
+  ],
   "warmupRequests": 1,
-  "allowStatuses": "HIT,REVALIDATED,EXPIRED,STALE",
-  "reportPath": "./_reports/cloudflare-cache.json",
-  "summaryPath": "./_reports/cloudflare-cache.md"
+  "allowStatuses": "HIT,REVALIDATED,EXPIRED,STALE"
 }
 ```
 
-## GitHub Actions
+Run purge only after the new origin content is available. A first request may be
+`MISS`; warmup followed by an allowed cache status proves that the edge can
+actually retain the response.
 
-Configure cache rules from a caller-owned protected environment with the composite
-action. The consumer workflow remains declarative; the API token is passed to the
-PowerForge CLI through an environment-variable name and never appears in command
-arguments.
+## Cloudflare Pages readiness gate
 
-```yaml
-jobs:
-  cloudflare-cache-policy:
-    runs-on: ubuntu-latest
-    environment: production
-    permissions:
-      contents: read
-    steps:
-      - uses: EvotecIT/PSPublishModule/.github/actions/powerforge-cloudflare-cache-policy@POWERFORGE_COMMIT
-        with:
-          site-config: Website/site.json
-          zone-id: ${{ vars.CLOUDFLARE_ZONE_ID }}
-          api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+Before testing a move from GitHub Pages, gate the built artifact against the
+current Cloudflare Pages plan limits rather than estimating from the source tree:
+
+```json
+{
+  "task": "audit",
+  "siteRoot": "./_site",
+  "maxTotalFiles": 20000,
+  "maxFileBytes": 26214400,
+  "failOnCategories": "budget"
+}
 ```
 
-Pin `POWERFORGE_COMMIT` to an exact commit. Cloudflare's current
-[Cache Rules API guide](https://developers.cloudflare.com/cache/how-to/cache-rules/create-api/)
-lists these token permissions:
-
-- `Zone > Cache Rules > Edit`, scoped to the target zones
-- `Account > Account Rulesets > Edit`, scoped to the owning account
-- `Account > Account Filter Lists > Edit`, scoped to the owning account
-
-If the same token is also used by deployment purge, grant `Zone > Cache Purge > Purge`.
-The action rejects pull-request events before protected inputs are used.
-
-### Post-Deploy Purge
-
-For GitHub Pages workflows that deploy via `actions/deploy-pages@v4`, the purge should run
-in the deploy job **after** the deployment step, using secrets:
-
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ZONE_ID`
-
-Pseudo-snippet:
-
-```yaml
-- name: Purge Cloudflare
-  env:
-    CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-  run: |
-    powerforge-web cloudflare purge --zone-id ${{ secrets.CLOUDFLARE_ZONE_ID }} --token-env CLOUDFLARE_API_TOKEN --site-config ./site.json
-    powerforge-web cloudflare verify --site-config ./site.json --warmup 1
-```
-
-## Standard Rule Expressions
-
-The standard policy uses three cache rules for each PowerForge website.
-These expressions only use `eq`/`wildcard` (no `matches`), so they work on Free plans.
-
-1) `Static assets`
-
-```txt
-(http.request.method eq "GET" and (
-  http.request.uri.path wildcard "/css/*" or
-  http.request.uri.path wildcard "/js/*" or
-  http.request.uri.path wildcard "/assets/*" or
-  http.request.uri.path wildcard "/fonts/*" or
-  http.request.uri.path wildcard "/images/*" or
-  http.request.uri.path wildcard "/img/*" or
-  http.request.uri.path wildcard "/*.css" or
-  http.request.uri.path wildcard "/*.js" or
-  http.request.uri.path wildcard "/*.mjs" or
-  http.request.uri.path wildcard "/*.png" or
-  http.request.uri.path wildcard "/*.jpg" or
-  http.request.uri.path wildcard "/*.jpeg" or
-  http.request.uri.path wildcard "/*.webp" or
-  http.request.uri.path wildcard "/*.svg" or
-  http.request.uri.path wildcard "/*.ico" or
-  http.request.uri.path wildcard "/*.woff" or
-  http.request.uri.path wildcard "/*.woff2"
-))
-```
-
-2) `Data files`
-
-```txt
-(http.request.method eq "GET" and (
-  http.request.uri.path wildcard "/data/*" or
-  http.request.uri.path eq "/sitemap.xml" or
-  http.request.uri.path eq "/llms.txt" or
-  http.request.uri.path eq "/llms-full.txt" or
-  http.request.uri.path eq "/llms.json"
-))
-```
-
-3) `HTML / Docs / API`
-
-```txt
-(http.request.method eq "GET" and (
-  http.request.uri.path eq "/" or
-  http.request.uri.path wildcard "/docs/*" or
-  http.request.uri.path wildcard "/api/*" or
-  http.request.uri.path wildcard "/blog/*" or
-  http.request.uri.path wildcard "/showcase/*" or
-  http.request.uri.path wildcard "/playground/*" or
-  http.request.uri.path wildcard "/pricing/*" or
-  http.request.uri.path wildcard "/benchmarks/*" or
-  http.request.uri.path wildcard "/faq/*" or
-  http.request.uri.path eq "/search/" or
-  http.request.uri.path wildcard "/search/*" or
-  http.request.uri.path wildcard "*.html"
-))
-```
-
-For all 3 rules use:
-- `Cache eligibility`: `Eligible for cache`
-- `Edge TTL`: `Use cache-control header if present, cache request with Cloudflare's default TTL for the response status if not`
-- `Respect strong ETags`: enable
-- Keep query handling default unless noted below.
-
-Query-string guidance:
-- `Static assets` rule:
-  - `Ignore query string`: enable (improves hit rate for cache-busted/static URLs)
-- `Data files` and `HTML / Docs / API` rules:
-  - keep default query behavior (do not force ignore globally)
-
-Route precedence for CLI:
-- When `--url`/`--path` are provided, those explicit values are used.
-- `--site-config` route inference is used only when explicit `--url`/`--path` are not provided.
+This proves file count and per-file size only. A migration candidate still needs
+a real preview deployment, custom-domain certificate validation, redirects,
+headers, cache behavior, application startup, and rollback proof before DNS is
+changed.

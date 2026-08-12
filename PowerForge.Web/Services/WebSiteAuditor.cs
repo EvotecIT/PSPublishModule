@@ -34,6 +34,7 @@ public static partial class WebSiteAuditor
         var issues = new List<WebAuditIssue>();
         var suppressIssuePatterns = WebSuppressionMatcher.NormalizePatterns(options.SuppressIssues);
         var maxTotalFiles = Math.Max(0, options.MaxTotalFiles);
+        var maxFileBytes = Math.Max(0, options.MaxFileBytes);
         var totalFileCountTruncated = false;
         var totalFileCount = maxTotalFiles > 0
             ? CountAllFiles(siteRoot, maxTotalFiles, options.BudgetExclude, options.UseDefaultExcludes, out totalFileCountTruncated)
@@ -116,6 +117,16 @@ public static partial class WebSiteAuditor
         {
             var countLabel = totalFileCountTruncated ? $"> {maxTotalFiles}" : totalFileCount.ToString();
             AddIssue("warning", "budget", null, $"total file count under site root exceeds budget: {countLabel} (budget {maxTotalFiles}).", "max-total-files");
+        }
+
+        if (maxFileBytes > 0 && TryFindLargestBudgetFile(siteRoot, options.BudgetExclude, options.UseDefaultExcludes, out var largestFile, out var largestFileBytes) && largestFileBytes > maxFileBytes)
+        {
+            AddIssue(
+                "warning",
+                "budget",
+                largestFile,
+                $"file size exceeds budget: {largestFileBytes} bytes (budget {maxFileBytes} bytes).",
+                "max-file-bytes");
         }
 
         var baselineNavSignatures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

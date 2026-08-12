@@ -69,8 +69,8 @@ PowerForge.Web can prepare and verify the common static-site subset:
 - static host `_headers` with Link headers and well-known content types
 - optional Apache `.htaccess` rules with homepage Link headers and Markdown
   negotiation for Apache-hosted static sites
-- static security headers for HSTS, CSP, X-Content-Type-Options,
-  X-Frame-Options, Referrer-Policy, and discovery-resource CORS
+- static security headers for opt-in HSTS, CSP, X-Content-Type-Options,
+  X-Frame-Options, Referrer-Policy, Permissions-Policy, and discovery-resource CORS
 - optional static Markdown artifacts generated from rendered HTML
 - API catalog Linkset generation
 - Agent Skills index + default SKILL.md generation
@@ -256,7 +256,7 @@ powerforge-web agent-ready verify --site-root .\_site --config .\site.json --fai
 Scan a deployed site:
 
 ```powershell
-powerforge-web agent-ready scan --url https://example.com --fail-on-failures
+powerforge-web agent-ready scan --config .\site.json --fail-on-failures
 ```
 
 ## Deployment Notes
@@ -268,6 +268,11 @@ GitHub Pages does not consume `_headers` or `.htaccess`. For GitHub Pages sites,
 generate the discovery files and Markdown artifacts, then put Cloudflare or
 another edge in front if the live site must satisfy response-header and
 `Accept: text/markdown` negotiation checks.
+
+HSTS generation defaults to disabled. Set `AgentReadiness.SecurityHeaders.Hsts`
+to `true` only after certificate renewal and the HTTPS recovery path are proven
+for the production hostname. For Cloudflare-proxied GitHub Pages, an edge response
+header does not prove that GitHub can renew the separate origin certificate.
 
 Apache deployments can set `agentReadiness.apache.enabled: true` and run
 `agent-ready prepare` after any step that creates or filters `.htaccess`, so the
