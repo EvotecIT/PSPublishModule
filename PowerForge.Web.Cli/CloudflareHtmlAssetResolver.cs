@@ -145,7 +145,7 @@ internal static class CloudflareHtmlAssetResolver
             var relative = candidate.TrimStart('/');
             var pathEnd = relative.IndexOfAny(['?', '#']);
             var relativePath = pathEnd < 0 ? relative : relative[..pathEnd];
-            if (ContainsDotSegment(relativePath))
+            if (!StaysWithinDeploymentBase(siteBase, relativePath))
                 throw new InvalidOperationException($"cloudflare: {label} '{value}' must resolve under {siteBase.GetLeftPart(UriPartial.Authority)}.");
             resolved = relative.Length == 0 ? siteBase : new Uri(siteBase, relative);
         }
@@ -155,19 +155,37 @@ internal static class CloudflareHtmlAssetResolver
         return resolved;
     }
 
-    private static bool ContainsDotSegment(string value)
+    private static bool StaysWithinDeploymentBase(Uri siteBase, string relativePath)
     {
-        var decoded = value.Replace('\\', '/');
+        var decoded = relativePath.Replace('\\', '/');
         while (true)
         {
-            if (decoded.Split('/').Any(static segment => segment is "." or ".."))
-                return true;
-
             var unescaped = Uri.UnescapeDataString(decoded);
             if (string.Equals(decoded, unescaped, StringComparison.Ordinal))
-                return false;
+                break;
             decoded = unescaped.Replace('\\', '/');
         }
+
+        var baseDepth = EnsureDirectoryUri(siteBase).AbsolutePath
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Length;
+        var depth = baseDepth;
+        foreach (var segment in decoded.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".")
+                continue;
+            if (segment == "..")
+            {
+                if (depth == baseDepth)
+                    return false;
+                depth--;
+                continue;
+            }
+
+            depth++;
+        }
+
+        return true;
     }
 
     private static bool HasDeploymentBasePath(Uri siteBase, Uri candidate)
