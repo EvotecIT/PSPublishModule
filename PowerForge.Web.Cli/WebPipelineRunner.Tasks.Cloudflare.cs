@@ -21,20 +21,23 @@ internal static partial class WebPipelineRunner
         var discoverySources = ReadStringList(step, "discoverAssetsFrom", "discover-assets-from").ToArray();
         var assetPathPatterns = ReadStringList(step, "assetPathPatterns", "asset-path-patterns").ToArray();
 
-        if (discoverySources.Length > 0 || assetPathPatterns.Length > 0)
-        {
-            if (string.IsNullOrWhiteSpace(baseUrl))
-                throw new InvalidOperationException("cloudflare: missing 'baseUrl' (required for HTML asset discovery).");
-            var discoveryTimeoutMs = GetInt(step, "timeoutMs") ?? GetInt(step, "timeout-ms") ?? GetInt(step, "timeout") ?? 15000;
-            urls.AddRange(CloudflareHtmlAssetResolver.Resolve(baseUrl, discoverySources, assetPathPatterns, discoveryTimeoutMs));
-        }
-
+        // The profile fallback depends on what the caller configured, not on URLs
+        // discovered later from deployed HTML. Preserve the normal route gate when
+        // asset discovery is the only explicit target source.
         if (urls.Count == 0 && paths.Count == 0 && siteProfile is not null)
         {
             var profilePaths = operation.Equals("verify", StringComparison.OrdinalIgnoreCase)
                 ? siteProfile.VerifyPaths
                 : siteProfile.PurgePaths;
             paths.AddRange(profilePaths);
+        }
+
+        if (discoverySources.Length > 0 || assetPathPatterns.Length > 0)
+        {
+            if (string.IsNullOrWhiteSpace(baseUrl))
+                throw new InvalidOperationException("cloudflare: missing 'baseUrl' (required for HTML asset discovery).");
+            var discoveryTimeoutMs = GetInt(step, "timeoutMs") ?? GetInt(step, "timeout-ms") ?? GetInt(step, "timeout") ?? 15000;
+            urls.AddRange(CloudflareHtmlAssetResolver.Resolve(baseUrl, discoverySources, assetPathPatterns, discoveryTimeoutMs));
         }
 
         if (paths.Count > 0)

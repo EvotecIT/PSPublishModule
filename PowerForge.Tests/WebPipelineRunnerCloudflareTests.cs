@@ -180,6 +180,15 @@ public class WebPipelineRunnerCloudflareTests
             (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(
                 port, "HIT", appPath, html, discoveryPath, appPath);
 
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                $$"""
+                {
+                  "Name": "Cloudflare Discovery Profile Test",
+                  "BaseUrl": "http://127.0.0.1:{{port}}",
+                  "Features": [ "docs" ]
+                }
+                """);
+
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
                 $$"""
@@ -188,10 +197,9 @@ public class WebPipelineRunnerCloudflareTests
                     {
                       "task": "cloudflare",
                       "operation": "verify",
-                      "baseUrl": "http://127.0.0.1:{{port}}",
+                      "siteConfig": "./site.json",
                       "warmupRequests": 0,
                       "allowStatuses": "HIT",
-                      "paths": [ "{{appPath}}" ],
                       "discoverAssetsFrom": [ "{{discoveryPath}}" ],
                       "assetPathPatterns": [ "/apps/converter/_framework/blazor.webassembly.*.js" ]
                     }
@@ -203,7 +211,9 @@ public class WebPipelineRunnerCloudflareTests
 
             Assert.True(result.Success, result.Steps.Single().Message);
             Assert.NotNull(requestCounter);
-            Assert.Contains(appPath, requestCounter!.Paths);
+            Assert.Contains("/", requestCounter!.Paths);
+            Assert.Contains("/docs/", requestCounter.Paths);
+            Assert.Contains("/sitemap.xml", requestCounter.Paths);
             Assert.Contains("/apps/converter/_framework/blazor.webassembly.abc123.js?v=release", requestCounter!.Paths);
         }
         finally
