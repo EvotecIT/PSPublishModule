@@ -368,8 +368,13 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             : System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDirectory, path));
 
     private static bool PathsEqual(string left, string right)
-        => string.Equals(
-            left,
-            right,
-            Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    {
+        var fullLeft = Path.GetFullPath(left);
+        var fullRight = Path.GetFullPath(right);
+        var comparison = FrameworkCompatibility.GetPathStringComparisonForPath(fullLeft) == StringComparison.OrdinalIgnoreCase ||
+                         FrameworkCompatibility.GetPathStringComparisonForPath(fullRight) == StringComparison.OrdinalIgnoreCase
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return string.Equals(fullLeft, fullRight, comparison);
+    }
 }

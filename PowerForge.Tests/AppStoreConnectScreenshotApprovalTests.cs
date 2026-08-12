@@ -330,6 +330,58 @@ public sealed class AppStoreConnectScreenshotApprovalTests
         }
     }
 
+    [Fact]
+    public void Validate_UsesOwningVolumeCaseSemanticsForApprovalPaths()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.ScreenshotApproval", Guid.NewGuid().ToString("N")));
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparison(root.FullName) != StringComparison.OrdinalIgnoreCase)
+                return;
+
+            var screenshotFolder = Directory.CreateDirectory(Path.Combine(root.FullName, "Screenshots"));
+            var screenshotPath = Path.Combine(screenshotFolder.FullName, "01-Home.png");
+            File.WriteAllBytes(screenshotPath, Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII="));
+            var spec = CreateSpec();
+            spec.ScreenshotSets[0].Path = "Screenshots";
+            File.WriteAllText(
+                Path.Combine(root.FullName, "approval.json"),
+                JsonSerializer.Serialize(new AppStoreConnectScreenshotApprovalManifest
+                {
+                    AppId = spec.AppId,
+                    Platform = spec.Platform,
+                    VersionString = spec.VersionString!,
+                    SourceCommit = ApprovedSourceCommit,
+                    Locale = spec.Locale,
+                    ApprovedAt = DateTimeOffset.Parse("2026-08-12T00:00:00Z"),
+                    ApprovedBy = "release-owner",
+                    Screenshots =
+                    [
+                        new AppStoreConnectScreenshotApprovalEntry
+                        {
+                            ScreenshotDisplayType = spec.ScreenshotSets[0].ScreenshotDisplayType,
+                            File = "screenshots/01-home.png",
+                            Sha256 = ComputeSha256(screenshotPath),
+                            Width = 1,
+                            Height = 1
+                        }
+                    ]
+                }));
+
+            var result = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
+                spec,
+                root.FullName,
+                expectedSourceCommit: ApprovedSourceCommit);
+
+            Assert.True(result.IsValid, string.Join(Environment.NewLine, result.Messages));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private static AppStoreConnectScreenshotSyncSpec CreateSpec()
         => new()
         {

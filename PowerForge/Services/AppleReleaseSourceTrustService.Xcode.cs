@@ -43,6 +43,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         "OTHER_CPLUSPLUSFLAGS",
         "OTHER_LDFLAGS",
         "OTHER_LIBTOOLFLAGS",
+        "MTL_COMPILER_FLAGS",
         "OTHER_SWIFT_FLAGS",
         "INFOPLIST_OTHER_PREPROCESSOR_FLAGS"
     };
