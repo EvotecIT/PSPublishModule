@@ -208,13 +208,22 @@ public sealed class PSPublishModuleManifestContractTests
 
         Assert.Contains("$invokeParams.PublishNuget = $true", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("$invokeParams.ModuleSignModule = $true", projectWrapperScript, StringComparison.Ordinal);
-        Assert.Contains("if ($Publish -and $PackagesOnly)", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$publishRequested = $Publish -or $RunMode -eq 'Publish'", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$fullPublishRequested = $Publish -or ($RunMode -eq 'Publish' -and -not $ModuleOnly)", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("if ($Publish -and $ModuleOnly)", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("Use -ModuleOnly -RunMode Publish", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("if ($publishRequested -and $PackagesOnly)", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("Use -PackagesOnly -PublishNuget", projectWrapperScript, StringComparison.Ordinal);
-        Assert.Contains("if ($Publish -and $ToolsOnly)", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("if ($publishRequested -and $ToolsOnly)", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("Use -ToolsOnly -PublishToolGitHub", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$PSBoundParameters.ContainsKey('PublishProjectGitHub')", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$PSBoundParameters.ContainsKey('PublishToolGitHub')", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("if ($fullPublishRequested -and $hasLaneSpecificGitHubOverride)", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("The unified GitHub release is published last automatically", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("[switch] $ModuleNoDotnetBuild", projectWrapperScript, StringComparison.Ordinal);
-        Assert.Contains("$invokeParams.ModuleRunMode = if ($Publish) { 'Publish' } else { $RunMode }", projectWrapperScript, StringComparison.Ordinal);
-        Assert.Contains("$Publish -or $RunMode -eq 'Publish' -or $PublishNuget", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$invokeParams.ModuleRunMode = if ($publishRequested) { 'Publish' } else { $RunMode }", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("if ($fullPublishRequested)", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$publishRequested -or $PublishNuget", projectWrapperScript, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "$invokeParams.ModuleRunMode = if ($Publish -or $PublishNuget -or $PublishProjectGitHub)",
             projectWrapperScript,

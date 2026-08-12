@@ -44,6 +44,13 @@ The complete repository release uses the same entry point:
 .\Build\Build-Project.ps1 -Publish
 ```
 
+For compatibility, an unscoped `-RunMode Publish` request is normalized to the same complete release. It publishes
+the coordinated PowerForge package train to NuGet, publishes PSPublishModule to PowerShell Gallery, and creates the
+unified GitHub release only after those prerequisite lanes succeed. Use the explicit lane selectors for an
+intentional partial operation: `-ModuleOnly -RunMode Publish`, `-PackagesOnly -PublishNuget`, or
+`-ToolsOnly -PublishToolGitHub`. Full publication rejects those lane selectors and the lane-specific GitHub
+publication switches so a partial public release cannot become visible before the coordinated registries succeed.
+
 `Build/Build-Project.ps1` loads `Build/release.json`, which coordinates the module recipe in `powerforge.json`
 with packages, tools, signing, and the unified GitHub release. External module repositories can continue using
 the `Build-Module {}` DSL; both entry-point styles run the same shared module and release engines.
