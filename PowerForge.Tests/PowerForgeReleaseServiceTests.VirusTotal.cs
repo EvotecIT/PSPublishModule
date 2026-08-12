@@ -46,6 +46,53 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PublishBuiltReleaseOutputs_MultilineResolvedSecret_FailsBeforeRemoteUpload(bool useEnvironment)
+    {
+        var root = CreateSandbox();
+        var environmentName = "POWERFORGE_TEST_VT_" + Guid.NewGuid().ToString("N");
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var artifactPath = Path.Combine(root, "Example.msi");
+            var secretPath = Path.Combine(root, "secret.txt");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(artifactPath, "signed installer");
+            File.WriteAllText(secretPath, "first\nsecond");
+            if (useEnvironment)
+                Environment.SetEnvironmentVariable(environmentName, "first\nsecond");
+            var uploadCalled = false;
+            var service = CreateReleaseService(
+                root,
+                new List<ModuleExecutionSnapshot>(),
+                new PowerForgeToolReleaseResult { Success = true },
+                publishVirusTotalMonitor: (_, _) =>
+                {
+                    uploadCalled = true;
+                    return new VirusTotalMonitorPublishResult { Success = true };
+                });
+            var spec = CreateVirusTotalInstallerSpec();
+            spec.VirusTotal!.ApiKey = null;
+            spec.VirusTotal.ApiKeyEnvName = useEnvironment ? environmentName : null;
+            spec.VirusTotal.ApiKeyFilePath = useEnvironment ? null : secretPath;
+
+            var exception = Assert.Throws<InvalidOperationException>(() => service.PublishBuiltReleaseOutputs(
+                spec,
+                new PowerForgeReleaseRequest { ConfigPath = releasePath },
+                CreateBuiltInstallerResult(artifactPath)));
+
+            Assert.Contains("single-line", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(uploadCalled);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(environmentName, null);
+            TryDelete(root);
+        }
+    }
+
     [Fact]
     public void PublishBuiltReleaseOutputs_VirusTotalFailure_IsReceiptedWithoutFailingPrimaryRelease()
     {
@@ -273,6 +320,49 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(result.Success, result.ErrorMessage);
             Assert.False(uploadCalled);
             Assert.False(Assert.IsType<VirusTotalMonitorPublishResult>(result.VirusTotalMonitor).Success);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void PublishBuiltReleaseOutputs_ReceiptPathIsDirectory_FailsBeforeRemoteUpload()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var artifactPath = Path.Combine(root, "Example.msi");
+            var receiptPath = Path.Combine(root, "Artifacts", "Release", "receipt.json");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(artifactPath, "signed installer");
+            Directory.CreateDirectory(receiptPath);
+            var uploadCalled = false;
+            var service = CreateReleaseService(
+                root,
+                new List<ModuleExecutionSnapshot>(),
+                new PowerForgeToolReleaseResult { Success = true },
+                publishVirusTotalMonitor: (_, _) =>
+                {
+                    uploadCalled = true;
+                    return new VirusTotalMonitorPublishResult { Success = true };
+                });
+            var spec = CreateVirusTotalInstallerSpec();
+            spec.VirusTotal!.ReceiptPath = receiptPath;
+
+            var result = service.PublishBuiltReleaseOutputs(
+                spec,
+                new PowerForgeReleaseRequest { ConfigPath = releasePath },
+                CreateBuiltInstallerResult(artifactPath));
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.False(uploadCalled);
+            Assert.Contains(
+                "existing directory",
+                Assert.IsType<VirusTotalMonitorPublishResult>(result.VirusTotalMonitor).ErrorMessage,
+                StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

@@ -5,6 +5,36 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeReleaseModulePackageProvenanceTests
 {
     [Fact]
+    public void CreateDotNetStorePackageEntries_UsesMatchingTargetVersion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var packagePath = Path.Combine(root, "Example.msixupload");
+        try
+        {
+            File.WriteAllText(packagePath, "signed store package");
+            var entry = Assert.Single(PowerForgeReleaseService.CreateDotNetStorePackageEntries(
+                new DotNetPublishStorePackageResult
+                {
+                    Target = "Example",
+                    OutputFiles = [packagePath]
+                },
+                new DotNetPublishPlan
+                {
+                    Targets = [new DotNetPublishTargetPlan { Name = "Example", Version = "2.3.4" }]
+                },
+                sharedReleaseVersion: null));
+
+            Assert.Equal("2.3.4", entry.Version);
+            Assert.True(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void CreateModuleAssetEntries_ValidBuiltModuleArchive_IsVerifiedFinalPackage()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));

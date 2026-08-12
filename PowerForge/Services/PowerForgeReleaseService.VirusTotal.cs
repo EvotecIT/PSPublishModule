@@ -102,6 +102,12 @@ internal sealed partial class PowerForgeReleaseService
                 "VirusTotal Monitor publishing is enabled, but the configured API key source did not produce a value.");
         }
 
+        if (apiKey!.IndexOf('\r') >= 0 || apiKey.IndexOf('\n') >= 0)
+        {
+            throw new InvalidOperationException(
+                "VirusTotal Monitor API key must be a single-line secret.");
+        }
+
         return apiKey;
     }
 
@@ -308,6 +314,11 @@ internal sealed partial class PowerForgeReleaseService
         string configDirectory)
     {
         var receiptPath = ResolveOutputPath(configDirectory, options.ReceiptPath!);
+        if (Directory.Exists(receiptPath))
+        {
+            throw new InvalidOperationException(
+                $"VirusTotal receipt path points to an existing directory: '{receiptPath}'.");
+        }
         var directory = Path.GetDirectoryName(receiptPath)
             ?? throw new InvalidOperationException("VirusTotal receipt path has no parent directory.");
         Directory.CreateDirectory(directory);

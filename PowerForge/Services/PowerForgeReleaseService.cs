@@ -4686,7 +4686,10 @@ internal sealed partial class PowerForgeReleaseService
 
         assets.AddRange(
             (result.DotNetTools?.StorePackages ?? Array.Empty<DotNetPublishStorePackageResult>())
-            .SelectMany(CreateDotNetStorePackageEntries));
+            .SelectMany(storePackage => CreateDotNetStorePackageEntries(
+                storePackage,
+                dotNetPlan,
+                sharedReleaseVersion)));
 
         assets.AddRange(
             new[]
@@ -4804,8 +4807,12 @@ internal sealed partial class PowerForgeReleaseService
         };
     }
 
-    private static IEnumerable<PowerForgeReleaseAssetEntry> CreateDotNetStorePackageEntries(DotNetPublishStorePackageResult storePackage)
+    internal static IEnumerable<PowerForgeReleaseAssetEntry> CreateDotNetStorePackageEntries(
+        DotNetPublishStorePackageResult storePackage,
+        DotNetPublishPlan? dotNetPlan,
+        string? sharedReleaseVersion)
     {
+        var version = ResolveDotNetTargetVersion(storePackage.Target, dotNetPlan, sharedReleaseVersion);
         foreach (var path in (storePackage.OutputFiles ?? Array.Empty<string>())
             .Concat(storePackage.UploadFiles ?? Array.Empty<string>())
             .Concat(storePackage.SymbolFiles ?? Array.Empty<string>())
@@ -4817,6 +4824,7 @@ internal sealed partial class PowerForgeReleaseService
                 Category = PowerForgeReleaseAssetCategory.Store,
                 Source = "DotNetPublish",
                 Target = storePackage.Target,
+                Version = version,
                 Runtime = storePackage.Runtime,
                 Framework = storePackage.Framework,
                 Style = storePackage.Style.ToString(),
@@ -5047,6 +5055,9 @@ internal sealed partial class PowerForgeReleaseService
     }
 
     private static string? ResolveDotNetArtefactVersion(DotNetPublishArtefactResult artifact, DotNetPublishPlan? plan, string? sharedReleaseVersion)
+        => ResolveDotNetTargetVersion(artifact.Target, plan, sharedReleaseVersion);
+
+    private static string? ResolveDotNetTargetVersion(string targetName, DotNetPublishPlan? plan, string? sharedReleaseVersion)
     {
         if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
             return sharedReleaseVersion;
@@ -5055,7 +5066,7 @@ internal sealed partial class PowerForgeReleaseService
             return null;
 
         var target = plan.Targets.FirstOrDefault(candidate =>
-            string.Equals(candidate.Name, artifact.Target, StringComparison.OrdinalIgnoreCase));
+            string.Equals(candidate.Name, targetName, StringComparison.OrdinalIgnoreCase));
         if (target is null)
             return null;
 
