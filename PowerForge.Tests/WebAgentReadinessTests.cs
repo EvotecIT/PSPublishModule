@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using PowerForge.Web;
@@ -1680,6 +1681,108 @@ public class WebAgentReadinessTests
         {
             TryDeleteDirectory(root);
         }
+    }
+
+    [Fact]
+    public async Task Scan_HonorsDisabledOptionalAgentReadinessChecks()
+    {
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = new AgentReadinessScanHandler(),
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        });
+
+        foreach (var id in new[] { "link-headers", "robots-txt", "api-catalog", "agent-skills", "agents-json", "markdown-negotiation", "security-csp" })
+            Assert.Equal("info", Assert.Single(result.Checks, check => check.Id == id).Status);
+    }
+
+    [Fact]
+    public async Task Scan_DisabledAgentReadinessShortCircuitsWithoutNetwork()
+    {
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://unreachable.invalid",
+            HttpMessageHandler = new ThrowingScanHandler(),
+            AgentReadiness = new AgentReadinessSpec { Enabled = false }
+        });
+
+        Assert.True(result.Success);
+        Assert.Empty(result.Checks);
+        Assert.Contains("AgentReadiness is disabled.", result.Warnings);
+    }
+
+    [Theory]
+    [InlineData("<main><h1>Example</h1></main>", false)]
+    [InlineData("<main><button tool-name=\"lookup\" tool-description=\"Lookup\">Run</button></main>", true)]
+    public async Task Scan_EnforcesConfiguredWebMcp(string body, bool expectedSuccess)
+    {
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = new AgentReadinessScanHandler(body),
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownNegotiation = false,
+                WebMcp = true
+            }
+        });
+
+        var webMcp = Assert.Single(result.Checks, check => check.Id == "webmcp");
+        Assert.Equal(expectedSuccess ? "pass" : "fail", webMcp.Status);
+        if (!expectedSuccess)
+            Assert.False(result.Success);
+    }
+
+    private sealed class AgentReadinessScanHandler(string? body = null) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == "/")
+            {
+                var html = body ?? """
+                    <!doctype html><html lang="en"><head><title>Example</title><meta name="robots" content="index,follow"></head>
+                    <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example</h1></main><footer>Footer</footer></body></html>
+                    """;
+                return Task.FromResult(Response(HttpStatusCode.OK, html, "text/html"));
+            }
+
+            if (path == "/sitemap.xml")
+                return Task.FromResult(Response(HttpStatusCode.OK, "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>https://example.test/</loc></url></urlset>", "application/xml"));
+
+            return Task.FromResult(Response(HttpStatusCode.NotFound, "not found", "text/plain"));
+        }
+
+        private static HttpResponseMessage Response(HttpStatusCode statusCode, string content, string mediaType) => new(statusCode)
+        {
+            Content = new StringContent(content, System.Text.Encoding.UTF8, mediaType)
+        };
+    }
+
+    private sealed class ThrowingScanHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("The disabled scan should not issue HTTP requests.");
     }
 
     private static void TryDeleteDirectory(string path)

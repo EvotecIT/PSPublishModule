@@ -313,36 +313,79 @@ public static partial class WebAgentReadiness
             throw new ArgumentException("BaseUrl is required.", nameof(options));
 
         var baseUrl = NormalizeBaseUrl(options.BaseUrl);
+        var spec = ResolveSpec(options.AgentReadiness);
         var checks = new List<WebAgentReadinessCheck>();
         var warnings = new List<string>();
-        using var http = new HttpClient { Timeout = TimeSpan.FromMilliseconds(options.TimeoutMs <= 0 ? 15000 : options.TimeoutMs) };
+
+        if (!spec.Enabled)
+        {
+            return new WebAgentReadinessResult
+            {
+                Operation = "scan",
+                BaseUrl = baseUrl,
+                Success = true,
+                Warnings = new[] { "AgentReadiness is disabled." }
+            };
+        }
+
+        using var http = options.HttpMessageHandler is null
+            ? new HttpClient()
+            : new HttpClient(options.HttpMessageHandler, disposeHandler: false);
+        http.Timeout = TimeSpan.FromMilliseconds(options.TimeoutMs <= 0 ? 15000 : options.TimeoutMs);
         http.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForge.Web.AgentReady/1.0");
 
         var root = await TrySendAsync(http, HttpMethod.Get, baseUrl, null, cancellationToken).ConfigureAwait(false);
         var linkHeader = root.Response?.Headers.TryGetValues("Link", out var links) == true ? string.Join(", ", links) : string.Empty;
+        var linkHeadersPresent = root.Success && linkHeader.Contains("api-catalog", StringComparison.OrdinalIgnoreCase);
         AddCheck(checks, "link-headers", "discoverability", "Link headers (RFC 8288)",
-            root.Success && linkHeader.Contains("api-catalog", StringComparison.OrdinalIgnoreCase) ? "pass" : "fail",
-            root.Success && linkHeader.Contains("api-catalog", StringComparison.OrdinalIgnoreCase)
+            linkHeadersPresent ? "pass" : (spec.LinkHeaders ? "fail" : "info"),
+            linkHeadersPresent
                 ? "Homepage response includes agent discovery Link headers."
-                : "Homepage response does not include Link headers pointing to agent discovery resources.",
+                : (spec.LinkHeaders
+                    ? "Homepage response does not include Link headers pointing to agent discovery resources."
+                    : "Link header verification is disabled by site policy."),
             baseUrl);
-        AddRemoteSecurityHeaderChecks(checks, root.Response, baseUrl, options.AgentReadiness);
+        AddRemoteSecurityHeaderChecks(checks, root.Response, baseUrl, spec);
 
         var rootText = await TryGetTextAsync(http, baseUrl, null, cancellationToken).ConfigureAwait(false);
         if (rootText.Success)
+        {
             AddHtmlSemanticsChecks(checks, rootText.Text, baseUrl);
+            if (spec.WebMcp)
+            {
+                var hasWebMcp = HtmlContainsWebMcpSignal(rootText.Text);
+                AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", hasWebMcp ? "pass" : "fail",
+                    hasWebMcp
+                        ? "Homepage HTML includes WebMCP tool registration or declarative tool annotations."
+                        : "Homepage HTML does not include WebMCP tool registration or declarative tool annotations.",
+                    baseUrl);
+            }
+        }
+        else if (spec.WebMcp)
+        {
+            AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", "fail",
+                $"Homepage HTML could not be inspected for WebMCP: {rootText.Message}",
+                baseUrl);
+        }
 
         var robots = await TryGetTextAsync(http, CombineUrl(baseUrl, "/robots.txt"), null, cancellationToken).ConfigureAwait(false);
-        AddCheck(checks, "robots-txt", "discoverability", "robots.txt", robots.Success ? "pass" : "fail", robots.Message, CombineUrl(baseUrl, "/robots.txt"));
+        AddCheck(checks, "robots-txt", "discoverability", "robots.txt",
+            robots.Success ? "pass" : (spec.Robots ? "fail" : "info"),
+            robots.Success ? robots.Message : (spec.Robots ? robots.Message : "robots.txt verification is disabled by site policy."),
+            CombineUrl(baseUrl, "/robots.txt"));
         if (robots.Success)
         {
+            var botRulesExpected = spec.Robots;
+            var hasBotRules = HasRobotsUserAgent(robots.Text);
             AddCheck(checks, "ai-bot-rules", "bot-access-control", "AI bot rules in robots.txt",
-                HasRobotsUserAgent(robots.Text) ? "pass" : "fail",
-                HasRobotsUserAgent(robots.Text) ? "robots.txt declares crawler rules." : "robots.txt has no User-agent rules.",
+                hasBotRules ? "pass" : (botRulesExpected ? "fail" : "info"),
+                hasBotRules ? "robots.txt declares crawler rules." : (botRulesExpected ? "robots.txt has no User-agent rules." : "robots.txt verification is disabled by site policy."),
                 CombineUrl(baseUrl, "/robots.txt"));
+            var contentSignalsExpected = spec.Robots && spec.ContentSignals?.Enabled == true;
+            var hasContentSignals = HasContentSignals(robots.Text);
             AddCheck(checks, "content-signals", "bot-access-control", "Content Signals in robots.txt",
-                HasContentSignals(robots.Text) ? "pass" : "fail",
-                HasContentSignals(robots.Text) ? "robots.txt declares Content-Signal preferences." : "No Content-Signal directive found.",
+                hasContentSignals ? "pass" : (contentSignalsExpected ? "fail" : "info"),
+                hasContentSignals ? "robots.txt declares Content-Signal preferences." : (contentSignalsExpected ? "No Content-Signal directive found." : "Content Signals are disabled by site policy."),
                 CombineUrl(baseUrl, "/robots.txt"));
         }
 
@@ -376,18 +419,20 @@ public static partial class WebAgentReadiness
         }
 
         AddCheck(checks, "markdown-negotiation", "content", "Markdown for Agents",
-            GetMarkdownNegotiationStatus(markdownNegotiated, markdownAlternateAvailableAsMarkdown),
-            BuildMarkdownNegotiationMessage(
-                markdownNegotiated,
-                markdown.Success,
-                markdownContentType,
-                GetHeaderValue(markdown.Response, "Vary"),
-                GetHeaderValue(markdown.Response, "CF-Cache-Status"),
-                GetHeaderValue(markdown.Response, "Cache-Control"),
-                markdownAlternateAvailableAsMarkdown,
-                markdownAlternateUrl,
-                markdownAlternateFetched,
-                markdownAlternateContentType),
+            spec.MarkdownNegotiation ? GetMarkdownNegotiationStatus(markdownNegotiated, markdownAlternateAvailableAsMarkdown) : "info",
+            spec.MarkdownNegotiation
+                ? BuildMarkdownNegotiationMessage(
+                    markdownNegotiated,
+                    markdown.Success,
+                    markdownContentType,
+                    GetHeaderValue(markdown.Response, "Vary"),
+                    GetHeaderValue(markdown.Response, "CF-Cache-Status"),
+                    GetHeaderValue(markdown.Response, "Cache-Control"),
+                    markdownAlternateAvailableAsMarkdown,
+                    markdownAlternateUrl,
+                    markdownAlternateFetched,
+                    markdownAlternateContentType)
+                : "Markdown negotiation verification is disabled by site policy.",
             baseUrl);
         if (!markdownNegotiated)
         {
@@ -402,41 +447,47 @@ public static partial class WebAgentReadiness
         }
 
         var apiCatalog = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/api-catalog"), null, cancellationToken).ConfigureAwait(false);
+        var apiCatalogExpected = spec.ApiCatalog?.Enabled == true;
+        var apiCatalogValid = apiCatalog.Success && ValidateApiCatalogText(apiCatalog.Text);
         AddCheck(checks, "api-catalog", "api-auth-mcp-skill-discovery", "API Catalog (RFC 9727)",
-            apiCatalog.Success && ValidateApiCatalogText(apiCatalog.Text) ? "pass" : "fail",
-            apiCatalog.Success && ValidateApiCatalogText(apiCatalog.Text) ? "API catalog returned a Linkset document." : apiCatalog.Message,
+            apiCatalogValid ? "pass" : (apiCatalogExpected ? "fail" : "info"),
+            apiCatalogValid ? "API catalog returned a Linkset document." : (apiCatalogExpected ? apiCatalog.Message : "API catalog verification is disabled by site policy."),
             CombineUrl(baseUrl, "/.well-known/api-catalog"));
 
         var openApi = await TryFindOpenApiAsync(http, baseUrl, cancellationToken).ConfigureAwait(false);
         AddCheck(checks, "openapi", "agent-protocols", "OpenAPI",
-            openApi.Success ? "pass" : "info",
+            openApi.Success ? "pass" : (spec.OpenApi?.Enabled == true ? "fail" : "info"),
             openApi.Success ? $"OpenAPI document detected at {openApi.Url}." : "No OpenAPI document found at common static paths.",
             openApi.Url ?? baseUrl);
 
         var agentSkills = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/agent-skills/index.json"), null, cancellationToken).ConfigureAwait(false);
         var agentSkillsValid = agentSkills.Success && ValidateAgentSkillsIndexText(agentSkills.Text);
+        var agentSkillsExpected = spec.AgentSkills?.Enabled == true;
         AddCheck(checks, "agent-skills", "api-auth-mcp-skill-discovery", "Agent Skills index",
-            agentSkillsValid ? "pass" : "info",
-            agentSkillsValid ? "Agent Skills discovery index is valid." : "Agent Skills index was not found or is not valid.",
+            agentSkillsValid ? "pass" : (agentSkillsExpected ? "fail" : "info"),
+            agentSkillsValid ? "Agent Skills discovery index is valid." : (agentSkillsExpected ? "Agent Skills index was not found or is not valid." : "Agent Skills verification is disabled by site policy."),
             CombineUrl(baseUrl, "/.well-known/agent-skills/index.json"));
 
         var agentsJson = await TryGetTextAsync(http, CombineUrl(baseUrl, "/agents.json"), null, cancellationToken).ConfigureAwait(false);
         var agentsJsonValid = agentsJson.Success && ValidateAgentsJsonText(agentsJson.Text);
+        var agentsJsonExpected = spec.AgentsJson?.Enabled == true;
         AddCheck(checks, "agents-json", "agent-protocols", "agents.json",
-            agentsJsonValid ? "pass" : "info",
-            agentsJsonValid ? "agents.json discovery document is valid." : "agents.json was not found or is not valid.",
+            agentsJsonValid ? "pass" : (agentsJsonExpected ? "fail" : "info"),
+            agentsJsonValid ? "agents.json discovery document is valid." : (agentsJsonExpected ? "agents.json was not found or is not valid." : "agents.json verification is disabled by site policy."),
             CombineUrl(baseUrl, "/agents.json"));
 
         var a2a = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/agent-card.json"), null, cancellationToken).ConfigureAwait(false);
+        var a2aValid = a2a.Success && ValidateA2AAgentCardText(a2a.Text);
         AddCheck(checks, "a2a-agent-card", "agent-protocols", "A2A Agent Card",
-            a2a.Success && ValidateA2AAgentCardText(a2a.Text) ? "pass" : "info",
-            a2a.Success && ValidateA2AAgentCardText(a2a.Text) ? "A2A Agent Card is valid." : "A2A Agent Card was not found or is not valid.",
+            a2aValid ? "pass" : (spec.A2AAgentCard?.Enabled == true ? "fail" : "info"),
+            a2aValid ? "A2A Agent Card is valid." : (spec.A2AAgentCard?.Enabled == true ? "A2A Agent Card was not found or is not valid." : "A2A Agent Card verification is disabled by site policy."),
             CombineUrl(baseUrl, "/.well-known/agent-card.json"));
 
         var mcp = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/mcp/server-card.json"), null, cancellationToken).ConfigureAwait(false);
+        var mcpValid = mcp.Success && ValidateMcpServerCardText(mcp.Text);
         AddCheck(checks, "mcp-server-card", "api-auth-mcp-skill-discovery", "MCP Server Card",
-            mcp.Success && ValidateMcpServerCardText(mcp.Text) ? "pass" : "info",
-            mcp.Success && ValidateMcpServerCardText(mcp.Text) ? "MCP Server Card is valid." : "MCP Server Card was not found or is not valid.",
+            mcpValid ? "pass" : (spec.McpServerCard?.Enabled == true ? "fail" : "info"),
+            mcpValid ? "MCP Server Card is valid." : (spec.McpServerCard?.Enabled == true ? "MCP Server Card was not found or is not valid." : "MCP Server Card verification is disabled by site policy."),
             CombineUrl(baseUrl, "/.well-known/mcp/server-card.json"));
 
         return new WebAgentReadinessResult
@@ -2588,4 +2639,6 @@ public sealed class WebAgentReadinessScanOptions
     public int TimeoutMs { get; set; } = 15000;
     /// <summary>Optional site policy used to decide which live headers are required.</summary>
     public AgentReadinessSpec? AgentReadiness { get; set; }
+    /// <summary>Optional test or host-provided HTTP transport.</summary>
+    internal HttpMessageHandler? HttpMessageHandler { get; set; }
 }

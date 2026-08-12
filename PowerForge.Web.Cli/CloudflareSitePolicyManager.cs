@@ -50,7 +50,21 @@ internal static class CloudflareSitePolicyManager
             var cacheResult = CloudflareCachePolicyManager.Apply(
                 zoneId, apiToken, hostname, policyName, htmlPaths, dryRun: false, logger: null, httpClient, basePath);
             if (!cacheResult.Success)
-                return Failure(false, cacheResult.Message);
+            {
+                var reconciliation = cacheResult.Reconciliation;
+                if (reconciliation?.Snapshot is null)
+                    return Failure(false, cacheResult.Message);
+
+                var cacheRollback = CloudflareManagedRulesetManager.Restore(
+                    reconciliation.Snapshot,
+                    reconciliation.AppliedRulesetId,
+                    apiToken,
+                    httpClient);
+                var cacheRecovery = cacheRollback.Success
+                    ? "The previous cache-policy state was restored."
+                    : "Cache rollback was incomplete; rerun the site policy after resolving the reported Cloudflare error.";
+                return Failure(false, $"Cache apply failed: {cacheResult.Message} Cache rollback: {cacheRollback.Message} {cacheRecovery}");
+            }
 
             var headerResult = CloudflareResponseHeaderPolicyManager.Apply(
                 zoneId, apiToken, hostname, policyName, securityHeaders, dryRun: false, httpClient);

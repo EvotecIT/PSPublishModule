@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -159,9 +160,61 @@ public class WebPipelineRunnerCloudflareTests
         }
     }
 
+    [Fact]
+    public async Task RunPipeline_CloudflareVerify_DiscoversFingerprintAssetFromDeployedHtml()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-cloudflare-discovery-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
+        RequestCounter? requestCounter = null;
+
+        try
+        {
+            var port = GetFreePort();
+            const string appPath = "/apps/converter/";
+            var html = """<html><body><script src="_framework/blazor.webassembly.abc123.js"></script></body></html>""";
+            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(port, "HIT", appPath, html);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "cloudflare",
+                      "operation": "verify",
+                      "baseUrl": "http://127.0.0.1:{{port}}",
+                      "warmupRequests": 0,
+                      "allowStatuses": "HIT",
+                      "paths": [ "{{appPath}}" ],
+                      "discoverAssetsFrom": [ "{{appPath}}" ],
+                      "assetPathPatterns": [ "/apps/converter/_framework/blazor.webassembly.*.js" ]
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success, result.Steps.Single().Message);
+            Assert.NotNull(requestCounter);
+            Assert.Contains("/apps/converter/_framework/blazor.webassembly.abc123.js", requestCounter!.Paths);
+        }
+        finally
+        {
+            await StopServerAsync(listener, cts, serverTask);
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static (HttpListener listener, CancellationTokenSource cts, Task serverTask, RequestCounter requestCounter) StartCloudflareStatusServer(
         int port,
-        string cacheStatus)
+        string cacheStatus,
+        string? htmlPath = null,
+        string? html = null)
     {
         var listener = new HttpListener();
         listener.Prefixes.Add($"http://127.0.0.1:{port}/");
@@ -169,8 +222,6 @@ public class WebPipelineRunnerCloudflareTests
 
         var cts = new CancellationTokenSource();
         var requestCounter = new RequestCounter();
-        var payload = Encoding.UTF8.GetBytes("ok");
-
         var serverTask = Task.Run(async () =>
         {
             while (!cts.IsCancellationRequested)
@@ -193,8 +244,13 @@ public class WebPipelineRunnerCloudflareTests
                     continue;
 
                 Interlocked.Increment(ref requestCounter.Count);
+                var requestPath = context.Request.Url?.AbsolutePath ?? "/";
+                requestCounter.Paths.Enqueue(requestPath);
+                var content = string.Equals(requestPath, htmlPath, StringComparison.Ordinal) ? html ?? string.Empty : "ok";
+                var payload = Encoding.UTF8.GetBytes(content);
                 context.Response.StatusCode = 200;
                 context.Response.Headers["cf-cache-status"] = cacheStatus;
+                context.Response.ContentType = string.Equals(requestPath, htmlPath, StringComparison.Ordinal) ? "text/html" : "text/plain";
                 context.Response.OutputStream.Write(payload, 0, payload.Length);
                 context.Response.Close();
             }
@@ -206,6 +262,7 @@ public class WebPipelineRunnerCloudflareTests
     private sealed class RequestCounter
     {
         public int Count;
+        public ConcurrentQueue<string> Paths { get; } = new();
     }
 
     private static async Task StopServerAsync(HttpListener? listener, CancellationTokenSource? cts, Task? serverTask)

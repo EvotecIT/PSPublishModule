@@ -39,6 +39,7 @@ public sealed class CloudflareResponseHeaderPolicyTests
         Assert.Equal("SAMEORIGIN", headers["X-Frame-Options"]!["value"]!.GetValue<string>());
         Assert.Equal("camera=(), geolocation=(), microphone=(), payment=(), usb=()", headers["Permissions-Policy"]!["value"]!.GetValue<string>());
         Assert.Equal("(http.host eq \"officeimo.com\")", rule["expression"]!.GetValue<string>());
+        Assert.Equal("PowerForge OfficeIMO [officeimo.com]: security headers", rule["description"]!.GetValue<string>());
     }
 
     [Fact]
@@ -54,12 +55,41 @@ public sealed class CloudflareResponseHeaderPolicyTests
     }
 
     [Fact]
+    public void RouteProfile_ShouldDisableCloudflareHeadersWhenAgentReadinessIsDisabled()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-cloudflare-disabled-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath,
+                """
+                {
+                  "Name": "Disabled",
+                  "BaseUrl": "https://disabled.example.com",
+                  "AgentReadiness": { "Enabled": false }
+                }
+                """);
+
+            var profile = CloudflareRouteProfileResolver.Load(configPath);
+
+            Assert.NotNull(profile.SecurityHeaders);
+            Assert.False(profile.SecurityHeaders.Enabled);
+            Assert.False(profile.SecurityHeaders.Hsts);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Apply_DryRun_ShouldPreserveUnrelatedTransformRules()
     {
         var existingRules = new JsonArray
         {
             ExistingRule("custom-id", "Operator custom header"),
-            ExistingRule("managed-id", "PowerForge OfficeIMO: security headers")
+            ExistingRule("managed-id", "PowerForge OfficeIMO [officeimo.com]: security headers")
         };
         var handler = new SequenceHandler(JsonResponse(HttpStatusCode.OK, ExistingEnvelope(existingRules)));
         using var client = NewClient(handler);
@@ -190,14 +220,110 @@ public sealed class CloudflareResponseHeaderPolicyTests
         Assert.EndsWith("/rulesets/new-cache-ruleset", handler.Requests[7].Uri.AbsolutePath, StringComparison.Ordinal);
     }
 
-    private static JsonObject ExistingRule(string id, string description, string action = "rewrite") => new()
+    [Fact]
+    public void Apply_ShouldPreserveSameNamedLegacyHeaderRuleForAnotherHost()
+    {
+        var existingRules = new JsonArray
+        {
+            ExistingRule("target-id", "PowerForge Shared: security headers", expression: "(http.host eq \"one.example.com\")"),
+            ExistingRule("other-id", "PowerForge Shared: security headers", expression: "(http.host eq \"two.example.com\")")
+        };
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(existingRules)),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+        using var client = NewClient(handler);
+
+        var result = CloudflareResponseHeaderPolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "one.example.com",
+            "Shared",
+            new AgentSecurityHeadersSpec { Hsts = false },
+            dryRun: false,
+            client);
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(1, result.PreservedRuleCount);
+        var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
+        Assert.Contains(rules, rule => rule!["description"]!.GetValue<string>() == "PowerForge Shared [one.example.com]: security headers");
+        Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "other-id");
+        Assert.DoesNotContain(rules, rule => rule!["id"]?.GetValue<string>() == "target-id");
+    }
+
+    [Fact]
+    public void SitePolicy_ShouldRestoreCacheAfterAmbiguousTransportFailure()
+    {
+        var oldCacheRules = new JsonArray { ExistingRule("cache-custom", "Operator cache rule", "set_cache_settings") };
+        var oldHeaderRules = new JsonArray { ExistingRule("header-custom", "Operator header rule") };
+        var handler = new TransportFailureHandler(
+            throwOnRequest: 4,
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldCacheRules)),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldHeaderRules)),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldCacheRules)),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("https://api.cloudflare.test/client/v4/") };
+
+        var result = CloudflareSitePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "officeimo.com",
+            "OfficeIMO",
+            htmlPaths: null,
+            securityHeaders: new AgentSecurityHeadersSpec { Hsts = false },
+            dryRun: false,
+            httpClient: client);
+
+        Assert.False(result.Success);
+        Assert.Contains("previous cache-policy state was restored", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(5, handler.Requests.Count);
+        Assert.Equal(HttpMethod.Put, handler.Requests[4].Method);
+        var restoredCache = JsonNode.Parse(handler.Requests[4].Body)!["rules"]!.AsArray();
+        Assert.Equal("Operator cache rule", Assert.Single(restoredCache)!["description"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void SitePolicy_ShouldDeleteNewCacheRulesetAfterAmbiguousCreateResponseLoss()
+    {
+        var oldHeaderRules = new JsonArray { ExistingRule("header-custom", "Operator header rule") };
+        var desiredCacheRules = CloudflareCachePolicyBuilder.BuildManagedRules(
+            "officeimo.com",
+            "OfficeIMO",
+            htmlPaths: null);
+        var handler = new TransportFailureHandler(
+            throwOnRequest: 4,
+            JsonResponse(HttpStatusCode.NotFound, """{"success":false,"errors":[{"message":"not found"}]}"""),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldHeaderRules)),
+            JsonResponse(HttpStatusCode.NotFound, """{"success":false,"errors":[{"message":"not found"}]}"""),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(desiredCacheRules, "new-cache-ruleset")),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("https://api.cloudflare.test/client/v4/") };
+
+        var result = CloudflareSitePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "officeimo.com",
+            "OfficeIMO",
+            htmlPaths: null,
+            securityHeaders: new AgentSecurityHeadersSpec { Hsts = false },
+            dryRun: false,
+            httpClient: client);
+
+        Assert.False(result.Success);
+        Assert.Contains("previous cache-policy state was restored", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(6, handler.Requests.Count);
+        Assert.Equal(HttpMethod.Get, handler.Requests[4].Method);
+        Assert.Equal(HttpMethod.Delete, handler.Requests[5].Method);
+        Assert.EndsWith("/rulesets/new-cache-ruleset", handler.Requests[5].Uri.AbsolutePath, StringComparison.Ordinal);
+    }
+
+    private static JsonObject ExistingRule(string id, string description, string action = "rewrite", string expression = "true") => new()
     {
         ["id"] = id,
         ["ref"] = id,
         ["version"] = "3",
         ["last_updated"] = "2026-08-12T00:00:00Z",
         ["description"] = description,
-        ["expression"] = "true",
+        ["expression"] = expression,
         ["action"] = action,
         ["action_parameters"] = action == "rewrite"
             ? new JsonObject { ["headers"] = new JsonObject() }
@@ -205,11 +331,17 @@ public sealed class CloudflareResponseHeaderPolicyTests
         ["enabled"] = true
     };
 
-    private static string ExistingEnvelope(JsonArray rules) => new JsonObject
+    private static string ExistingEnvelope(JsonArray rules, string? id = null)
     {
-        ["success"] = true,
-        ["result"] = new JsonObject { ["rules"] = rules.DeepClone() }
-    }.ToJsonString();
+        var result = new JsonObject { ["rules"] = rules.DeepClone() };
+        if (!string.IsNullOrWhiteSpace(id))
+            result["id"] = id;
+        return new JsonObject
+        {
+            ["success"] = true,
+            ["result"] = result
+        }.ToJsonString();
+    }
 
     private static string SuccessEnvelope(string? id = null) => new JsonObject
     {
@@ -254,6 +386,24 @@ public sealed class CloudflareResponseHeaderPolicyTests
         {
             var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? string.Empty;
             Requests.Add(new CapturedRequest(request.Method, request.RequestUri!, request.Headers.Authorization, body));
+            return _responses.Dequeue();
+        }
+    }
+
+    private sealed class TransportFailureHandler(int throwOnRequest, params HttpResponseMessage[] responses) : HttpMessageHandler
+    {
+        private readonly Queue<HttpResponseMessage> _responses = new(responses);
+        internal List<CapturedRequest> Requests { get; } = [];
+
+        protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken) => CaptureAndRespond(request);
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(CaptureAndRespond(request));
+
+        private HttpResponseMessage CaptureAndRespond(HttpRequestMessage request)
+        {
+            var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? string.Empty;
+            Requests.Add(new CapturedRequest(request.Method, request.RequestUri!, request.Headers.Authorization, body));
+            if (Requests.Count == throwOnRequest)
+                throw new HttpRequestException("simulated response loss");
             return _responses.Dequeue();
         }
     }

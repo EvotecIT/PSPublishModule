@@ -47,7 +47,8 @@ internal static class CloudflareManagedRulesetManager
         JsonArray managedRules,
         bool dryRun,
         string policyLabel,
-        HttpClient httpClient)
+        HttpClient httpClient,
+        Func<JsonObject, bool>? isLegacyManagedRule = null)
     {
         try
         {
@@ -76,11 +77,11 @@ internal static class CloudflareManagedRulesetManager
 
             var existingManaged = existingRules
                 .OfType<JsonObject>()
-                .Where(rule => (rule["description"]?.GetValue<string>() ?? string.Empty).StartsWith(managedPrefix, StringComparison.Ordinal))
+                .Where(rule => IsManagedRule(rule, managedPrefix, isLegacyManagedRule))
                 .ToArray();
             CopyManagedRuleIdentity(existingManaged, managedRules);
 
-            var desiredRules = BuildDesiredRuleSequence(existingRules, managedRules, managedPrefix, out var preservedCount);
+            var desiredRules = BuildDesiredRuleSequence(existingRules, managedRules, managedPrefix, isLegacyManagedRule, out var preservedCount);
             var changesRequired = !JsonNode.DeepEquals(
                 NormalizeRulesForComparison(existingRules),
                 NormalizeRulesForComparison(desiredRules));
@@ -109,9 +110,31 @@ internal static class CloudflareManagedRulesetManager
                     });
 
             if (!updateResponse.Success)
-                return Failure(
-                    updateResponse.ErrorMessage,
-                    entrypointExists || updateResponse.TransportError is not null ? snapshot : null);
+            {
+                if (!entrypointExists && updateResponse.TransportError is not null)
+                {
+                    var reconciliation = CloudflareApiClient.Send(httpClient, HttpMethod.Get, entrypoint, apiToken, body: null);
+                    if (reconciliation.Success &&
+                        TryReadRules(reconciliation.Result, out var reconciledRules) &&
+                        JsonNode.DeepEquals(
+                            NormalizeRulesForComparison(reconciledRules),
+                            NormalizeRulesForComparison(desiredRules)))
+                    {
+                        var reconciledRulesetId = TryReadRulesetId(reconciliation.Result);
+                        if (!string.IsNullOrWhiteSpace(reconciledRulesetId))
+                            return Failure(updateResponse.ErrorMessage, snapshot, reconciledRulesetId);
+                    }
+
+                    if (reconciliation.StatusCode == HttpStatusCode.NotFound)
+                        return Failure(updateResponse.ErrorMessage);
+
+                    return Failure(
+                        $"{updateResponse.ErrorMessage} The newly created ruleset could not be identified safely for rollback.",
+                        snapshot);
+                }
+
+                return Failure(updateResponse.ErrorMessage, entrypointExists ? snapshot : null);
+            }
 
             return Success(
                 true,
@@ -202,7 +225,12 @@ internal static class CloudflareManagedRulesetManager
         }
     }
 
-    private static JsonArray BuildDesiredRuleSequence(JsonArray existingRules, JsonArray managedRules, string managedPrefix, out int preservedCount)
+    private static JsonArray BuildDesiredRuleSequence(
+        JsonArray existingRules,
+        JsonArray managedRules,
+        string managedPrefix,
+        Func<JsonObject, bool>? isLegacyManagedRule,
+        out int preservedCount)
     {
         var desiredByDescription = managedRules
             .OfType<JsonObject>()
@@ -211,8 +239,8 @@ internal static class CloudflareManagedRulesetManager
         var lastManagedIndex = -1;
         for (var index = 0; index < existingRules.Count; index++)
         {
-            var description = existingRules[index]!["description"]?.GetValue<string>() ?? string.Empty;
-            if (description.StartsWith(managedPrefix, StringComparison.Ordinal))
+            var existing = existingRules[index]!.AsObject();
+            if (IsManagedRule(existing, managedPrefix, isLegacyManagedRule))
                 lastManagedIndex = index;
         }
 
@@ -225,7 +253,7 @@ internal static class CloudflareManagedRulesetManager
         {
             var existing = existingRules[index]!.AsObject();
             var description = existing["description"]?.GetValue<string>() ?? string.Empty;
-            if (!description.StartsWith(managedPrefix, StringComparison.Ordinal))
+            if (!IsManagedRule(existing, managedPrefix, isLegacyManagedRule))
             {
                 desiredRules.Add(PrepareRuleForUpdate(existing));
                 preservedCount++;
@@ -240,6 +268,13 @@ internal static class CloudflareManagedRulesetManager
         }
 
         return desiredRules;
+    }
+
+    private static bool IsManagedRule(JsonObject rule, string managedPrefix, Func<JsonObject, bool>? isLegacyManagedRule)
+    {
+        var description = rule["description"]?.GetValue<string>() ?? string.Empty;
+        return description.StartsWith(managedPrefix, StringComparison.Ordinal) ||
+               isLegacyManagedRule?.Invoke(rule) == true;
     }
 
     private static void AddMissingManagedRules(JsonArray destination, JsonArray managedRules, HashSet<string> emittedDescriptions)
@@ -293,10 +328,14 @@ internal static class CloudflareManagedRulesetManager
         return id.GetString();
     }
 
-    private static CloudflareManagedRulesetResult Failure(string message, CloudflareManagedRulesetSnapshot? snapshot = null) => new()
+    private static CloudflareManagedRulesetResult Failure(
+        string message,
+        CloudflareManagedRulesetSnapshot? snapshot = null,
+        string? appliedRulesetId = null) => new()
     {
         Message = message,
-        Snapshot = snapshot
+        Snapshot = snapshot,
+        AppliedRulesetId = appliedRulesetId
     };
 
     private static CloudflareManagedRulesetResult Success(

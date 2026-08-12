@@ -18,6 +18,16 @@ internal static partial class WebPipelineRunner
                       Environment.GetEnvironmentVariable("POWERFORGE_BASE_URL");
         var urls = ReadStringList(step, "urls", "url").ToList();
         var paths = ReadStringList(step, "paths", "path").ToList();
+        var discoverySources = ReadStringList(step, "discoverAssetsFrom", "discover-assets-from").ToArray();
+        var assetPathPatterns = ReadStringList(step, "assetPathPatterns", "asset-path-patterns").ToArray();
+
+        if (discoverySources.Length > 0 || assetPathPatterns.Length > 0)
+        {
+            if (string.IsNullOrWhiteSpace(baseUrl))
+                throw new InvalidOperationException("cloudflare: missing 'baseUrl' (required for HTML asset discovery).");
+            var discoveryTimeoutMs = GetInt(step, "timeoutMs") ?? GetInt(step, "timeout-ms") ?? GetInt(step, "timeout") ?? 15000;
+            urls.AddRange(CloudflareHtmlAssetResolver.Resolve(baseUrl, discoverySources, assetPathPatterns, discoveryTimeoutMs));
+        }
 
         if (urls.Count == 0 && paths.Count == 0 && siteProfile is not null)
         {
@@ -226,11 +236,23 @@ internal static partial class WebPipelineRunner
     {
         foreach (var name in names)
         {
-            var value = GetString(step, name);
-            if (string.IsNullOrWhiteSpace(value))
+            if (step.ValueKind != JsonValueKind.Object || !step.TryGetProperty(name, out var property))
                 continue;
 
-            foreach (var token in value.Split(new[] { ',', ';', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries))
+            if (property.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in property.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(item.GetString()))
+                        yield return item.GetString()!.Trim();
+                }
+                continue;
+            }
+
+            if (property.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(property.GetString()))
+                continue;
+
+            foreach (var token in property.GetString()!.Split(new[] { ',', ';', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 var trimmed = token.Trim();
                 if (!string.IsNullOrWhiteSpace(trimmed))

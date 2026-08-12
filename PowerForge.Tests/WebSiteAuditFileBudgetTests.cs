@@ -8,12 +8,12 @@ public class WebSiteAuditFileBudgetTests
     public void Audit_MaxTotalFiles_EmitsBudgetWarning()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-file-budget-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(Path.Combine(root, "api-fragments"));
 
         try
         {
             File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><html><head><title>Home</title></head><body></body></html>");
-            File.WriteAllText(Path.Combine(root, "extra.txt"), "x");
+            File.WriteAllText(Path.Combine(root, "api-fragments", "extra.head.html"), "x");
 
             var result = WebSiteAuditor.Audit(new WebAuditOptions
             {
@@ -179,12 +179,12 @@ public class WebSiteAuditFileBudgetTests
     public void Audit_MaxFileBytes_ReportsLargestArtifactAndCanGateDeployment()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-byte-budget-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, "_powerforge"));
+        Directory.CreateDirectory(Path.Combine(root, "api-fragments"));
 
         try
         {
             File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><html><head><title>Home</title></head><body></body></html>");
-            File.WriteAllBytes(Path.Combine(root, "_powerforge", "xrefmap.json"), new byte[101]);
+            File.WriteAllBytes(Path.Combine(root, "api-fragments", "oversized.head.html"), new byte[101]);
 
             var result = WebSiteAuditor.Audit(new WebAuditOptions
             {
@@ -209,7 +209,7 @@ public class WebSiteAuditFileBudgetTests
 
             Assert.False(result.Success);
             var issue = Assert.Single(result.Issues, i => i.Hint == "max-file-bytes");
-            Assert.Equal("_powerforge/xrefmap.json", issue.Path);
+            Assert.Equal("api-fragments/oversized.head.html", issue.Path);
             Assert.Contains("101 bytes", issue.Message, StringComparison.Ordinal);
         }
         finally

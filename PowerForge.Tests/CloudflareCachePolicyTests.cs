@@ -37,7 +37,7 @@ public sealed class CloudflareCachePolicyTests
         Assert.Equal(3, rules.Count);
         var htmlRule = Assert.IsType<JsonObject>(rules[0]);
         var staticRule = Assert.IsType<JsonObject>(rules[2]);
-        Assert.Equal("PowerForge Tactra: static assets", staticRule["description"]!.GetValue<string>());
+        Assert.Equal("PowerForge Tactra [tactra.dev]: static assets", staticRule["description"]!.GetValue<string>());
         Assert.Contains("http.host eq \"tactra.dev\"", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Contains("/*.wasm", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Contains("/*.webcil", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
@@ -78,10 +78,10 @@ public sealed class CloudflareCachePolicyTests
     {
         var existingRules = new JsonArray
         {
-            ExistingRule("managed-html-id", "PowerForge CodeGlyphX: HTML docs and API", "old-html"),
-            ExistingRule("managed-data-id", "PowerForge CodeGlyphX: data files", "old-data"),
-            ExistingRule("managed-static-id", "PowerForge CodeGlyphX: static assets", "old-static"),
-            ExistingRule("managed-immutable-id", "PowerForge CodeGlyphX: immutable framework assets", "old-immutable"),
+            ExistingRule("managed-html-id", "PowerForge CodeGlyphX [codeglyphx.com]: HTML docs and API", "old-html"),
+            ExistingRule("managed-data-id", "PowerForge CodeGlyphX [codeglyphx.com]: data files", "old-data"),
+            ExistingRule("managed-static-id", "PowerForge CodeGlyphX [codeglyphx.com]: static assets", "old-static"),
+            ExistingRule("managed-immutable-id", "PowerForge CodeGlyphX [codeglyphx.com]: immutable framework assets", "old-immutable"),
             ExistingRule("custom-id", "Operator custom bypass", "custom", action: "set_cache_settings")
         };
         var handler = new SequenceHandler(
@@ -125,11 +125,11 @@ public sealed class CloudflareCachePolicyTests
         var existingRules = new JsonArray
         {
             ExistingRule("custom-before", "Operator before", "before"),
-            ExistingRule("managed-html-id", "PowerForge Example: HTML docs and API", "old-html"),
+            ExistingRule("managed-html-id", "PowerForge Example [example.com]: HTML docs and API", "old-html"),
             ExistingRule("custom-between", "Operator between", "between"),
-            ExistingRule("managed-data-id", "PowerForge Example: data files", "old-data"),
-            ExistingRule("managed-static-id", "PowerForge Example: static assets", "old-static"),
-            ExistingRule("managed-immutable-id", "PowerForge Example: immutable framework assets", "old-immutable"),
+            ExistingRule("managed-data-id", "PowerForge Example [example.com]: data files", "old-data"),
+            ExistingRule("managed-static-id", "PowerForge Example [example.com]: static assets", "old-static"),
+            ExistingRule("managed-immutable-id", "PowerForge Example [example.com]: immutable framework assets", "old-immutable"),
             ExistingRule("custom-after", "Operator after", "after")
         };
         var handler = new SequenceHandler(
@@ -150,8 +150,39 @@ public sealed class CloudflareCachePolicyTests
         Assert.True(result.Success, result.Message);
         var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
         Assert.Equal(
-            ["Operator before", "PowerForge Example: HTML docs and API", "Operator between", "PowerForge Example: data files", "PowerForge Example: static assets", "Operator after"],
+            ["Operator before", "PowerForge Example [example.com]: HTML docs and API", "Operator between", "PowerForge Example [example.com]: data files", "PowerForge Example [example.com]: static assets", "Operator after"],
             rules.Select(rule => rule!["description"]!.GetValue<string>()).ToArray());
+    }
+
+    [Fact]
+    public void Apply_ShouldMigrateOnlyLegacyRulesOwnedByTheTargetHost()
+    {
+        var existingRules = new JsonArray
+        {
+            ExistingRule("target-id", "PowerForge Shared: HTML docs and API", "(http.host eq \"one.example.com\")"),
+            ExistingRule("other-id", "PowerForge Shared: HTML docs and API", "(http.host eq \"two.example.com\")")
+        };
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(existingRules)),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+        using var client = NewClient(handler);
+
+        var result = CloudflareCachePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "one.example.com",
+            "Shared",
+            htmlPaths: null,
+            dryRun: false,
+            logger: null,
+            client);
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(1, result.PreservedRuleCount);
+        var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
+        Assert.Contains(rules, rule => rule!["description"]!.GetValue<string>() == "PowerForge Shared [one.example.com]: HTML docs and API");
+        Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "other-id");
+        Assert.DoesNotContain(rules, rule => rule!["id"]?.GetValue<string>() == "target-id");
     }
 
     [Fact]

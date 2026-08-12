@@ -37,7 +37,7 @@ public static partial class WebSiteAuditor
         var maxFileBytes = Math.Max(0, options.MaxFileBytes);
         var totalFileCountTruncated = false;
         var totalFileCount = maxTotalFiles > 0
-            ? CountAllFiles(siteRoot, maxTotalFiles, options.BudgetExclude, options.UseDefaultExcludes, out totalFileCountTruncated)
+            ? CountAllFiles(siteRoot, maxTotalFiles, options.BudgetExclude, out totalFileCountTruncated)
             : 0;
         var allHtmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
@@ -119,7 +119,7 @@ public static partial class WebSiteAuditor
             AddIssue("warning", "budget", null, $"total file count under site root exceeds budget: {countLabel} (budget {maxTotalFiles}).", "max-total-files");
         }
 
-        if (maxFileBytes > 0 && TryFindLargestBudgetFile(siteRoot, options.BudgetExclude, options.UseDefaultExcludes, out var largestFile, out var largestFileBytes) && largestFileBytes > maxFileBytes)
+        if (maxFileBytes > 0 && TryFindLargestBudgetFile(siteRoot, options.BudgetExclude, out var largestFile, out var largestFileBytes) && largestFileBytes > maxFileBytes)
         {
             AddIssue(
                 "warning",

@@ -90,12 +90,13 @@ internal static class CloudflareCachePolicyBuilder
         ValidateExpressionLength("static assets", staticExpression);
         ValidateExpressionLength("data files", dataExpression);
         ValidateExpressionLength("HTML docs and API", htmlExpression);
+        var descriptionPrefix = CloudflareManagedRuleOwnership.BuildPrefix(policyName, hostname);
 
         return new JsonArray
         {
-            BuildOverrideRule($"PowerForge {policyName}: HTML docs and API", htmlExpression, HtmlEdgeTtlSeconds, HtmlBrowserTtlSeconds),
-            BuildRespectOriginRule($"PowerForge {policyName}: data files", dataExpression),
-            BuildOverrideRule($"PowerForge {policyName}: static assets", staticExpression, StaticEdgeTtlSeconds, StaticBrowserTtlSeconds)
+            BuildOverrideRule($"{descriptionPrefix} HTML docs and API", htmlExpression, HtmlEdgeTtlSeconds, HtmlBrowserTtlSeconds),
+            BuildRespectOriginRule($"{descriptionPrefix} data files", dataExpression),
+            BuildOverrideRule($"{descriptionPrefix} static assets", staticExpression, StaticEdgeTtlSeconds, StaticBrowserTtlSeconds)
         };
     }
 

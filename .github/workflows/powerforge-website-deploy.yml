@@ -93,7 +93,7 @@ on:
         type: boolean
         default: false
       manage_cloudflare_site_policy:
-        description: Apply PowerForge-managed Cloudflare cache and response headers after deployment. HSTS remains opt-in through site.json.
+        description: Apply PowerForge-managed Cloudflare cache and response headers after deployment. Review AgentReadiness.SecurityHeaders.Hsts in site.json before enabling; the compatibility default is enabled.
         required: false
         type: boolean
         default: false

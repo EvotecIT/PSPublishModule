@@ -52,7 +52,9 @@ internal static class CloudflareRouteProfileResolver
             BaseUrl = baseUrl,
             VerifyPaths = verifyPaths,
             PurgePaths = purgePaths,
-            SecurityHeaders = spec.AgentReadiness?.SecurityHeaders
+            SecurityHeaders = spec.AgentReadiness?.Enabled == false
+                ? new AgentSecurityHeadersSpec { Enabled = false, Hsts = false }
+                : spec.AgentReadiness?.SecurityHeaders
         };
     }
 

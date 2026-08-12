@@ -30,12 +30,12 @@ public static partial class WebSiteAuditor
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline);
     private const int LinkPurposeRedirectDepthLimit = 8;
 
-    private static int CountAllFiles(string root, int stopAfter, string[] budgetExcludePatterns, bool useDefaultExcludes, out bool truncated)
+    private static int CountAllFiles(string root, int stopAfter, string[] budgetExcludePatterns, out bool truncated)
     {
         // Best-effort: avoid full traversal when auditing just wants a budget check.
         var count = 0;
         truncated = false;
-        var excludes = BuildExcludePatterns(budgetExcludePatterns ?? Array.Empty<string>(), useDefaultExcludes);
+        var excludes = NormalizePatterns(budgetExcludePatterns ?? Array.Empty<string>());
         var hasExcludes = excludes.Length > 0;
         try
         {
@@ -66,13 +66,14 @@ public static partial class WebSiteAuditor
     private static bool TryFindLargestBudgetFile(
         string root,
         string[] budgetExcludePatterns,
-        bool useDefaultExcludes,
         out string? relativePath,
         out long bytes)
     {
         relativePath = null;
         bytes = 0;
-        var excludes = BuildExcludePatterns(budgetExcludePatterns ?? Array.Empty<string>(), useDefaultExcludes);
+        // HTML-audit defaults suppress implementation fragments from page checks,
+        // but every deployed artifact still counts toward the file-size budget.
+        var excludes = NormalizePatterns(budgetExcludePatterns ?? Array.Empty<string>());
 
         try
         {

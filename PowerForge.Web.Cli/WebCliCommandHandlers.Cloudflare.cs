@@ -344,7 +344,8 @@ internal static partial class WebCliCommandHandlers
             return Fail(result.Message, outputJson, logger, command);
 
         var message = $"Cloudflare site policy for {hostname}: {result.Message}";
-        logger.Info(message);
+        if (!outputJson)
+            logger.Info(message);
 
         if (outputJson)
         {

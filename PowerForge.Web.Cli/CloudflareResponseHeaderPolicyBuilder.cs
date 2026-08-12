@@ -29,11 +29,13 @@ internal static class CloudflareResponseHeaderPolicyBuilder
         if (headers.Count == 0)
             return new JsonArray();
 
+        var descriptionPrefix = CloudflareManagedRuleOwnership.BuildPrefix(policyName, hostname);
+
         return new JsonArray
         {
             new JsonObject
             {
-                ["description"] = $"PowerForge {policyName}: security headers",
+                ["description"] = $"{descriptionPrefix} security headers",
                 ["expression"] = $"(http.host eq \"{hostname}\")",
                 ["action"] = "rewrite",
                 ["action_parameters"] = new JsonObject { ["headers"] = headers },
