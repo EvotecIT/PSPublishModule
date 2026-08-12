@@ -59,10 +59,7 @@ internal sealed partial class PowerForgeReleaseService
                 "VirusTotal Monitor resume receipt belongs to a different project.");
         }
 
-        var completed = ValidateVirusTotalReceiptArtifacts(receipt.Artifacts);
-        if (!string.Equals(receipt.Version, version, StringComparison.OrdinalIgnoreCase))
-            return Array.Empty<VirusTotalMonitorArtifactReceipt>();
-        return completed;
+        return ValidateVirusTotalReceiptArtifacts(receipt.Artifacts);
     }
 
     private static VirusTotalMonitorArtifactReceipt[] ValidateVirusTotalReceiptArtifacts(

@@ -58,6 +58,7 @@ public sealed partial class ReleasePublishExecutionService
 
             UnifiedReleaseConfigFingerprint.Validate(configPath, buildResult.UnifiedReleaseConfigSha256);
             var spec = PowerForgeReleaseService.LoadConfiguration(configPath!);
+            var modulePublisherActive = HasEnabledModulePublisher(configPath!, spec);
             var targets = new List<ReleasePublishTarget>();
             var assets = unified.ReleaseAssets
                 .Concat(unified.ReleaseAssetEntries.Select(static entry => entry.StagedPath ?? entry.Path))
@@ -149,7 +150,10 @@ public sealed partial class ReleasePublishExecutionService
                     Destination: "Configured module package destinations"));
             }
 
-            if (PowerForgeReleaseService.ShouldPublishVirusTotalMonitorFromCheckpoint(spec, unified))
+            if (PowerForgeReleaseService.ShouldPublishVirusTotalMonitorFromCheckpoint(
+                    spec,
+                    unified,
+                    modulePublisherActive))
             {
                 targets.Add(new ReleasePublishTarget(
                     RootPath: item.RootPath,
@@ -371,7 +375,13 @@ public sealed partial class ReleasePublishExecutionService
                 FirstLine(ex.Message) ?? "Unified release configuration preflight failed.");
         }
 
-        if (!PowerForgeReleaseService.ShouldPublishVirusTotalMonitorFromCheckpoint(spec, builtReleaseResult))
+        var modulePublisherActive = HasEnabledModulePublisher(
+            repository.UnifiedReleaseConfigPath!,
+            spec);
+        if (!PowerForgeReleaseService.ShouldPublishVirusTotalMonitorFromCheckpoint(
+                spec,
+                builtReleaseResult,
+                modulePublisherActive))
             return null;
 
         try
@@ -379,7 +389,8 @@ public sealed partial class ReleasePublishExecutionService
             PowerForgeReleaseService.PrepareVirusTotalPublishPreflight(
                 spec,
                 repository.UnifiedReleaseConfigPath!,
-                builtReleaseResult);
+                builtReleaseResult,
+                modulePublisherActive);
             return null;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

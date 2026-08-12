@@ -6,7 +6,8 @@ internal sealed partial class PowerForgeReleaseService
 {
     internal static bool ShouldPublishVirusTotalMonitorFromCheckpoint(
         PowerForgeReleaseSpec spec,
-        PowerForgeReleaseResult result)
+        PowerForgeReleaseResult result,
+        bool modulePublisherActive = false)
     {
         if (spec is null)
             throw new ArgumentNullException(nameof(spec));
@@ -16,7 +17,8 @@ internal sealed partial class PowerForgeReleaseService
             return false;
 
         var hasFinalAssets = result.ReleaseAssetEntries?.Any(static entry => entry.IsFinalPackageOutput) == true;
-        var modulePublishing = result.ModulePlan?.RunMode == ConfigurationGateMode.Publish ||
+        var modulePublishing = modulePublisherActive ||
+                               result.ModulePlan?.RunMode == ConfigurationGateMode.Publish ||
                                result.ModulePublication is not null;
         var packagePublishing = hasFinalAssets &&
                                 (spec.Packages?.PublishNuget == true || spec.Packages?.PublishGitHub == true);
@@ -44,9 +46,10 @@ internal sealed partial class PowerForgeReleaseService
     internal static string? PrepareVirusTotalPublishPreflight(
         PowerForgeReleaseSpec spec,
         string configPath,
-        PowerForgeReleaseResult result)
+        PowerForgeReleaseResult result,
+        bool modulePublisherActive = false)
     {
-        if (!ShouldPublishVirusTotalMonitorFromCheckpoint(spec, result))
+        if (!ShouldPublishVirusTotalMonitorFromCheckpoint(spec, result, modulePublisherActive))
             return null;
         if (string.IsNullOrWhiteSpace(configPath))
             throw new ArgumentException("ConfigPath is required.", nameof(configPath));

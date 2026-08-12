@@ -43,4 +43,21 @@ public sealed class VirusTotalMonitorReleaseConfigurationTests
 
         Assert.Contains("path structure", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void ValidateConfiguration_DestinationWithoutVersion_FailsPreflight()
+    {
+        var options = new PowerForgeVirusTotalOptions
+        {
+            Enabled = true,
+            ApiKeyEnvName = "VIRUSTOTAL_MONITOR_API_KEY",
+            ArtifactKinds = [VirusTotalArtifactKind.MsiPackage],
+            DestinationPathTemplate = "/{Project}/{Kind}/{FileName}"
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => VirusTotalReleaseArtifactSelector.ValidateConfiguration(options));
+
+        Assert.Contains("{Version}", exception.Message, StringComparison.Ordinal);
+    }
 }

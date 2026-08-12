@@ -52,6 +52,88 @@ public sealed partial class PowerForgeReleaseServiceTests
         Assert.True(PowerForgeReleaseService.ShouldPublishVirusTotalMonitorFromCheckpoint(spec, result));
     }
 
+    [Fact]
+    public void ShouldPublishVirusTotalMonitorFromCheckpoint_StudioModulePublisher_ReturnsTrue()
+    {
+        var spec = new PowerForgeReleaseSpec
+        {
+            Module = new PowerForgeModuleReleaseOptions(),
+            VirusTotal = new PowerForgeVirusTotalOptions { Enabled = true }
+        };
+        var result = new PowerForgeReleaseResult
+        {
+            ModulePlan = new PowerForgeModuleReleasePlanSummary
+            {
+                RunMode = ConfigurationGateMode.Build
+            }
+        };
+
+        Assert.True(PowerForgeReleaseService.ShouldPublishVirusTotalMonitorFromCheckpoint(
+            spec,
+            result,
+            modulePublisherActive: true));
+    }
+
+    [Fact]
+    public void PublishBuiltReleaseOutputs_MatchingDestinationFromDifferentAggregateVersion_ResumesItem()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var artifactPath = Path.Combine(root, "Example.msi");
+            var receiptPath = Path.Combine(root, "Artifacts", "Release", "virustotal-monitor-receipt.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(receiptPath)!);
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(artifactPath, "signed installer");
+            File.WriteAllText(receiptPath, """
+                {
+                  "schemaVersion": 1,
+                  "provider": "VirusTotal Monitor",
+                  "project": "Example",
+                  "version": "9.9.9",
+                  "artifacts": [
+                    {
+                      "kind": "MsiPackage",
+                      "destinationPath": "/Example/1.2.3/MsiPackage/Example.msi",
+                      "monitorId": "existing-item",
+                      "verificationStatus": "Verified"
+                    }
+                  ]
+                }
+                """);
+            VirusTotalMonitorPublishRequest? captured = null;
+            var service = CreateReleaseService(
+                root,
+                new List<ModuleExecutionSnapshot>(),
+                new PowerForgeToolReleaseResult { Success = true },
+                publishVirusTotalMonitor: (request, _) =>
+                {
+                    captured = request;
+                    return new VirusTotalMonitorPublishResult { Success = true };
+                });
+            var spec = CreateVirusTotalInstallerSpec();
+            spec.VirusTotal!.ReceiptPath = receiptPath;
+
+            var result = service.PublishBuiltReleaseOutputs(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ResolvedReleaseVersion = "1.2.3"
+                },
+                CreateBuiltInstallerResult(artifactPath));
+
+            Assert.True(result.Success);
+            var artifact = Assert.Single(Assert.IsType<VirusTotalMonitorPublishRequest>(captured).Artifacts);
+            Assert.Equal("existing-item", artifact.ExistingItemId);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData(
         "[{\"destinationPath\":\"/Example/1.2.3/MsiPackage/Example.msi\"}]",

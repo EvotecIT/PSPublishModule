@@ -57,6 +57,11 @@ internal static class VirusTotalReleaseArtifactSelector
         }
         ValidateTemplateTokens(options.DestinationPathTemplate, nameof(options.DestinationPathTemplate));
         ValidateDestinationTemplateStructure(options.DestinationPathTemplate);
+        if (!options.DestinationPathTemplate.Contains("{Version}", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "VirusTotal DestinationPathTemplate must contain {Version} so separate releases cannot overwrite the same Monitor destination.");
+        }
         if (!string.IsNullOrWhiteSpace(options.DetailsTemplate))
             ValidateTemplateTokens(options.DetailsTemplate!, nameof(options.DetailsTemplate));
 
