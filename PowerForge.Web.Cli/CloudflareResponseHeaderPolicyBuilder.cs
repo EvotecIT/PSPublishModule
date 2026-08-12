@@ -10,10 +10,15 @@ internal static class CloudflareResponseHeaderPolicyBuilder
 {
     private const int MaxHeaderValueLength = 4096;
 
-    internal static JsonArray BuildManagedRules(string hostname, string policyName, AgentSecurityHeadersSpec? securityHeaders)
+    internal static JsonArray BuildManagedRules(
+        string hostname,
+        string policyName,
+        AgentSecurityHeadersSpec? securityHeaders,
+        string? basePath = null)
     {
         hostname = CloudflareCachePolicyBuilder.NormalizeHostname(hostname);
         policyName = CloudflareCachePolicyBuilder.NormalizePolicyName(policyName, hostname);
+        basePath = CloudflareCachePolicyBuilder.NormalizeBasePath(basePath);
         var security = securityHeaders ?? new AgentSecurityHeadersSpec();
         if (!security.Enabled)
             return new JsonArray();
@@ -22,8 +27,10 @@ internal static class CloudflareResponseHeaderPolicyBuilder
         AddHeader(headers, "Strict-Transport-Security", security.Hsts, security.HstsValue);
         AddHeader(headers, "Content-Security-Policy", security.ContentSecurityPolicy, security.ContentSecurityPolicyValue);
         AddHeader(headers, "X-Content-Type-Options", security.XContentTypeOptions, "nosniff");
-        AddHeader(headers, "X-Frame-Options", security.XFrameOptions, security.XFrameOptionsValue ?? "DENY");
-        AddHeader(headers, "Referrer-Policy", security.ReferrerPolicy, security.ReferrerPolicyValue);
+        AddHeader(headers, "X-Frame-Options", security.XFrameOptions,
+            string.IsNullOrWhiteSpace(security.XFrameOptionsValue) ? "DENY" : security.XFrameOptionsValue);
+        AddHeader(headers, "Referrer-Policy", security.ReferrerPolicy,
+            string.IsNullOrWhiteSpace(security.ReferrerPolicyValue) ? "strict-origin-when-cross-origin" : security.ReferrerPolicyValue);
         AddHeader(headers, "Permissions-Policy", security.PermissionsPolicy, security.PermissionsPolicyValue);
 
         if (headers.Count == 0)
@@ -36,7 +43,7 @@ internal static class CloudflareResponseHeaderPolicyBuilder
             new JsonObject
             {
                 ["description"] = $"{descriptionPrefix} security headers",
-                ["expression"] = $"(http.host eq \"{hostname}\")",
+                ["expression"] = BuildExpression(hostname, basePath),
                 ["action"] = "rewrite",
                 ["action_parameters"] = new JsonObject { ["headers"] = headers },
                 ["enabled"] = true
@@ -60,5 +67,16 @@ internal static class CloudflareResponseHeaderPolicyBuilder
             ["operation"] = "set",
             ["value"] = normalized
         };
+    }
+
+    private static string BuildExpression(string hostname, string basePath)
+    {
+        var hostExpression = $"http.host eq \"{hostname}\"";
+        if (basePath == "/")
+            return $"({hostExpression})";
+
+        var root = CloudflareCachePolicyBuilder.EscapeExpressionString(basePath.TrimEnd('/'));
+        var prefix = CloudflareCachePolicyBuilder.EscapeExpressionString(basePath);
+        return $"({hostExpression} and (http.request.uri.path eq \"{root}\" or starts_with(http.request.uri.path, \"{prefix}\")))";
     }
 }

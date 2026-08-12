@@ -16,7 +16,8 @@ internal static class CloudflareResponseHeaderPolicyManager
         string policyName,
         AgentSecurityHeadersSpec? securityHeaders,
         bool dryRun,
-        HttpClient? httpClient = null)
+        HttpClient? httpClient = null,
+        string? basePath = null)
     {
         if (!CloudflareCachePolicyManager.TryValidateInputs(zoneId, apiToken, ref hostname, ref policyName, out var error))
             return new CloudflareManagedRulesetResult { Message = error };
@@ -24,7 +25,7 @@ internal static class CloudflareResponseHeaderPolicyManager
         JsonArray managedRules;
         try
         {
-            managedRules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(hostname, policyName, securityHeaders);
+            managedRules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(hostname, policyName, securityHeaders, basePath);
         }
         catch (ArgumentException ex)
         {

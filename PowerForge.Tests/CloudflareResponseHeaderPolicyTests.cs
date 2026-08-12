@@ -55,6 +55,29 @@ public sealed class CloudflareResponseHeaderPolicyTests
     }
 
     [Fact]
+    public void BuildManagedRules_ShouldScopeHeadersToBasePathAndUseBlankValueDefaults()
+    {
+        var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com",
+            "Docs",
+            new AgentSecurityHeadersSpec
+            {
+                Hsts = false,
+                XFrameOptionsValue = " ",
+                ReferrerPolicyValue = ""
+            },
+            "/docs/");
+
+        var rule = Assert.IsType<JsonObject>(Assert.Single(rules));
+        Assert.Equal(
+            "(http.host eq \"example.com\" and (http.request.uri.path eq \"/docs\" or starts_with(http.request.uri.path, \"/docs/\")))",
+            rule["expression"]!.GetValue<string>());
+        var headers = rule["action_parameters"]!["headers"]!.AsObject();
+        Assert.Equal("DENY", headers["X-Frame-Options"]!["value"]!.GetValue<string>());
+        Assert.Equal("strict-origin-when-cross-origin", headers["Referrer-Policy"]!["value"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void RouteProfile_ShouldDisableCloudflareHeadersWhenAgentReadinessIsDisabled()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-cloudflare-disabled-" + Guid.NewGuid().ToString("N"));

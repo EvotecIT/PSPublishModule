@@ -174,9 +174,11 @@ public class WebPipelineRunnerCloudflareTests
         try
         {
             var port = GetFreePort();
+            const string discoveryPath = "/redirect";
             const string appPath = "/apps/converter/";
-            var html = """<html><body><script src="_framework/blazor.webassembly.abc123.js"></script></body></html>""";
-            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(port, "HIT", appPath, html);
+            var html = """<html><head><base href="./"></head><body><script src="_framework/blazor.webassembly.abc123.js?v=release"></script></body></html>""";
+            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(
+                port, "HIT", appPath, html, discoveryPath, appPath);
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
@@ -190,7 +192,7 @@ public class WebPipelineRunnerCloudflareTests
                       "warmupRequests": 0,
                       "allowStatuses": "HIT",
                       "paths": [ "{{appPath}}" ],
-                      "discoverAssetsFrom": [ "{{appPath}}" ],
+                      "discoverAssetsFrom": [ "{{discoveryPath}}" ],
                       "assetPathPatterns": [ "/apps/converter/_framework/blazor.webassembly.*.js" ]
                     }
                   ]
@@ -201,7 +203,52 @@ public class WebPipelineRunnerCloudflareTests
 
             Assert.True(result.Success, result.Steps.Single().Message);
             Assert.NotNull(requestCounter);
-            Assert.Contains("/apps/converter/_framework/blazor.webassembly.abc123.js", requestCounter!.Paths);
+            Assert.Contains("/apps/converter/_framework/blazor.webassembly.abc123.js?v=release", requestCounter!.Paths);
+        }
+        finally
+        {
+            await StopServerAsync(listener, cts, serverTask);
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task RunPipeline_CloudflareVerify_RejectsCrossOriginDiscoveryRedirect()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-cloudflare-cross-origin-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
+        try
+        {
+            var port = GetFreePort();
+            (listener, cts, serverTask, _) = StartCloudflareStatusServer(
+                port,
+                "HIT",
+                redirectPath: "/redirect",
+                redirectTarget: "https://outside.example/apps/converter/");
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "cloudflare",
+                      "operation": "verify",
+                      "baseUrl": "http://127.0.0.1:{{port}}",
+                      "discoverAssetsFrom": "/redirect",
+                      "assetPathPatterns": "/apps/converter/_framework/*.js"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Contains("outside the configured site origin", result.Steps.Single().Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -214,7 +261,9 @@ public class WebPipelineRunnerCloudflareTests
         int port,
         string cacheStatus,
         string? htmlPath = null,
-        string? html = null)
+        string? html = null,
+        string? redirectPath = null,
+        string? redirectTarget = null)
     {
         var listener = new HttpListener();
         listener.Prefixes.Add($"http://127.0.0.1:{port}/");
@@ -244,13 +293,20 @@ public class WebPipelineRunnerCloudflareTests
                     continue;
 
                 Interlocked.Increment(ref requestCounter.Count);
-                var requestPath = context.Request.Url?.AbsolutePath ?? "/";
+                var requestPath = context.Request.Url?.PathAndQuery ?? "/";
                 requestCounter.Paths.Enqueue(requestPath);
-                var content = string.Equals(requestPath, htmlPath, StringComparison.Ordinal) ? html ?? string.Empty : "ok";
+                if (string.Equals(context.Request.Url?.AbsolutePath, redirectPath, StringComparison.Ordinal))
+                {
+                    context.Response.StatusCode = (int)HttpStatusCode.Redirect;
+                    context.Response.RedirectLocation = redirectTarget;
+                    context.Response.Close();
+                    continue;
+                }
+                var content = string.Equals(context.Request.Url?.AbsolutePath, htmlPath, StringComparison.Ordinal) ? html ?? string.Empty : "ok";
                 var payload = Encoding.UTF8.GetBytes(content);
                 context.Response.StatusCode = 200;
                 context.Response.Headers["cf-cache-status"] = cacheStatus;
-                context.Response.ContentType = string.Equals(requestPath, htmlPath, StringComparison.Ordinal) ? "text/html" : "text/plain";
+                context.Response.ContentType = string.Equals(context.Request.Url?.AbsolutePath, htmlPath, StringComparison.Ordinal) ? "text/html" : "text/plain";
                 context.Response.OutputStream.Write(payload, 0, payload.Length);
                 context.Response.Close();
             }

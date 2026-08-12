@@ -1753,6 +1753,144 @@ public class WebAgentReadinessTests
             Assert.False(result.Success);
     }
 
+    [Fact]
+    public async Task Scan_HonorsConfiguredDiscoveryPathsAndNonCatalogLinkRelations()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/custom/catalog"] = ("{\"linkset\":[{\"anchor\":\"/\"}]}", "application/linkset+json"),
+            ["/custom/skills.json"] = ("{\"$schema\":\"https://schemas.agentskills.io/discovery/0.2.0/schema.json\",\"skills\":[{}]}", "application/json"),
+            ["/custom/agents.json"] = ("{\"name\":\"Example\",\"resources\":{}}", "application/json"),
+            ["/custom/a2a.json"] = ("{\"name\":\"Example\",\"description\":\"Test\",\"url\":\"https://example.test\",\"version\":\"1\",\"skills\":[]}", "application/json"),
+            ["/custom/mcp.json"] = ("{\"serverInfo\":{},\"transport\":{\"endpoint\":\"/mcp\"}}", "application/json"),
+            ["/custom/openapi.json"] = ("{\"openapi\":\"3.1.0\"}", "application/json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(responses);
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = true,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/catalog" },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true, IndexPath = "custom/skills.json" },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = true, OutputPath = "custom/agents.json" },
+                A2AAgentCard = new AgentA2ACardSpec { Enabled = true, OutputPath = "custom/a2a.json" },
+                McpServerCard = new AgentMcpServerCardSpec { Enabled = true, OutputPath = "custom/mcp.json" },
+                OpenApi = new AgentOpenApiSpec { Enabled = true, Path = "custom/openapi.json" },
+                MarkdownNegotiation = false
+            }
+        });
+
+        foreach (var id in new[] { "link-headers", "api-catalog", "agent-skills", "agents-json", "a2a-agent-card", "mcp-server-card", "openapi" })
+            Assert.Equal("pass", Assert.Single(result.Checks, check => check.Id == id).Status);
+        Assert.All(responses.Keys, path => Assert.Contains(path, handler.Requests));
+    }
+
+    [Fact]
+    public async Task Scan_RequiresLinkTargetsForEveryEnabledDiscoverySurface()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/custom/catalog"] = ("{\"linkset\":[{}]}", "application/linkset+json"),
+            ["/custom/openapi.json"] = ("{\"openapi\":\"3.1.0\"}", "application/json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(
+            responses,
+            "</custom/openapi.json>; rel=\"service-desc\"; type=\"application/openapi+json\"");
+
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = true,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/catalog" },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                OpenApi = new AgentOpenApiSpec { Enabled = true, Path = "custom/openapi.json" },
+                MarkdownNegotiation = false
+            }
+        });
+
+        Assert.Equal("fail", Assert.Single(result.Checks, check => check.Id == "link-headers").Status);
+    }
+
+    [Theory]
+    [InlineData("/API/openapi.json")]
+    [InlineData("/api/openapi.json?v=wrong")]
+    public async Task Scan_RequiresLinkToExactDiscoveredOpenApiUrl(string linkedOpenApiUrl)
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/api/openapi.json"] = ("{\"openapi\":\"3.1.0\"}", "application/json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(
+            responses,
+            $"<{linkedOpenApiUrl}>; rel=\"service-desc\"; type=\"application/openapi+json\"");
+
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = true,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                OpenApi = new AgentOpenApiSpec { Enabled = true },
+                MarkdownNegotiation = false
+            }
+        });
+
+        Assert.Equal("pass", Assert.Single(result.Checks, check => check.Id == "openapi").Status);
+        Assert.Equal("fail", Assert.Single(result.Checks, check => check.Id == "link-headers").Status);
+    }
+
+    [Fact]
+    public async Task Scan_RejectsAbsoluteUrlsForRelativeOnlyOutputPaths()
+    {
+        var handler = new ConfiguredDiscoveryScanHandler(
+            new Dictionary<string, (string Content, string MediaType)>(),
+            "<https://outside.example/skills.json>; rel=\"describedby\"");
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = true,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true, IndexPath = "https://outside.example/skills.json" },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        }));
+
+        Assert.Contains("must be relative", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(handler.Requests, path => path.Contains("outside", StringComparison.OrdinalIgnoreCase));
+    }
+
     private sealed class AgentReadinessScanHandler(string? body = null) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -1783,6 +1921,45 @@ public class WebAgentReadinessTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The disabled scan should not issue HTTP requests.");
+    }
+
+    private sealed class ConfiguredDiscoveryScanHandler(
+        IReadOnlyDictionary<string, (string Content, string MediaType)> responses,
+        string? linkHeader = null) : HttpMessageHandler
+    {
+        internal List<string> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            Requests.Add(path);
+            if (path == "/")
+            {
+                var response = Response(
+                    HttpStatusCode.OK,
+                    """<!doctype html><html lang="en"><head><meta name="robots" content="index,follow"></head><body><main><h1>Example</h1></main></body></html>""",
+                    "text/html");
+                response.Headers.TryAddWithoutValidation("Link", linkHeader ??
+                    "</custom/catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\", " +
+                    "</custom/skills.json>; rel=\"describedby\"; type=\"application/json\", " +
+                    "</custom/agents.json>; rel=\"describedby\"; type=\"application/json\", " +
+                    "</custom/a2a.json>; rel=\"service-desc\"; type=\"application/json\", " +
+                    "</custom/mcp.json>; rel=\"service-desc\"; type=\"application/json\", " +
+                    "</custom/openapi.json>; rel=\"service-desc\"; type=\"application/openapi+json\"");
+                return Task.FromResult(response);
+            }
+
+            if (path == "/sitemap.xml")
+                return Task.FromResult(Response(HttpStatusCode.OK, "<urlset></urlset>", "application/xml"));
+            if (responses.TryGetValue(path, out var configured))
+                return Task.FromResult(Response(HttpStatusCode.OK, configured.Content, configured.MediaType));
+            return Task.FromResult(Response(HttpStatusCode.NotFound, "not found", "text/plain"));
+        }
+
+        private static HttpResponseMessage Response(HttpStatusCode statusCode, string content, string mediaType) => new(statusCode)
+        {
+            Content = new StringContent(content, System.Text.Encoding.UTF8, mediaType)
+        };
     }
 
     private static void TryDeleteDirectory(string path)

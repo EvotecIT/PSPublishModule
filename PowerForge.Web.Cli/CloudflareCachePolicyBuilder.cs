@@ -309,6 +309,6 @@ internal static class CloudflareCachePolicyBuilder
             ["enabled"] = true
         };
 
-    private static string EscapeExpressionString(string value) =>
+    internal static string EscapeExpressionString(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
 }

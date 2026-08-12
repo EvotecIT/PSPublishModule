@@ -336,15 +336,6 @@ public static partial class WebAgentReadiness
 
         var root = await TrySendAsync(http, HttpMethod.Get, baseUrl, null, cancellationToken).ConfigureAwait(false);
         var linkHeader = root.Response?.Headers.TryGetValues("Link", out var links) == true ? string.Join(", ", links) : string.Empty;
-        var linkHeadersPresent = root.Success && linkHeader.Contains("api-catalog", StringComparison.OrdinalIgnoreCase);
-        AddCheck(checks, "link-headers", "discoverability", "Link headers (RFC 8288)",
-            linkHeadersPresent ? "pass" : (spec.LinkHeaders ? "fail" : "info"),
-            linkHeadersPresent
-                ? "Homepage response includes agent discovery Link headers."
-                : (spec.LinkHeaders
-                    ? "Homepage response does not include Link headers pointing to agent discovery resources."
-                    : "Link header verification is disabled by site policy."),
-            baseUrl);
         AddRemoteSecurityHeaderChecks(checks, root.Response, baseUrl, spec);
 
         var rootText = await TryGetTextAsync(http, baseUrl, null, cancellationToken).ConfigureAwait(false);
@@ -446,49 +437,64 @@ public static partial class WebAgentReadiness
                 markdownAlternateUrl);
         }
 
-        var apiCatalog = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/api-catalog"), null, cancellationToken).ConfigureAwait(false);
+        var apiCatalogUrl = ResolveRemoteOutputUrl(baseUrl, spec.ApiCatalog?.OutputPath, "/.well-known/api-catalog");
+        var apiCatalog = await TryGetTextAsync(http, apiCatalogUrl, null, cancellationToken).ConfigureAwait(false);
         var apiCatalogExpected = spec.ApiCatalog?.Enabled == true;
         var apiCatalogValid = apiCatalog.Success && ValidateApiCatalogText(apiCatalog.Text);
         AddCheck(checks, "api-catalog", "api-auth-mcp-skill-discovery", "API Catalog (RFC 9727)",
             apiCatalogValid ? "pass" : (apiCatalogExpected ? "fail" : "info"),
             apiCatalogValid ? "API catalog returned a Linkset document." : (apiCatalogExpected ? apiCatalog.Message : "API catalog verification is disabled by site policy."),
-            CombineUrl(baseUrl, "/.well-known/api-catalog"));
+            apiCatalogUrl);
 
-        var openApi = await TryFindOpenApiAsync(http, baseUrl, cancellationToken).ConfigureAwait(false);
+        var openApi = await TryFindOpenApiAsync(http, baseUrl, spec.OpenApi?.Path, cancellationToken).ConfigureAwait(false);
         AddCheck(checks, "openapi", "agent-protocols", "OpenAPI",
             openApi.Success ? "pass" : (spec.OpenApi?.Enabled == true ? "fail" : "info"),
-            openApi.Success ? $"OpenAPI document detected at {openApi.Url}." : "No OpenAPI document found at common static paths.",
-            openApi.Url ?? baseUrl);
+            openApi.Success ? $"OpenAPI document detected at {openApi.Url}." : "No OpenAPI document found at the configured or common static paths.",
+            openApi.Url ?? ResolveRemoteUrl(baseUrl, spec.OpenApi?.Path, "/openapi.json"));
 
-        var agentSkills = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/agent-skills/index.json"), null, cancellationToken).ConfigureAwait(false);
+        var linkHeadersPresent = root.Success && HasExpectedDiscoveryLink(linkHeader, baseUrl, spec, openApi.Url);
+        AddCheck(checks, "link-headers", "discoverability", "Link headers (RFC 8288)",
+            linkHeadersPresent ? "pass" : (spec.LinkHeaders ? "fail" : "info"),
+            linkHeadersPresent
+                ? "Homepage response includes Link headers for every enabled discovery resource."
+                : (spec.LinkHeaders
+                    ? "Homepage response does not include Link headers for every enabled discovery resource."
+                    : "Link header verification is disabled by site policy."),
+            baseUrl);
+
+        var agentSkillsUrl = ResolveRemoteOutputUrl(baseUrl, spec.AgentSkills?.IndexPath, "/.well-known/agent-skills/index.json");
+        var agentSkills = await TryGetTextAsync(http, agentSkillsUrl, null, cancellationToken).ConfigureAwait(false);
         var agentSkillsValid = agentSkills.Success && ValidateAgentSkillsIndexText(agentSkills.Text);
         var agentSkillsExpected = spec.AgentSkills?.Enabled == true;
         AddCheck(checks, "agent-skills", "api-auth-mcp-skill-discovery", "Agent Skills index",
             agentSkillsValid ? "pass" : (agentSkillsExpected ? "fail" : "info"),
             agentSkillsValid ? "Agent Skills discovery index is valid." : (agentSkillsExpected ? "Agent Skills index was not found or is not valid." : "Agent Skills verification is disabled by site policy."),
-            CombineUrl(baseUrl, "/.well-known/agent-skills/index.json"));
+            agentSkillsUrl);
 
-        var agentsJson = await TryGetTextAsync(http, CombineUrl(baseUrl, "/agents.json"), null, cancellationToken).ConfigureAwait(false);
+        var agentsJsonUrl = ResolveRemoteOutputUrl(baseUrl, spec.AgentsJson?.OutputPath, "/agents.json");
+        var agentsJson = await TryGetTextAsync(http, agentsJsonUrl, null, cancellationToken).ConfigureAwait(false);
         var agentsJsonValid = agentsJson.Success && ValidateAgentsJsonText(agentsJson.Text);
         var agentsJsonExpected = spec.AgentsJson?.Enabled == true;
         AddCheck(checks, "agents-json", "agent-protocols", "agents.json",
             agentsJsonValid ? "pass" : (agentsJsonExpected ? "fail" : "info"),
             agentsJsonValid ? "agents.json discovery document is valid." : (agentsJsonExpected ? "agents.json was not found or is not valid." : "agents.json verification is disabled by site policy."),
-            CombineUrl(baseUrl, "/agents.json"));
+            agentsJsonUrl);
 
-        var a2a = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/agent-card.json"), null, cancellationToken).ConfigureAwait(false);
+        var a2aUrl = ResolveRemoteOutputUrl(baseUrl, spec.A2AAgentCard?.OutputPath, "/.well-known/agent-card.json");
+        var a2a = await TryGetTextAsync(http, a2aUrl, null, cancellationToken).ConfigureAwait(false);
         var a2aValid = a2a.Success && ValidateA2AAgentCardText(a2a.Text);
         AddCheck(checks, "a2a-agent-card", "agent-protocols", "A2A Agent Card",
             a2aValid ? "pass" : (spec.A2AAgentCard?.Enabled == true ? "fail" : "info"),
             a2aValid ? "A2A Agent Card is valid." : (spec.A2AAgentCard?.Enabled == true ? "A2A Agent Card was not found or is not valid." : "A2A Agent Card verification is disabled by site policy."),
-            CombineUrl(baseUrl, "/.well-known/agent-card.json"));
+            a2aUrl);
 
-        var mcp = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/mcp/server-card.json"), null, cancellationToken).ConfigureAwait(false);
+        var mcpUrl = ResolveRemoteOutputUrl(baseUrl, spec.McpServerCard?.OutputPath, "/.well-known/mcp/server-card.json");
+        var mcp = await TryGetTextAsync(http, mcpUrl, null, cancellationToken).ConfigureAwait(false);
         var mcpValid = mcp.Success && ValidateMcpServerCardText(mcp.Text);
         AddCheck(checks, "mcp-server-card", "api-auth-mcp-skill-discovery", "MCP Server Card",
             mcpValid ? "pass" : (spec.McpServerCard?.Enabled == true ? "fail" : "info"),
             mcpValid ? "MCP Server Card is valid." : (spec.McpServerCard?.Enabled == true ? "MCP Server Card was not found or is not valid." : "MCP Server Card verification is disabled by site policy."),
-            CombineUrl(baseUrl, "/.well-known/mcp/server-card.json"));
+            mcpUrl);
 
         return new WebAgentReadinessResult
         {
@@ -2177,17 +2183,115 @@ public static partial class WebAgentReadiness
         return null;
     }
 
-    private static async Task<OpenApiScanResult> TryFindOpenApiAsync(HttpClient http, string baseUrl, CancellationToken cancellationToken)
+    private static async Task<OpenApiScanResult> TryFindOpenApiAsync(
+        HttpClient http,
+        string baseUrl,
+        string? configuredPath,
+        CancellationToken cancellationToken)
     {
-        foreach (var candidate in new[] { "/openapi.json", "/api/openapi.json", "/swagger.json", "/api/swagger.json", "/.well-known/openapi.json" })
+        var candidates = string.IsNullOrWhiteSpace(configuredPath)
+            ? new[] { "/openapi.json", "/api/openapi.json", "/swagger.json", "/api/swagger.json", "/.well-known/openapi.json" }
+            : new[] { configuredPath! };
+        foreach (var candidate in candidates)
         {
-            var url = CombineUrl(baseUrl, candidate);
+            var url = ResolveRemoteUrl(baseUrl, candidate, "/openapi.json");
             var result = await TryGetTextAsync(http, url, null, cancellationToken).ConfigureAwait(false);
             if (result.Success && LooksLikeOpenApi(result.Text))
                 return new OpenApiScanResult(true, url);
         }
 
         return new OpenApiScanResult(false, null);
+    }
+
+    private static string ResolveRemoteUrl(string baseUrl, string? configuredPath, string defaultPath)
+    {
+        var value = string.IsNullOrWhiteSpace(configuredPath) ? defaultPath : configuredPath!.Trim();
+        return Uri.TryCreate(value, UriKind.Absolute, out var absolute)
+            ? absolute.AbsoluteUri
+            : CombineUrl(baseUrl, NormalizeRoute(value));
+    }
+
+    private static string ResolveRemoteOutputUrl(string baseUrl, string? configuredPath, string defaultPath)
+    {
+        var value = string.IsNullOrWhiteSpace(configuredPath) ? defaultPath : configuredPath!.Trim();
+        if (Uri.TryCreate(value, UriKind.Absolute, out _))
+            throw new ArgumentException($"Agent-readiness output path '{configuredPath}' must be relative to the site root.", nameof(configuredPath));
+        return CombineUrl(baseUrl, NormalizeRoute(value));
+    }
+
+    private static bool HasExpectedDiscoveryLink(
+        string linkHeader,
+        string baseUrl,
+        AgentReadinessSpec spec,
+        string? discoveredOpenApiUrl)
+    {
+        if (string.IsNullOrWhiteSpace(linkHeader))
+            return false;
+
+        var expectationGroups = new List<RemoteLinkExpectation[]>();
+        if (spec.ApiCatalog?.Enabled == true)
+            expectationGroups.Add([new RemoteLinkExpectation(
+                ResolveRemoteOutputUrl(baseUrl, spec.ApiCatalog.OutputPath, "/.well-known/api-catalog"), "api-catalog")]);
+        if (spec.AgentSkills?.Enabled == true)
+            expectationGroups.Add([new RemoteLinkExpectation(
+                ResolveRemoteOutputUrl(baseUrl, spec.AgentSkills.IndexPath, "/.well-known/agent-skills/index.json"), "describedby")]);
+        if (spec.AgentsJson?.Enabled == true)
+            expectationGroups.Add([new RemoteLinkExpectation(
+                ResolveRemoteOutputUrl(baseUrl, spec.AgentsJson.OutputPath, "/agents.json"), "describedby")]);
+        if (spec.A2AAgentCard?.Enabled == true)
+            expectationGroups.Add([new RemoteLinkExpectation(
+                ResolveRemoteOutputUrl(baseUrl, spec.A2AAgentCard.OutputPath, "/.well-known/agent-card.json"), "service-desc")]);
+        if (spec.McpServerCard?.Enabled == true)
+            expectationGroups.Add([new RemoteLinkExpectation(
+                ResolveRemoteOutputUrl(baseUrl, spec.McpServerCard.OutputPath, "/.well-known/mcp/server-card.json"), "service-desc")]);
+        if (spec.OpenApi?.Enabled == true)
+        {
+            var target = string.IsNullOrWhiteSpace(spec.OpenApi.Path)
+                ? discoveredOpenApiUrl
+                : ResolveRemoteUrl(baseUrl, spec.OpenApi.Path, "/openapi.json");
+            if (string.IsNullOrWhiteSpace(target))
+                return false;
+            expectationGroups.Add([new RemoteLinkExpectation(target!, "service-desc")]);
+        }
+        if (spec.MarkdownArtifacts?.Enabled == true)
+            expectationGroups.Add([new RemoteLinkExpectation(
+                ResolveRemoteOutputUrl(baseUrl, "/index" + NormalizeMarkdownExtension(spec.MarkdownArtifacts.Extension), "/index.md"), "alternate")]);
+
+        if (expectationGroups.Count == 0)
+            expectationGroups.Add([new RemoteLinkExpectation(ResolveRemoteOutputUrl(baseUrl, "/llms.txt", "/llms.txt"), "service-doc")]);
+
+        return expectationGroups.All(group => group.Any(expectation => LinkHeaderContainsTarget(linkHeader, baseUrl, expectation)));
+    }
+
+    private static bool LinkHeaderContainsTarget(string linkHeader, string baseUrl, RemoteLinkExpectation expectation)
+    {
+        foreach (var segment in SplitHeaderValues(linkHeader))
+        {
+            var start = segment.IndexOf('<');
+            var end = segment.IndexOf('>');
+            if (start < 0 || end <= start ||
+                !LinkRelContains(ParseLinkParameters(segment[(end + 1)..]).GetValueOrDefault("rel"), expectation.Relation))
+                continue;
+
+            var href = segment.Substring(start + 1, end - start - 1).Trim();
+            var actualUrl = ResolveRemoteUrl(baseUrl, href, "/");
+            if (SameRemoteUrl(actualUrl, expectation.TargetUrl))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool SameRemoteUrl(string actualUrl, string expectedUrl)
+    {
+        if (!Uri.TryCreate(actualUrl, UriKind.Absolute, out var actual) ||
+            !Uri.TryCreate(expectedUrl, UriKind.Absolute, out var expected))
+            return string.Equals(actualUrl, expectedUrl, StringComparison.Ordinal);
+
+        return string.Equals(actual.Scheme, expected.Scheme, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(actual.Host, expected.Host, StringComparison.OrdinalIgnoreCase) &&
+               actual.Port == expected.Port &&
+               string.Equals(actual.PathAndQuery, expected.PathAndQuery, StringComparison.Ordinal);
     }
 
     private static bool LooksLikeOpenApi(string text)
@@ -2598,6 +2702,7 @@ public static partial class WebAgentReadiness
     }
 
     private sealed record HeaderLinkTarget(string Href, string Rel, string Type);
+    private sealed record RemoteLinkExpectation(string TargetUrl, string Relation);
     private sealed record MarkdownArtifactWriteResult(string[] Paths, string? RootRoute);
     private sealed record HtmlReadResult(string Text, string Path);
     private sealed record OpenApiScanResult(bool Success, string? Url);

@@ -33,17 +33,22 @@ internal static class CloudflareHtmlAssetResolver
         if (sources.Length == 0 || patterns.Length == 0)
             throw new InvalidOperationException("cloudflare: HTML asset discovery requires both 'discoverAssetsFrom' and 'assetPathPatterns'.");
 
-        using var http = new HttpClient { Timeout = TimeSpan.FromMilliseconds(Math.Clamp(timeoutMs, 1000, 120000)) };
+        using var redirectHandler = new HttpClientHandler { AllowAutoRedirect = false };
+        using var http = new HttpClient(redirectHandler) { Timeout = TimeSpan.FromMilliseconds(Math.Clamp(timeoutMs, 1000, 120000)) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForge.Web.CloudflareVerify/1.0");
         var matches = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var source in sources)
         {
-            using var response = http.GetAsync(source).GetAwaiter().GetResult();
+            using var response = GetSameOrigin(http, siteBase, source, out var finalSource);
             if (!response.IsSuccessStatusCode)
                 throw new InvalidOperationException($"cloudflare: HTML asset discovery failed for '{source}' (HTTP {(int)response.StatusCode}).");
 
             var html = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
             var document = HtmlParser.ParseWithAngleSharp(html);
+            var documentBase = finalSource;
+            var configuredBase = document.QuerySelector("base[href]")?.GetAttribute("href");
+            if (!string.IsNullOrWhiteSpace(configuredBase) && Uri.TryCreate(finalSource, configuredBase, out var resolvedBase))
+                documentBase = resolvedBase;
             foreach (var element in document.QuerySelectorAll("[src],[href]"))
             {
                 foreach (var attributeName in new[] { "src", "href" })
@@ -51,12 +56,13 @@ internal static class CloudflareHtmlAssetResolver
                     var value = element.GetAttribute(attributeName);
                     if (string.IsNullOrWhiteSpace(value))
                         continue;
-                    if (!Uri.TryCreate(source, value, out var asset) || !HasSameOrigin(siteBase, asset))
+                    if (!Uri.TryCreate(documentBase, value, out var asset) || !HasSameOrigin(siteBase, asset))
                         continue;
 
                     var path = Uri.UnescapeDataString(asset.AbsolutePath);
+                    var verificationUri = new UriBuilder(asset) { Fragment = string.Empty }.Uri.AbsoluteUri;
                     foreach (var pattern in patterns.Where(pattern => WebGlobMatcher.IsMatch(pattern, path)))
-                        matches.TryAdd(pattern, asset.GetLeftPart(UriPartial.Path));
+                        matches.TryAdd(pattern, verificationUri);
                 }
             }
         }
@@ -67,6 +73,37 @@ internal static class CloudflareHtmlAssetResolver
 
         return matches.Values.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
+
+    private static HttpResponseMessage GetSameOrigin(HttpClient http, Uri siteBase, Uri source, out Uri finalSource)
+    {
+        var current = source;
+        for (var redirectCount = 0; redirectCount <= 10; redirectCount++)
+        {
+            var response = http.GetAsync(current).GetAwaiter().GetResult();
+            if (!IsRedirect(response.StatusCode))
+            {
+                finalSource = response.RequestMessage?.RequestUri ?? current;
+                return response;
+            }
+
+            var location = response.Headers.Location;
+            response.Dispose();
+            if (location is null || !Uri.TryCreate(current, location, out var next))
+                throw new InvalidOperationException($"cloudflare: HTML asset discovery received a redirect without a valid Location from '{current}'.");
+            if (!HasSameOrigin(siteBase, next))
+                throw new InvalidOperationException($"cloudflare: HTML asset discovery for '{source}' redirected outside the configured site origin.");
+            current = next;
+        }
+
+        throw new InvalidOperationException($"cloudflare: HTML asset discovery for '{source}' exceeded 10 redirects.");
+    }
+
+    private static bool IsRedirect(System.Net.HttpStatusCode statusCode) =>
+        statusCode is System.Net.HttpStatusCode.MovedPermanently or
+            System.Net.HttpStatusCode.Redirect or
+            System.Net.HttpStatusCode.RedirectMethod or
+            System.Net.HttpStatusCode.TemporaryRedirect or
+            System.Net.HttpStatusCode.PermanentRedirect;
 
     private static Uri ResolveSameOriginUri(Uri siteBase, string value, string label)
     {
