@@ -46,6 +46,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
         var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
         var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        var artifactPath = Path.Combine(repositoryRoot, "Example.msi");
+        File.WriteAllText(artifactPath, "signed installer");
         File.WriteAllText(
             releaseConfig,
             """
@@ -66,7 +68,17 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             UnifiedReleaseStateJson: JsonSerializer.Serialize(new PowerForgeReleaseResult
             {
                 Success = true,
-                ConfigPath = releaseConfig
+                ConfigPath = releaseConfig,
+                ReleaseAssetEntries =
+                [
+                    new PowerForgeReleaseAssetEntry
+                    {
+                        Path = artifactPath,
+                        Category = PowerForgeReleaseAssetCategory.Installer,
+                        Version = "1.2.3",
+                        IsFinalPackageOutput = true
+                    }
+                ]
             }),
             UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
         var signingResult = new ReleaseSigningExecutionResult(
@@ -143,6 +155,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
         var releaseConfig = Path.Combine(buildDirectory, "release.json");
         var secretName = $"POWERFORGE_MISSING_{Guid.NewGuid():N}";
+        var artifactPath = Path.Combine(repositoryRoot, "Example.msi");
+        File.WriteAllText(artifactPath, "signed installer");
         File.WriteAllText(
             releaseConfig,
             $$"""
@@ -163,7 +177,17 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             UnifiedReleaseStateJson: JsonSerializer.Serialize(new PowerForgeReleaseResult
             {
                 Success = true,
-                ConfigPath = releaseConfig
+                ConfigPath = releaseConfig,
+                ReleaseAssetEntries =
+                [
+                    new PowerForgeReleaseAssetEntry
+                    {
+                        Path = artifactPath,
+                        Category = PowerForgeReleaseAssetCategory.Installer,
+                        Version = "1.2.3",
+                        IsFinalPackageOutput = true
+                    }
+                ]
             }),
             UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
         var signingResult = new ReleaseSigningExecutionResult(
@@ -203,6 +227,97 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             Assert.Equal("VirusTotal Monitor", receipt.TargetName);
             Assert.Equal("VirusTotal", receipt.TargetKind);
             Assert.Equal(ReleasePublishReceiptStatus.Failed, receipt.Status);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnifiedRelease_AppleOnlyCheckpoint_SkipsVirusTotalPreflight()
+    {
+        var repositoryRoot = Directory.CreateDirectory(
+            Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        var secretName = $"POWERFORGE_MISSING_{Guid.NewGuid():N}";
+        File.WriteAllText(
+            releaseConfig,
+            $$"""
+            {
+              "AppleApps": { "Apps": [] },
+              "VirusTotal": {
+                "Enabled": true,
+                "ApiKeyEnvName": "{{secretName}}",
+                "ArtifactKinds": [ "MsiPackage" ]
+              }
+            }
+            """);
+        var buildResult = new ReleaseBuildExecutionResult(
+            repositoryRoot,
+            true,
+            "Build completed.",
+            1,
+            [],
+            UnifiedReleaseStateJson: JsonSerializer.Serialize(new PowerForgeReleaseResult
+            {
+                Success = true,
+                ConfigPath = releaseConfig,
+                AppleAppPlan = new PowerForgeAppleReleasePlan(),
+                ReleaseAssetEntries =
+                [
+                    new PowerForgeReleaseAssetEntry
+                    {
+                        Path = Path.Combine(repositoryRoot, "build-only.json"),
+                        Category = PowerForgeReleaseAssetCategory.Other,
+                        IsFinalPackageOutput = false
+                    }
+                ]
+            }),
+            UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
+        var signingResult = new ReleaseSigningExecutionResult(
+            repositoryRoot,
+            true,
+            "Signing completed.",
+            JsonSerializer.Serialize(buildResult),
+            []);
+        var queueItem = new ReleaseQueueItem(
+            repositoryRoot,
+            "Example",
+            ReleaseRepositoryKind.Library,
+            ReleaseWorkspaceKind.PrimaryRepository,
+            1,
+            ReleaseQueueStage.Publish,
+            ReleaseQueueItemStatus.ReadyToRun,
+            "Ready.",
+            "publish.ready",
+            JsonSerializer.Serialize(signingResult),
+            DateTimeOffset.UtcNow);
+        var publishCalled = false;
+        var service = new ReleasePublishExecutionService(
+            new RepositoryCatalogScanner(),
+            new ModuleBuildHostService(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(),
+            new ProjectBuildPublishHostService(),
+            (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
+            publishUnifiedRelease: (_, _) =>
+            {
+                publishCalled = true;
+                return new PowerForgeReleaseResult { Success = true };
+            });
+
+        try
+        {
+            using var _ = new EnvironmentScope()
+                .Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true")
+                .Set(secretName, null);
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.True(publishCalled);
+            Assert.DoesNotContain(result.Receipts, static receipt =>
+                receipt.TargetName.Equals("VirusTotal Monitor", StringComparison.Ordinal));
         }
         finally
         {

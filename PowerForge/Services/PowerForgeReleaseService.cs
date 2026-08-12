@@ -391,6 +391,8 @@ internal sealed partial class PowerForgeReleaseService
             spec.VirusTotal,
             configDirectory,
             planOrValidation: !publishVirusTotalMonitor);
+        if (publishVirusTotalMonitor)
+            EnsureVirusTotalReceiptWritable(spec.VirusTotal!, configDirectory);
         var captureModuleArtifactProvenance = ShouldCaptureVirusTotalModuleArtifactProvenance(
             spec,
             request,
@@ -1026,11 +1028,11 @@ internal sealed partial class PowerForgeReleaseService
 
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
-        ValidateVirusTotalConfiguration(spec.VirusTotal);
-        var virusTotalApiKey = ResolveVirusTotalApiKeyForExecution(
-            spec.VirusTotal,
-            configDirectory,
-            planOrValidation: false);
+        var publishVirusTotalMonitor = ShouldPublishVirusTotalMonitorFromCheckpoint(spec, builtResult);
+        var virusTotalApiKey = PrepareVirusTotalPublishPreflight(
+            spec,
+            configPath,
+            builtResult);
         var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, builtResult);
 
         if (spec.AppleApps is not null)
@@ -1133,7 +1135,8 @@ internal sealed partial class PowerForgeReleaseService
         if (!builtResult.Success)
             return builtResult;
 
-        if (!TryPublishVirusTotalMonitor(
+        if (publishVirusTotalMonitor &&
+            !TryPublishVirusTotalMonitor(
                 spec,
                 request,
                 configDirectory,

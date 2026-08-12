@@ -210,13 +210,17 @@ public sealed partial class ReleasePublishExecutionService
                 repository.UnifiedReleaseConfigPath!,
                 buildResult.UnifiedReleaseConfigSha256);
             var spec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
-            if (spec.VirusTotal is { Enabled: true })
+            var builtReleaseResult = JsonSerializer.Deserialize<PowerForgeReleaseResult>(
+                    buildResult.UnifiedReleaseStateJson!)
+                ?? throw new InvalidOperationException("Unified release build state could not be deserialized.");
+            if (PowerForgeReleaseService.ShouldPublishVirusTotalMonitorFromCheckpoint(spec, builtReleaseResult))
             {
                 try
                 {
-                    PowerForgeReleaseService.ValidateVirusTotalPublishPreflight(
+                    PowerForgeReleaseService.PrepareVirusTotalPublishPreflight(
                         spec,
-                        repository.UnifiedReleaseConfigPath!);
+                        repository.UnifiedReleaseConfigPath!,
+                        builtReleaseResult);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
