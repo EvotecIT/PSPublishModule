@@ -6,6 +6,70 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    internal static bool ShouldPublishVirusTotalMonitor(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        bool explicitAppleAction,
+        bool runModule,
+        bool runPackages,
+        bool runTools,
+        bool publishUnifiedGitHub)
+    {
+        if (spec.VirusTotal is not { Enabled: true } ||
+            request.PlanOnly ||
+            request.ValidateOnly ||
+            explicitAppleAction)
+        {
+            return false;
+        }
+
+        if (publishUnifiedGitHub)
+            return true;
+
+        if (runModule && spec.Module is not null)
+        {
+            var packagePublishingRequested =
+                !request.ModuleOnly &&
+                ((request.PublishNuget ?? spec.Packages?.PublishNuget) == true ||
+                 (request.PublishProjectGitHub ?? spec.Packages?.PublishGitHub) == true);
+            if (ResolveModuleRunMode(spec.Module, request, packagePublishingRequested) == ConfigurationGateMode.Publish)
+                return true;
+        }
+
+        if (runPackages &&
+            ((request.PublishNuget ?? spec.Packages?.PublishNuget) == true ||
+             (request.PublishProjectGitHub ?? spec.Packages?.PublishGitHub) == true))
+        {
+            return true;
+        }
+
+        return runTools && spec.Tools is not null &&
+               (request.PublishToolGitHub ?? spec.Tools.GitHub.Publish);
+    }
+
+    internal static bool ShouldCaptureVirusTotalModuleArtifactProvenance(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        bool runModule,
+        bool publishVirusTotalMonitor)
+    {
+        if (!publishVirusTotalMonitor ||
+            !runModule ||
+            spec.Module is null ||
+            spec.VirusTotal is not { Enabled: true } options ||
+            !(options.ArtifactKinds ?? Array.Empty<VirusTotalArtifactKind>())
+                .Contains(VirusTotalArtifactKind.PowerShellModule))
+        {
+            return false;
+        }
+
+        var packagePublishingRequested =
+            !request.ModuleOnly &&
+            ((request.PublishNuget ?? spec.Packages?.PublishNuget) == true ||
+             (request.PublishProjectGitHub ?? spec.Packages?.PublishGitHub) == true);
+        return ResolveModuleRunMode(spec.Module, request, packagePublishingRequested) == ConfigurationGateMode.Publish;
+    }
+
     private static void ValidateVirusTotalConfiguration(PowerForgeVirusTotalOptions? options)
     {
         if (options is not null)
@@ -122,7 +186,9 @@ internal sealed partial class PowerForgeReleaseService
             }
             request.Progress?.PhaseCompleted(
                 PowerForgeReleaseProgressPhase.VirusTotal,
-                $"Registered and hash-verified {publishResult.Artifacts.Length} artifact(s); Monitor analysis remains asynchronous");
+                options.VerifySha256
+                    ? $"Registered and hash-verified {publishResult.Artifacts.Length} artifact(s); Monitor analysis remains asynchronous"
+                    : $"Registered {publishResult.Artifacts.Length} artifact(s); Monitor analysis remains asynchronous");
             return true;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)

@@ -147,7 +147,16 @@ internal static class VirusTotalReleaseArtifactSelector
 
     private static bool TryClassify(PowerForgeReleaseAssetEntry entry, out VirusTotalArtifactKind kind)
     {
-        var extension = Path.GetExtension(FirstNonEmpty(entry.StagedPath, entry.Path) ?? string.Empty);
+        var sourcePath = FirstNonEmpty(entry.StagedPath, entry.Path) ?? string.Empty;
+        var fileName = Path.GetFileName(sourcePath);
+        var extension = Path.GetExtension(sourcePath);
+        if (fileName.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".snupkg", StringComparison.OrdinalIgnoreCase))
+        {
+            kind = default;
+            return false;
+        }
+
         if (entry.Category == PowerForgeReleaseAssetCategory.Module &&
             extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
         {

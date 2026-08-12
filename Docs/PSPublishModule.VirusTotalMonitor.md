@@ -36,7 +36,7 @@ Configure exactly one API-key source:
 - `ApiKeyFilePath` reads a secret file at publish time.
 - `ApiKey` accepts an inline value for temporary use, but should not be committed.
 
-Planning and configuration validation do not read the secret or upload files. Secret resolution happens only when an actual release reaches the VirusTotal publishing phase.
+Planning, configuration validation, build/checkpoint runs, and explicit Apple status, doctor, or cleanup actions do not read the secret or upload files. Secret resolution happens only when an actual release reaches the VirusTotal publishing phase.
 
 ## Select eligible artifacts
 

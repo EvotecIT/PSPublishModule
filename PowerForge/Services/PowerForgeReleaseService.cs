@@ -281,10 +281,6 @@ internal sealed partial class PowerForgeReleaseService
         var explicitAppleAction = request.AppleAction != PowerForgeAppleReleaseAction.Configured;
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
         ValidateVirusTotalConfiguration(spec.VirusTotal);
-        var virusTotalApiKey = ResolveVirusTotalApiKeyForExecution(
-            spec.VirusTotal,
-            configDirectory,
-            request.PlanOnly || request.ValidateOnly);
         var selectedToolOutputs = ResolveSelectedToolOutputs(request);
         var selectedTargets = NormalizeStrings(request.Targets);
         var runModule = !explicitAppleAction &&
@@ -383,6 +379,24 @@ internal sealed partial class PowerForgeReleaseService
         if (willRunTools)
             ApplyToolRequestOverrides(spec.Tools!, request, configurationOverride);
 
+        var publishVirusTotalMonitor = ShouldPublishVirusTotalMonitor(
+            spec,
+            request,
+            explicitAppleAction,
+            runModule,
+            runPackages,
+            willRunTools,
+            publishUnifiedGitHub);
+        var virusTotalApiKey = ResolveVirusTotalApiKeyForExecution(
+            spec.VirusTotal,
+            configDirectory,
+            planOrValidation: !publishVirusTotalMonitor);
+        var captureModuleArtifactProvenance = ShouldCaptureVirusTotalModuleArtifactProvenance(
+            spec,
+            request,
+            runModule,
+            publishVirusTotalMonitor);
+
         if (!runModule && !runPackages && !runTools && !runAppleApps && !runWorkspaceValidation)
         {
             return new PowerForgeReleaseResult
@@ -472,7 +486,7 @@ internal sealed partial class PowerForgeReleaseService
                 publishUnifiedGitHub);
             result.ModulePlan = module.Plan;
             result.ModuleAssets = module.ArtifactPaths;
-            if (!request.PlanOnly && !request.ValidateOnly)
+            if (captureModuleArtifactProvenance)
                 moduleArtifactBaseline = CaptureModuleArtifactBaseline(result.ModuleAssets);
             var deferModulePublishing = ShouldDeferModulePublishing(
                 module.Request,
@@ -522,9 +536,12 @@ internal sealed partial class PowerForgeReleaseService
                     result.ModulePlan?.PreReleaseTag);
                 if (result.ModulePlan is not null)
                     result.ModulePlan.ArtifactPaths = result.ModuleAssets;
-                result.ModuleProducedAssets = ResolveProducedModuleArtifacts(
-                    result.ModuleAssets,
-                    moduleArtifactBaseline);
+                if (captureModuleArtifactProvenance)
+                {
+                    result.ModuleProducedAssets = ResolveProducedModuleArtifacts(
+                        result.ModuleAssets,
+                        moduleArtifactBaseline);
+                }
 
                 if (result.ModulePlan?.IncludesProjectPackages == true &&
                     module.Request.ConfigPath is not null)
@@ -878,9 +895,12 @@ internal sealed partial class PowerForgeReleaseService
                 return result;
             }
 
-            result.ModuleProducedAssets = ResolveProducedModuleArtifacts(
-                result.ModuleAssets,
-                moduleArtifactBaseline);
+            if (captureModuleArtifactProvenance)
+            {
+                result.ModuleProducedAssets = ResolveProducedModuleArtifacts(
+                    result.ModuleAssets,
+                    moduleArtifactBaseline);
+            }
 
             request.Progress?.PhaseCompleted(
                 PowerForgeReleaseProgressPhase.Module,
@@ -921,6 +941,7 @@ internal sealed partial class PowerForgeReleaseService
             }
             SubmitWingetOutputs(spec, request, configDirectory, result);
             if (result.Success &&
+                publishVirusTotalMonitor &&
                 !TryPublishVirusTotalMonitor(spec, request, configDirectory, result, sharedReleaseVersion, virusTotalApiKey))
             {
                 return result;
@@ -4690,7 +4711,7 @@ internal sealed partial class PowerForgeReleaseService
 
     private static IEnumerable<PowerForgeReleaseAssetEntry> CreatePackageAssetEntries(DotNetRepositoryProjectResult project)
     {
-        foreach (var package in project.Packages.Concat(project.SymbolPackages).Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
+        foreach (var package in project.Packages.Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
         {
             yield return new PowerForgeReleaseAssetEntry
             {
@@ -4701,6 +4722,20 @@ internal sealed partial class PowerForgeReleaseService
                 PackageId = project.PackageId,
                 Version = project.NewVersion,
                 IsFinalPackageOutput = true
+            };
+        }
+
+        foreach (var symbolPackage in project.SymbolPackages.Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
+        {
+            yield return new PowerForgeReleaseAssetEntry
+            {
+                Path = symbolPackage,
+                Category = PowerForgeReleaseAssetCategory.Package,
+                Source = "Packages",
+                Target = project.ProjectName,
+                PackageId = project.PackageId,
+                Version = project.NewVersion,
+                IsFinalPackageOutput = false
             };
         }
 

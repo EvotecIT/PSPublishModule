@@ -62,6 +62,19 @@ internal sealed class VirusTotalMonitorPublisher
                 await WriteCheckpointAsync(request, receipts, success: false, errorMessage: null, CancellationToken.None)
                     .ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
+                if (request.VerifySha256 &&
+                    response.VerificationStatus != VirusTotalMonitorVerificationStatus.Verified)
+                {
+                    return await WriteCheckpointAsync(
+                            request,
+                            receipts,
+                            success: false,
+                            errorMessage:
+                                $"VirusTotal Monitor hash verification did not complete for '{artifact.DestinationPath}' " +
+                                $"(status: {response.VerificationStatus}).",
+                            CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
