@@ -169,11 +169,7 @@ internal sealed partial class PowerForgeReleaseService
             : Path.Combine(plan.ProjectRoot, storedPath));
         var exportRoot = Path.GetFullPath(app.ExportPath)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var comparison = Path.DirectorySeparatorChar == '\\'
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        if (!artifactPath.Equals(exportRoot, comparison) &&
-            !artifactPath.StartsWith(exportRoot + Path.DirectorySeparatorChar, comparison))
+        if (!AppleReleaseArtifactService.IsWithinRoot(artifactPath, exportRoot))
         {
             throw new InvalidOperationException(
                 $"Direct Apple recovery artifact for '{app.Name}' is outside its current export root: {artifactPath}");
@@ -185,13 +181,10 @@ internal sealed partial class PowerForgeReleaseService
 
     private static void EnsurePathHasNoLinkedTraversal(string projectRoot, string path, string name)
     {
-        var comparison = Path.DirectorySeparatorChar == '\\'
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
         var root = Path.GetFullPath(projectRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var current = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (!current.Equals(root, comparison) &&
-            !current.StartsWith(root + Path.DirectorySeparatorChar, comparison))
+        var comparison = GetAppleOutputPathComparison(current, root);
+        if (!AppleReleaseArtifactService.IsWithinRoot(current, root))
             throw new InvalidOperationException($"{name} is outside AppleApps.ProjectRoot: {current}");
 
         while (true)

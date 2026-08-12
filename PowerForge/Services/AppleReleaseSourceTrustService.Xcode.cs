@@ -33,6 +33,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         "SYSTEM_HEADER_SEARCH_PATHS",
         "MTL_HEADER_SEARCH_PATHS",
         "FRAMEWORK_SEARCH_PATHS",
+        "IBC_PLUGIN_SEARCH_PATHS",
         "SYSTEM_FRAMEWORK_SEARCH_PATHS",
         "LIBRARY_SEARCH_PATHS",
         "SWIFT_INCLUDE_PATHS",

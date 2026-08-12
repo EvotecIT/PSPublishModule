@@ -140,7 +140,8 @@ internal sealed class AppleReleaseArtifactService
         return roots;
     }
 
-    private static bool IsWithinRoot(string path, string root)
+    /// <summary>Checks path containment using the owning volumes' actual case semantics.</summary>
+    internal static bool IsWithinRoot(string path, string root)
     {
         var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
