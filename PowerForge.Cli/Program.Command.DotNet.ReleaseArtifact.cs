@@ -1,0 +1,102 @@
+using PowerForge;
+using PowerForge.Cli;
+
+internal static partial class Program
+{
+    private static int CommandDotNetReleaseArtifact(string[] args, CliOptions cli, ILogger logger)
+    {
+        if (args.Length == 0 || !args[0].Equals("verify", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine(DotNetReleaseArtifactVerifyUsage);
+            return 2;
+        }
+
+        var commandArgs = args.Skip(1).ToArray();
+        var outputJson = IsJsonOutput(commandArgs);
+        var projectRoot = TryGetOptionValue(commandArgs, "--project-root");
+        var manifestPath = TryGetOptionValue(commandArgs, "--manifest");
+        var checksumsPath = TryGetOptionValue(commandArgs, "--checksums");
+        var configurationPath = TryGetOptionValue(commandArgs, "--config");
+        var installerId = TryGetOptionValue(commandArgs, "--installer");
+        var sourceRevision = TryGetOptionValue(commandArgs, "--source-revision");
+        if (string.IsNullOrWhiteSpace(projectRoot) ||
+            string.IsNullOrWhiteSpace(manifestPath) ||
+            string.IsNullOrWhiteSpace(checksumsPath) ||
+            string.IsNullOrWhiteSpace(configurationPath) ||
+            string.IsNullOrWhiteSpace(installerId) ||
+            string.IsNullOrWhiteSpace(sourceRevision))
+        {
+            if (outputJson)
+            {
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "dotnet.release-artifact.verify",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = "Project root, manifest, checksums, config, installer, and source revision are required."
+                });
+            }
+            else
+            {
+                Console.WriteLine(DotNetReleaseArtifactVerifyUsage);
+            }
+
+            return 2;
+        }
+
+        try
+        {
+            DotNetPublishReleaseArtifact result = new DotNetPublishReleaseArtifactVerifier().Verify(
+                new DotNetPublishReleaseArtifactVerificationRequest
+                {
+                    ProjectRoot = projectRoot,
+                    ManifestPath = manifestPath,
+                    ChecksumsPath = checksumsPath,
+                    ConfigurationPath = configurationPath,
+                    InstallerId = installerId,
+                    ExpectedSourceRevision = sourceRevision
+                });
+            if (outputJson)
+            {
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "dotnet.release-artifact.verify",
+                    Success = true,
+                    ExitCode = 0,
+                    Result = CliJson.SerializeToElement(result, CliJson.Context.DotNetPublishReleaseArtifact)
+                });
+            }
+            else
+            {
+                logger.Success($"Verified {result.InstallerId} {result.Version}: {result.ArtifactPath}");
+                logger.Info($"SHA-256: {result.Sha256}");
+                logger.Info($"Source: {result.SourceRevision}");
+                logger.Info($"Signer: {result.SignerSubject} ({result.SignerThumbprint})");
+            }
+
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            if (outputJson)
+            {
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "dotnet.release-artifact.verify",
+                    Success = false,
+                    ExitCode = 1,
+                    Error = ex.Message
+                });
+            }
+            else
+            {
+                logger.Error(ex.Message);
+            }
+
+            return 1;
+        }
+    }
+}

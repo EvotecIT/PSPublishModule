@@ -13,6 +13,8 @@ internal static partial class Program
         "Usage: powerforge dotnet bundle-postprocess [--config <DotNetPublish.json>] --bundle <Id> --bundle-root <path> [--project-root <path>] [--target <Name>] [--rid <Rid>] [--framework <tfm>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--configuration <Release|Debug>] [--zip-path <path>] [--source-output <path>] [--delete-pattern <glob>] [--skip-archive] [--skip-metadata] [--token <name=value>] [--plan] [--output json]";
     private const string DotNetScaffoldUsage =
         "Usage: powerforge dotnet scaffold [--project-root <path>] [--project <App.csproj>] [--target <Name>] [--framework <tfm>] [--rid <Rid[,Rid...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>[,...]] [--configuration <Release|Debug>] [--out <powerforge.dotnetpublish.json>] [--overwrite] [--no-schema] [--output json]";
+    private const string DotNetReleaseArtifactVerifyUsage =
+        "Usage: powerforge dotnet release-artifact verify --project-root <path> --manifest <manifest.json> --checksums <SHA256SUMS.txt> --config <powerforge.dotnetpublish.json> --installer <id> --source-revision <sha> [--output json]";
 
     private static int CommandDotNet(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -22,12 +24,15 @@ internal static partial class Program
             Console.WriteLine(DotNetPublishUsage);
             Console.WriteLine(DotNetBundlePostProcessUsage);
             Console.WriteLine(DotNetScaffoldUsage);
+            Console.WriteLine(DotNetReleaseArtifactVerifyUsage);
             return 2;
         }
 
         var sub = argv[0].ToLowerInvariant();
         switch (sub)
         {
+            case "release-artifact":
+                return CommandDotNetReleaseArtifact(argv.Skip(1).ToArray(), cli, logger);
             case "publish":
             {
                 var subArgs = argv.Skip(1).ToArray();
