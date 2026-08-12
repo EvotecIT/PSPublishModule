@@ -42,8 +42,8 @@ internal sealed class ProjectVersionBindingService
 
             var bindingPath = RequireValue(binding.Path, "VersionBindings.Path");
             var project = RequireValue(binding.Project, $"Version binding '{bindingPath}' Project");
-            var pattern = RequireValue(binding.Pattern, $"Version binding '{bindingPath}' Pattern");
-            var replacement = RequireValue(binding.Replacement, $"Version binding '{bindingPath}' Replacement");
+            var pattern = RequireUntrimmedText(binding.Pattern, $"Version binding '{bindingPath}' Pattern");
+            var replacement = RequireUntrimmedText(binding.Replacement, $"Version binding '{bindingPath}' Replacement");
             if (replacement.IndexOf("{Version}", StringComparison.Ordinal) < 0)
                 throw new InvalidOperationException($"Version binding '{bindingPath}' Replacement must contain '{{Version}}'.");
             if (Path.IsPathRooted(bindingPath))
@@ -59,7 +59,7 @@ internal sealed class ProjectVersionBindingService
 
             if (!plannedFiles.TryGetValue(fullPath, out var plannedFile))
             {
-                var content = File.ReadAllText(fullPath);
+                var content = RepositoryTextFileTransactionService.ReadText(fullPath);
                 var plannedContent = plannedContentsByPath is not null &&
                     plannedContentsByPath.TryGetValue(fullPath, out var overlaidContent)
                         ? overlaidContent
@@ -147,6 +147,14 @@ internal sealed class ProjectVersionBindingService
             throw new InvalidOperationException($"{label} is required.");
 
         return value!.Trim();
+    }
+
+    private static string RequireUntrimmedText(string? value, string label)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException($"{label} is required.");
+
+        return value!;
     }
 
     private static void EnsureChildPath(

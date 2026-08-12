@@ -19,18 +19,30 @@ internal sealed class RepositoryTextFileUpdate
 internal sealed class RepositoryTextFileTransactionService
 {
     internal delegate void ReplaceFileHandler(string sourcePath, string destinationPath, string backupPath);
+    internal delegate void PrepareFileHandler(string path, string content, Encoding encoding, byte[] preamble);
 
     private readonly ReplaceFileHandler _replaceFile;
+    private readonly PrepareFileHandler _prepareFile;
 
     public RepositoryTextFileTransactionService()
-        : this(static (sourcePath, destinationPath, backupPath) =>
-            File.Replace(sourcePath, destinationPath, backupPath))
+        : this(
+            static (sourcePath, destinationPath, backupPath) =>
+                File.Replace(sourcePath, destinationPath, backupPath),
+            WriteSnapshot)
     {
     }
 
     internal RepositoryTextFileTransactionService(ReplaceFileHandler replaceFile)
+        : this(replaceFile, WriteSnapshot)
+    {
+    }
+
+    internal RepositoryTextFileTransactionService(
+        ReplaceFileHandler replaceFile,
+        PrepareFileHandler prepareFile)
     {
         _replaceFile = replaceFile ?? throw new ArgumentNullException(nameof(replaceFile));
+        _prepareFile = prepareFile ?? throw new ArgumentNullException(nameof(prepareFile));
     }
 
     public void Apply(IReadOnlyList<RepositoryTextFileUpdate> updates)
@@ -69,12 +81,13 @@ internal sealed class RepositoryTextFileTransactionService
                 var suffix = ".powerforge-" + Guid.NewGuid().ToString("N");
                 var temporaryPath = fullPath + suffix + ".tmp";
                 var backupPath = fullPath + suffix + ".bak";
-                WriteSnapshot(temporaryPath, update.UpdatedContent, snapshot);
+                var preparedUpdate = new PreparedUpdate(fullPath, temporaryPath, backupPath);
+                prepared.Add(preparedUpdate);
+                _prepareFile(temporaryPath, update.UpdatedContent, snapshot.Encoding, snapshot.Preamble);
 #if !NET472
                 if (!OperatingSystem.IsWindows())
                     File.SetUnixFileMode(temporaryPath, File.GetUnixFileMode(fullPath));
 #endif
-                prepared.Add(new PreparedUpdate(fullPath, temporaryPath, backupPath));
             }
 
             var replaced = new List<PreparedUpdate>(prepared.Count);
@@ -146,50 +159,62 @@ internal sealed class RepositoryTextFileTransactionService
         }
     }
 
+    internal static string ReadText(string path)
+        => ReadSnapshot(path).Content;
+
     private static TextFileSnapshot ReadSnapshot(string path)
     {
         var bytes = File.ReadAllBytes(path);
-        Encoding encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        Encoding encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
         var preambleLength = 0;
 
         if (StartsWith(bytes, new byte[] { 0x00, 0x00, 0xFE, 0xFF }))
         {
-            encoding = new UTF32Encoding(bigEndian: true, byteOrderMark: true);
+            encoding = new UTF32Encoding(bigEndian: true, byteOrderMark: true, throwOnInvalidCharacters: true);
             preambleLength = 4;
         }
         else if (StartsWith(bytes, new byte[] { 0xFF, 0xFE, 0x00, 0x00 }))
         {
-            encoding = new UTF32Encoding(bigEndian: false, byteOrderMark: true);
+            encoding = new UTF32Encoding(bigEndian: false, byteOrderMark: true, throwOnInvalidCharacters: true);
             preambleLength = 4;
         }
         else if (StartsWith(bytes, new byte[] { 0xEF, 0xBB, 0xBF }))
         {
-            encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+            encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true, throwOnInvalidBytes: true);
             preambleLength = 3;
         }
         else if (StartsWith(bytes, new byte[] { 0xFE, 0xFF }))
         {
-            encoding = new UnicodeEncoding(bigEndian: true, byteOrderMark: true);
+            encoding = new UnicodeEncoding(bigEndian: true, byteOrderMark: true, throwOnInvalidBytes: true);
             preambleLength = 2;
         }
         else if (StartsWith(bytes, new byte[] { 0xFF, 0xFE }))
         {
-            encoding = new UnicodeEncoding(bigEndian: false, byteOrderMark: true);
+            encoding = new UnicodeEncoding(bigEndian: false, byteOrderMark: true, throwOnInvalidBytes: true);
             preambleLength = 2;
         }
 
-        return new TextFileSnapshot(
-            encoding.GetString(bytes, preambleLength, bytes.Length - preambleLength),
-            encoding,
-            preambleLength == 0 ? Array.Empty<byte>() : encoding.GetPreamble());
+        try
+        {
+            return new TextFileSnapshot(
+                encoding.GetString(bytes, preambleLength, bytes.Length - preambleLength),
+                encoding,
+                preambleLength == 0 ? Array.Empty<byte>() : encoding.GetPreamble());
+        }
+        catch (DecoderFallbackException ex)
+        {
+            throw new InvalidOperationException(
+                $"Release text file '{path}' is not valid UTF-8 or BOM-marked UTF-16/UTF-32.",
+                ex);
+        }
     }
 
-    private static void WriteSnapshot(string path, string content, TextFileSnapshot snapshot)
+    private static void WriteSnapshot(string path, string content, Encoding encoding, byte[] preamble)
     {
-        var contentBytes = snapshot.Encoding.GetBytes(content);
-        var bytes = new byte[snapshot.Preamble.Length + contentBytes.Length];
-        Buffer.BlockCopy(snapshot.Preamble, 0, bytes, 0, snapshot.Preamble.Length);
-        Buffer.BlockCopy(contentBytes, 0, bytes, snapshot.Preamble.Length, contentBytes.Length);
+        var contentBytes = encoding.GetBytes(content);
+        var bytes = new byte[preamble.Length + contentBytes.Length];
+        Buffer.BlockCopy(preamble, 0, bytes, 0, preamble.Length);
+        Buffer.BlockCopy(contentBytes, 0, bytes, preamble.Length, contentBytes.Length);
         File.WriteAllBytes(path, bytes);
     }
 

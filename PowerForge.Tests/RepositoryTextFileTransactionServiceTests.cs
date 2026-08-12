@@ -155,6 +155,36 @@ public sealed class RepositoryTextFileTransactionServiceTests
         }
     }
 
+    [Fact]
+    public void Apply_cleans_partial_temporary_file_when_preparation_fails()
+    {
+        var root = CreateTemporaryDirectory();
+
+        try
+        {
+            var path = WriteFile(root, "version.txt", "old");
+            var service = new RepositoryTextFileTransactionService(
+                static (source, destination, backup) => File.Replace(source, destination, backup),
+                static (temporaryPath, _, _, _) =>
+                {
+                    File.WriteAllText(temporaryPath, "partial");
+                    throw new IOException("Injected preparation failure.");
+                });
+
+            Assert.Throws<IOException>(() => service.Apply(new[]
+            {
+                new RepositoryTextFileUpdate(path, "old", "new")
+            }));
+
+            Assert.Equal("old", File.ReadAllText(path));
+            Assert.Empty(Directory.EnumerateFiles(root.FullName, "*.powerforge-*"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static Encoding CreateEncoding(string format)
         => format switch
         {

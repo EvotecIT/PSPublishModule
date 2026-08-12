@@ -98,6 +98,97 @@ public sealed class ProjectVersionBindingServiceTests
     }
 
     [Fact]
+    public void Apply_preserves_whitespace_that_is_part_of_the_pattern()
+    {
+        var root = CreateTemporaryDirectory();
+
+        try
+        {
+            var path = WriteFile(root, "tool.txt", "preferred 1.2.3 version; compact=1.2.3");
+            var binding = CreateBinding("tool.txt");
+            binding.Pattern = @" 1\.2\.3 ";
+
+            new ProjectVersionBindingService(new NullLogger()).Apply(
+                root.FullName,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Example.Tool"] = "1.2.4"
+                },
+                new[] { binding },
+                whatIf: false);
+
+            Assert.Equal("preferred1.2.4version; compact=1.2.3", File.ReadAllText(path));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Apply_preserves_whitespace_in_the_replacement()
+    {
+        var root = CreateTemporaryDirectory();
+
+        try
+        {
+            var path = WriteFile(root, "tool.txt", "Example.Tool@1.2.3");
+            var binding = CreateBinding("tool.txt");
+            binding.Replacement = " {Version} ";
+
+            new ProjectVersionBindingService(new NullLogger()).Apply(
+                root.FullName,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Example.Tool"] = "1.2.4"
+                },
+                new[] { binding },
+                whatIf: false);
+
+            Assert.Equal("Example.Tool@ 1.2.4 ", File.ReadAllText(path));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Apply_rejects_bomless_non_utf8_without_modifying_the_file()
+    {
+        var root = CreateTemporaryDirectory();
+
+        try
+        {
+            var path = Path.Combine(root.FullName, "tool.txt");
+            var originalBytes = new byte[]
+            {
+                (byte)'E', (byte)'x', (byte)'a', (byte)'m', (byte)'p', (byte)'l', (byte)'e', (byte)'.',
+                (byte)'T', (byte)'o', (byte)'o', (byte)'l', (byte)'@', (byte)'1', (byte)'.', (byte)'2',
+                (byte)'.', (byte)'3', (byte)' ', 0xE9
+            };
+            File.WriteAllBytes(path, originalBytes);
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new ProjectVersionBindingService(new NullLogger()).Apply(
+                    root.FullName,
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["Example.Tool"] = "1.2.4"
+                    },
+                    new[] { CreateBinding("tool.txt") },
+                    whatIf: false));
+
+            Assert.Contains("not valid UTF-8", exception.Message, StringComparison.Ordinal);
+            Assert.Equal(originalBytes, File.ReadAllBytes(path));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Apply_rejects_paths_outside_the_repository()
     {
         var root = CreateTemporaryDirectory();
