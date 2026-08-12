@@ -273,6 +273,38 @@ public class WebPipelineRunnerCloudflareTests
     }
 
     [Fact]
+    public void CloudflareHtmlAssetResolver_RejectsNetworkPathDiscoverySource()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() => CloudflareHtmlAssetResolver.Resolve(
+            "https://example.test/",
+            ["//outside.example/apps/converter/"],
+            ["/apps/converter/_framework/*.js"],
+            timeoutMs: 5000));
+
+        Assert.Contains("must resolve under", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("/../admin/")]
+    [InlineData("/safe/../../admin/")]
+    [InlineData("/..\\admin/")]
+    [InlineData("/%2e%2e/admin/")]
+    [InlineData("/%2e%2e%2fadmin/")]
+    [InlineData("/..%5cadmin/")]
+    [InlineData("/%252e%252e/admin/")]
+    [InlineData("/%252e%252e%252fadmin/")]
+    public void CloudflareHtmlAssetResolver_RejectsDeploymentBaseTraversal(string source)
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() => CloudflareHtmlAssetResolver.Resolve(
+            "https://example.test/project/",
+            [source],
+            ["/project/_framework/*.js"],
+            timeoutMs: 5000));
+
+        Assert.Contains("must resolve under", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task RunPipeline_CloudflareVerify_RejectsCachedErrorResponse()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-cloudflare-cached-error-" + Guid.NewGuid().ToString("N"));
@@ -346,8 +378,14 @@ public class WebPipelineRunnerCloudflareTests
         }
     }
 
-    [Fact]
-    public async Task RunPipeline_CloudflareVerify_ResolvesRootDiscoveryPathUnderConfiguredSiteBase()
+    [Theory]
+    [InlineData("/?next=/../admin#section/../next", "/project/?next=/../admin")]
+    [InlineData("./", "/project/")]
+    [InlineData("docs/../", "/project/")]
+    [InlineData("docs/./../", "/project/")]
+    public async Task RunPipeline_CloudflareVerify_ResolvesSafeRelativeDiscoveryPathUnderConfiguredSiteBase(
+        string discoverySource,
+        string expectedRequestPath)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-cloudflare-base-path-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -374,7 +412,7 @@ public class WebPipelineRunnerCloudflareTests
                       "baseUrl": "http://127.0.0.1:{{port}}/project/",
                       "warmupRequests": 0,
                       "allowStatuses": "HIT",
-                      "discoverAssetsFrom": "/",
+                      "discoverAssetsFrom": "{{discoverySource}}",
                       "assetPathPatterns": "{{assetPath}}"
                     }
                   ]
@@ -385,7 +423,7 @@ public class WebPipelineRunnerCloudflareTests
 
             Assert.True(result.Success, result.Steps.Single().Message);
             Assert.NotNull(requestCounter);
-            Assert.Contains(appPath, requestCounter!.Paths);
+            Assert.Contains(expectedRequestPath, requestCounter!.Paths);
             Assert.Contains(assetPath, requestCounter.Paths);
             Assert.DoesNotContain("/", requestCounter.Paths);
         }

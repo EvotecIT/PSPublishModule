@@ -322,6 +322,14 @@ jobs:
         timeout-minutes: 10
         run: .\Build\Build-Project.ps1 -ModuleOnly
 
+      - name: Test cross-platform Cloudflare website contracts
+        shell: pwsh
+        timeout-minutes: 10
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --nologo
+          --filter 'FullyQualifiedName~WebPipelineRunnerCloudflareTests'
+
       - name: Test Linux website deployment state machine
         shell: bash
         run: sudo bash Deployment/Linux/tests/powerforge-site-deploy-fixture.sh

@@ -124,22 +124,74 @@ internal static class CloudflareHtmlAssetResolver
     {
         var candidate = value.Trim();
         Uri? resolved;
-        if (Uri.TryCreate(candidate, UriKind.Absolute, out var absolute))
+        if (candidate.StartsWith("//", StringComparison.Ordinal))
+            throw new InvalidOperationException($"cloudflare: {label} '{value}' must resolve under {siteBase.GetLeftPart(UriPartial.Authority)}.");
+
+        var deploymentRelative = false;
+        // Unix treats leading-slash paths as absolute file URIs. Pipeline paths
+        // are deployment-relative on every platform, so classify them before
+        // asking Uri to detect absolute HTTP(S) URLs.
+        if (!candidate.StartsWith("/", StringComparison.Ordinal) &&
+            Uri.TryCreate(candidate, UriKind.Absolute, out var absolute))
         {
             resolved = absolute;
         }
         else
         {
+            deploymentRelative = true;
             // Pipeline paths are site-relative: a leading slash means the root of
             // the configured deployment, not the hostname root. This matters for
             // GitHub Pages project sites such as https://host/project/.
             var relative = candidate.TrimStart('/');
+            var pathEnd = relative.IndexOfAny(['?', '#']);
+            var relativePath = pathEnd < 0 ? relative : relative[..pathEnd];
+            if (!StaysWithinDeploymentBase(siteBase, relativePath))
+                throw new InvalidOperationException($"cloudflare: {label} '{value}' must resolve under {siteBase.GetLeftPart(UriPartial.Authority)}.");
             resolved = relative.Length == 0 ? siteBase : new Uri(siteBase, relative);
         }
 
-        if (!HasSameOrigin(siteBase, resolved))
+        if (!HasSameOrigin(siteBase, resolved) || (deploymentRelative && !HasDeploymentBasePath(siteBase, resolved)))
             throw new InvalidOperationException($"cloudflare: {label} '{value}' must resolve under {siteBase.GetLeftPart(UriPartial.Authority)}.");
         return resolved;
+    }
+
+    private static bool StaysWithinDeploymentBase(Uri siteBase, string relativePath)
+    {
+        var decoded = relativePath.Replace('\\', '/');
+        while (true)
+        {
+            var unescaped = Uri.UnescapeDataString(decoded);
+            if (string.Equals(decoded, unescaped, StringComparison.Ordinal))
+                break;
+            decoded = unescaped.Replace('\\', '/');
+        }
+
+        var baseDepth = EnsureDirectoryUri(siteBase).AbsolutePath
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Length;
+        var depth = baseDepth;
+        foreach (var segment in decoded.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".")
+                continue;
+            if (segment == "..")
+            {
+                if (depth == baseDepth)
+                    return false;
+                depth--;
+                continue;
+            }
+
+            depth++;
+        }
+
+        return true;
+    }
+
+    private static bool HasDeploymentBasePath(Uri siteBase, Uri candidate)
+    {
+        var basePath = EnsureDirectoryUri(siteBase).AbsolutePath;
+        return basePath == "/" || candidate.AbsolutePath.StartsWith(basePath, StringComparison.Ordinal);
     }
 
     private static Uri EnsureDirectoryUri(Uri value)
