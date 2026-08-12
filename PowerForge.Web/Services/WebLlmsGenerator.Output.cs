@@ -57,8 +57,11 @@ public static partial class WebLlmsGenerator
             lines.Add("```");
             lines.Add(string.Empty);
         }
-        lines.Add("## Machine-friendly API data");
-        AppendApiResourceLinks(lines, apiCatalogs);
+        if (apiCatalogs.Count > 0)
+        {
+            lines.Add("## Machine-friendly API data");
+            AppendApiResourceLinks(lines, apiCatalogs);
+        }
         AppendOptionalMarkdown(lines, discoveryContentPath);
         lines.Add(string.Empty);
         lines.Add("Slug rule: lower-case, dots/symbols -> dashes.");
@@ -109,7 +112,7 @@ public static partial class WebLlmsGenerator
         }
         if (apiCatalogs.Count == 1)
             payload["api"] = CreateApiResourcePayload(apiCatalogs[0]);
-        else
+        else if (apiCatalogs.Count > 1)
             payload["apiCatalogs"] = apiCatalogs.Select(catalog => new Dictionary<string, object?>
             {
                 ["name"] = catalog.Name,
@@ -180,9 +183,12 @@ public static partial class WebLlmsGenerator
             lines.AddRange(quickstart.Lines);
             lines.Add("```");
         }
-        lines.Add(string.Empty);
-        lines.Add("## API Resources");
-        AppendApiResourceLinks(lines, apiCatalogs);
+        if (apiCatalogs.Count > 0)
+        {
+            lines.Add(string.Empty);
+            lines.Add("## API Resources");
+            AppendApiResourceLinks(lines, apiCatalogs);
+        }
 
         AppendApiDetails(lines, options, apiCatalogs);
         AppendOptionalMarkdown(lines, options.DiscoveryContentPath);

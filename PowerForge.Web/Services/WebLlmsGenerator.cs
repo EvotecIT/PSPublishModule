@@ -56,6 +56,11 @@ public static partial class WebLlmsGenerator
     public static WebLlmsResult Generate(WebLlmsOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
+        if (!Enum.IsDefined(options.ContentKind))
+            throw new ArgumentOutOfRangeException(
+                nameof(options.ContentKind),
+                options.ContentKind,
+                "Unsupported LLMS content kind. Expected Package or Site.");
 
         var siteRoot = Path.GetFullPath(options.SiteRoot);
         if (!Directory.Exists(siteRoot))
@@ -136,7 +141,11 @@ public static partial class WebLlmsGenerator
         configuredPaths.AddRange(options.ApiIndexPaths.Where(path => !string.IsNullOrWhiteSpace(path)));
 
         if (configuredPaths.Count == 0)
-            configuredPaths.Add(Path.Combine(siteRoot, "api", "index.json"));
+        {
+            var defaultIndexPath = Path.Combine(siteRoot, "api", "index.json");
+            if (options.ContentKind == WebLlmsContentKind.Package || File.Exists(defaultIndexPath))
+                configuredPaths.Add(defaultIndexPath);
+        }
 
         var fullPaths = configuredPaths
             .Select(Path.GetFullPath)
@@ -339,14 +348,25 @@ public static partial class WebLlmsGenerator
 
     private static string InferQuickstartLanguage(string path, string content)
     {
-        var extension = Path.GetExtension(path);
-        if (extension.Equals(".cs", StringComparison.OrdinalIgnoreCase)) return "csharp";
-        if (extension.Equals(".sh", StringComparison.OrdinalIgnoreCase)) return "shell";
-        if (extension.Equals(".txt", StringComparison.OrdinalIgnoreCase) &&
-            (content.Contains("Import-Module", StringComparison.OrdinalIgnoreCase) ||
-             content.Contains("Get-Command", StringComparison.OrdinalIgnoreCase)))
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        if (extension is ".cs" or ".csx") return "csharp";
+        if (extension is ".ps1" or ".psm1" or ".psd1") return "powershell";
+        if (extension is ".sh" or ".bash" or ".zsh") return "shell";
+
+        if (content.Contains("Import-Module", StringComparison.OrdinalIgnoreCase) ||
+            content.Contains("Get-Command", StringComparison.OrdinalIgnoreCase) ||
+            Regex.IsMatch(content, @"(?m)^\s*(Get|Set|New|Add|Remove|Invoke|Connect|Disconnect|Start|Stop|Test)-[A-Za-z0-9]+"))
             return "powershell";
-        return "shell";
+
+        if (Regex.IsMatch(content, @"(?m)^\s*(using\s+[A-Za-z_][A-Za-z0-9_.]*\s*;|namespace\s+[A-Za-z_]|(?:var|await|new)\s+.+;)"))
+            return "csharp";
+
+        if (content.StartsWith("#!", StringComparison.Ordinal) ||
+            Regex.IsMatch(content, @"(?m)^\s*\S+\s+--?[A-Za-z0-9]"))
+            return "shell";
+
+        // Preserve the historical non-PowerShell fallback for ambiguous curated snippets.
+        return "csharp";
     }
 
     private static string CreateInstallCommand(string packageId, bool isPowerShellModule, bool isDotNetTool)

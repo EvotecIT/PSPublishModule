@@ -36,18 +36,78 @@ public class WebLlmsGeneratorTests
             Assert.Contains("search --query example", llmsTxt, StringComparison.Ordinal);
             Assert.DoesNotContain("## Metadata", llmsTxt, StringComparison.Ordinal);
             Assert.DoesNotContain("## Install", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("## Machine-friendly API data", llmsTxt, StringComparison.Ordinal);
             Assert.DoesNotContain("example.invalid", llmsTxt, StringComparison.Ordinal);
 
             var llmsFull = File.ReadAllText(result.LlmsFullPath);
             Assert.DoesNotContain("## Installation", llmsFull, StringComparison.Ordinal);
             Assert.DoesNotContain("- Package:", llmsFull, StringComparison.Ordinal);
             Assert.DoesNotContain("- Version:", llmsFull, StringComparison.Ordinal);
+            Assert.DoesNotContain("## API Resources", llmsFull, StringComparison.Ordinal);
 
             var llmsJson = File.ReadAllText(result.LlmsJsonPath);
             Assert.DoesNotContain("\"package\"", llmsJson, StringComparison.Ordinal);
             Assert.DoesNotContain("\"version\"", llmsJson, StringComparison.Ordinal);
             Assert.DoesNotContain("\"install\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"api\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"apiCatalogs\"", llmsJson, StringComparison.Ordinal);
             Assert.Contains("\"quickstartLanguage\": \"shell\"", llmsJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RejectsUndefinedContentKind()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-content-kind-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var exception = Assert.Throws<ArgumentOutOfRangeException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = (WebLlmsContentKind)42
+            }));
+
+            Assert.Equal("ContentKind", exception.ParamName);
+            Assert.Contains("Expected Package or Site", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RecognizesCSharpInTextQuickstart()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-csharp-text-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var quickstartPath = Path.Combine(root, "quickstart.txt");
+            File.WriteAllText(quickstartPath,
+                """
+                using Example.Product;
+
+                var client = new ExampleClient();
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Product",
+                PackageId = "Example.Product",
+                QuickstartPath = quickstartPath
+            });
+
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.Contains("\"quickstartLanguage\": \"csharp\"", llmsJson, StringComparison.Ordinal);
         }
         finally
         {
