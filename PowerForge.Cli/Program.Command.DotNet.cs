@@ -14,7 +14,7 @@ internal static partial class Program
     private const string DotNetScaffoldUsage =
         "Usage: powerforge dotnet scaffold [--project-root <path>] [--project <App.csproj>] [--target <Name>] [--framework <tfm>] [--rid <Rid[,Rid...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>[,...]] [--configuration <Release|Debug>] [--out <powerforge.dotnetpublish.json>] [--overwrite] [--no-schema] [--output json]";
     private const string DotNetReleaseArtifactVerifyUsage =
-        "Usage: powerforge dotnet release-artifact verify --project-root <path> --manifest <manifest.json> --checksums <SHA256SUMS.txt> --config <powerforge.dotnetpublish.json> --installer <id> --source-revision <sha> [--output json]";
+        "Usage: powerforge dotnet release-artifact verify --project-root <path> --manifest <manifest.json> --checksums <SHA256SUMS.txt> --config <powerforge.dotnetpublish.json> --installer <id> --source-revision <sha> [--target <name>] [--rid <rid>] [--framework <tfm>] [--style <style>] [--output json]";
 
     private static int CommandDotNet(string[] filteredArgs, CliOptions cli, ILogger logger)
     {

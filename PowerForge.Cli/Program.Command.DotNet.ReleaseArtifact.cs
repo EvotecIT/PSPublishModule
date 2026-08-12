@@ -19,6 +19,10 @@ internal static partial class Program
         var configurationPath = TryGetOptionValue(commandArgs, "--config");
         var installerId = TryGetOptionValue(commandArgs, "--installer");
         var sourceRevision = TryGetOptionValue(commandArgs, "--source-revision");
+        var target = TryGetOptionValue(commandArgs, "--target");
+        var runtime = TryGetOptionValue(commandArgs, "--rid");
+        var framework = TryGetOptionValue(commandArgs, "--framework");
+        var style = TryGetOptionValue(commandArgs, "--style");
         if (string.IsNullOrWhiteSpace(projectRoot) ||
             string.IsNullOrWhiteSpace(manifestPath) ||
             string.IsNullOrWhiteSpace(checksumsPath) ||
@@ -55,7 +59,11 @@ internal static partial class Program
                     ChecksumsPath = checksumsPath,
                     ConfigurationPath = configurationPath,
                     InstallerId = installerId,
-                    ExpectedSourceRevision = sourceRevision
+                    ExpectedSourceRevision = sourceRevision,
+                    Target = target,
+                    Runtime = runtime,
+                    Framework = framework,
+                    Style = style
                 });
             if (outputJson)
             {

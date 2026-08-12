@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PowerForge;
 
@@ -10,6 +11,7 @@ namespace PowerForge;
 /// </summary>
 public sealed class DotNetPublishReleaseArtifactVerifier
 {
+    private static readonly JsonSerializerOptions ConfigurationJsonOptions = CreateConfigurationJsonOptions();
     private readonly Func<string, DotNetPublishMsiPackageMetadata> _readPackage;
     private readonly Func<string, AuthenticodeResult> _verifyAuthenticode;
 
@@ -40,15 +42,30 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         var configurationPath = RequireFile(request.ConfigurationPath, nameof(request.ConfigurationPath));
         var installerId = RequireText(request.InstallerId, nameof(request.InstallerId));
 
-        using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        var manifestRelativePath = GetRelativePath(projectRoot, manifestPath).Replace('\\', '/');
+        var manifestDigest = ComputeSha256(manifestPath);
+        if (!ChecksumContains(checksumsPath, manifestRelativePath, manifestDigest))
+            throw Invalid("PowerForge manifest SHA-256 does not match the checksum manifest.");
+
+        using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath), new JsonDocumentOptions
+        {
+            AllowTrailingCommas = true,
+            CommentHandling = JsonCommentHandling.Skip
+        });
         if (manifest.RootElement.ValueKind != JsonValueKind.Array)
             throw Invalid("PowerForge manifest must contain a JSON array.");
 
         var entries = manifest.RootElement.EnumerateArray()
             .Where(entry => Is(entry, "Category", "Installer") && Is(entry, "InstallerId", installerId))
             .ToArray();
+        entries = FilterEntries(entries, "Target", request.Target);
+        entries = FilterEntries(entries, "Runtime", request.Runtime);
+        entries = FilterEntries(entries, "Framework", request.Framework);
+        entries = FilterEntries(entries, "Style", request.Style);
         if (entries.Length != 1)
-            throw Invalid($"PowerForge manifest must contain exactly one '{installerId}' installer.");
+            throw Invalid(
+                $"PowerForge manifest selectors must identify exactly one '{installerId}' installer; " +
+                "specify target, RID, framework, and style for matrix builds.");
 
         var entry = entries[0];
         if (ReadInt32(entry, "SignedFiles") < 1)
@@ -117,45 +134,41 @@ public sealed class DotNetPublishReleaseArtifactVerifier
 
     private static ExpectedInstaller ReadExpectedInstaller(string configurationPath, string installerId)
     {
-        using var configuration = JsonDocument.Parse(File.ReadAllText(configurationPath));
-        var installers = ReadArray(configuration.RootElement, "Installers")
-            .Where(installer => Is(installer, "Id", installerId))
+        var configuration = JsonSerializer.Deserialize<DotNetPublishSpec>(
+                File.ReadAllText(configurationPath),
+                ConfigurationJsonOptions)
+            ?? throw Invalid("PowerForge configuration could not be deserialized.");
+        configuration = DotNetPublishPipelineRunner.ResolveProfile(configuration);
+        var installers = (configuration.Installers ?? Array.Empty<DotNetPublishInstaller>())
+            .Where(installer => string.Equals(installer.Id, installerId, StringComparison.OrdinalIgnoreCase))
             .ToArray();
         if (installers.Length != 1)
             throw Invalid($"PowerForge configuration must define exactly one '{installerId}' installer.");
 
         var installer = installers[0];
-        if (!TryGet(installer, "Authoring", out var authoring) ||
-            !TryGet(authoring, "Product", out var product))
-        {
-            throw Invalid("PowerForge installer authoring identity is required for release verification.");
-        }
-
-        JsonElement sign;
-        if (TryGet(installer, "Sign", out sign))
-        {
-            // Inline signing policy is already resolved.
-        }
-        else
-        {
-            var profileName = ReadString(installer, "SignProfile");
-            if (string.IsNullOrWhiteSpace(profileName) ||
-                !TryGet(configuration.RootElement, "SigningProfiles", out var profiles) ||
-                profiles.ValueKind != JsonValueKind.Object ||
-                !TryGet(profiles, profileName, out sign))
-            {
-                throw Invalid("PowerForge installer signing configuration is required for release verification.");
-            }
-        }
-
-        if (!ReadBoolean(sign, "Enabled"))
+        var sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+            configuration.SigningProfiles,
+            installer.SignProfile,
+            installer.Sign,
+            installer.SignOverrides,
+            $"Installer '{installerId}'");
+        if (sign is null || !sign.Enabled)
             throw Invalid("PowerForge installer signing must be enabled for a release artifact.");
 
+        if (installer.Authoring is null &&
+            string.IsNullOrWhiteSpace(installer.InstallerProjectId) &&
+            string.IsNullOrWhiteSpace(installer.InstallerProjectPath))
+        {
+            throw Invalid("PowerForge installer authoring or a hand-authored installer project is required for release verification.");
+        }
+
+        var product = installer.Authoring?.Product;
+
         return new ExpectedInstaller(
-            RequireText(ReadString(product, "Name"), "Product.Name"),
-            RequireText(ReadString(product, "Manufacturer"), "Product.Manufacturer"),
-            NormalizeGuid(ReadString(product, "UpgradeCode"), "Product.UpgradeCode"),
-            NormalizeThumbprint(ReadString(sign, "Thumbprint")));
+            product is null ? null : RequireText(product.Name, "Product.Name"),
+            product is null ? null : RequireText(product.Manufacturer, "Product.Manufacturer"),
+            product is null ? null : NormalizeGuid(product.UpgradeCode, "Product.UpgradeCode"),
+            NormalizeThumbprint(sign.Thumbprint));
     }
 
     private static void ValidatePackage(
@@ -168,9 +181,12 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         ValidateEqual(ReadString(manifestPackage, "ProductVersion"), actual.ProductVersion, "ProductVersion");
         ValidateEqual(NormalizeGuid(ReadString(manifestPackage, "ProductCode"), "ProductCode"), NormalizeGuid(actual.ProductCode, "ProductCode"), "ProductCode");
         ValidateEqual(NormalizeGuid(ReadString(manifestPackage, "UpgradeCode"), "UpgradeCode"), NormalizeGuid(actual.UpgradeCode, "UpgradeCode"), "UpgradeCode");
-        ValidateEqual(expected.ProductName, actual.ProductName, "configured ProductName");
-        ValidateEqual(expected.Manufacturer, actual.Manufacturer, "configured Manufacturer");
-        ValidateEqual(expected.UpgradeCode, NormalizeGuid(actual.UpgradeCode, "UpgradeCode"), "configured UpgradeCode");
+        if (expected.ProductName is not null)
+            ValidateEqual(expected.ProductName, actual.ProductName, "configured ProductName");
+        if (expected.Manufacturer is not null)
+            ValidateEqual(expected.Manufacturer, actual.Manufacturer, "configured Manufacturer");
+        if (expected.UpgradeCode is not null)
+            ValidateEqual(expected.UpgradeCode, NormalizeGuid(actual.UpgradeCode, "UpgradeCode"), "configured UpgradeCode");
         _ = NormalizeVersion(actual.ProductVersion);
     }
 
@@ -228,6 +244,44 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         }
 
         return false;
+    }
+
+    private static JsonElement[] FilterEntries(JsonElement[] entries, string propertyName, string? selector)
+    {
+        if (string.IsNullOrWhiteSpace(selector))
+            return entries;
+
+        var expected = selector!.Trim();
+        return entries
+            .Where(entry => Is(entry, propertyName, expected))
+            .ToArray();
+    }
+
+    private static string GetRelativePath(string root, string path)
+    {
+#if NET472
+        var basePath = Path.GetFullPath(root)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        var baseUri = new Uri(basePath);
+        var targetUri = new Uri(Path.GetFullPath(path));
+        return Uri.UnescapeDataString(baseUri.MakeRelativeUri(targetUri).ToString())
+            .Replace('/', Path.DirectorySeparatorChar);
+#else
+        return Path.GetRelativePath(root, path);
+#endif
+    }
+
+    private static JsonSerializerOptions CreateConfigurationJsonOptions()
+    {
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true
+        };
+        options.Converters.Add(new JsonStringEnumConverter());
+        return options;
     }
 
     private static string ResolveWithinRoot(string root, string relativePath)
@@ -309,9 +363,6 @@ public sealed class DotNetPublishReleaseArtifactVerifier
     private static int ReadInt32(JsonElement element, string name) =>
         TryGet(element, name, out var value) && value.TryGetInt32(out var result) ? result : 0;
 
-    private static bool ReadBoolean(JsonElement element, string name) =>
-        TryGet(element, name, out var value) && value.ValueKind == JsonValueKind.True;
-
     private static string[] ReadStringArray(JsonElement element, string name) =>
         ReadArray(element, name)
             .Where(value => value.ValueKind == JsonValueKind.String)
@@ -361,7 +412,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
 
     private sealed class ExpectedInstaller
     {
-        internal ExpectedInstaller(string productName, string manufacturer, string upgradeCode, string signerThumbprint)
+        internal ExpectedInstaller(string? productName, string? manufacturer, string? upgradeCode, string signerThumbprint)
         {
             ProductName = productName;
             Manufacturer = manufacturer;
@@ -369,9 +420,9 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             SignerThumbprint = signerThumbprint;
         }
 
-        internal string ProductName { get; }
-        internal string Manufacturer { get; }
-        internal string UpgradeCode { get; }
+        internal string? ProductName { get; }
+        internal string? Manufacturer { get; }
+        internal string? UpgradeCode { get; }
         internal string SignerThumbprint { get; }
     }
 }

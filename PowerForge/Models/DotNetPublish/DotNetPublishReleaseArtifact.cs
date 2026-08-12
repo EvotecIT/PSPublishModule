@@ -20,6 +20,18 @@ public sealed class DotNetPublishReleaseArtifactVerificationRequest
     /// <summary>Installer identifier expected in the manifest and configuration.</summary>
     public string InstallerId { get; set; } = string.Empty;
 
+    /// <summary>Optional publish target selector used to disambiguate matrix installer entries.</summary>
+    public string? Target { get; set; }
+
+    /// <summary>Optional runtime identifier selector used to disambiguate matrix installer entries.</summary>
+    public string? Runtime { get; set; }
+
+    /// <summary>Optional target-framework selector used to disambiguate matrix installer entries.</summary>
+    public string? Framework { get; set; }
+
+    /// <summary>Optional publish-style selector used to disambiguate matrix installer entries.</summary>
+    public string? Style { get; set; }
+
     /// <summary>Source revision expected by the caller, for example the version-tag workflow commit.</summary>
     public string ExpectedSourceRevision { get; set; } = string.Empty;
 }

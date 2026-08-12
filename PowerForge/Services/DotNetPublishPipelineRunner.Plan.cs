@@ -576,7 +576,7 @@ public sealed partial class DotNetPublishPipelineRunner
         };
     }
 
-    private static DotNetPublishSpec ResolveProfile(DotNetPublishSpec spec)
+    internal static DotNetPublishSpec ResolveProfile(DotNetPublishSpec spec)
     {
         var profiles = (spec.Profiles ?? Array.Empty<DotNetPublishProfile>())
             .Where(p => p is not null && !string.IsNullOrWhiteSpace(p.Name))
