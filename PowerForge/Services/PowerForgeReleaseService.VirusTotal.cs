@@ -43,7 +43,8 @@ internal sealed partial class PowerForgeReleaseService
             return true;
         }
 
-        if (spec.Winget is { Enabled: true } winget &&
+        if (runTools &&
+            spec.Winget is { Enabled: true } winget &&
             (request.SubmitWinget ?? (winget.Submit || winget.Submission?.Enabled == true)))
         {
             return true;
@@ -149,19 +150,14 @@ internal sealed partial class PowerForgeReleaseService
 
         try
         {
-            version = ResolveVirusTotalReleaseVersion(result, sharedReleaseVersion);
-            if (string.IsNullOrWhiteSpace(version))
-            {
-                throw new InvalidOperationException(
-                    "VirusTotal Monitor publishing requires the unified release to resolve a version.");
-            }
+            version = ResolveVirusTotalReleaseVersion(result, sharedReleaseVersion) ?? "mixed";
 
             project = ResolveVirusTotalProjectName(spec, options, configDirectory);
             var artifacts = VirusTotalReleaseArtifactSelector.Select(
                 result.ReleaseAssetEntries ?? Array.Empty<PowerForgeReleaseAssetEntry>(),
                 options,
                 project,
-                version!);
+                string.Equals(version, "mixed", StringComparison.Ordinal) ? null : version);
             if (artifacts.Length == 0)
                 return true;
 

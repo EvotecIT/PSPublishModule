@@ -105,7 +105,7 @@ internal static class VirusTotalReleaseArtifactSelector
         IEnumerable<PowerForgeReleaseAssetEntry> entries,
         PowerForgeVirusTotalOptions options,
         string project,
-        string version)
+        string? version)
     {
         if (entries is null)
             throw new ArgumentNullException(nameof(entries));
@@ -113,7 +113,8 @@ internal static class VirusTotalReleaseArtifactSelector
             throw new ArgumentNullException(nameof(options));
 
         ValidatePathSegment(project, nameof(project));
-        ValidatePathSegment(version, nameof(version));
+        if (!string.IsNullOrWhiteSpace(version))
+            ValidatePathSegment(version!, nameof(version));
         var selectedKinds = new HashSet<VirusTotalArtifactKind>(
             options.ArtifactKinds ?? Array.Empty<VirusTotalArtifactKind>());
         var selected = new List<VirusTotalMonitorArtifact>();
@@ -141,12 +142,17 @@ internal static class VirusTotalReleaseArtifactSelector
                 ? fileName
                 : NormalizeRelativePath(entry.RelativeStagePath!);
             var artifactVersion = string.IsNullOrWhiteSpace(entry.Version) ? version : entry.Version!.Trim();
-            ValidatePathSegment(artifactVersion, nameof(entry.Version));
+            if (string.IsNullOrWhiteSpace(artifactVersion))
+            {
+                throw new InvalidOperationException(
+                    $"VirusTotal artifact '{entry.Path}' does not have a resolved release version.");
+            }
+            ValidatePathSegment(artifactVersion!, nameof(entry.Version));
 
             var destinationPath = ApplyTemplate(
                 options.DestinationPathTemplate,
                 project,
-                artifactVersion,
+                artifactVersion!,
                 kind,
                 fileName,
                 relativePath,
@@ -156,7 +162,7 @@ internal static class VirusTotalReleaseArtifactSelector
                 : ApplyTemplate(
                     options.DetailsTemplate!,
                     project,
-                    artifactVersion,
+                    artifactVersion!,
                     kind,
                     fileName,
                     relativePath,

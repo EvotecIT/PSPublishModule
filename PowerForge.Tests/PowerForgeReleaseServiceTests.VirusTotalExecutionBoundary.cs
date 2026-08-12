@@ -180,6 +180,14 @@ public sealed partial class PowerForgeReleaseServiceTests
             runPackages: false,
             runTools: true,
             publishUnifiedGitHub: false));
+        Assert.False(PowerForgeReleaseService.ShouldPublishVirusTotalMonitor(
+            wingetSpec,
+            new PowerForgeReleaseRequest(),
+            explicitAppleAction: false,
+            runModule: false,
+            runPackages: false,
+            runTools: false,
+            publishUnifiedGitHub: false));
 
         Assert.False(PowerForgeReleaseService.ShouldCaptureVirusTotalModuleArtifactProvenance(
             spec,

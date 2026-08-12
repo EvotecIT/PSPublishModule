@@ -241,4 +241,74 @@ public sealed partial class PowerForgeReleaseServiceTests
             TryDelete(root);
         }
     }
+
+    [Fact]
+    public void PublishBuiltReleaseOutputs_MixedVersionPackages_UsesEachArtifactVersion()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var firstPath = Path.Combine(root, "First.1.2.3.nupkg");
+            var secondPath = Path.Combine(root, "Second.4.5.6.nupkg");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(firstPath, "first package");
+            File.WriteAllText(secondPath, "second package");
+            VirusTotalMonitorPublishRequest? captured = null;
+            var service = CreateReleaseService(
+                root,
+                new List<ModuleExecutionSnapshot>(),
+                new PowerForgeToolReleaseResult { Success = true },
+                publishVirusTotalMonitor: (request, _) =>
+                {
+                    captured = request;
+                    return new VirusTotalMonitorPublishResult { Success = true };
+                });
+            var spec = new PowerForgeReleaseSpec
+            {
+                VirusTotal = new PowerForgeVirusTotalOptions
+                {
+                    Enabled = true,
+                    ProjectName = "Example",
+                    ApiKey = "test-key",
+                    ArtifactKinds = [VirusTotalArtifactKind.NuGetPackage]
+                }
+            };
+            var builtResult = new PowerForgeReleaseResult
+            {
+                Success = true,
+                ReleaseAssetEntries =
+                [
+                    new PowerForgeReleaseAssetEntry
+                    {
+                        Path = firstPath,
+                        Category = PowerForgeReleaseAssetCategory.Package,
+                        Version = "1.2.3",
+                        IsFinalPackageOutput = true
+                    },
+                    new PowerForgeReleaseAssetEntry
+                    {
+                        Path = secondPath,
+                        Category = PowerForgeReleaseAssetCategory.Package,
+                        Version = "4.5.6",
+                        IsFinalPackageOutput = true
+                    }
+                ]
+            };
+
+            var result = service.PublishBuiltReleaseOutputs(
+                spec,
+                new PowerForgeReleaseRequest { ConfigPath = releasePath },
+                builtResult);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.NotNull(captured);
+            Assert.Contains(captured!.Artifacts, artifact => artifact.DestinationPath.Contains("/1.2.3/", StringComparison.Ordinal));
+            Assert.Contains(captured.Artifacts, artifact => artifact.DestinationPath.Contains("/4.5.6/", StringComparison.Ordinal));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
 }

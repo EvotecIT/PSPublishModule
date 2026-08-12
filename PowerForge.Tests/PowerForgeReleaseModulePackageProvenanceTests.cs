@@ -124,6 +124,7 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
             {
                 archive.CreateEntry("ExampleModule/ExampleModule.psd1");
                 archive.CreateEntry("ExampleModule/ExampleModule.psm1");
+                archive.CreateEntry("ExampleModule/Sources/Internal.cs");
                 archive.CreateEntry("BundledDependency/BundledDependency.psd1");
                 archive.CreateEntry("BundledDependency/BundledDependency.psm1");
             }

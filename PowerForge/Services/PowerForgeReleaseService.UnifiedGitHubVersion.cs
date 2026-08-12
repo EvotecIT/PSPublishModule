@@ -120,10 +120,6 @@ internal sealed partial class PowerForgeReleaseService
                     name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
                     name.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ||
                     name.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase) ||
-                    name.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
-                    name.EndsWith(".csx", StringComparison.OrdinalIgnoreCase) ||
-                    name.EndsWith(".fs", StringComparison.OrdinalIgnoreCase) ||
-                    name.EndsWith(".vb", StringComparison.OrdinalIgnoreCase) ||
                     name.EndsWith(".props", StringComparison.OrdinalIgnoreCase) ||
                     name.EndsWith(".targets", StringComparison.OrdinalIgnoreCase)))
             {
