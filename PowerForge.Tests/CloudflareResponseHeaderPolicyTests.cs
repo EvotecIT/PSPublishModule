@@ -99,7 +99,7 @@ public sealed class CloudflareResponseHeaderPolicyTests
         var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
             "example.com", "Docs", security, "/project/", readiness);
 
-        Assert.Equal(3, rules.Count);
+        Assert.Equal(4, rules.Count);
         var apiRule = Assert.IsType<JsonObject>(rules.Single(rule =>
             rule!["description"]!.GetValue<string>().EndsWith("discovery API catalog headers", StringComparison.Ordinal)));
         var jsonRule = Assert.IsType<JsonObject>(rules.Single(rule =>
@@ -116,6 +116,16 @@ public sealed class CloudflareResponseHeaderPolicyTests
             apiRule["action_parameters"]!["headers"]!["Content-Type"]!["value"]!.GetValue<string>());
         Assert.Equal("application/json",
             jsonRule["action_parameters"]!["headers"]!["Content-Type"]!["value"]!.GetValue<string>());
+        var linkRule = Assert.IsType<JsonObject>(rules.Single(rule =>
+            rule!["description"]!.GetValue<string>().EndsWith("discovery Link headers", StringComparison.Ordinal)));
+        Assert.Equal(
+            "(http.host eq \"example.com\" and (http.request.uri.path eq \"/project\" or http.request.uri.path eq \"/project/\"))",
+            linkRule["expression"]!.GetValue<string>());
+        var link = linkRule["action_parameters"]!["headers"]!["Link"]!["value"]!.GetValue<string>();
+        Assert.Contains("</project/discovery/catalog.json>; rel=\"api-catalog\"; type=\"application/linkset+json\"", link, StringComparison.Ordinal);
+        Assert.Contains("</project/skills/index.json>; rel=\"describedby\"; type=\"application/json\"", link, StringComparison.Ordinal);
+        Assert.Contains("</project/.well-known/agent-card.json>; rel=\"service-desc\"; type=\"application/json\"", link, StringComparison.Ordinal);
+        Assert.Contains("</project/cards/mcp.json>; rel=\"service-desc\"; type=\"application/json\"", link, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -131,13 +141,16 @@ public sealed class CloudflareResponseHeaderPolicyTests
                 ApiCatalog = new AgentApiCatalogSpec { Enabled = true }
             });
 
-        Assert.Equal(3, rules.Count);
-        foreach (var discoveryRule in rules.Skip(1))
+        Assert.Equal(4, rules.Count);
+        foreach (var discoveryRule in rules.Where(rule =>
+                     !rule!["description"]!.GetValue<string>().EndsWith("discovery Link headers", StringComparison.Ordinal)).Skip(1))
         {
             var discoveryHeaders = discoveryRule!["action_parameters"]!["headers"]!.AsObject();
             Assert.True(discoveryHeaders.ContainsKey("Content-Type"));
             Assert.False(discoveryHeaders.ContainsKey("Access-Control-Allow-Origin"));
         }
+        Assert.Contains(rules, rule =>
+            rule!["description"]!.GetValue<string>().EndsWith("discovery Link headers", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -153,7 +166,7 @@ public sealed class CloudflareResponseHeaderPolicyTests
                 ApiCatalog = new AgentApiCatalogSpec { Enabled = true }
             });
 
-        Assert.Equal(2, rules.Count);
+        Assert.Equal(3, rules.Count);
         var rule = Assert.IsType<JsonObject>(rules.Single(candidate =>
             candidate!["description"]!.GetValue<string>().EndsWith("discovery API catalog headers", StringComparison.Ordinal)));
         var headers = rule["action_parameters"]!["headers"]!.AsObject();
@@ -168,6 +181,7 @@ public sealed class CloudflareResponseHeaderPolicyTests
         var readiness = new AgentReadinessSpec
         {
             Enabled = true,
+            LinkHeaders = false,
             ApiCatalog = new AgentApiCatalogSpec
             {
                 Enabled = true,
@@ -262,7 +276,7 @@ public sealed class CloudflareResponseHeaderPolicyTests
             Assert.NotNull(profile.AgentReadiness?.ApiCatalog);
             Assert.NotNull(profile.AgentReadiness?.AgentSkills);
             Assert.NotNull(profile.AgentReadiness?.AgentsJson);
-            Assert.Equal(3, rules.Count);
+            Assert.Equal(4, rules.Count);
         }
         finally
         {
@@ -555,6 +569,41 @@ public sealed class CloudflareResponseHeaderPolicyTests
         Assert.Contains(rules, rule => rule!["description"]!.GetValue<string>() == "PowerForge [example.com/first/]: First Renamed: security headers");
         Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "first-id");
         Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "second-id");
+    }
+
+    [Fact]
+    public void Apply_ShouldScopePreviousHostFormatRulesByBasePath()
+    {
+        var docsRules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com", "Shared", new AgentSecurityHeadersSpec { Hsts = false }, "/docs/");
+        docsRules[0]!["id"] = "docs-id";
+        docsRules[0]!["description"] = "PowerForge Shared [example.com]: security headers";
+        var appRules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com", "Shared", new AgentSecurityHeadersSpec { Hsts = false }, "/app/");
+        appRules[0]!["id"] = "app-id";
+        appRules[0]!["description"] = "PowerForge Shared [example.com]: security headers";
+        var existingRules = new JsonArray(docsRules[0]!.DeepClone(), appRules[0]!.DeepClone());
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(existingRules)),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+        using var client = NewClient(handler);
+
+        var result = CloudflareResponseHeaderPolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "example.com",
+            "Shared",
+            new AgentSecurityHeadersSpec { Hsts = false },
+            dryRun: false,
+            client,
+            basePath: "/docs/");
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(1, result.PreservedRuleCount);
+        var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
+        Assert.Contains(rules, rule => rule!["description"]!.GetValue<string>() == "PowerForge [example.com/docs/]: Shared: security headers");
+        Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "docs-id");
+        Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "app-id");
     }
 
     [Fact]

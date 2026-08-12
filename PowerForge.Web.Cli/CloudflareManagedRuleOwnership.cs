@@ -32,7 +32,9 @@ internal static class CloudflareManagedRuleOwnership
         var description = rule["description"]?.GetValue<string>() ?? string.Empty;
         var expression = rule["expression"]?.GetValue<string>() ?? string.Empty;
         var previousHostScopedSuffix = $" [{hostname}]:";
-        if (description.StartsWith($"PowerForge {policyName}{previousHostScopedSuffix}", StringComparison.Ordinal))
+        var normalizedBasePath = CloudflareCachePolicyBuilder.NormalizeBasePath(basePath);
+        if (normalizedBasePath == "/" &&
+            description.StartsWith($"PowerForge {policyName}{previousHostScopedSuffix}", StringComparison.Ordinal))
             return true;
 
         var hasPreviousDescription = description.StartsWith("PowerForge ", StringComparison.Ordinal) &&

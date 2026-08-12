@@ -53,6 +53,27 @@ internal static class CloudflareResponseHeaderPolicyBuilder
             });
         }
 
+        var linkHeader = BuildDiscoveryLinkHeader(agentReadiness, basePath);
+        if (!string.IsNullOrWhiteSpace(linkHeader))
+        {
+            if (linkHeader.Length > MaxHeaderValueLength)
+                throw new ArgumentException($"Cloudflare response header 'Link' exceeds {MaxHeaderValueLength} characters.");
+            rules.Add(new JsonObject
+            {
+                ["description"] = $"{descriptionPrefix} discovery Link headers",
+                ["expression"] = BuildHomepageExpression(hostname, basePath),
+                ["action"] = "rewrite",
+                ["action_parameters"] = new JsonObject
+                {
+                    ["headers"] = new JsonObject
+                    {
+                        ["Link"] = new JsonObject { ["operation"] = "set", ["value"] = linkHeader }
+                    }
+                },
+                ["enabled"] = true
+            });
+        }
+
         foreach (var group in BuildDiscoveryHeaderGroups(agentReadiness, basePath))
         {
             var resourceHeaders = new JsonObject();
@@ -105,6 +126,70 @@ internal static class CloudflareResponseHeaderPolicyBuilder
         var prefix = CloudflareCachePolicyBuilder.EscapeExpressionString(basePath);
         return $"({hostExpression} and (http.request.uri.path eq \"{root}\" or starts_with(http.request.uri.path, \"{prefix}\")))";
     }
+
+    private static string BuildHomepageExpression(string hostname, string basePath)
+    {
+        var homepage = basePath == "/" ? "/" : basePath.TrimEnd('/');
+        var slashHomepage = basePath;
+        return homepage == slashHomepage
+            ? $"(http.host eq \"{hostname}\" and http.request.uri.path eq \"{homepage}\")"
+            : $"(http.host eq \"{hostname}\" and (http.request.uri.path eq \"{homepage}\" or http.request.uri.path eq \"{slashHomepage}\"))";
+    }
+
+    private static string? BuildDiscoveryLinkHeader(AgentReadinessSpec? readiness, string basePath)
+    {
+        if (readiness?.Enabled != true || !readiness.LinkHeaders)
+            return null;
+
+        var links = new List<string>();
+        void Add(string? configured, string fallback, string relation, string type)
+        {
+            var value = string.IsNullOrWhiteSpace(configured) ? fallback : configured.Trim();
+            string target;
+            if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
+            {
+                if ((absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps) || value.Any(char.IsControl))
+                    throw new ArgumentException($"Invalid Cloudflare discovery resource URL '{configured}'.", nameof(configured));
+                target = absolute.AbsoluteUri;
+            }
+            else
+            {
+                target = NormalizeDiscoveryPath(value, fallback, basePath);
+            }
+            links.Add($"<{EscapeLinkUriReference(target)}>; rel=\"{relation}\"; type=\"{type}\"");
+        }
+
+        if (readiness.ApiCatalog?.Enabled == true)
+            Add(readiness.ApiCatalog.OutputPath, ".well-known/api-catalog", "api-catalog", "application/linkset+json");
+        if (readiness.AgentSkills?.Enabled == true)
+            Add(readiness.AgentSkills.IndexPath, ".well-known/agent-skills/index.json", "describedby", "application/json");
+        if (readiness.AgentsJson?.Enabled == true)
+            Add(readiness.AgentsJson.OutputPath, "agents.json", "describedby", "application/json");
+        if (readiness.A2AAgentCard?.Enabled == true)
+            Add(readiness.A2AAgentCard.OutputPath, ".well-known/agent-card.json", "service-desc", "application/json");
+        if (readiness.McpServerCard?.Enabled == true)
+            Add(readiness.McpServerCard.OutputPath, ".well-known/mcp/server-card.json", "service-desc", "application/json");
+        if (readiness.OpenApi?.Enabled == true && !string.IsNullOrWhiteSpace(readiness.OpenApi.Path))
+            Add(readiness.OpenApi.Path, "openapi.json", "service-desc", "application/openapi+json");
+        if (readiness.MarkdownArtifacts?.Enabled == true)
+        {
+            var extension = string.IsNullOrWhiteSpace(readiness.MarkdownArtifacts.Extension)
+                ? ".md"
+                : readiness.MarkdownArtifacts.Extension!.Trim();
+            if (!extension.StartsWith(".", StringComparison.Ordinal))
+                extension = "." + extension;
+            Add("index" + (extension == "." ? ".md" : extension), "index.md", "alternate", "text/markdown");
+        }
+        if (links.Count == 0)
+            Add("llms.txt", "llms.txt", "service-doc", "text/plain");
+
+        return string.Join(", ", links.Distinct(StringComparer.Ordinal));
+    }
+
+    private static string EscapeLinkUriReference(string value) =>
+        value.Replace("<", "%3C", StringComparison.Ordinal)
+            .Replace(">", "%3E", StringComparison.Ordinal)
+            .Replace("\"", "%22", StringComparison.Ordinal);
 
     private static (string Name, string ContentType, string[] Paths)[] BuildDiscoveryHeaderGroups(
         AgentReadinessSpec? readiness,
