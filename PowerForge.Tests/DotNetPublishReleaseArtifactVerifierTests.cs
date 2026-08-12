@@ -368,6 +368,73 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
         Assert.Equal(new string('B', 40), result.SignerThumbprint);
     }
 
+    [Fact]
+    public void Verify_AppliesSigningEnableOverrideUsedByReleaseBuild()
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteConfiguration(new
+        {
+            Installers = new[]
+            {
+                new
+                {
+                    Id = "Test.MSI",
+                    Authoring = ReleaseFixture.AuthoringIdentity,
+                    Sign = new { Enabled = false, Thumbprint }
+                }
+            }
+        });
+        var request = fixture.CreateRequest();
+        request.EnableSigning = true;
+
+        DotNetPublishReleaseArtifact result = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal(Thumbprint, result.SignerThumbprint);
+    }
+
+    [Fact]
+    public void Verify_ExplicitNoSignWinsOverSignerIdentityOverrides()
+    {
+        using var fixture = new ReleaseFixture();
+        var request = fixture.CreateRequest();
+        request.EnableSigning = false;
+        request.SignThumbprint = Thumbprint;
+        request.SignSubjectName = "Test Publisher";
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("signing must be enabled", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_AcceptsInlineUnifiedReleaseConfiguration()
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteConfiguration(new
+        {
+            Tools = new
+            {
+                DotNetPublish = new
+                {
+                    Installers = new[]
+                    {
+                        new
+                        {
+                            Id = "Test.MSI",
+                            Authoring = ReleaseFixture.AuthoringIdentity,
+                            Sign = new { Enabled = true, Thumbprint }
+                        }
+                    }
+                }
+            }
+        });
+
+        DotNetPublishReleaseArtifact result = fixture.CreateVerifier().Verify(fixture.CreateRequest());
+
+        Assert.Equal("Test.MSI", result.InstallerId);
+    }
+
     private sealed class ReleaseFixture : IDisposable
     {
         private readonly List<string> _outsideArtifacts = new();

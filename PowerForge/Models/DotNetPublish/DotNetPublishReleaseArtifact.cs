@@ -47,6 +47,9 @@ public sealed class DotNetPublishReleaseArtifactVerificationRequest
     /// <summary>Optional signing subject-name override used by the build.</summary>
     public string? SignSubjectName { get; set; }
 
+    /// <summary>Optional signing enable override used by the build.</summary>
+    public bool? EnableSigning { get; set; }
+
     /// <summary>Source revision expected by the caller, for example the version-tag workflow commit.</summary>
     public string ExpectedSourceRevision { get; set; } = string.Empty;
 }

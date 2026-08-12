@@ -164,10 +164,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         string installerId,
         DotNetPublishReleaseArtifactVerificationRequest request)
     {
-        var configuration = JsonSerializer.Deserialize<DotNetPublishSpec>(
-                File.ReadAllText(configurationPath),
-                ConfigurationJsonOptions)
-            ?? throw Invalid("PowerForge configuration could not be deserialized.");
+        var configuration = ReadConfiguredPublishSpec(configurationPath);
         if (!string.IsNullOrWhiteSpace(request.Profile))
             configuration.Profile = request.Profile!.Trim();
         configuration = DotNetPublishPipelineRunner.ResolveProfile(configuration);
@@ -200,6 +197,11 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             if (!string.IsNullOrWhiteSpace(request.SignSubjectName))
                 sign.SubjectName = request.SignSubjectName!.Trim();
         }
+        if (request.EnableSigning.HasValue)
+        {
+            sign = DotNetPublishSigningProfileResolver.CloneSignOptions(sign) ?? new DotNetPublishSignOptions();
+            sign.Enabled = request.EnableSigning.Value;
+        }
         if (sign is null || !sign.Enabled)
             throw Invalid("PowerForge installer signing must be enabled for a release artifact.");
 
@@ -225,6 +227,49 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             signerThumbprint,
             signerSubjectName,
             configuration.DotNet.AllowOutputOutsideProjectRoot);
+    }
+
+    private static DotNetPublishSpec ReadConfiguredPublishSpec(string configurationPath)
+    {
+        var json = File.ReadAllText(configurationPath);
+        using var document = JsonDocument.Parse(json, new JsonDocumentOptions
+        {
+            CommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true
+        });
+        if (!TryGet(document.RootElement, "Tools", out _))
+        {
+            return JsonSerializer.Deserialize<DotNetPublishSpec>(json, ConfigurationJsonOptions)
+                ?? throw Invalid("PowerForge dotnet-publish configuration could not be deserialized.");
+        }
+
+        var release = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(json, ConfigurationJsonOptions)
+            ?? throw Invalid("PowerForge release configuration could not be deserialized.");
+        var tools = release.Tools
+            ?? throw Invalid("PowerForge release configuration does not define Tools.DotNetPublish.");
+        if (tools.DotNetPublish is not null && !string.IsNullOrWhiteSpace(tools.DotNetPublishConfigPath))
+            throw Invalid("Tools.DotNetPublish and Tools.DotNetPublishConfigPath are mutually exclusive.");
+
+        DotNetPublishSpec configuration;
+        if (tools.DotNetPublish is not null)
+        {
+            configuration = tools.DotNetPublish;
+        }
+        else
+        {
+            var configuredPath = RequireText(tools.DotNetPublishConfigPath, "Tools.DotNetPublishConfigPath");
+            var root = Path.GetDirectoryName(configurationPath) ?? Directory.GetCurrentDirectory();
+            var path = Path.GetFullPath(Path.IsPathRooted(configuredPath)
+                ? configuredPath
+                : Path.Combine(root, configuredPath));
+            var externalJson = File.ReadAllText(RequireFile(path, "Tools.DotNetPublishConfigPath"));
+            configuration = JsonSerializer.Deserialize<DotNetPublishSpec>(externalJson, ConfigurationJsonOptions)
+                ?? throw Invalid("Referenced PowerForge dotnet-publish configuration could not be deserialized.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(tools.DotNetPublishProfile))
+            configuration.Profile = tools.DotNetPublishProfile!.Trim();
+        return configuration;
     }
 
     private static void ValidatePackage(

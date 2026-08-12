@@ -28,12 +28,15 @@ internal static partial class Program
         var signProfile = TryGetOptionValue(commandArgs, "--sign-profile");
         var signThumbprint = TryGetOptionValue(commandArgs, "--sign-thumbprint");
         var signSubjectName = TryGetOptionValue(commandArgs, "--sign-subject-name");
+        var enableSigning = commandArgs.Any(value => value.Equals("--sign", StringComparison.OrdinalIgnoreCase));
+        var disableSigning = commandArgs.Any(value => value.Equals("--no-sign", StringComparison.OrdinalIgnoreCase));
         if (string.IsNullOrWhiteSpace(projectRoot) ||
             string.IsNullOrWhiteSpace(manifestPath) ||
             string.IsNullOrWhiteSpace(checksumsPath) ||
             string.IsNullOrWhiteSpace(configurationPath) ||
             string.IsNullOrWhiteSpace(installerId) ||
-            string.IsNullOrWhiteSpace(sourceRevision))
+            string.IsNullOrWhiteSpace(sourceRevision) ||
+            (enableSigning && disableSigning))
         {
             if (outputJson)
             {
@@ -43,7 +46,9 @@ internal static partial class Program
                     Command = "dotnet.release-artifact.verify",
                     Success = false,
                     ExitCode = 2,
-                    Error = "Project root, manifest, checksums, config, installer, and source revision are required."
+                    Error = enableSigning && disableSigning
+                        ? "Use either --sign or --no-sign, not both."
+                        : "Project root, manifest, checksums, config, installer, and source revision are required."
                 });
             }
             else
@@ -73,7 +78,8 @@ internal static partial class Program
                     Profile = profile,
                     SignProfile = signProfile,
                     SignThumbprint = signThumbprint,
-                    SignSubjectName = signSubjectName
+                    SignSubjectName = signSubjectName,
+                    EnableSigning = enableSigning ? true : disableSigning ? false : null
                 });
             if (outputJson)
             {
