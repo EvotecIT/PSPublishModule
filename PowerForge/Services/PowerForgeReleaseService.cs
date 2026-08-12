@@ -4201,10 +4201,11 @@ internal sealed partial class PowerForgeReleaseService
             foreach (var target in spec.Targets ?? Array.Empty<DotNetPublishTarget>())
             {
                 target.Publish ??= new DotNetPublishPublishOptions();
+                var hasRequestedSignProfile = !string.IsNullOrWhiteSpace(request.SignProfile);
                 var baseSign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
                     spec.SigningProfiles,
-                    !string.IsNullOrWhiteSpace(request.SignProfile) ? request.SignProfile : target.Publish.SignProfile,
-                    target.Publish.Sign,
+                    hasRequestedSignProfile ? request.SignProfile : target.Publish.SignProfile,
+                    hasRequestedSignProfile ? null : target.Publish.Sign,
                     target.Publish.SignOverrides,
                     $"Target '{target.Name}'");
                 target.Publish.Sign = ApplySigningOverrides(baseSign, request);
@@ -4217,10 +4218,11 @@ internal sealed partial class PowerForgeReleaseService
 
             foreach (var installer in spec.Installers ?? Array.Empty<DotNetPublishInstaller>())
             {
+                var hasRequestedSignProfile = !string.IsNullOrWhiteSpace(request.SignProfile);
                 var baseSign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
                     spec.SigningProfiles,
-                    !string.IsNullOrWhiteSpace(request.SignProfile) ? request.SignProfile : installer.SignProfile,
-                    installer.Sign,
+                    hasRequestedSignProfile ? request.SignProfile : installer.SignProfile,
+                    hasRequestedSignProfile ? null : installer.Sign,
                     installer.SignOverrides,
                     $"Installer '{installer.Id}'");
                 installer.Sign = ApplySigningOverrides(baseSign, request);
@@ -5504,6 +5506,8 @@ internal sealed partial class PowerForgeReleaseService
             sign.ToolPath = request.SignToolPath!.Trim();
         if (!string.IsNullOrWhiteSpace(request.SignThumbprint))
             sign.Thumbprint = request.SignThumbprint!.Trim();
+        else if (!string.IsNullOrWhiteSpace(request.SignSubjectName))
+            sign.Thumbprint = null;
         if (!string.IsNullOrWhiteSpace(request.SignSubjectName))
             sign.SubjectName = request.SignSubjectName!.Trim();
         if (request.SignOnMissingTool.HasValue)

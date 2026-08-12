@@ -32,6 +32,21 @@ public sealed class DotNetPublishReleaseArtifactVerificationRequest
     /// <summary>Optional publish-style selector used to disambiguate matrix installer entries.</summary>
     public string? Style { get; set; }
 
+    /// <summary>Optional manifest-relative MSI path used to select one output from a multi-output installer build.</summary>
+    public string? ArtifactPath { get; set; }
+
+    /// <summary>Optional active publish profile used by the build.</summary>
+    public string? Profile { get; set; }
+
+    /// <summary>Optional signing profile override used by the build.</summary>
+    public string? SignProfile { get; set; }
+
+    /// <summary>Optional signing thumbprint override used by the build.</summary>
+    public string? SignThumbprint { get; set; }
+
+    /// <summary>Optional signing subject-name override used by the build.</summary>
+    public string? SignSubjectName { get; set; }
+
     /// <summary>Source revision expected by the caller, for example the version-tag workflow commit.</summary>
     public string ExpectedSourceRevision { get; set; } = string.Empty;
 }

@@ -41,6 +41,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         var checksumsPath = RequireFile(request.ChecksumsPath, nameof(request.ChecksumsPath));
         var configurationPath = RequireFile(request.ConfigurationPath, nameof(request.ConfigurationPath));
         var installerId = RequireText(request.InstallerId, nameof(request.InstallerId));
+        var expected = ReadExpectedInstaller(configurationPath, installerId, request);
 
         var manifestRelativePath = GetRelativePath(projectRoot, manifestPath).Replace('\\', '/');
         var manifestDigest = ComputeSha256(manifestPath);
@@ -80,28 +81,47 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             throw Invalid("PowerForge manifest source revision does not match the release workflow commit.");
         }
 
-        var outputFiles = ReadStringArray(entry, "OutputFiles");
+        var outputFiles = ReadStringArray(entry, "OutputFiles")
+            .Select(NormalizeRelativePath)
+            .ToArray();
         var packageMetadata = ReadArray(entry, "PackageMetadata");
-        if (outputFiles.Length != 1 || packageMetadata.Length != 1)
-            throw Invalid("PowerForge installer entry must contain exactly one output and one package metadata record.");
+        if (outputFiles.Length == 0 || packageMetadata.Length == 0)
+            throw Invalid("PowerForge installer entry does not contain an output with package metadata.");
 
-        var relativePath = NormalizeRelativePath(outputFiles[0]);
-        var artifactPath = ResolveWithinRoot(projectRoot, relativePath);
+        string relativePath;
+        if (string.IsNullOrWhiteSpace(request.ArtifactPath))
+        {
+            if (outputFiles.Length != 1)
+                throw Invalid("PowerForge installer entry contains multiple MSI outputs; select one with --artifact.");
+            relativePath = outputFiles[0];
+        }
+        else
+        {
+            var selectedPath = NormalizeRelativePath(request.ArtifactPath);
+            var selectedOutputs = outputFiles
+                .Where(path => string.Equals(path, selectedPath, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (selectedOutputs.Length != 1)
+                throw Invalid("The requested MSI artifact path does not identify exactly one manifest output.");
+            relativePath = selectedOutputs[0];
+        }
+
+        var artifactPath = ResolveArtifactPath(projectRoot, relativePath, expected.AllowOutputOutsideProjectRoot);
         if (!File.Exists(artifactPath))
             throw new FileNotFoundException("PowerForge installer output was not found.", artifactPath);
 
-        var manifestPackage = packageMetadata[0];
-        if (!string.Equals(
-                NormalizeRelativePath(ReadString(manifestPackage, "Path")),
+        var matchingPackageMetadata = packageMetadata
+            .Where(package => string.Equals(
+                NormalizeRelativePath(ReadString(package, "Path")),
                 relativePath,
                 StringComparison.OrdinalIgnoreCase))
-        {
-            throw Invalid("PowerForge package metadata does not describe the installer output.");
-        }
+            .ToArray();
+        if (matchingPackageMetadata.Length != 1)
+            throw Invalid("PowerForge package metadata does not uniquely describe the selected installer output.");
+        var manifestPackage = matchingPackageMetadata[0];
         if (!string.IsNullOrWhiteSpace(ReadString(manifestPackage, "ReadError")))
             throw Invalid("PowerForge manifest reports that MSI package metadata could not be read.");
 
-        var expected = ReadExpectedInstaller(configurationPath, installerId);
         var actual = _readPackage(artifactPath);
         ValidatePackage(manifestPackage, actual, expected);
 
@@ -112,8 +132,15 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         var signature = _verifyAuthenticode(artifactPath);
         if (!signature.IsValid)
             throw Invalid($"Installer Authenticode signature is not valid (0x{signature.StatusCode:X8}).");
-        if (!string.Equals(signature.Thumbprint, expected.SignerThumbprint, StringComparison.OrdinalIgnoreCase))
+        if (expected.SignerThumbprint is not null &&
+            !string.Equals(signature.Thumbprint, expected.SignerThumbprint, StringComparison.OrdinalIgnoreCase))
             throw Invalid("Installer signature does not use the configured release certificate.");
+        if (expected.SignerThumbprint is null &&
+            expected.SignerSubjectName is not null &&
+            signature.Subject.IndexOf(expected.SignerSubjectName, StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            throw Invalid("Installer signature does not match the configured release certificate subject.");
+        }
 
         return new DotNetPublishReleaseArtifact
         {
@@ -132,12 +159,17 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         };
     }
 
-    private static ExpectedInstaller ReadExpectedInstaller(string configurationPath, string installerId)
+    private static ExpectedInstaller ReadExpectedInstaller(
+        string configurationPath,
+        string installerId,
+        DotNetPublishReleaseArtifactVerificationRequest request)
     {
         var configuration = JsonSerializer.Deserialize<DotNetPublishSpec>(
                 File.ReadAllText(configurationPath),
                 ConfigurationJsonOptions)
             ?? throw Invalid("PowerForge configuration could not be deserialized.");
+        if (!string.IsNullOrWhiteSpace(request.Profile))
+            configuration.Profile = request.Profile!.Trim();
         configuration = DotNetPublishPipelineRunner.ResolveProfile(configuration);
         var installers = (configuration.Installers ?? Array.Empty<DotNetPublishInstaller>())
             .Where(installer => string.Equals(installer.Id, installerId, StringComparison.OrdinalIgnoreCase))
@@ -146,12 +178,28 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             throw Invalid($"PowerForge configuration must define exactly one '{installerId}' installer.");
 
         var installer = installers[0];
+        var hasRequestedSignProfile = !string.IsNullOrWhiteSpace(request.SignProfile);
         var sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
             configuration.SigningProfiles,
-            installer.SignProfile,
-            installer.Sign,
+            hasRequestedSignProfile ? request.SignProfile : installer.SignProfile,
+            hasRequestedSignProfile ? null : installer.Sign,
             installer.SignOverrides,
             $"Installer '{installerId}'");
+        if (!string.IsNullOrWhiteSpace(request.SignThumbprint) ||
+            !string.IsNullOrWhiteSpace(request.SignSubjectName))
+        {
+            sign = DotNetPublishSigningProfileResolver.CloneSignOptions(sign) ?? new DotNetPublishSignOptions();
+            sign.Enabled = true;
+            if (string.IsNullOrWhiteSpace(request.SignThumbprint) &&
+                !string.IsNullOrWhiteSpace(request.SignSubjectName))
+            {
+                sign.Thumbprint = null;
+            }
+            if (!string.IsNullOrWhiteSpace(request.SignThumbprint))
+                sign.Thumbprint = request.SignThumbprint!.Trim();
+            if (!string.IsNullOrWhiteSpace(request.SignSubjectName))
+                sign.SubjectName = request.SignSubjectName!.Trim();
+        }
         if (sign is null || !sign.Enabled)
             throw Invalid("PowerForge installer signing must be enabled for a release artifact.");
 
@@ -163,12 +211,20 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         }
 
         var product = installer.Authoring?.Product;
+        var signerThumbprint = string.IsNullOrWhiteSpace(sign.Thumbprint)
+            ? null
+            : NormalizeThumbprint(sign.Thumbprint);
+        var signerSubjectName = signerThumbprint is not null || string.IsNullOrWhiteSpace(sign.SubjectName)
+            ? null
+            : sign.SubjectName!.Trim();
 
         return new ExpectedInstaller(
             product is null ? null : RequireText(product.Name, "Product.Name"),
             product is null ? null : RequireText(product.Manufacturer, "Product.Manufacturer"),
             product is null ? null : NormalizeGuid(product.UpgradeCode, "Product.UpgradeCode"),
-            NormalizeThumbprint(sign.Thumbprint));
+            signerThumbprint,
+            signerSubjectName,
+            configuration.DotNet.AllowOutputOutsideProjectRoot);
     }
 
     private static void ValidatePackage(
@@ -284,13 +340,16 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         return options;
     }
 
-    private static string ResolveWithinRoot(string root, string relativePath)
+    private static string ResolveArtifactPath(string root, string relativePath, bool allowOutsideProjectRoot)
     {
-        if (Path.IsPathRooted(relativePath))
+        var platformPath = relativePath.Replace('/', Path.DirectorySeparatorChar);
+        if (Path.IsPathRooted(platformPath) && !allowOutsideProjectRoot)
             throw Invalid("PowerForge manifest installer path must be relative to the repository.");
-        var candidate = Path.GetFullPath(Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        var candidate = Path.GetFullPath(Path.IsPathRooted(platformPath)
+            ? platformPath
+            : Path.Combine(root, platformPath));
         var prefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        if (!allowOutsideProjectRoot && !candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             throw Invalid("PowerForge manifest installer path resolves outside the repository.");
         return candidate;
     }
@@ -323,7 +382,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
 
     private static string NormalizeRelativePath(string? value)
     {
-        var normalized = RequireText(value, "manifest artifact path").Replace('\\', '/').TrimStart('/');
+        var normalized = RequireText(value, "manifest artifact path").Replace('\\', '/');
         return normalized;
     }
 
@@ -412,17 +471,27 @@ public sealed class DotNetPublishReleaseArtifactVerifier
 
     private sealed class ExpectedInstaller
     {
-        internal ExpectedInstaller(string? productName, string? manufacturer, string? upgradeCode, string signerThumbprint)
+        internal ExpectedInstaller(
+            string? productName,
+            string? manufacturer,
+            string? upgradeCode,
+            string? signerThumbprint,
+            string? signerSubjectName,
+            bool allowOutputOutsideProjectRoot)
         {
             ProductName = productName;
             Manufacturer = manufacturer;
             UpgradeCode = upgradeCode;
             SignerThumbprint = signerThumbprint;
+            SignerSubjectName = signerSubjectName;
+            AllowOutputOutsideProjectRoot = allowOutputOutsideProjectRoot;
         }
 
         internal string? ProductName { get; }
         internal string? Manufacturer { get; }
         internal string? UpgradeCode { get; }
-        internal string SignerThumbprint { get; }
+        internal string? SignerThumbprint { get; }
+        internal string? SignerSubjectName { get; }
+        internal bool AllowOutputOutsideProjectRoot { get; }
     }
 }

@@ -23,6 +23,11 @@ internal static partial class Program
         var runtime = TryGetOptionValue(commandArgs, "--rid");
         var framework = TryGetOptionValue(commandArgs, "--framework");
         var style = TryGetOptionValue(commandArgs, "--style");
+        var artifactPath = TryGetOptionValue(commandArgs, "--artifact");
+        var profile = TryGetOptionValue(commandArgs, "--profile");
+        var signProfile = TryGetOptionValue(commandArgs, "--sign-profile");
+        var signThumbprint = TryGetOptionValue(commandArgs, "--sign-thumbprint");
+        var signSubjectName = TryGetOptionValue(commandArgs, "--sign-subject-name");
         if (string.IsNullOrWhiteSpace(projectRoot) ||
             string.IsNullOrWhiteSpace(manifestPath) ||
             string.IsNullOrWhiteSpace(checksumsPath) ||
@@ -63,7 +68,12 @@ internal static partial class Program
                     Target = target,
                     Runtime = runtime,
                     Framework = framework,
-                    Style = style
+                    Style = style,
+                    ArtifactPath = artifactPath,
+                    Profile = profile,
+                    SignProfile = signProfile,
+                    SignThumbprint = signThumbprint,
+                    SignSubjectName = signSubjectName
                 });
             if (outputJson)
             {

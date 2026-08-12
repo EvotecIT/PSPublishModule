@@ -189,8 +189,189 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
         Assert.Equal("{22222222-2222-2222-2222-222222222222}", result.UpgradeCode);
     }
 
+    [Fact]
+    public void Verify_SelectsOneMsiFromAMultiOutputInstallerEntry()
+    {
+        using var fixture = new ReleaseFixture();
+        const string secondArtifact = "Artifacts/Test-Secondary-1.2.3.msi";
+        fixture.CreateArtifact(secondArtifact, 17);
+        fixture.WriteSingleEntryManifest("Artifacts/Test-1.2.3.msi", secondArtifact);
+        var request = fixture.CreateRequest();
+
+        Assert.Throws<InvalidDataException>(() => fixture.CreateVerifier().Verify(request));
+
+        request.ArtifactPath = secondArtifact;
+        DotNetPublishReleaseArtifact result = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal(Path.GetFullPath(Path.Combine(fixture.Root, secondArtifact)), result.ArtifactPath);
+    }
+
+    [Fact]
+    public void Verify_RespectsConfiguredOutsideRootOutputPolicy()
+    {
+        using var fixture = new ReleaseFixture();
+        string relativeArtifact = "../" + Guid.NewGuid().ToString("N") + ".msi";
+        fixture.CreateArtifact(relativeArtifact, 23);
+        fixture.WriteSingleEntryManifest(relativeArtifact);
+
+        InvalidDataException rejected = Assert.Throws<InvalidDataException>(
+            () => fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+        Assert.Contains("outside", rejected.Message, StringComparison.OrdinalIgnoreCase);
+
+        fixture.WriteConfiguration(new
+        {
+            DotNet = new { AllowOutputOutsideProjectRoot = true },
+            Installers = new[]
+            {
+                new { Id = "Test.MSI", Authoring = ReleaseFixture.AuthoringIdentity, Sign = new { Enabled = true, Thumbprint } }
+            }
+        });
+        DotNetPublishReleaseArtifact result = fixture.CreateVerifier().Verify(fixture.CreateRequest());
+
+        Assert.Equal(Path.GetFullPath(Path.Combine(fixture.Root, relativeArtifact)), result.ArtifactPath);
+    }
+
+    [Fact]
+    public void Verify_AcceptsRootedOutputWhenOutsideRootPolicyIsEnabled()
+    {
+        using var fixture = new ReleaseFixture();
+        string rootedArtifact = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.Outside",
+            Guid.NewGuid().ToString("N") + ".msi");
+        fixture.CreateArtifact(rootedArtifact, 29);
+        fixture.WriteSingleEntryManifest(rootedArtifact);
+
+        InvalidDataException rejected = Assert.Throws<InvalidDataException>(
+            () => fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+        Assert.Contains("relative", rejected.Message, StringComparison.OrdinalIgnoreCase);
+
+        fixture.WriteConfiguration(new
+        {
+            DotNet = new { AllowOutputOutsideProjectRoot = true },
+            Installers = new[]
+            {
+                new { Id = "Test.MSI", Authoring = ReleaseFixture.AuthoringIdentity, Sign = new { Enabled = true, Thumbprint } }
+            }
+        });
+
+        DotNetPublishReleaseArtifact result = fixture.CreateVerifier().Verify(fixture.CreateRequest());
+
+        Assert.Equal(Path.GetFullPath(rootedArtifact), result.ArtifactPath);
+    }
+
+    [Fact]
+    public void Verify_AcceptsSubjectSelectedReleaseCertificate()
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteConfiguration(new
+        {
+            Installers = new[]
+            {
+                new
+                {
+                    Id = "Test.MSI",
+                    Authoring = ReleaseFixture.AuthoringIdentity,
+                    Sign = new { Enabled = true, SubjectName = "Test Publisher" }
+                }
+            }
+        });
+
+        DotNetPublishReleaseArtifact result = fixture.CreateVerifier(new string('B', 40))
+            .Verify(fixture.CreateRequest());
+
+        Assert.Equal("CN=Test Publisher", result.SignerSubject);
+    }
+
+    [Fact]
+    public void Verify_AcceptsAutomaticReleaseCertificateSelection()
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteConfiguration(new
+        {
+            Installers = new[]
+            {
+                new { Id = "Test.MSI", Authoring = ReleaseFixture.AuthoringIdentity, Sign = new { Enabled = true } }
+            }
+        });
+
+        DotNetPublishReleaseArtifact result = fixture.CreateVerifier(new string('B', 40))
+            .Verify(fixture.CreateRequest());
+
+        Assert.Equal(new string('B', 40), result.SignerThumbprint);
+    }
+
+    [Fact]
+    public void Verify_AppliesEffectiveProfileAndSigningOverrides()
+    {
+        const string overrideThumbprint = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+        using var fixture = new ReleaseFixture();
+        fixture.WriteConfiguration(new
+        {
+            Profiles = new[]
+            {
+                new { Name = "default", Default = true, Targets = new[] { "Default" } },
+                new { Name = "release", Default = false, Targets = new[] { "Release" } }
+            },
+            Targets = new[]
+            {
+                new { Name = "Default" },
+                new { Name = "Release" }
+            },
+            Installers = new[]
+            {
+                new
+                {
+                    Id = "Test.MSI",
+                    PrepareFromTarget = "Release",
+                    Authoring = ReleaseFixture.AuthoringIdentity,
+                    Sign = new { Enabled = false, Thumbprint }
+                }
+            }
+        });
+        var request = fixture.CreateRequest();
+        request.Profile = "release";
+        request.SignThumbprint = overrideThumbprint;
+
+        DotNetPublishReleaseArtifact result = fixture.CreateVerifier(overrideThumbprint).Verify(request);
+
+        Assert.Equal(overrideThumbprint, result.SignerThumbprint);
+    }
+
+    [Fact]
+    public void Verify_ExplicitSigningProfileAndSubjectOverrideInlineSigningIdentity()
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteConfiguration(new
+        {
+            SigningProfiles = new Dictionary<string, object>
+            {
+                ["release"] = new { Enabled = true, Thumbprint }
+            },
+            Installers = new[]
+            {
+                new
+                {
+                    Id = "Test.MSI",
+                    Authoring = ReleaseFixture.AuthoringIdentity,
+                    Sign = new { Enabled = false, Thumbprint = new string('C', 40) }
+                }
+            }
+        });
+        var request = fixture.CreateRequest();
+        request.SignProfile = "release";
+        request.SignSubjectName = "Test Publisher";
+
+        DotNetPublishReleaseArtifact result = fixture.CreateVerifier(new string('B', 40)).Verify(request);
+
+        Assert.Equal("CN=Test Publisher", result.SignerSubject);
+        Assert.Equal(new string('B', 40), result.SignerThumbprint);
+    }
+
     private sealed class ReleaseFixture : IDisposable
     {
+        private readonly List<string> _outsideArtifacts = new();
+
         internal ReleaseFixture()
         {
             Root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -269,17 +450,62 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
                     }
                 }
             })));
-            RefreshChecksums();
+            RefreshChecksums(["Artifacts/Test-1.2.3.msi"]);
         }
 
-        private void RefreshChecksums()
+        internal void WriteSingleEntryManifest(params string[] outputFiles)
+        {
+            File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    Category = "Installer",
+                    InstallerId = "Test.MSI",
+                    Target = "Service",
+                    Framework = "net8.0",
+                    Runtime = "win-x64",
+                    Style = "Portable",
+                    OutputFiles = outputFiles,
+                    SignedFiles = outputFiles.Length,
+                    SourceRevision,
+                    SourceDirty = false,
+                    PackageMetadata = outputFiles.Select(path => new
+                    {
+                        Path = path,
+                        ProductName = "Test Product",
+                        Manufacturer = "Evotec",
+                        ProductVersion = "1.2.3",
+                        ProductCode = "{11111111-1111-1111-1111-111111111111}",
+                        UpgradeCode = "{22222222-2222-2222-2222-222222222222}",
+                        ReadError = (string?)null
+                    }).ToArray()
+                }
+            }));
+            RefreshChecksums(outputFiles);
+        }
+
+        internal string CreateArtifact(string relativePath, byte seed)
+        {
+            string path = Path.GetFullPath(Path.Combine(Root, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllBytes(path, Enumerable.Range(0, 512).Select(value => (byte)(value + seed)).ToArray());
+            string rootPrefix = Root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (!path.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+                _outsideArtifacts.Add(path);
+            return path;
+        }
+
+        private void RefreshChecksums(IReadOnlyList<string> outputFiles)
         {
             string manifestDigest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(ManifestPath)));
-            File.WriteAllLines(ChecksumsPath,
-            [
-                $"{Digest.ToLowerInvariant()} *Artifacts/Test-1.2.3.msi",
-                $"{manifestDigest.ToLowerInvariant()} *manifest.json"
-            ]);
+            List<string> checksums = outputFiles.Select(relativePath =>
+            {
+                string path = Path.GetFullPath(Path.Combine(Root, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+                string digest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+                return $"{digest.ToLowerInvariant()} *{relativePath.Replace('\\', '/')}";
+            }).ToList();
+            checksums.Add($"{manifestDigest.ToLowerInvariant()} *manifest.json");
+            File.WriteAllLines(ChecksumsPath, checksums);
         }
 
         internal DotNetPublishReleaseArtifactVerificationRequest CreateRequest() => new()
@@ -312,6 +538,10 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
         public void Dispose()
         {
             if (Directory.Exists(Root)) Directory.Delete(Root, recursive: true);
+            foreach (string path in _outsideArtifacts)
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
         }
     }
 }

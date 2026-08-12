@@ -4290,6 +4290,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                                 ["SafeNetToken"] = new()
                                 {
                                     Enabled = true,
+                                    Thumbprint = new string('B', 40),
                                     Csp = "SafeNet eToken Base Cryptographic Provider",
                                     KeyContainer = "Token Container"
                                 }
@@ -4305,7 +4306,12 @@ public sealed partial class PowerForgeReleaseServiceTests
                                         Framework = "net10.0",
                                         Runtimes = new[] { "win-x64" },
                                         Style = DotNetPublishStyle.PortableCompat,
-                                        SignProfile = "LocalCert"
+                                        SignProfile = "LocalCert",
+                                        Sign = new DotNetPublishSignOptions
+                                        {
+                                            Enabled = false,
+                                            Thumbprint = new string('C', 40)
+                                        }
                                     }
                                 }
                             },
@@ -4316,7 +4322,12 @@ public sealed partial class PowerForgeReleaseServiceTests
                                     Id = "PowerForge.Msi",
                                     PrepareFromTarget = "PowerForge",
                                     InstallerProjectPath = "PowerForge.Installer.wixproj",
-                                    SignProfile = "LocalCert"
+                                    SignProfile = "LocalCert",
+                                    Sign = new DotNetPublishSignOptions
+                                    {
+                                        Enabled = false,
+                                        Thumbprint = new string('C', 40)
+                                    }
                                 }
                             }
                         }
@@ -4328,6 +4339,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     PlanOnly = true,
                     ToolsOnly = true,
                     SignProfile = "SafeNetToken",
+                    SignSubjectName = "Release Publisher",
                     SignDescription = "Release signing"
                 });
 
@@ -4339,6 +4351,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(target.Publish.Sign!.Enabled);
             Assert.Equal("SafeNet eToken Base Cryptographic Provider", target.Publish.Sign.Csp);
             Assert.Equal("Token Container", target.Publish.Sign.KeyContainer);
+            Assert.Null(target.Publish.Sign.Thumbprint);
+            Assert.Equal("Release Publisher", target.Publish.Sign.SubjectName);
             Assert.Equal("Release signing", target.Publish.Sign.Description);
 
             var installer = Assert.Single(result.DotNetToolPlan.Installers);
@@ -4346,6 +4360,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(installer.Sign!.Enabled);
             Assert.Equal("SafeNet eToken Base Cryptographic Provider", installer.Sign.Csp);
             Assert.Equal("Token Container", installer.Sign.KeyContainer);
+            Assert.Null(installer.Sign.Thumbprint);
+            Assert.Equal("Release Publisher", installer.Sign.SubjectName);
             Assert.Equal("Release signing", installer.Sign.Description);
         }
         finally
