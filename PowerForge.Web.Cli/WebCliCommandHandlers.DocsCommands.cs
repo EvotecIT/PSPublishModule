@@ -518,6 +518,7 @@ internal static partial class WebCliCommandHandlers
                        TryGetOptionValue(subArgs, "--root") ??
                        TryGetOptionValue(subArgs, "--path");
         var projectFile = TryGetOptionValue(subArgs, "--project");
+        var contentKindText = TryGetOptionValue(subArgs, "--content-kind");
         var packageFiles = ReadOptionList(subArgs, "--package-files");
         var apiIndex = TryGetOptionValue(subArgs, "--api-index");
         var apiIndexes = ReadOptionList(subArgs, "--api-indexes");
@@ -544,10 +545,19 @@ internal static partial class WebCliCommandHandlers
             apiLevel = parsedLevel;
         var apiMaxTypes = ParseIntOption(apiMaxTypesText, 200);
         var apiMaxMembers = ParseIntOption(apiMaxMembersText, 2000);
+        var contentKind = WebLlmsContentKind.Package;
+        if (!string.IsNullOrWhiteSpace(contentKindText))
+        {
+            if (!Enum.TryParse<WebLlmsContentKind>(contentKindText, true, out var parsedContentKind) ||
+                !Enum.IsDefined(parsedContentKind))
+                return Fail("Invalid --content-kind. Expected Package or Site.", outputJson, logger, "web.llms");
+            contentKind = parsedContentKind;
+        }
 
         var result = WebLlmsGenerator.Generate(new WebLlmsOptions
         {
             SiteRoot = siteRoot,
+            ContentKind = contentKind,
             ProjectFile = projectFile,
             PackageFiles = packageFiles.ToArray(),
             ApiIndexPath = apiIndex,

@@ -1651,6 +1651,7 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException("llms requires siteRoot.");
 
         var apiLevelText = GetString(step, "apiLevel") ?? GetString(step, "api-level");
+        var contentKindText = GetString(step, "contentKind") ?? GetString(step, "content-kind");
         var apiIndexPaths = (GetArrayOfStrings(step, "apiIndexes") ??
                              GetArrayOfStrings(step, "api-indexes") ??
                              Array.Empty<string>())
@@ -1668,6 +1669,7 @@ internal static partial class WebPipelineRunner
         var res = WebLlmsGenerator.Generate(new WebLlmsOptions
         {
             SiteRoot = siteRoot,
+            ContentKind = ParseLlmsContentKind(contentKindText),
             ProjectFile = ResolvePath(baseDir, GetString(step, "project")),
             PackageFiles = packageFiles,
             ApiIndexPath = ResolvePath(baseDir, GetString(step, "apiIndex") ?? GetString(step, "api-index")),
@@ -1687,7 +1689,9 @@ internal static partial class WebPipelineRunner
             ApiMaxMembers = GetInt(step, "apiMaxMembers") ?? 2000
         });
         stepResult.Success = true;
-        stepResult.Message = $"LLMS generated ({res.Version})";
+        stepResult.Message = res.PackageCount == 0
+            ? "LLMS generated (site)"
+            : $"LLMS generated ({res.Version})";
     }
 
     private static void ExecuteCompatibilityMatrix(JsonElement step, string baseDir, WebPipelineStepResult stepResult)

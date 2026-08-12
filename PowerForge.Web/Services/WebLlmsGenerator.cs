@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Net;
@@ -14,6 +13,8 @@ public sealed class WebLlmsOptions
     public string? ProjectFile { get; set; }
     /// <summary>Optional project or module manifests used to describe every installable package in a suite.</summary>
     public string[] PackageFiles { get; set; } = Array.Empty<string>();
+    /// <summary>Content shape to generate. Site content omits package and installation metadata.</summary>
+    public WebLlmsContentKind ContentKind { get; set; } = WebLlmsContentKind.Package;
     /// <summary>Optional API index path.</summary>
     public string? ApiIndexPath { get; set; }
     /// <summary>Optional API index paths for sites that publish more than one API catalog.</summary>
@@ -61,11 +62,18 @@ public static partial class WebLlmsGenerator
             throw new DirectoryNotFoundException($"Site root not found: {siteRoot}");
 
         var projectInfo = ReadProjectInfo(options.ProjectFile);
-        var packages = ResolvePackages(options.PackageFiles);
+        var includePackageContent = options.ContentKind == WebLlmsContentKind.Package;
+        var packages = includePackageContent
+            ? ResolvePackages(options.PackageFiles)
+            : new List<PackageInfo>();
         var name = options.Name ?? projectInfo.Name ?? options.PackageId ?? projectInfo.PackageId ??
                    packages.FirstOrDefault()?.Id ?? Path.GetFileName(siteRoot);
-        var packageId = options.PackageId ?? projectInfo.PackageId ?? name;
-        var version = options.Version ?? ResolveSuiteVersion(packages) ?? projectInfo.Version ?? "unknown";
+        var packageId = includePackageContent
+            ? options.PackageId ?? projectInfo.PackageId ?? name
+            : null;
+        var version = includePackageContent
+            ? options.Version ?? ResolveSuiteVersion(packages) ?? projectInfo.Version ?? "unknown"
+            : null;
 
         var apiCatalogs = ResolveApiCatalogs(options, siteRoot);
         int? typeCount = apiCatalogs.Any(catalog => catalog.TypeCount.HasValue)
@@ -82,12 +90,15 @@ public static partial class WebLlmsGenerator
             primaryPackage?.Id ?? name,
             primaryPackage?.IsPowerShellModule ?? projectInfo.IsPowerShellModule,
             primaryPackage?.IsDotNetTool ?? projectInfo.IsDotNetTool,
-            primaryPackage?.ToolCommandName ?? projectInfo.ToolCommandName);
-        var legacyInstallCommand = CreateInstallCommand(packageId, projectInfo.IsPowerShellModule, projectInfo.IsDotNetTool);
+            primaryPackage?.ToolCommandName ?? projectInfo.ToolCommandName,
+            includePackageContent);
+        var legacyInstallCommand = includePackageContent
+            ? CreateInstallCommand(packageId!, projectInfo.IsPowerShellModule, projectInfo.IsDotNetTool)
+            : null;
         var overview = ResolveOverview(options, projectInfo, siteRoot, name);
-        WriteLlmsTxt(llmsTxtPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart, options.DiscoveryContentPath);
-        WriteLlmsJson(llmsJsonPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, quickstart);
-        WriteLlmsFull(llmsFullPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart, options);
+        WriteLlmsTxt(llmsTxtPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart, options.DiscoveryContentPath, includePackageContent);
+        WriteLlmsJson(llmsJsonPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, quickstart, includePackageContent);
+        WriteLlmsFull(llmsFullPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart, options, includePackageContent);
 
         return new WebLlmsResult
         {
@@ -95,9 +106,9 @@ public static partial class WebLlmsGenerator
             LlmsJsonPath = llmsJsonPath,
             LlmsFullPath = llmsFullPath,
             Name = name,
-            PackageId = packageId,
-            Version = version,
-            PackageCount = packages.Count == 0 ? 1 : packages.Count,
+            PackageId = packageId ?? string.Empty,
+            Version = version ?? string.Empty,
+            PackageCount = includePackageContent ? packages.Count == 0 ? 1 : packages.Count : 0,
             ApiTypeCount = typeCount,
             ApiCatalogCount = apiCatalogs.Count
         };
@@ -271,30 +282,31 @@ public static partial class WebLlmsGenerator
         return Regex.Replace(decoded, @"\s+", " ").Trim();
     }
 
-    private static QuickstartInfo ResolveQuickstart(
+    private static QuickstartInfo? ResolveQuickstart(
         string? quickstartPath,
         string name,
         bool isPowerShellModule,
         bool isDotNetTool,
-        string? toolCommandName)
+        string? toolCommandName,
+        bool allowGenerated)
     {
         if (!string.IsNullOrWhiteSpace(quickstartPath))
         {
             var full = Path.GetFullPath(quickstartPath);
-            if (File.Exists(full))
+            if (!File.Exists(full))
+                throw new FileNotFoundException($"LLMS quickstart file not found: {full}", full);
+
+            var text = File.ReadAllText(full).TrimEnd();
+            return new QuickstartInfo
             {
-                var text = File.ReadAllText(full).TrimEnd();
-                return new QuickstartInfo
-                {
-                    Language = Path.GetExtension(full).Equals(".ps1", StringComparison.OrdinalIgnoreCase)
-                        ? "powershell"
-                        : "csharp",
-                    Lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
-                };
-            }
+                Language = Path.GetExtension(full).Equals(".ps1", StringComparison.OrdinalIgnoreCase)
+                    ? "powershell"
+                    : InferQuickstartLanguage(full, text),
+                Lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
+            };
         }
 
-        if (isPowerShellModule)
+        if (allowGenerated && isPowerShellModule)
         {
             return new QuickstartInfo
             {
@@ -307,7 +319,7 @@ public static partial class WebLlmsGenerator
             };
         }
 
-        if (isDotNetTool)
+        if (allowGenerated && isDotNetTool)
         {
             var commandName = string.IsNullOrWhiteSpace(toolCommandName)
                 ? name
@@ -322,16 +334,19 @@ public static partial class WebLlmsGenerator
             };
         }
 
-        return new QuickstartInfo
-        {
-            Language = "csharp",
-            Lines =
-            [
-                $"using {name};",
-                string.Empty,
-                "// TODO: add quickstart snippet"
-            ]
-        };
+        return null;
+    }
+
+    private static string InferQuickstartLanguage(string path, string content)
+    {
+        var extension = Path.GetExtension(path);
+        if (extension.Equals(".cs", StringComparison.OrdinalIgnoreCase)) return "csharp";
+        if (extension.Equals(".sh", StringComparison.OrdinalIgnoreCase)) return "shell";
+        if (extension.Equals(".txt", StringComparison.OrdinalIgnoreCase) &&
+            (content.Contains("Import-Module", StringComparison.OrdinalIgnoreCase) ||
+             content.Contains("Get-Command", StringComparison.OrdinalIgnoreCase)))
+            return "powershell";
+        return "shell";
     }
 
     private static string CreateInstallCommand(string packageId, bool isPowerShellModule, bool isDotNetTool)
@@ -340,229 +355,6 @@ public static partial class WebLlmsGenerator
             : isDotNetTool
                 ? $"dotnet tool install --global {packageId}"
                 : $"dotnet add package {packageId}";
-
-    private static void WriteLlmsTxt(
-        string path,
-        string name,
-        string packageId,
-        string version,
-        string legacyInstallCommand,
-        IReadOnlyList<PackageInfo> packages,
-        int? typeCount,
-        IReadOnlyList<ApiCatalogInfo> apiCatalogs,
-        string overview,
-        QuickstartInfo quickstart,
-        string? discoveryContentPath)
-    {
-        var lines = new List<string>
-        {
-            $"# {name}",
-            string.Empty,
-            $"> {overview}",
-            string.Empty,
-            "## Metadata"
-        };
-        if (packages.Count == 0)
-        {
-            lines.Add($"- Version: {version}");
-            lines.Add($"- Package: {packageId}");
-        }
-        else
-        {
-            lines.Add($"- Packages: {packages.Count}");
-            lines.Add($"- Suite version: {version}");
-        }
-        if (typeCount.HasValue) lines.Add($"- API types: {typeCount.Value}");
-        if (apiCatalogs.Count > 1) lines.Add($"- API catalogs: {apiCatalogs.Count}");
-        lines.Add(string.Empty);
-        lines.Add("## Install");
-        if (packages.Count == 0)
-            lines.Add($"- {FormatInlineCode(legacyInstallCommand)}");
-        else
-            AppendPackageInstallMarkdown(lines, packages);
-        lines.Add(string.Empty);
-        lines.Add("## Quickstart");
-        lines.Add($"```{quickstart.Language}");
-        lines.AddRange(quickstart.Lines);
-        lines.Add("```");
-        lines.Add(string.Empty);
-        lines.Add("## Machine-friendly API data");
-        AppendApiResourceLinks(lines, apiCatalogs);
-        AppendOptionalMarkdown(lines, discoveryContentPath);
-        lines.Add(string.Empty);
-        lines.Add("Slug rule: lower-case, dots/symbols -> dashes.");
-
-        File.WriteAllText(path, string.Join(Environment.NewLine, lines), Encoding.UTF8);
-    }
-
-    private static void WriteLlmsJson(
-        string path,
-        string name,
-        string packageId,
-        string version,
-        string legacyInstallCommand,
-        IReadOnlyList<PackageInfo> packages,
-        int? typeCount,
-        IReadOnlyList<ApiCatalogInfo> apiCatalogs,
-        QuickstartInfo quickstart)
-    {
-        var payload = new Dictionary<string, object?>
-        {
-            ["name"] = name,
-            ["version"] = version,
-            ["quickstart"] = quickstart.Lines.Where(l => l != null).ToArray(),
-            ["quickstartLanguage"] = quickstart.Language,
-            ["apiTypeCount"] = typeCount
-        };
-        if (packages.Count == 0)
-        {
-            payload["package"] = packageId;
-            payload["install"] = new[] { legacyInstallCommand };
-        }
-        else
-        {
-            payload["packages"] = packages.Select(static package => new Dictionary<string, object?>
-            {
-                ["id"] = package.Id,
-                ["version"] = package.Version,
-                ["install"] = package.InstallCommand
-            }).ToArray();
-            payload["install"] = packages.Select(static package => package.InstallCommand).ToArray();
-        }
-        if (apiCatalogs.Count == 1)
-            payload["api"] = CreateApiResourcePayload(apiCatalogs[0]);
-        else
-            payload["apiCatalogs"] = apiCatalogs.Select(catalog => new Dictionary<string, object?>
-            {
-                ["name"] = catalog.Name,
-                ["typeCount"] = catalog.TypeCount,
-                ["resources"] = CreateApiResourcePayload(catalog)
-            }).ToArray();
-
-        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(path, json, Encoding.UTF8);
-    }
-
-    private static void WriteLlmsFull(
-        string path,
-        string name,
-        string packageId,
-        string version,
-        string legacyInstallCommand,
-        IReadOnlyList<PackageInfo> packages,
-        int? typeCount,
-        IReadOnlyList<ApiCatalogInfo> apiCatalogs,
-        string overview,
-        QuickstartInfo quickstart,
-        WebLlmsOptions options)
-    {
-        var lines = new List<string>
-        {
-            $"# {name} - Complete AI Context",
-            string.Empty,
-            "## Overview",
-            overview
-        };
-        if (packages.Count == 0)
-        {
-            lines.Add($"- Package: {packageId}");
-            lines.Add($"- Version: {version}");
-        }
-        else
-        {
-            lines.Add($"- Packages: {packages.Count}");
-            lines.Add($"- Suite version: {version}");
-        }
-        if (typeCount.HasValue) lines.Add($"- API types: {typeCount.Value}");
-        if (apiCatalogs.Count > 1) lines.Add($"- API catalogs: {apiCatalogs.Count}");
-        if (!string.IsNullOrWhiteSpace(options.License)) lines.Add($"- License: {options.License}");
-        if (!string.IsNullOrWhiteSpace(options.Targets)) lines.Add($"- Targets: {options.Targets}");
-
-        lines.Add(string.Empty);
-        lines.Add("## Installation");
-        if (packages.Count == 0)
-        {
-            lines.Add("```");
-            lines.Add(legacyInstallCommand);
-            lines.Add("```");
-        }
-        else
-        {
-            AppendPackageInstallMarkdown(lines, packages);
-        }
-        lines.Add(string.Empty);
-        lines.Add("## Quickstart");
-        lines.Add($"```{quickstart.Language}");
-        lines.AddRange(quickstart.Lines);
-        lines.Add("```");
-        lines.Add(string.Empty);
-        lines.Add("## API Resources");
-        AppendApiResourceLinks(lines, apiCatalogs);
-
-        AppendApiDetails(lines, options, apiCatalogs);
-        AppendOptionalMarkdown(lines, options.DiscoveryContentPath);
-
-        if (!string.IsNullOrWhiteSpace(options.ExtraContentPath))
-        {
-            var extraPath = Path.GetFullPath(options.ExtraContentPath);
-            if (File.Exists(extraPath))
-            {
-                lines.Add(string.Empty);
-                lines.AddRange(File.ReadAllLines(extraPath));
-            }
-        }
-
-        File.WriteAllText(path, string.Join(Environment.NewLine, lines), Encoding.UTF8);
-    }
-
-    private static void AppendOptionalMarkdown(List<string> lines, string? contentPath)
-    {
-        if (string.IsNullOrWhiteSpace(contentPath))
-            return;
-
-        var fullPath = Path.GetFullPath(contentPath);
-        if (!File.Exists(fullPath))
-            return;
-
-        lines.Add(string.Empty);
-        lines.AddRange(File.ReadAllLines(fullPath));
-    }
-
-    private static void AppendPackageInstallMarkdown(List<string> lines, IReadOnlyList<PackageInfo> packages)
-    {
-        foreach (var package in packages)
-        {
-            var version = string.IsNullOrWhiteSpace(package.Version)
-                ? string.Empty
-                : $" — source version `{package.Version}`";
-            lines.Add($"- {FormatInlineCode(package.InstallCommand)}{version}");
-        }
-    }
-
-    private static string FormatInlineCode(string value)
-        => $"`{value.Replace("`", "\\`", StringComparison.Ordinal)}`";
-
-    private static void AppendApiResourceLinks(List<string> lines, IReadOnlyList<ApiCatalogInfo> apiCatalogs)
-    {
-        foreach (var catalog in apiCatalogs)
-        {
-            var label = apiCatalogs.Count > 1 ? $"{catalog.Name} " : string.Empty;
-            lines.Add($"- [{label}API index]({catalog.ApiBase}/index.json): Type and package metadata.");
-            lines.Add($"- [{label}API search]({catalog.ApiBase}/search.json): Searchable API data.");
-            lines.Add($"- [{label}API type template]({catalog.ApiBase}/types/{{slug}}.json): Per-type API details.");
-        }
-    }
-
-    private static Dictionary<string, object?> CreateApiResourcePayload(ApiCatalogInfo catalog)
-    {
-        return new Dictionary<string, object?>
-        {
-            ["index"] = $"{catalog.ApiBase}/index.json",
-            ["search"] = $"{catalog.ApiBase}/search.json",
-            ["type"] = $"{catalog.ApiBase}/types/{{slug}}.json",
-            ["slugRule"] = "lower-case, dots/symbols -> dashes"
-        };
-    }
 
     private static void AppendApiDetails(List<string> lines, WebLlmsOptions options, IReadOnlyList<ApiCatalogInfo> apiCatalogs)
     {

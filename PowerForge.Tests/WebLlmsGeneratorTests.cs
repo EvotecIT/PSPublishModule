@@ -6,6 +6,111 @@ using Xunit;
 public class WebLlmsGeneratorTests
 {
     [Fact]
+    public void Generate_SiteContentOmitsInventedPackageMetadataAndKeepsCuratedQuickstart()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-site-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var quickstartPath = Path.Combine(root, "quickstart.txt");
+            File.WriteAllText(quickstartPath, "search --query example");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                Name = "Example Portal",
+                PackageId = "example.invalid",
+                Version = "1.2.3",
+                QuickstartPath = quickstartPath,
+                Overview = "A documentation and product portal."
+            });
+
+            Assert.Equal(0, result.PackageCount);
+            Assert.Empty(result.PackageId);
+            Assert.Empty(result.Version);
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("# Example Portal", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("search --query example", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("## Metadata", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("## Install", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("example.invalid", llmsTxt, StringComparison.Ordinal);
+
+            var llmsFull = File.ReadAllText(result.LlmsFullPath);
+            Assert.DoesNotContain("## Installation", llmsFull, StringComparison.Ordinal);
+            Assert.DoesNotContain("- Package:", llmsFull, StringComparison.Ordinal);
+            Assert.DoesNotContain("- Version:", llmsFull, StringComparison.Ordinal);
+
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.DoesNotContain("\"package\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"version\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"install\"", llmsJson, StringComparison.Ordinal);
+            Assert.Contains("\"quickstartLanguage\": \"shell\"", llmsJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_DotNetPackageWithoutCuratedQuickstartOmitsPlaceholderSection()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-no-placeholder-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Product",
+                PackageId = "Example.Product"
+            });
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("dotnet add package Example.Product", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("## Quickstart", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("TODO", llmsTxt, StringComparison.OrdinalIgnoreCase);
+
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.DoesNotContain("\"quickstart\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"quickstartLanguage\"", llmsJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_ThrowsWhenConfiguredQuickstartDoesNotExist()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-missing-quickstart-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var missingPath = Path.Combine(root, "missing.cs");
+            var exception = Assert.Throws<FileNotFoundException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Product",
+                PackageId = "Example.Product",
+                QuickstartPath = missingPath
+            }));
+
+            Assert.Equal(missingPath, exception.FileName);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Generate_WritesRecommendedLlmsTxtMarkdownLinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-markdown-links-" + Guid.NewGuid().ToString("N"));

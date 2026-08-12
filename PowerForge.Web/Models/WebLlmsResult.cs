@@ -11,10 +11,10 @@ public sealed class WebLlmsResult
     public string LlmsFullPath { get; set; } = string.Empty;
     /// <summary>Package or project name.</summary>
     public string Name { get; set; } = string.Empty;
-    /// <summary>Package identifier.</summary>
+    /// <summary>Package identifier, or an empty string for site content.</summary>
     public string PackageId { get; set; } = string.Empty;
-    /// <summary>Package version.</summary>
-    public string Version { get; set; } = "unknown";
+    /// <summary>Package version, or an empty string for site content.</summary>
+    public string Version { get; set; } = string.Empty;
     /// <summary>Number of installable packages represented by the generated files.</summary>
     public int PackageCount { get; set; }
     /// <summary>Optional count of API types included.</summary>

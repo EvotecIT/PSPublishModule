@@ -73,6 +73,15 @@ public enum WebApiDetailLevel
     Full
 }
 
+/// <summary>Content shape emitted by the LLMS generator.</summary>
+public enum WebLlmsContentKind
+{
+    /// <summary>Describe an installable package, module, tool, or package suite.</summary>
+    Package,
+    /// <summary>Describe a website or product portal without inventing package metadata.</summary>
+    Site
+}
+
 /// <summary>Repository provider selection.</summary>
 public enum RepositoryProvider
 {

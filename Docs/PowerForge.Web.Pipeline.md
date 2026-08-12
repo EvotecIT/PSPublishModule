@@ -795,6 +795,7 @@ Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
 {
   "task": "llms",
   "siteRoot": "./Artifacts/site",
+  "contentKind": "Package",
   "project": "./src/MyLib/MyLib.csproj",
   "apiIndex": "./Artifacts/site/api/index.json",
   "apiBase": "/api",
@@ -807,6 +808,8 @@ Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
 }
 ```
 Notes:
+- `contentKind`: `Package` (default) for installable packages/modules/tools, or `Site` for portals that must not emit package, version, or installation metadata
+- `Site` content can still include an explicitly configured `quickstart`; package content omits the quickstart section when no meaningful snippet is available
 - `apiLevel`: `None` (default), `Summary`, or `Full`
 - `apiMaxTypes` / `apiMaxMembers` cap the size of API detail sections in `llms-full.txt`
 

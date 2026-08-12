@@ -8,6 +8,79 @@ namespace PowerForge.Tests;
 public sealed class WebPipelineLlmsContractTests
 {
     [Fact]
+    public void Llms_pipeline_site_content_omits_package_installation_metadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-pipeline-site-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "llms",
+                      "siteRoot": "_site",
+                      "contentKind": "Site",
+                      "name": "Example Portal",
+                      "overview": "A documentation and product portal."
+                    }
+                  ]
+                }
+                """);
+
+            Directory.CreateDirectory(Path.Combine(root, "_site"));
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.StartsWith("LLMS generated (site)", Assert.Single(result.Steps).Message, StringComparison.Ordinal);
+            var llmsTxt = File.ReadAllText(Path.Combine(root, "_site", "llms.txt"));
+            Assert.DoesNotContain("## Install", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("dotnet add package", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Llms_pipeline_rejects_unknown_content_kind()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-pipeline-kind-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "llms",
+                      "siteRoot": "_site",
+                      "contentKind": "PortalTypo",
+                      "name": "Example Portal"
+                    }
+                  ]
+                }
+                """);
+
+            Directory.CreateDirectory(Path.Combine(root, "_site"));
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.False(result.Success);
+            Assert.Contains("Unsupported LLMS content kind", Assert.Single(result.Steps).Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void LlmsStep_schema_declares_package_manifest_arrays()
     {
         var schemaDocument = JsonNode.Parse(File.ReadAllText(GetRepoPath(
@@ -19,6 +92,23 @@ public sealed class WebPipelineLlmsContractTests
         {
             Assert.Equal("array", properties[propertyName]!["type"]!.GetValue<string>());
             Assert.Equal("string", properties[propertyName]!["items"]!["type"]!.GetValue<string>());
+        }
+    }
+
+    [Fact]
+    public void LlmsStep_schema_declares_site_content_kind()
+    {
+        var schemaDocument = JsonNode.Parse(File.ReadAllText(GetRepoPath(
+            "Schemas",
+            "powerforge.web.pipelinespec.schema.json")))!;
+        var properties = schemaDocument["$defs"]!["LlmsStep"]!["properties"]!;
+
+        foreach (var propertyName in new[] { "contentKind", "content-kind" })
+        {
+            var values = properties[propertyName]!["enum"]!.AsArray()
+                .Select(static value => value!.GetValue<string>())
+                .ToArray();
+            Assert.Equal(new[] { "Package", "Site" }, values);
         }
     }
 

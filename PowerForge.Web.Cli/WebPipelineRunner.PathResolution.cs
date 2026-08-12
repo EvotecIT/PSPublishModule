@@ -138,6 +138,14 @@ internal static partial class WebPipelineRunner
         return Enum.TryParse<WebApiDetailLevel>(value, true, out var parsed) ? parsed : WebApiDetailLevel.None;
     }
 
+    private static WebLlmsContentKind ParseLlmsContentKind(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return WebLlmsContentKind.Package;
+        if (Enum.TryParse<WebLlmsContentKind>(value, true, out var parsed) && Enum.IsDefined(parsed))
+            return parsed;
+        throw new InvalidOperationException($"Unsupported LLMS content kind '{value}'. Expected Package or Site.");
+    }
+
     private static void TryResolveApiFragmentsFromTheme(string siteConfigPath, ref string? head, ref string? header, ref string? footer)
     {
         if (string.IsNullOrWhiteSpace(siteConfigPath))
