@@ -199,6 +199,17 @@ internal sealed partial class PowerForgeReleaseService
             if (target is null)
                 continue;
 
+            if (string.Equals(receipt.OperationPhase, "UploadAmbiguous", StringComparison.Ordinal))
+            {
+                if (remoteBuild is null)
+                {
+                    throw new InvalidOperationException(
+                        $"The prior App Store upload attempt for '{app.Name}' has an ambiguous remote result. " +
+                        "PowerForge will not upload the archive again until App Store Connect state is reconciled and a uniquely matching build is deliberately adopted.");
+                }
+                continue;
+            }
+
             if (remoteBuild is null)
             {
                 return new AppleUploadAttestation(receipt, target);
@@ -263,6 +274,8 @@ internal sealed partial class PowerForgeReleaseService
         string? build)
     {
         if (receipt.PlanOnly ||
+            (!string.Equals(receipt.OperationPhase, "UploadAttested", StringComparison.Ordinal) &&
+             !string.Equals(receipt.OperationPhase, "UploadAmbiguous", StringComparison.Ordinal)) ||
             receipt.SchemaVersion < 4 ||
             string.IsNullOrWhiteSpace(receipt.ReceiptSha256) ||
             !string.Equals(receipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))

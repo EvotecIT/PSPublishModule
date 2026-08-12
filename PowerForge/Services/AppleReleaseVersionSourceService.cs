@@ -14,10 +14,14 @@ internal sealed class AppleReleaseVersionSourceService
         "^\\d+\\.\\d+(?:\\.\\d+)?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private readonly Action<string>? _onComparedVersionSource;
+    private readonly Action<string> _deleteFile;
 
-    internal AppleReleaseVersionSourceService(Action<string>? onComparedVersionSource = null)
+    internal AppleReleaseVersionSourceService(
+        Action<string>? onComparedVersionSource = null,
+        Action<string>? deleteFile = null)
     {
         _onComparedVersionSource = onComparedVersionSource;
+        _deleteFile = deleteFile ?? File.Delete;
     }
 
     internal PowerForgeAppleVersionReceipt Read(string sourcePath)
@@ -153,7 +157,7 @@ internal sealed class AppleReleaseVersionSourceService
                 throw new InvalidOperationException(
                     $"Apple version source changed while applying the approved update and was restored instead of being overwritten: {path}");
             }
-            File.Delete(backupPath);
+            TryDeleteCommittedBackup(backupPath);
 
             if (!string.Equals(File.ReadAllText(path), content, StringComparison.Ordinal))
                 throw new InvalidOperationException($"Apple version source changed while the approved update was being published: {path}");
@@ -163,8 +167,14 @@ internal sealed class AppleReleaseVersionSourceService
             if (File.Exists(temporaryPath))
                 File.Delete(temporaryPath);
             if (File.Exists(backupPath) && string.Equals(File.ReadAllText(backupPath), expectedContent, StringComparison.Ordinal))
-                File.Delete(backupPath);
+                TryDeleteCommittedBackup(backupPath);
         }
+    }
+
+    private void TryDeleteCommittedBackup(string backupPath)
+    {
+        try { _deleteFile(backupPath); }
+        catch { /* approved replacement is already committed; retain the old bytes */ }
     }
 
     private static void RestoreConcurrentVersionSource(string path, string candidatePath, string expectedNamedContent)

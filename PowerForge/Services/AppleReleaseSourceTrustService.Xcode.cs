@@ -33,8 +33,10 @@ internal sealed partial class AppleReleaseSourceTrustService
         "SYSTEM_HEADER_SEARCH_PATHS",
         "MTL_HEADER_SEARCH_PATHS",
         "FRAMEWORK_SEARCH_PATHS",
+        "SYSTEM_FRAMEWORK_SEARCH_PATHS",
         "LIBRARY_SEARCH_PATHS",
-        "SWIFT_INCLUDE_PATHS"
+        "SWIFT_INCLUDE_PATHS",
+        "SWIFT_SYSTEM_INCLUDE_PATHS"
     };
 
     private static readonly HashSet<string> FlagBuildSettings = new(StringComparer.OrdinalIgnoreCase)

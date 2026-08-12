@@ -302,6 +302,38 @@ public sealed class AppleArchiveBuildSnapshotTests
     }
 
     [Fact]
+    public void DirectExport_publish_retains_previous_export_until_release_completion()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var destination = Directory.CreateDirectory(Path.Combine(root.FullName, "export"));
+            File.WriteAllText(Path.Combine(destination.FullName, "payload"), "previous export");
+            using var snapshot = AppleDirectExportSnapshot.Create();
+            var artifact = Directory.CreateDirectory(Path.Combine(snapshot.ExportPath, "CasaRay.app"));
+            File.WriteAllText(Path.Combine(artifact.FullName, "payload"), "candidate export");
+            snapshot.BindProducedArtifact(artifact.FullName, AppleNotarizationService.ComputeArtifactSha256(artifact.FullName));
+
+            var published = snapshot.Publish(destination.FullName);
+            var backupParent = Assert.Single(Directory.EnumerateDirectories(
+                root.FullName,
+                ".export.powerforge-backup-*",
+                SearchOption.TopDirectoryOnly));
+            Assert.Equal("previous export", File.ReadAllText(Path.Combine(backupParent, "export", "payload")));
+            Assert.Equal("candidate export", File.ReadAllText(Path.Combine(published.ArtifactPath, "payload")));
+
+            snapshot.CommitPublication();
+
+            Assert.False(Directory.Exists(backupParent));
+            Assert.Equal("candidate export", File.ReadAllText(Path.Combine(published.ArtifactPath, "payload")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Publish_rejects_archive_replaced_after_xcodebuild_identity_was_observed()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -6,6 +6,9 @@ internal sealed class AppleDirectExportSnapshot : IDisposable
     private bool _disposed;
     private string? _approvedArtifactPath;
     private string? _approvedArtifactSha256;
+    private string? _publishedBackup;
+    private string? _publishedBackupDeletionCandidate;
+    private AppleArtifactCopy.PathIdentity? _publishedDestinationIdentity;
 
     private AppleDirectExportSnapshot(string rootPath, string exportPath)
     {
@@ -127,11 +130,11 @@ internal sealed class AppleDirectExportSnapshot : IDisposable
                     $"The published Developer ID export tree changed before notarization. Expected '{sourceExportSha256}', received '{observedPublishedExportSha256}'.");
             }
             if (movedExisting)
-                AppleArtifactCopy.RemoveBackupIfUnchanged(
-                    backup,
-                    backupDeletionCandidate,
-                    existingDestination!,
-                    "Previous Developer ID export");
+            {
+                _publishedBackup = backup;
+                _publishedBackupDeletionCandidate = backupDeletionCandidate;
+                _publishedDestinationIdentity = existingDestination;
+            }
             return new ApplePublishedDirectExport(destination, publishedArtifact, publishedSha256);
         }
         catch (Exception publicationException)
@@ -152,6 +155,40 @@ internal sealed class AppleDirectExportSnapshot : IDisposable
         finally
         {
             try { AppleArtifactCopy.DeleteOwnedDirectory(stage); } catch { /* best effort private cleanup */ }
+        }
+    }
+
+    internal void CommitPublication()
+    {
+        var backup = _publishedBackup;
+        var backupDeletionCandidate = _publishedBackupDeletionCandidate;
+        var destinationIdentity = _publishedDestinationIdentity;
+        if (string.IsNullOrWhiteSpace(backup) ||
+            string.IsNullOrWhiteSpace(backupDeletionCandidate) ||
+            destinationIdentity is null)
+        {
+            return;
+        }
+
+        try
+        {
+            AppleArtifactCopy.RemoveBackupIfUnchanged(
+                backup!,
+                backupDeletionCandidate!,
+                destinationIdentity,
+                "Previous Developer ID export");
+        }
+        catch
+        {
+            // The configured notarization workflow completed. Retain any previous
+            // or concurrently replaced backup instead of converting cleanup into
+            // a retryable release failure.
+        }
+        finally
+        {
+            _publishedBackup = null;
+            _publishedBackupDeletionCandidate = null;
+            _publishedDestinationIdentity = null;
         }
     }
 

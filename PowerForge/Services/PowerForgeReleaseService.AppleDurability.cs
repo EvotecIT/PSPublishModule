@@ -53,6 +53,36 @@ internal sealed partial class PowerForgeReleaseService
         });
     }
 
+    private void WriteAppleUploadAmbiguity(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        PowerForgeAppleAppReleaseResult result,
+        string detail)
+    {
+        if (!plan.Automation.WriteReceipt)
+            return;
+
+        var attemptId = Guid.NewGuid().ToString("N");
+        var target = CreateAppleCheckpointTarget(plan, app);
+        target.UploadPerformed = true;
+        target.ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');
+        target.ArchiveSha256 = result.ArchiveSha256 ?? app.ExpectedArchiveSha256;
+        target.BuildUploadId = result.Upload?.BuildUploadId;
+        target.UploadAttestationAttemptId = attemptId;
+        target.UploadExecutionSha256 = ComputeAppleUploadExecutionSha256(plan, app);
+        target.ErrorMessage = $"App Store upload state is ambiguous for '{app.Name}'; reconcile App Store Connect before retrying. {detail}";
+        _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
+        {
+            AttemptId = attemptId,
+            Action = plan.Action,
+            SourceCommit = plan.SourceCommit,
+            OperationPhase = "UploadAmbiguous",
+            Success = false,
+            ErrorMessage = target.ErrorMessage,
+            Targets = new[] { target }
+        });
+    }
+
     private void WriteAppleNotarizationAttestation(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app,

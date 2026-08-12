@@ -73,4 +73,36 @@ public sealed partial class PowerForgeReleaseServiceTests
             TryDelete(root);
         }
     }
+
+    [Fact]
+    public void AppleVersionSource_UpdateSucceedsWhenCommittedBackupCleanupFails()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            WriteXcodeGenVersionSource(root, "1.5.0", "13");
+            var sourcePath = Path.Combine(root, "project.yml");
+            var approvedContent = File.ReadAllText(sourcePath);
+            var service = new AppleReleaseVersionSourceService(
+                deleteFile: path => throw new IOException($"Simulated cleanup failure for {path}"));
+
+            var receipt = service.Update(
+                sourcePath,
+                approvedContent,
+                "1.6.0",
+                "14",
+                highestRemoteBuildNumber: 13,
+                whatIf: false);
+
+            Assert.True(receipt.Changed);
+            var version = new AppleReleaseVersionSourceService().Read(sourcePath);
+            Assert.Equal("1.6.0", version.MarketingVersion);
+            Assert.Equal("14", version.BuildNumber);
+            Assert.Single(Directory.EnumerateFiles(root, ".project.yml.*.previous"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
 }

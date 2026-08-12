@@ -152,41 +152,39 @@ public sealed partial class AppleNotarizationService
             submittedFileMutationIdentity = ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(
                 submittedPath,
                 "private Apple notarization submitted file");
-            submission = await RunAsync(xcrunExecutable, submissionArtifactPath, submitArguments, timeout, toolEnvironment, cancellationToken).ConfigureAwait(false);
-            (submissionId, status) = ParseSubmission(submission);
+            try
+            {
+                submission = await RunAsync(xcrunExecutable, submissionArtifactPath, submitArguments, timeout, toolEnvironment, cancellationToken).ConfigureAwait(false);
+                (submissionId, status) = ParseSubmission(submission);
+            }
+            catch (Exception ex)
+            {
+                throw CreateAmbiguousSubmissionException(
+                    request,
+                    artifactPath,
+                    artifactSha256,
+                    submissionPath,
+                    submissionSha256!,
+                    submissionId: null,
+                    status: null,
+                    ex);
+            }
         }
         if (!resumed &&
-            submission.Succeeded &&
             (string.IsNullOrWhiteSpace(submissionId) ||
              (!string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) &&
               !string.Equals(status, "Invalid", StringComparison.OrdinalIgnoreCase))))
         {
-            try
-            {
-                request.AmbiguousCheckpoint?.Invoke(new AppleNotarizationAmbiguousCheckpoint
-                {
-                    ArtifactPath = artifactPath,
-                    ArtifactSha256 = artifactSha256,
-                    SubmissionPath = submissionPath,
-                    SubmissionSha256 = submissionSha256!,
-                    SubmissionId = submissionId,
-                    Status = status
-                });
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException(
-                    "notarytool exited successfully without complete submission evidence, and the ambiguous remote mutation checkpoint could not be persisted. " +
-                    "Do not resubmit until Apple notary history has been reconciled.",
-                    ex);
-            }
-
-            throw new InvalidOperationException(
-                "notarytool exited successfully without a complete terminal submission id and status. The remote mutation is ambiguous; " +
-                "do not resubmit until Apple notary history has been reconciled.");
+            throw CreateAmbiguousSubmissionException(
+                request,
+                artifactPath,
+                artifactSha256,
+                submissionPath,
+                submissionSha256!,
+                submissionId,
+                status);
         }
         using var acceptedArtifactMonitor = !resumed &&
-                                            submission.Succeeded &&
                                             string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase)
             ? CreateArtifactMutationMonitor(
                 submissionArtifactPath,
@@ -195,7 +193,6 @@ public sealed partial class AppleNotarizationService
                 "Do not staple or publish until the accepted submission has been reconciled.")
             : null;
         if (!resumed &&
-            submission.Succeeded &&
             string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) &&
             !string.IsNullOrWhiteSpace(submissionId))
         {

@@ -2265,26 +2265,47 @@ internal sealed partial class PowerForgeReleaseService
                         "private Apple upload archive snapshot",
                         "xcodebuild exportArchive",
                         "Discard the upload/export result and inspect remote state before retrying.");
-                var upload = _uploadAppleApp(new AppleAppArchiveUploadRequest
+                AppleAppArchiveUploadResult upload;
+                try
                 {
-                    ArchivePath = uploadSnapshot?.ArchivePath ?? app.ArchivePath,
-                    BundleId = app.BundleId,
-                    RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys,
-                    ExportPath = directExportSnapshot?.ExportPath ?? app.ExportPath,
-                    TeamId = app.TeamId,
-                    XcodeBuildExecutable = plan.XcodeBuildExecutable,
-                    RequireTrustedSystemTools = !string.IsNullOrWhiteSpace(plan.SourceCommit),
-                    SigningStyle = plan.SigningStyle,
-                    Destination = direct ? "export" : "upload",
-                    Method = direct ? plan.DirectDistribution.ExportMethod : "app-store-connect",
-                    ManageAppVersionAndBuildNumber = plan.ManageAppVersionAndBuildNumber,
-                    UploadSymbols = plan.UploadSymbols,
-                    GenerateAppStoreInformation = !direct && plan.GenerateAppStoreInformation,
-                    AppStoreConnectApiKeyPath = direct ? null : plan.AppStoreConnectApiKeyPath,
-                    AppStoreConnectApiKeyId = direct ? null : plan.AppStoreConnectApiKeyId,
-                    AppStoreConnectApiIssuerId = direct ? null : plan.AppStoreConnectApiIssuerId,
-                    AllowProvisioningUpdates = plan.AllowProvisioningUpdates
-                });
+                    upload = _uploadAppleApp(new AppleAppArchiveUploadRequest
+                    {
+                        ArchivePath = uploadSnapshot?.ArchivePath ?? app.ArchivePath,
+                        BundleId = app.BundleId,
+                        RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys,
+                        ExportPath = directExportSnapshot?.ExportPath ?? app.ExportPath,
+                        TeamId = app.TeamId,
+                        XcodeBuildExecutable = plan.XcodeBuildExecutable,
+                        RequireTrustedSystemTools = !string.IsNullOrWhiteSpace(plan.SourceCommit),
+                        SigningStyle = plan.SigningStyle,
+                        Destination = direct ? "export" : "upload",
+                        Method = direct ? plan.DirectDistribution.ExportMethod : "app-store-connect",
+                        ManageAppVersionAndBuildNumber = plan.ManageAppVersionAndBuildNumber,
+                        UploadSymbols = plan.UploadSymbols,
+                        GenerateAppStoreInformation = !direct && plan.GenerateAppStoreInformation,
+                        AppStoreConnectApiKeyPath = direct ? null : plan.AppStoreConnectApiKeyPath,
+                        AppStoreConnectApiKeyId = direct ? null : plan.AppStoreConnectApiKeyId,
+                        AppStoreConnectApiIssuerId = direct ? null : plan.AppStoreConnectApiIssuerId,
+                        AllowProvisioningUpdates = plan.AllowProvisioningUpdates
+                    });
+                }
+                catch (Exception ex) when (!direct)
+                {
+                    try
+                    {
+                        WriteAppleUploadAmbiguity(plan, app, result, $"The upload process did not return a definitive result: {ex.Message}");
+                    }
+                    catch (Exception checkpointException)
+                    {
+                        throw new AggregateException(
+                            $"The App Store upload attempt for '{app.Name}' was indeterminate and its ambiguity checkpoint could not be persisted. Do not upload again until remote state is reconciled.",
+                            ex,
+                            checkpointException);
+                    }
+                    throw new InvalidOperationException(
+                        $"The App Store upload attempt for '{app.Name}' ended without a definitive result. Do not upload again until App Store Connect state is reconciled.",
+                        ex);
+                }
                 upload.ArchivePath = app.ArchivePath;
                 result.Upload = upload;
                 if (!direct && upload.Succeeded)
@@ -2298,6 +2319,24 @@ internal sealed partial class PowerForgeReleaseService
                         throw new InvalidOperationException(
                             $"The App Store upload completed for '{app.Name}', but its durable upload attestation could not be persisted. " +
                             "Do not upload the archive again until App Store Connect state has been reconciled.",
+                            ex);
+                    }
+                }
+                else if (!direct)
+                {
+                    try
+                    {
+                        WriteAppleUploadAmbiguity(
+                            plan,
+                            app,
+                            result,
+                            $"xcodebuild exited with code {upload.ProcessResult.ExitCode} (timed out: {upload.ProcessResult.TimedOut}).");
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            $"The App Store upload attempt for '{app.Name}' was indeterminate and its ambiguity checkpoint could not be persisted. " +
+                            "Do not upload again until remote state is reconciled.",
                             ex);
                     }
                 }
@@ -2336,6 +2375,7 @@ internal sealed partial class PowerForgeReleaseService
                     WriteAppleNotarizationAttestation(plan, app, result);
                     if (!result.Notarization.Succeeded)
                         throw CreateAppleNotarizationFailure(app, result.Notarization);
+                    directExportSnapshot.CommitPublication();
                 }
                 else
                 {
