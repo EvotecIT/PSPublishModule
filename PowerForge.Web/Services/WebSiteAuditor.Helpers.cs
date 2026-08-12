@@ -30,12 +30,12 @@ public static partial class WebSiteAuditor
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline);
     private const int LinkPurposeRedirectDepthLimit = 8;
 
-    private static int CountAllFiles(string root, int stopAfter, string[] budgetExcludePatterns, bool useDefaultExcludes, out bool truncated)
+    private static int CountAllFiles(string root, int stopAfter, string[] budgetExcludePatterns, out bool truncated)
     {
         // Best-effort: avoid full traversal when auditing just wants a budget check.
         var count = 0;
         truncated = false;
-        var excludes = BuildExcludePatterns(budgetExcludePatterns ?? Array.Empty<string>(), useDefaultExcludes);
+        var excludes = NormalizePatterns(budgetExcludePatterns ?? Array.Empty<string>());
         var hasExcludes = excludes.Length > 0;
         try
         {
@@ -61,6 +61,39 @@ public static partial class WebSiteAuditor
         }
 
         return count;
+    }
+
+    private static IReadOnlyList<(string RelativePath, long Bytes)> FindOverBudgetFiles(
+        string root,
+        string[] budgetExcludePatterns,
+        long maxFileBytes)
+    {
+        // HTML-audit defaults suppress implementation fragments from page checks,
+        // but every deployed artifact still counts toward the file-size budget.
+        var excludes = NormalizePatterns(budgetExcludePatterns ?? Array.Empty<string>());
+        var overBudget = new List<(string RelativePath, long Bytes)>();
+
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+                if (excludes.Length > 0 && MatchesAny(excludes, relative))
+                    continue;
+
+                var length = new FileInfo(file).Length;
+                if (length > maxFileBytes)
+                    overBudget.Add((relative, length));
+            }
+        }
+        catch
+        {
+            // Keep artifact metrics best-effort, consistent with the existing file-count budget.
+        }
+
+        return overBudget
+            .OrderBy(static item => item.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static IEnumerable<string> EnumerateHtmlFiles(string root, string[] includePatterns, string[] excludePatterns, bool useDefaultExcludes)

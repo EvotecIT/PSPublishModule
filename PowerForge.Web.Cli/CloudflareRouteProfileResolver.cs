@@ -13,6 +13,8 @@ internal sealed class CloudflareSiteRouteProfile
     public string BaseUrl { get; init; } = string.Empty;
     public string[] VerifyPaths { get; init; } = Array.Empty<string>();
     public string[] PurgePaths { get; init; } = Array.Empty<string>();
+    public AgentSecurityHeadersSpec? SecurityHeaders { get; init; }
+    public AgentReadinessSpec? AgentReadiness { get; init; }
 }
 
 internal static class CloudflareRouteProfileResolver
@@ -43,6 +45,7 @@ internal static class CloudflareRouteProfileResolver
 
         var verifyPaths = BuildVerifyPaths(spec);
         var purgePaths = BuildPurgePaths(verifyPaths);
+        var agentReadiness = spec.AgentReadiness is null ? null : WebAgentReadiness.ResolveSpec(spec.AgentReadiness);
 
         return new CloudflareSiteRouteProfile
         {
@@ -50,7 +53,11 @@ internal static class CloudflareRouteProfileResolver
             Name = (spec.Name ?? string.Empty).Trim(),
             BaseUrl = baseUrl,
             VerifyPaths = verifyPaths,
-            PurgePaths = purgePaths
+            PurgePaths = purgePaths,
+            AgentReadiness = agentReadiness,
+            SecurityHeaders = agentReadiness?.Enabled == false
+                ? new AgentSecurityHeadersSpec { Enabled = false, Hsts = false }
+                : agentReadiness?.SecurityHeaders
         };
     }
 

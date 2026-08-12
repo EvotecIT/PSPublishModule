@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -159,9 +160,250 @@ public class WebPipelineRunnerCloudflareTests
         }
     }
 
+    [Fact]
+    public async Task RunPipeline_CloudflareVerify_DiscoversFingerprintAssetFromDeployedHtml()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-cloudflare-discovery-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
+        RequestCounter? requestCounter = null;
+
+        try
+        {
+            var port = GetFreePort();
+            const string discoveryPath = "/redirect";
+            const string appPath = "/apps/converter/";
+            var html = """<html><head><base href="./"></head><body><img srcset="data:image/gif;base64,R0lGODlhAQABAAAAACw= 1x, _framework/ignored,asset.js 1.5x, _framework/blazor.webassembly.abc123.js?v=release 2x"></body></html>""";
+            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(
+                port, "HIT", appPath, html, discoveryPath, appPath);
+
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                $$"""
+                {
+                  "Name": "Cloudflare Discovery Profile Test",
+                  "BaseUrl": "http://127.0.0.1:{{port}}",
+                  "Features": [ "docs" ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "cloudflare",
+                      "operation": "verify",
+                      "siteConfig": "./site.json",
+                      "warmupRequests": 0,
+                      "allowStatuses": "HIT",
+                      "discoverAssetsFrom": [ "{{discoveryPath}}" ],
+                      "assetPathPatterns": [
+                        "/apps/converter/_framework/ignored,asset.js",
+                        "/apps/converter/_framework/blazor.webassembly.*.js"
+                      ]
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success, result.Steps.Single().Message);
+            Assert.NotNull(requestCounter);
+            Assert.Contains("/", requestCounter!.Paths);
+            Assert.Contains("/docs/", requestCounter.Paths);
+            Assert.Contains("/sitemap.xml", requestCounter.Paths);
+            Assert.Contains("/apps/converter/_framework/ignored,asset.js", requestCounter.Paths);
+            Assert.Contains("/apps/converter/_framework/blazor.webassembly.abc123.js?v=release", requestCounter!.Paths);
+        }
+        finally
+        {
+            await StopServerAsync(listener, cts, serverTask);
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task RunPipeline_CloudflareVerify_RejectsCrossOriginDiscoveryRedirect()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-cloudflare-cross-origin-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
+        try
+        {
+            var port = GetFreePort();
+            (listener, cts, serverTask, _) = StartCloudflareStatusServer(
+                port,
+                "HIT",
+                redirectPath: "/redirect",
+                redirectTarget: "https://outside.example/apps/converter/");
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "cloudflare",
+                      "operation": "verify",
+                      "baseUrl": "http://127.0.0.1:{{port}}",
+                      "discoverAssetsFrom": "/redirect",
+                      "assetPathPatterns": "/apps/converter/_framework/*.js"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Contains("outside the configured site origin", result.Steps.Single().Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            await StopServerAsync(listener, cts, serverTask);
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task RunPipeline_CloudflareVerify_RejectsCachedErrorResponse()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-cloudflare-cached-error-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
+        try
+        {
+            var port = GetFreePort();
+            (listener, cts, serverTask, _) = StartCloudflareStatusServer(
+                port, "HIT", responseStatus: HttpStatusCode.NotFound);
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "cloudflare",
+                      "operation": "verify",
+                      "baseUrl": "http://127.0.0.1:{{port}}",
+                      "warmupRequests": 0,
+                      "allowStatuses": "HIT",
+                      "paths": "/missing.js"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Contains("Cloudflare cache verify failed", result.Steps.Single().Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            await StopServerAsync(listener, cts, serverTask);
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task CloudflareVerifyCommand_ShouldCombineExplicitUrlsAndPaths()
+    {
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
+        RequestCounter? requestCounter = null;
+        try
+        {
+            var port = GetFreePort();
+            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(port, "HIT");
+            var baseUrl = $"http://127.0.0.1:{port}";
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand(
+                "cloudflare",
+                ["verify", "--base-url", baseUrl, "--url", $"{baseUrl}/explicit", "--path", "/from-path", "--warmup", "0", "--allow-status", "HIT"],
+                outputJson: false,
+                new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+
+            Assert.Equal(0, exitCode);
+            Assert.NotNull(requestCounter);
+            Assert.Contains("/explicit", requestCounter!.Paths);
+            Assert.Contains("/from-path", requestCounter.Paths);
+        }
+        finally
+        {
+            await StopServerAsync(listener, cts, serverTask);
+        }
+    }
+
+    [Fact]
+    public async Task RunPipeline_CloudflareVerify_ResolvesRootDiscoveryPathUnderConfiguredSiteBase()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-cloudflare-base-path-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
+        RequestCounter? requestCounter = null;
+        try
+        {
+            var port = GetFreePort();
+            const string appPath = "/project/";
+            const string assetPath = "/project/_framework/app.abc123.js";
+            var html = """<html><body><script src="_framework/app.abc123.js"></script></body></html>""";
+            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(port, "HIT", appPath, html);
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "cloudflare",
+                      "operation": "verify",
+                      "baseUrl": "http://127.0.0.1:{{port}}/project/",
+                      "warmupRequests": 0,
+                      "allowStatuses": "HIT",
+                      "discoverAssetsFrom": "/",
+                      "assetPathPatterns": "{{assetPath}}"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success, result.Steps.Single().Message);
+            Assert.NotNull(requestCounter);
+            Assert.Contains(appPath, requestCounter!.Paths);
+            Assert.Contains(assetPath, requestCounter.Paths);
+            Assert.DoesNotContain("/", requestCounter.Paths);
+        }
+        finally
+        {
+            await StopServerAsync(listener, cts, serverTask);
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static (HttpListener listener, CancellationTokenSource cts, Task serverTask, RequestCounter requestCounter) StartCloudflareStatusServer(
         int port,
-        string cacheStatus)
+        string cacheStatus,
+        string? htmlPath = null,
+        string? html = null,
+        string? redirectPath = null,
+        string? redirectTarget = null,
+        HttpStatusCode responseStatus = HttpStatusCode.OK)
     {
         var listener = new HttpListener();
         listener.Prefixes.Add($"http://127.0.0.1:{port}/");
@@ -169,8 +411,6 @@ public class WebPipelineRunnerCloudflareTests
 
         var cts = new CancellationTokenSource();
         var requestCounter = new RequestCounter();
-        var payload = Encoding.UTF8.GetBytes("ok");
-
         var serverTask = Task.Run(async () =>
         {
             while (!cts.IsCancellationRequested)
@@ -193,8 +433,20 @@ public class WebPipelineRunnerCloudflareTests
                     continue;
 
                 Interlocked.Increment(ref requestCounter.Count);
-                context.Response.StatusCode = 200;
+                var requestPath = context.Request.Url?.PathAndQuery ?? "/";
+                requestCounter.Paths.Enqueue(requestPath);
+                if (string.Equals(context.Request.Url?.AbsolutePath, redirectPath, StringComparison.Ordinal))
+                {
+                    context.Response.StatusCode = (int)HttpStatusCode.Redirect;
+                    context.Response.RedirectLocation = redirectTarget;
+                    context.Response.Close();
+                    continue;
+                }
+                var content = string.Equals(context.Request.Url?.AbsolutePath, htmlPath, StringComparison.Ordinal) ? html ?? string.Empty : "ok";
+                var payload = Encoding.UTF8.GetBytes(content);
+                context.Response.StatusCode = (int)responseStatus;
                 context.Response.Headers["cf-cache-status"] = cacheStatus;
+                context.Response.ContentType = string.Equals(context.Request.Url?.AbsolutePath, htmlPath, StringComparison.Ordinal) ? "text/html" : "text/plain";
                 context.Response.OutputStream.Write(payload, 0, payload.Length);
                 context.Response.Close();
             }
@@ -206,6 +458,7 @@ public class WebPipelineRunnerCloudflareTests
     private sealed class RequestCounter
     {
         public int Count;
+        public ConcurrentQueue<string> Paths { get; } = new();
     }
 
     private static async Task StopServerAsync(HttpListener? listener, CancellationTokenSource? cts, Task? serverTask)

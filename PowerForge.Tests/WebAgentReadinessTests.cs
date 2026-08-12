@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using PowerForge.Web;
@@ -5,7 +6,7 @@ using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
-public class WebAgentReadinessTests
+public partial class WebAgentReadinessTests
 {
     [Fact]
     public void Prepare_WritesDiscoveryFilesAndHeaders()
@@ -57,6 +58,7 @@ public class WebAgentReadinessTests
                 {
                     Enabled = true,
                     ContentSignals = new AgentContentSignalsSpec { Search = true, AiInput = false, AiTrain = false },
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Hsts = true },
                     ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = ".well-known/custom-api-catalog" },
                     AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true },
                     A2AAgentCard = new AgentA2ACardSpec { Enabled = true }
@@ -530,6 +532,7 @@ public class WebAgentReadinessTests
                     Enabled = true,
                     LinkHeaders = false,
                     MarkdownNegotiation = false,
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Hsts = true },
                     ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
                     AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
                     AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = true }
@@ -991,6 +994,7 @@ public class WebAgentReadinessTests
                   Header set X-Content-Type-Options "nosniff"
                   Header set X-Frame-Options "DENY"
                   Header set Referrer-Policy "strict-origin-when-cross-origin"
+                  Header set Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
                   Header set Access-Control-Allow-Origin "*"
                 </IfModule>
                 """);
@@ -1004,7 +1008,7 @@ public class WebAgentReadinessTests
                     Enabled = true,
                     Robots = false,
                     LinkHeaders = false,
-                    SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = true },
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = true, Hsts = true },
                     ContentSignals = new AgentContentSignalsSpec { Enabled = false },
                     ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
                     AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
@@ -1677,6 +1681,633 @@ public class WebAgentReadinessTests
         {
             TryDeleteDirectory(root);
         }
+    }
+
+    [Fact]
+    public async Task Scan_HonorsDisabledOptionalAgentReadinessChecks()
+    {
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = new AgentReadinessScanHandler(),
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        });
+
+        foreach (var id in new[] { "link-headers", "robots-txt", "api-catalog", "agent-skills", "agents-json", "markdown-negotiation", "security-csp" })
+            Assert.Equal("info", Assert.Single(result.Checks, check => check.Id == id).Status);
+    }
+
+    [Fact]
+    public async Task Scan_DisabledAgentReadinessShortCircuitsWithoutNetwork()
+    {
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://unreachable.invalid",
+            HttpMessageHandler = new ThrowingScanHandler(),
+            AgentReadiness = new AgentReadinessSpec { Enabled = false }
+        });
+
+        Assert.True(result.Success);
+        Assert.Empty(result.Checks);
+        Assert.Contains("AgentReadiness is disabled.", result.Warnings);
+    }
+
+    [Theory]
+    [InlineData("<main><h1>Example</h1></main>", false)]
+    [InlineData("<main><button tool-name=\"lookup\" tool-description=\"Lookup\">Run</button></main>", true)]
+    public async Task Scan_EnforcesConfiguredWebMcp(string body, bool expectedSuccess)
+    {
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = new AgentReadinessScanHandler(body),
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownNegotiation = false,
+                WebMcp = true
+            }
+        });
+
+        var webMcp = Assert.Single(result.Checks, check => check.Id == "webmcp");
+        Assert.Equal(expectedSuccess ? "pass" : "fail", webMcp.Status);
+        if (!expectedSuccess)
+            Assert.False(result.Success);
+    }
+
+    [Fact]
+    public async Task Scan_HonorsConfiguredDiscoveryPathsAndNonCatalogLinkRelations()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/custom/catalog"] = ("{\"linkset\":[{\"anchor\":\"/\"}]}", "application/linkset+json"),
+            ["/custom/skills.json"] = ("{\"$schema\":\"https://schemas.agentskills.io/discovery/0.2.0/schema.json\",\"skills\":[{}]}", "application/json"),
+            ["/custom/agents.json"] = ("{\"name\":\"Example\",\"resources\":{}}", "application/json"),
+            ["/custom/agents-well-known.json"] = ("{\"name\":\"Example\",\"resources\":{}}", "application/json"),
+            ["/custom/a2a.json"] = ("{\"name\":\"Example\",\"description\":\"Test\",\"url\":\"https://example.test\",\"version\":\"1\",\"skills\":[]}", "application/json"),
+            ["/custom/mcp.json"] = ("{\"serverInfo\":{},\"transport\":{\"endpoint\":\"/mcp\"}}", "application/json"),
+            ["/custom/openapi.json"] = ("{\"openapi\":\"3.1.0\"}", "application/json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(responses);
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = true,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/catalog" },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true, IndexPath = "custom/skills.json" },
+                AgentsJson = new AgentDiscoveryDocumentSpec
+                {
+                    Enabled = true,
+                    OutputPath = "custom/agents.json",
+                    WellKnownOutputPath = "custom/agents-well-known.json"
+                },
+                A2AAgentCard = new AgentA2ACardSpec { Enabled = true, OutputPath = "custom/a2a.json" },
+                McpServerCard = new AgentMcpServerCardSpec { Enabled = true, OutputPath = "custom/mcp.json" },
+                OpenApi = new AgentOpenApiSpec { Enabled = true, Path = "custom/openapi.json" },
+                MarkdownNegotiation = false
+            }
+        });
+
+        foreach (var id in new[] { "link-headers", "api-catalog", "agent-skills", "agents-json", "a2a-agent-card", "mcp-server-card", "openapi" })
+            Assert.Equal("pass", Assert.Single(result.Checks, check => check.Id == id).Status);
+        Assert.All(responses.Keys, path => Assert.Contains(path, handler.Requests));
+    }
+
+    [Fact]
+    public async Task Scan_ResolvesRootRelativeDiscoveryLinksAgainstOriginForSubpathSites()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/project/custom/catalog"] = ("{\"linkset\":[{\"anchor\":\"/project/\"}]}", "application/linkset+json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(
+            responses,
+            "</project/custom/catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\"",
+            homepagePath: "/project");
+
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test/project/",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = true,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/catalog" },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                A2AAgentCard = new AgentA2ACardSpec { Enabled = false },
+                McpServerCard = new AgentMcpServerCardSpec { Enabled = false },
+                OpenApi = new AgentOpenApiSpec { Enabled = false },
+                MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        });
+
+        Assert.Equal("pass", Assert.Single(result.Checks, check => check.Id == "link-headers").Status);
+        Assert.Contains("/project/custom/catalog", handler.Requests);
+    }
+
+    [Fact]
+    public async Task Scan_DoesNotTreatLlmsFallbackAsConfiguredLinkDiscovery()
+    {
+        var handler = new ConfiguredDiscoveryScanHandler(
+            new Dictionary<string, (string Content, string MediaType)>(),
+            "</llms.txt>; rel=\"service-doc\"; type=\"text/plain\"");
+
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = true,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                A2AAgentCard = new AgentA2ACardSpec { Enabled = false },
+                McpServerCard = new AgentMcpServerCardSpec { Enabled = false },
+                OpenApi = new AgentOpenApiSpec { Enabled = false },
+                MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        });
+
+        var linkHeaders = Assert.Single(result.Checks, check => check.Id == "link-headers");
+        Assert.Equal("info", linkHeaders.Status);
+        Assert.Contains("No enabled discovery resources", linkHeaders.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Scan_ChecksCorsOnEnabledDiscoveryResourcesInsteadOfHomepage()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/custom/catalog"] = ("{\"linkset\":[{\"anchor\":\"/\"}]}", "application/linkset+json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(responses, corsOrigin: "https://client.example");
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec
+                {
+                    Enabled = true,
+                    Hsts = false,
+                    ContentSecurityPolicy = false,
+                    XContentTypeOptions = false,
+                    XFrameOptions = false,
+                    ReferrerPolicy = false,
+                    PermissionsPolicy = false,
+                    CorsForWellKnown = true,
+                    CorsAllowOrigin = "https://client.example"
+                },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/catalog" },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        });
+
+        Assert.Equal("pass", Assert.Single(result.Checks, check => check.Id == "security-cors").Status);
+        Assert.DoesNotContain("Access-Control-Allow-Origin", handler.HomepageHeaders);
+    }
+
+    [Fact]
+    public async Task Scan_DoesNotAcceptHomepageCorsWhenDiscoveryResourceLacksIt()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/custom/catalog"] = ("{\"linkset\":[{\"anchor\":\"/\"}]}", "application/linkset+json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(responses, homepageCorsOrigin: "*");
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec
+                {
+                    Enabled = true,
+                    Hsts = false,
+                    ContentSecurityPolicy = false,
+                    XContentTypeOptions = false,
+                    XFrameOptions = false,
+                    ReferrerPolicy = false,
+                    PermissionsPolicy = false,
+                    CorsForWellKnown = true,
+                    CorsAllowOrigin = "*"
+                },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/catalog" },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        });
+
+        Assert.Equal("fail", Assert.Single(result.Checks, check => check.Id == "security-cors").Status);
+        Assert.Contains("Access-Control-Allow-Origin", handler.HomepageHeaders);
+    }
+
+    [Fact]
+    public async Task Scan_RequiresCorsOnWellKnownAgentsJsonMirror()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/agents.json"] = ("{\"name\":\"Example\",\"resources\":{}}", "application/json"),
+            ["/.well-known/agents.json"] = ("{\"name\":\"Example\",\"resources\":{}}", "application/json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(
+            responses,
+            corsOrigin: "*",
+            corsPaths: ["/agents.json"]);
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec
+                {
+                    Enabled = true,
+                    Hsts = false,
+                    ContentSecurityPolicy = false,
+                    XContentTypeOptions = false,
+                    XFrameOptions = false,
+                    ReferrerPolicy = false,
+                    PermissionsPolicy = false,
+                    CorsForWellKnown = true,
+                    CorsAllowOrigin = "*"
+                },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = true },
+                MarkdownNegotiation = false
+            }
+        });
+
+        var cors = Assert.Single(result.Checks, check => check.Id == "security-cors");
+        Assert.Equal("fail", cors.Status);
+        Assert.Contains("/.well-known/agents.json", cors.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Scan_RequiresValidWellKnownAgentsJsonMirrorWhenCorsCheckIsDisabled()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/agents.json"] = ("{\"name\":\"Example\",\"resources\":{}}", "application/json")
+        };
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = new ConfiguredDiscoveryScanHandler(responses),
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false, CorsForWellKnown = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = true },
+                A2AAgentCard = new AgentA2ACardSpec { Enabled = false },
+                McpServerCard = new AgentMcpServerCardSpec { Enabled = false },
+                OpenApi = new AgentOpenApiSpec { Enabled = false },
+                MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        });
+
+        var agents = Assert.Single(result.Checks, check => check.Id == "agents-json");
+        Assert.Equal("fail", agents.Status);
+        Assert.Contains("well-known", agents.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith("/.well-known/agents.json", agents.Target, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Verify_RequiresValidWellKnownAgentsJsonMirror()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-agents-mirror-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "agents.json"), "{\"name\":\"Example\",\"resources\":{}}");
+
+            var result = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions
+            {
+                SiteRoot = root,
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = true },
+                    A2AAgentCard = new AgentA2ACardSpec { Enabled = false },
+                    McpServerCard = new AgentMcpServerCardSpec { Enabled = false },
+                    OpenApi = new AgentOpenApiSpec { Enabled = false },
+                    MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = false }
+                }
+            });
+
+            var agents = Assert.Single(result.Checks, check => check.Id == "agents-json");
+            Assert.Equal("fail", agents.Status);
+            Assert.Contains("well-known", agents.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith(Path.Combine(".well-known", "agents.json"), agents.Target, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Prepare_RejectsCollidingEnabledDiscoveryOutputPathsBeforeWriting()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-collision-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var exception = Assert.Throws<ArgumentException>(() => WebAgentReadiness.Prepare(new WebAgentReadinessPrepareOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/discovery.json" },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true, IndexPath = "custom/discovery.json" },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false }
+                }
+            }));
+
+            Assert.Contains("configured for both API Catalog and Agent Skills", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(root, "custom", "discovery.json")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ResolveSpec_AllowsAgentsJsonAliasesToShareOneOutputPath()
+    {
+        var resolved = WebAgentReadiness.ResolveSpec(new AgentReadinessSpec
+        {
+            Enabled = true,
+            ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+            AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+            AgentsJson = new AgentDiscoveryDocumentSpec
+            {
+                Enabled = true,
+                OutputPath = "agents.json",
+                WellKnownOutputPath = "agents.json"
+            }
+        });
+
+        Assert.Equal("agents.json", resolved.AgentsJson!.OutputPath);
+        Assert.Equal("agents.json", resolved.AgentsJson.WellKnownOutputPath);
+    }
+
+    [Fact]
+    public async Task Scan_RequiresLinkTargetsForEveryEnabledDiscoverySurface()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/custom/catalog"] = ("{\"linkset\":[{}]}", "application/linkset+json"),
+            ["/custom/openapi.json"] = ("{\"openapi\":\"3.1.0\"}", "application/json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(
+            responses,
+            "</custom/openapi.json>; rel=\"service-desc\"; type=\"application/openapi+json\"");
+
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = true,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/catalog" },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                OpenApi = new AgentOpenApiSpec { Enabled = true, Path = "custom/openapi.json" },
+                MarkdownNegotiation = false
+            }
+        });
+
+        Assert.Equal("fail", Assert.Single(result.Checks, check => check.Id == "link-headers").Status);
+    }
+
+    [Theory]
+    [InlineData("/API/openapi.json")]
+    [InlineData("/api/openapi.json?v=wrong")]
+    public async Task Scan_RequiresLinkToExactDiscoveredOpenApiUrl(string linkedOpenApiUrl)
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/api/openapi.json"] = ("{\"openapi\":\"3.1.0\"}", "application/json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(
+            responses,
+            $"<{linkedOpenApiUrl}>; rel=\"service-desc\"; type=\"application/openapi+json\"");
+
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = true,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                OpenApi = new AgentOpenApiSpec { Enabled = true },
+                MarkdownNegotiation = false
+            }
+        });
+
+        Assert.Equal("pass", Assert.Single(result.Checks, check => check.Id == "openapi").Status);
+        Assert.Equal("fail", Assert.Single(result.Checks, check => check.Id == "link-headers").Status);
+    }
+
+    [Fact]
+    public async Task Scan_RejectsAbsoluteUrlsForRelativeOnlyOutputPaths()
+    {
+        var handler = new ConfiguredDiscoveryScanHandler(
+            new Dictionary<string, (string Content, string MediaType)>(),
+            "<https://outside.example/skills.json>; rel=\"describedby\"");
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = true,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true, IndexPath = "https://outside.example/skills.json" },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        }));
+
+        Assert.Contains("must be relative", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(handler.Requests, path => path.Contains("outside", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private sealed class AgentReadinessScanHandler(string? body = null) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == "/")
+            {
+                var html = body ?? """
+                    <!doctype html><html lang="en"><head><title>Example</title><meta name="robots" content="index,follow"></head>
+                    <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example</h1></main><footer>Footer</footer></body></html>
+                    """;
+                return Task.FromResult(Response(HttpStatusCode.OK, html, "text/html"));
+            }
+
+            if (path == "/sitemap.xml")
+                return Task.FromResult(Response(HttpStatusCode.OK, "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>https://example.test/</loc></url></urlset>", "application/xml"));
+
+            return Task.FromResult(Response(HttpStatusCode.NotFound, "not found", "text/plain"));
+        }
+
+        private static HttpResponseMessage Response(HttpStatusCode statusCode, string content, string mediaType) => new(statusCode)
+        {
+            Content = new StringContent(content, System.Text.Encoding.UTF8, mediaType)
+        };
+    }
+
+    private sealed class ThrowingScanHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("The disabled scan should not issue HTTP requests.");
+    }
+
+    private sealed class ConfiguredDiscoveryScanHandler(
+        IReadOnlyDictionary<string, (string Content, string MediaType)> responses,
+        string? linkHeader = null,
+        string? corsOrigin = null,
+        string? homepageCorsOrigin = null,
+        IReadOnlyCollection<string>? corsPaths = null,
+        string homepagePath = "/",
+        bool negotiateMarkdown = false) : HttpMessageHandler
+    {
+        internal List<string> Requests { get; } = [];
+        internal HashSet<string> HomepageHeaders { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            Requests.Add(path);
+            if (path == homepagePath)
+            {
+                if (negotiateMarkdown &&
+                    request.Headers.Accept.Any(value =>
+                        string.Equals(value.MediaType, "text/markdown", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return Task.FromResult(Response(HttpStatusCode.OK, "# Example", "text/markdown"));
+                }
+
+                var response = Response(
+                    HttpStatusCode.OK,
+                    """<!doctype html><html lang="en"><head><meta name="robots" content="index,follow"></head><body><main><h1>Example</h1></main></body></html>""",
+                    "text/html");
+                response.Headers.TryAddWithoutValidation("Link", linkHeader ??
+                    "</custom/catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\", " +
+                    "</custom/skills.json>; rel=\"describedby\"; type=\"application/json\", " +
+                    "</custom/agents.json>; rel=\"describedby\"; type=\"application/json\", " +
+                    "</custom/a2a.json>; rel=\"service-desc\"; type=\"application/json\", " +
+                    "</custom/mcp.json>; rel=\"service-desc\"; type=\"application/json\", " +
+                    "</custom/openapi.json>; rel=\"service-desc\"; type=\"application/openapi+json\"");
+                if (!string.IsNullOrWhiteSpace(homepageCorsOrigin))
+                    response.Headers.TryAddWithoutValidation("Access-Control-Allow-Origin", homepageCorsOrigin);
+                foreach (var header in response.Headers)
+                    HomepageHeaders.Add(header.Key);
+                return Task.FromResult(response);
+            }
+
+            if (path == "/sitemap.xml")
+                return Task.FromResult(Response(HttpStatusCode.OK, "<urlset></urlset>", "application/xml"));
+            if (responses.TryGetValue(path, out var configured))
+            {
+                var response = Response(HttpStatusCode.OK, configured.Content, configured.MediaType);
+                if (!string.IsNullOrWhiteSpace(corsOrigin) &&
+                    (corsPaths is null || corsPaths.Contains(path, StringComparer.Ordinal)))
+                    response.Headers.TryAddWithoutValidation("Access-Control-Allow-Origin", corsOrigin);
+                return Task.FromResult(response);
+            }
+            return Task.FromResult(Response(HttpStatusCode.NotFound, "not found", "text/plain"));
+        }
+
+        private static HttpResponseMessage Response(HttpStatusCode statusCode, string content, string mediaType) => new(statusCode)
+        {
+            Content = new StringContent(content, System.Text.Encoding.UTF8, mediaType)
+        };
     }
 
     private static void TryDeleteDirectory(string path)

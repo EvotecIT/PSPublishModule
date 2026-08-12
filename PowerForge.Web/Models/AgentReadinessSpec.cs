@@ -79,7 +79,10 @@ public sealed class AgentSecurityHeadersSpec
 {
     /// <summary>Enable generated security headers in the static host headers file.</summary>
     public bool Enabled { get; set; } = true;
-    /// <summary>Emit Strict-Transport-Security. Only meaningful when the deployed site is HTTPS.</summary>
+    /// <summary>
+    /// Emit Strict-Transport-Security. Existing PowerForge behavior keeps this enabled by default;
+    /// sites with an unproven HTTPS recovery path should explicitly disable it.
+    /// </summary>
     public bool Hsts { get; set; } = true;
     /// <summary>Strict-Transport-Security value.</summary>
     public string? HstsValue { get; set; } = "max-age=31536000; includeSubDomains; preload";
@@ -92,11 +95,18 @@ public sealed class AgentSecurityHeadersSpec
     public bool XContentTypeOptions { get; set; } = true;
     /// <summary>Emit X-Frame-Options.</summary>
     public bool XFrameOptions { get; set; } = true;
+    /// <summary>X-Frame-Options value.</summary>
+    public string? XFrameOptionsValue { get; set; } = "DENY";
     /// <summary>Emit Referrer-Policy.</summary>
     public bool ReferrerPolicy { get; set; } = true;
     /// <summary>Referrer-Policy value.</summary>
     public string? ReferrerPolicyValue { get; set; } = "strict-origin-when-cross-origin";
-    /// <summary>Emit permissive CORS only for agent well-known JSON resources.</summary>
+    /// <summary>Emit Permissions-Policy.</summary>
+    public bool PermissionsPolicy { get; set; }
+    /// <summary>Permissions-Policy value.</summary>
+    public string? PermissionsPolicyValue { get; set; } =
+        "camera=(), geolocation=(), microphone=(), payment=(), usb=()";
+    /// <summary>Emit CORS for configured agent discovery resources.</summary>
     public bool CorsForWellKnown { get; set; } = true;
     /// <summary>Access-Control-Allow-Origin value for agent discovery resources.</summary>
     public string? CorsAllowOrigin { get; set; } = "*";

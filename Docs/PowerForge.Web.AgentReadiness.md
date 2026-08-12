@@ -69,8 +69,8 @@ PowerForge.Web can prepare and verify the common static-site subset:
 - static host `_headers` with Link headers and well-known content types
 - optional Apache `.htaccess` rules with homepage Link headers and Markdown
   negotiation for Apache-hosted static sites
-- static security headers for HSTS, CSP, X-Content-Type-Options,
-  X-Frame-Options, Referrer-Policy, and discovery-resource CORS
+- static security headers for default-on (explicitly opt-out) HSTS, CSP, X-Content-Type-Options,
+  X-Frame-Options, Referrer-Policy, Permissions-Policy, and discovery-resource CORS
 - optional static Markdown artifacts generated from rendered HTML
 - API catalog Linkset generation
 - Agent Skills index + default SKILL.md generation
@@ -96,6 +96,11 @@ When a live scan sees a valid direct Markdown artifact but the homepage still
 returns HTML for `Accept: text/markdown`, PowerForge reports the negotiation as
 a warning instead of a failure so sites without header-aware edge caching can
 still pass on the portable direct-artifact path.
+
+When `MarkdownArtifacts.Enabled` is `true`, the direct homepage artifact is a
+required deployed resource. The live scan fetches it even when content
+negotiation succeeds, requires a `text/markdown` media type, and includes it in
+the configured discovery-resource CORS check.
 
 ## Site Configuration
 
@@ -256,7 +261,7 @@ powerforge-web agent-ready verify --site-root .\_site --config .\site.json --fai
 Scan a deployed site:
 
 ```powershell
-powerforge-web agent-ready scan --url https://example.com --fail-on-failures
+powerforge-web agent-ready scan --config .\site.json --fail-on-failures
 ```
 
 ## Deployment Notes
@@ -268,6 +273,12 @@ GitHub Pages does not consume `_headers` or `.htaccess`. For GitHub Pages sites,
 generate the discovery files and Markdown artifacts, then put Cloudflare or
 another edge in front if the live site must satisfy response-header and
 `Accept: text/markdown` negotiation checks.
+
+PowerForge retains its existing HSTS-enabled default for compatibility. Set
+`AgentReadiness.SecurityHeaders.Hsts` to `false` for any site whose certificate
+renewal and HTTPS recovery path are not proven. For Cloudflare-proxied GitHub
+Pages, an edge response header does not prove that GitHub can renew the separate
+origin certificate.
 
 Apache deployments can set `agentReadiness.apache.enabled: true` and run
 `agent-ready prepare` after any step that creates or filters `.htaccess`, so the

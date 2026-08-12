@@ -9,6 +9,24 @@ namespace PowerForge.Tests;
 public sealed class CloudflareCachePolicyTests
 {
     [Fact]
+    public void VerifyCommandResult_ShouldSerializeWithTrimSafeMetadata()
+    {
+        var result = new CloudflareVerifyCommandResult
+        {
+            BaseUrl = "https://example.com",
+            UrlCount = 1,
+            AllowedStatuses = ["HIT"],
+            Results = [new CloudflareVerifyEntry { Url = "https://example.com/", Status = "HIT", HttpStatusCode = 200, Success = true }],
+            Message = "Verified."
+        };
+
+        var json = System.Text.Json.JsonSerializer.SerializeToElement(result, WebCliJson.Options);
+
+        Assert.Equal("HIT", json.GetProperty("allowedStatuses")[0].GetString());
+        Assert.True(json.GetProperty("results")[0].GetProperty("success").GetBoolean());
+    }
+
+    [Fact]
     public void BuildManagedRules_ShouldScopePolicyAndIncludeSiteRoutes()
     {
         var rules = CloudflareCachePolicyBuilder.BuildManagedRules(
@@ -17,15 +35,20 @@ public sealed class CloudflareCachePolicyTests
             ["/privacy/", "/support/", "/sitemap.xml"]);
 
         Assert.Equal(3, rules.Count);
-        var staticRule = Assert.IsType<JsonObject>(rules[0]);
-        var htmlRule = Assert.IsType<JsonObject>(rules[2]);
-        Assert.Equal("PowerForge Tactra: static assets", staticRule["description"]!.GetValue<string>());
+        var htmlRule = Assert.IsType<JsonObject>(rules[0]);
+        var staticRule = Assert.IsType<JsonObject>(rules[2]);
+        Assert.Equal("PowerForge [tactra.dev/]: Tactra: static assets", staticRule["description"]!.GetValue<string>());
         Assert.Contains("http.host eq \"tactra.dev\"", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.True(staticRule["action_parameters"]!["cache_key"]!["custom_key"]!["query_string"]!["exclude"]!["all"]!.GetValue<bool>());
+        Assert.Contains("/*.wasm", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("/*.webcil", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Equal("respect_origin", staticRule["action_parameters"]!["edge_ttl"]!["mode"]!.GetValue<string>());
+        Assert.Equal("respect_origin", staticRule["action_parameters"]!["browser_ttl"]!["mode"]!.GetValue<string>());
+        Assert.Null(staticRule["action_parameters"]!["cache_key"]);
 
         var htmlExpression = htmlRule["expression"]!.GetValue<string>();
-        Assert.Contains("/privacy/*", htmlExpression, StringComparison.Ordinal);
-        Assert.Contains("/support/*", htmlExpression, StringComparison.Ordinal);
+        Assert.DoesNotContain("/privacy/*", htmlExpression, StringComparison.Ordinal);
+        Assert.DoesNotContain("/support/*", htmlExpression, StringComparison.Ordinal);
+        Assert.Contains("ends_with(http.request.uri.path, \"/\")", htmlExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("sitemap.xml", htmlExpression, StringComparison.Ordinal);
     }
 
@@ -38,14 +61,32 @@ public sealed class CloudflareCachePolicyTests
             ["/docs/"],
             basePath: "/project/");
 
-        var staticExpression = rules[0]!["expression"]!.GetValue<string>();
+        var htmlExpression = rules[0]!["expression"]!.GetValue<string>();
         var dataExpression = rules[1]!["expression"]!.GetValue<string>();
-        var htmlExpression = rules[2]!["expression"]!.GetValue<string>();
+        var staticExpression = rules[2]!["expression"]!.GetValue<string>();
         Assert.Contains("/project/css/*", staticExpression, StringComparison.Ordinal);
         Assert.Contains("/project/*.css", staticExpression, StringComparison.Ordinal);
+        Assert.Contains("/project/*.wasm", staticExpression, StringComparison.Ordinal);
         Assert.Contains("/project/sitemap.xml", dataExpression, StringComparison.Ordinal);
-        Assert.Contains("/project/docs/*", htmlExpression, StringComparison.Ordinal);
+        Assert.DoesNotContain("/project/docs/*", htmlExpression, StringComparison.Ordinal);
+        Assert.Contains("starts_with(http.request.uri.path, \"/project/\")", htmlExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("uri.path eq \"/docs/\"", htmlExpression, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildManagedRules_ShouldEncodeConfiguredPathsForCloudflareMatching()
+    {
+        var rules = CloudflareCachePolicyBuilder.BuildManagedRules(
+            "example.com",
+            "Project",
+            ["/release notes/zażółć"],
+            basePath: "/product docs/");
+
+        Assert.Contains("/product%20docs/css/*", rules[2]!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("uri.path eq \"/product%20docs/release%20notes/za%C5%BC%C3%B3%C5%82%C4%87\"",
+            rules[0]!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("starts_with(http.request.uri.path, \"/product%20docs/\")",
+            rules[0]!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -53,9 +94,10 @@ public sealed class CloudflareCachePolicyTests
     {
         var existingRules = new JsonArray
         {
-            ExistingRule("managed-static-id", "PowerForge CodeGlyphX: static assets", "old-static"),
-            ExistingRule("managed-data-id", "PowerForge CodeGlyphX: data files", "old-data"),
-            ExistingRule("managed-html-id", "PowerForge CodeGlyphX: HTML docs and API", "old-html"),
+            ExistingRule("managed-html-id", "PowerForge CodeGlyphX [codeglyphx.com]: HTML docs and API", "old-html"),
+            ExistingRule("managed-data-id", "PowerForge CodeGlyphX [codeglyphx.com]: data files", "old-data"),
+            ExistingRule("managed-static-id", "PowerForge CodeGlyphX [codeglyphx.com]: static assets", "old-static"),
+            ExistingRule("managed-immutable-id", "PowerForge CodeGlyphX [codeglyphx.com]: immutable framework assets", "old-immutable"),
             ExistingRule("custom-id", "Operator custom bypass", "custom", action: "set_cache_settings")
         };
         var handler = new SequenceHandler(
@@ -85,8 +127,8 @@ public sealed class CloudflareCachePolicyTests
         var payload = JsonNode.Parse(handler.Requests[1].Body)!.AsObject();
         var rules = payload["rules"]!.AsArray();
         Assert.Equal(4, rules.Count);
-        Assert.Equal("managed-static-id", rules[0]!["id"]!.GetValue<string>());
-        Assert.Contains("/downloads/*", rules[2]!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Equal("managed-html-id", rules[0]!["id"]!.GetValue<string>());
+        Assert.Contains("ends_with(http.request.uri.path, \"/\")", rules[0]!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Equal("Operator custom bypass", rules[3]!["description"]!.GetValue<string>());
         Assert.Equal("custom-id", rules[3]!["id"]!.GetValue<string>());
         Assert.Null(rules[3]!["version"]);
@@ -99,10 +141,11 @@ public sealed class CloudflareCachePolicyTests
         var existingRules = new JsonArray
         {
             ExistingRule("custom-before", "Operator before", "before"),
-            ExistingRule("managed-static-id", "PowerForge Example: static assets", "old-static"),
+            ExistingRule("managed-html-id", "PowerForge Example [example.com]: HTML docs and API", "old-html"),
             ExistingRule("custom-between", "Operator between", "between"),
-            ExistingRule("managed-data-id", "PowerForge Example: data files", "old-data"),
-            ExistingRule("managed-html-id", "PowerForge Example: HTML docs and API", "old-html"),
+            ExistingRule("managed-data-id", "PowerForge Example [example.com]: data files", "old-data"),
+            ExistingRule("managed-static-id", "PowerForge Example [example.com]: static assets", "old-static"),
+            ExistingRule("managed-immutable-id", "PowerForge Example [example.com]: immutable framework assets", "old-immutable"),
             ExistingRule("custom-after", "Operator after", "after")
         };
         var handler = new SequenceHandler(
@@ -123,8 +166,39 @@ public sealed class CloudflareCachePolicyTests
         Assert.True(result.Success, result.Message);
         var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
         Assert.Equal(
-            ["Operator before", "PowerForge Example: static assets", "Operator between", "PowerForge Example: data files", "PowerForge Example: HTML docs and API", "Operator after"],
+            ["Operator before", "PowerForge [example.com/]: Example: HTML docs and API", "Operator between", "PowerForge [example.com/]: Example: data files", "PowerForge [example.com/]: Example: static assets", "Operator after"],
             rules.Select(rule => rule!["description"]!.GetValue<string>()).ToArray());
+    }
+
+    [Fact]
+    public void Apply_ShouldMigrateOnlyLegacyRulesOwnedByTheTargetHost()
+    {
+        var existingRules = new JsonArray
+        {
+            ExistingRule("target-id", "PowerForge Shared: HTML docs and API", "(http.host eq \"one.example.com\")"),
+            ExistingRule("other-id", "PowerForge Shared: HTML docs and API", "(http.host eq \"two.example.com\")")
+        };
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(existingRules)),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+        using var client = NewClient(handler);
+
+        var result = CloudflareCachePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "one.example.com",
+            "Shared",
+            htmlPaths: null,
+            dryRun: false,
+            logger: null,
+            client);
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(1, result.PreservedRuleCount);
+        var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
+        Assert.Contains(rules, rule => rule!["description"]!.GetValue<string>() == "PowerForge [one.example.com/]: Shared: HTML docs and API");
+        Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "other-id");
+        Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "target-id");
     }
 
     [Fact]
@@ -132,7 +206,7 @@ public sealed class CloudflareCachePolicyTests
     {
         var handler = new SequenceHandler(
             JsonResponse(HttpStatusCode.NotFound, """{"success":false,"errors":[{"message":"not found"}]}"""),
-            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope("new-ruleset")));
         using var client = NewClient(handler);
 
         var result = CloudflareCachePolicyManager.Apply(
@@ -154,6 +228,81 @@ public sealed class CloudflareCachePolicyTests
         Assert.Equal("zone", payload["kind"]!.GetValue<string>());
         Assert.Equal("http_request_cache_settings", payload["phase"]!.GetValue<string>());
         Assert.Equal(3, payload["rules"]!.AsArray().Count);
+    }
+
+    [Fact]
+    public void Apply_ShouldFailWhenCreatedRulesetCannotBeIdentifiedForRollback()
+    {
+        var desiredRules = CloudflareCachePolicyBuilder.BuildManagedRules("example.com", "Example", htmlPaths: null);
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.NotFound, """{"success":false,"errors":[{"message":"not found"}]}"""),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(desiredRules)));
+        using var client = NewClient(handler);
+
+        var result = CloudflareCachePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "example.com",
+            "Example",
+            htmlPaths: null,
+            dryRun: false,
+            logger: null,
+            client);
+
+        Assert.False(result.Success);
+        Assert.Contains("could not be identified safely for rollback", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(result.Reconciliation?.Snapshot);
+        Assert.Equal(3, handler.Requests.Count);
+    }
+
+    [Fact]
+    public void Apply_ShouldTreatServerErrorOnExistingRulesetWriteAsAmbiguous()
+    {
+        var existingRules = new JsonArray { ExistingRule("custom-id", "Operator custom rule", "true") };
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(existingRules)),
+            JsonResponse(HttpStatusCode.InternalServerError, """{"success":false,"errors":[{"message":"server error"}]}"""));
+        using var client = NewClient(handler);
+
+        var result = CloudflareCachePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "example.com",
+            "Example",
+            htmlPaths: null,
+            dryRun: false,
+            logger: null,
+            client);
+
+        Assert.False(result.Success);
+        Assert.NotNull(result.Reconciliation?.Snapshot);
+    }
+
+    [Fact]
+    public void Apply_ShouldReconcileAmbiguousServerErrorAfterCreate()
+    {
+        var desiredRules = CloudflareCachePolicyBuilder.BuildManagedRules("example.com", "Example", htmlPaths: null);
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.NotFound, """{"success":false,"errors":[{"message":"not found"}]}"""),
+            JsonResponse(HttpStatusCode.BadGateway, """{"success":false,"errors":[{"message":"upstream timeout"}]}"""),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(desiredRules, "created-after-timeout")));
+        using var client = NewClient(handler);
+
+        var result = CloudflareCachePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "example.com",
+            "Example",
+            htmlPaths: null,
+            dryRun: false,
+            logger: null,
+            client);
+
+        Assert.False(result.Success);
+        Assert.NotNull(result.Reconciliation?.Snapshot);
+        Assert.Equal("created-after-timeout", result.Reconciliation?.AppliedRulesetId);
+        Assert.Equal(3, handler.Requests.Count);
     }
 
     [Fact]
@@ -274,7 +423,7 @@ public sealed class CloudflareCachePolicyTests
     public void Apply_ShouldRejectOversizedExpressionBeforeCallingCloudflare()
     {
         var longPaths = Enumerable.Range(0, 40)
-            .Select(index => $"/{new string('x', 120)}-{index}/")
+            .Select(index => $"/{new string('x', 120)}-{index}")
             .ToArray();
         var handler = new SequenceHandler();
         using var client = NewClient(handler);
@@ -344,9 +493,23 @@ public sealed class CloudflareCachePolicyTests
         Assert.Contains("Invoke-PowerForgeCloudflareCachePolicy.ps1", action, StringComparison.Ordinal);
         Assert.Contains("--token-env', 'POWERFORGE_CLOUDFLARE_API_TOKEN'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("--token', $env:POWERFORGE_CLOUDFLARE_API_TOKEN", script, StringComparison.Ordinal);
+        Assert.Contains("'cache-policy'", script, StringComparison.Ordinal);
         Assert.Contains("--base-path", script, StringComparison.Ordinal);
         Assert.Contains("site-config must identify a file inside the caller repository", script, StringComparison.Ordinal);
         Assert.True(script.Split('\n').Length < 100, "The action entrypoint should remain a bounded adapter over the CLI.");
+    }
+
+    [Fact]
+    public void BuildManagedRules_ShouldCollapseLargeDocumentationRouteInventories()
+    {
+        var routes = Enumerable.Range(1, 500).Select(index => $"/api/project-{index}/").ToArray();
+
+        var rules = CloudflareCachePolicyBuilder.BuildManagedRules("officeimo.com", "OfficeIMO", routes);
+
+        var expression = rules[0]!["expression"]!.GetValue<string>();
+        Assert.Contains("ends_with(http.request.uri.path, \"/\")", expression, StringComparison.Ordinal);
+        Assert.DoesNotContain("project-500", expression, StringComparison.Ordinal);
+        Assert.True(expression.Length < 1024, "Large navigation inventories should compile to a compact HTML policy.");
     }
 
     private static JsonObject ExistingRule(string id, string description, string expression, string action = "set_cache_settings") => new()
@@ -362,16 +525,22 @@ public sealed class CloudflareCachePolicyTests
         ["enabled"] = true
     };
 
-    private static string ExistingEnvelope(JsonArray rules) => new JsonObject
+    private static string ExistingEnvelope(JsonArray rules, string? id = null)
     {
-        ["success"] = true,
-        ["result"] = new JsonObject { ["rules"] = rules }
-    }.ToJsonString();
+        var result = new JsonObject { ["rules"] = rules };
+        if (!string.IsNullOrWhiteSpace(id))
+            result["id"] = id;
+        return new JsonObject
+        {
+            ["success"] = true,
+            ["result"] = result
+        }.ToJsonString();
+    }
 
-    private static string SuccessEnvelope() => new JsonObject
+    private static string SuccessEnvelope(string? id = null) => new JsonObject
     {
         ["success"] = true,
-        ["result"] = new JsonObject()
+        ["result"] = string.IsNullOrWhiteSpace(id) ? new JsonObject() : new JsonObject { ["id"] = id }
     }.ToJsonString();
 
     private static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string body) => new(statusCode)

@@ -92,6 +92,11 @@ on:
         required: false
         type: boolean
         default: false
+      manage_cloudflare_site_policy:
+        description: Apply PowerForge-managed Cloudflare cache and response headers after deployment. Review AgentReadiness.SecurityHeaders.Hsts in site.json before enabling; the compatibility default is enabled.
+        required: false
+        type: boolean
+        default: false
       deployment_target:
         required: false
         type: string
@@ -255,13 +260,14 @@ jobs:
 
   deploy:
     if: ${{ inputs.deployment_target == 'github-pages' }}
-    needs: build
+    needs: [build, guardrails]
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     permissions:
+      contents: read
       pages: write
       id-token: write
     steps:
@@ -274,6 +280,39 @@ jobs:
         if: ${{ steps.deployment.outcome == 'failure' }}
         id: deployment_retry
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+
+  cloudflare-site-policy:
+    if: ${{ inputs.deployment_target == 'github-pages' && inputs.manage_cloudflare_site_policy }}
+    needs: [deploy, build, guardrails]
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    environment:
+      name: github-pages
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact caller source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.build.outputs.source_sha }}
+
+      - name: Checkout shared Cloudflare policy action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ needs.guardrails.outputs.workflow_repository }}
+          ref: ${{ needs.guardrails.outputs.workflow_sha }}
+          path: ./.powerforge-deployment
+          token: ${{ github.token }}
+          fetch-depth: 1
+
+      - name: Apply managed Cloudflare site policy
+        uses: ./.powerforge-deployment/.github/actions/powerforge-cloudflare-site-policy
+        with:
+          site-config: ${{ format('{0}/site.json', inputs.website_root) }}
+          zone-id: ${{ secrets.cloudflare_zone_id }}
+          api-token: ${{ secrets.cloudflare_api_token }}
+          checkout-caller: "false"
 
   deploy-linux:
     if: ${{ inputs.deployment_target == 'linux' }}
@@ -335,8 +374,8 @@ jobs:
           engine-asset-sha256: ${{ needs.build.outputs.engine_asset_sha256 }}
 
   post-deploy:
-    if: ${{ always() && inputs.post_deploy_pipeline_config != '' && ((inputs.deployment_target == 'github-pages' && needs.deploy.result == 'success') || (inputs.deployment_target == 'linux' && needs.deploy-linux.result == 'success')) }}
-    needs: [deploy, deploy-linux]
+    if: ${{ always() && inputs.post_deploy_pipeline_config != '' && ((inputs.deployment_target == 'github-pages' && needs.deploy.result == 'success' && (!inputs.manage_cloudflare_site_policy || needs.cloudflare-site-policy.result == 'success')) || (inputs.deployment_target == 'linux' && needs.deploy-linux.result == 'success')) }}
+    needs: [deploy, cloudflare-site-policy, deploy-linux]
     uses: ./.github/workflows/powerforge-website-run.yml
     with:
       website_root: ${{ inputs.website_root }}

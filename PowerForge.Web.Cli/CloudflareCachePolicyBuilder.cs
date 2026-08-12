@@ -9,6 +9,8 @@ internal static class CloudflareCachePolicyBuilder
 {
     private const int MaxHtmlPaths = 64;
     private const int MaxRuleExpressionLength = 4096;
+    private const int HtmlEdgeTtlSeconds = 7200;
+    private const int HtmlBrowserTtlSeconds = 300;
 
     private static readonly string[] DefaultHtmlPaths =
     {
@@ -44,6 +46,7 @@ internal static class CloudflareCachePolicyBuilder
             BuildPathClause("wildcard", CombineBasePath(basePath, "/fonts/*")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/images/*")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/img/*")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.map")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.css")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.js")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.mjs")),
@@ -54,7 +57,14 @@ internal static class CloudflareCachePolicyBuilder
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.svg")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.ico")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.woff")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.woff2"))
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.woff2")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.pdf")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.zip")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.wasm")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.webcil")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.dat")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.dll")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.pdb"))
         }) + "))";
 
         var dataExpression = $"({hostFilter}(" + string.Join(" or ", new[]
@@ -63,22 +73,32 @@ internal static class CloudflareCachePolicyBuilder
             BuildPathClause("eq", CombineBasePath(basePath, "/sitemap.xml")),
             BuildPathClause("eq", CombineBasePath(basePath, "/llms.txt")),
             BuildPathClause("eq", CombineBasePath(basePath, "/llms-full.txt")),
-            BuildPathClause("eq", CombineBasePath(basePath, "/llms.json"))
+            BuildPathClause("eq", CombineBasePath(basePath, "/llms.json")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.json")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.xml")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.txt"))
         }) + "))";
 
         var routeClauses = BuildHtmlRouteClauses(basePath, htmlPaths);
+        routeClauses.Add(BuildScopedPathFunctionClause(basePath, "ends_with", "/"));
+        routeClauses.Add(BuildScopedPathFunctionClause(basePath, "ends_with", ".html"));
         routeClauses.Add(BuildPathClause("wildcard", CombineBasePath(basePath, "/*.html")));
         var htmlExpression = $"({hostFilter}(" + string.Join(" or ", routeClauses) + "))";
 
         ValidateExpressionLength("static assets", staticExpression);
         ValidateExpressionLength("data files", dataExpression);
         ValidateExpressionLength("HTML docs and API", htmlExpression);
+        var descriptionPrefix = CloudflareManagedRuleOwnership.BuildDescriptionPrefix(policyName, hostname, basePath);
 
         return new JsonArray
         {
-            BuildRule($"PowerForge {policyName}: static assets", staticExpression, ignoreQueryString: true),
-            BuildRule($"PowerForge {policyName}: data files", dataExpression, ignoreQueryString: false),
-            BuildRule($"PowerForge {policyName}: HTML docs and API", htmlExpression, ignoreQueryString: false)
+            BuildOverrideRule($"{descriptionPrefix} HTML docs and API", htmlExpression, HtmlEdgeTtlSeconds, HtmlBrowserTtlSeconds),
+            BuildRespectOriginRule($"{descriptionPrefix} data files", dataExpression),
+            // Stable asset names are common (including Blazor framework files).
+            // Respect origin validators/TTLs so a managed rule cannot pin an old
+            // deployment in edge or browser caches. Fingerprinted assets can still
+            // carry immutable Cache-Control from the generated origin output.
+            BuildRespectOriginRule($"{descriptionPrefix} static assets", staticExpression)
         };
     }
 
@@ -129,6 +149,11 @@ internal static class CloudflareCachePolicyBuilder
             .Where(path => path is not null)
             .Cast<string>()
             .Select(path => CombineBasePath(basePath, path))
+            // Directory routes and .html files are already covered by the compact
+            // provider-wide clauses. Keep only exceptional extensionless routes so
+            // large documentation menus do not inflate the Cloudflare expression.
+            .Where(path => !path.EndsWith("/", StringComparison.Ordinal) &&
+                           !path.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(MaxHtmlPaths + 1)
             .ToArray();
@@ -187,9 +212,17 @@ internal static class CloudflareCachePolicyBuilder
     }
 
     private static string BuildPathClause(string operation, string path) =>
-        $"http.request.uri.path {operation} \"{EscapeExpressionString(path)}\"";
+        $"http.request.uri.path {operation} \"{EscapeExpressionString(EncodeUriPathForExpression(path))}\"";
 
-    private static void ValidateExpressionLength(string ruleName, string expression)
+    private static string BuildScopedPathFunctionClause(string basePath, string functionName, string suffix)
+    {
+        var function = $"{functionName}(http.request.uri.path, \"{EscapeExpressionString(EncodeUriPathForExpression(suffix))}\")";
+        return basePath == "/"
+            ? function
+            : $"(starts_with(http.request.uri.path, \"{EscapeExpressionString(EncodeUriPathForExpression(basePath))}\") and {function})";
+    }
+
+    internal static void ValidateExpressionLength(string ruleName, string expression)
     {
         if (expression.Length > MaxRuleExpressionLength)
         {
@@ -198,31 +231,78 @@ internal static class CloudflareCachePolicyBuilder
         }
     }
 
-    private static JsonObject BuildRule(string description, string expression, bool ignoreQueryString)
+    private static JsonObject BuildOverrideRule(
+        string description,
+        string expression,
+        int edgeTtlSeconds,
+        int browserTtlSeconds)
     {
         var actionParameters = new JsonObject
         {
             ["cache"] = true,
-            ["edge_ttl"] = new JsonObject { ["mode"] = "respect_origin" },
+            ["edge_ttl"] = new JsonObject
+            {
+                ["mode"] = "override_origin",
+                ["default"] = edgeTtlSeconds,
+                ["status_code_ttl"] = BuildStatusCodeTtls(edgeTtlSeconds)
+            },
+            ["browser_ttl"] = new JsonObject
+            {
+                ["mode"] = "override_origin",
+                ["default"] = browserTtlSeconds
+            },
+            ["respect_strong_etags"] = true
+        };
+
+        return BuildRule(description, expression, actionParameters);
+    }
+
+    private static JsonObject BuildRespectOriginRule(string description, string expression)
+    {
+        var actionParameters = new JsonObject
+        {
+            ["cache"] = true,
+            ["edge_ttl"] = new JsonObject
+            {
+                ["mode"] = "respect_origin",
+                ["status_code_ttl"] = new JsonArray
+                {
+                    StatusCodeRange(300, 499, 0),
+                    StatusCodeRange(500, null, -1)
+                }
+            },
             ["browser_ttl"] = new JsonObject { ["mode"] = "respect_origin" },
             ["respect_strong_etags"] = true
         };
 
-        if (ignoreQueryString)
-        {
-            actionParameters["cache_key"] = new JsonObject
-            {
-                ["custom_key"] = new JsonObject
-                {
-                    ["query_string"] = new JsonObject
-                    {
-                        ["exclude"] = new JsonObject { ["all"] = true }
-                    }
-                }
-            };
-        }
+        return BuildRule(description, expression, actionParameters);
+    }
+
+    private static JsonArray BuildStatusCodeTtls(int successTtlSeconds) => new()
+    {
+        StatusCodeRange(null, 199, -1),
+        StatusCodeRange(200, 299, successTtlSeconds),
+        StatusCodeRange(300, 499, 0),
+        StatusCodeRange(500, null, -1)
+    };
+
+    private static JsonObject StatusCodeRange(int? from, int? to, int value)
+    {
+        var range = new JsonObject();
+        if (from.HasValue)
+            range["from"] = from.Value;
+        if (to.HasValue)
+            range["to"] = to.Value;
 
         return new JsonObject
+        {
+            ["status_code_range"] = range,
+            ["value"] = value
+        };
+    }
+
+    private static JsonObject BuildRule(string description, string expression, JsonObject actionParameters) =>
+        new()
         {
             ["description"] = description,
             ["expression"] = expression,
@@ -230,8 +310,24 @@ internal static class CloudflareCachePolicyBuilder
             ["action_parameters"] = actionParameters,
             ["enabled"] = true
         };
-    }
 
-    private static string EscapeExpressionString(string value) =>
+    internal static string EscapeExpressionString(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+
+    /// <summary>Encodes configured URI path segments for Cloudflare Rules matching while preserving wildcard operators.</summary>
+    internal static string EncodeUriPathForExpression(string value) =>
+        string.Join("/", value.Split('/').Select(static segment =>
+        {
+            string decoded;
+            try
+            {
+                decoded = Uri.UnescapeDataString(segment);
+            }
+            catch (UriFormatException)
+            {
+                decoded = segment;
+            }
+
+            return Uri.EscapeDataString(decoded).Replace("%2A", "*", StringComparison.OrdinalIgnoreCase);
+        }));
 }

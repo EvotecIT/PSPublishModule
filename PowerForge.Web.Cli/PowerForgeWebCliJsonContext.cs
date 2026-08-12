@@ -65,6 +65,7 @@ namespace PowerForge.Web.Cli;
 [JsonSerializable(typeof(CloudflareAnalyticsCollectionResult))]
 [JsonSerializable(typeof(CloudflareAnalyticsCapabilityProbeResult))]
 [JsonSerializable(typeof(CloudflareTrafficCollectionCommandResult))]
+[JsonSerializable(typeof(CloudflareVerifyCommandResult))]
 [JsonSerializable(typeof(WebTrafficListCommandResult))]
 [JsonSerializable(typeof(WebPerformanceObservationBatch))]
 [JsonSerializable(typeof(WebPerformanceObservation[]))]

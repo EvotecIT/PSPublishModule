@@ -55,7 +55,8 @@ internal static partial class WebPipelineRunner
                 result = WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
                 {
                     BaseUrl = baseUrl,
-                    TimeoutMs = timeoutMs
+                    TimeoutMs = timeoutMs,
+                    AgentReadiness = siteSpec?.AgentReadiness
                 }).GetAwaiter().GetResult();
                 break;
             default:

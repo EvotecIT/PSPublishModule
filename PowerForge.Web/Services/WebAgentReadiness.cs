@@ -11,7 +11,7 @@ using HtmlTinkerX;
 namespace PowerForge.Web;
 
 /// <summary>Prepares and checks static-site agent-readiness discovery signals.</summary>
-public static class WebAgentReadiness
+public static partial class WebAgentReadiness
 {
     private const string AgentBlockStart = "# BEGIN PowerForge Agent Readiness";
     private const string AgentBlockEnd = "# END PowerForge Agent Readiness";
@@ -261,10 +261,19 @@ public static class WebAgentReadiness
         var agentsJsonPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.AgentsJson?.OutputPath) ? "agents.json" : spec.AgentsJson!.OutputPath!);
         var agentsJsonValid = ValidateAgentsJson(agentsJsonPath, out var agentsMessage);
         var agentsJsonExpected = spec.AgentsJson?.Enabled == true;
+        var agentsWellKnownPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.AgentsJson?.WellKnownOutputPath) ? ".well-known/agents.json" : spec.AgentsJson!.WellKnownOutputPath!);
+        var agentsWellKnownValid = !agentsJsonExpected ||
+                                   string.Equals(agentsWellKnownPath, agentsJsonPath, StringComparison.OrdinalIgnoreCase) ||
+                                   ValidateAgentsJson(agentsWellKnownPath, out _);
+        var agentsDiscoveryValid = agentsJsonValid && agentsWellKnownValid;
         AddCheck(checks, "agents-json", "agent-protocols", "agents.json",
-            agentsJsonValid ? "pass" : (agentsJsonExpected ? "fail" : "info"),
-            agentsJsonValid ? agentsMessage : (agentsJsonExpected ? agentsMessage : "agents.json generation is disabled."),
-            agentsJsonPath);
+            agentsDiscoveryValid ? "pass" : (agentsJsonExpected ? "fail" : "info"),
+            agentsDiscoveryValid
+                ? agentsMessage
+                : (agentsJsonExpected
+                    ? (agentsJsonValid ? "The well-known agents.json mirror was not found or is not valid." : agentsMessage)
+                    : "agents.json generation is disabled."),
+            agentsJsonValid && !agentsWellKnownValid ? agentsWellKnownPath : agentsJsonPath);
 
         var a2aPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.A2AAgentCard?.OutputPath) ? ".well-known/agent-card.json" : spec.A2AAgentCard!.OutputPath!);
         var a2aExpected = spec.A2AAgentCard?.Enabled == true;
@@ -313,36 +322,70 @@ public static class WebAgentReadiness
             throw new ArgumentException("BaseUrl is required.", nameof(options));
 
         var baseUrl = NormalizeBaseUrl(options.BaseUrl);
+        var spec = ResolveSpec(options.AgentReadiness);
         var checks = new List<WebAgentReadinessCheck>();
         var warnings = new List<string>();
-        using var http = new HttpClient { Timeout = TimeSpan.FromMilliseconds(options.TimeoutMs <= 0 ? 15000 : options.TimeoutMs) };
+
+        if (!spec.Enabled)
+        {
+            return new WebAgentReadinessResult
+            {
+                Operation = "scan",
+                BaseUrl = baseUrl,
+                Success = true,
+                Warnings = new[] { "AgentReadiness is disabled." }
+            };
+        }
+
+        using var http = options.HttpMessageHandler is null
+            ? new HttpClient()
+            : new HttpClient(options.HttpMessageHandler, disposeHandler: false);
+        http.Timeout = TimeSpan.FromMilliseconds(options.TimeoutMs <= 0 ? 15000 : options.TimeoutMs);
         http.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForge.Web.AgentReady/1.0");
 
         var root = await TrySendAsync(http, HttpMethod.Get, baseUrl, null, cancellationToken).ConfigureAwait(false);
         var linkHeader = root.Response?.Headers.TryGetValues("Link", out var links) == true ? string.Join(", ", links) : string.Empty;
-        AddCheck(checks, "link-headers", "discoverability", "Link headers (RFC 8288)",
-            root.Success && linkHeader.Contains("api-catalog", StringComparison.OrdinalIgnoreCase) ? "pass" : "fail",
-            root.Success && linkHeader.Contains("api-catalog", StringComparison.OrdinalIgnoreCase)
-                ? "Homepage response includes agent discovery Link headers."
-                : "Homepage response does not include Link headers pointing to agent discovery resources.",
-            baseUrl);
-        AddRemoteSecurityHeaderChecks(checks, root.Response, baseUrl);
+        AddRemoteSecurityHeaderChecks(checks, root.Response, baseUrl, spec);
 
         var rootText = await TryGetTextAsync(http, baseUrl, null, cancellationToken).ConfigureAwait(false);
         if (rootText.Success)
+        {
             AddHtmlSemanticsChecks(checks, rootText.Text, baseUrl);
+            if (spec.WebMcp)
+            {
+                var hasWebMcp = HtmlContainsWebMcpSignal(rootText.Text);
+                AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", hasWebMcp ? "pass" : "fail",
+                    hasWebMcp
+                        ? "Homepage HTML includes WebMCP tool registration or declarative tool annotations."
+                        : "Homepage HTML does not include WebMCP tool registration or declarative tool annotations.",
+                    baseUrl);
+            }
+        }
+        else if (spec.WebMcp)
+        {
+            AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", "fail",
+                $"Homepage HTML could not be inspected for WebMCP: {rootText.Message}",
+                baseUrl);
+        }
 
         var robots = await TryGetTextAsync(http, CombineUrl(baseUrl, "/robots.txt"), null, cancellationToken).ConfigureAwait(false);
-        AddCheck(checks, "robots-txt", "discoverability", "robots.txt", robots.Success ? "pass" : "fail", robots.Message, CombineUrl(baseUrl, "/robots.txt"));
+        AddCheck(checks, "robots-txt", "discoverability", "robots.txt",
+            robots.Success ? "pass" : (spec.Robots ? "fail" : "info"),
+            robots.Success ? robots.Message : (spec.Robots ? robots.Message : "robots.txt verification is disabled by site policy."),
+            CombineUrl(baseUrl, "/robots.txt"));
         if (robots.Success)
         {
+            var botRulesExpected = spec.Robots;
+            var hasBotRules = HasRobotsUserAgent(robots.Text);
             AddCheck(checks, "ai-bot-rules", "bot-access-control", "AI bot rules in robots.txt",
-                HasRobotsUserAgent(robots.Text) ? "pass" : "fail",
-                HasRobotsUserAgent(robots.Text) ? "robots.txt declares crawler rules." : "robots.txt has no User-agent rules.",
+                hasBotRules ? "pass" : (botRulesExpected ? "fail" : "info"),
+                hasBotRules ? "robots.txt declares crawler rules." : (botRulesExpected ? "robots.txt has no User-agent rules." : "robots.txt verification is disabled by site policy."),
                 CombineUrl(baseUrl, "/robots.txt"));
+            var contentSignalsExpected = spec.Robots && spec.ContentSignals?.Enabled == true;
+            var hasContentSignals = HasContentSignals(robots.Text);
             AddCheck(checks, "content-signals", "bot-access-control", "Content Signals in robots.txt",
-                HasContentSignals(robots.Text) ? "pass" : "fail",
-                HasContentSignals(robots.Text) ? "robots.txt declares Content-Signal preferences." : "No Content-Signal directive found.",
+                hasContentSignals ? "pass" : (contentSignalsExpected ? "fail" : "info"),
+                hasContentSignals ? "robots.txt declares Content-Signal preferences." : (contentSignalsExpected ? "No Content-Signal directive found." : "Content Signals are disabled by site policy."),
                 CombineUrl(baseUrl, "/robots.txt"));
         }
 
@@ -362,82 +405,112 @@ public static class WebAgentReadiness
         var markdown = await TryGetTextAsync(http, baseUrl, "text/markdown", cancellationToken).ConfigureAwait(false);
         var markdownContentType = markdown.Response?.Content.Headers.ContentType?.MediaType ?? string.Empty;
         var markdownNegotiated = markdown.Success && IsMarkdownContentType(markdownContentType);
-        var markdownAlternateUrl = ResolveMarkdownAlternateUrl(baseUrl, linkHeader) ?? CombineUrl(baseUrl, "/index.md");
-        HttpTextResult? markdownAlternate = null;
-        var markdownAlternateContentType = string.Empty;
-        var markdownAlternateFetched = false;
-        var markdownAlternateAvailableAsMarkdown = false;
-        if (!markdownNegotiated && !string.IsNullOrWhiteSpace(markdownAlternateUrl))
-        {
-            markdownAlternate = await TryGetTextAsync(http, markdownAlternateUrl, null, cancellationToken).ConfigureAwait(false);
-            markdownAlternateContentType = markdownAlternate.Response?.Content.Headers.ContentType?.MediaType ?? string.Empty;
-            markdownAlternateFetched = markdownAlternate.Success;
-            markdownAlternateAvailableAsMarkdown = markdownAlternateFetched && IsMarkdownContentType(markdownAlternateContentType);
-        }
+        var markdownArtifact = await ScanRemoteMarkdownArtifactAsync(
+            http, baseUrl, linkHeader, spec, markdownNegotiated, cancellationToken).ConfigureAwait(false);
 
         AddCheck(checks, "markdown-negotiation", "content", "Markdown for Agents",
-            GetMarkdownNegotiationStatus(markdownNegotiated, markdownAlternateAvailableAsMarkdown),
-            BuildMarkdownNegotiationMessage(
-                markdownNegotiated,
-                markdown.Success,
-                markdownContentType,
-                GetHeaderValue(markdown.Response, "Vary"),
-                GetHeaderValue(markdown.Response, "CF-Cache-Status"),
-                GetHeaderValue(markdown.Response, "Cache-Control"),
-                markdownAlternateAvailableAsMarkdown,
-                markdownAlternateUrl,
-                markdownAlternateFetched,
-                markdownAlternateContentType),
+            spec.MarkdownNegotiation ? GetMarkdownNegotiationStatus(markdownNegotiated, markdownArtifact.AvailableAsMarkdown) : "info",
+            spec.MarkdownNegotiation
+                ? BuildMarkdownNegotiationMessage(
+                    markdownNegotiated,
+                    markdown.Success,
+                    markdownContentType,
+                    GetHeaderValue(markdown.Response, "Vary"),
+                    GetHeaderValue(markdown.Response, "CF-Cache-Status"),
+                    GetHeaderValue(markdown.Response, "Cache-Control"),
+                    markdownArtifact.AvailableAsMarkdown,
+                    markdownArtifact.Url,
+                    markdownArtifact.Fetched,
+                    markdownArtifact.ContentType)
+                : "Markdown negotiation verification is disabled by site policy.",
             baseUrl);
-        if (!markdownNegotiated)
-        {
-            AddCheck(checks, "markdown-artifact-public", "content", "Direct Markdown artifact",
-                markdownAlternateAvailableAsMarkdown ? "pass" : (markdownAlternateFetched ? "warn" : "info"),
-                markdownAlternateAvailableAsMarkdown
-                    ? $"Direct Markdown artifact is available at {markdownAlternateUrl}."
-                    : (markdownAlternateFetched
-                        ? $"Direct Markdown artifact was fetched at {markdownAlternateUrl}, but returned {FormatContentTypeForMessage(markdownAlternateContentType)}. Configure the host MIME type as text/markdown."
-                        : $"Direct Markdown artifact was not found at {markdownAlternateUrl}."),
-                markdownAlternateUrl);
-        }
+        AddRemoteMarkdownArtifactCheck(checks, markdownArtifact, markdownNegotiated);
 
-        var apiCatalog = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/api-catalog"), null, cancellationToken).ConfigureAwait(false);
+        var apiCatalogUrl = ResolveRemoteOutputUrl(baseUrl, spec.ApiCatalog?.OutputPath, "/.well-known/api-catalog");
+        var apiCatalog = await TryGetTextAsync(http, apiCatalogUrl, null, cancellationToken).ConfigureAwait(false);
+        var apiCatalogExpected = spec.ApiCatalog?.Enabled == true;
+        var apiCatalogValid = apiCatalog.Success && ValidateApiCatalogText(apiCatalog.Text);
         AddCheck(checks, "api-catalog", "api-auth-mcp-skill-discovery", "API Catalog (RFC 9727)",
-            apiCatalog.Success && ValidateApiCatalogText(apiCatalog.Text) ? "pass" : "fail",
-            apiCatalog.Success && ValidateApiCatalogText(apiCatalog.Text) ? "API catalog returned a Linkset document." : apiCatalog.Message,
-            CombineUrl(baseUrl, "/.well-known/api-catalog"));
+            apiCatalogValid ? "pass" : (apiCatalogExpected ? "fail" : "info"),
+            apiCatalogValid ? "API catalog returned a Linkset document." : (apiCatalogExpected ? apiCatalog.Message : "API catalog verification is disabled by site policy."),
+            apiCatalogUrl);
 
-        var openApi = await TryFindOpenApiAsync(http, baseUrl, cancellationToken).ConfigureAwait(false);
+        var openApi = await TryFindOpenApiAsync(http, baseUrl, spec.OpenApi?.Path, cancellationToken).ConfigureAwait(false);
         AddCheck(checks, "openapi", "agent-protocols", "OpenAPI",
-            openApi.Success ? "pass" : "info",
-            openApi.Success ? $"OpenAPI document detected at {openApi.Url}." : "No OpenAPI document found at common static paths.",
-            openApi.Url ?? baseUrl);
+            openApi.Success ? "pass" : (spec.OpenApi?.Enabled == true ? "fail" : "info"),
+            openApi.Success ? $"OpenAPI document detected at {openApi.Url}." : "No OpenAPI document found at the configured or common static paths.",
+            openApi.Url ?? ResolveRemoteUrl(baseUrl, spec.OpenApi?.Path, "/openapi.json"));
 
-        var agentSkills = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/agent-skills/index.json"), null, cancellationToken).ConfigureAwait(false);
+        var discoveryLinksExpected = HasEnabledDiscoveryLinkTargets(spec);
+        var linkHeadersPresent = discoveryLinksExpected && root.Success && HasExpectedDiscoveryLink(linkHeader, baseUrl, spec, openApi.Url);
+        AddCheck(checks, "link-headers", "discoverability", "Link headers (RFC 8288)",
+            linkHeadersPresent ? "pass" : (spec.LinkHeaders && discoveryLinksExpected ? "fail" : "info"),
+            linkHeadersPresent
+                ? "Homepage response includes Link headers for every enabled discovery resource."
+                : (!discoveryLinksExpected
+                    ? "No enabled discovery resources require Link headers."
+                    : spec.LinkHeaders
+                    ? "Homepage response does not include Link headers for every enabled discovery resource."
+                    : "Link header verification is disabled by site policy."),
+            baseUrl);
+
+        var agentSkillsUrl = ResolveRemoteOutputUrl(baseUrl, spec.AgentSkills?.IndexPath, "/.well-known/agent-skills/index.json");
+        var agentSkills = await TryGetTextAsync(http, agentSkillsUrl, null, cancellationToken).ConfigureAwait(false);
         var agentSkillsValid = agentSkills.Success && ValidateAgentSkillsIndexText(agentSkills.Text);
+        var agentSkillsExpected = spec.AgentSkills?.Enabled == true;
         AddCheck(checks, "agent-skills", "api-auth-mcp-skill-discovery", "Agent Skills index",
-            agentSkillsValid ? "pass" : "info",
-            agentSkillsValid ? "Agent Skills discovery index is valid." : "Agent Skills index was not found or is not valid.",
-            CombineUrl(baseUrl, "/.well-known/agent-skills/index.json"));
+            agentSkillsValid ? "pass" : (agentSkillsExpected ? "fail" : "info"),
+            agentSkillsValid ? "Agent Skills discovery index is valid." : (agentSkillsExpected ? "Agent Skills index was not found or is not valid." : "Agent Skills verification is disabled by site policy."),
+            agentSkillsUrl);
 
-        var agentsJson = await TryGetTextAsync(http, CombineUrl(baseUrl, "/agents.json"), null, cancellationToken).ConfigureAwait(false);
+        var agentsJsonUrl = ResolveRemoteOutputUrl(baseUrl, spec.AgentsJson?.OutputPath, "/agents.json");
+        var agentsJson = await TryGetTextAsync(http, agentsJsonUrl, null, cancellationToken).ConfigureAwait(false);
+        var agentsWellKnownUrl = ResolveRemoteOutputUrl(baseUrl, spec.AgentsJson?.WellKnownOutputPath, "/.well-known/agents.json");
+        var agentsWellKnown = spec.AgentsJson?.Enabled == true
+            ? SameRemoteUrl(agentsWellKnownUrl, agentsJsonUrl)
+                ? agentsJson
+                : await TryGetTextAsync(http, agentsWellKnownUrl, null, cancellationToken).ConfigureAwait(false)
+            : null;
+        var agentsJsonExpected = spec.AgentsJson?.Enabled == true;
         var agentsJsonValid = agentsJson.Success && ValidateAgentsJsonText(agentsJson.Text);
+        var agentsWellKnownValid = !agentsJsonExpected ||
+                                   (agentsWellKnown?.Success == true && ValidateAgentsJsonText(agentsWellKnown.Text));
+        var agentsDiscoveryValid = agentsJsonValid && agentsWellKnownValid;
         AddCheck(checks, "agents-json", "agent-protocols", "agents.json",
-            agentsJsonValid ? "pass" : "info",
-            agentsJsonValid ? "agents.json discovery document is valid." : "agents.json was not found or is not valid.",
-            CombineUrl(baseUrl, "/agents.json"));
+            agentsDiscoveryValid ? "pass" : (agentsJsonExpected ? "fail" : "info"),
+            agentsDiscoveryValid
+                ? "agents.json and its well-known mirror are valid."
+                : (agentsJsonExpected
+                    ? (agentsJsonValid ? "The well-known agents.json mirror was not found or is not valid." : "agents.json was not found or is not valid.")
+                    : "agents.json verification is disabled by site policy."),
+            agentsJsonValid && !agentsWellKnownValid ? agentsWellKnownUrl : agentsJsonUrl);
 
-        var a2a = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/agent-card.json"), null, cancellationToken).ConfigureAwait(false);
+        var a2aUrl = ResolveRemoteOutputUrl(baseUrl, spec.A2AAgentCard?.OutputPath, "/.well-known/agent-card.json");
+        var a2a = await TryGetTextAsync(http, a2aUrl, null, cancellationToken).ConfigureAwait(false);
+        var a2aValid = a2a.Success && ValidateA2AAgentCardText(a2a.Text);
         AddCheck(checks, "a2a-agent-card", "agent-protocols", "A2A Agent Card",
-            a2a.Success && ValidateA2AAgentCardText(a2a.Text) ? "pass" : "info",
-            a2a.Success && ValidateA2AAgentCardText(a2a.Text) ? "A2A Agent Card is valid." : "A2A Agent Card was not found or is not valid.",
-            CombineUrl(baseUrl, "/.well-known/agent-card.json"));
+            a2aValid ? "pass" : (spec.A2AAgentCard?.Enabled == true ? "fail" : "info"),
+            a2aValid ? "A2A Agent Card is valid." : (spec.A2AAgentCard?.Enabled == true ? "A2A Agent Card was not found or is not valid." : "A2A Agent Card verification is disabled by site policy."),
+            a2aUrl);
 
-        var mcp = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/mcp/server-card.json"), null, cancellationToken).ConfigureAwait(false);
+        var mcpUrl = ResolveRemoteOutputUrl(baseUrl, spec.McpServerCard?.OutputPath, "/.well-known/mcp/server-card.json");
+        var mcp = await TryGetTextAsync(http, mcpUrl, null, cancellationToken).ConfigureAwait(false);
+        var mcpValid = mcp.Success && ValidateMcpServerCardText(mcp.Text);
         AddCheck(checks, "mcp-server-card", "api-auth-mcp-skill-discovery", "MCP Server Card",
-            mcp.Success && ValidateMcpServerCardText(mcp.Text) ? "pass" : "info",
-            mcp.Success && ValidateMcpServerCardText(mcp.Text) ? "MCP Server Card is valid." : "MCP Server Card was not found or is not valid.",
-            CombineUrl(baseUrl, "/.well-known/mcp/server-card.json"));
+            mcpValid ? "pass" : (spec.McpServerCard?.Enabled == true ? "fail" : "info"),
+            mcpValid ? "MCP Server Card is valid." : (spec.McpServerCard?.Enabled == true ? "MCP Server Card was not found or is not valid." : "MCP Server Card verification is disabled by site policy."),
+            mcpUrl);
+
+        AddRemoteDiscoveryCorsCheck(checks, spec,
+        [
+            (spec.ApiCatalog?.Enabled == true, apiCatalogUrl, apiCatalog.Response),
+            (spec.AgentSkills?.Enabled == true, agentSkillsUrl, agentSkills.Response),
+            (spec.AgentsJson?.Enabled == true, agentsJsonUrl, agentsJson.Response),
+            (spec.AgentsJson?.Enabled == true, agentsWellKnownUrl, agentsWellKnown?.Response),
+            (spec.A2AAgentCard?.Enabled == true, a2aUrl, a2a.Response),
+            (spec.McpServerCard?.Enabled == true, mcpUrl, mcp.Response),
+            (markdownArtifact.Expected, markdownArtifact.Url, markdownArtifact.Result?.Response)
+        ]);
 
         return new WebAgentReadinessResult
         {
@@ -449,7 +522,7 @@ public static class WebAgentReadiness
         };
     }
 
-    private static AgentReadinessSpec ResolveSpec(AgentReadinessSpec? spec)
+    internal static AgentReadinessSpec ResolveSpec(AgentReadinessSpec? spec)
     {
         if (spec is not null)
         {
@@ -481,12 +554,13 @@ public static class WebAgentReadiness
                 resolved.ApiCatalog ??= new AgentApiCatalogSpec();
                 resolved.AgentSkills ??= new AgentSkillsDiscoverySpec();
                 resolved.AgentsJson ??= new AgentDiscoveryDocumentSpec();
+                ValidateDiscoveryOutputPaths(resolved);
             }
 
             return resolved;
         }
 
-        return new AgentReadinessSpec
+        var defaults = new AgentReadinessSpec
         {
             Enabled = true,
             SecurityHeaders = new AgentSecurityHeadersSpec(),
@@ -496,6 +570,64 @@ public static class WebAgentReadiness
             AgentsJson = new AgentDiscoveryDocumentSpec(),
             Apache = new AgentApacheSupportSpec { Enabled = false }
         };
+        ValidateDiscoveryOutputPaths(defaults);
+        return defaults;
+    }
+
+    private static void ValidateDiscoveryOutputPaths(AgentReadinessSpec spec)
+    {
+        var owners = new Dictionary<string, (string DisplayName, string ResourceOwner)>(StringComparer.OrdinalIgnoreCase);
+
+        void Add(string displayName, string resourceOwner, string? configured, string fallback)
+        {
+            var value = string.IsNullOrWhiteSpace(configured) ? fallback : configured.Trim();
+            if (Uri.TryCreate(value, UriKind.Absolute, out _))
+                throw new ArgumentException($"Agent-readiness output path '{configured}' must be relative to the site root.");
+
+            var normalized = NormalizeDiscoveryOutputPath(value);
+            if (owners.TryGetValue(normalized, out var existing))
+            {
+                if (string.Equals(existing.ResourceOwner, resourceOwner, StringComparison.Ordinal))
+                    return;
+                throw new ArgumentException(
+                    $"Agent-readiness discovery output path '{normalized}' is configured for both {existing.DisplayName} and {displayName}.");
+            }
+            owners[normalized] = (displayName, resourceOwner);
+        }
+
+        if (spec.ApiCatalog?.Enabled == true)
+            Add("API Catalog", "api-catalog", spec.ApiCatalog.OutputPath, ".well-known/api-catalog");
+        if (spec.AgentSkills?.Enabled == true)
+            Add("Agent Skills", "agent-skills", spec.AgentSkills.IndexPath, ".well-known/agent-skills/index.json");
+        if (spec.AgentsJson?.Enabled == true)
+        {
+            Add("agents.json", "agents-json", spec.AgentsJson.OutputPath, "agents.json");
+            Add("well-known agents.json", "agents-json", spec.AgentsJson.WellKnownOutputPath, ".well-known/agents.json");
+        }
+        if (spec.A2AAgentCard?.Enabled == true)
+            Add("A2A Agent Card", "a2a-agent-card", spec.A2AAgentCard.OutputPath, ".well-known/agent-card.json");
+        if (spec.McpServerCard?.Enabled == true)
+            Add("MCP Server Card", "mcp-server-card", spec.McpServerCard.OutputPath, ".well-known/mcp/server-card.json");
+    }
+
+    private static string NormalizeDiscoveryOutputPath(string value)
+    {
+        var segments = new List<string>();
+        foreach (var segment in value.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".")
+                continue;
+            if (segment == "..")
+            {
+                if (segments.Count == 0)
+                    throw new ArgumentException($"Agent-readiness output path '{value}' resolves outside the site root.");
+                segments.RemoveAt(segments.Count - 1);
+                continue;
+            }
+            segments.Add(segment);
+        }
+
+        return "/" + string.Join("/", segments);
     }
 
     private static string UpdateRobots(string siteRoot, string? baseUrl, AgentReadinessSpec spec)
@@ -1271,9 +1403,11 @@ public static class WebAgentReadiness
                 if (security.XContentTypeOptions)
                     AppendApacheHeaderSet(sb, "X-Content-Type-Options", "nosniff");
                 if (security.XFrameOptions)
-                    AppendApacheHeaderSet(sb, "X-Frame-Options", "DENY");
+                    AppendApacheHeaderSet(sb, "X-Frame-Options", string.IsNullOrWhiteSpace(security.XFrameOptionsValue) ? "DENY" : security.XFrameOptionsValue);
                 if (security.ReferrerPolicy)
                     AppendApacheHeaderSet(sb, "Referrer-Policy", string.IsNullOrWhiteSpace(security.ReferrerPolicyValue) ? "strict-origin-when-cross-origin" : security.ReferrerPolicyValue);
+                if (security.PermissionsPolicy && !string.IsNullOrWhiteSpace(security.PermissionsPolicyValue))
+                    AppendApacheHeaderSet(sb, "Permissions-Policy", security.PermissionsPolicyValue);
             }
 
             if (writeContentSignals)
@@ -1420,7 +1554,9 @@ public static class WebAgentReadiness
         if (string.IsNullOrWhiteSpace(route))
             return;
 
-        sb.Append("  <If \"%{REQUEST_URI} == '").Append(EscapeApacheExpressionString(NormalizeRoute(route))).AppendLine("'\">");
+        sb.Append("  <If \"%{REQUEST_URI} == '")
+            .Append(EscapeApacheExpressionString(EscapeLinkUriReference(NormalizeRoute(route))))
+            .AppendLine("'\">");
         AppendApacheHeaderSet(sb, "Content-Type", contentType, indent: "    ", always: true);
         if (security.Enabled && security.CorsForWellKnown && !string.IsNullOrWhiteSpace(security.CorsAllowOrigin))
             AppendApacheHeaderSet(sb, "Access-Control-Allow-Origin", security.CorsAllowOrigin, indent: "    ", always: true);
@@ -1439,7 +1575,7 @@ public static class WebAgentReadiness
         if (string.IsNullOrWhiteSpace(route))
             return;
 
-        sb.AppendLine(NormalizeRoute(route));
+        sb.AppendLine(EscapeLinkUriReference(NormalizeRoute(route)));
         sb.Append("  Content-Type: ").Append(contentType).AppendLine();
         AppendCorsHeaders(sb, security);
     }
@@ -1456,9 +1592,11 @@ public static class WebAgentReadiness
         if (security.XContentTypeOptions)
             sb.AppendLine("  X-Content-Type-Options: nosniff");
         if (security.XFrameOptions)
-            sb.AppendLine("  X-Frame-Options: DENY");
+            sb.Append("  X-Frame-Options: ").Append(string.IsNullOrWhiteSpace(security.XFrameOptionsValue) ? "DENY" : security.XFrameOptionsValue!.Trim()).AppendLine();
         if (security.ReferrerPolicy)
             sb.Append("  Referrer-Policy: ").Append(string.IsNullOrWhiteSpace(security.ReferrerPolicyValue) ? "strict-origin-when-cross-origin" : security.ReferrerPolicyValue!.Trim()).AppendLine();
+        if (security.PermissionsPolicy && !string.IsNullOrWhiteSpace(security.PermissionsPolicyValue))
+            sb.Append("  Permissions-Policy: ").Append(security.PermissionsPolicyValue!.Trim()).AppendLine();
     }
 
     private static void AppendCorsHeaders(StringBuilder sb, AgentSecurityHeadersSpec security)
@@ -1509,10 +1647,25 @@ public static class WebAgentReadiness
     }
 
     private static string EscapeLinkUriReference(string value)
-        => StripHeaderControlCharacters(value)
-            .Replace("<", "%3C", StringComparison.Ordinal)
-            .Replace(">", "%3E", StringComparison.Ordinal)
-            .Replace("\"", "%22", StringComparison.Ordinal);
+    {
+        var sanitized = StripHeaderControlCharacters(value);
+        if (Uri.TryCreate(sanitized, UriKind.Absolute, out var absolute))
+            return absolute.AbsoluteUri;
+
+        return string.Join("/", sanitized.Split('/').Select(EscapeLinkPathSegment));
+    }
+
+    private static string EscapeLinkPathSegment(string value)
+    {
+        try
+        {
+            return Uri.EscapeDataString(Uri.UnescapeDataString(value));
+        }
+        catch (UriFormatException)
+        {
+            return Uri.EscapeDataString(value);
+        }
+    }
 
     private static string EscapeLinkParameterValue(string value)
         => StripHeaderControlCharacters(value)
@@ -1847,6 +2000,8 @@ public static class WebAgentReadiness
 
         AddConfiguredHeaderCheck(checks, "security-referrer-policy", "Referrer-Policy", headersText, headersPath, apacheText, apachePath, fallbackTarget, expected && spec!.ReferrerPolicy, "Referrer-Policy",
             "Static host headers include Referrer-Policy.", "Static host headers do not include Referrer-Policy.");
+        AddConfiguredHeaderCheck(checks, "security-permissions-policy", "Permissions-Policy", headersText, headersPath, apacheText, apachePath, fallbackTarget, expected && spec!.PermissionsPolicy, "Permissions-Policy",
+            "Static host headers include Permissions-Policy.", "Static host headers do not include Permissions-Policy.");
         AddConfiguredHeaderCheck(checks, "security-cors", "CORS", headersText, headersPath, apacheText, apachePath, fallbackTarget, expected && spec!.CorsForWellKnown, "Access-Control-Allow-Origin",
             "Agent discovery resources include CORS headers.", "No Access-Control-Allow-Origin header configured for agent discovery resources.");
     }
@@ -1923,34 +2078,6 @@ public static class WebAgentReadiness
            value.Equals("add", StringComparison.OrdinalIgnoreCase) ||
            value.Equals("append", StringComparison.OrdinalIgnoreCase) ||
            value.Equals("merge", StringComparison.OrdinalIgnoreCase);
-
-    private static void AddRemoteSecurityHeaderChecks(List<WebAgentReadinessCheck> checks, HttpResponseMessage? response, string target)
-    {
-        AddCheck(checks, "security-hsts", "security-trust", "HSTS",
-            HeaderExists(response, "Strict-Transport-Security") ? "pass" : "fail",
-            HeaderExists(response, "Strict-Transport-Security") ? "Homepage response includes HSTS." : "Homepage response does not include HSTS.",
-            target);
-        AddCheck(checks, "security-csp", "security-trust", "CSP",
-            HeaderExists(response, "Content-Security-Policy") ? "pass" : "fail",
-            HeaderExists(response, "Content-Security-Policy") ? "Homepage response includes CSP." : "Homepage response does not include CSP.",
-            target);
-        AddCheck(checks, "security-xcto", "security-trust", "X-Content-Type-Options",
-            HeaderExists(response, "X-Content-Type-Options") ? "pass" : "fail",
-            HeaderExists(response, "X-Content-Type-Options") ? "Homepage response includes X-Content-Type-Options." : "Homepage response does not include X-Content-Type-Options.",
-            target);
-        AddCheck(checks, "security-xfo", "security-trust", "X-Frame-Options",
-            HeaderExists(response, "X-Frame-Options") || HeaderContains(response, "Content-Security-Policy", "frame-ancestors") ? "pass" : "fail",
-            HeaderExists(response, "X-Frame-Options") || HeaderContains(response, "Content-Security-Policy", "frame-ancestors") ? "Homepage response includes clickjacking protection." : "Homepage response does not include X-Frame-Options or CSP frame-ancestors.",
-            target);
-        AddCheck(checks, "security-referrer-policy", "security-trust", "Referrer-Policy",
-            HeaderExists(response, "Referrer-Policy") ? "pass" : "fail",
-            HeaderExists(response, "Referrer-Policy") ? "Homepage response includes Referrer-Policy." : "Homepage response does not include Referrer-Policy.",
-            target);
-        AddCheck(checks, "security-cors", "security-trust", "CORS",
-            HeaderExists(response, "Access-Control-Allow-Origin") ? "pass" : "warn",
-            HeaderExists(response, "Access-Control-Allow-Origin") ? "Homepage response includes CORS." : "Homepage response does not include CORS; this is usually only required on API or discovery resources.",
-            target);
-    }
 
     private static void AddHtmlSemanticsChecks(List<WebAgentReadinessCheck> checks, string html, string? target)
     {
@@ -2148,17 +2275,133 @@ public static class WebAgentReadiness
         return null;
     }
 
-    private static async Task<OpenApiScanResult> TryFindOpenApiAsync(HttpClient http, string baseUrl, CancellationToken cancellationToken)
+    private static async Task<OpenApiScanResult> TryFindOpenApiAsync(
+        HttpClient http,
+        string baseUrl,
+        string? configuredPath,
+        CancellationToken cancellationToken)
     {
-        foreach (var candidate in new[] { "/openapi.json", "/api/openapi.json", "/swagger.json", "/api/swagger.json", "/.well-known/openapi.json" })
+        var candidates = string.IsNullOrWhiteSpace(configuredPath)
+            ? new[] { "/openapi.json", "/api/openapi.json", "/swagger.json", "/api/swagger.json", "/.well-known/openapi.json" }
+            : new[] { configuredPath! };
+        foreach (var candidate in candidates)
         {
-            var url = CombineUrl(baseUrl, candidate);
+            var url = ResolveRemoteUrl(baseUrl, candidate, "/openapi.json");
             var result = await TryGetTextAsync(http, url, null, cancellationToken).ConfigureAwait(false);
             if (result.Success && LooksLikeOpenApi(result.Text))
                 return new OpenApiScanResult(true, url);
         }
 
         return new OpenApiScanResult(false, null);
+    }
+
+    private static string ResolveRemoteUrl(string baseUrl, string? configuredPath, string defaultPath)
+    {
+        var value = string.IsNullOrWhiteSpace(configuredPath) ? defaultPath : configuredPath!.Trim();
+        return Uri.TryCreate(value, UriKind.Absolute, out var absolute)
+            ? absolute.AbsoluteUri
+            : CombineUrl(baseUrl, NormalizeRoute(value));
+    }
+
+    private static string ResolveRemoteOutputUrl(string baseUrl, string? configuredPath, string defaultPath)
+    {
+        var value = string.IsNullOrWhiteSpace(configuredPath) ? defaultPath : configuredPath!.Trim();
+        if (Uri.TryCreate(value, UriKind.Absolute, out _))
+            throw new ArgumentException($"Agent-readiness output path '{configuredPath}' must be relative to the site root.", nameof(configuredPath));
+        return CombineUrl(baseUrl, NormalizeRoute(value));
+    }
+
+    private static bool HasExpectedDiscoveryLink(
+        string linkHeader,
+        string baseUrl,
+        AgentReadinessSpec spec,
+        string? discoveredOpenApiUrl)
+    {
+        if (string.IsNullOrWhiteSpace(linkHeader))
+            return false;
+
+        var expectationGroups = new List<RemoteLinkExpectation[]>();
+        if (spec.ApiCatalog?.Enabled == true)
+            expectationGroups.Add([new RemoteLinkExpectation(
+                ResolveRemoteOutputUrl(baseUrl, spec.ApiCatalog.OutputPath, "/.well-known/api-catalog"), "api-catalog")]);
+        if (spec.AgentSkills?.Enabled == true)
+            expectationGroups.Add([new RemoteLinkExpectation(
+                ResolveRemoteOutputUrl(baseUrl, spec.AgentSkills.IndexPath, "/.well-known/agent-skills/index.json"), "describedby")]);
+        if (spec.AgentsJson?.Enabled == true)
+            expectationGroups.Add([new RemoteLinkExpectation(
+                ResolveRemoteOutputUrl(baseUrl, spec.AgentsJson.OutputPath, "/agents.json"), "describedby")]);
+        if (spec.A2AAgentCard?.Enabled == true)
+            expectationGroups.Add([new RemoteLinkExpectation(
+                ResolveRemoteOutputUrl(baseUrl, spec.A2AAgentCard.OutputPath, "/.well-known/agent-card.json"), "service-desc")]);
+        if (spec.McpServerCard?.Enabled == true)
+            expectationGroups.Add([new RemoteLinkExpectation(
+                ResolveRemoteOutputUrl(baseUrl, spec.McpServerCard.OutputPath, "/.well-known/mcp/server-card.json"), "service-desc")]);
+        if (spec.OpenApi?.Enabled == true)
+        {
+            var target = string.IsNullOrWhiteSpace(spec.OpenApi.Path)
+                ? discoveredOpenApiUrl
+                : ResolveRemoteUrl(baseUrl, spec.OpenApi.Path, "/openapi.json");
+            if (string.IsNullOrWhiteSpace(target))
+                return false;
+            expectationGroups.Add([new RemoteLinkExpectation(target!, "service-desc")]);
+        }
+        if (spec.MarkdownArtifacts?.Enabled == true)
+            expectationGroups.Add([new RemoteLinkExpectation(
+                ResolveRemoteOutputUrl(baseUrl, "/index" + NormalizeMarkdownExtension(spec.MarkdownArtifacts.Extension), "/index.md"), "alternate")]);
+
+        return expectationGroups.All(group => group.Any(expectation => LinkHeaderContainsTarget(linkHeader, baseUrl, expectation)));
+    }
+
+    private static bool HasEnabledDiscoveryLinkTargets(AgentReadinessSpec spec) =>
+        spec.ApiCatalog?.Enabled == true ||
+        spec.AgentSkills?.Enabled == true ||
+        spec.AgentsJson?.Enabled == true ||
+        spec.A2AAgentCard?.Enabled == true ||
+        spec.McpServerCard?.Enabled == true ||
+        spec.OpenApi?.Enabled == true ||
+        spec.MarkdownArtifacts?.Enabled == true;
+
+    private static bool LinkHeaderContainsTarget(string linkHeader, string baseUrl, RemoteLinkExpectation expectation)
+    {
+        foreach (var segment in SplitHeaderValues(linkHeader))
+        {
+            var start = segment.IndexOf('<');
+            var end = segment.IndexOf('>');
+            if (start < 0 || end <= start ||
+                !LinkRelContains(ParseLinkParameters(segment[(end + 1)..]).GetValueOrDefault("rel"), expectation.Relation))
+                continue;
+
+            var href = segment.Substring(start + 1, end - start - 1).Trim();
+            var actualUrl = ResolveLinkTargetUrl(baseUrl, href);
+            if (SameRemoteUrl(actualUrl, expectation.TargetUrl))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string ResolveLinkTargetUrl(string baseUrl, string href)
+    {
+        if (Uri.TryCreate(href, UriKind.Absolute, out var absolute))
+            return absolute.AbsoluteUri;
+
+        if (Uri.TryCreate(baseUrl.TrimEnd('/') + "/", UriKind.Absolute, out var homepage) &&
+            Uri.TryCreate(homepage, href, out var resolved))
+            return resolved.AbsoluteUri;
+
+        return ResolveRemoteUrl(baseUrl, href, "/");
+    }
+
+    private static bool SameRemoteUrl(string actualUrl, string expectedUrl)
+    {
+        if (!Uri.TryCreate(actualUrl, UriKind.Absolute, out var actual) ||
+            !Uri.TryCreate(expectedUrl, UriKind.Absolute, out var expected))
+            return string.Equals(actualUrl, expectedUrl, StringComparison.Ordinal);
+
+        return string.Equals(actual.Scheme, expected.Scheme, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(actual.Host, expected.Host, StringComparison.OrdinalIgnoreCase) &&
+               actual.Port == expected.Port &&
+               string.Equals(actual.PathAndQuery, expected.PathAndQuery, StringComparison.Ordinal);
     }
 
     private static bool LooksLikeOpenApi(string text)
@@ -2484,16 +2727,20 @@ public static class WebAgentReadiness
     private static string CombineUrl(string baseUrl, string route)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
-            return NormalizeRoute(route);
-        return baseUrl.TrimEnd('/') + "/" + NormalizeRoute(route).TrimStart('/');
+            return EscapeLinkUriReference(NormalizeRoute(route));
+
+        var combined = baseUrl.TrimEnd('/') + "/" + NormalizeRoute(route).TrimStart('/');
+        return Uri.TryCreate(combined, UriKind.Absolute, out var absolute)
+            ? absolute.AbsoluteUri
+            : combined;
     }
 
     private static string ToAbsoluteUrl(string? baseUrl, string value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
-        if (Uri.TryCreate(value, UriKind.Absolute, out _))
-            return value.Trim();
+        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
+            return absolute.AbsoluteUri;
         return string.IsNullOrWhiteSpace(baseUrl) ? NormalizeRoute(value) : CombineUrl(baseUrl!, value);
     }
 
@@ -2569,6 +2816,7 @@ public static class WebAgentReadiness
     }
 
     private sealed record HeaderLinkTarget(string Href, string Rel, string Type);
+    private sealed record RemoteLinkExpectation(string TargetUrl, string Relation);
     private sealed record MarkdownArtifactWriteResult(string[] Paths, string? RootRoute);
     private sealed record HtmlReadResult(string Text, string Path);
     private sealed record OpenApiScanResult(bool Success, string? Url);
@@ -2608,4 +2856,8 @@ public sealed class WebAgentReadinessScanOptions
     public string BaseUrl { get; set; } = string.Empty;
     /// <summary>HTTP timeout in milliseconds.</summary>
     public int TimeoutMs { get; set; } = 15000;
+    /// <summary>Optional site policy used to decide which live headers are required.</summary>
+    public AgentReadinessSpec? AgentReadiness { get; set; }
+    /// <summary>Optional test or host-provided HTTP transport.</summary>
+    internal HttpMessageHandler? HttpMessageHandler { get; set; }
 }

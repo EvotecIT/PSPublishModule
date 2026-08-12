@@ -16,6 +16,22 @@ public sealed class GitHubWebsiteDeployGuardrailTests
     }
 
     [Fact]
+    public void ReusableWorkflow_ShouldApplyGitHubPagesCloudflarePolicyOnLinux()
+    {
+        var workflow = ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml");
+        var policyStart = workflow.IndexOf("  cloudflare-site-policy:", StringComparison.Ordinal);
+        var linuxStart = workflow.IndexOf("  deploy-linux:", StringComparison.Ordinal);
+        Assert.True(policyStart >= 0 && linuxStart > policyStart);
+        var policyJob = workflow[policyStart..linuxStart];
+
+        Assert.Contains("needs: [deploy, build, guardrails]", policyJob, StringComparison.Ordinal);
+        Assert.Contains("runs-on: ubuntu-latest", policyJob, StringComparison.Ordinal);
+        Assert.Contains("powerforge-cloudflare-site-policy", policyJob, StringComparison.Ordinal);
+        Assert.Contains("needs: [deploy, cloudflare-site-policy, deploy-linux]", workflow, StringComparison.Ordinal);
+        Assert.Contains("needs.cloudflare-site-policy.result == 'success'", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Guardrail_ShouldAcceptExplicitLocalizedAndSingleLanguageModes()
     {
         var localized = CreateSafeSeoDoctorStep();

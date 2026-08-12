@@ -40,6 +40,18 @@ internal static partial class WebCliCommandHandlers
             return HandleCloudflareDnsRecord(subArgs, outputJson, logger, outputSchemaVersion);
         }
 
+        if (verb.Equals("site-policy", StringComparison.OrdinalIgnoreCase))
+        {
+            if (subArgs.Length > 0 && !subArgs[0].StartsWith("-", StringComparison.Ordinal))
+            {
+                if (!subArgs[0].Equals("apply", StringComparison.OrdinalIgnoreCase))
+                    return Fail($"Unknown cloudflare site-policy verb '{subArgs[0]}'. Supported: apply.", outputJson, logger, "web.cloudflare.site-policy");
+                subArgs = subArgs.Skip(1).ToArray();
+            }
+
+            return HandleCloudflareSitePolicy(subArgs, outputJson, logger, outputSchemaVersion);
+        }
+
         if (verb.Equals("cache-policy", StringComparison.OrdinalIgnoreCase) ||
             verb.Equals("policy", StringComparison.OrdinalIgnoreCase) ||
             verb.Equals("rules", StringComparison.OrdinalIgnoreCase))
@@ -54,7 +66,7 @@ internal static partial class WebCliCommandHandlers
             return HandleCloudflareCachePolicy(subArgs, outputJson, logger, outputSchemaVersion);
         }
 
-        return Fail($"Unknown cloudflare verb '{verb}'. Supported: purge, verify, cache-policy, dns-record.", outputJson, logger, "web.cloudflare");
+        return Fail($"Unknown cloudflare verb '{verb}'. Supported: purge, verify, site-policy, cache-policy, dns-record.", outputJson, logger, "web.cloudflare");
     }
 
     private static int HandleCloudflareDnsRecord(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
@@ -289,6 +301,82 @@ internal static partial class WebCliCommandHandlers
         return result.Success ? 0 : 1;
     }
 
+    private static int HandleCloudflareSitePolicy(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
+    {
+        const string command = "web.cloudflare.site-policy.apply";
+        if (!TryLoadCloudflareSiteProfile(subArgs, outputJson, logger, command, out var siteProfile, out var loadError))
+            return loadError;
+        if (siteProfile is null)
+            return Fail("cloudflare site-policy requires --site-config.", outputJson, logger, command);
+
+        var zoneId = TryGetOptionValue(subArgs, "--zone-id") ?? TryGetOptionValue(subArgs, "--zone") ?? TryGetOptionValue(subArgs, "--zoneId");
+        if (string.IsNullOrWhiteSpace(zoneId))
+            return Fail("Missing required --zone-id.", outputJson, logger, command);
+
+        var token = TryGetOptionValue(subArgs, "--token") ?? TryGetOptionValue(subArgs, "--api-token") ?? TryGetOptionValue(subArgs, "--apiToken");
+        var tokenEnv = TryGetOptionValue(subArgs, "--token-env") ?? TryGetOptionValue(subArgs, "--api-token-env") ?? TryGetOptionValue(subArgs, "--apiTokenEnv") ?? "CLOUDFLARE_API_TOKEN";
+        if (string.IsNullOrWhiteSpace(token))
+            token = Environment.GetEnvironmentVariable(tokenEnv);
+        if (string.IsNullOrWhiteSpace(token))
+            return Fail($"Missing Cloudflare API token. Provide --token or set env var '{tokenEnv}'.", outputJson, logger, command);
+
+        if (!Uri.TryCreate(siteProfile.BaseUrl, UriKind.Absolute, out var siteBaseUri) ||
+            (siteBaseUri.Scheme != Uri.UriSchemeHttps && siteBaseUri.Scheme != Uri.UriSchemeHttp))
+            return Fail("site config BaseUrl must be an absolute HTTP or HTTPS URL.", outputJson, logger, command);
+
+        var hostname = TryGetOptionValue(subArgs, "--hostname") ?? TryGetOptionValue(subArgs, "--host") ?? siteBaseUri.Host;
+        var basePath = TryGetOptionValue(subArgs, "--base-path") ?? TryGetOptionValue(subArgs, "--basePath") ?? siteBaseUri.AbsolutePath;
+        var policyName = TryGetOptionValue(subArgs, "--policy-name") ?? TryGetOptionValue(subArgs, "--policyName") ?? siteProfile.Name ?? hostname;
+        var htmlPaths = ReadOptionList(subArgs, "--html-path", "--html-paths");
+        htmlPaths.AddRange(siteProfile.VerifyPaths);
+        var dryRun = HasOption(subArgs, "--dry-run") || HasOption(subArgs, "--dryRun");
+
+        var result = CloudflareSitePolicyManager.Apply(
+            zoneId,
+            token,
+            hostname,
+            policyName,
+            htmlPaths,
+            siteProfile.SecurityHeaders,
+            dryRun,
+            basePath: basePath,
+            agentReadiness: siteProfile.AgentReadiness);
+        if (!result.Success)
+            return Fail(result.Message, outputJson, logger, command);
+
+        var message = $"Cloudflare site policy for {hostname}: {result.Message}";
+        if (!outputJson)
+            logger.Info(message);
+
+        if (outputJson)
+        {
+            var element = JsonSerializer.SerializeToElement(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["siteConfig"] = siteProfile.SiteConfigPath,
+                ["zoneId"] = zoneId,
+                ["hostname"] = hostname,
+                ["basePath"] = basePath,
+                ["policyName"] = policyName,
+                ["dryRun"] = dryRun,
+                ["changesRequired"] = result.ChangesRequired,
+                ["changed"] = result.Changed,
+                ["responseHeaderManagedRuleCount"] = result.ResponseHeaderManagedRuleCount,
+                ["cacheManagedRuleCount"] = result.CacheManagedRuleCount,
+                ["message"] = message
+            }, WebCliJson.Options);
+            WebCliJsonWriter.Write(new WebCliJsonEnvelope
+            {
+                SchemaVersion = outputSchemaVersion,
+                Command = command,
+                Success = true,
+                ExitCode = 0,
+                Result = element
+            });
+        }
+
+        return 0;
+    }
+
     private static int HandleCloudflarePurge(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
         if (!TryLoadCloudflareSiteProfile(subArgs, outputJson, logger, "web.cloudflare.purge", out var siteProfile, out var loadError))
@@ -326,13 +414,14 @@ internal static partial class WebCliCommandHandlers
         if (urls.Count == 0 && paths.Count == 0 && siteProfile is not null)
             paths.AddRange(siteProfile.PurgePaths);
 
-        if (urls.Count == 0 && paths.Count > 0)
+        if (paths.Count > 0)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
                 return Fail("Missing --base-url (required when using --path/--paths).", outputJson, logger, "web.cloudflare.purge");
 
             urls.AddRange(paths.Select(p => CombineUrl(baseUrl, p)));
         }
+        urls = urls.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         var (ok, message) = CloudflareCachePurger.Purge(
             zoneId: zoneId,
@@ -386,13 +475,14 @@ internal static partial class WebCliCommandHandlers
         if (urls.Count == 0 && paths.Count == 0 && siteProfile is not null)
             paths.AddRange(siteProfile.VerifyPaths);
 
-        if (urls.Count == 0 && paths.Count > 0)
+        if (paths.Count > 0)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
                 return Fail("Missing --base-url (required when using --path/--paths).", outputJson, logger, "web.cloudflare.verify");
 
             urls.AddRange(paths.Select(p => CombineUrl(baseUrl, p)));
         }
+        urls = urls.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         if (urls.Count == 0)
             return Fail("Missing target URLs. Provide --url/--urls or --path/--paths.", outputJson, logger, "web.cloudflare.verify");
@@ -424,16 +514,16 @@ internal static partial class WebCliCommandHandlers
 
         if (outputJson)
         {
-            var element = JsonSerializer.SerializeToElement(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            var element = JsonSerializer.SerializeToElement(new CloudflareVerifyCommandResult
             {
-                ["siteConfig"] = siteProfile?.SiteConfigPath,
-                ["baseUrl"] = baseUrl,
-                ["urlCount"] = urls.Count,
-                ["warmupRequests"] = warmupRequests,
-                ["timeoutMs"] = timeoutMs,
-                ["allowedStatuses"] = allowedStatuses,
-                ["results"] = entries,
-                ["message"] = message
+                SiteConfig = siteProfile?.SiteConfigPath,
+                BaseUrl = baseUrl,
+                UrlCount = urls.Count,
+                WarmupRequests = warmupRequests,
+                TimeoutMs = timeoutMs,
+                AllowedStatuses = allowedStatuses.ToArray(),
+                Results = entries,
+                Message = message
             }, WebCliJson.Options);
 
             WebCliJsonWriter.Write(new WebCliJsonEnvelope
