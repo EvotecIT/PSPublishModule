@@ -9,6 +9,24 @@ namespace PowerForge.Tests;
 public sealed class CloudflareCachePolicyTests
 {
     [Fact]
+    public void VerifyCommandResult_ShouldSerializeWithTrimSafeMetadata()
+    {
+        var result = new CloudflareVerifyCommandResult
+        {
+            BaseUrl = "https://example.com",
+            UrlCount = 1,
+            AllowedStatuses = ["HIT"],
+            Results = [new CloudflareVerifyEntry { Url = "https://example.com/", Status = "HIT", HttpStatusCode = 200, Success = true }],
+            Message = "Verified."
+        };
+
+        var json = System.Text.Json.JsonSerializer.SerializeToElement(result, WebCliJson.Options);
+
+        Assert.Equal("HIT", json.GetProperty("allowedStatuses")[0].GetString());
+        Assert.True(json.GetProperty("results")[0].GetProperty("success").GetBoolean());
+    }
+
+    [Fact]
     public void BuildManagedRules_ShouldScopePolicyAndIncludeSiteRoutes()
     {
         var rules = CloudflareCachePolicyBuilder.BuildManagedRules(

@@ -14,6 +14,18 @@ internal sealed class CloudflareVerifyEntry
     public string? Error { get; set; }
 }
 
+internal sealed class CloudflareVerifyCommandResult
+{
+    public string? SiteConfig { get; set; }
+    public string? BaseUrl { get; set; }
+    public int UrlCount { get; set; }
+    public int WarmupRequests { get; set; }
+    public int TimeoutMs { get; set; }
+    public string[] AllowedStatuses { get; set; } = Array.Empty<string>();
+    public CloudflareVerifyEntry[] Results { get; set; } = Array.Empty<CloudflareVerifyEntry>();
+    public string Message { get; set; } = string.Empty;
+}
+
 internal static class CloudflareCacheVerifier
 {
     internal static readonly string[] DefaultAllowedStatuses = { "HIT", "REVALIDATED", "EXPIRED", "STALE" };

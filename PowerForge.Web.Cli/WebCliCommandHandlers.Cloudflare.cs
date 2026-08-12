@@ -510,16 +510,16 @@ internal static partial class WebCliCommandHandlers
 
         if (outputJson)
         {
-            var element = JsonSerializer.SerializeToElement(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            var element = JsonSerializer.SerializeToElement(new CloudflareVerifyCommandResult
             {
-                ["siteConfig"] = siteProfile?.SiteConfigPath,
-                ["baseUrl"] = baseUrl,
-                ["urlCount"] = urls.Count,
-                ["warmupRequests"] = warmupRequests,
-                ["timeoutMs"] = timeoutMs,
-                ["allowedStatuses"] = allowedStatuses,
-                ["results"] = entries,
-                ["message"] = message
+                SiteConfig = siteProfile?.SiteConfigPath,
+                BaseUrl = baseUrl,
+                UrlCount = urls.Count,
+                WarmupRequests = warmupRequests,
+                TimeoutMs = timeoutMs,
+                AllowedStatuses = allowedStatuses.ToArray(),
+                Results = entries,
+                Message = message
             }, WebCliJson.Options);
 
             WebCliJsonWriter.Write(new WebCliJsonEnvelope
