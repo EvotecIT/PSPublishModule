@@ -10,6 +10,9 @@ internal static class VirusTotalReleaseArtifactSelector
         ["Project", "Version", "Kind", "FileName", "RelativePath", "Target", "Runtime", "Framework"],
         StringComparer.Ordinal);
     private static readonly Regex TemplateTokenPattern = new("\\{([^{}]+)\\}", RegexOptions.CultureInvariant);
+    private static readonly Regex OptionalTemplateTokenPattern = new(
+        "\\{(?:Target|Runtime|Framework)\\}",
+        RegexOptions.CultureInvariant);
 
     public static void ValidateConfiguration(PowerForgeVirusTotalOptions options)
     {
@@ -91,13 +94,22 @@ internal static class VirusTotalReleaseArtifactSelector
     private static void ValidateDestinationTemplateStructure(string template)
     {
         var normalized = template.Trim().Replace('\\', '/');
+        var segments = normalized.Split('/').Skip(1).ToArray();
         if (!normalized.StartsWith("/", StringComparison.Ordinal) ||
             normalized.EndsWith("/", StringComparison.Ordinal) ||
             normalized.Contains("//", StringComparison.Ordinal) ||
-            normalized.Split('/').Skip(1).Any(segment => segment is "." or ".." || string.IsNullOrWhiteSpace(segment)))
+            segments.Any(segment => segment is "." or ".." || string.IsNullOrWhiteSpace(segment)))
         {
             throw new InvalidOperationException(
                 $"VirusTotal DestinationPathTemplate has an invalid path structure: '{template}'.");
+        }
+
+        if (segments.Any(segment =>
+                OptionalTemplateTokenPattern.IsMatch(segment) &&
+                string.IsNullOrEmpty(OptionalTemplateTokenPattern.Replace(segment, string.Empty))))
+        {
+            throw new InvalidOperationException(
+                "VirusTotal DestinationPathTemplate cannot use optional Target, Runtime, or Framework tokens as an entire path segment.");
         }
     }
 
@@ -194,7 +206,7 @@ internal static class VirusTotalReleaseArtifactSelector
 
     private static bool TryClassify(PowerForgeReleaseAssetEntry entry, out VirusTotalArtifactKind kind)
     {
-        var sourcePath = FirstNonEmpty(entry.StagedPath, entry.Path) ?? string.Empty;
+        var sourcePath = entry.Path ?? string.Empty;
         var fileName = Path.GetFileName(sourcePath);
         var extension = Path.GetExtension(sourcePath);
         if (fileName.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase) ||

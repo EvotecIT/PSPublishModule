@@ -5,6 +5,39 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeReleaseModulePackageProvenanceTests
 {
     [Fact]
+    public void CreateDotNetArtefactEntries_ExecutableOnlyPublish_IsVerifiedFinalPackage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var executablePath = Path.Combine(root, "Example.exe");
+        try
+        {
+            File.WriteAllText(executablePath, "signed executable");
+            var entry = Assert.Single(PowerForgeReleaseService.CreateDotNetArtefactEntries(
+                new DotNetPublishArtefactResult
+                {
+                    Target = "Example",
+                    ExePath = executablePath,
+                    Runtime = "win-x64",
+                    Framework = "net10.0"
+                },
+                new DotNetPublishPlan
+                {
+                    Targets = [new DotNetPublishTargetPlan { Name = "Example", Version = "2.3.4" }]
+                },
+                sharedReleaseVersion: null));
+
+            Assert.Equal(executablePath, entry.Path);
+            Assert.Equal("2.3.4", entry.Version);
+            Assert.True(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void CreateDotNetStorePackageEntries_UsesMatchingTargetVersion()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -145,6 +178,71 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Fact]
+    public void CreateModuleAssetEntries_PackedModuleUnderConfiguredRoot_IsVerifiedFinalPackage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var archivePath = Path.Combine(root, "ExampleModule.v1.0.0.zip");
+        try
+        {
+            using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                archive.CreateEntry("Modules/ExampleModule/ExampleModule.psd1");
+                archive.CreateEntry("Modules/ExampleModule/ExampleModule.psm1");
+            }
+
+            var entry = Assert.Single(PowerForgeReleaseService.CreateModuleAssetEntries(
+                archivePath,
+                new PowerForgeModuleReleasePlanSummary
+                {
+                    ModuleName = "ExampleModule",
+                    ManifestPath = Path.Combine(root, "ExampleModule.psd1"),
+                    PackedModuleRoots = ["Modules"]
+                },
+                new[] { archivePath }));
+
+            Assert.True(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolvePackedModuleRoots_UsesEnabledPackedArtefactConfiguration()
+    {
+        var roots = PowerForgeReleaseService.ResolvePackedModuleRoots(
+            new ModulePipelineConfigurationContext
+            {
+                ProjectRoot = Path.GetTempPath(),
+                Spec = new ModulePipelineSpec
+                {
+                    Segments =
+                    [
+                        new ConfigurationArtefactSegment
+                        {
+                            ArtefactType = ArtefactType.Packed,
+                            Configuration = new ArtefactConfiguration
+                            {
+                                Enabled = true,
+                                RequiredModules = new ArtefactRequiredModulesConfiguration
+                                {
+                                    ModulesPath = "Payload/Modules"
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            "ExampleModule",
+            "1.2.3",
+            preRelease: null);
+
+        Assert.Equal(new[] { "Payload/Modules" }, roots);
     }
 
     [Fact]

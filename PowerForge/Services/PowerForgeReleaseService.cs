@@ -1457,6 +1457,11 @@ internal sealed partial class PowerForgeReleaseService
             ModuleVersion = buildRequest.ModuleVersion,
             PreReleaseTag = NullIfEmpty(buildRequest.PreReleaseTag ?? string.Empty),
             StagingPath = buildRequest.StagingPath,
+            PackedModuleRoots = ResolvePackedModuleRoots(
+                moduleConfig,
+                moduleName,
+                buildRequest.ModuleVersion,
+                buildRequest.PreReleaseTag),
             NoSign = buildRequest.NoSign,
             SkipInstall = buildRequest.SkipInstall,
             SignModule = buildRequest.SignModule,
@@ -4751,83 +4756,6 @@ internal sealed partial class PowerForgeReleaseService
                 Target = project.ProjectName,
                 PackageId = project.PackageId,
                 Version = project.NewVersion,
-                IsFinalPackageOutput = true
-            };
-        }
-    }
-
-    private static IEnumerable<PowerForgeReleaseAssetEntry> CreateLegacyToolAssetEntries(PowerForgeToolReleaseArtifactResult artifact)
-    {
-        var paths = !string.IsNullOrWhiteSpace(artifact.ZipPath) && File.Exists(artifact.ZipPath)
-            ? new[] { artifact.ZipPath }
-            : new[] { artifact.ExecutablePath, artifact.CommandAliasPath };
-
-        foreach (var path in paths
-            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
-        {
-            yield return new PowerForgeReleaseAssetEntry
-            {
-                Path = path!,
-                Category = PowerForgeReleaseAssetCategory.Tool,
-                Source = "LegacyTools",
-                Target = artifact.Target,
-                Version = artifact.Version,
-                Runtime = artifact.Runtime,
-                Framework = artifact.Framework,
-                Style = artifact.Flavor.ToString(),
-                IsFinalPackageOutput = true
-            };
-        }
-    }
-
-    private static IEnumerable<PowerForgeReleaseAssetEntry> CreateDotNetArtefactEntries(
-        DotNetPublishArtefactResult artifact,
-        DotNetPublishPlan? dotNetPlan,
-        string? sharedReleaseVersion)
-    {
-        if (string.IsNullOrWhiteSpace(artifact.ZipPath) || !File.Exists(artifact.ZipPath))
-            yield break;
-
-        var version = ResolveDotNetArtefactVersion(artifact, dotNetPlan, sharedReleaseVersion);
-
-        yield return new PowerForgeReleaseAssetEntry
-        {
-            Path = artifact.ZipPath!,
-            Category = artifact.Category == DotNetPublishArtefactCategory.Bundle
-                ? PowerForgeReleaseAssetCategory.Portable
-                : PowerForgeReleaseAssetCategory.Tool,
-            Source = "DotNetPublish",
-            Target = artifact.Target,
-            Version = version,
-            Runtime = artifact.Runtime,
-            Framework = artifact.Framework,
-            Style = artifact.Style.ToString(),
-            BundleId = artifact.BundleId,
-            IsFinalPackageOutput = true
-        };
-    }
-
-    internal static IEnumerable<PowerForgeReleaseAssetEntry> CreateDotNetStorePackageEntries(
-        DotNetPublishStorePackageResult storePackage,
-        DotNetPublishPlan? dotNetPlan,
-        string? sharedReleaseVersion)
-    {
-        var version = ResolveDotNetTargetVersion(storePackage.Target, dotNetPlan, sharedReleaseVersion);
-        foreach (var path in (storePackage.OutputFiles ?? Array.Empty<string>())
-            .Concat(storePackage.UploadFiles ?? Array.Empty<string>())
-            .Concat(storePackage.SymbolFiles ?? Array.Empty<string>())
-            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
-        {
-            yield return new PowerForgeReleaseAssetEntry
-            {
-                Path = path!,
-                Category = PowerForgeReleaseAssetCategory.Store,
-                Source = "DotNetPublish",
-                Target = storePackage.Target,
-                Version = version,
-                Runtime = storePackage.Runtime,
-                Framework = storePackage.Framework,
-                Style = storePackage.Style.ToString(),
                 IsFinalPackageOutput = true
             };
         }

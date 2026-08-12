@@ -129,9 +129,18 @@ internal sealed partial class PowerForgeReleaseService
             var expectedManifestName = Path.GetFileName(plan?.ManifestPath);
             if (!string.IsNullOrWhiteSpace(expectedManifestName))
             {
-                return files.Count(name =>
-                    name.Count(character => character == '/') == 1 &&
-                    string.Equals(Path.GetFileName(name), expectedManifestName, StringComparison.OrdinalIgnoreCase)) == 1;
+                var moduleName = string.IsNullOrWhiteSpace(plan?.ModuleName)
+                    ? Path.GetFileNameWithoutExtension(expectedManifestName)
+                    : plan!.ModuleName!.Trim();
+                var expectedManifestPaths = new[] { string.Empty }
+                    .Concat(plan?.PackedModuleRoots ?? Array.Empty<string>())
+                    .Select(NormalizePackedModuleRoot)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Select(root => string.IsNullOrWhiteSpace(root)
+                        ? $"{moduleName}/{expectedManifestName}"
+                        : $"{root}/{moduleName}/{expectedManifestName}")
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                return files.Count(expectedManifestPaths.Contains) == 1;
             }
 
             var roots = files
@@ -155,6 +164,77 @@ internal sealed partial class PowerForgeReleaseService
             return false;
         }
     }
+
+    /// <summary>
+    /// Resolves archive-relative roots that can contain the main module in configured packed artefacts.
+    /// </summary>
+    internal static string[] ResolvePackedModuleRoots(
+        ModulePipelineConfigurationContext? context,
+        string? moduleName,
+        string? moduleVersion,
+        string? preRelease)
+    {
+        if (context is null || string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrWhiteSpace(moduleVersion))
+            return Array.Empty<string>();
+
+        return (context.Spec.Segments ?? Array.Empty<IConfigurationSegment>())
+            .OfType<ConfigurationArtefactSegment>()
+            .Where(segment => segment.ArtefactType == ArtefactType.Packed && segment.Configuration?.Enabled == true)
+            .Select(segment => ResolvePackedModuleRoot(
+                segment.Configuration,
+                context.ProjectRoot,
+                moduleName!,
+                moduleVersion!,
+                preRelease))
+            .OfType<string>()
+            .Where(root => !string.IsNullOrWhiteSpace(root))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string? ResolvePackedModuleRoot(
+        ArtefactConfiguration configuration,
+        string projectRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+    {
+        var configuredPath = configuration.RequiredModules?.ModulesPath;
+        if (string.IsNullOrWhiteSpace(configuredPath))
+            return null;
+
+        var replaced = ModulePathTokenFormatter.ReplacePathTokens(
+            configuredPath,
+            moduleName,
+            moduleVersion,
+            preRelease);
+        replaced = PathValueResolver.Clean(replaced);
+        if (string.IsNullOrWhiteSpace(replaced))
+            return null;
+
+        if (!Path.IsPathRooted(replaced))
+            return NormalizePackedModuleRoot(replaced);
+
+        var outputRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(
+            configuration.Path,
+            projectRoot,
+            moduleName,
+            moduleVersion,
+            preRelease,
+            ArtefactType.Packed);
+        var relative = FrameworkCompatibility.GetRelativePath(outputRoot, Path.GetFullPath(replaced));
+        var normalized = NormalizePackedModuleRoot(relative);
+        if (normalized == ".." || normalized.StartsWith("../", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Packed artefact ModulesPath '{configuredPath}' must remain under the packed artefact output root.");
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizePackedModuleRoot(string value)
+        => value.Trim().Replace('\\', '/').Trim('/');
 
     private static string? ResolveModuleManifestVersion(string manifestText)
     {

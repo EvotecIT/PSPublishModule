@@ -172,6 +172,67 @@ public sealed partial class VirusTotalMonitorReleaseTests
     }
 
     [Fact]
+    public void SelectArtifacts_StagedExtensionDoesNotChangeProducerKind()
+    {
+        var entry = Entry("Example.1.2.3.nupkg", PowerForgeReleaseAssetCategory.Package, "staged/Example.zip");
+        entry.StagedPath = Path.Combine(Path.GetTempPath(), "staged", "Example.zip");
+
+        var selected = VirusTotalReleaseArtifactSelector.Select(
+            new[] { entry },
+            new PowerForgeVirusTotalOptions
+            {
+                Enabled = true,
+                ArtifactKinds = new[] { VirusTotalArtifactKind.NuGetPackage }
+            },
+            "Example",
+            "1.2.3");
+
+        var artifact = Assert.Single(selected);
+        Assert.Equal(VirusTotalArtifactKind.NuGetPackage, artifact.Kind);
+        Assert.Equal(Path.GetFullPath(entry.StagedPath), artifact.SourcePath);
+    }
+
+    [Theory]
+    [InlineData("{Target}")]
+    [InlineData("{Runtime}")]
+    [InlineData("{Framework}")]
+    [InlineData("{Runtime}{Framework}")]
+    public void ValidateConfiguration_OptionalOnlyPathSegment_FailsBeforeRelease(string optionalSegment)
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            VirusTotalReleaseArtifactSelector.ValidateConfiguration(new PowerForgeVirusTotalOptions
+            {
+                Enabled = true,
+                ApiKeyEnvName = "VIRUSTOTAL_MONITOR_API_KEY",
+                ArtifactKinds = new[] { VirusTotalArtifactKind.NuGetPackage },
+                DestinationPathTemplate = $"/{{Project}}/{{Version}}/{optionalSegment}/{{FileName}}",
+                ReceiptPath = "receipt.json"
+            }));
+
+        Assert.Contains("optional", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SelectArtifacts_StagedSymbolPackage_RemainsExcludedByProducerIdentity()
+    {
+        var entry = Entry("Example.1.2.3.snupkg", PowerForgeReleaseAssetCategory.Package, "staged/Example.zip");
+        entry.StagedPath = Path.Combine(Path.GetTempPath(), "staged", "Example.zip");
+
+        var selected = VirusTotalReleaseArtifactSelector.Select(
+            new[] { entry },
+            new PowerForgeVirusTotalOptions
+            {
+                Enabled = true,
+                RequireMatchingArtifacts = false,
+                ArtifactKinds = new[] { VirusTotalArtifactKind.NuGetPackage }
+            },
+            "Example",
+            "1.2.3");
+
+        Assert.Empty(selected);
+    }
+
+    [Fact]
     public void SelectArtifacts_UnverifiedConfiguredModuleZip_FailsClosed()
     {
         var sourceArchive = Entry(
