@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace PowerForge.Tests;
 
@@ -102,6 +103,24 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_RejectsInstallerWithoutPrepareFromTarget()
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteConfigurationWithoutDefaults(new
+        {
+            Installers = new[]
+            {
+                new { Id = "Test.MSI", Authoring = ReleaseFixture.AuthoringIdentity, Sign = new { Enabled = true, Thumbprint } }
+            }
+        });
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("PrepareFromTarget", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_RejectsAChangedArtifactEvenWhenManifestIdentityStillMatches()
     {
         using var fixture = new ReleaseFixture();
@@ -111,6 +130,105 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
             () => fixture.CreateVerifier().Verify(fixture.CreateRequest()));
 
         Assert.Contains("checksum manifest", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_RejectsAChangedArtifactBeforeOpeningTheMsiDatabase()
+    {
+        using var fixture = new ReleaseFixture();
+        File.AppendAllText(fixture.ArtifactPath, "changed");
+        var packageRead = false;
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier(() => packageRead = true).Verify(fixture.CreateRequest()));
+
+        Assert.Contains("checksum manifest", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(packageRead);
+    }
+
+    [Theory]
+    [InlineData("Other", "net8.0", "win-x64", "Portable")]
+    [InlineData("Service", "net9.0", "win-x64", "Portable")]
+    [InlineData("Service", "net8.0", "win-arm64", "Portable")]
+    [InlineData("Service", "net8.0", "win-x64", "FrameworkDependent")]
+    public void Verify_RejectsManifestDimensionsOutsideTheConfiguredInstallerPlan(
+        string target,
+        string framework,
+        string runtime,
+        string style)
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteConfiguration(ReleaseFixture.ConfigurationWithInstallerPlan());
+        fixture.WriteManifest((target, framework, runtime, style));
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("configured installer plan", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_AcceptsManifestDimensionsWithinTheConfiguredInstallerPlan()
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteConfiguration(ReleaseFixture.ConfigurationWithInstallerPlan());
+
+        DotNetPublishReleaseArtifact result = fixture.CreateVerifier().Verify(fixture.CreateRequest());
+
+        Assert.Equal("Test.MSI", result.InstallerId);
+    }
+
+    [Fact]
+    public void Verify_RejectsConfiguredAuthoredVersionWhenDynamicVersioningIsDisabled()
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteConfiguration(ReleaseFixture.ConfigurationWithAuthoredVersion("2.0.0", dynamicVersioning: false));
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("configured ProductVersion", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_AllowsManifestVersionWhenDynamicVersioningIsEnabled()
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteConfiguration(ReleaseFixture.ConfigurationWithAuthoredVersion("2.0.0", dynamicVersioning: true));
+
+        DotNetPublishReleaseArtifact result = fixture.CreateVerifier().Verify(fixture.CreateRequest());
+
+        Assert.Equal("1.2.3", result.Version);
+    }
+
+    [Fact]
+    public void GetRelativePathViaUri_PreservesCrossVolumeRootedPaths()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        string target = Path.GetFullPath(@"D:\release\SyncSE.msi");
+
+        string result = DotNetPublishReleaseArtifactVerifier.GetRelativePathViaUri(@"C:\source", target);
+
+        Assert.Equal(target, result, StringComparer.OrdinalIgnoreCase);
+        Assert.True(Path.IsPathRooted(result));
+    }
+
+    [Fact]
+    public void GetRelativePathViaUri_PreservesCrossShareUncPaths()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        const string target = @"\\server\release-share\SyncSE.msi";
+
+        string result = DotNetPublishReleaseArtifactVerifier.GetRelativePathViaUri(
+            @"\\server\source-share\repo",
+            target);
+
+        Assert.Equal(target, result, StringComparer.OrdinalIgnoreCase);
+        Assert.True(Path.IsPathRooted(result));
     }
 
     [Fact]
@@ -129,6 +247,32 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
     public void Verify_UsesMatrixSelectorsToIdentifyOneInstallerArtifact()
     {
         using var fixture = new ReleaseFixture();
+        fixture.WriteConfiguration(new
+        {
+            Targets = new[]
+            {
+                new
+                {
+                    Name = "Service",
+                    Publish = new
+                    {
+                        Frameworks = new[] { "net8.0", "net10.0" },
+                        Runtimes = new[] { "win-x64" },
+                        Styles = new[] { "Portable" }
+                    }
+                }
+            },
+            Installers = new[]
+            {
+                new
+                {
+                    Id = "Test.MSI",
+                    PrepareFromTarget = "Service",
+                    Authoring = ReleaseFixture.AuthoringIdentity,
+                    Sign = new { Enabled = true, Thumbprint }
+                }
+            }
+        });
         fixture.WriteManifest(
             ("Service", "net8.0", "win-x64", "Portable"),
             ("Service", "net10.0", "win-x64", "Portable"));
@@ -184,13 +328,21 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
             $$"""
             {
               // PowerForge publish configuration supports comments.
+              "Targets": [
+                {
+                  "Name": "Service",
+                  "Publish": { "Framework": "net8.0", "Runtimes": [ "win-x64" ], "Style": "Portable" },
+                },
+              ],
               "Installers": [
                 {
                   "Id": "Test.MSI",
+                  "PrepareFromTarget": "Service",
                   "Authoring": {
                     "Product": {
                       "Name": "Test Product",
                       "Manufacturer": "Evotec",
+                      "Version": "1.2.3",
                       "UpgradeCode": "{22222222-2222-2222-2222-222222222222}",
                     },
                   },
@@ -366,8 +518,8 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
             },
             Targets = new[]
             {
-                new { Name = "Default" },
-                new { Name = "Release" }
+                new { Name = "Default", Publish = new { Framework = "net8.0", Runtimes = new[] { "win-x64" }, Style = "Portable" } },
+                new { Name = "Release", Publish = new { Framework = "net8.0", Runtimes = new[] { "win-x64" }, Style = "Portable" } }
             },
             Installers = new[]
             {
@@ -380,6 +532,7 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
                 }
             }
         });
+        fixture.WriteManifest(("Release", "net8.0", "win-x64", "Portable"));
         var request = fixture.CreateRequest();
         request.Profile = "release";
         request.SignThumbprint = overrideThumbprint;
@@ -522,7 +675,62 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
             {
                 Name = "Test Product",
                 Manufacturer = "Evotec",
+                Version = "1.2.3",
                 UpgradeCode = "{22222222-2222-2222-2222-222222222222}"
+            }
+        };
+
+        internal static object ConfigurationWithInstallerPlan() => new
+        {
+            DotNet = new { Runtimes = new[] { "win-x64" } },
+            Targets = new[]
+            {
+                new
+                {
+                    Name = "Service",
+                    Publish = new
+                    {
+                        Framework = "net8.0",
+                        Runtimes = new[] { "win-x64" },
+                        Styles = new[] { "Portable" }
+                    }
+                }
+            },
+            Installers = new[]
+            {
+                new
+                {
+                    Id = "Test.MSI",
+                    PrepareFromTarget = "Service",
+                    Runtimes = new[] { "win-x64" },
+                    Frameworks = new[] { "net8.0" },
+                    Styles = new[] { "Portable" },
+                    Authoring = AuthoringIdentity,
+                    Sign = new { Enabled = true, Thumbprint }
+                }
+            }
+        };
+
+        internal static object ConfigurationWithAuthoredVersion(string version, bool dynamicVersioning) => new
+        {
+            Installers = new[]
+            {
+                new
+                {
+                    Id = "Test.MSI",
+                    Authoring = new
+                    {
+                        Product = new
+                        {
+                            Name = "Test Product",
+                            Manufacturer = "Evotec",
+                            Version = version,
+                            UpgradeCode = "{22222222-2222-2222-2222-222222222222}"
+                        }
+                    },
+                    Versioning = new { Enabled = dynamicVersioning },
+                    Sign = new { Enabled = true, Thumbprint }
+                }
             }
         };
 
@@ -534,7 +742,35 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
         internal string Digest { get; }
         internal string SourceRevision { get; } = new string('a', 40);
 
-        internal void WriteConfiguration(object configuration) =>
+        internal void WriteConfiguration(object configuration)
+        {
+            JsonNode root = JsonSerializer.SerializeToNode(configuration)!;
+            JsonObject spec = root["Tools"]?["DotNetPublish"] as JsonObject ?? root.AsObject();
+            if (spec["Targets"] is null)
+            {
+                spec["Targets"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["Name"] = "Service",
+                        ["Publish"] = new JsonObject
+                        {
+                            ["Framework"] = "net8.0",
+                            ["Runtimes"] = new JsonArray("win-x64"),
+                            ["Style"] = "Portable"
+                        }
+                    }
+                };
+            }
+            if (spec["Installers"] is JsonArray installers)
+            {
+                foreach (JsonObject installer in installers.OfType<JsonObject>())
+                    installer["PrepareFromTarget"] ??= "Service";
+            }
+            File.WriteAllText(ConfigurationPath, root.ToJsonString());
+        }
+
+        internal void WriteConfigurationWithoutDefaults(object configuration) =>
             File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(configuration));
 
         internal void WriteConfiguration(string configuration) =>
@@ -672,20 +908,35 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
 
         internal DotNetPublishReleaseArtifactVerifier CreateVerifier(string thumbprint = Thumbprint) =>
             new(
-                _ => new DotNetPublishMsiPackageMetadata
-                {
-                    Path = ArtifactPath,
-                    ProductName = "Test Product",
-                    Manufacturer = "Evotec",
-                    ProductVersion = "1.2.3",
-                    ProductCode = "{11111111-1111-1111-1111-111111111111}",
-                    UpgradeCode = "{22222222-2222-2222-2222-222222222222}"
-                },
+                _ => ReadPackageMetadata(),
                 _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
                     true,
                     0,
                     "CN=Test Publisher",
                     thumbprint));
+
+        internal DotNetPublishReleaseArtifactVerifier CreateVerifier(Action onReadPackage) =>
+            new(
+                _ =>
+                {
+                    onReadPackage();
+                    return ReadPackageMetadata();
+                },
+                _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
+                    true,
+                    0,
+                    "CN=Test Publisher",
+                    Thumbprint));
+
+        private DotNetPublishMsiPackageMetadata ReadPackageMetadata() => new()
+        {
+            Path = ArtifactPath,
+            ProductName = "Test Product",
+            Manufacturer = "Evotec",
+            ProductVersion = "1.2.3",
+            ProductCode = "{11111111-1111-1111-1111-111111111111}",
+            UpgradeCode = "{22222222-2222-2222-2222-222222222222}"
+        };
 
         public void Dispose()
         {

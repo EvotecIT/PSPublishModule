@@ -69,6 +69,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
                 "specify target, RID, framework, and style for matrix builds.");
 
         var entry = entries[0];
+        ValidateManifestDimensions(entry, expected);
         if (ReadInt32(entry, "SignedFiles") < 1)
             throw Invalid("PowerForge manifest does not attest that the installer was signed.");
         if (!TryGet(entry, "SourceDirty", out var sourceDirty) || sourceDirty.ValueKind != JsonValueKind.False)
@@ -126,12 +127,12 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         if (!string.IsNullOrWhiteSpace(ReadString(manifestPackage, "ReadError")))
             throw Invalid("PowerForge manifest reports that MSI package metadata could not be read.");
 
-        var actual = _readPackage(artifactPath);
-        ValidatePackage(manifestPackage, actual, expected);
-
         var digest = ComputeSha256(artifactPath);
         if (!ChecksumContains(checksumsPath, relativePath, digest))
             throw Invalid("Installer SHA-256 does not match the PowerForge checksum manifest.");
+
+        var actual = _readPackage(artifactPath);
+        ValidatePackage(manifestPackage, actual, expected);
 
         var signature = _verifyAuthenticode(artifactPath);
         if (!signature.IsValid)
@@ -217,6 +218,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         }
 
         var product = installer.Authoring?.Product;
+        var expectedCombinations = ResolveExpectedCombinations(configuration, installer);
         var signerThumbprint = string.IsNullOrWhiteSpace(sign.Thumbprint)
             ? null
             : NormalizeThumbprint(sign.Thumbprint);
@@ -228,6 +230,8 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             product is null ? null : RequireText(product.Name, "Product.Name"),
             product is null ? null : RequireText(product.Manufacturer, "Product.Manufacturer"),
             product is null ? null : NormalizeGuid(product.UpgradeCode, "Product.UpgradeCode"),
+            product is null || installer.Versioning?.Enabled == true ? null : NormalizeVersion(product.Version),
+            expectedCombinations,
             signerThumbprint,
             signerSubjectName,
             configuration.DotNet.AllowOutputOutsideProjectRoot);
@@ -292,7 +296,107 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             ValidateEqual(expected.Manufacturer, actual.Manufacturer, "configured Manufacturer");
         if (expected.UpgradeCode is not null)
             ValidateEqual(expected.UpgradeCode, NormalizeGuid(actual.UpgradeCode, "UpgradeCode"), "configured UpgradeCode");
+        if (expected.ProductVersion is not null)
+            ValidateEqual(expected.ProductVersion, NormalizeVersion(actual.ProductVersion), "configured ProductVersion");
         _ = NormalizeVersion(actual.ProductVersion);
+    }
+
+    private static void ValidateManifestDimensions(JsonElement entry, ExpectedInstaller expected)
+    {
+        if (expected.Combinations.Length == 0)
+            return;
+
+        var target = ReadString(entry, "Target");
+        var runtime = ReadString(entry, "Runtime");
+        var framework = ReadString(entry, "Framework");
+        var style = ReadString(entry, "Style");
+        if (!expected.Combinations.Any(combination =>
+                string.Equals(combination.Target, target, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(combination.Runtime, runtime, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(combination.Framework, framework, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(combination.Style, style, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw Invalid("PowerForge manifest installer dimensions do not match the configured installer plan.");
+        }
+    }
+
+    private static ExpectedCombination[] ResolveExpectedCombinations(
+        DotNetPublishSpec configuration,
+        DotNetPublishInstaller installer)
+    {
+        var targetName = installer.PrepareFromTarget?.Trim() ?? string.Empty;
+        if (targetName.Length == 0)
+            throw Invalid($"PowerForge installer '{installer.Id}' must define PrepareFromTarget for release verification.");
+
+        var matchingTargets = (configuration.Targets ?? Array.Empty<DotNetPublishTarget>())
+            .Where(target => string.Equals(target?.Name?.Trim(), targetName, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (matchingTargets.Length != 1 || matchingTargets[0].Publish is null)
+            throw Invalid($"PowerForge configuration does not define the installer target '{targetName}'.");
+
+        var publish = matchingTargets[0].Publish;
+        var frameworks = NormalizeConfiguredStrings(publish.Frameworks);
+        if (frameworks.Length == 0 && !string.IsNullOrWhiteSpace(publish.Framework))
+            frameworks = new[] { publish.Framework.Trim() };
+        if (frameworks.Length == 0)
+            frameworks = NormalizeConfiguredStrings(configuration.Matrix?.Frameworks);
+
+        var runtimes = NormalizeConfiguredStrings(publish.Runtimes);
+        if (runtimes.Length == 0)
+            runtimes = NormalizeConfiguredStrings(configuration.Matrix?.Runtimes);
+        if (runtimes.Length == 0)
+            runtimes = NormalizeConfiguredStrings(configuration.DotNet.Runtimes);
+
+        var styles = (publish.Styles ?? Array.Empty<DotNetPublishStyle>()).Distinct().ToArray();
+        if (styles.Length == 0)
+            styles = (configuration.Matrix?.Styles ?? Array.Empty<DotNetPublishStyle>()).Distinct().ToArray();
+        if (styles.Length == 0)
+            styles = new[] { publish.Style };
+        if (frameworks.Length == 0 || runtimes.Length == 0)
+            throw Invalid($"PowerForge configuration does not resolve publish dimensions for installer target '{targetName}'.");
+
+        var combinations = (from framework in frameworks
+                            from runtime in runtimes
+                            from style in styles
+                            select new ExpectedCombination(targetName, runtime, framework, style.ToString()))
+            .ToArray();
+        var include = configuration.Matrix?.Include ?? Array.Empty<DotNetPublishMatrixRule>();
+        if (include.Length > 0)
+            combinations = combinations.Where(combination => include.Any(rule => RuleMatches(combination, rule))).ToArray();
+        var exclude = configuration.Matrix?.Exclude ?? Array.Empty<DotNetPublishMatrixRule>();
+        if (exclude.Length > 0)
+            combinations = combinations.Where(combination => !exclude.Any(rule => RuleMatches(combination, rule))).ToArray();
+
+        var installerRuntimes = NormalizeConfiguredStrings(installer.Runtimes);
+        var installerFrameworks = NormalizeConfiguredStrings(installer.Frameworks);
+        var installerStyles = (installer.Styles ?? Array.Empty<DotNetPublishStyle>())
+            .Select(style => style.ToString())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        combinations = combinations.Where(combination =>
+            (installerRuntimes.Length == 0 || installerRuntimes.Contains(combination.Runtime, StringComparer.OrdinalIgnoreCase)) &&
+            (installerFrameworks.Length == 0 || installerFrameworks.Contains(combination.Framework, StringComparer.OrdinalIgnoreCase)) &&
+            (installerStyles.Count == 0 || installerStyles.Contains(combination.Style))).ToArray();
+        if (combinations.Length == 0)
+            throw Invalid($"PowerForge installer '{installer.Id}' does not match a configured publish combination.");
+        return combinations;
+    }
+
+    private static string[] NormalizeConfiguredStrings(IEnumerable<string>? values) =>
+        (values ?? Array.Empty<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static bool RuleMatches(ExpectedCombination combination, DotNetPublishMatrixRule? rule)
+    {
+        if (rule is null)
+            return false;
+        var targets = NormalizeConfiguredStrings(rule.Targets);
+        return (targets.Length == 0 || targets.Any(pattern => DotNetPublishPipelineRunner.WildcardMatch(combination.Target, pattern))) &&
+               (string.IsNullOrWhiteSpace(rule.Runtime) || DotNetPublishPipelineRunner.WildcardMatch(combination.Runtime, rule.Runtime!.Trim())) &&
+               (string.IsNullOrWhiteSpace(rule.Framework) || DotNetPublishPipelineRunner.WildcardMatch(combination.Framework, rule.Framework!.Trim())) &&
+               (string.IsNullOrWhiteSpace(rule.Style) || DotNetPublishPipelineRunner.WildcardMatch(combination.Style, rule.Style!.Trim()));
     }
 
     private static void ValidateEqual(string? expected, string? actual, string name)
@@ -365,16 +469,29 @@ public sealed class DotNetPublishReleaseArtifactVerifier
     private static string GetRelativePath(string root, string path)
     {
 #if NET472
-        var basePath = Path.GetFullPath(root)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            + Path.DirectorySeparatorChar;
-        var baseUri = new Uri(basePath);
-        var targetUri = new Uri(Path.GetFullPath(path));
-        return Uri.UnescapeDataString(baseUri.MakeRelativeUri(targetUri).ToString())
-            .Replace('/', Path.DirectorySeparatorChar);
+        return GetRelativePathViaUri(root, path);
 #else
         return Path.GetRelativePath(root, path);
 #endif
+    }
+
+    internal static string GetRelativePathViaUri(string root, string path)
+    {
+        var fullRoot = Path.GetFullPath(root);
+        var fullPath = Path.GetFullPath(path);
+        if (!string.Equals(Path.GetPathRoot(fullRoot), Path.GetPathRoot(fullPath), StringComparison.OrdinalIgnoreCase))
+            return fullPath;
+
+        var basePath = fullRoot
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        var baseUri = new Uri(basePath);
+        var targetUri = new Uri(fullPath);
+        var relativeUri = baseUri.MakeRelativeUri(targetUri);
+        if (relativeUri.IsAbsoluteUri)
+            return fullPath;
+        return Uri.UnescapeDataString(relativeUri.ToString())
+            .Replace('/', Path.DirectorySeparatorChar);
     }
 
     private static JsonSerializerOptions CreateConfigurationJsonOptions()
@@ -532,6 +649,8 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             string? productName,
             string? manufacturer,
             string? upgradeCode,
+            string? productVersion,
+            ExpectedCombination[] combinations,
             string? signerThumbprint,
             string? signerSubjectName,
             bool allowOutputOutsideProjectRoot)
@@ -539,6 +658,8 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             ProductName = productName;
             Manufacturer = manufacturer;
             UpgradeCode = upgradeCode;
+            ProductVersion = productVersion;
+            Combinations = combinations;
             SignerThumbprint = signerThumbprint;
             SignerSubjectName = signerSubjectName;
             AllowOutputOutsideProjectRoot = allowOutputOutsideProjectRoot;
@@ -547,8 +668,26 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         internal string? ProductName { get; }
         internal string? Manufacturer { get; }
         internal string? UpgradeCode { get; }
+        internal string? ProductVersion { get; }
+        internal ExpectedCombination[] Combinations { get; }
         internal string? SignerThumbprint { get; }
         internal string? SignerSubjectName { get; }
         internal bool AllowOutputOutsideProjectRoot { get; }
+    }
+
+    private sealed class ExpectedCombination
+    {
+        internal ExpectedCombination(string target, string runtime, string framework, string style)
+        {
+            Target = target;
+            Runtime = runtime;
+            Framework = framework;
+            Style = style;
+        }
+
+        internal string Target { get; }
+        internal string Runtime { get; }
+        internal string Framework { get; }
+        internal string Style { get; }
     }
 }
