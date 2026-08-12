@@ -82,21 +82,30 @@ public static partial class WebLlmsGenerator
         }
 
         var properties = ReadMsBuildProperties(full, requirePackageMetadata);
-        var assemblyName = GetMsBuildProperty(properties, "AssemblyName");
-        var rootNamespace = GetMsBuildProperty(properties, "RootNamespace");
-        var packageId = GetMsBuildProperty(properties, "PackageId");
-        var packageVersion = GetMsBuildProperty(properties, "PackageVersion");
-        var versionValue = GetMsBuildProperty(properties, "Version");
-        var versionPrefix = GetMsBuildProperty(properties, "VersionPrefix");
-        var versionSuffix = GetMsBuildProperty(properties, "VersionSuffix");
+        var assemblyName = GetMsBuildProperty(properties, "AssemblyName", requirePackageMetadata);
+        var rootNamespace = GetMsBuildProperty(properties, "RootNamespace", requirePackageMetadata);
+        var description = GetMsBuildProperty(properties, "Description", requirePackageMetadata);
+        var projectName = Path.GetFileNameWithoutExtension(full);
+        if (!requirePackageMetadata)
+        {
+            return new ProjectInfo
+            {
+                Name = assemblyName ?? rootNamespace ?? projectName,
+                Description = description
+            };
+        }
+
+        var packageId = GetMsBuildProperty(properties, "PackageId", throwOnUnresolved: true);
+        var packageVersion = GetMsBuildProperty(properties, "PackageVersion", throwOnUnresolved: true);
+        var versionValue = GetMsBuildProperty(properties, "Version", throwOnUnresolved: true);
+        var versionPrefix = GetMsBuildProperty(properties, "VersionPrefix", throwOnUnresolved: true);
+        var versionSuffix = GetMsBuildProperty(properties, "VersionSuffix", throwOnUnresolved: true);
         var version = packageVersion ??
                       versionValue ??
                       CombineMsBuildVersion(versionPrefix, versionSuffix);
-        var description = GetMsBuildProperty(properties, "Description");
-        var packAsTool = GetMsBuildProperty(properties, "PackAsTool");
-        var toolCommandName = GetMsBuildProperty(properties, "ToolCommandName");
+        var packAsTool = GetMsBuildProperty(properties, "PackAsTool", throwOnUnresolved: true);
+        var toolCommandName = GetMsBuildProperty(properties, "ToolCommandName", throwOnUnresolved: true);
 
-        var projectName = Path.GetFileNameWithoutExtension(full);
         packageId ??= assemblyName ?? projectName;
 
         return new ProjectInfo
@@ -113,30 +122,60 @@ public static partial class WebLlmsGenerator
         };
     }
 
-    private static Dictionary<string, string> ReadMsBuildProperties(string projectFile, bool requirePackageMetadata)
+    private static MsBuildPropertySet ReadMsBuildProperties(string projectFile, bool requirePackageMetadata)
     {
-        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["MSBuildProjectName"] = Path.GetFileNameWithoutExtension(projectFile)
-        };
+        var properties = new MsBuildPropertySet();
+        properties.Values["MSBuildProjectName"] = Path.GetFileNameWithoutExtension(projectFile);
 
-        var directory = Path.GetDirectoryName(projectFile);
-        while (!string.IsNullOrWhiteSpace(directory))
-        {
-            var propsPath = Path.Combine(directory, "Directory.Build.props");
-            if (File.Exists(propsPath))
-            {
-                ReadMsBuildPropertyFile(propsPath, properties, requirePackageMetadata);
-                break;
-            }
-            directory = Directory.GetParent(directory)?.FullName;
-        }
+        var propsPath = FindNearestBuildFile(projectFile, "Directory.Build.props");
+        if (propsPath is not null)
+            ReadMsBuildPropertyFile(propsPath, properties, requirePackageMetadata);
 
         ReadMsBuildPropertyFile(projectFile, properties, requirePackageMetadata);
+        if (requirePackageMetadata)
+        {
+            var targetsPath = FindNearestBuildFile(projectFile, "Directory.Build.targets");
+            if (targetsPath is not null)
+                EnsureNoPostProjectPackageMetadata(targetsPath);
+        }
         return properties;
     }
 
-    private static void ReadMsBuildPropertyFile(string path, Dictionary<string, string> properties, bool requirePackageMetadata)
+    private static string? FindNearestBuildFile(string projectFile, string fileName)
+    {
+        var directory = Path.GetDirectoryName(projectFile);
+        while (!string.IsNullOrWhiteSpace(directory))
+        {
+            var candidate = Path.Combine(directory, fileName);
+            if (File.Exists(candidate))
+                return candidate;
+            directory = Directory.GetParent(directory)?.FullName;
+        }
+
+        return null;
+    }
+
+    private static void EnsureNoPostProjectPackageMetadata(string path)
+    {
+        XDocument document;
+        try
+        {
+            document = XDocument.Load(path, LoadOptions.None);
+        }
+        catch (Exception ex) when (ex is System.Xml.XmlException or IOException)
+        {
+            throw new InvalidDataException($"Configured LLMS project metadata is invalid: {path}", ex);
+        }
+
+        var metadataName = document.Descendants()
+            .Where(element => element.Parent?.Name.LocalName == "PropertyGroup")
+            .Select(element => element.Name.LocalName)
+            .FirstOrDefault(PackageMetadataPropertyNames.Contains);
+        if (metadataName is not null)
+            throw new InvalidDataException($"Cannot prove package metadata '{metadataName}' assigned after the project in {path}.");
+    }
+
+    private static void ReadMsBuildPropertyFile(string path, MsBuildPropertySet properties, bool requirePackageMetadata)
     {
         XDocument document;
         try
@@ -153,33 +192,39 @@ public static partial class WebLlmsGenerator
 
         foreach (var group in document.Descendants().Where(element => element.Name.LocalName == "PropertyGroup"))
         {
-            var groupCondition = group.Attribute("Condition")?.Value;
             foreach (var property in group.Elements())
             {
                 var name = property.Name.LocalName;
-                if (!string.IsNullOrWhiteSpace(groupCondition) || property.Attribute("Condition") is not null)
+                if (IsConditionalMsBuildScope(property))
                 {
-                    if (requirePackageMetadata && CriticalPackageProperties.Contains(name))
-                        throw new InvalidDataException($"Cannot prove conditional package metadata '{name}' in {path}.");
+                    properties.ConditionalNames.Add(name);
                     continue;
                 }
 
-                properties[name] = property.Value.Trim();
+                properties.Values[name] = ExpandMsBuildPropertyAtAssignment(property.Value.Trim(), properties);
+                properties.ConditionalNames.Remove(name);
             }
         }
     }
 
-    private static string? GetMsBuildProperty(IReadOnlyDictionary<string, string> properties, string name)
+    private static bool IsConditionalMsBuildScope(XElement property)
     {
-        if (!properties.TryGetValue(name, out var value)) return null;
+        return property.AncestorsAndSelf().Any(element =>
+            !string.IsNullOrWhiteSpace(element.Attribute("Condition")?.Value) ||
+            element.Name.LocalName is "Choose" or "When" or "Otherwise" or "Target");
+    }
 
+    private static string ExpandMsBuildPropertyAtAssignment(string value, MsBuildPropertySet properties)
+    {
         var expanded = value;
         for (var attempt = 0; attempt < 10; attempt++)
         {
             var changed = false;
             expanded = Regex.Replace(expanded, @"\$\((?<name>[^)]+)\)", match =>
             {
-                if (!properties.TryGetValue(match.Groups["name"].Value, out var replacement))
+                var referencedName = match.Groups["name"].Value;
+                if (properties.ConditionalNames.Contains(referencedName) ||
+                    !properties.Values.TryGetValue(referencedName, out var replacement))
                     return match.Value;
                 changed = true;
                 return replacement;
@@ -187,14 +232,40 @@ public static partial class WebLlmsGenerator
             if (!changed) break;
         }
 
-        if (expanded.Contains("$(", StringComparison.Ordinal) || expanded.Contains("%(", StringComparison.Ordinal))
-            throw new InvalidDataException($"Cannot resolve MSBuild property '{name}' for LLMS package metadata.");
-        return NormalizeEmpty(expanded);
+        return expanded;
     }
 
-    private static readonly HashSet<string> CriticalPackageProperties = new(StringComparer.OrdinalIgnoreCase)
+    private static string? GetMsBuildProperty(MsBuildPropertySet properties, string name, bool throwOnUnresolved)
     {
-        "AssemblyName", "PackageId", "PackAsTool", "ToolCommandName"
+        if (properties.ConditionalNames.Contains(name))
+        {
+            if (throwOnUnresolved)
+                throw new InvalidDataException($"Cannot resolve MSBuild property '{name}' for LLMS package metadata.");
+            return null;
+        }
+        if (!properties.Values.TryGetValue(name, out var value)) return null;
+
+        if (value.Contains("$(", StringComparison.Ordinal) ||
+            value.Contains("%(", StringComparison.Ordinal))
+        {
+            if (throwOnUnresolved)
+                throw new InvalidDataException($"Cannot resolve MSBuild property '{name}' for LLMS package metadata.");
+            return null;
+        }
+
+        return NormalizeEmpty(value);
+    }
+
+    private sealed class MsBuildPropertySet
+    {
+        public Dictionary<string, string> Values { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> ConditionalNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static readonly HashSet<string> PackageMetadataPropertyNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "AssemblyName", "RootNamespace", "PackageId", "PackageVersion", "Version", "VersionPrefix",
+        "VersionSuffix", "Description", "PackAsTool", "ToolCommandName"
     };
 
     private static string? CombineMsBuildVersion(string? versionPrefix, string? versionSuffix)
@@ -205,18 +276,6 @@ public static partial class WebLlmsGenerator
             return versionPrefix;
 
         return $"{versionPrefix}-{versionSuffix.TrimStart('-')}";
-    }
-
-    private static string? NormalizeMsBuildMetadataValue(string value)
-    {
-        var normalized = NormalizeEmpty(value);
-        if (normalized is null)
-            return null;
-
-        return normalized.Contains("$(", StringComparison.Ordinal) ||
-               normalized.Contains("%(", StringComparison.Ordinal)
-            ? null
-            : normalized;
     }
 
     private static string MatchPowerShellDataValue(string content, string name)
@@ -313,13 +372,6 @@ public static partial class WebLlmsGenerator
         }
 
         return output.ToString();
-    }
-
-    private static string MatchValue(string content, string name)
-    {
-        var pattern = $@"<{name}>([^<]+)</{name}>";
-        var match = Regex.Match(content, pattern, RegexOptions.IgnoreCase);
-        return match.Success ? match.Groups[1].Value.Trim() : string.Empty;
     }
 
     private static string? NormalizeEmpty(string value)

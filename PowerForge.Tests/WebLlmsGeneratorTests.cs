@@ -1139,6 +1139,139 @@ public class WebLlmsGeneratorTests
     }
 
     [Fact]
+    public void Generate_SiteIgnoresUnresolvedPackageOnlyProjectMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-site-project-metadata-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<html><head><title>Example Portal</title></head><body></body></html>");
+            var projectPath = Path.Combine(root, "Internal.Project.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <Version>$(GitVersion)</Version>
+                    <PackageId>$(PublishedPackageId)</PackageId>
+                    <Description>Example portal documentation.</Description>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                ProjectFile = projectPath
+            });
+
+            Assert.Equal("Example Portal", result.Name);
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("Example portal documentation.", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("GitVersion", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("PublishedPackageId", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RejectsPackageMetadataInsideChooseBranches()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-conditional-package-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectPath = Path.Combine(root, "Conditional.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <Choose>
+                    <When Condition="'$(Configuration)' == 'Release'">
+                      <PropertyGroup><PackageId>Example.Release</PackageId></PropertyGroup>
+                    </When>
+                    <Otherwise>
+                      <PropertyGroup><PackageId>Example.Debug</PackageId></PropertyGroup>
+                    </Otherwise>
+                  </Choose>
+                </Project>
+                """);
+
+            var exception = Assert.Throws<InvalidDataException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            }));
+            Assert.Contains("Cannot resolve MSBuild property 'PackageId'", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_ExpandsMsBuildPropertiesAtAssignmentTime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-assignment-order-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Directory.Build.props"),
+                "<Project><PropertyGroup><BaseName>Example.Initial</BaseName><PackageId>$(BaseName)</PackageId></PropertyGroup></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><BaseName>Example.Later</BaseName><Version>1.0.0</Version></PropertyGroup></Project>");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("dotnet add package Example.Initial", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("Example.Later", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RejectsPackageMetadataAssignedInDirectoryBuildTargets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-late-package-metadata-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Directory.Build.targets"),
+                "<Project><PropertyGroup><PackageId>Example.Late</PackageId></PropertyGroup></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>Example.Early</PackageId></PropertyGroup></Project>");
+
+            var exception = Assert.Throws<InvalidDataException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            }));
+            Assert.Contains("assigned after the project", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Generate_RejectsMissingConfiguredProjectFile()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-missing-project-" + Guid.NewGuid().ToString("N"));

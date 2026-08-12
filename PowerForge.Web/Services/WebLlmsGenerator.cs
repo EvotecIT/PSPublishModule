@@ -76,8 +76,9 @@ public static partial class WebLlmsGenerator
         var packages = includePackageContent
             ? ResolvePackages(options.PackageFiles)
             : new List<PackageInfo>();
-        var name = options.Name ?? projectInfo.Name ??
-                   (includePackageContent ? options.PackageId ?? projectInfo.PackageId ?? packages.FirstOrDefault()?.Id : TryReadNameFromHomepage(siteRoot));
+        var name = includePackageContent
+            ? options.Name ?? projectInfo.Name ?? options.PackageId ?? projectInfo.PackageId ?? packages.FirstOrDefault()?.Id
+            : options.Name ?? TryReadNameFromHomepage(siteRoot) ?? projectInfo.Name;
         if (string.IsNullOrWhiteSpace(name))
             throw new InvalidOperationException("LLMS content name could not be resolved. Configure name or provide usable project/homepage metadata.");
         var packageId = includePackageContent
