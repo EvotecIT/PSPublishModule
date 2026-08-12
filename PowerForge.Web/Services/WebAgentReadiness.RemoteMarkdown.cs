@@ -16,7 +16,7 @@ public static partial class WebAgentReadiness
         var url = expected
             ? ResolveRemoteOutputUrl(
                 baseUrl,
-                "/index" + NormalizeMarkdownExtension(spec.MarkdownArtifacts!.Extension),
+                "index" + NormalizeMarkdownExtension(spec.MarkdownArtifacts!.Extension),
                 "/index.md")
             : ResolveMarkdownAlternateUrl(baseUrl, linkHeader) ?? CombineUrl(baseUrl, "/index.md");
         var result = expected || !markdownNegotiated

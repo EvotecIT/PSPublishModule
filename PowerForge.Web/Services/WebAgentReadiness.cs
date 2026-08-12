@@ -555,6 +555,8 @@ public static partial class WebAgentReadiness
                 resolved.AgentSkills ??= new AgentSkillsDiscoverySpec();
                 resolved.AgentsJson ??= new AgentDiscoveryDocumentSpec();
                 ValidateDiscoveryOutputPaths(resolved);
+                if (resolved.MarkdownArtifacts?.Enabled == true)
+                    _ = NormalizeMarkdownExtension(resolved.MarkdownArtifacts.Extension);
             }
 
             return resolved;
@@ -581,7 +583,9 @@ public static partial class WebAgentReadiness
         void Add(string displayName, string resourceOwner, string? configured, string fallback)
         {
             var value = string.IsNullOrWhiteSpace(configured) ? fallback : configured.Trim();
-            if (Uri.TryCreate(value, UriKind.Absolute, out _))
+            if (value.StartsWith("/", StringComparison.Ordinal) ||
+                value.StartsWith("\\", StringComparison.Ordinal) ||
+                Uri.TryCreate(value, UriKind.Absolute, out _))
                 throw new ArgumentException($"Agent-readiness output path '{configured}' must be relative to the site root.");
 
             var normalized = NormalizeDiscoveryOutputPath(value);
@@ -612,6 +616,22 @@ public static partial class WebAgentReadiness
 
     private static string NormalizeDiscoveryOutputPath(string value)
     {
+        string decoded;
+        try
+        {
+            decoded = Uri.UnescapeDataString(value);
+        }
+        catch (UriFormatException ex)
+        {
+            throw new ArgumentException($"Agent-readiness output path '{value}' contains invalid percent encoding.", ex);
+        }
+
+        if (!string.Equals(decoded, value, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"Agent-readiness output path '{value}' must use unescaped filesystem characters instead of percent-encoded URI segments.");
+        }
+
         var segments = new List<string>();
         foreach (var segment in value.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -861,7 +881,7 @@ public static partial class WebAgentReadiness
 
     private static string NormalizeApiCatalogAnchorKey(string value)
     {
-        var normalized = Uri.TryCreate(value, UriKind.Absolute, out var uri)
+        var normalized = TryCreateAbsoluteHttpUri(value, out var uri)
             ? uri.AbsoluteUri
             : NormalizeRoute(value);
         // Treat /api and /api/ as the same catalog anchor for explicit-vs-inferred de-duplication.
@@ -881,7 +901,7 @@ public static partial class WebAgentReadiness
 
     private static bool IsLocalProjectApiRoute(string? value)
         => !string.IsNullOrWhiteSpace(value) &&
-           !Uri.TryCreate(value, UriKind.Absolute, out _) &&
+           !TryCreateAbsoluteHttpUri(value!, out _) &&
            NormalizeRoute(value!).StartsWith("/projects/", StringComparison.OrdinalIgnoreCase);
 
     private static string? GetJsonString(JsonElement element, string propertyName)
@@ -1130,12 +1150,33 @@ public static partial class WebAgentReadiness
                relative.StartsWith("api-fragments/", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string NormalizeMarkdownExtension(string? extension)
+    internal static string NormalizeMarkdownExtension(string? extension)
     {
         var value = string.IsNullOrWhiteSpace(extension) ? ".md" : extension!.Trim();
         if (!value.StartsWith(".", StringComparison.Ordinal))
             value = "." + value;
-        return value.Equals(".", StringComparison.Ordinal) ? ".md" : value;
+        if (value.Equals(".", StringComparison.Ordinal))
+            return ".md";
+
+        string decoded;
+        try
+        {
+            decoded = Uri.UnescapeDataString(value);
+        }
+        catch (UriFormatException ex)
+        {
+            throw new ArgumentException($"Markdown artifact extension '{extension}' contains invalid percent encoding.", ex);
+        }
+
+        if (!string.Equals(decoded, value, StringComparison.Ordinal) ||
+            value.IndexOfAny(['/', '\\', '?', '#', '*']) >= 0 ||
+            value.Any(char.IsControl))
+        {
+            throw new ArgumentException(
+                $"Markdown artifact extension '{extension}' must be an unescaped file extension without path or URI syntax.");
+        }
+
+        return value;
     }
 
     private static string ConvertHtmlDocumentToMarkdown(string html, AgentMarkdownArtifactsSpec spec)
@@ -1649,7 +1690,7 @@ public static partial class WebAgentReadiness
     private static string EscapeLinkUriReference(string value)
     {
         var sanitized = StripHeaderControlCharacters(value);
-        if (Uri.TryCreate(sanitized, UriKind.Absolute, out var absolute))
+        if (TryCreateAbsoluteHttpUri(sanitized, out var absolute))
             return absolute.AbsoluteUri;
 
         return string.Join("/", sanitized.Split('/').Select(EscapeLinkPathSegment));
@@ -2261,7 +2302,7 @@ public static partial class WebAgentReadiness
         if (!string.IsNullOrWhiteSpace(spec?.Path))
         {
             var configured = spec.Path!.Trim();
-            if (Uri.TryCreate(configured, UriKind.Absolute, out _))
+            if (TryCreateAbsoluteHttpUri(configured, out _))
                 return configured;
             return File.Exists(ResolveSitePath(siteRoot, configured)) ? NormalizeRoute(configured) : null;
         }
@@ -2298,16 +2339,25 @@ public static partial class WebAgentReadiness
     private static string ResolveRemoteUrl(string baseUrl, string? configuredPath, string defaultPath)
     {
         var value = string.IsNullOrWhiteSpace(configuredPath) ? defaultPath : configuredPath!.Trim();
-        return Uri.TryCreate(value, UriKind.Absolute, out var absolute)
+        return TryCreateAbsoluteHttpUri(value, out var absolute)
             ? absolute.AbsoluteUri
             : CombineUrl(baseUrl, NormalizeRoute(value));
     }
 
     private static string ResolveRemoteOutputUrl(string baseUrl, string? configuredPath, string defaultPath)
     {
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            var configured = configuredPath!.Trim();
+            if (configured.StartsWith("/", StringComparison.Ordinal) ||
+                configured.StartsWith("\\", StringComparison.Ordinal) ||
+                Uri.TryCreate(configured, UriKind.Absolute, out _))
+            {
+                throw new ArgumentException($"Agent-readiness output path '{configuredPath}' must be relative to the site root.", nameof(configuredPath));
+            }
+        }
+
         var value = string.IsNullOrWhiteSpace(configuredPath) ? defaultPath : configuredPath!.Trim();
-        if (Uri.TryCreate(value, UriKind.Absolute, out _))
-            throw new ArgumentException($"Agent-readiness output path '{configuredPath}' must be relative to the site root.", nameof(configuredPath));
         return CombineUrl(baseUrl, NormalizeRoute(value));
     }
 
@@ -2347,7 +2397,7 @@ public static partial class WebAgentReadiness
         }
         if (spec.MarkdownArtifacts?.Enabled == true)
             expectationGroups.Add([new RemoteLinkExpectation(
-                ResolveRemoteOutputUrl(baseUrl, "/index" + NormalizeMarkdownExtension(spec.MarkdownArtifacts.Extension), "/index.md"), "alternate")]);
+                ResolveRemoteOutputUrl(baseUrl, "index" + NormalizeMarkdownExtension(spec.MarkdownArtifacts.Extension), "/index.md"), "alternate")]);
 
         return expectationGroups.All(group => group.Any(expectation => LinkHeaderContainsTarget(linkHeader, baseUrl, expectation)));
     }
@@ -2382,11 +2432,18 @@ public static partial class WebAgentReadiness
 
     private static string ResolveLinkTargetUrl(string baseUrl, string href)
     {
-        if (Uri.TryCreate(href, UriKind.Absolute, out var absolute))
+        if (TryCreateAbsoluteHttpUri(href, out var absolute))
             return absolute.AbsoluteUri;
 
-        if (Uri.TryCreate(baseUrl.TrimEnd('/') + "/", UriKind.Absolute, out var homepage) &&
-            Uri.TryCreate(homepage, href, out var resolved))
+        if (!href.StartsWith("/", StringComparison.Ordinal) &&
+            Uri.TryCreate(href, UriKind.Absolute, out _))
+        {
+            return string.Empty;
+        }
+
+        if (TryCreateAbsoluteHttpUri(baseUrl.TrimEnd('/') + "/", out var homepage) &&
+            Uri.TryCreate(homepage, href, out var resolved) &&
+            (resolved.Scheme == Uri.UriSchemeHttp || resolved.Scheme == Uri.UriSchemeHttps))
             return resolved.AbsoluteUri;
 
         return ResolveRemoteUrl(baseUrl, href, "/");
@@ -2541,9 +2598,10 @@ public static partial class WebAgentReadiness
             if (string.IsNullOrWhiteSpace(href))
                 continue;
 
-            return Uri.TryCreate(href, UriKind.Absolute, out _)
-                ? href
-                : CombineUrl(baseUrl, href);
+            var resolved = ResolveLinkTargetUrl(baseUrl, href);
+            if (string.IsNullOrWhiteSpace(resolved))
+                continue;
+            return resolved;
         }
 
         return null;
@@ -2730,7 +2788,7 @@ public static partial class WebAgentReadiness
             return EscapeLinkUriReference(NormalizeRoute(route));
 
         var combined = baseUrl.TrimEnd('/') + "/" + NormalizeRoute(route).TrimStart('/');
-        return Uri.TryCreate(combined, UriKind.Absolute, out var absolute)
+        return TryCreateAbsoluteHttpUri(combined, out var absolute)
             ? absolute.AbsoluteUri
             : combined;
     }
@@ -2739,9 +2797,22 @@ public static partial class WebAgentReadiness
     {
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
-        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
+        if (TryCreateAbsoluteHttpUri(value, out var absolute))
             return absolute.AbsoluteUri;
         return string.IsNullOrWhiteSpace(baseUrl) ? NormalizeRoute(value) : CombineUrl(baseUrl!, value);
+    }
+
+    private static bool TryCreateAbsoluteHttpUri(string value, out Uri uri)
+    {
+        if (Uri.TryCreate(value, UriKind.Absolute, out var candidate) &&
+            (candidate.Scheme == Uri.UriSchemeHttp || candidate.Scheme == Uri.UriSchemeHttps))
+        {
+            uri = candidate;
+            return true;
+        }
+
+        uri = null!;
+        return false;
     }
 
     private static string NormalizeRoute(string value)

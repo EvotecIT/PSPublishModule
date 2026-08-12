@@ -149,9 +149,10 @@ internal static class CloudflareResponseHeaderPolicyBuilder
         {
             var value = string.IsNullOrWhiteSpace(configured) ? fallback : configured.Trim();
             string target;
-            if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
+            if (Uri.TryCreate(value, UriKind.Absolute, out var absolute) &&
+                (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps))
             {
-                if ((absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps) || value.Any(char.IsControl))
+                if (value.Any(char.IsControl))
                     throw new ArgumentException($"Invalid Cloudflare discovery resource URL '{configured}'.", nameof(configured));
                 target = absolute.AbsoluteUri;
             }
@@ -193,7 +194,8 @@ internal static class CloudflareResponseHeaderPolicyBuilder
 
     private static string EscapeLinkUriReference(string value)
     {
-        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
+        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute) &&
+            (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps))
             return absolute.AbsoluteUri;
 
         return CloudflareCachePolicyBuilder.EncodeUriPathForExpression(value);
