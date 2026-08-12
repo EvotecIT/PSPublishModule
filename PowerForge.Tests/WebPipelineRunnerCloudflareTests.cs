@@ -176,7 +176,7 @@ public class WebPipelineRunnerCloudflareTests
             var port = GetFreePort();
             const string discoveryPath = "/redirect";
             const string appPath = "/apps/converter/";
-            var html = """<html><head><base href="./"></head><body><script src="_framework/blazor.webassembly.abc123.js?v=release"></script></body></html>""";
+            var html = """<html><head><base href="./"></head><body><img srcset="data:image/gif;base64,R0lGODlhAQABAAAAACw= 1x, _framework/blazor.webassembly.abc123.js?v=release 2x"></body></html>""";
             (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(
                 port, "HIT", appPath, html, discoveryPath, appPath);
 

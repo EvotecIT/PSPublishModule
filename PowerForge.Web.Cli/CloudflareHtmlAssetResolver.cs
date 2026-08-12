@@ -51,20 +51,33 @@ internal static class CloudflareHtmlAssetResolver
             var configuredBase = document.QuerySelector("base[href]")?.GetAttribute("href");
             if (!string.IsNullOrWhiteSpace(configuredBase) && Uri.TryCreate(finalSource, configuredBase, out var resolvedBase))
                 documentBase = resolvedBase;
-            foreach (var element in document.QuerySelectorAll("[src],[href]"))
+            void AddMatchingAsset(string value)
+            {
+                if (!Uri.TryCreate(documentBase, value, out var asset) || !HasSameOrigin(siteBase, asset))
+                    return;
+
+                var path = Uri.UnescapeDataString(asset.AbsolutePath);
+                var verificationUri = new UriBuilder(asset) { Fragment = string.Empty }.Uri.AbsoluteUri;
+                foreach (var pattern in patterns.Where(pattern => WebGlobMatcher.IsMatch(pattern, path)))
+                    matches.TryAdd(pattern, verificationUri);
+            }
+
+            foreach (var element in document.QuerySelectorAll("[src],[href],[srcset],[imagesrcset]"))
             {
                 foreach (var attributeName in new[] { "src", "href" })
                 {
                     var value = element.GetAttribute(attributeName);
-                    if (string.IsNullOrWhiteSpace(value))
-                        continue;
-                    if (!Uri.TryCreate(documentBase, value, out var asset) || !HasSameOrigin(siteBase, asset))
-                        continue;
+                    if (!string.IsNullOrWhiteSpace(value))
+                        AddMatchingAsset(value);
+                }
 
-                    var path = Uri.UnescapeDataString(asset.AbsolutePath);
-                    var verificationUri = new UriBuilder(asset) { Fragment = string.Empty }.Uri.AbsoluteUri;
-                    foreach (var pattern in patterns.Where(pattern => WebGlobMatcher.IsMatch(pattern, path)))
-                        matches.TryAdd(pattern, verificationUri);
+                foreach (var attributeName in new[] { "srcset", "imagesrcset" })
+                {
+                    var sourceSet = element.GetAttribute(attributeName);
+                    if (string.IsNullOrWhiteSpace(sourceSet))
+                        continue;
+                    foreach (var candidate in ParseSourceSet(sourceSet))
+                        AddMatchingAsset(candidate);
                 }
             }
         }
@@ -145,6 +158,18 @@ internal static class CloudflareHtmlAssetResolver
         if (normalized.Contains("..", StringComparison.Ordinal) || normalized.Any(char.IsControl))
             throw new InvalidOperationException($"cloudflare: unsafe asset path pattern '{value}'.");
         return normalized;
+    }
+
+    private static IEnumerable<string> ParseSourceSet(string sourceSet)
+    {
+        foreach (var part in sourceSet.Split(','))
+        {
+            var candidate = part.Trim();
+            if (candidate.Length == 0)
+                continue;
+            var separator = candidate.IndexOfAny(new[] { ' ', '\t', '\r', '\n' });
+            yield return separator > 0 ? candidate[..separator] : candidate;
+        }
     }
 
     private static bool HasSameOrigin(Uri expected, Uri actual) =>

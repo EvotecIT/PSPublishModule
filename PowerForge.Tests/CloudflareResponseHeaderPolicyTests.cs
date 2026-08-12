@@ -154,6 +154,39 @@ public sealed class CloudflareResponseHeaderPolicyTests
     }
 
     [Fact]
+    public void BuildManagedRules_ShouldLinkCommonOpenApiCandidatesWhenPathIsOmitted()
+    {
+        var readiness = new AgentReadinessSpec
+        {
+            Enabled = true,
+            ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+            AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+            AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+            A2AAgentCard = new AgentA2ACardSpec { Enabled = false },
+            McpServerCard = new AgentMcpServerCardSpec { Enabled = false },
+            OpenApi = new AgentOpenApiSpec { Enabled = true }
+        };
+
+        var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com", "API", new AgentSecurityHeadersSpec { Hsts = false }, "/docs/", readiness);
+
+        var linkRule = Assert.IsType<JsonObject>(rules.Single(rule =>
+            rule!["description"]!.GetValue<string>().EndsWith("discovery Link headers", StringComparison.Ordinal)));
+        var link = linkRule["action_parameters"]!["headers"]!["Link"]!["value"]!.GetValue<string>();
+        foreach (var candidate in new[]
+                 {
+                     "/docs/openapi.json",
+                     "/docs/api/openapi.json",
+                     "/docs/swagger.json",
+                     "/docs/api/swagger.json",
+                     "/docs/.well-known/openapi.json"
+                 })
+        {
+            Assert.Contains($"<{candidate}>; rel=\"service-desc\"; type=\"application/openapi+json\"", link, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void BuildManagedRules_ShouldKeepDiscoveryContentTypeWhenSecurityHeadersAreDisabled()
     {
         var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(

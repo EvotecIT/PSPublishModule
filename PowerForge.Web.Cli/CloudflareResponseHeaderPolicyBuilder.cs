@@ -169,8 +169,27 @@ internal static class CloudflareResponseHeaderPolicyBuilder
             Add(readiness.A2AAgentCard.OutputPath, ".well-known/agent-card.json", "service-desc", "application/json");
         if (readiness.McpServerCard?.Enabled == true)
             Add(readiness.McpServerCard.OutputPath, ".well-known/mcp/server-card.json", "service-desc", "application/json");
-        if (readiness.OpenApi?.Enabled == true && !string.IsNullOrWhiteSpace(readiness.OpenApi.Path))
-            Add(readiness.OpenApi.Path, "openapi.json", "service-desc", "application/openapi+json");
+        if (readiness.OpenApi?.Enabled == true)
+        {
+            if (!string.IsNullOrWhiteSpace(readiness.OpenApi.Path))
+            {
+                Add(readiness.OpenApi.Path, "openapi.json", "service-desc", "application/openapi+json");
+            }
+            else
+            {
+                foreach (var candidate in new[]
+                         {
+                             "openapi.json",
+                             "api/openapi.json",
+                             "swagger.json",
+                             "api/swagger.json",
+                             ".well-known/openapi.json"
+                         })
+                {
+                    Add(candidate, candidate, "service-desc", "application/openapi+json");
+                }
+            }
+        }
         if (readiness.MarkdownArtifacts?.Enabled == true)
         {
             var extension = string.IsNullOrWhiteSpace(readiness.MarkdownArtifacts.Extension)
