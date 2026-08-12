@@ -276,7 +276,10 @@ internal sealed partial class PowerForgeReleaseService
             string.Equals(candidate.AppId, app.AppStoreConnectAppId, StringComparison.OrdinalIgnoreCase) &&
             candidate.Platform == app.Platform &&
             string.Equals(candidate.Configuration, app.Configuration, StringComparison.OrdinalIgnoreCase) &&
-            AppleReleasePathsEqual(candidate.ProjectPath, FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/')) &&
+            AppleReleasePathsEqual(
+                candidate.ProjectPath,
+                FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'),
+                plan.ProjectRoot) &&
             candidate.IsWorkspace == app.IsWorkspace &&
             string.Equals(candidate.Scheme, app.Scheme, StringComparison.Ordinal) &&
             candidate.ArchiveVariant == app.ArchiveVariant &&
@@ -297,13 +300,14 @@ internal sealed partial class PowerForgeReleaseService
             (string.IsNullOrWhiteSpace(app.ExpectedArchiveSha256) ||
              string.Equals(candidate.ArchiveSha256, app.ExpectedArchiveSha256, StringComparison.OrdinalIgnoreCase)) &&
             !string.IsNullOrWhiteSpace(candidate.ArchivePath) &&
-            IsVerifiedUploadCheckpoint(receipts, receipt, candidate));
+            IsVerifiedUploadCheckpoint(receipts, receipt, candidate, plan.ProjectRoot));
     }
 
     private static bool IsVerifiedUploadCheckpoint(
         IReadOnlyCollection<PowerForgeAppleReleaseReceipt> receipts,
         PowerForgeAppleReleaseReceipt receipt,
-        PowerForgeAppleReleaseTargetReceipt target)
+        PowerForgeAppleReleaseTargetReceipt target,
+        string comparisonPath)
     {
         if (string.Equals(target.UploadAttestationAttemptId, receipt.AttemptId, StringComparison.OrdinalIgnoreCase))
             return true;
@@ -326,13 +330,13 @@ internal sealed partial class PowerForgeReleaseService
             string.Equals(candidate.BundleId, target.BundleId, StringComparison.OrdinalIgnoreCase) &&
             candidate.Platform == target.Platform &&
             string.Equals(candidate.Configuration, target.Configuration, StringComparison.OrdinalIgnoreCase) &&
-            AppleReleasePathsEqual(candidate.ProjectPath, target.ProjectPath) &&
+            AppleReleasePathsEqual(candidate.ProjectPath, target.ProjectPath, comparisonPath) &&
             candidate.IsWorkspace == target.IsWorkspace &&
             string.Equals(candidate.Scheme, target.Scheme, StringComparison.Ordinal) &&
             candidate.ArchiveVariant == target.ArchiveVariant &&
             string.Equals(candidate.Destination, target.Destination, StringComparison.Ordinal) &&
             candidate.DistributionRoute == target.DistributionRoute &&
-            AppleReleasePathsEqual(candidate.ArchivePath, target.ArchivePath) &&
+            AppleReleasePathsEqual(candidate.ArchivePath, target.ArchivePath, comparisonPath) &&
             string.Equals(candidate.ArchiveSha256, target.ArchiveSha256, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(candidate.UploadExecutionSha256, target.UploadExecutionSha256, StringComparison.OrdinalIgnoreCase));
     }
@@ -345,19 +349,33 @@ internal sealed partial class PowerForgeReleaseService
         if (!IsUploadExecution(plan) || !plan.Automation.Resume)
             return false;
 
-        var prior = _appleReceiptStore.ReadAll(plan)
+        var latestNotarizationEvidence = _appleReceiptStore.ReadAll(plan)
             .Where(receipt =>
                 !receipt.PlanOnly &&
                 receipt.SchemaVersion >= 4 &&
                 !string.IsNullOrWhiteSpace(receipt.ReceiptSha256) &&
                 !string.IsNullOrWhiteSpace(plan.SourceCommit) &&
                 string.Equals(receipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))
-            .SelectMany(receipt => receipt.Targets.Where(target => IsMatchingDirectReceiptTarget(plan, target, app)))
-            .FirstOrDefault(target =>
-                string.Equals(target.NotarizationStatus, "Accepted", StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(target.NotarizationSubmissionId) &&
-                !string.IsNullOrWhiteSpace(target.DirectArtifactPath) &&
-                IsSha256(target.DirectArtifactSha256));
+            .SelectMany(receipt => receipt.Targets
+                .Where(target => IsMatchingDirectReceiptTarget(plan, target, app))
+                .Select(target => new { Receipt = receipt, Target = target }))
+            .FirstOrDefault(evidence =>
+                string.Equals(evidence.Receipt.OperationPhase, "NotarizationAmbiguous", StringComparison.Ordinal) ||
+                (string.Equals(evidence.Target.NotarizationStatus, "Accepted", StringComparison.OrdinalIgnoreCase) &&
+                 !string.IsNullOrWhiteSpace(evidence.Target.NotarizationSubmissionId) &&
+                 !string.IsNullOrWhiteSpace(evidence.Target.DirectArtifactPath) &&
+                 IsSha256(evidence.Target.DirectArtifactSha256)));
+        if (string.Equals(
+                latestNotarizationEvidence?.Receipt.OperationPhase,
+                "NotarizationAmbiguous",
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"The prior Apple notarization submission state for '{app.Name}' is ambiguous. " +
+                "Reconcile Apple notary history and record a definitive result before retrying; the artifact must not be submitted again automatically.");
+        }
+
+        var prior = latestNotarizationEvidence?.Target;
         if (prior is null)
             return false;
 
@@ -446,7 +464,8 @@ internal sealed partial class PowerForgeReleaseService
            string.Equals(target.Configuration, app.Configuration, StringComparison.OrdinalIgnoreCase) &&
            AppleReleasePathsEqual(
                target.ProjectPath,
-               FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/')) &&
+               FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'),
+               plan.ProjectRoot) &&
            target.IsWorkspace == app.IsWorkspace &&
            string.Equals(target.Scheme, app.Scheme, StringComparison.Ordinal) &&
            target.ArchiveVariant == app.ArchiveVariant &&
@@ -467,11 +486,23 @@ internal sealed partial class PowerForgeReleaseService
            value!.Length == 64 &&
            value.All(static character => Uri.IsHexDigit(character));
 
-    internal static bool AppleReleasePathsEqual(string? left, string? right)
-        => string.Equals(
+    internal static bool AppleReleasePathsEqual(
+        string? left,
+        string? right,
+        string? comparisonPath = null)
+    {
+        var probePath = !string.IsNullOrWhiteSpace(comparisonPath)
+            ? comparisonPath!
+            : !string.IsNullOrWhiteSpace(left) && Path.IsPathRooted(left)
+                ? left!
+                : !string.IsNullOrWhiteSpace(right) && Path.IsPathRooted(right)
+                    ? right!
+                    : Directory.GetCurrentDirectory();
+        return string.Equals(
             left,
             right,
-            Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+            FrameworkCompatibility.GetPathStringComparisonForPath(probePath));
+    }
 
     private sealed class AppleUploadAttestation
     {

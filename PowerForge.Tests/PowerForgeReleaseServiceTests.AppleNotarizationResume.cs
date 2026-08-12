@@ -65,7 +65,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void DirectNotarizationResume_UsesPlatformCorrectProjectPathIdentity()
+    public void DirectNotarizationResume_UsesOwningVolumeProjectPathIdentity()
     {
         var plan = new PowerForgeAppleReleasePlan
         {
@@ -101,7 +101,9 @@ public sealed partial class PowerForgeReleaseServiceTests
 
         var matches = PowerForgeReleaseService.IsMatchingDirectReceiptTarget(plan, receipt, app);
 
-        Assert.Equal(Path.DirectorySeparatorChar == '\\', matches);
+        Assert.Equal(
+            FrameworkCompatibility.GetPathStringComparisonForPath(plan.ProjectRoot) == StringComparison.OrdinalIgnoreCase,
+            matches);
     }
 
     [Theory]
@@ -188,13 +190,17 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void UploadAttestationResume_UsesPlatformCorrectProjectPathIdentity()
+    public void UploadAttestationResume_UsesOwningVolumeProjectPathIdentity()
     {
+        var root = Directory.GetCurrentDirectory();
         var matches = PowerForgeReleaseService.AppleReleasePathsEqual(
             "CasaRay.xcodeproj",
-            "casaray.xcodeproj");
+            "casaray.xcodeproj",
+            root);
 
-        Assert.Equal(Path.DirectorySeparatorChar == '\\', matches);
+        Assert.Equal(
+            FrameworkCompatibility.GetPathStringComparisonForPath(root) == StringComparison.OrdinalIgnoreCase,
+            matches);
     }
 
     [Fact]

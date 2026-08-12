@@ -118,6 +118,35 @@ internal sealed partial class PowerForgeReleaseService
         });
     }
 
+    private void WriteAppleNotarizationAmbiguity(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        AppleNotarizationAmbiguousCheckpoint checkpoint)
+    {
+        if (!plan.Automation.WriteReceipt)
+            return;
+
+        var target = CreateAppleCheckpointTarget(plan, app);
+        target.ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');
+        target.ArchiveSha256 = app.ExpectedArchiveSha256;
+        target.DirectArtifactPath = CreatePortableDirectArtifactPath(plan, app, checkpoint.ArtifactPath);
+        target.DirectArtifactSha256 = checkpoint.ArtifactSha256;
+        target.DirectExecutionSha256 = ComputeDirectExecutionSha256(plan, app);
+        target.NotarizationSubmissionId = checkpoint.SubmissionId;
+        target.NotarizationSubmissionSha256 = checkpoint.SubmissionSha256;
+        target.NotarizationStatus = checkpoint.Status;
+        target.ErrorMessage = $"Apple notarization submission state is ambiguous for '{app.Name}'; reconcile Apple notary history before retrying.";
+        _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
+        {
+            Action = plan.Action,
+            SourceCommit = plan.SourceCommit,
+            OperationPhase = "NotarizationAmbiguous",
+            Success = false,
+            ErrorMessage = target.ErrorMessage,
+            Targets = new[] { target }
+        });
+    }
+
     private void WriteAppleNotarizationStapled(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app,

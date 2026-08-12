@@ -165,9 +165,10 @@ public sealed partial class PowerForgeReleaseServiceTests {
             Assert.False(result.Success);
             Assert.NotNull(privateArchive);
             Assert.Contains("private Apple upload archive snapshot changed", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain(
+            Assert.Contains(
                 new AppleReleaseReceiptStore().ReadAll(result.AppleAppPlan!),
-                receipt => receipt.OperationPhase == "UploadAttested");
+                receipt => receipt.OperationPhase == "UploadAttested" &&
+                           Assert.Single(receipt.Targets).UploadPerformed);
         } finally {
             TryDelete(root);
         }
@@ -217,9 +218,10 @@ public sealed partial class PowerForgeReleaseServiceTests {
             Assert.False(result.Success);
             Assert.NotNull(privateArchive);
             Assert.Contains("private Apple upload archive snapshot", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain(
+            Assert.Contains(
                 new AppleReleaseReceiptStore().ReadAll(result.AppleAppPlan!),
-                receipt => receipt.OperationPhase == "UploadAttested");
+                receipt => receipt.OperationPhase == "UploadAttested" &&
+                           Assert.Single(receipt.Targets).UploadPerformed);
         } finally {
             if (!string.IsNullOrWhiteSpace(aliasRoot) && Directory.Exists(aliasRoot))
                 Directory.Delete(aliasRoot, recursive: true);

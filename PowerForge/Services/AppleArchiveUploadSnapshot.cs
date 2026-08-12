@@ -76,6 +76,12 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         string description = "private Apple upload archive snapshot")
     {
         var sha256 = AppleNotarizationService.ComputeArtifactSha256(archivePath);
+        if (File.Exists(archivePath))
+        {
+            return new SnapshotIdentity(
+                sha256,
+                ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(archivePath, description));
+        }
         var identities = CaptureFileMutationIdentities(archivePath, description);
         var canonical = new System.Text.StringBuilder();
         foreach (var pair in identities.OrderBy(static pair => pair.Key, StringComparer.Ordinal))

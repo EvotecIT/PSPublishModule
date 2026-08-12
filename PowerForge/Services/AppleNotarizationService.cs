@@ -1,11 +1,10 @@
-using System.Text.Json;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace PowerForge;
 
 /// <summary>Submits direct macOS artifacts for notarization and verifies the accepted result locally.</summary>
-public sealed class AppleNotarizationService
+public sealed partial class AppleNotarizationService
 {
     private readonly IProcessRunner _processRunner;
 
@@ -126,6 +125,9 @@ public sealed class AppleNotarizationService
                 "private Apple notarization submission",
                 "notarytool",
                 "Do not resubmit until the accepted submission has been reconciled.");
+        var submissionPath = resumed
+            ? artifactPath
+            : ResolveRetainedSubmissionPath(request, artifactPath);
         if (resumed)
         {
             submissionId = request.AcceptedSubmissionId!.Trim();
@@ -153,6 +155,36 @@ public sealed class AppleNotarizationService
             submission = await RunAsync(xcrunExecutable, submissionArtifactPath, submitArguments, timeout, toolEnvironment, cancellationToken).ConfigureAwait(false);
             (submissionId, status) = ParseSubmission(submission);
         }
+        if (!resumed &&
+            submission.Succeeded &&
+            (string.IsNullOrWhiteSpace(submissionId) ||
+             (!string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) &&
+              !string.Equals(status, "Invalid", StringComparison.OrdinalIgnoreCase))))
+        {
+            try
+            {
+                request.AmbiguousCheckpoint?.Invoke(new AppleNotarizationAmbiguousCheckpoint
+                {
+                    ArtifactPath = artifactPath,
+                    ArtifactSha256 = artifactSha256,
+                    SubmissionPath = submissionPath,
+                    SubmissionSha256 = submissionSha256!,
+                    SubmissionId = submissionId,
+                    Status = status
+                });
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    "notarytool exited successfully without complete submission evidence, and the ambiguous remote mutation checkpoint could not be persisted. " +
+                    "Do not resubmit until Apple notary history has been reconciled.",
+                    ex);
+            }
+
+            throw new InvalidOperationException(
+                "notarytool exited successfully without a complete terminal submission id and status. The remote mutation is ambiguous; " +
+                "do not resubmit until Apple notary history has been reconciled.");
+        }
         using var acceptedArtifactMonitor = !resumed &&
                                             submission.Succeeded &&
                                             string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase)
@@ -162,10 +194,6 @@ public sealed class AppleNotarizationService
                 "accepted checkpoint and retained submission capture",
                 "Do not staple or publish until the accepted submission has been reconciled.")
             : null;
-        var submissionPath = resumed
-            ? artifactPath
-            : ResolveRetainedSubmissionPath(request, artifactPath);
-
         if (!resumed &&
             submission.Succeeded &&
             string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) &&
@@ -343,6 +371,14 @@ public sealed class AppleNotarizationService
         }
         if (submission.Succeeded && string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) && request.Assess)
         {
+            var assessmentIdentity = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+                submissionArtifactPath,
+                "private Apple Gatekeeper assessment artifact");
+            using var assessmentMonitor = CreateArtifactMutationMonitor(
+                submissionArtifactPath,
+                "private Apple Gatekeeper assessment artifact",
+                "spctl",
+                "Discard the private artifact and resume from the last durable notarization checkpoint.");
             var assessmentArguments = extension.Equals(".dmg", StringComparison.OrdinalIgnoreCase)
                 ? new[] { "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=4", submissionArtifactPath }
                 : new[]
@@ -352,6 +388,17 @@ public sealed class AppleNotarizationService
                     "--verbose=4", submissionArtifactPath
                 };
             assessment = await RunAsync(spctlExecutable, submissionArtifactPath, assessmentArguments, timeout, toolEnvironment, cancellationToken).ConfigureAwait(false);
+            assessmentMonitor.ValidateNoChanges();
+            var observedAssessmentIdentity = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+                submissionArtifactPath,
+                "private Apple Gatekeeper assessment artifact");
+            if (!assessmentIdentity.Equals(observedAssessmentIdentity))
+            {
+                throw new InvalidOperationException(
+                    "The private Apple Gatekeeper assessment artifact changed while spctl was reading it. " +
+                    "A transient write or hard-link alias invalidates the assessment result. " +
+                    "Discard the private artifact and resume from the last durable notarization checkpoint.");
+            }
         }
 
         string finalArtifactSha256;
@@ -586,25 +633,6 @@ public sealed class AppleNotarizationService
         return result;
     }
 
-    private static AppleReleaseSourceMutationMonitor CreateArtifactMutationMonitor(
-        string artifactPath,
-        string scopeDescription,
-        string readerDescription,
-        string failureInstruction,
-        bool enableImmediately = true)
-    {
-        var fullPath = Path.GetFullPath(artifactPath);
-        var isDirectory = Directory.Exists(fullPath);
-        return new AppleReleaseSourceMutationMonitor(
-            Path.GetDirectoryName(fullPath)!,
-            scopeDescription,
-            readerDescription,
-            failureInstruction,
-            enableImmediately,
-            exactPath: fullPath,
-            includeExactPathDescendants: isDirectory);
-    }
-
     private static string ResolveAppleToolExecutable(
         string? executable,
         string defaultName,
@@ -624,23 +652,6 @@ public sealed class AppleNotarizationService
 
         throw new InvalidOperationException(
             $"Exact-source Apple notarization requires the trusted system tool '{trustedPath}'; received '{value}'.");
-    }
-
-    private static (string? Id, string? Status) ParseSubmission(ProcessRunResult result)
-    {
-        var payload = string.IsNullOrWhiteSpace(result.StdOut) ? result.StdErr : result.StdOut;
-        try
-        {
-            using var document = JsonDocument.Parse(payload);
-            var root = document.RootElement;
-            var id = root.TryGetProperty("id", out var idElement) ? idElement.GetString() : null;
-            var status = root.TryGetProperty("status", out var statusElement) ? statusElement.GetString() : null;
-            return (id, status);
-        }
-        catch (JsonException)
-        {
-            return (null, null);
-        }
     }
 
     internal static string ComputeArtifactSha256(string artifactPath)

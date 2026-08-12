@@ -2285,22 +2285,33 @@ internal sealed partial class PowerForgeReleaseService
                     AppStoreConnectApiIssuerId = direct ? null : plan.AppStoreConnectApiIssuerId,
                     AllowProvisioningUpdates = plan.AllowProvisioningUpdates
                 });
+                upload.ArchivePath = app.ArchivePath;
+                result.Upload = upload;
+                if (!direct && upload.Succeeded)
+                {
+                    try
+                    {
+                        WriteAppleUploadAttestation(plan, app, result);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            $"The App Store upload completed for '{app.Name}', but its durable upload attestation could not be persisted. " +
+                            "Do not upload the archive again until App Store Connect state has been reconciled.",
+                            ex);
+                    }
+                }
                 if (direct && upload.Succeeded)
                     directExportSnapshot!.BindProducedArtifact(upload.ExportArtifactPath, upload.ExportArtifactSha256);
                 uploadMutationMonitor?.ValidateNoChanges();
                 if (uploadSnapshot is not null)
                     uploadSnapshot.ValidateUnchanged(approvedArchiveSha256!);
-                upload.ArchivePath = app.ArchivePath;
-                result.Upload = upload;
                 if (!upload.Succeeded)
                 {
                     result.Success = false;
                     result.ErrorMessage = $"xcodebuild exportArchive {(direct ? "Developer ID export" : "upload")} failed for '{app.Name}' with exit code {upload.ProcessResult.ExitCode}.";
                     return CompleteAppleExecutionFailure(plan, resultsByApp, app);
                 }
-
-                if (!direct)
-                    WriteAppleUploadAttestation(plan, app, result);
                 VerifyAppleArchiveUnchangedAfterUpload(app, result);
 
                 if (direct)

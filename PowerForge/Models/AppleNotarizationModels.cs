@@ -59,7 +59,25 @@ public sealed class AppleNotarizationRequest
 
     internal Action<AppleNotarizationAcceptedCheckpoint>? AcceptedCheckpoint { get; set; }
 
+    internal Action<AppleNotarizationAmbiguousCheckpoint>? AmbiguousCheckpoint { get; set; }
+
     internal Action<AppleNotarizationStapledCheckpoint>? StapledCheckpoint { get; set; }
+}
+
+/// <summary>Durable evidence that notarytool may have mutated remote state without returning a terminal result.</summary>
+internal sealed class AppleNotarizationAmbiguousCheckpoint
+{
+    internal string ArtifactPath { get; set; } = string.Empty;
+
+    internal string ArtifactSha256 { get; set; } = string.Empty;
+
+    internal string SubmissionPath { get; set; } = string.Empty;
+
+    internal string SubmissionSha256 { get; set; } = string.Empty;
+
+    internal string? SubmissionId { get; set; }
+
+    internal string? Status { get; set; }
 }
 
 internal sealed class AppleNotarizationAcceptedCheckpoint

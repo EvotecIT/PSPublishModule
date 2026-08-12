@@ -2,6 +2,44 @@ namespace PowerForge.Tests;
 
 public sealed partial class AppleNotarizationServiceTests
 {
+    [Theory]
+    [InlineData("{}", null, null)]
+    [InlineData("{\"id\":\"pending-submission\",\"status\":\"In Progress\"}", "pending-submission", "In Progress")]
+    public async Task NotarizeAsync_checkpoints_ambiguous_success_without_terminal_submission_evidence(
+        string response,
+        string? expectedId,
+        string? expectedStatus)
+    {
+        var package = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(package, "approved-package");
+        try
+        {
+            AppleNotarizationAmbiguousCheckpoint? checkpoint = null;
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(new IncompleteSubmissionEvidenceRunner(response)).NotarizeAsync(
+                    new AppleNotarizationRequest
+                    {
+                        ArtifactPath = package,
+                        KeychainProfile = "powerforge-notary",
+                        Staple = false,
+                        Assess = false,
+                        AmbiguousCheckpoint = ambiguous => checkpoint = ambiguous
+                    }));
+
+            Assert.Contains("ambiguous", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("do not resubmit", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(checkpoint);
+            Assert.Equal(expectedId, checkpoint.SubmissionId);
+            Assert.Equal(expectedStatus, checkpoint.Status);
+            Assert.Equal(64, checkpoint.SubmissionSha256.Length);
+        }
+        finally
+        {
+            try { File.Delete(package); } catch { }
+        }
+    }
+
     [Fact]
     public async Task NotarizeAsync_rejects_private_app_root_replaced_after_acceptance()
     {
@@ -93,6 +131,30 @@ public sealed partial class AppleNotarizationServiceTests
             var result = new ProcessRunResult(
                 0,
                 isSubmission ? "{\"id\":\"accepted-boundary\",\"status\":\"Accepted\"}" : "ok",
+                string.Empty,
+                request.FileName,
+                TimeSpan.Zero,
+                false);
+            request.InvokeCompletionBoundary(result);
+            return Task.FromResult(result);
+        }
+    }
+
+    private sealed class IncompleteSubmissionEvidenceRunner : IProcessRunner
+    {
+        private readonly string _response;
+
+        internal IncompleteSubmissionEvidenceRunner(string response)
+        {
+            _response = response;
+        }
+
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            var isSubmission = request.Arguments.Count > 0 && request.Arguments[0] == "notarytool";
+            var result = new ProcessRunResult(
+                0,
+                isSubmission ? _response : "ok",
                 string.Empty,
                 request.FileName,
                 TimeSpan.Zero,

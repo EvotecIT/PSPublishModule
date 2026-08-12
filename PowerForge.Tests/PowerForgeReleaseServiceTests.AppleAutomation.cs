@@ -87,9 +87,10 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.NotEqual(Assert.Single(result.AppleAppPlan!.Apps).ArchivePath, uploaderArchivePath);
             Assert.Equal("before", File.ReadAllText(Path.Combine(Assert.Single(result.AppleAppPlan.Apps).ArchivePath, "payload")));
             Assert.Contains("private Apple upload archive snapshot changed", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain(
+            var uploadAttestation = Assert.Single(
                 new AppleReleaseReceiptStore().ReadAll(result.AppleAppPlan!),
                 receipt => receipt.OperationPhase == "UploadAttested");
+            Assert.True(Assert.Single(uploadAttestation.Targets).UploadPerformed);
         }
         finally
         {
