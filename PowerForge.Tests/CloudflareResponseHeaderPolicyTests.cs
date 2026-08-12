@@ -10,6 +10,15 @@ namespace PowerForge.Tests;
 public sealed class CloudflareResponseHeaderPolicyTests
 {
     [Fact]
+    public void SecurityHeaderDefaults_ShouldRemainBackwardCompatible()
+    {
+        var security = new AgentSecurityHeadersSpec();
+
+        Assert.True(security.Hsts);
+        Assert.False(security.PermissionsPolicy);
+    }
+
+    [Fact]
     public void BuildManagedRules_ShouldEmitConfiguredBaselineWithoutHsts()
     {
         var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
@@ -19,7 +28,8 @@ public sealed class CloudflareResponseHeaderPolicyTests
             {
                 Hsts = false,
                 ContentSecurityPolicyValue = "default-src 'self'; frame-ancestors 'self'",
-                XFrameOptionsValue = "SAMEORIGIN"
+                XFrameOptionsValue = "SAMEORIGIN",
+                PermissionsPolicy = true
             });
 
         var rule = Assert.IsType<JsonObject>(Assert.Single(rules));
@@ -87,7 +97,100 @@ public sealed class CloudflareResponseHeaderPolicyTests
         Assert.True(script.Split('\n').Length < 100, "The action entrypoint should remain a bounded adapter over the CLI.");
     }
 
-    private static JsonObject ExistingRule(string id, string description) => new()
+    [Fact]
+    public void SitePolicy_ShouldPreflightBothRulesetsBeforeWriting()
+    {
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(new JsonArray())),
+            JsonResponse(HttpStatusCode.Forbidden, """{"success":false,"errors":[{"message":"missing transform permission"}]}"""));
+        using var client = NewClient(handler);
+
+        var result = CloudflareSitePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "officeimo.com",
+            "OfficeIMO",
+            htmlPaths: null,
+            securityHeaders: new AgentSecurityHeadersSpec { Hsts = false },
+            dryRun: false,
+            httpClient: client);
+
+        Assert.False(result.Success);
+        Assert.Contains("No changes were made", result.Message, StringComparison.Ordinal);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.All(handler.Requests, request => Assert.Equal(HttpMethod.Get, request.Method));
+    }
+
+    [Fact]
+    public void SitePolicy_ShouldRestoreCacheWhenHeaderApplyFails()
+    {
+        var oldCacheRules = new JsonArray { ExistingRule("cache-custom", "Operator cache rule", "set_cache_settings") };
+        var oldHeaderRules = new JsonArray { ExistingRule("header-custom", "Operator header rule") };
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldCacheRules)),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldHeaderRules)),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldCacheRules)),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldHeaderRules)),
+            JsonResponse(HttpStatusCode.BadRequest, """{"success":false,"errors":[{"message":"invalid transform"}]}"""),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+        using var client = NewClient(handler);
+
+        var result = CloudflareSitePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "officeimo.com",
+            "OfficeIMO",
+            htmlPaths: null,
+            securityHeaders: new AgentSecurityHeadersSpec { Hsts = false },
+            dryRun: false,
+            httpClient: client);
+
+        Assert.False(result.Success);
+        Assert.Contains("previous site-policy state was restored", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(8, handler.Requests.Count);
+        Assert.Equal([HttpMethod.Get, HttpMethod.Get, HttpMethod.Get, HttpMethod.Put, HttpMethod.Get, HttpMethod.Put, HttpMethod.Put, HttpMethod.Put],
+            handler.Requests.Select(request => request.Method).ToArray());
+
+        var restoredHeaders = JsonNode.Parse(handler.Requests[6].Body)!["rules"]!.AsArray();
+        var restoredCache = JsonNode.Parse(handler.Requests[7].Body)!["rules"]!.AsArray();
+        Assert.Equal("Operator header rule", Assert.Single(restoredHeaders)!["description"]!.GetValue<string>());
+        Assert.Equal("Operator cache rule", Assert.Single(restoredCache)!["description"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void SitePolicy_ShouldDeleteNewCacheRulesetWhenHeaderApplyFails()
+    {
+        var oldHeaderRules = new JsonArray { ExistingRule("header-custom", "Operator header rule") };
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.NotFound, """{"success":false,"errors":[{"message":"not found"}]}"""),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldHeaderRules)),
+            JsonResponse(HttpStatusCode.NotFound, """{"success":false,"errors":[{"message":"not found"}]}"""),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope("new-cache-ruleset")),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldHeaderRules)),
+            JsonResponse(HttpStatusCode.BadRequest, """{"success":false,"errors":[{"message":"invalid transform"}]}"""),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+        using var client = NewClient(handler);
+
+        var result = CloudflareSitePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "officeimo.com",
+            "OfficeIMO",
+            htmlPaths: null,
+            securityHeaders: new AgentSecurityHeadersSpec { Hsts = false },
+            dryRun: false,
+            httpClient: client);
+
+        Assert.False(result.Success);
+        Assert.Contains("previous site-policy state was restored", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HttpMethod.Delete, handler.Requests[7].Method);
+        Assert.EndsWith("/rulesets/new-cache-ruleset", handler.Requests[7].Uri.AbsolutePath, StringComparison.Ordinal);
+    }
+
+    private static JsonObject ExistingRule(string id, string description, string action = "rewrite") => new()
     {
         ["id"] = id,
         ["ref"] = id,
@@ -95,15 +198,25 @@ public sealed class CloudflareResponseHeaderPolicyTests
         ["last_updated"] = "2026-08-12T00:00:00Z",
         ["description"] = description,
         ["expression"] = "true",
-        ["action"] = "rewrite",
-        ["action_parameters"] = new JsonObject { ["headers"] = new JsonObject() },
+        ["action"] = action,
+        ["action_parameters"] = action == "rewrite"
+            ? new JsonObject { ["headers"] = new JsonObject() }
+            : new JsonObject { ["cache"] = true },
         ["enabled"] = true
     };
 
     private static string ExistingEnvelope(JsonArray rules) => new JsonObject
     {
         ["success"] = true,
-        ["result"] = new JsonObject { ["rules"] = rules }
+        ["result"] = new JsonObject { ["rules"] = rules.DeepClone() }
+    }.ToJsonString();
+
+    private static string SuccessEnvelope(string? id = null) => new JsonObject
+    {
+        ["success"] = true,
+        ["result"] = string.IsNullOrWhiteSpace(id)
+            ? new JsonObject()
+            : new JsonObject { ["id"] = id }
     }.ToJsonString();
 
     private static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string body) => new(statusCode)

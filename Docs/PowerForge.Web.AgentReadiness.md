@@ -269,10 +269,11 @@ generate the discovery files and Markdown artifacts, then put Cloudflare or
 another edge in front if the live site must satisfy response-header and
 `Accept: text/markdown` negotiation checks.
 
-HSTS generation defaults to disabled. Set `AgentReadiness.SecurityHeaders.Hsts`
-to `true` only after certificate renewal and the HTTPS recovery path are proven
-for the production hostname. For Cloudflare-proxied GitHub Pages, an edge response
-header does not prove that GitHub can renew the separate origin certificate.
+PowerForge retains its existing HSTS-enabled default for compatibility. Set
+`AgentReadiness.SecurityHeaders.Hsts` to `false` for any site whose certificate
+renewal and HTTPS recovery path are not proven. For Cloudflare-proxied GitHub
+Pages, an edge response header does not prove that GitHub can renew the separate
+origin certificate.
 
 Apache deployments can set `agentReadiness.apache.enabled: true` and run
 `agent-ready prepare` after any step that creates or filters `.htaccess`, so the

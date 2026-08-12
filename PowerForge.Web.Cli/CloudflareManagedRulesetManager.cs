@@ -16,6 +16,22 @@ internal sealed class CloudflareManagedRulesetResult
     public int ManagedRuleCount { get; init; }
     public int PreservedRuleCount { get; init; }
     public string Message { get; init; } = string.Empty;
+    internal CloudflareManagedRulesetSnapshot? Snapshot { get; init; }
+    internal string? AppliedRulesetId { get; init; }
+}
+
+internal sealed class CloudflareManagedRulesetSnapshot
+{
+    internal required string ZoneId { get; init; }
+    internal required string Phase { get; init; }
+    internal required bool EntryPointExists { get; init; }
+    internal required JsonArray ExistingRules { get; init; }
+}
+
+internal sealed class CloudflareManagedRulesetRestoreResult
+{
+    internal bool Success { get; init; }
+    internal string Message { get; init; } = string.Empty;
 }
 
 /// <summary>Reconciles one PowerForge-owned rule group while preserving unrelated Cloudflare rules.</summary>
@@ -50,6 +66,14 @@ internal static class CloudflareManagedRulesetManager
             if (existingRules.Any(rule => rule is not JsonObject))
                 return Failure("Cloudflare entry-point response contained a malformed rule; refusing to replace the existing ruleset.");
 
+            var snapshot = new CloudflareManagedRulesetSnapshot
+            {
+                ZoneId = zoneId.Trim(),
+                Phase = phase,
+                EntryPointExists = entrypointExists,
+                ExistingRules = existingRules.DeepClone().AsArray()
+            };
+
             var existingManaged = existingRules
                 .OfType<JsonObject>()
                 .Where(rule => (rule["description"]?.GetValue<string>() ?? string.Empty).StartsWith(managedPrefix, StringComparison.Ordinal))
@@ -63,10 +87,10 @@ internal static class CloudflareManagedRulesetManager
             var managedCount = managedRules.Count;
 
             if (!changesRequired)
-                return Success(false, false, managedCount, preservedCount, $"Cloudflare {policyLabel} is already current ({managedCount} managed rule(s), {preservedCount} preserved rule(s)).");
+                return Success(false, false, managedCount, preservedCount, $"Cloudflare {policyLabel} is already current ({managedCount} managed rule(s), {preservedCount} preserved rule(s)).", snapshot);
 
             if (dryRun)
-                return Success(true, false, managedCount, preservedCount, $"Cloudflare {policyLabel} would update {managedCount} managed rule(s) and preserve {preservedCount} unrelated rule(s).");
+                return Success(true, false, managedCount, preservedCount, $"Cloudflare {policyLabel} would update {managedCount} managed rule(s) and preserve {preservedCount} unrelated rule(s).", snapshot);
 
             var updateResponse = entrypointExists
                 ? CloudflareApiClient.Send(httpClient, HttpMethod.Put, entrypoint, apiToken, new JsonObject { ["rules"] = desiredRules })
@@ -85,13 +109,75 @@ internal static class CloudflareManagedRulesetManager
                     });
 
             if (!updateResponse.Success)
-                return Failure(updateResponse.ErrorMessage);
+                return Failure(
+                    updateResponse.ErrorMessage,
+                    entrypointExists || updateResponse.TransportError is not null ? snapshot : null);
 
-            return Success(true, true, managedCount, preservedCount, $"Applied {managedCount} Cloudflare {policyLabel} rule(s); preserved {preservedCount} unrelated rule(s).");
+            return Success(
+                true,
+                true,
+                managedCount,
+                preservedCount,
+                $"Applied {managedCount} Cloudflare {policyLabel} rule(s); preserved {preservedCount} unrelated rule(s).",
+                snapshot,
+                entrypointExists ? null : TryReadRulesetId(updateResponse.Result));
         }
         catch (Exception ex)
         {
             return Failure($"Cloudflare {policyLabel} failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    internal static CloudflareManagedRulesetRestoreResult Restore(
+        CloudflareManagedRulesetSnapshot snapshot,
+        string? appliedRulesetId,
+        string apiToken,
+        HttpClient httpClient)
+    {
+        try
+        {
+            CloudflareApiResponse response;
+            if (snapshot.EntryPointExists)
+            {
+                var restoreRules = new JsonArray();
+                foreach (var rule in snapshot.ExistingRules.OfType<JsonObject>())
+                    restoreRules.Add(PrepareRuleForUpdate(rule));
+                var entrypoint = $"zones/{Uri.EscapeDataString(snapshot.ZoneId)}/rulesets/phases/{snapshot.Phase}/entrypoint";
+                response = CloudflareApiClient.Send(
+                    httpClient,
+                    HttpMethod.Put,
+                    entrypoint,
+                    apiToken,
+                    new JsonObject { ["rules"] = restoreRules });
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(appliedRulesetId))
+                {
+                    return new CloudflareManagedRulesetRestoreResult
+                    {
+                        Message = "Cannot remove the newly created Cloudflare ruleset because its identifier was not returned."
+                    };
+                }
+
+                response = CloudflareApiClient.Send(
+                    httpClient,
+                    HttpMethod.Delete,
+                    $"zones/{Uri.EscapeDataString(snapshot.ZoneId)}/rulesets/{Uri.EscapeDataString(appliedRulesetId)}",
+                    apiToken,
+                    body: null);
+            }
+
+            return response.Success
+                ? new CloudflareManagedRulesetRestoreResult { Success = true, Message = "Restored the previous Cloudflare ruleset state." }
+                : new CloudflareManagedRulesetRestoreResult { Message = $"Cloudflare ruleset rollback failed: {response.ErrorMessage}" };
+        }
+        catch (Exception ex)
+        {
+            return new CloudflareManagedRulesetRestoreResult
+            {
+                Message = $"Cloudflare ruleset rollback failed: {ex.GetType().Name}: {ex.Message}"
+            };
         }
     }
 
@@ -199,15 +285,36 @@ internal static class CloudflareManagedRulesetManager
         return clone;
     }
 
-    private static CloudflareManagedRulesetResult Failure(string message) => new() { Message = message };
+    private static string? TryReadRulesetId(JsonElement? result)
+    {
+        if (result is null || result.Value.ValueKind != JsonValueKind.Object ||
+            !result.Value.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.String)
+            return null;
+        return id.GetString();
+    }
 
-    private static CloudflareManagedRulesetResult Success(bool changesRequired, bool changed, int managedCount, int preservedCount, string message) => new()
+    private static CloudflareManagedRulesetResult Failure(string message, CloudflareManagedRulesetSnapshot? snapshot = null) => new()
+    {
+        Message = message,
+        Snapshot = snapshot
+    };
+
+    private static CloudflareManagedRulesetResult Success(
+        bool changesRequired,
+        bool changed,
+        int managedCount,
+        int preservedCount,
+        string message,
+        CloudflareManagedRulesetSnapshot snapshot,
+        string? appliedRulesetId = null) => new()
     {
         Success = true,
         ChangesRequired = changesRequired,
         Changed = changed,
         ManagedRuleCount = managedCount,
         PreservedRuleCount = preservedCount,
-        Message = message
+        Message = message,
+        Snapshot = snapshot,
+        AppliedRulesetId = appliedRulesetId
     };
 }

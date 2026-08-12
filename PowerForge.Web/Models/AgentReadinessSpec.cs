@@ -80,10 +80,10 @@ public sealed class AgentSecurityHeadersSpec
     /// <summary>Enable generated security headers in the static host headers file.</summary>
     public bool Enabled { get; set; } = true;
     /// <summary>
-    /// Emit Strict-Transport-Security. Disabled by default because HSTS is persistent in browsers and
-    /// must only be enabled after every production and recovery hostname has a proven HTTPS path.
+    /// Emit Strict-Transport-Security. Existing PowerForge behavior keeps this enabled by default;
+    /// sites with an unproven HTTPS recovery path should explicitly disable it.
     /// </summary>
-    public bool Hsts { get; set; }
+    public bool Hsts { get; set; } = true;
     /// <summary>Strict-Transport-Security value.</summary>
     public string? HstsValue { get; set; } = "max-age=31536000; includeSubDomains; preload";
     /// <summary>Emit Content-Security-Policy.</summary>
@@ -102,7 +102,7 @@ public sealed class AgentSecurityHeadersSpec
     /// <summary>Referrer-Policy value.</summary>
     public string? ReferrerPolicyValue { get; set; } = "strict-origin-when-cross-origin";
     /// <summary>Emit Permissions-Policy.</summary>
-    public bool PermissionsPolicy { get; set; } = true;
+    public bool PermissionsPolicy { get; set; }
     /// <summary>Permissions-Policy value.</summary>
     public string? PermissionsPolicyValue { get; set; } =
         "camera=(), geolocation=(), microphone=(), payment=(), usb=()";

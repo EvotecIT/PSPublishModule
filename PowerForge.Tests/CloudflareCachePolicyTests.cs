@@ -25,8 +25,10 @@ public sealed class CloudflareCachePolicyTests
         Assert.Equal("override_origin", staticRule["action_parameters"]!["edge_ttl"]!["mode"]!.GetValue<string>());
         Assert.Equal(2592000, staticRule["action_parameters"]!["edge_ttl"]!["default"]!.GetValue<int>());
         Assert.Null(staticRule["action_parameters"]!["cache_key"]);
-        Assert.Contains("/*/_framework/*", immutableRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.Contains("/*.wasm", immutableRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("/*/_framework/*.*.wasm", immutableRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.DoesNotContain("/_framework/*\"", immutableRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.DoesNotContain("/*.br", immutableRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.DoesNotContain("/*.gz", immutableRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Equal(31536000, immutableRule["action_parameters"]!["edge_ttl"]!["default"]!.GetValue<int>());
 
         var htmlExpression = htmlRule["expression"]!.GetValue<string>();
@@ -51,7 +53,7 @@ public sealed class CloudflareCachePolicyTests
         var immutableExpression = rules[3]!["expression"]!.GetValue<string>();
         Assert.Contains("/project/css/*", staticExpression, StringComparison.Ordinal);
         Assert.Contains("/project/*.css", staticExpression, StringComparison.Ordinal);
-        Assert.Contains("/project/*/_framework/*", immutableExpression, StringComparison.Ordinal);
+        Assert.Contains("/project/*/_framework/*.*.wasm", immutableExpression, StringComparison.Ordinal);
         Assert.Contains("/project/sitemap.xml", dataExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("/project/docs/*", htmlExpression, StringComparison.Ordinal);
         Assert.Contains("starts_with(http.request.uri.path, \"/project/\")", htmlExpression, StringComparison.Ordinal);

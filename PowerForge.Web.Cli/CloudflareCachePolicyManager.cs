@@ -17,6 +17,7 @@ internal sealed class CloudflareCachePolicyApplyResult
     public int ManagedRuleCount { get; init; }
     public int PreservedRuleCount { get; init; }
     public string Message { get; init; } = string.Empty;
+    internal CloudflareManagedRulesetResult? Reconciliation { get; init; }
 }
 
 internal static class CloudflareCachePolicyManager
@@ -74,7 +75,8 @@ internal static class CloudflareCachePolicyManager
                 PolicyName = policyName,
                 ManagedRuleCount = reconciled.ManagedRuleCount,
                 PreservedRuleCount = reconciled.PreservedRuleCount,
-                Message = reconciled.Message
+                Message = reconciled.Message,
+                Reconciliation = reconciled
             };
         }
         finally

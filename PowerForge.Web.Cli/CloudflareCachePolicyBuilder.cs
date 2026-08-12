@@ -67,15 +67,12 @@ internal static class CloudflareCachePolicyBuilder
 
         var immutableExpression = $"({hostFilter}(" + string.Join(" or ", new[]
         {
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/_framework/*")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/*/_framework/*")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.wasm")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.webcil")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.dll")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.pdb")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.dat")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.br")),
-            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.gz"))
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/_framework/*.*.wasm")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*/_framework/*.*.wasm")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/_framework/*.*.webcil")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*/_framework/*.*.webcil")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/_framework/*.*.dat")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*/_framework/*.*.dat"))
         }) + "))";
 
         var dataExpression = $"({hostFilter}(" + string.Join(" or ", new[]

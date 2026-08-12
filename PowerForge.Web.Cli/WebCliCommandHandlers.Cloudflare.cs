@@ -40,8 +40,7 @@ internal static partial class WebCliCommandHandlers
             return HandleCloudflareDnsRecord(subArgs, outputJson, logger, outputSchemaVersion);
         }
 
-        if (verb.Equals("site-policy", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("policy", StringComparison.OrdinalIgnoreCase))
+        if (verb.Equals("site-policy", StringComparison.OrdinalIgnoreCase))
         {
             if (subArgs.Length > 0 && !subArgs[0].StartsWith("-", StringComparison.Ordinal))
             {
@@ -54,6 +53,7 @@ internal static partial class WebCliCommandHandlers
         }
 
         if (verb.Equals("cache-policy", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("policy", StringComparison.OrdinalIgnoreCase) ||
             verb.Equals("rules", StringComparison.OrdinalIgnoreCase))
         {
             if (subArgs.Length > 0 && !subArgs[0].StartsWith("-", StringComparison.Ordinal))
@@ -331,31 +331,19 @@ internal static partial class WebCliCommandHandlers
         htmlPaths.AddRange(siteProfile.VerifyPaths);
         var dryRun = HasOption(subArgs, "--dry-run") || HasOption(subArgs, "--dryRun");
 
-        var cacheResult = CloudflareCachePolicyManager.Apply(
+        var result = CloudflareSitePolicyManager.Apply(
             zoneId,
             token,
             hostname,
             policyName,
             htmlPaths,
-            dryRun,
-            logger: null,
-            basePath: basePath);
-        if (!cacheResult.Success)
-            return Fail(cacheResult.Message, outputJson, logger, command);
-
-        var headerResult = CloudflareResponseHeaderPolicyManager.Apply(
-            zoneId,
-            token,
-            hostname,
-            policyName,
             siteProfile.SecurityHeaders,
-            dryRun);
-        if (!headerResult.Success)
-            return Fail($"{cacheResult.Message} {headerResult.Message}", outputJson, logger, command);
+            dryRun,
+            basePath: basePath);
+        if (!result.Success)
+            return Fail(result.Message, outputJson, logger, command);
 
-        var changed = headerResult.Changed || cacheResult.Changed;
-        var changesRequired = headerResult.ChangesRequired || cacheResult.ChangesRequired;
-        var message = $"Cloudflare site policy for {hostname}: {headerResult.Message} {cacheResult.Message}";
+        var message = $"Cloudflare site policy for {hostname}: {result.Message}";
         logger.Info(message);
 
         if (outputJson)
@@ -368,10 +356,10 @@ internal static partial class WebCliCommandHandlers
                 ["basePath"] = basePath,
                 ["policyName"] = policyName,
                 ["dryRun"] = dryRun,
-                ["changesRequired"] = changesRequired,
-                ["changed"] = changed,
-                ["responseHeaderManagedRuleCount"] = headerResult.ManagedRuleCount,
-                ["cacheManagedRuleCount"] = cacheResult.ManagedRuleCount,
+                ["changesRequired"] = result.ChangesRequired,
+                ["changed"] = result.Changed,
+                ["responseHeaderManagedRuleCount"] = result.ResponseHeaderManagedRuleCount,
+                ["cacheManagedRuleCount"] = result.CacheManagedRuleCount,
                 ["message"] = message
             }, WebCliJson.Options);
             WebCliJsonWriter.Write(new WebCliJsonEnvelope

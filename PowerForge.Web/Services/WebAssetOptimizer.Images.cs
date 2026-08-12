@@ -679,15 +679,18 @@ public static partial class WebAssetOptimizer
         if (headers.ImmutablePaths is { Length: > 0 })
         {
             foreach (var path in headers.ImmutablePaths)
-                immutablePaths.Add(path);
+            {
+                if (!string.IsNullOrWhiteSpace(path))
+                    immutablePaths.Add(path.Trim());
+            }
         }
-        else if (map is not null)
+        if (map is not null)
         {
             foreach (var path in map.Values)
             {
-                var segments = path.TrimStart('/').Split('/');
-                if (segments.Length > 1)
-                    immutablePaths.Add($"/{segments[0]}/*");
+                if (string.IsNullOrWhiteSpace(path))
+                    continue;
+                immutablePaths.Add("/" + path.Trim().TrimStart('/', '\\'));
             }
         }
 

@@ -43,13 +43,16 @@ The command manages two Cloudflare ruleset phases:
 
 Rules outside the site's `PowerForge <Name>:` description prefix retain their
 positions. PowerForge avoids a write when the effective policy is already
-current.
+current. The combined command preflights both ruleset phases before its first
+write. If the second phase fails, it restores the snapshots taken before the
+operation and reports any incomplete rollback explicitly.
 
-## HSTS is intentionally opt-in
+## HSTS must be an explicit site decision
 
-`AgentReadiness.SecurityHeaders.Hsts` defaults to `false`. HSTS persists in
-browsers after it is received, so enable it only after HTTPS renewal and the
-recovery path have been proven for the actual production hostname.
+PowerForge retains its existing `AgentReadiness.SecurityHeaders.Hsts` default of
+`true` for compatibility. HSTS persists in browsers after it is received, so a
+site whose HTTPS renewal or recovery path is not proven must explicitly set it
+to `false` before applying the managed response-header policy.
 
 ```json
 {
@@ -82,7 +85,7 @@ The policy uses Free-plan-compatible Rules language (`eq`, `wildcard`,
 | HTML, docs, and API | 2 hours | 5 minutes | Includes directory routes and `.html`; does not cache 3xx/4xx/5xx responses. |
 | Data and discovery | Origin-controlled | Origin-controlled | Covers JSON, XML, text, sitemap, and LLM discovery files. |
 | Static assets | 30 days | 1 day | Covers CSS, JavaScript, images, fonts, maps, PDFs, and archives. |
-| Immutable framework assets | 1 year | 1 year | Covers Blazor `_framework`, WASM, Webcil, assemblies, data, and precompressed files. |
+| Immutable framework assets | 1 year | 1 year | Covers fingerprinted Blazor WASM, Webcil, and data files. Stable loader names keep the shorter static-asset policy. |
 
 Query strings remain part of the normal cache key. This avoids serving the wrong
 representation when an application uses query parameters for behavior rather
