@@ -45,7 +45,8 @@ internal sealed partial class PowerForgeReleaseService
             spec.VirusTotal,
             configDirectory,
             planOrValidation: false);
-        EnsureVirusTotalReceiptWritable(spec.VirusTotal!, configDirectory);
+        var project = ResolveVirusTotalProjectName(spec, spec.VirusTotal!, configDirectory);
+        EnsureVirusTotalReceiptWritable(spec.VirusTotal!, configDirectory, project);
         return apiKey;
     }
 
@@ -86,7 +87,43 @@ internal sealed partial class PowerForgeReleaseService
         return ShouldRunSectionForTargets(selectedTargets, toolMatches, true, appleMatches);
     }
 
-    private static void ValidateExistingVirusTotalReceiptIdentity(string receiptPath)
+    private static PowerForgeReleaseAssetEntry[] CollectVirusTotalReleaseAssetEntries(
+        PowerForgeReleaseResult result)
+    {
+        var entries = (result.ReleaseAssetEntries ?? Array.Empty<PowerForgeReleaseAssetEntry>()).ToList();
+        var paths = entries
+            .Select(static (entry, index) => new { Entry = entry, Index = index })
+            .Where(static item => !string.IsNullOrWhiteSpace(item.Entry.Path))
+            .GroupBy(static item => Path.GetFullPath(item.Entry.Path), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.First().Index, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in (result.ModulePackagePlans ?? Array.Empty<PowerForgeModulePackageReleaseCheckpoint>())
+                     .SelectMany(static checkpoint => checkpoint.Release.Projects)
+                     .SelectMany(CreatePackageAssetEntries))
+        {
+            var fullPath = Path.GetFullPath(entry.Path);
+            if (!paths.TryGetValue(fullPath, out var existingIndex))
+            {
+                paths.Add(fullPath, entries.Count);
+                entries.Add(entry);
+                continue;
+            }
+
+            var existing = entries[existingIndex];
+            if (!existing.IsFinalPackageOutput && entry.IsFinalPackageOutput)
+            {
+                entry.StagedPath = existing.StagedPath;
+                entry.RelativeStagePath = existing.RelativeStagePath;
+                entries[existingIndex] = entry;
+            }
+        }
+
+        return entries.ToArray();
+    }
+
+    private static void ValidateExistingVirusTotalReceiptIdentity(
+        string receiptPath,
+        string expectedProject)
     {
         using var document = JsonDocument.Parse(File.ReadAllText(receiptPath));
         if (document.RootElement.ValueKind != JsonValueKind.Object ||
@@ -94,7 +131,7 @@ internal sealed partial class PowerForgeReleaseService
             schema.ValueKind != JsonValueKind.Number ||
             !schema.TryGetInt32(out var schemaVersion) ||
             !TryGetRequiredString(document.RootElement, "provider", out var provider) ||
-            !TryGetRequiredString(document.RootElement, "project", out _) ||
+            !TryGetRequiredString(document.RootElement, "project", out var project) ||
             !TryGetRequiredString(document.RootElement, "version", out _))
         {
             throw new InvalidDataException(
@@ -106,6 +143,12 @@ internal sealed partial class PowerForgeReleaseService
         {
             throw new InvalidDataException(
                 "VirusTotal Monitor resume receipt has an unsupported schema or provider.");
+        }
+
+        if (!string.Equals(project, expectedProject, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException(
+                $"VirusTotal Monitor resume receipt belongs to project '{project}', not '{expectedProject}'.");
         }
     }
 

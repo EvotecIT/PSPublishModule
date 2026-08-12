@@ -142,14 +142,16 @@ internal static class SpectrePowerForgeReleaseConsoleUi
         var hasTargetAwareSelection =
             request.Targets.Any(static target => !string.IsNullOrWhiteSpace(target)) &&
             (spec.Tools is not null || spec.AppleApps is not null);
-        var runModule = !hasTargetAwareSelection &&
+        var runModule = !request.AppleOnly &&
+                        !hasTargetAwareSelection &&
                         spec.Module is not null &&
                         (!request.PackagesOnly && !request.ToolsOnly || request.ModuleOnly);
         var moduleIncludesPackages = runModule &&
                                      spec.Module?.IncludesPackages == true &&
                                      !request.PlanOnly &&
                                      !request.ValidateOnly;
-        var runPackages = (spec.Packages is not null || moduleIncludesPackages) &&
+        var runPackages = !request.AppleOnly &&
+                          (spec.Packages is not null || moduleIncludesPackages) &&
                           !request.ModuleOnly &&
                           !request.ToolsOnly;
         if (hasTargetAwareSelection)

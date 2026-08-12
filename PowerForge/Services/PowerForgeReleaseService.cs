@@ -392,7 +392,13 @@ internal sealed partial class PowerForgeReleaseService
             configDirectory,
             planOrValidation: !publishVirusTotalMonitor);
         if (publishVirusTotalMonitor)
-            EnsureVirusTotalReceiptWritable(spec.VirusTotal!, configDirectory);
+        {
+            var virusTotalProject = ResolveVirusTotalProjectName(
+                spec,
+                spec.VirusTotal!,
+                configDirectory);
+            EnsureVirusTotalReceiptWritable(spec.VirusTotal!, configDirectory, virusTotalProject);
+        }
         var captureModuleArtifactProvenance = ShouldCaptureVirusTotalModuleArtifactProvenance(
             spec,
             request,

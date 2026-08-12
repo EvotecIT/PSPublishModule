@@ -120,6 +120,45 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
         Assert.DoesNotContain("VirusTotal Monitor registration", writer.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void InteractiveRelease_AppleOnlySwitch_DoesNotShowVirusTotalPhase()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer);
+        var spec = new PowerForgeReleaseSpec
+        {
+            Module = new PowerForgeModuleReleaseOptions
+            {
+                ModuleName = "Example",
+                IncludesPackages = true
+            },
+            Packages = new ProjectBuildConfiguration { PublishNuget = true },
+            AppleApps = new PowerForgeAppleReleaseOptions
+            {
+                Apps = [new AppleAppConfiguration { Enabled = true, Name = "MacApp" }]
+            },
+            VirusTotal = new PowerForgeVirusTotalOptions
+            {
+                Enabled = true,
+                ApiKeyEnvName = "VIRUSTOTAL_MONITOR_API_KEY",
+                ArtifactKinds = [VirusTotalArtifactKind.NuGetPackage]
+            }
+        };
+        var request = new PowerForgeReleaseRequest
+        {
+            ConfigPath = "release.json",
+            AppleOnly = true
+        };
+
+        _ = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
+            console,
+            spec,
+            request,
+            _ => new PowerForgeReleaseResult { Success = true });
+
+        Assert.DoesNotContain("VirusTotal Monitor registration", writer.ToString(), StringComparison.Ordinal);
+    }
+
     private static IAnsiConsole CreateConsole(TextWriter writer)
         => AnsiConsole.Create(new AnsiConsoleSettings
         {

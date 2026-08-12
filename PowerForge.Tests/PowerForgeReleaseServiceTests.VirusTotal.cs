@@ -321,6 +321,81 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void PublishBuiltReleaseOutputs_ModuleOwnedPackage_IsSelectedForVirusTotal()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var packagePath = Path.Combine(root, "Example.Library.1.2.3.nupkg");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(packagePath, "signed package");
+            VirusTotalMonitorArtifact? selected = null;
+            var service = CreateReleaseService(
+                root,
+                new List<ModuleExecutionSnapshot>(),
+                new PowerForgeToolReleaseResult { Success = true },
+                publishVirusTotalMonitor: (request, _) =>
+                {
+                    selected = Assert.Single(request.Artifacts);
+                    return new VirusTotalMonitorPublishResult { Success = true };
+                });
+            var spec = CreateVirusTotalInstallerSpec();
+            spec.VirusTotal!.ArtifactKinds = [VirusTotalArtifactKind.NuGetPackage];
+            var builtResult = new PowerForgeReleaseResult
+            {
+                Success = true,
+                ReleaseAssetEntries =
+                [
+                    new PowerForgeReleaseAssetEntry
+                    {
+                        Path = packagePath,
+                        Category = PowerForgeReleaseAssetCategory.Metadata,
+                        IsFinalPackageOutput = false
+                    }
+                ],
+                ModulePackagePlans =
+                [
+                    new PowerForgeModulePackageReleaseCheckpoint
+                    {
+                        Release = new DotNetRepositoryReleaseResult
+                        {
+                            Success = true,
+                            Projects =
+                            {
+                                new DotNetRepositoryProjectResult
+                                {
+                                    ProjectName = "Example.Library",
+                                    PackageId = "Example.Library",
+                                    NewVersion = "1.2.3",
+                                    Packages = { packagePath }
+                                }
+                            }
+                        }
+                    }
+                ]
+            };
+
+            var result = service.PublishBuiltReleaseOutputs(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ResolvedReleaseVersion = "1.2.3"
+                },
+                builtResult);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(packagePath, selected?.SourcePath);
+            Assert.Equal(VirusTotalArtifactKind.NuGetPackage, selected?.Kind);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static PowerForgeReleaseSpec CreateVirusTotalInstallerSpec()
         => new()
         {

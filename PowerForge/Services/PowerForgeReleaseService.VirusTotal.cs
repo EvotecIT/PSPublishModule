@@ -155,7 +155,7 @@ internal sealed partial class PowerForgeReleaseService
             version = ResolveVirusTotalReleaseVersion(result, sharedReleaseVersion) ?? "mixed";
 
             project = ResolveVirusTotalProjectName(spec, options, configDirectory);
-            EnsureVirusTotalReceiptWritable(options, configDirectory);
+            EnsureVirusTotalReceiptWritable(options, configDirectory, project);
             receiptWritable = true;
             resumeReceipts = LoadVirusTotalResumeReceipts(
                 options,
@@ -164,7 +164,7 @@ internal sealed partial class PowerForgeReleaseService
                 version!);
             resumeReceiptSafeToReplace = true;
             var artifacts = VirusTotalReleaseArtifactSelector.Select(
-                result.ReleaseAssetEntries ?? Array.Empty<PowerForgeReleaseAssetEntry>(),
+                CollectVirusTotalReleaseAssetEntries(result),
                 options,
                 project,
                 string.Equals(version, "mixed", StringComparison.Ordinal) ? null : version);
@@ -341,7 +341,8 @@ internal sealed partial class PowerForgeReleaseService
 
     private static void EnsureVirusTotalReceiptWritable(
         PowerForgeVirusTotalOptions options,
-        string configDirectory)
+        string configDirectory,
+        string project)
     {
         var receiptPath = ResolveOutputPath(configDirectory, options.ReceiptPath!);
         if (Directory.Exists(receiptPath))
@@ -354,7 +355,7 @@ internal sealed partial class PowerForgeReleaseService
         Directory.CreateDirectory(directory);
         if (File.Exists(receiptPath))
         {
-            ValidateExistingVirusTotalReceiptIdentity(receiptPath);
+            ValidateExistingVirusTotalReceiptIdentity(receiptPath, project);
             using var receipt = new FileStream(
                 receiptPath,
                 FileMode.Open,

@@ -63,6 +63,48 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(artifactPath, "signed installer");
             Directory.CreateDirectory(receiptPath);
             var uploadCalled = false;
+            var service = CreateReleaseService(
+                root,
+                new List<ModuleExecutionSnapshot>(),
+                new PowerForgeToolReleaseResult { Success = true },
+                publishVirusTotalMonitor: (_, _) =>
+                {
+                    uploadCalled = true;
+                    return new VirusTotalMonitorPublishResult { Success = true };
+                });
+            var spec = CreateVirusTotalInstallerSpec();
+            spec.VirusTotal!.ReceiptPath = receiptPath;
+
+            var exception = Assert.Throws<InvalidOperationException>(() => service.PublishBuiltReleaseOutputs(
+                spec,
+                new PowerForgeReleaseRequest { ConfigPath = releasePath },
+                CreateBuiltInstallerResult(artifactPath)));
+
+            Assert.Contains("existing directory", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(uploadCalled);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void PublishBuiltReleaseOutputs_InvalidResumeReceipt_PreservesOriginalReceipt()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var artifactPath = Path.Combine(root, "Example.msi");
+            var receiptPath = Path.Combine(root, "Artifacts", "Release", "virustotal-monitor-receipt.json");
+            var originalReceipt =
+                "{ \"schemaVersion\": 999, \"provider\": \"Future Monitor\", \"project\": \"Example\", \"version\": \"1.2.3\", \"monitorId\": \"recover-me\" }";
+            Directory.CreateDirectory(Path.GetDirectoryName(receiptPath)!);
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(artifactPath, "signed installer");
+            File.WriteAllText(receiptPath, originalReceipt);
+            var uploadCalled = false;
             var githubCalled = false;
             var service = CreateReleaseService(
                 root,
@@ -88,55 +130,13 @@ public sealed partial class PowerForgeReleaseServiceTests
                 Token = "github-token"
             };
 
-            var exception = Assert.Throws<InvalidOperationException>(() => service.PublishBuiltReleaseOutputs(
-                spec,
-                new PowerForgeReleaseRequest { ConfigPath = releasePath },
-                CreateBuiltInstallerResult(artifactPath)));
-
-            Assert.Contains("existing directory", exception.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.False(githubCalled);
-            Assert.False(uploadCalled);
-        }
-        finally
-        {
-            TryDelete(root);
-        }
-    }
-
-    [Fact]
-    public void PublishBuiltReleaseOutputs_InvalidResumeReceipt_PreservesOriginalReceipt()
-    {
-        var root = CreateSandbox();
-        try
-        {
-            var releasePath = Path.Combine(root, "release.json");
-            var artifactPath = Path.Combine(root, "Example.msi");
-            var receiptPath = Path.Combine(root, "Artifacts", "Release", "virustotal-monitor-receipt.json");
-            var originalReceipt =
-                "{ \"schemaVersion\": 999, \"provider\": \"Future Monitor\", \"project\": \"Example\", \"version\": \"1.2.3\", \"monitorId\": \"recover-me\" }";
-            Directory.CreateDirectory(Path.GetDirectoryName(receiptPath)!);
-            File.WriteAllText(releasePath, "{}");
-            File.WriteAllText(artifactPath, "signed installer");
-            File.WriteAllText(receiptPath, originalReceipt);
-            var uploadCalled = false;
-            var service = CreateReleaseService(
-                root,
-                new List<ModuleExecutionSnapshot>(),
-                new PowerForgeToolReleaseResult { Success = true },
-                publishVirusTotalMonitor: (_, _) =>
-                {
-                    uploadCalled = true;
-                    return new VirusTotalMonitorPublishResult { Success = true };
-                });
-            var spec = CreateVirusTotalInstallerSpec();
-            spec.VirusTotal!.ReceiptPath = receiptPath;
-
             var exception = Assert.Throws<InvalidDataException>(() => service.PublishBuiltReleaseOutputs(
                 spec,
                 new PowerForgeReleaseRequest { ConfigPath = releasePath },
                 CreateBuiltInstallerResult(artifactPath)));
 
             Assert.Contains("unsupported schema", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(githubCalled);
             Assert.False(uploadCalled);
             Assert.Equal(originalReceipt, File.ReadAllText(receiptPath));
         }
@@ -161,10 +161,16 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(artifactPath, "signed installer");
             File.WriteAllText(receiptPath, originalReceipt);
             var uploadCalled = false;
+            var githubCalled = false;
             var service = CreateReleaseService(
                 root,
                 new List<ModuleExecutionSnapshot>(),
                 new PowerForgeToolReleaseResult { Success = true },
+                publishGitHubRelease: _ =>
+                {
+                    githubCalled = true;
+                    return new GitHubReleasePublishResult { Succeeded = true };
+                },
                 publishVirusTotalMonitor: (_, _) =>
                 {
                     uploadCalled = true;
@@ -172,6 +178,13 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
             var spec = CreateVirusTotalInstallerSpec();
             spec.VirusTotal!.ReceiptPath = receiptPath;
+            spec.GitHub = new PowerForgeReleaseGitHubOptions
+            {
+                Publish = true,
+                Owner = "EvotecIT",
+                Repository = "Example",
+                Token = "github-token"
+            };
 
             var exception = Assert.Throws<InvalidDataException>(() => service.PublishBuiltReleaseOutputs(
                 spec,
@@ -179,6 +192,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 CreateBuiltInstallerResult(artifactPath)));
 
             Assert.Contains("explicitly contain", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(githubCalled);
             Assert.False(uploadCalled);
             Assert.Equal(originalReceipt, File.ReadAllText(receiptPath));
         }
@@ -211,10 +225,16 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(artifactPath, "signed installer");
             File.WriteAllText(receiptPath, originalReceipt);
             var uploadCalled = false;
+            var githubCalled = false;
             var service = CreateReleaseService(
                 root,
                 new List<ModuleExecutionSnapshot>(),
                 new PowerForgeToolReleaseResult { Success = true },
+                publishGitHubRelease: _ =>
+                {
+                    githubCalled = true;
+                    return new GitHubReleasePublishResult { Succeeded = true };
+                },
                 publishVirusTotalMonitor: (_, _) =>
                 {
                     uploadCalled = true;
@@ -222,15 +242,22 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
             var spec = CreateVirusTotalInstallerSpec();
             spec.VirusTotal!.ReceiptPath = receiptPath;
+            spec.GitHub = new PowerForgeReleaseGitHubOptions
+            {
+                Publish = true,
+                Owner = "EvotecIT",
+                Repository = "Example",
+                Token = "github-token"
+            };
 
-            var result = service.PublishBuiltReleaseOutputs(
+            var exception = Assert.Throws<InvalidDataException>(() => service.PublishBuiltReleaseOutputs(
                 spec,
                 new PowerForgeReleaseRequest { ConfigPath = releasePath },
-                CreateBuiltInstallerResult(artifactPath));
+                CreateBuiltInstallerResult(artifactPath)));
 
-            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Contains("AnotherProject", exception.Message, StringComparison.Ordinal);
+            Assert.False(githubCalled);
             Assert.False(uploadCalled);
-            Assert.False(Assert.IsType<VirusTotalMonitorPublishResult>(result.VirusTotalMonitor).Success);
             Assert.Equal(originalReceipt, File.ReadAllText(receiptPath));
         }
         finally

@@ -213,6 +213,7 @@ public sealed partial class ReleasePublishExecutionService
             var builtReleaseResult = JsonSerializer.Deserialize<PowerForgeReleaseResult>(
                     buildResult.UnifiedReleaseStateJson!)
                 ?? throw new InvalidOperationException("Unified release build state could not be deserialized.");
+            ApplySignedCheckpointArtifacts(builtReleaseResult, signingResult);
             if (PowerForgeReleaseService.ShouldPublishVirusTotalMonitorFromCheckpoint(spec, builtReleaseResult))
             {
                 try
@@ -246,7 +247,7 @@ public sealed partial class ReleasePublishExecutionService
             var result = await Task.Run(
                     () => _publishUnifiedRelease(
                         repository.UnifiedReleaseConfigPath!,
-                        buildResult.UnifiedReleaseStateJson!,
+                        JsonSerializer.Serialize(builtReleaseResult),
                         cancellationToken),
                     cancellationToken)
                 .ConfigureAwait(false);

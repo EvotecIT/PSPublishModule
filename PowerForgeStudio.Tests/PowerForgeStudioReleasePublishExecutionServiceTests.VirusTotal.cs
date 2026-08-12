@@ -328,4 +328,131 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public async Task ExecuteAsync_UnifiedRelease_ModuleOwnedPackage_IsMaterializedForVirusTotal()
+    {
+        var repositoryRoot = Directory.CreateDirectory(
+            Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+            var releaseConfig = Path.Combine(buildDirectory, "release.json");
+            var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+            var unsignedDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "unsigned")).FullName;
+            var packagePath = Path.Combine(repositoryRoot, "signed", "Example.Library.1.2.3.nupkg");
+            var checkpointPackagePath = Path.Combine(unsignedDirectory, "Example.Library.1.2.3.nupkg");
+            Directory.CreateDirectory(Path.GetDirectoryName(packagePath)!);
+            File.WriteAllText(packagePath, "signed package");
+            File.WriteAllText(checkpointPackagePath, "unsigned package");
+            File.WriteAllText(
+                moduleConfig,
+                """
+                {
+                  "Build": { "Name": "Example", "SourcePath": "." },
+                  "Segments": [
+                    {
+                      "Type": "PackageBuild",
+                      "Configuration": {
+                        "Name": "Example packages",
+                        "PublishNuget": true,
+                        "PublishApiKey": "test-key",
+                        "PublishSource": "https://example.test/v3/index.json"
+                      }
+                    }
+                  ]
+                }
+                """);
+            File.WriteAllText(
+                releaseConfig,
+                """
+                {
+                  "Module": {
+                    "RepositoryRoot": "..",
+                    "ConfigPath": "powerforge.json",
+                    "IncludesPackages": true
+                  },
+                  "VirusTotal": {
+                    "Enabled": true,
+                    "ProjectName": "Example",
+                    "ApiKeyEnvName": "VIRUSTOTAL_MONITOR_API_KEY",
+                    "ArtifactKinds": [ "NuGetPackage" ]
+                  }
+                }
+                """);
+            var unified = new PowerForgeReleaseResult
+            {
+                Success = true,
+                ConfigPath = releaseConfig,
+                ModulePackagePlans =
+                [
+                    new PowerForgeModulePackageReleaseCheckpoint
+                    {
+                        Key = "PackageBuild:0",
+                        Name = "Example packages",
+                        ConfigPath = moduleConfig,
+                        Release = new DotNetRepositoryReleaseResult
+                        {
+                            Success = true,
+                            Projects =
+                            {
+                                new DotNetRepositoryProjectResult
+                                {
+                                    ProjectName = "Example.Library",
+                                    PackageId = "Example.Library",
+                                    NewVersion = "1.2.3",
+                                    Packages = { checkpointPackagePath }
+                                }
+                            }
+                        }
+                    }
+                ]
+            };
+            var queueItem = CreateUnifiedPublishQueueItem(
+                repositoryRoot,
+                "Example",
+                releaseConfig,
+                unified,
+                [CreateModuleSigningReceipt(repositoryRoot, packagePath)]);
+            PowerForgeReleaseResult? capturedCheckpoint = null;
+            var service = new ReleasePublishExecutionService(
+                new RepositoryCatalogScanner(),
+                new ModuleBuildHostService(),
+                new ProjectBuildHostService(),
+                new ProjectBuildCommandHostService(),
+                new ProjectBuildPublishHostService(),
+                (_, _) => Task.FromResult(new DotNetNuGetPushResult(
+                    0,
+                    "published",
+                    string.Empty,
+                    "dotnet",
+                    TimeSpan.Zero,
+                    false,
+                    null)),
+                publishUnifiedRelease: (_, stateJson) =>
+                {
+                    capturedCheckpoint = JsonSerializer.Deserialize<PowerForgeReleaseResult>(stateJson);
+                    return new PowerForgeReleaseResult
+                    {
+                        Success = true,
+                        VirusTotalMonitor = new VirusTotalMonitorPublishResult { Success = true }
+                    };
+                });
+
+            using var _ = new EnvironmentScope()
+                .Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true")
+                .Set("VIRUSTOTAL_MONITOR_API_KEY", "test-key");
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.True(result.Succeeded, result.Summary);
+            var checkpoint = Assert.IsType<PowerForgeReleaseResult>(capturedCheckpoint);
+            var package = Assert.Single(checkpoint.ModulePackagePlans)
+                .Release.Projects.Single().Packages.Single();
+            Assert.Equal(packagePath, package);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
 }
