@@ -11,7 +11,7 @@ Creates inline .NET/NuGet package build configuration from the module-build DSL.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationPackageBuild [-Name <string>] [-Enabled] [-BuildBeforeModule] [-UseAsReleaseVersionSource] [-ProvideLocalNuGetFeed] [-RootPath <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <IDictionary>] [-VersionTracks <IDictionary>] [-ExpectedVersionMapAsInclude] [-ExpectedVersionMapUseWildcards] [-AlignPackageVersions] [-IncludeProjects <string[]>] [-ExcludeProjects <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-Configuration <string>] [-OutputPath <string>] [-ReleaseZipOutputPath <string>] [-StagingPath <string>] [-CleanStaging] [-PlanOnly] [-PlanOutputPath <string>] [-UpdateVersions] [-Build] [-PackStrategy <string>] [-IncludeSymbols] [-PublishNuget] [-PublishGitHub] [-CreateReleaseZip] [-UseGitHubPackages] [-GitHubPackagesOwner <string>] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-PublishFailFast] [-CertificateThumbprint <string>] [-CertificateStore <string>] [-TimeStampServer <string>] [-SignAssemblies] [-SignDependencyAssemblies] [-SignPackages] [-OverwriteSignedAssemblies] [-OverwriteSignedPackages] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-GitHubAccessToken <string>] [-GitHubAccessTokenFilePath <string>] [-GitHubAccessTokenEnvName <string>] [-GitHubUsername <string>] [-GitHubRepositoryName <string>] [-GitHubIsPreRelease] [-GitHubIncludeProjectNameInTag] [-GitHubGenerateReleaseNotes] [-GitHubReleaseName <string>] [-GitHubTagName <string>] [-GitHubTagTemplate <string>] [-GitHubReleaseMode <string>] [-GitHubPrimaryProject <string>] [-GitHubTagConflictPolicy <string>] [-Options <IDictionary>] [<CommonParameters>]
+New-ConfigurationPackageBuild [-Name <string>] [-Enabled] [-BuildBeforeModule] [-UseAsReleaseVersionSource] [-ProvideLocalNuGetFeed] [-RootPath <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <IDictionary>] [-VersionTracks <IDictionary>] [-VersionBindings <ProjectVersionBinding[]>] [-ExpectedVersionMapAsInclude] [-ExpectedVersionMapUseWildcards] [-AlignPackageVersions] [-IncludeProjects <string[]>] [-ExcludeProjects <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-Configuration <string>] [-OutputPath <string>] [-ReleaseZipOutputPath <string>] [-StagingPath <string>] [-CleanStaging] [-PlanOnly] [-PlanOutputPath <string>] [-UpdateVersions] [-Build] [-PackStrategy <string>] [-IncludeSymbols] [-PublishNuget] [-PublishGitHub] [-CreateReleaseZip] [-UseGitHubPackages] [-GitHubPackagesOwner <string>] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-PublishFailFast] [-CertificateThumbprint <string>] [-CertificateStore <string>] [-TimeStampServer <string>] [-SignAssemblies] [-SignDependencyAssemblies] [-SignPackages] [-OverwriteSignedAssemblies] [-OverwriteSignedPackages] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-GitHubAccessToken <string>] [-GitHubAccessTokenFilePath <string>] [-GitHubAccessTokenEnvName <string>] [-GitHubUsername <string>] [-GitHubRepositoryName <string>] [-GitHubIsPreRelease] [-GitHubIncludeProjectNameInTag] [-GitHubGenerateReleaseNotes] [-GitHubReleaseName <string>] [-GitHubTagName <string>] [-GitHubTagTemplate <string>] [-GitHubReleaseMode <string>] [-GitHubPrimaryProject <string>] [-GitHubTagConflictPolicy <string>] [-Options <IDictionary>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -1057,6 +1057,22 @@ Whether GitHub Packages should be used as the NuGet version lookup and publish f
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -VersionBindings
+Repository files whose embedded versions follow a resolved project version.
+
+```yaml
+Type: ProjectVersionBinding[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
