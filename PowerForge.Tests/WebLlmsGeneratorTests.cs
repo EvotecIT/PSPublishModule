@@ -37,6 +37,7 @@ public class WebLlmsGeneratorTests
             Assert.DoesNotContain("## Metadata", llmsTxt, StringComparison.Ordinal);
             Assert.DoesNotContain("## Install", llmsTxt, StringComparison.Ordinal);
             Assert.DoesNotContain("## Machine-friendly API data", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("Slug rule:", llmsTxt, StringComparison.Ordinal);
             Assert.DoesNotContain("example.invalid", llmsTxt, StringComparison.Ordinal);
 
             var llmsFull = File.ReadAllText(result.LlmsFullPath);
@@ -51,6 +52,7 @@ public class WebLlmsGeneratorTests
             Assert.DoesNotContain("\"install\"", llmsJson, StringComparison.Ordinal);
             Assert.DoesNotContain("\"api\"", llmsJson, StringComparison.Ordinal);
             Assert.DoesNotContain("\"apiCatalogs\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"apiTypeCount\"", llmsJson, StringComparison.Ordinal);
             Assert.Contains("\"quickstartLanguage\": \"shell\"", llmsJson, StringComparison.Ordinal);
         }
         finally
@@ -193,6 +195,10 @@ public class WebLlmsGeneratorTests
             Assert.Contains("- [API index](/projects/example/api/index.json):", llmsTxt, StringComparison.Ordinal);
             Assert.Contains("- [API search](/projects/example/api/search.json):", llmsTxt, StringComparison.Ordinal);
             Assert.Contains("- [API type template](/projects/example/api/types/{slug}.json):", llmsTxt, StringComparison.Ordinal);
+            const string slugRule = "lower-case; remove generic arity markers (one or two backticks followed by digits); replace remaining non-alphanumerics with dashes; collapse and trim dashes";
+            Assert.Contains($"Slug rule: {slugRule}.", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains($"- Slug rule: {slugRule}.", File.ReadAllText(result.LlmsFullPath), StringComparison.Ordinal);
+            Assert.Contains($"\"slugRule\": \"{slugRule}\"", File.ReadAllText(result.LlmsJsonPath), StringComparison.Ordinal);
         }
         finally
         {
@@ -233,8 +239,97 @@ public class WebLlmsGeneratorTests
             Assert.Contains("[Compare libraries](/comparisons/)", llmsTxt, StringComparison.Ordinal);
             Assert.Contains("[License policy](/licensing/)", llmsTxt, StringComparison.Ordinal);
             Assert.DoesNotContain("Full-only implementation notes", llmsTxt, StringComparison.Ordinal);
+            Assert.True(
+                llmsTxt.IndexOf("[License policy](/licensing/)", StringComparison.Ordinal) <
+                llmsTxt.IndexOf("Slug rule:", StringComparison.Ordinal));
             Assert.Contains("[Compare libraries](/comparisons/)", llmsFull, StringComparison.Ordinal);
             Assert.Contains("Full-only implementation notes", llmsFull, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_SiteContentPublishesPresentDefaultAndExplicitApiCatalogs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-site-api-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var defaultDirectory = Path.Combine(root, "api");
+            Directory.CreateDirectory(defaultDirectory);
+            var defaultIndex = Path.Combine(defaultDirectory, "index.json");
+            File.WriteAllText(defaultIndex,
+                """
+                {
+                  "title": "Example API Reference",
+                  "typeCount": 3,
+                  "types": []
+                }
+                """);
+
+            var implicitResult = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                Name = "Example Portal"
+            });
+
+            Assert.Equal(1, implicitResult.ApiCatalogCount);
+            Assert.Equal(3, implicitResult.ApiTypeCount);
+            Assert.Contains("[API index](/api/index.json)", File.ReadAllText(implicitResult.LlmsTxtPath), StringComparison.Ordinal);
+            Assert.Contains("\"apiTypeCount\": 3", File.ReadAllText(implicitResult.LlmsJsonPath), StringComparison.Ordinal);
+
+            var explicitIndex = WriteApiIndex(root, "custom", "Example.Custom", 5);
+            var explicitResult = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                Name = "Example Portal",
+                ApiIndexPath = explicitIndex,
+                ApiBase = "/reference"
+            });
+
+            Assert.Equal(1, explicitResult.ApiCatalogCount);
+            Assert.Equal(5, explicitResult.ApiTypeCount);
+            Assert.Contains("[API index](/reference/index.json)", File.ReadAllText(explicitResult.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_SiteContentAggregatesExplicitApiCatalogs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-site-multi-api-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var firstIndex = WriteApiIndex(root, "first", "Example.First", 2);
+            var secondIndex = WriteApiIndex(root, "second", "Example.Second", 4);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                Name = "Example Portal",
+                ApiIndexPaths = new[] { firstIndex, secondIndex }
+            });
+
+            Assert.Equal(2, result.ApiCatalogCount);
+            Assert.Equal(6, result.ApiTypeCount);
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.Contains("[Example.First API index](/api/first/index.json)", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("[Example.Second API search](/api/second/search.json)", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("\"apiCatalogs\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"package\"", llmsJson, StringComparison.Ordinal);
         }
         finally
         {

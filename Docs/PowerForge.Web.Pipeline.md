@@ -810,6 +810,7 @@ Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
 Notes:
 - `contentKind`: `Package` (default) for installable packages/modules/tools, or `Site` for portals that must not emit package, version, or installation metadata
 - `Site` content can still include an explicitly configured `quickstart`; package content omits the quickstart section when no meaningful snippet is available
+- `Site` content emits API resource metadata only when an API index is configured or exists under the generated site root
 - `apiLevel`: `None` (default), `Summary`, or `Full`
 - `apiMaxTypes` / `apiMaxMembers` cap the size of API detail sections in `llms-full.txt`
 

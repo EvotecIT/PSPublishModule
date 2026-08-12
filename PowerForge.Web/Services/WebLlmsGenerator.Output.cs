@@ -5,6 +5,8 @@ namespace PowerForge.Web;
 
 public static partial class WebLlmsGenerator
 {
+    private const string ApiSlugRule = "lower-case; remove generic arity markers (one or two backticks followed by digits); replace remaining non-alphanumerics with dashes; collapse and trim dashes";
+
     private static void WriteLlmsTxt(
         string path,
         string name,
@@ -63,8 +65,11 @@ public static partial class WebLlmsGenerator
             AppendApiResourceLinks(lines, apiCatalogs);
         }
         AppendOptionalMarkdown(lines, discoveryContentPath);
-        lines.Add(string.Empty);
-        lines.Add("Slug rule: lower-case, dots/symbols -> dashes.");
+        if (apiCatalogs.Count > 0)
+        {
+            lines.Add(string.Empty);
+            lines.Add($"Slug rule: {ApiSlugRule}.");
+        }
 
         File.WriteAllText(path, string.Join(Environment.NewLine, lines), Encoding.UTF8);
     }
@@ -81,11 +86,9 @@ public static partial class WebLlmsGenerator
         QuickstartInfo? quickstart,
         bool includePackageContent)
     {
-        var payload = new Dictionary<string, object?>
-        {
-            ["name"] = name,
-            ["apiTypeCount"] = typeCount
-        };
+        var payload = new Dictionary<string, object?> { ["name"] = name };
+        if (apiCatalogs.Count > 0)
+            payload["apiTypeCount"] = typeCount;
         if (quickstart is not null)
         {
             payload["quickstart"] = quickstart.Lines.Where(l => l != null).ToArray();
@@ -188,6 +191,7 @@ public static partial class WebLlmsGenerator
             lines.Add(string.Empty);
             lines.Add("## API Resources");
             AppendApiResourceLinks(lines, apiCatalogs);
+            lines.Add($"- Slug rule: {ApiSlugRule}.");
         }
 
         AppendApiDetails(lines, options, apiCatalogs);
@@ -251,7 +255,7 @@ public static partial class WebLlmsGenerator
             ["index"] = $"{catalog.ApiBase}/index.json",
             ["search"] = $"{catalog.ApiBase}/search.json",
             ["type"] = $"{catalog.ApiBase}/types/{{slug}}.json",
-            ["slugRule"] = "lower-case, dots/symbols -> dashes"
+            ["slugRule"] = ApiSlugRule
         };
     }
 }
