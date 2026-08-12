@@ -2,6 +2,34 @@ namespace PowerForge;
 
 public sealed partial class AppStoreConnectScreenshotSyncService
 {
+    private static IReadOnlyDictionary<string, string>? MergeExpectedFileSha256(
+        string baseDirectory,
+        IReadOnlyDictionary<string, string>? releaseExpected,
+        IReadOnlyDictionary<string, string>? manifestExpected)
+    {
+        if (releaseExpected is null || releaseExpected.Count == 0)
+            return manifestExpected;
+        if (manifestExpected is null || manifestExpected.Count == 0)
+            return releaseExpected;
+
+        var comparer = FrameworkCompatibility.GetPathStringComparisonForPath(baseDirectory) == StringComparison.OrdinalIgnoreCase
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var merged = new Dictionary<string, string>(comparer);
+        foreach (var pair in releaseExpected.Concat(manifestExpected))
+        {
+            var path = Path.GetFullPath(pair.Key);
+            if (merged.TryGetValue(path, out var existing) &&
+                !existing.Equals(pair.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Screenshot '{path}' has conflicting release-plan and approval-manifest SHA-256 evidence.");
+            }
+            merged[path] = pair.Value;
+        }
+        return merged;
+    }
+
     private static ScreenshotSnapshotIdentity CaptureScreenshotSnapshotIdentity(
         string root,
         IEnumerable<PreflightedScreenshotSet> sets)

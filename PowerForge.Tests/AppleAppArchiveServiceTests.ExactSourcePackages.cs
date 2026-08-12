@@ -90,6 +90,38 @@ public sealed partial class AppleAppArchiveServiceTests
     }
 
     [Fact]
+    public async Task CreateArchiveAsync_exact_source_rejects_restored_package_bytes_changed_through_removed_hard_link_alias()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            RunGit(root.FullName, "init", "--quiet");
+            var runner = new ExactPackageProcessRunner(root.FullName, mutatePackageViaHardLinkDuringArchive: true);
+            WritePackageLock(root.FullName, runner.RemoteUrl, runner.ApprovedRevision);
+            CommitApprovedInputs(root.FullName);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleAppArchiveService(runner).CreateArchiveAsync(new AppleAppArchiveRequest
+                {
+                    ProjectPath = project.FullName,
+                    Scheme = "App",
+                    ArchivePath = Path.Combine(root.FullName, "App.xcarchive"),
+                    RequireExactPackageSnapshot = true
+                }));
+
+            Assert.Contains("hard-link alias", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(runner.SourcePackagesRoot));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task CreateArchiveAsync_exact_source_rejects_materialized_package_revision_outside_lock()
     {
         if (!OperatingSystem.IsMacOS()) return;
@@ -195,6 +227,8 @@ public sealed partial class AppleAppArchiveServiceTests
         private readonly bool _materializeBinaryArtifact;
         private readonly bool _mutateBinaryArtifactDuringArchive;
         private readonly bool _replaceBinaryArtifactAfterResolveCompletion;
+        private readonly bool _mutatePackageViaHardLinkDuringArchive;
+        private readonly string _fixtureRoot;
         private readonly string _remoteSourceRoot;
 
         internal ExactPackageProcessRunner(
@@ -203,13 +237,16 @@ public sealed partial class AppleAppArchiveServiceTests
             bool materializeWrongRevision = false,
             bool materializeBinaryArtifact = false,
             bool mutateBinaryArtifactDuringArchive = false,
-            bool replaceBinaryArtifactAfterResolveCompletion = false)
+            bool replaceBinaryArtifactAfterResolveCompletion = false,
+            bool mutatePackageViaHardLinkDuringArchive = false)
         {
+            _fixtureRoot = fixtureRoot;
             _mutateDuringArchive = mutateDuringArchive;
             _materializeWrongRevision = materializeWrongRevision;
             _materializeBinaryArtifact = materializeBinaryArtifact;
             _mutateBinaryArtifactDuringArchive = mutateBinaryArtifactDuringArchive;
             _replaceBinaryArtifactAfterResolveCompletion = replaceBinaryArtifactAfterResolveCompletion;
+            _mutatePackageViaHardLinkDuringArchive = mutatePackageViaHardLinkDuringArchive;
             _remoteSourceRoot = Directory.CreateDirectory(Path.Combine(fixtureRoot, "RemoteShared")).FullName;
             RunGit(_remoteSourceRoot, "init", "--quiet");
             RunGit(_remoteSourceRoot, "config", "user.name", "PowerForge Tests");
@@ -243,7 +280,7 @@ public sealed partial class AppleAppArchiveServiceTests
                 DerivedDataRoot = request.Arguments[derivedIndex + 1];
                 var checkouts = Directory.CreateDirectory(Path.Combine(SourcePackagesRoot, "checkouts")).FullName;
                 var checkout = Path.Combine(checkouts, "Shared");
-                RunGit(checkouts, "clone", "--quiet", _remoteSourceRoot, checkout);
+                RunGit(checkouts, "clone", "--quiet", "--no-hardlinks", _remoteSourceRoot, checkout);
                 RunGit(checkout, "remote", "set-url", "origin", RemoteUrl);
                 if (_materializeWrongRevision)
                 {
@@ -265,6 +302,22 @@ public sealed partial class AppleAppArchiveServiceTests
                 var original = File.ReadAllText(manifest);
                 File.WriteAllText(manifest, original + "// injected\n");
                 File.WriteAllText(manifest, original);
+            }
+            else if (_mutatePackageViaHardLinkDuringArchive)
+            {
+                var manifest = Path.Combine(SourcePackagesRoot, "checkouts", "Shared", "Package.swift");
+                var original = File.ReadAllText(manifest);
+                var alias = Path.Combine(_fixtureRoot, $"package-alias-{Guid.NewGuid():N}");
+                TestFileLink.CreateHardLink(alias, manifest);
+                try
+                {
+                    File.WriteAllText(alias, original + "// injected through external alias\n");
+                    File.WriteAllText(alias, original);
+                }
+                finally
+                {
+                    File.Delete(alias);
+                }
             }
             else if (_mutateBinaryArtifactDuringArchive)
             {

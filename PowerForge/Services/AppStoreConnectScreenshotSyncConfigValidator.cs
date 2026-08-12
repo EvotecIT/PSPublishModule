@@ -42,8 +42,17 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
         foreach (var set in spec.ScreenshotSets)
             setResults.Add(ValidateSet(set, spec.Quality ?? new AppStoreConnectScreenshotQualitySpec(), baseDirectory));
 
+        var approvedFileSha256 = new Dictionary<string, string>(
+            FrameworkCompatibility.GetPathStringComparisonForPath(baseDirectory) == StringComparison.OrdinalIgnoreCase
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal);
         messages.AddRange(FindDuplicateDisplayTypes(spec.ScreenshotSets));
-        messages.AddRange(ValidateApprovalManifest(spec, baseDirectory, setResults, expectedSourceCommit));
+        messages.AddRange(ValidateApprovalManifest(
+            spec,
+            baseDirectory,
+            setResults,
+            expectedSourceCommit,
+            approvedFileSha256));
         var isValid = messages.Count == 0 && setResults.All(static set => set.IsValid);
 
         return new AppStoreConnectScreenshotSyncValidationResult
@@ -51,7 +60,10 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             ConfigPath = configPath ?? string.Empty,
             IsValid = isValid,
             Messages = messages.ToArray(),
-            ScreenshotSets = setResults.ToArray()
+            ScreenshotSets = setResults.ToArray(),
+            ApprovedFileSha256 = isValid && approvedFileSha256.Count > 0
+                ? approvedFileSha256
+                : null
         };
     }
 
@@ -59,7 +71,8 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
         AppStoreConnectScreenshotSyncSpec spec,
         string baseDirectory,
         IReadOnlyCollection<AppStoreConnectScreenshotSetSyncValidationResult> sets,
-        string? expectedSourceCommit)
+        string? expectedSourceCommit,
+        IDictionary<string, string> approvedFileSha256)
     {
         var quality = spec.Quality ?? new AppStoreConnectScreenshotQualitySpec();
         if (!quality.RequireApprovalManifest)
@@ -179,6 +192,8 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
                 var sha256 = ComputeSha256(file);
                 if (!string.Equals(entry.Sha256, sha256, StringComparison.OrdinalIgnoreCase))
                     messages.Add($"Screenshot '{Path.GetFileName(file)}' changed after approval (SHA-256 mismatch).");
+                else
+                    approvedFileSha256[Path.GetFullPath(file)] = entry.Sha256.Trim();
                 if (TryReadPngDimensions(file, out var width, out var height) &&
                     (entry.Width != width || entry.Height != height))
                 {

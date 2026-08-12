@@ -9,7 +9,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
     private readonly IReadOnlyDictionary<string, string> _approvedPackageRevisions;
     private readonly IReadOnlyDictionary<string, string?> _environmentVariables;
     private readonly AppleReleaseSourceMutationMonitor _monitor;
-    private readonly string _materializedPackagesSha256;
+    private readonly AppleArchiveUploadSnapshot.SnapshotIdentity _materializedPackagesIdentity;
     private bool _disposed;
 
     private AppleSwiftPackageBuildSnapshot(
@@ -17,13 +17,13 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         IReadOnlyDictionary<string, string> approvedPackageRevisions,
         IReadOnlyDictionary<string, string?> environmentVariables,
         AppleReleaseSourceMutationMonitor monitor,
-        string materializedPackagesSha256)
+        AppleArchiveUploadSnapshot.SnapshotIdentity materializedPackagesIdentity)
     {
         RootPath = rootPath;
         _approvedPackageRevisions = approvedPackageRevisions;
         _environmentVariables = environmentVariables;
         _monitor = monitor;
-        _materializedPackagesSha256 = materializedPackagesSha256;
+        _materializedPackagesIdentity = materializedPackagesIdentity;
     }
 
     internal string RootPath { get; }
@@ -85,7 +85,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 "xcodebuild archive",
                 "Discard the archive and resolve the exact package graph again.",
                 enableImmediately: false);
-            string? materializedPackagesSha256 = null;
+            AppleArchiveUploadSnapshot.SnapshotIdentity? materializedPackagesIdentity = null;
             var processRequest = new ProcessRunRequest(
                 xcodeBuildExecutable,
                 Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
@@ -99,7 +99,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             {
                 if (!completionResult.Succeeded)
                     return;
-                materializedPackagesSha256 = monitor.CaptureExpectedProducerOutput(
+                materializedPackagesIdentity = monitor.CaptureExpectedProducerOutput(
                     () => CaptureMaterializedPackageIdentity(
                         sourceTrust,
                         sourcePackagesPath,
@@ -115,7 +115,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                     $"xcodebuild failed to resolve the exact Swift package graph with exit code {result.ExitCode}: " +
                     (string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr));
             }
-            if (string.IsNullOrWhiteSpace(materializedPackagesSha256))
+            if (materializedPackagesIdentity is null)
             {
                 monitor.Dispose();
                 throw new InvalidOperationException(
@@ -127,7 +127,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 approvedPackageRevisions,
                 environmentVariables,
                 monitor,
-                materializedPackagesSha256!);
+                materializedPackagesIdentity);
             monitor = null;
             return snapshot;
         }
@@ -156,12 +156,16 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             _sourceTrust,
             SourcePackagesPath,
             _approvedPackageRevisions);
-        if (!actual.Equals(_materializedPackagesSha256, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("The materialized Swift package root changed before xcodebuild archive.");
+        if (!actual.Equals(_materializedPackagesIdentity))
+        {
+            throw new InvalidOperationException(
+                "The materialized Swift package root changed before xcodebuild archive. " +
+                "A transient write or hard-link alias invalidates the exact package graph.");
+        }
         _monitor.ValidateNoChanges();
     }
 
-    private static string CaptureMaterializedPackageIdentity(
+    private static AppleArchiveUploadSnapshot.SnapshotIdentity CaptureMaterializedPackageIdentity(
         AppleReleaseSourceTrustService sourceTrust,
         string sourcePackagesPath,
         IReadOnlyDictionary<string, string> approvedPackageRevisions)
@@ -170,7 +174,9 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         var artifactsPath = Path.Combine(sourcePackagesPath, "artifacts");
         if (Directory.Exists(artifactsPath))
             ValidateNoEscapingArtifactLinks(artifactsPath);
-        return AppleNotarizationService.ComputeArtifactSha256(sourcePackagesPath);
+        return AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+            sourcePackagesPath,
+            "materialized Swift package snapshot");
     }
 
     private static void ValidateNoEscapingArtifactLinks(string artifactsRoot)

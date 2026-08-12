@@ -127,10 +127,30 @@ public sealed partial class AppStoreConnectScreenshotSyncService
                 $"Screenshot preflight failed: {string.Join(" ", messages)}");
         }
 
+        return CreateSnapshot(request, validation);
+    }
+
+    internal ScreenshotSnapshot CreateSnapshot(
+        AppStoreConnectScreenshotSyncRequest request,
+        AppStoreConnectScreenshotSyncValidationResult validation)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (validation is null)
+            throw new ArgumentNullException(nameof(validation));
+        if (!validation.IsValid)
+            throw new InvalidOperationException("A valid screenshot preflight is required before immutable snapshot creation.");
+
+        var spec = request.Spec ?? throw new ArgumentException("Spec is required.", nameof(request));
         var sourceSets = spec.ScreenshotSets
             .Select(setSpec => PreflightScreenshotSet(request.BaseDirectory, setSpec))
             .ToArray();
-        return CreateScreenshotSnapshot(sourceSets, request.ExpectedFileSha256);
+        return CreateScreenshotSnapshot(
+            sourceSets,
+            MergeExpectedFileSha256(
+                request.BaseDirectory,
+                request.ExpectedFileSha256,
+                validation.ApprovedFileSha256));
     }
 
     internal async Task<AppStoreConnectScreenshotSyncResult> SyncAsync(
@@ -327,7 +347,8 @@ public sealed partial class AppStoreConnectScreenshotSyncService
         IReadOnlyCollection<PreflightedScreenshotSet> sourceSets,
         IReadOnlyDictionary<string, string>? expectedFileSha256)
     {
-        var comparer = Path.DirectorySeparatorChar == '\\'
+        var comparer = sourceSets.Any(set =>
+                FrameworkCompatibility.GetPathStringComparisonForPath(set.Folder) == StringComparison.OrdinalIgnoreCase)
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
         var expected = expectedFileSha256 is null

@@ -71,10 +71,12 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         }
     }
 
-    internal static SnapshotIdentity CaptureCompleteIdentity(string archivePath)
+    internal static SnapshotIdentity CaptureCompleteIdentity(
+        string archivePath,
+        string description = "private Apple upload archive snapshot")
     {
         var sha256 = AppleNotarizationService.ComputeArtifactSha256(archivePath);
-        var identities = CaptureFileMutationIdentities(archivePath);
+        var identities = CaptureFileMutationIdentities(archivePath, description);
         var canonical = new System.Text.StringBuilder();
         foreach (var pair in identities.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
         {
@@ -88,7 +90,9 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         return new SnapshotIdentity(sha256, digest);
     }
 
-    private static IReadOnlyDictionary<string, string> CaptureFileMutationIdentities(string archivePath)
+    private static IReadOnlyDictionary<string, string> CaptureFileMutationIdentities(
+        string archivePath,
+        string description)
     {
         var result = new Dictionary<string, string>(GetPathComparer(archivePath));
         var files = new List<(string RelativePath, string FullPath)>();
@@ -120,8 +124,8 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             if (hardLinkCounts[index] != 1)
             {
                 throw new InvalidOperationException(
-                    $"The private Apple upload archive snapshot file '{files[index].RelativePath}' has {hardLinkCounts[index]} hard links. " +
-                    "Upload snapshots require one private pathname per regular file.");
+                    $"The {description} file '{files[index].RelativePath}' has {hardLinkCounts[index]} hard links. " +
+                    "Private release snapshots require one pathname per regular file.");
             }
             var status = ExistingFilePathIdentityResolver.ResolveStatus(files[index].FullPath);
             try
@@ -131,7 +135,7 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             catch (ArgumentException exception)
             {
                 throw new InvalidOperationException(
-                    $"The private Apple upload archive snapshot contains duplicate platform-equivalent file paths at '{files[index].RelativePath}'.",
+                    $"The {description} contains duplicate platform-equivalent file paths at '{files[index].RelativePath}'.",
                     exception);
             }
         }
