@@ -1761,6 +1761,7 @@ public class WebAgentReadinessTests
             ["/custom/catalog"] = ("{\"linkset\":[{\"anchor\":\"/\"}]}", "application/linkset+json"),
             ["/custom/skills.json"] = ("{\"$schema\":\"https://schemas.agentskills.io/discovery/0.2.0/schema.json\",\"skills\":[{}]}", "application/json"),
             ["/custom/agents.json"] = ("{\"name\":\"Example\",\"resources\":{}}", "application/json"),
+            ["/custom/agents-well-known.json"] = ("{\"name\":\"Example\",\"resources\":{}}", "application/json"),
             ["/custom/a2a.json"] = ("{\"name\":\"Example\",\"description\":\"Test\",\"url\":\"https://example.test\",\"version\":\"1\",\"skills\":[]}", "application/json"),
             ["/custom/mcp.json"] = ("{\"serverInfo\":{},\"transport\":{\"endpoint\":\"/mcp\"}}", "application/json"),
             ["/custom/openapi.json"] = ("{\"openapi\":\"3.1.0\"}", "application/json")
@@ -1779,7 +1780,12 @@ public class WebAgentReadinessTests
                 ContentSignals = new AgentContentSignalsSpec { Enabled = false },
                 ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/catalog" },
                 AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true, IndexPath = "custom/skills.json" },
-                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = true, OutputPath = "custom/agents.json" },
+                AgentsJson = new AgentDiscoveryDocumentSpec
+                {
+                    Enabled = true,
+                    OutputPath = "custom/agents.json",
+                    WellKnownOutputPath = "custom/agents-well-known.json"
+                },
                 A2AAgentCard = new AgentA2ACardSpec { Enabled = true, OutputPath = "custom/a2a.json" },
                 McpServerCard = new AgentMcpServerCardSpec { Enabled = true, OutputPath = "custom/mcp.json" },
                 OpenApi = new AgentOpenApiSpec { Enabled = true, Path = "custom/openapi.json" },
@@ -1990,6 +1996,77 @@ public class WebAgentReadinessTests
         var cors = Assert.Single(result.Checks, check => check.Id == "security-cors");
         Assert.Equal("fail", cors.Status);
         Assert.Contains("/.well-known/agents.json", cors.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Scan_RequiresValidWellKnownAgentsJsonMirrorWhenCorsCheckIsDisabled()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/agents.json"] = ("{\"name\":\"Example\",\"resources\":{}}", "application/json")
+        };
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = new ConfiguredDiscoveryScanHandler(responses),
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false, CorsForWellKnown = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = true },
+                A2AAgentCard = new AgentA2ACardSpec { Enabled = false },
+                McpServerCard = new AgentMcpServerCardSpec { Enabled = false },
+                OpenApi = new AgentOpenApiSpec { Enabled = false },
+                MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        });
+
+        var agents = Assert.Single(result.Checks, check => check.Id == "agents-json");
+        Assert.Equal("fail", agents.Status);
+        Assert.Contains("well-known", agents.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith("/.well-known/agents.json", agents.Target, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Verify_RequiresValidWellKnownAgentsJsonMirror()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-agents-mirror-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "agents.json"), "{\"name\":\"Example\",\"resources\":{}}");
+
+            var result = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions
+            {
+                SiteRoot = root,
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = true },
+                    A2AAgentCard = new AgentA2ACardSpec { Enabled = false },
+                    McpServerCard = new AgentMcpServerCardSpec { Enabled = false },
+                    OpenApi = new AgentOpenApiSpec { Enabled = false },
+                    MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = false }
+                }
+            });
+
+            var agents = Assert.Single(result.Checks, check => check.Id == "agents-json");
+            Assert.Equal("fail", agents.Status);
+            Assert.Contains("well-known", agents.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith(Path.Combine(".well-known", "agents.json"), agents.Target, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
     }
 
     [Fact]

@@ -261,10 +261,19 @@ public static partial class WebAgentReadiness
         var agentsJsonPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.AgentsJson?.OutputPath) ? "agents.json" : spec.AgentsJson!.OutputPath!);
         var agentsJsonValid = ValidateAgentsJson(agentsJsonPath, out var agentsMessage);
         var agentsJsonExpected = spec.AgentsJson?.Enabled == true;
+        var agentsWellKnownPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.AgentsJson?.WellKnownOutputPath) ? ".well-known/agents.json" : spec.AgentsJson!.WellKnownOutputPath!);
+        var agentsWellKnownValid = !agentsJsonExpected ||
+                                   string.Equals(agentsWellKnownPath, agentsJsonPath, StringComparison.OrdinalIgnoreCase) ||
+                                   ValidateAgentsJson(agentsWellKnownPath, out _);
+        var agentsDiscoveryValid = agentsJsonValid && agentsWellKnownValid;
         AddCheck(checks, "agents-json", "agent-protocols", "agents.json",
-            agentsJsonValid ? "pass" : (agentsJsonExpected ? "fail" : "info"),
-            agentsJsonValid ? agentsMessage : (agentsJsonExpected ? agentsMessage : "agents.json generation is disabled."),
-            agentsJsonPath);
+            agentsDiscoveryValid ? "pass" : (agentsJsonExpected ? "fail" : "info"),
+            agentsDiscoveryValid
+                ? agentsMessage
+                : (agentsJsonExpected
+                    ? (agentsJsonValid ? "The well-known agents.json mirror was not found or is not valid." : agentsMessage)
+                    : "agents.json generation is disabled."),
+            agentsJsonValid && !agentsWellKnownValid ? agentsWellKnownPath : agentsJsonPath);
 
         var a2aPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.A2AAgentCard?.OutputPath) ? ".well-known/agent-card.json" : spec.A2AAgentCard!.OutputPath!);
         var a2aExpected = spec.A2AAgentCard?.Enabled == true;
@@ -482,12 +491,19 @@ public static partial class WebAgentReadiness
                 ? agentsJson
                 : await TryGetTextAsync(http, agentsWellKnownUrl, null, cancellationToken).ConfigureAwait(false)
             : null;
-        var agentsJsonValid = agentsJson.Success && ValidateAgentsJsonText(agentsJson.Text);
         var agentsJsonExpected = spec.AgentsJson?.Enabled == true;
+        var agentsJsonValid = agentsJson.Success && ValidateAgentsJsonText(agentsJson.Text);
+        var agentsWellKnownValid = !agentsJsonExpected ||
+                                   (agentsWellKnown?.Success == true && ValidateAgentsJsonText(agentsWellKnown.Text));
+        var agentsDiscoveryValid = agentsJsonValid && agentsWellKnownValid;
         AddCheck(checks, "agents-json", "agent-protocols", "agents.json",
-            agentsJsonValid ? "pass" : (agentsJsonExpected ? "fail" : "info"),
-            agentsJsonValid ? "agents.json discovery document is valid." : (agentsJsonExpected ? "agents.json was not found or is not valid." : "agents.json verification is disabled by site policy."),
-            agentsJsonUrl);
+            agentsDiscoveryValid ? "pass" : (agentsJsonExpected ? "fail" : "info"),
+            agentsDiscoveryValid
+                ? "agents.json and its well-known mirror are valid."
+                : (agentsJsonExpected
+                    ? (agentsJsonValid ? "The well-known agents.json mirror was not found or is not valid." : "agents.json was not found or is not valid.")
+                    : "agents.json verification is disabled by site policy."),
+            agentsJsonValid && !agentsWellKnownValid ? agentsWellKnownUrl : agentsJsonUrl);
 
         var a2aUrl = ResolveRemoteOutputUrl(baseUrl, spec.A2AAgentCard?.OutputPath, "/.well-known/agent-card.json");
         var a2a = await TryGetTextAsync(http, a2aUrl, null, cancellationToken).ConfigureAwait(false);
