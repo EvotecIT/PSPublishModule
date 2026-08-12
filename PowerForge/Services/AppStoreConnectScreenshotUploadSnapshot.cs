@@ -82,7 +82,7 @@ internal sealed class AppStoreConnectScreenshotUploadSnapshot : IDisposable
         }
         catch
         {
-            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
+            try { AppleArtifactCopy.DeleteOwnedDirectory(root); } catch { /* best effort private cleanup */ }
             throw;
         }
     }
@@ -125,8 +125,7 @@ internal sealed class AppStoreConnectScreenshotUploadSnapshot : IDisposable
         if (_disposed)
             return;
         _disposed = true;
-        if (Directory.Exists(RootPath))
-            Directory.Delete(RootPath, recursive: true);
+        try { AppleArtifactCopy.DeleteOwnedDirectory(RootPath); } catch { /* best effort after remote operation */ }
     }
 
     private sealed class RangedFileContent : HttpContent

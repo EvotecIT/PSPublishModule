@@ -347,6 +347,45 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public void ScreenshotUploadSnapshot_dispose_prepares_read_only_private_tree()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        AppStoreConnectScreenshotUploadSnapshot? snapshot = null;
+        try
+        {
+            var screenshotPath = Path.Combine(root.FullName, "approved.png");
+            File.WriteAllBytes(screenshotPath, new byte[] { 1, 2, 3 });
+            snapshot = AppStoreConnectScreenshotUploadSnapshot.Capture(
+                screenshotPath,
+                ComputeScreenshotSha256(screenshotPath));
+            var snapshotRoot = snapshot.RootPath;
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(snapshot.FilePath, UnixFileMode.UserRead);
+                File.SetUnixFileMode(snapshotRoot, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            }
+            else
+#endif
+            {
+                File.SetAttributes(snapshot.FilePath, File.GetAttributes(snapshot.FilePath) | FileAttributes.ReadOnly);
+                File.SetAttributes(snapshotRoot, File.GetAttributes(snapshotRoot) | FileAttributes.ReadOnly);
+            }
+
+            var exception = Record.Exception(snapshot.Dispose);
+            snapshot = null;
+
+            Assert.Null(exception);
+            Assert.False(Directory.Exists(snapshotRoot));
+        }
+        finally
+        {
+            snapshot?.Dispose();
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task UploadScreenshotAsync_RejectsPrivateSnapshotMutationDuringReservation()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -34,7 +34,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         "-imacros", "-include", "-include-pch", "-include-pth", "-index-store-path",
         "-index-unit-output-path", "-install_name", "-iprefix", "-iquote", "-isysroot", "-isystem",
         "-isystem-after", "-ivfsstatcache", "-iwithprefix", "-iwithprefixbefore",
-        "-iwithsysroot", "-load", "-load-pass-plugin", "-load-plugin-library", "-module-file-info", "-module-map-file",
+        "-iwithsysroot", "-ld-path", "-load", "-load-pass-plugin", "-load-plugin-library", "-module-file-info", "-module-map-file",
         "-multi-lib-config", "-plugin", "-plugin-path", "-profile-sample-use", "-profile-use",
         "-resource-dir", "-rpath", "-sdk", "-stdlib++-isystem", "-working-directory"
     };
@@ -73,7 +73,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         "-object-file-name=", "-profile-use=", "-fxray-always-instrument=", "-fxray-attr-list=",
         "-fxray-never-instrument=", "-include-pch=",
         "-include-pth=", "-gcc-toolchain=", "-resource-dir=", "-ivfsstatcache=",
-        "-plugin-path=", "-fplugin=", "-force_load=",
+        "-plugin-path=", "-fplugin=", "-force_load=", "-ld-path=",
         "-stdlib++-isystem", "-iframeworkwithsysroot", "-iwithprefixbefore", "-cxx-isystem",
         "-iwithsysroot", "-iwithprefix", "-isystem-after", "-iframework", "-idirafter",
         "-imacros=", "-include=", "-imacros", "-include", "-isystem", "-iquote", "-iprefix", "-isysroot=",

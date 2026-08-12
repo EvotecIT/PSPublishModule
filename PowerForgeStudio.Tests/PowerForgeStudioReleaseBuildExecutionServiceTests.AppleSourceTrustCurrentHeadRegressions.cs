@@ -29,6 +29,45 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Theory]
+    [InlineData("-ld-path Rules")]
+    [InlineData("-ld-path=Rules")]
+    [InlineData("-Xfrontend -ld-path -Xfrontend Rules")]
+    [InlineData("-Xfrontend=-ld-path=Rules")]
+    public void ResolveExactAppleSourceCommit_classifies_swift_linker_executable_paths(string option)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "SwiftLinkerExecutableRepo" + option.Length,
+            $"OTHER_SWIFT_FLAGS = {option}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_classifies_swift_linker_executable_path_from_response_file()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "SwiftLinkerExecutableResponseRepo",
+            "OTHER_SWIFT_FLAGS = @Swift.rsp\n");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Swift.rsp"), "-ld-path=Rules\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
     [InlineData("__has_embed(\"/tmp/payload.bin\")", "__has_embed")]
     [InlineData("__has_ ## embed(\"/tmp/payload.bin\")", "__has_embed")]
     [InlineData("__has_ ## include(\"/tmp/payload.bin\")", "__has_include")]

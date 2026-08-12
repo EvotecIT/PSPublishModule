@@ -409,7 +409,7 @@ public sealed class AppStoreConnectScreenshotSyncService
         }
         catch
         {
-            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
+            try { AppleArtifactCopy.DeleteOwnedDirectory(root); } catch { /* best effort private cleanup */ }
             throw;
         }
     }
@@ -575,7 +575,7 @@ public sealed class AppStoreConnectScreenshotSyncService
 
         public void Dispose()
         {
-            try { Directory.Delete(_root, recursive: true); } catch { /* best effort */ }
+            try { AppleArtifactCopy.DeleteOwnedDirectory(_root); } catch { /* best effort after remote operation */ }
         }
     }
 }
