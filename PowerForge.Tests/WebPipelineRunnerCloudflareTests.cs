@@ -176,7 +176,7 @@ public class WebPipelineRunnerCloudflareTests
             var port = GetFreePort();
             const string discoveryPath = "/redirect";
             const string appPath = "/apps/converter/";
-            var html = """<html><head><base href="./"></head><body><img srcset="data:image/gif;base64,R0lGODlhAQABAAAAACw= 1x, _framework/blazor.webassembly.abc123.js?v=release 2x"></body></html>""";
+            var html = """<html><head><base href="./"></head><body><img srcset="data:image/gif;base64,R0lGODlhAQABAAAAACw= 1x, _framework/ignored,asset.js 1.5x, _framework/blazor.webassembly.abc123.js?v=release 2x"></body></html>""";
             (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(
                 port, "HIT", appPath, html, discoveryPath, appPath);
 
@@ -201,7 +201,10 @@ public class WebPipelineRunnerCloudflareTests
                       "warmupRequests": 0,
                       "allowStatuses": "HIT",
                       "discoverAssetsFrom": [ "{{discoveryPath}}" ],
-                      "assetPathPatterns": [ "/apps/converter/_framework/blazor.webassembly.*.js" ]
+                      "assetPathPatterns": [
+                        "/apps/converter/_framework/ignored,asset.js",
+                        "/apps/converter/_framework/blazor.webassembly.*.js"
+                      ]
                     }
                   ]
                 }
@@ -214,6 +217,7 @@ public class WebPipelineRunnerCloudflareTests
             Assert.Contains("/", requestCounter!.Paths);
             Assert.Contains("/docs/", requestCounter.Paths);
             Assert.Contains("/sitemap.xml", requestCounter.Paths);
+            Assert.Contains("/apps/converter/_framework/ignored,asset.js", requestCounter.Paths);
             Assert.Contains("/apps/converter/_framework/blazor.webassembly.abc123.js?v=release", requestCounter!.Paths);
         }
         finally

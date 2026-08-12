@@ -162,15 +162,46 @@ internal static class CloudflareHtmlAssetResolver
 
     private static IEnumerable<string> ParseSourceSet(string sourceSet)
     {
-        foreach (var part in sourceSet.Split(','))
+        var index = 0;
+        while (index < sourceSet.Length)
         {
-            var candidate = part.Trim();
-            if (candidate.Length == 0)
+            while (index < sourceSet.Length && (IsAsciiWhitespace(sourceSet[index]) || sourceSet[index] == ','))
+                index++;
+            if (index >= sourceSet.Length)
+                yield break;
+
+            var urlStart = index;
+            while (index < sourceSet.Length && !IsAsciiWhitespace(sourceSet[index]))
+                index++;
+            var url = sourceSet[urlStart..index];
+
+            if (url.EndsWith(",", StringComparison.Ordinal))
+            {
+                url = url.TrimEnd(',');
+                if (url.Length > 0)
+                    yield return url;
                 continue;
-            var separator = candidate.IndexOfAny(new[] { ' ', '\t', '\r', '\n' });
-            yield return separator > 0 ? candidate[..separator] : candidate;
+            }
+
+            if (url.Length > 0)
+                yield return url;
+
+            var parentheses = 0;
+            while (index < sourceSet.Length)
+            {
+                var character = sourceSet[index++];
+                if (character == '(')
+                    parentheses++;
+                else if (character == ')' && parentheses > 0)
+                    parentheses--;
+                else if (character == ',' && parentheses == 0)
+                    break;
+            }
         }
     }
+
+    private static bool IsAsciiWhitespace(char value) =>
+        value is ' ' or '\t' or '\n' or '\f' or '\r';
 
     private static bool HasSameOrigin(Uri expected, Uri actual) =>
         string.Equals(expected.Scheme, actual.Scheme, StringComparison.OrdinalIgnoreCase) &&
