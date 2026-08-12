@@ -36,7 +36,7 @@ internal static class CloudflareResponseHeaderPolicyBuilder
             AddHeader(headers, "Permissions-Policy", security.PermissionsPolicy, security.PermissionsPolicyValue);
         }
 
-        var descriptionPrefix = CloudflareManagedRuleOwnership.BuildPrefix(policyName, hostname);
+        var descriptionPrefix = CloudflareManagedRuleOwnership.BuildDescriptionPrefix(policyName, hostname, basePath);
         var rules = new JsonArray();
 
         if (headers.Count > 0)

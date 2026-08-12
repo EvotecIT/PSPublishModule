@@ -88,7 +88,7 @@ internal static class CloudflareCachePolicyBuilder
         ValidateExpressionLength("static assets", staticExpression);
         ValidateExpressionLength("data files", dataExpression);
         ValidateExpressionLength("HTML docs and API", htmlExpression);
-        var descriptionPrefix = CloudflareManagedRuleOwnership.BuildPrefix(policyName, hostname);
+        var descriptionPrefix = CloudflareManagedRuleOwnership.BuildDescriptionPrefix(policyName, hostname, basePath);
 
         return new JsonArray
         {

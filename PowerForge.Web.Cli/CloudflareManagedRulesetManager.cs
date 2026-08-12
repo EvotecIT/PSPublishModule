@@ -157,7 +157,8 @@ internal static class CloudflareManagedRulesetManager
                 if (string.IsNullOrWhiteSpace(appliedRulesetId))
                 {
                     return Failure(
-                        "Cloudflare created the ruleset but did not return an identifier, and the entry point could not be identified safely for rollback.");
+                        "Cloudflare created the ruleset but did not return an identifier, and the entry point could not be identified safely for rollback.",
+                        snapshot);
                 }
             }
 
@@ -231,15 +232,14 @@ internal static class CloudflareManagedRulesetManager
 
     private static void CopyManagedRuleIdentity(IEnumerable<JsonObject> existingRules, JsonArray desiredRules)
     {
-        var byDescription = existingRules
-            .Where(rule => rule["description"] is not null)
-            .GroupBy(rule => rule["description"]!.GetValue<string>(), StringComparer.Ordinal)
+        var byRuleKey = existingRules
+            .Where(rule => GetRuleKey(rule).Length > 0)
+            .GroupBy(GetRuleKey, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
         foreach (var desired in desiredRules.OfType<JsonObject>())
         {
-            var description = desired["description"]?.GetValue<string>() ?? string.Empty;
-            if (!byDescription.TryGetValue(description, out var existing))
+            if (!byRuleKey.TryGetValue(GetRuleKey(desired), out var existing))
                 continue;
 
             foreach (var identityName in new[] { "id", "ref" })
@@ -257,10 +257,10 @@ internal static class CloudflareManagedRulesetManager
         Func<JsonObject, bool>? isLegacyManagedRule,
         out int preservedCount)
     {
-        var desiredByDescription = managedRules
+        var desiredByRuleKey = managedRules
             .OfType<JsonObject>()
-            .ToDictionary(rule => rule["description"]?.GetValue<string>() ?? string.Empty, rule => rule, StringComparer.Ordinal);
-        var emittedDescriptions = new HashSet<string>(StringComparer.Ordinal);
+            .ToDictionary(GetRuleKey, rule => rule, StringComparer.Ordinal);
+        var emittedRuleKeys = new HashSet<string>(StringComparer.Ordinal);
         var lastManagedIndex = -1;
         for (var index = 0; index < existingRules.Count; index++)
         {
@@ -271,13 +271,12 @@ internal static class CloudflareManagedRulesetManager
 
         var desiredRules = new JsonArray();
         if (lastManagedIndex < 0)
-            AddMissingManagedRules(desiredRules, managedRules, emittedDescriptions);
+            AddMissingManagedRules(desiredRules, managedRules, emittedRuleKeys);
 
         preservedCount = 0;
         for (var index = 0; index < existingRules.Count; index++)
         {
             var existing = existingRules[index]!.AsObject();
-            var description = existing["description"]?.GetValue<string>() ?? string.Empty;
             if (!IsManagedRule(existing, managedPrefix, isLegacyManagedRule))
             {
                 desiredRules.Add(PrepareRuleForUpdate(existing));
@@ -285,11 +284,12 @@ internal static class CloudflareManagedRulesetManager
                 continue;
             }
 
-            if (desiredByDescription.TryGetValue(description, out var desired) && emittedDescriptions.Add(description))
+            var ruleKey = GetRuleKey(existing);
+            if (desiredByRuleKey.TryGetValue(ruleKey, out var desired) && emittedRuleKeys.Add(ruleKey))
                 desiredRules.Add(desired.DeepClone());
 
             if (index == lastManagedIndex)
-                AddMissingManagedRules(desiredRules, managedRules, emittedDescriptions);
+                AddMissingManagedRules(desiredRules, managedRules, emittedRuleKeys);
         }
 
         return desiredRules;
@@ -302,14 +302,20 @@ internal static class CloudflareManagedRulesetManager
                isLegacyManagedRule?.Invoke(rule) == true;
     }
 
-    private static void AddMissingManagedRules(JsonArray destination, JsonArray managedRules, HashSet<string> emittedDescriptions)
+    private static void AddMissingManagedRules(JsonArray destination, JsonArray managedRules, HashSet<string> emittedRuleKeys)
     {
         foreach (var managed in managedRules.OfType<JsonObject>())
         {
-            var description = managed["description"]?.GetValue<string>() ?? string.Empty;
-            if (emittedDescriptions.Add(description))
+            if (emittedRuleKeys.Add(GetRuleKey(managed)))
                 destination.Add(managed.DeepClone());
         }
+    }
+
+    private static string GetRuleKey(JsonObject rule)
+    {
+        var description = rule["description"]?.GetValue<string>() ?? string.Empty;
+        var separator = description.LastIndexOf(": ", StringComparison.Ordinal);
+        return separator >= 0 ? description[(separator + 2)..] : description;
     }
 
     private static bool TryReadRules(JsonElement? result, out JsonArray rules)

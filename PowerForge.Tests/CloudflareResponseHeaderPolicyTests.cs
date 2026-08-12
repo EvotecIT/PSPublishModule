@@ -39,7 +39,7 @@ public sealed class CloudflareResponseHeaderPolicyTests
         Assert.Equal("SAMEORIGIN", headers["X-Frame-Options"]!["value"]!.GetValue<string>());
         Assert.Equal("camera=(), geolocation=(), microphone=(), payment=(), usb=()", headers["Permissions-Policy"]!["value"]!.GetValue<string>());
         Assert.Equal("(http.host eq \"officeimo.com\")", rule["expression"]!.GetValue<string>());
-        Assert.Equal("PowerForge OfficeIMO [officeimo.com]: security headers", rule["description"]!.GetValue<string>());
+        Assert.Equal("PowerForge [officeimo.com/]: OfficeIMO: security headers", rule["description"]!.GetValue<string>());
     }
 
     [Fact]
@@ -428,6 +428,42 @@ public sealed class CloudflareResponseHeaderPolicyTests
     }
 
     [Fact]
+    public void SitePolicy_ShouldReportIncompleteRollbackWhenCreatedHeaderRulesetHasNoIdentifier()
+    {
+        var oldCacheRules = new JsonArray { ExistingRule("cache-custom", "Operator cache rule", "set_cache_settings") };
+        var desiredHeaderRules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "officeimo.com", "OfficeIMO", new AgentSecurityHeadersSpec { Hsts = false });
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldCacheRules)),
+            JsonResponse(HttpStatusCode.NotFound, """{"success":false,"errors":[{"message":"not found"}]}"""),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldCacheRules)),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
+            JsonResponse(HttpStatusCode.NotFound, """{"success":false,"errors":[{"message":"not found"}]}"""),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(desiredHeaderRules)),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+        using var client = NewClient(handler);
+
+        var result = CloudflareSitePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "officeimo.com",
+            "OfficeIMO",
+            htmlPaths: null,
+            securityHeaders: new AgentSecurityHeadersSpec { Hsts = false },
+            dryRun: false,
+            httpClient: client);
+
+        Assert.False(result.Success);
+        Assert.Contains("Response-header rollback", result.Message, StringComparison.Ordinal);
+        Assert.Contains("identifier was not returned", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Rollback was incomplete", result.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("previous site-policy state was restored", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(8, handler.Requests.Count);
+        Assert.Equal(HttpMethod.Put, handler.Requests[7].Method);
+    }
+
+    [Fact]
     public void Apply_ShouldPreserveSameNamedLegacyHeaderRuleForAnotherHost()
     {
         var existingRules = new JsonArray
@@ -452,9 +488,73 @@ public sealed class CloudflareResponseHeaderPolicyTests
         Assert.True(result.Success, result.Message);
         Assert.Equal(1, result.PreservedRuleCount);
         var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
-        Assert.Contains(rules, rule => rule!["description"]!.GetValue<string>() == "PowerForge Shared [one.example.com]: security headers");
+        Assert.Contains(rules, rule => rule!["description"]!.GetValue<string>() == "PowerForge [one.example.com/]: Shared: security headers");
         Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "other-id");
-        Assert.DoesNotContain(rules, rule => rule!["id"]?.GetValue<string>() == "target-id");
+        Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "target-id");
+    }
+
+    [Fact]
+    public void Apply_ShouldReplaceRenamedHostScopedSecurityRuleAndRemoveDisabledHsts()
+    {
+        var previousRules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com", "Previous", new AgentSecurityHeadersSpec { Hsts = true });
+        var previousRule = previousRules[0]!.AsObject();
+        previousRule["id"] = "managed-security-id";
+        previousRule["description"] = "PowerForge Previous [example.com]: security headers";
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(previousRules)),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+        using var client = NewClient(handler);
+
+        var result = CloudflareResponseHeaderPolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "example.com",
+            "Renamed",
+            new AgentSecurityHeadersSpec { Hsts = false },
+            dryRun: false,
+            client);
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(0, result.PreservedRuleCount);
+        var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
+        var rule = Assert.Single(rules)!.AsObject();
+        Assert.Equal("managed-security-id", rule["id"]!.GetValue<string>());
+        Assert.Equal("PowerForge [example.com/]: Renamed: security headers", rule["description"]!.GetValue<string>());
+        Assert.Null(rule["action_parameters"]!["headers"]!["Strict-Transport-Security"]);
+    }
+
+    [Fact]
+    public void Apply_ShouldUseBasePathIdentityWhenPolicyNameChanges()
+    {
+        var firstSiteRules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com", "First", new AgentSecurityHeadersSpec { Hsts = false }, "/first/");
+        firstSiteRules[0]!["id"] = "first-id";
+        var secondSiteRules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com", "Second", new AgentSecurityHeadersSpec { Hsts = false }, "/second/");
+        secondSiteRules[0]!["id"] = "second-id";
+        var existingRules = new JsonArray(firstSiteRules[0]!.DeepClone(), secondSiteRules[0]!.DeepClone());
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(existingRules)),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+        using var client = NewClient(handler);
+
+        var result = CloudflareResponseHeaderPolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "example.com",
+            "First Renamed",
+            new AgentSecurityHeadersSpec { Hsts = false },
+            dryRun: false,
+            client,
+            basePath: "/first/");
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(1, result.PreservedRuleCount);
+        var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
+        Assert.Contains(rules, rule => rule!["description"]!.GetValue<string>() == "PowerForge [example.com/first/]: First Renamed: security headers");
+        Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "first-id");
+        Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "second-id");
     }
 
     [Fact]

@@ -37,7 +37,7 @@ public sealed class CloudflareCachePolicyTests
         Assert.Equal(3, rules.Count);
         var htmlRule = Assert.IsType<JsonObject>(rules[0]);
         var staticRule = Assert.IsType<JsonObject>(rules[2]);
-        Assert.Equal("PowerForge Tactra [tactra.dev]: static assets", staticRule["description"]!.GetValue<string>());
+        Assert.Equal("PowerForge [tactra.dev/]: Tactra: static assets", staticRule["description"]!.GetValue<string>());
         Assert.Contains("http.host eq \"tactra.dev\"", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Contains("/*.wasm", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Contains("/*.webcil", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
@@ -150,7 +150,7 @@ public sealed class CloudflareCachePolicyTests
         Assert.True(result.Success, result.Message);
         var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
         Assert.Equal(
-            ["Operator before", "PowerForge Example [example.com]: HTML docs and API", "Operator between", "PowerForge Example [example.com]: data files", "PowerForge Example [example.com]: static assets", "Operator after"],
+            ["Operator before", "PowerForge [example.com/]: Example: HTML docs and API", "Operator between", "PowerForge [example.com/]: Example: data files", "PowerForge [example.com/]: Example: static assets", "Operator after"],
             rules.Select(rule => rule!["description"]!.GetValue<string>()).ToArray());
     }
 
@@ -180,9 +180,9 @@ public sealed class CloudflareCachePolicyTests
         Assert.True(result.Success, result.Message);
         Assert.Equal(1, result.PreservedRuleCount);
         var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
-        Assert.Contains(rules, rule => rule!["description"]!.GetValue<string>() == "PowerForge Shared [one.example.com]: HTML docs and API");
+        Assert.Contains(rules, rule => rule!["description"]!.GetValue<string>() == "PowerForge [one.example.com/]: Shared: HTML docs and API");
         Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "other-id");
-        Assert.DoesNotContain(rules, rule => rule!["id"]?.GetValue<string>() == "target-id");
+        Assert.Contains(rules, rule => rule!["id"]?.GetValue<string>() == "target-id");
     }
 
     [Fact]
@@ -236,6 +236,7 @@ public sealed class CloudflareCachePolicyTests
 
         Assert.False(result.Success);
         Assert.Contains("could not be identified safely for rollback", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(result.Reconciliation?.Snapshot);
         Assert.Equal(3, handler.Requests.Count);
     }
 

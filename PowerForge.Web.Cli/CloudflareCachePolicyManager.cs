@@ -58,12 +58,12 @@ internal static class CloudflareCachePolicyManager
                 CachePhase,
                 "PowerForge cache policy",
                 "PowerForge-managed cache policy",
-                CloudflareManagedRuleOwnership.BuildPrefix(policyName, hostname),
+                CloudflareManagedRuleOwnership.BuildOwnershipPrefix(hostname, basePath),
                 managedRules,
                 dryRun,
                 $"cache policy for {hostname}",
                 httpClient,
-                rule => CloudflareManagedRuleOwnership.IsLegacyRuleForHost(rule, policyName, hostname));
+                rule => CloudflareManagedRuleOwnership.IsLegacyRuleForSite(rule, policyName, hostname, basePath));
             if (reconciled.Success)
                 logger?.Info(reconciled.Message);
             return new CloudflareCachePolicyApplyResult

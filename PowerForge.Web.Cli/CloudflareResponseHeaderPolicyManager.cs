@@ -43,12 +43,12 @@ internal static class CloudflareResponseHeaderPolicyManager
                 ResponseHeadersPhase,
                 "PowerForge response header policy",
                 "PowerForge-managed response security headers",
-                CloudflareManagedRuleOwnership.BuildPrefix(policyName, hostname),
+                CloudflareManagedRuleOwnership.BuildOwnershipPrefix(hostname, basePath),
                 managedRules,
                 dryRun,
                 $"response header policy for {hostname}",
                 httpClient,
-                rule => CloudflareManagedRuleOwnership.IsLegacyRuleForHost(rule, policyName, hostname));
+                rule => CloudflareManagedRuleOwnership.IsLegacyRuleForSite(rule, policyName, hostname, basePath));
         }
         finally
         {
