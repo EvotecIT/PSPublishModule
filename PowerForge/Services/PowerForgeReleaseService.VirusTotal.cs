@@ -1,7 +1,3 @@
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
 namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
@@ -130,6 +126,7 @@ internal sealed partial class PowerForgeReleaseService
         var receiptWritable = false;
         var resumeReceiptSafeToReplace = false;
         var receiptWriteFailed = false;
+        FileStream? receiptLock = null;
         VirusTotalMonitorArtifactReceipt[] resumeReceipts = Array.Empty<VirusTotalMonitorArtifactReceipt>();
 
         string PersistReceipt(VirusTotalMonitorPublishResult publishResult)
@@ -155,6 +152,7 @@ internal sealed partial class PowerForgeReleaseService
             version = ResolveVirusTotalReleaseVersion(result, sharedReleaseVersion) ?? "mixed";
 
             project = ResolveVirusTotalProjectName(spec, options, configDirectory);
+            receiptLock = AcquireVirusTotalReceiptLock(options, configDirectory);
             EnsureVirusTotalReceiptWritable(options, configDirectory, project);
             receiptWritable = true;
             resumeReceipts = LoadVirusTotalResumeReceipts(
@@ -260,6 +258,10 @@ internal sealed partial class PowerForgeReleaseService
                 "The primary release remains successful because Monitor registration is an asynchronous post-release integration.");
             return true;
         }
+        finally
+        {
+            receiptLock?.Dispose();
+        }
     }
 
     internal static string? ResolveVirusTotalReleaseVersion(
@@ -268,122 +270,6 @@ internal sealed partial class PowerForgeReleaseService
         => NormalizeReleaseVersion(sharedReleaseVersion) ??
            ResolveModuleReleaseVersion(result.ModulePlan) ??
            ResolveUniqueAssetVersion(result.ReleaseAssetEntries ?? Array.Empty<PowerForgeReleaseAssetEntry>());
-
-    private static VirusTotalMonitorArtifactReceipt[] LoadVirusTotalResumeReceipts(
-        PowerForgeVirusTotalOptions options,
-        string configDirectory,
-        string project,
-        string version)
-    {
-        var receiptPath = ResolveOutputPath(configDirectory, options.ReceiptPath!);
-        if (!File.Exists(receiptPath))
-            return Array.Empty<VirusTotalMonitorArtifactReceipt>();
-
-        var serializerOptions = CreateVirusTotalReceiptSerializerOptions(writeIndented: false);
-        var receipt = JsonSerializer.Deserialize<VirusTotalMonitorReceiptDocument>(
-            File.ReadAllText(receiptPath),
-            serializerOptions)
-            ?? throw new InvalidDataException("VirusTotal Monitor resume receipt is empty.");
-        if (receipt.SchemaVersion != 1 ||
-            !string.Equals(receipt.Provider, "VirusTotal Monitor", StringComparison.Ordinal))
-        {
-            throw new InvalidDataException(
-                "VirusTotal Monitor resume receipt has an unsupported schema or provider.");
-        }
-        if (!string.Equals(receipt.Project, project, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidDataException(
-                "VirusTotal Monitor resume receipt belongs to a different project.");
-        }
-        if (!string.Equals(receipt.Version, version, StringComparison.OrdinalIgnoreCase))
-            return Array.Empty<VirusTotalMonitorArtifactReceipt>();
-
-        var completedGroups = (receipt.Artifacts ?? Array.Empty<VirusTotalMonitorArtifactReceipt>())
-            .Where(static item =>
-                item is not null &&
-                !string.IsNullOrWhiteSpace(item.DestinationPath) &&
-                !string.IsNullOrWhiteSpace(item.MonitorId))
-            .GroupBy(static item => item.DestinationPath, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var conflictingDestination = completedGroups.FirstOrDefault(static group =>
-            group.Select(static item => item.MonitorId).Distinct(StringComparer.Ordinal).Skip(1).Any());
-        if (conflictingDestination is not null)
-        {
-            throw new InvalidDataException(
-                $"VirusTotal Monitor receipt maps destination '{conflictingDestination.Key}' to conflicting item ids.");
-        }
-
-        return completedGroups
-            .Select(static group => group.Last())
-            .ToArray();
-    }
-
-    private static VirusTotalMonitorArtifactReceipt[] ApplyVirusTotalResumeReceipts(
-        VirusTotalMonitorArtifactReceipt[] resumeReceipts,
-        VirusTotalMonitorArtifact[] artifacts)
-    {
-        var completed = resumeReceipts.ToDictionary(
-            static receipt => receipt.DestinationPath,
-            static receipt => receipt,
-            StringComparer.OrdinalIgnoreCase);
-        var applicable = new List<VirusTotalMonitorArtifactReceipt>();
-        foreach (var artifact in artifacts)
-        {
-            if (!completed.TryGetValue(artifact.DestinationPath, out var receipt))
-                continue;
-
-            artifact.ExistingItemId = receipt.MonitorId;
-            applicable.Add(receipt);
-        }
-
-        return applicable.ToArray();
-    }
-
-    private static void EnsureVirusTotalReceiptWritable(
-        PowerForgeVirusTotalOptions options,
-        string configDirectory,
-        string project)
-    {
-        var receiptPath = ResolveOutputPath(configDirectory, options.ReceiptPath!);
-        if (Directory.Exists(receiptPath))
-        {
-            throw new InvalidOperationException(
-                $"VirusTotal receipt path points to an existing directory: '{receiptPath}'.");
-        }
-        var directory = Path.GetDirectoryName(receiptPath)
-            ?? throw new InvalidOperationException("VirusTotal receipt path has no parent directory.");
-        Directory.CreateDirectory(directory);
-        if (File.Exists(receiptPath))
-        {
-            ValidateExistingVirusTotalReceiptIdentity(receiptPath, project);
-            using var receipt = new FileStream(
-                receiptPath,
-                FileMode.Open,
-                FileAccess.ReadWrite,
-                FileShare.None,
-                bufferSize: 1,
-                FileOptions.WriteThrough);
-            receipt.Flush(flushToDisk: true);
-        }
-
-        var probePath = Path.Combine(directory, $".{Path.GetFileName(receiptPath)}.{Guid.NewGuid():N}.probe");
-        try
-        {
-            using var stream = new FileStream(
-                probePath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 1,
-                FileOptions.WriteThrough);
-            stream.WriteByte(0);
-            stream.Flush(flushToDisk: true);
-        }
-        finally
-        {
-            try { File.Delete(probePath); } catch { /* best effort */ }
-        }
-    }
 
     private static string ResolveVirusTotalProjectName(
         PowerForgeReleaseSpec spec,
@@ -411,55 +297,4 @@ internal sealed partial class PowerForgeReleaseService
         return normalized;
     }
 
-    private static string WriteVirusTotalReceipt(
-        PowerForgeVirusTotalOptions options,
-        string configDirectory,
-        string project,
-        string version,
-        VirusTotalMonitorPublishResult result)
-    {
-        var receiptPath = ResolveOutputPath(configDirectory, options.ReceiptPath!);
-        var directory = Path.GetDirectoryName(receiptPath)
-            ?? throw new InvalidOperationException("VirusTotal receipt path has no parent directory.");
-        Directory.CreateDirectory(directory);
-        var serializerOptions = CreateVirusTotalReceiptSerializerOptions(writeIndented: true);
-        var json = JsonSerializer.Serialize(
-            new VirusTotalMonitorReceiptDocument
-            {
-                Project = project,
-                Version = version,
-                HashVerificationRequested = options.VerifySha256,
-                Success = result.Success,
-                ErrorMessage = result.ErrorMessage,
-                Artifacts = result.Artifacts
-            },
-            serializerOptions);
-        var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(receiptPath)}.{Guid.NewGuid():N}.tmp");
-        try
-        {
-            File.WriteAllText(temporaryPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            if (File.Exists(receiptPath))
-                File.Replace(temporaryPath, receiptPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
-            else
-                File.Move(temporaryPath, receiptPath);
-        }
-        finally
-        {
-            try { File.Delete(temporaryPath); } catch { /* best effort */ }
-        }
-
-        return receiptPath;
-    }
-
-    private static JsonSerializerOptions CreateVirusTotalReceiptSerializerOptions(bool writeIndented)
-    {
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = writeIndented
-        };
-        options.Converters.Add(new JsonStringEnumConverter());
-        return options;
-    }
 }

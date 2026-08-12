@@ -122,6 +122,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
             var spec = new PowerForgeReleaseSpec
             {
+                Packages = new ProjectBuildConfiguration { PublishNuget = true },
                 VirusTotal = new PowerForgeVirusTotalOptions
                 {
                     Enabled = true,
@@ -359,6 +360,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 [
                     new PowerForgeModulePackageReleaseCheckpoint
                     {
+                        PublishNuget = true,
                         Release = new DotNetRepositoryReleaseResult
                         {
                             Success = true,
@@ -399,6 +401,10 @@ public sealed partial class PowerForgeReleaseServiceTests
     private static PowerForgeReleaseSpec CreateVirusTotalInstallerSpec()
         => new()
         {
+            Packages = new ProjectBuildConfiguration
+            {
+                PublishNuget = true
+            },
             VirusTotal = new PowerForgeVirusTotalOptions
             {
                 Enabled = true,
@@ -412,6 +418,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         => new()
         {
             Success = true,
+            Packages = new ProjectBuildHostExecutionResult { Success = true },
             ReleaseAssets = [artifactPath],
             ReleaseAssetEntries =
             [

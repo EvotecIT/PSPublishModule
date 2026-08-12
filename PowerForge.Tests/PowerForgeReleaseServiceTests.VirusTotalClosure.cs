@@ -97,7 +97,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             var builtResult = new PowerForgeReleaseResult
             {
                 Success = true,
-                ModulePlan = new PowerForgeModuleReleasePlanSummary { ModuleVersion = "1.2.3" },
+                ModulePlan = new PowerForgeModuleReleasePlanSummary
+                {
+                    ModuleVersion = "1.2.3",
+                    RunMode = ConfigurationGateMode.Publish
+                },
                 ReleaseAssetEntries =
                 [
                     new PowerForgeReleaseAssetEntry
@@ -146,6 +150,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
             var spec = new PowerForgeReleaseSpec
             {
+                Packages = new ProjectBuildConfiguration { PublishNuget = true },
                 VirusTotal = new PowerForgeVirusTotalOptions
                 {
                     Enabled = true,
@@ -202,6 +207,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 publishVirusTotalMonitor: (_, _) => throw new InvalidOperationException("provider construction failed"));
             var spec = new PowerForgeReleaseSpec
             {
+                Packages = new ProjectBuildConfiguration { PublishNuget = true },
                 VirusTotal = new PowerForgeVirusTotalOptions
                 {
                     Enabled = true,
@@ -266,6 +272,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
             var spec = new PowerForgeReleaseSpec
             {
+                Packages = new ProjectBuildConfiguration { PublishNuget = true },
                 VirusTotal = new PowerForgeVirusTotalOptions
                 {
                     Enabled = true,

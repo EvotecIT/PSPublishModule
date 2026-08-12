@@ -15,17 +15,30 @@ internal sealed partial class PowerForgeReleaseService
         if (spec.VirusTotal is not { Enabled: true })
             return false;
 
-        return result.ReleaseAssetEntries?.Any(static entry => entry.IsFinalPackageOutput) == true ||
-               result.ModulePlan is not null ||
-               result.ModulePublication is not null ||
-               (result.ModulePackagePlans?.Length ?? 0) > 0 ||
-               result.Packages is not null ||
-               result.ToolPlan is not null ||
-               result.Tools is not null ||
-               result.DotNetToolPlan is not null ||
-               result.DotNetTools is not null ||
-               (result.WingetManifestPaths?.Length ?? 0) > 0 ||
-               (result.WingetManifests?.Length ?? 0) > 0;
+        var hasFinalAssets = result.ReleaseAssetEntries?.Any(static entry => entry.IsFinalPackageOutput) == true;
+        var modulePublishing = result.ModulePlan?.RunMode == ConfigurationGateMode.Publish ||
+                               result.ModulePublication is not null;
+        var packagePublishing = hasFinalAssets &&
+                                (spec.Packages?.PublishNuget == true || spec.Packages?.PublishGitHub == true);
+        var modulePackagePublishing = (result.ModulePackagePlans ?? Array.Empty<PowerForgeModulePackageReleaseCheckpoint>())
+            .Any(static checkpoint => checkpoint.PublishNuget || checkpoint.PublishGitHub);
+        var toolPublishing = (result.ToolPlan is not null ||
+                              result.Tools is not null ||
+                              result.DotNetToolPlan is not null ||
+                              result.DotNetTools is not null) &&
+                             spec.Tools?.GitHub.Publish == true;
+        var wingetPublishing = ((result.WingetManifestPaths?.Length ?? 0) > 0 ||
+                                (result.WingetManifests?.Length ?? 0) > 0) &&
+                               spec.Winget is { Enabled: true } winget &&
+                               (winget.Submit || winget.Submission?.Enabled == true);
+        var unifiedGitHubPublishing = hasFinalAssets && spec.GitHub?.Publish == true;
+
+        return modulePublishing ||
+               packagePublishing ||
+               modulePackagePublishing ||
+               toolPublishing ||
+               wingetPublishing ||
+               unifiedGitHubPublishing;
     }
 
     internal static string? PrepareVirusTotalPublishPreflight(
@@ -46,7 +59,8 @@ internal sealed partial class PowerForgeReleaseService
             configDirectory,
             planOrValidation: false);
         var project = ResolveVirusTotalProjectName(spec, spec.VirusTotal!, configDirectory);
-        EnsureVirusTotalReceiptWritable(spec.VirusTotal!, configDirectory, project);
+        using (AcquireVirusTotalReceiptLock(spec.VirusTotal!, configDirectory))
+            EnsureVirusTotalReceiptWritable(spec.VirusTotal!, configDirectory, project);
         return apiKey;
     }
 
@@ -150,6 +164,19 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidDataException(
                 $"VirusTotal Monitor resume receipt belongs to project '{project}', not '{expectedProject}'.");
         }
+
+        if (!TryGetPropertyIgnoreCase(document.RootElement, "artifacts", out var artifacts) ||
+            artifacts.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidDataException(
+                "VirusTotal Monitor resume receipt must explicitly contain an artifacts array.");
+        }
+
+        var receipt = JsonSerializer.Deserialize<VirusTotalMonitorReceiptDocument>(
+            document.RootElement.GetRawText(),
+            CreateVirusTotalReceiptSerializerOptions(writeIndented: false))
+            ?? throw new InvalidDataException("VirusTotal Monitor resume receipt is empty.");
+        _ = ValidateVirusTotalReceiptArtifacts(receipt.Artifacts);
     }
 
     private static bool TryGetRequiredString(JsonElement root, string name, out string? value)

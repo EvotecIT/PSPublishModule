@@ -146,6 +146,15 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         var repository = _catalogScanner.InspectRepository(queueItem.RootPath);
         var receipts = new List<ReleasePublishReceipt>();
         var unifiedOwnsGitHub = UnifiedReleaseOwnsGitHub(repository.UnifiedReleaseConfigPath);
+        var unifiedPreflightFailure = PrepareUnifiedReleaseVirusTotalPreflight(
+            repository,
+            signingResult,
+            cancellationToken);
+        if (unifiedPreflightFailure is not null)
+        {
+            receipts.Add(unifiedPreflightFailure);
+            return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+        }
 
         if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
         {

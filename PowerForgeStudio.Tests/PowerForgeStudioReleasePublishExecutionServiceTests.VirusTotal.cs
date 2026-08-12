@@ -52,6 +52,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             releaseConfig,
             """
             {
+              "GitHub": { "Publish": true },
               "VirusTotal": {
                 "Enabled": true,
                 "ApiKeyEnvName": "VIRUSTOTAL_MONITOR_API_KEY",
@@ -161,6 +162,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             releaseConfig,
             $$"""
             {
+              "GitHub": { "Publish": true },
               "VirusTotal": {
                 "Enabled": true,
                 "ApiKeyEnvName": "{{secretName}}",
@@ -391,6 +393,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                         Key = "PackageBuild:0",
                         Name = "Example packages",
                         ConfigPath = moduleConfig,
+                        PublishNuget = true,
                         Release = new DotNetRepositoryReleaseResult
                         {
                             Success = true,

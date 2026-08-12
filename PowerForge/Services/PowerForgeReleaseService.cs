@@ -397,7 +397,8 @@ internal sealed partial class PowerForgeReleaseService
                 spec,
                 spec.VirusTotal!,
                 configDirectory);
-            EnsureVirusTotalReceiptWritable(spec.VirusTotal!, configDirectory, virusTotalProject);
+            using (AcquireVirusTotalReceiptLock(spec.VirusTotal!, configDirectory))
+                EnsureVirusTotalReceiptWritable(spec.VirusTotal!, configDirectory, virusTotalProject);
         }
         var captureModuleArtifactProvenance = ShouldCaptureVirusTotalModuleArtifactProvenance(
             spec,

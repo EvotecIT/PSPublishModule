@@ -214,35 +214,6 @@ public sealed partial class ReleasePublishExecutionService
                     buildResult.UnifiedReleaseStateJson!)
                 ?? throw new InvalidOperationException("Unified release build state could not be deserialized.");
             ApplySignedCheckpointArtifacts(builtReleaseResult, signingResult);
-            if (PowerForgeReleaseService.ShouldPublishVirusTotalMonitorFromCheckpoint(spec, builtReleaseResult))
-            {
-                try
-                {
-                    PowerForgeReleaseService.PrepareVirusTotalPublishPreflight(
-                        spec,
-                        repository.UnifiedReleaseConfigPath!,
-                        builtReleaseResult);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    return [
-                        ReleaseQueueReceiptFactory.CreatePublishReceipt(
-                            repository.RootPath,
-                            repository.Name,
-                            "UnifiedRelease",
-                            "VirusTotal Monitor",
-                            "VirusTotal",
-                            "Configured VirusTotal Monitor project",
-                            ReleasePublishReceiptStatus.Failed,
-                            FirstLine(ex.Message) ?? "VirusTotal Monitor preflight failed.",
-                            sourcePath: null)
-                    ];
-                }
-            }
             cancellationToken.ThrowIfCancellationRequested();
             var result = await Task.Run(
                     () => _publishUnifiedRelease(
@@ -347,6 +318,86 @@ public sealed partial class ReleasePublishExecutionService
             return [
                 FailedReceipt(repository.RootPath, repository.Name, "UnifiedRelease", "GitHub release", null, FirstLine(ex.Message) ?? "Unified GitHub publishing failed.")
             ];
+        }
+    }
+
+    private ReleasePublishReceipt? PrepareUnifiedReleaseVirusTotalPreflight(
+        PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
+        ReleaseSigningExecutionResult signingResult,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
+            return null;
+
+        var buildResult = _checkpointSerializer.TryDeserialize<ReleaseBuildExecutionResult>(
+            signingResult.SourceCheckpointStateJson);
+        if (buildResult is null || string.IsNullOrWhiteSpace(buildResult.UnifiedReleaseStateJson))
+        {
+            return FailedReceipt(
+                repository.RootPath,
+                repository.Name,
+                "UnifiedRelease",
+                "Configuration",
+                repository.UnifiedReleaseConfigPath,
+                "Unified release build state was not preserved through the signing checkpoint.");
+        }
+
+        PowerForgeReleaseSpec spec;
+        PowerForgeReleaseResult builtReleaseResult;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            UnifiedReleaseConfigFingerprint.Validate(
+                repository.UnifiedReleaseConfigPath!,
+                buildResult.UnifiedReleaseConfigSha256);
+            spec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
+            builtReleaseResult = JsonSerializer.Deserialize<PowerForgeReleaseResult>(
+                    buildResult.UnifiedReleaseStateJson!)
+                ?? throw new InvalidOperationException("Unified release build state could not be deserialized.");
+            ApplySignedCheckpointArtifacts(builtReleaseResult, signingResult);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return FailedReceipt(
+                repository.RootPath,
+                repository.Name,
+                "UnifiedRelease",
+                "Configuration",
+                repository.UnifiedReleaseConfigPath,
+                FirstLine(ex.Message) ?? "Unified release configuration preflight failed.");
+        }
+
+        if (!PowerForgeReleaseService.ShouldPublishVirusTotalMonitorFromCheckpoint(spec, builtReleaseResult))
+            return null;
+
+        try
+        {
+            PowerForgeReleaseService.PrepareVirusTotalPublishPreflight(
+                spec,
+                repository.UnifiedReleaseConfigPath!,
+                builtReleaseResult);
+            return null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                repository.RootPath,
+                repository.Name,
+                "UnifiedRelease",
+                "VirusTotal Monitor",
+                "VirusTotal",
+                "Configured VirusTotal Monitor project",
+                ReleasePublishReceiptStatus.Failed,
+                FirstLine(ex.Message) ?? "VirusTotal Monitor preflight failed.",
+                sourcePath: null);
         }
     }
 
