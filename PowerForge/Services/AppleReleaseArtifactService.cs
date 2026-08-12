@@ -5,15 +5,6 @@ namespace PowerForge;
 /// </summary>
 internal sealed class AppleReleaseArtifactService
 {
-    private static readonly StringComparison PathComparison =
-        Path.DirectorySeparatorChar == '\\'
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-    private static readonly StringComparer PathComparer =
-        Path.DirectorySeparatorChar == '\\'
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal;
-
     private readonly Func<string, long> _getAvailableBytes;
     private readonly Func<DateTimeOffset> _utcNow;
 
@@ -58,7 +49,7 @@ internal sealed class AppleReleaseArtifactService
         var protectedFullPaths = (protectedPaths ?? Array.Empty<string>())
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetFullPath)
-            .ToHashSet(PathComparer);
+            .ToArray();
         var cutoff = _utcNow().UtcDateTime.AddDays(-Math.Max(0, plan.Automation.ArtifactRetentionDays));
         var candidates = roots
             .Where(Directory.Exists)
@@ -74,9 +65,10 @@ internal sealed class AppleReleaseArtifactService
     {
         var left = Path.GetFullPath(first).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var right = Path.GetFullPath(second).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return left.Equals(right, PathComparison) ||
-               left.StartsWith(right + Path.DirectorySeparatorChar, PathComparison) ||
-               right.StartsWith(left + Path.DirectorySeparatorChar, PathComparison);
+        var comparison = GetPathComparison(left, right);
+        return left.Equals(right, comparison) ||
+               left.StartsWith(right + Path.DirectorySeparatorChar, comparison) ||
+               right.StartsWith(left + Path.DirectorySeparatorChar, comparison);
     }
 
     internal PowerForgeAppleReleaseCleanupReceipt RemoveCurrentArtifacts(
@@ -89,8 +81,8 @@ internal sealed class AppleReleaseArtifactService
         var paths = selected
             .SelectMany(static app => new[] { app.ArchivePath, app.ExportPath })
             .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Distinct(PathComparer)
             .ToArray();
+        paths = DistinctPaths(paths);
         return RemovePaths(plan, paths);
     }
 
@@ -137,8 +129,8 @@ internal sealed class AppleReleaseArtifactService
             })
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(static path => Path.GetFullPath(path!))
-            .Distinct(PathComparer)
             .ToArray();
+        roots = DistinctPaths(roots);
         if (roots.Length == 0)
             throw new InvalidOperationException("Apple release artifact roots could not be resolved.");
         if (roots.Any(root => !IsWithinRoot(root, plan.ProjectRoot)))
@@ -152,8 +144,9 @@ internal sealed class AppleReleaseArtifactService
     {
         var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return fullPath.Equals(fullRoot, PathComparison) ||
-               fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, PathComparison);
+        var comparison = GetPathComparison(fullPath, fullRoot);
+        return fullPath.Equals(fullRoot, comparison) ||
+               fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, comparison);
     }
 
     private static void EnsureNoReparsePoints(string projectRoot, string path)
@@ -174,7 +167,7 @@ internal sealed class AppleReleaseArtifactService
                     $"Refusing to remove Apple release artifact through a symbolic link or reparse point: {current}");
             }
 
-            if (current.Equals(root, PathComparison))
+            if (PathsEqual(current, root))
                 break;
             current = Path.GetDirectoryName(current)
                 ?? throw new InvalidOperationException($"Unable to inspect Apple release artifact path: {path}");
@@ -285,12 +278,38 @@ internal sealed class AppleReleaseArtifactService
                 return current;
             }
 
-            if (current.Equals(root, PathComparison))
+            if (PathsEqual(current, root))
                 break;
             current = Path.GetDirectoryName(current);
         }
 
         return null;
+    }
+
+    private static string[] DistinctPaths(IEnumerable<string> paths)
+    {
+        var distinct = new List<string>();
+        foreach (var path in paths)
+        {
+            if (!distinct.Any(existing => PathsEqual(existing, path)))
+                distinct.Add(path);
+        }
+        return distinct.ToArray();
+    }
+
+    private static bool PathsEqual(string first, string second)
+        => Path.GetFullPath(first).Equals(Path.GetFullPath(second), GetPathComparison(first, second));
+
+    private static StringComparison GetPathComparison(string first, string second)
+        => FrameworkCompatibility.GetPathStringComparisonForPath(GetComparisonProbePath(first)) == StringComparison.OrdinalIgnoreCase ||
+           FrameworkCompatibility.GetPathStringComparisonForPath(GetComparisonProbePath(second)) == StringComparison.OrdinalIgnoreCase
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+    private static string GetComparisonProbePath(string path)
+    {
+        var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return Path.GetDirectoryName(fullPath) ?? fullPath;
     }
 
     private static DateTime GetLastWriteTimeUtc(string path)

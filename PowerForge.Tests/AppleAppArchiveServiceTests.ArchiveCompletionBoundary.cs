@@ -3,6 +3,33 @@ namespace PowerForge.Tests;
 public sealed partial class AppleAppArchiveServiceTests
 {
     [Fact]
+    public async Task CreateArchiveAsync_rejects_success_without_bound_archive_output()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleAppArchiveService(new SuccessfulRunnerWithoutArchive()).CreateArchiveAsync(
+                    new AppleAppArchiveRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "App",
+                        ArchivePath = Path.Combine(root.FullName, "App.xcarchive"),
+                        XcodeBuildExecutable = "xcodebuild-test"
+                    }));
+
+            Assert.Contains("no exact private archive output", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task CreateArchiveAsync_rejects_archive_replaced_after_xcodebuild_completion_boundary()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -99,6 +126,12 @@ public sealed partial class AppleAppArchiveServiceTests
             File.WriteAllText(payload, "concurrent replacement");
             return Task.FromResult(result);
         }
+    }
+
+    private sealed class SuccessfulRunnerWithoutArchive : IProcessRunner
+    {
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, false));
     }
 
     private sealed class PostCompletionArchiveAliasMutationRunner : IProcessRunner

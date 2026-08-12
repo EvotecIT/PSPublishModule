@@ -359,16 +359,24 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
         if (_disposed)
             return;
         _disposed = true;
-        var result = _git.RunRawAsync(
-                _repositoryRoot,
-                new[] { "worktree", "remove", "--force", RootPath },
-                TimeSpan.FromMinutes(2))
-            .GetAwaiter()
-            .GetResult();
-        if (!result.Succeeded)
+        RemoveWorktreeBestEffort(_git, _repositoryRoot, RootPath);
+    }
+
+    internal static void RemoveWorktreeBestEffort(GitClient git, string repositoryRoot, string snapshotRoot)
+    {
+        try
         {
-            throw new InvalidOperationException(
-                $"Failed to remove the isolated Apple build snapshot '{RootPath}': {result.StdErr}".Trim());
+            _ = git.RunRawAsync(
+                    repositoryRoot,
+                    new[] { "worktree", "remove", "--force", snapshotRoot },
+                    TimeSpan.FromMinutes(2))
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch
+        {
+            // Snapshot cleanup is private, post-operation hygiene. A Git cleanup failure must not
+            // turn an already completed remote release into a retryable release failure.
         }
     }
 

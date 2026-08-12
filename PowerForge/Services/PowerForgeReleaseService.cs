@@ -2242,18 +2242,11 @@ internal sealed partial class PowerForgeReleaseService
                         return CompleteAppleExecutionFailure(plan, resultsByApp, app);
                     }
 
-                    var publishedArchiveSha256 = archiveBuildSnapshot?.Publish(app.ArchivePath, archive.ArchiveSha256);
-                    if (!string.IsNullOrWhiteSpace(publishedArchiveSha256))
-                    {
-                        approvedArchiveInputPath = archiveBuildSnapshot!.ArchivePath;
-                        result.ArchiveSha256 = publishedArchiveSha256;
-                        app.ExpectedArchiveSha256 = publishedArchiveSha256;
-                        archive.ArchivePath = app.ArchivePath;
-                    }
-                    else
-                    {
-                        CaptureAppleArchiveSha256(result, app);
-                    }
+                    var publishedArchiveSha256 = archiveBuildSnapshot!.Publish(app.ArchivePath, archive.ArchiveSha256);
+                    approvedArchiveInputPath = archiveBuildSnapshot.ArchivePath;
+                    result.ArchiveSha256 = publishedArchiveSha256;
+                    app.ExpectedArchiveSha256 = publishedArchiveSha256;
+                    archive.ArchivePath = app.ArchivePath;
                 }
 
             if (plan.Upload && result.Success && !resumedUpload)

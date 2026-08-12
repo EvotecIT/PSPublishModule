@@ -331,6 +331,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("receipt-contains-plan")]
     [InlineData("lock-under-plan")]
     [InlineData("history-under-archive-root")]
+    [InlineData("archive-overlaps-receipt-journal-lock")]
     [InlineData("plan-overwrites-project")]
     public void Execute_ApplePlan_RejectsOverlappingAutomationOutputPaths(string scenario)
     {
@@ -367,6 +368,12 @@ public sealed partial class PowerForgeReleaseServiceTests
                     break;
                 case "history-under-archive-root":
                     automation.ReceiptHistoryPath = "build/powerforge/apple/archives/receipts";
+                    break;
+                case "archive-overlaps-receipt-journal-lock":
+                    spec.AppleApps.ArchiveRoot = FrameworkCompatibility.GetRelativePath(
+                        root,
+                        Path.GetDirectoryName(AppleReleaseReceiptJournalLease.CreateLockPath(
+                            Path.Combine(root, automation.ReceiptPath!)))!);
                     break;
                 case "plan-overwrites-project":
                     automation.PlanReceiptPath = "CasaRay.xcodeproj/project.pbxproj";

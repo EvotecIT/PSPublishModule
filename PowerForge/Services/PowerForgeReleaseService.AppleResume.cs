@@ -72,6 +72,14 @@ internal sealed partial class PowerForgeReleaseService
         {
             if (attestation is not null)
             {
+                if (string.IsNullOrWhiteSpace(attestation.Target.BuildUploadId))
+                {
+                    throw new InvalidOperationException(
+                        $"Apple recovery for '{app.Name}' found a durable successful upload attestation without an App Store Connect Delivery UUID. " +
+                        "The remote mutation is ambiguous and PowerForge will not upload the archive again. Inspect App Store Connect, wait for the " +
+                        "uniquely matching build to become visible, then deliberately adopt it with --apple-adopt-existing-build " +
+                        "--confirm-apple-action.");
+                }
                 EnsureExplicitAppleRecoveryAdoption(plan, app, "an attested upload that is not yet visible as a build");
                 if (plan.Automation.WaitForProcessing)
                     state = WaitForAppleBuild(plan, app, state, attestation.Target.BuildUploadId);
@@ -193,8 +201,6 @@ internal sealed partial class PowerForgeReleaseService
 
             if (remoteBuild is null)
             {
-                if (string.IsNullOrWhiteSpace(target.BuildUploadId))
-                    continue;
                 return new AppleUploadAttestation(receipt, target);
             }
 
@@ -206,19 +212,20 @@ internal sealed partial class PowerForgeReleaseService
 
             if (string.IsNullOrWhiteSpace(target.BuildId))
             {
-                if (string.IsNullOrWhiteSpace(target.BuildUploadId))
-                    continue;
-                var upload = _getAppleBuildUpload(CreateAppStoreConnectCredential(plan), target.BuildUploadId!);
-                if (upload is null ||
-                    !string.Equals(upload.MarketingVersion, state.VersionString, StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(upload.BuildNumber, state.BuildNumber, StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(
-                        upload.Platform,
-                        AppStoreConnectClient.ToAppStoreConnectPlatform(app.Platform),
-                        StringComparison.OrdinalIgnoreCase) ||
-                    IsTerminalAppleBuildFailure(upload.State))
+                if (!string.IsNullOrWhiteSpace(target.BuildUploadId))
                 {
-                    continue;
+                    var upload = _getAppleBuildUpload(CreateAppStoreConnectCredential(plan), target.BuildUploadId!);
+                    if (upload is null ||
+                        !string.Equals(upload.MarketingVersion, state.VersionString, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(upload.BuildNumber, state.BuildNumber, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(
+                            upload.Platform,
+                            AppStoreConnectClient.ToAppStoreConnectPlatform(app.Platform),
+                            StringComparison.OrdinalIgnoreCase) ||
+                        IsTerminalAppleBuildFailure(upload.State))
+                    {
+                        continue;
+                    }
                 }
             }
 

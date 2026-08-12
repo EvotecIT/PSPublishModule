@@ -581,6 +581,21 @@ public sealed partial class AppleAppArchiveServiceTests
         {
             Requests.Add(request);
             _beforeResult?.Invoke(request);
+            if (_result.Succeeded)
+            {
+                for (var index = 0; index + 1 < request.Arguments.Count; index++)
+                {
+                    if (!request.Arguments[index].Equals("-archivePath", StringComparison.Ordinal) ||
+                        !request.Arguments.Contains("archive"))
+                    {
+                        continue;
+                    }
+
+                    var archive = Directory.CreateDirectory(request.Arguments[index + 1]);
+                    File.WriteAllText(Path.Combine(archive.FullName, "archive.bin"), "archive");
+                    break;
+                }
+            }
             return Task.FromResult(_result);
         }
     }

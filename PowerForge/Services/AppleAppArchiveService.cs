@@ -139,6 +139,14 @@ public sealed partial class AppleAppArchiveService
             processRequest.InvokeCompletionBoundary(result);
             packageSnapshot?.ValidateUnchanged();
             archiveOutputMonitor.ValidateNoChanges();
+            if (result.Succeeded &&
+                (archiveIdentity is null ||
+                 string.IsNullOrWhiteSpace(archiveSha256) ||
+                 !Directory.Exists(archivePath)))
+            {
+                throw new InvalidOperationException(
+                    $"xcodebuild reported a successful archive but no exact private archive output was bound at process completion: {archivePath}");
+            }
             if (!string.IsNullOrWhiteSpace(archiveSha256) && Directory.Exists(archivePath))
             {
                 var currentArchiveIdentity = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(archivePath);

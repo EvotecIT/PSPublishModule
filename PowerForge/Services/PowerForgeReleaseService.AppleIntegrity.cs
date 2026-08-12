@@ -15,7 +15,9 @@ internal sealed partial class PowerForgeReleaseService
         {
             (Name: "ReceiptPath", Path: Path.GetFullPath(receiptPath)),
             (Name: "PlanReceiptPath", Path: Path.GetFullPath(planReceiptPath)),
-            (Name: "LockPath", Path: Path.GetFullPath(lockPath))
+            (Name: "LockPath", Path: Path.GetFullPath(lockPath)),
+            (Name: "ReceiptJournalLockPath", Path: AppleReleaseReceiptJournalLease.CreateLockPath(receiptPath)),
+            (Name: "ReceiptHistoryJournalLockPath", Path: AppleReleaseReceiptJournalLease.CreateLockPath(receiptHistoryPath))
         };
 
         for (var index = 0; index < files.Length; index++)

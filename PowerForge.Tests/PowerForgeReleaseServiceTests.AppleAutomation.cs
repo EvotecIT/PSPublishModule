@@ -1621,7 +1621,12 @@ public sealed partial class PowerForgeReleaseServiceTests
         };
 
     private static AppleAppArchiveResult CreateSuccessfulArchive(AppleAppArchiveRequest request)
-        => new()
+    {
+        var archive = Directory.CreateDirectory(request.ArchivePath!);
+        var payload = Path.Combine(archive.FullName, "archive.bin");
+        if (!File.Exists(payload))
+            File.WriteAllText(payload, "archive");
+        return new AppleAppArchiveResult
         {
             ArchivePath = request.ArchivePath!,
             Destination = request.Destination!,
@@ -1633,6 +1638,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 TimeSpan.FromSeconds(1),
                 false)
         };
+    }
 
     private static AppleAppArchiveUploadResult CreateSuccessfulUpload(AppleAppArchiveUploadRequest request)
         => new()

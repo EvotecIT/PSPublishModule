@@ -482,12 +482,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: request =>
                 {
@@ -1420,12 +1415,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     Assert.Contains("MARKETING_VERSION = 2.1.0;", content, StringComparison.Ordinal);
                     Assert.Contains("CURRENT_PROJECT_VERSION = 8;", content, StringComparison.Ordinal);
 
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -1493,12 +1483,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -1699,12 +1684,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -1859,12 +1839,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -1939,12 +1914,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -2404,12 +2374,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -2486,12 +2451,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -2563,12 +2523,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return new AppleAppArchiveResult
-                    {
-                        ArchivePath = request.ArchivePath!,
-                        Destination = request.Destination!,
-                        ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return CreateSuccessfulArchive(request);
                 },
                 uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
 
@@ -3679,12 +3634,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run."),
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
-                archiveAppleApp: request => new AppleAppArchiveResult
-                {
-                    ArchivePath = archivePath,
-                    Destination = request.Destination!,
-                    ProcessResult = new ProcessRunResult(0, "archive-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                },
+                archiveAppleApp: CreateSuccessfulArchive,
                 uploadAppleApp: request => new AppleAppArchiveUploadResult
                 {
                     ArchivePath = request.ArchivePath,

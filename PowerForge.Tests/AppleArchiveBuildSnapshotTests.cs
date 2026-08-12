@@ -3,6 +3,26 @@ namespace PowerForge.Tests;
 public sealed class AppleArchiveBuildSnapshotTests
 {
     [Fact]
+    public void Publish_rejects_successful_adapter_without_private_archive()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var destination = Path.Combine(root.FullName, "App.xcarchive");
+            using var snapshot = AppleArchiveBuildSnapshot.Create(destination);
+
+            var exception = Assert.Throws<DirectoryNotFoundException>(() => snapshot.Publish(destination));
+
+            Assert.Contains("did not produce its private archive output", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(destination));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void CopyDirectory_restores_read_only_directory_modes_after_copying_descendants()
     {
 #if NET8_0_OR_GREATER

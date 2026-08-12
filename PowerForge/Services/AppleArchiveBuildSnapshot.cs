@@ -29,12 +29,12 @@ internal sealed class AppleArchiveBuildSnapshot : IDisposable {
 
     /// <summary>
     /// Copies the private archive into a user-only same-volume staging directory, verifies it, and
-    /// atomically replaces the configured public archive. A missing archive is retained only for
-    /// injected process adapters.
+    /// atomically replaces the configured public archive.
     /// </summary>
-    internal string? Publish(string destinationArchivePath, string? expectedSourceSha256 = null) {
+    internal string Publish(string destinationArchivePath, string? expectedSourceSha256 = null) {
         if (!Directory.Exists(ArchivePath))
-            return null;
+            throw new DirectoryNotFoundException(
+                $"The successful Apple archive operation did not produce its private archive output: {ArchivePath}");
 
         var sourceSha256 = AppleNotarizationService.ComputeArtifactSha256(ArchivePath);
         if (!string.IsNullOrWhiteSpace(expectedSourceSha256) &&
