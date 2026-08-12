@@ -83,7 +83,7 @@ internal static class CloudflareResponseHeaderPolicyBuilder
                 "Access-Control-Allow-Origin",
                 security.Enabled && security.CorsForWellKnown,
                 security.CorsAllowOrigin);
-            var resourceExpression = BuildExactPathExpression(hostname, group.Paths);
+            var resourceExpression = BuildDiscoveryExpression(hostname, basePath, group);
             CloudflareCachePolicyBuilder.ValidateExpressionLength($"discovery {group.Name} headers", resourceExpression);
             rules.Add(new JsonObject
             {
@@ -208,17 +208,17 @@ internal static class CloudflareResponseHeaderPolicyBuilder
         }
     }
 
-    private static (string Name, string ContentType, string[] Paths)[] BuildDiscoveryHeaderGroups(
+    private static DiscoveryHeaderGroup[] BuildDiscoveryHeaderGroups(
         AgentReadinessSpec? readiness,
         string basePath)
     {
         if (readiness?.Enabled != true)
-            return Array.Empty<(string, string, string[])>();
+            return Array.Empty<DiscoveryHeaderGroup>();
 
-        var groups = new List<(string Name, string ContentType, string[] Paths)>();
+        var groups = new List<DiscoveryHeaderGroup>();
         if (readiness.ApiCatalog?.Enabled == true)
         {
-            groups.Add((
+            groups.Add(new DiscoveryHeaderGroup(
                 "API catalog",
                 "application/linkset+json; profile=\"https://www.rfc-editor.org/info/rfc9727\"",
                 [NormalizeDiscoveryPath(readiness.ApiCatalog.OutputPath, ".well-known/api-catalog", basePath)]));
@@ -237,9 +237,23 @@ internal static class CloudflareResponseHeaderPolicyBuilder
         if (readiness.McpServerCard?.Enabled == true)
             jsonPaths.Add(NormalizeDiscoveryPath(readiness.McpServerCard.OutputPath, ".well-known/mcp/server-card.json", basePath));
         if (jsonPaths.Count > 0)
-            groups.Add(("JSON", "application/json", jsonPaths.Distinct(StringComparer.Ordinal).ToArray()));
+            groups.Add(new DiscoveryHeaderGroup("JSON", "application/json", jsonPaths.Distinct(StringComparer.Ordinal).ToArray()));
+
+        if (readiness.MarkdownArtifacts?.Enabled == true)
+        {
+            var extension = NormalizeMarkdownArtifactExtension(readiness.MarkdownArtifacts.Extension);
+            groups.Add(new DiscoveryHeaderGroup("Markdown", "text/markdown; charset=utf-8", [], extension));
+        }
 
         return groups.ToArray();
+    }
+
+    private static string NormalizeMarkdownArtifactExtension(string? configured)
+    {
+        var extension = string.IsNullOrWhiteSpace(configured) ? ".md" : configured.Trim();
+        if (!extension.StartsWith(".", StringComparison.Ordinal))
+            extension = "." + extension;
+        return extension == "." ? ".md" : extension;
     }
 
     private static string NormalizeDiscoveryPath(string? configured, string fallback, string basePath)
@@ -259,4 +273,19 @@ internal static class CloudflareResponseHeaderPolicyBuilder
             $"http.request.uri.path eq \"{CloudflareCachePolicyBuilder.EscapeExpressionString(path)}\"");
         return $"(http.host eq \"{hostname}\" and ({string.Join(" or ", clauses)}))";
     }
+
+    private static string BuildDiscoveryExpression(string hostname, string basePath, DiscoveryHeaderGroup group)
+    {
+        if (string.IsNullOrWhiteSpace(group.PathSuffix))
+            return BuildExactPathExpression(hostname, group.Paths);
+
+        var suffix = CloudflareCachePolicyBuilder.EscapeExpressionString(group.PathSuffix);
+        if (basePath == "/")
+            return $"(http.host eq \"{hostname}\" and ends_with(http.request.uri.path, \"{suffix}\"))";
+
+        var prefix = CloudflareCachePolicyBuilder.EscapeExpressionString(basePath);
+        return $"(http.host eq \"{hostname}\" and starts_with(http.request.uri.path, \"{prefix}\") and ends_with(http.request.uri.path, \"{suffix}\"))";
+    }
+
+    private sealed record DiscoveryHeaderGroup(string Name, string ContentType, string[] Paths, string? PathSuffix = null);
 }

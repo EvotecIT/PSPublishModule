@@ -175,6 +175,44 @@ public sealed class CloudflareResponseHeaderPolicyTests
     }
 
     [Fact]
+    public void BuildManagedRules_ShouldApplyMarkdownHeadersAcrossConfiguredSubpath()
+    {
+        var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com",
+            "Docs",
+            new AgentSecurityHeadersSpec
+            {
+                Enabled = true,
+                Hsts = false,
+                CorsForWellKnown = true,
+                CorsAllowOrigin = "https://agent.example"
+            },
+            "/project/",
+            new AgentReadinessSpec
+            {
+                Enabled = true,
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = true, Extension = ".markdown" }
+            });
+
+        var markdownRule = Assert.IsType<JsonObject>(rules.Single(rule =>
+            rule!["description"]!.GetValue<string>().EndsWith("discovery Markdown headers", StringComparison.Ordinal)));
+        Assert.Equal(
+            "(http.host eq \"example.com\" and starts_with(http.request.uri.path, \"/project/\") and ends_with(http.request.uri.path, \".markdown\"))",
+            markdownRule["expression"]!.GetValue<string>());
+        var headers = markdownRule["action_parameters"]!["headers"]!.AsObject();
+        Assert.Equal("text/markdown; charset=utf-8", headers["Content-Type"]!["value"]!.GetValue<string>());
+        Assert.Equal("https://agent.example", headers["Access-Control-Allow-Origin"]!["value"]!.GetValue<string>());
+
+        var linkRule = Assert.IsType<JsonObject>(rules.Single(rule =>
+            rule!["description"]!.GetValue<string>().EndsWith("discovery Link headers", StringComparison.Ordinal)));
+        Assert.Contains("</project/index.markdown>; rel=\"alternate\"; type=\"text/markdown\"",
+            linkRule["action_parameters"]!["headers"]!["Link"]!["value"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildManagedRules_ShouldNotEmitDiscoveryCorsWhenDisabled()
     {
         var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(

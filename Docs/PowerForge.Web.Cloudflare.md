@@ -39,7 +39,7 @@ its environment-variable name to the CLI.
 The command manages two Cloudflare ruleset phases:
 
 - `http_request_cache_settings`: three cache rules
-- `http_response_headers_transform`: zero to three response-header rules (site-wide security, API Catalog media type/CORS, and JSON discovery media type/CORS, as configured)
+- `http_response_headers_transform`: zero to five response-header rules (site-wide security, homepage discovery links, API Catalog media type/CORS, JSON discovery media type/CORS, and Markdown artifact media type/CORS, as configured)
 
 Rules outside the site's `PowerForge <Name>:` description prefix retain their
 positions. PowerForge avoids a write when the effective policy is already
