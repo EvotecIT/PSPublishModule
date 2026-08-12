@@ -43,6 +43,12 @@ internal sealed partial class PowerForgeReleaseService
             return true;
         }
 
+        if (spec.Winget is { Enabled: true } winget &&
+            (request.SubmitWinget ?? (winget.Submit || winget.Submission?.Enabled == true)))
+        {
+            return true;
+        }
+
         return runTools && spec.Tools is not null &&
                (request.PublishToolGitHub ?? spec.Tools.GitHub.Publish);
     }
@@ -62,7 +68,13 @@ internal sealed partial class PowerForgeReleaseService
         {
             return false;
         }
-        return true;
+
+        var packagePublishingRequested =
+            !request.ModuleOnly &&
+            ((request.PublishNuget ?? spec.Packages?.PublishNuget) == true ||
+             (request.PublishProjectGitHub ?? spec.Packages?.PublishGitHub) == true);
+        return request.CaptureModuleArtifactProvenance ||
+               ResolveModuleRunMode(spec.Module, request, packagePublishingRequested) == ConfigurationGateMode.Publish;
     }
 
     private static void ValidateVirusTotalConfiguration(PowerForgeVirusTotalOptions? options)

@@ -434,7 +434,7 @@ internal sealed partial class PowerForgeReleaseService
 
         var coordinateModuleAndPackageVersions = ShouldCoordinateModuleAndPackageVersions(spec, runModule, runPackages);
         ModuleBuildHostBuildRequest? deferredModulePublishRequest = null;
-        IReadOnlyDictionary<string, string>? moduleArtifactBaseline = null;
+        IReadOnlyDictionary<string, ModuleArtifactSnapshot>? moduleArtifactBaseline = null;
         if (coordinateModuleAndPackageVersions)
         {
             var versionFloor = ResolveCoordinatedModuleVersionFloor(spec.Module!, configPath, request);

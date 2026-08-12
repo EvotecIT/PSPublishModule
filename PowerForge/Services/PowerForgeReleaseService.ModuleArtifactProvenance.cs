@@ -2,22 +2,23 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
-    internal static IReadOnlyDictionary<string, string> CaptureModuleArtifactBaseline(
+    internal static IReadOnlyDictionary<string, ModuleArtifactSnapshot> CaptureModuleArtifactBaseline(
         IEnumerable<string>? configuredPaths)
         => EnumerateModuleArtifactFiles(configuredPaths)
             .ToDictionary(
                 static path => path,
-                ComputeModuleArtifactSha256,
+                CaptureModuleArtifactSnapshot,
                 StringComparer.OrdinalIgnoreCase);
 
     internal static string[] ResolveProducedModuleArtifacts(
         IEnumerable<string>? configuredPaths,
-        IReadOnlyDictionary<string, string>? baseline)
+        IReadOnlyDictionary<string, ModuleArtifactSnapshot>? baseline)
     {
-        var prior = baseline ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var prior = baseline ?? new Dictionary<string, ModuleArtifactSnapshot>(StringComparer.OrdinalIgnoreCase);
         return EnumerateModuleArtifactFiles(configuredPaths)
-            .Where(path => !prior.TryGetValue(path, out var previousSha256) ||
-                           !string.Equals(previousSha256, ComputeModuleArtifactSha256(path), StringComparison.OrdinalIgnoreCase))
+            .Select(static path => (Path: path, Snapshot: CaptureModuleArtifactSnapshot(path)))
+            .Where(item => !prior.TryGetValue(item.Path, out var previous) || !previous.Equals(item.Snapshot))
+            .Select(static item => item.Path)
             .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -51,6 +52,36 @@ internal sealed partial class PowerForgeReleaseService
         }
     }
 
-    private static string ComputeModuleArtifactSha256(string path)
-        => ComputeSha256(path);
+    private static ModuleArtifactSnapshot CaptureModuleArtifactSnapshot(string path)
+    {
+        var file = new FileInfo(path);
+        return new ModuleArtifactSnapshot(
+            file.Length,
+            file.CreationTimeUtc,
+            file.LastWriteTimeUtc,
+            ComputeSha256(path));
+    }
+
+    internal readonly struct ModuleArtifactSnapshot
+    {
+        internal ModuleArtifactSnapshot(
+            long length,
+            DateTime creationTimeUtc,
+            DateTime lastWriteTimeUtc,
+            string sha256)
+        {
+            Length = length;
+            CreationTimeUtc = creationTimeUtc;
+            LastWriteTimeUtc = lastWriteTimeUtc;
+            Sha256 = sha256;
+        }
+
+        internal long Length { get; }
+
+        internal DateTime CreationTimeUtc { get; }
+
+        internal DateTime LastWriteTimeUtc { get; }
+
+        internal string Sha256 { get; }
+    }
 }

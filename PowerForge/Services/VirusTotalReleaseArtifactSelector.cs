@@ -51,6 +51,7 @@ internal static class VirusTotalReleaseArtifactSelector
                 "VirusTotal DestinationPathTemplate must contain {RelativePath} or {FileName} so artifacts cannot overwrite each other implicitly.");
         }
         ValidateTemplateTokens(options.DestinationPathTemplate, nameof(options.DestinationPathTemplate));
+        ValidateDestinationTemplateStructure(options.DestinationPathTemplate);
         if (!string.IsNullOrWhiteSpace(options.DetailsTemplate))
             ValidateTemplateTokens(options.DetailsTemplate!, nameof(options.DetailsTemplate));
 
@@ -84,6 +85,19 @@ internal static class VirusTotalReleaseArtifactSelector
         {
             throw new InvalidOperationException(
                 $"VirusTotal {settingName} contains an unsupported token or unmatched brace.");
+        }
+    }
+
+    private static void ValidateDestinationTemplateStructure(string template)
+    {
+        var normalized = template.Trim().Replace('\\', '/');
+        if (!normalized.StartsWith("/", StringComparison.Ordinal) ||
+            normalized.EndsWith("/", StringComparison.Ordinal) ||
+            normalized.Contains("//", StringComparison.Ordinal) ||
+            normalized.Split('/').Skip(1).Any(segment => segment is "." or ".." || string.IsNullOrWhiteSpace(segment)))
+        {
+            throw new InvalidOperationException(
+                $"VirusTotal DestinationPathTemplate has an invalid path structure: '{template}'.");
         }
     }
 

@@ -121,19 +121,25 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
         Directory.CreateDirectory(root);
         var unchanged = Path.Combine(root, "unchanged.zip");
         var changed = Path.Combine(root, "changed.zip");
+        var deterministicallyRebuilt = Path.Combine(root, "deterministic.zip");
         var added = Path.Combine(root, "added.zip");
         try
         {
             File.WriteAllText(unchanged, "same");
             File.WriteAllText(changed, "before");
+            File.WriteAllText(deterministicallyRebuilt, "same payload");
+            var rebuiltWriteTime = File.GetLastWriteTimeUtc(deterministicallyRebuilt);
             var baseline = PowerForgeReleaseService.CaptureModuleArtifactBaseline(new[] { root });
 
             File.WriteAllText(changed, "after");
+            File.WriteAllText(deterministicallyRebuilt, "same payload");
+            File.SetLastWriteTimeUtc(deterministicallyRebuilt, rebuiltWriteTime.AddMinutes(1));
             File.WriteAllText(added, "new");
             var produced = PowerForgeReleaseService.ResolveProducedModuleArtifacts(new[] { root }, baseline);
 
             Assert.DoesNotContain(unchanged, produced, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(changed, produced, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(deterministicallyRebuilt, produced, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(added, produced, StringComparer.OrdinalIgnoreCase);
         }
         finally

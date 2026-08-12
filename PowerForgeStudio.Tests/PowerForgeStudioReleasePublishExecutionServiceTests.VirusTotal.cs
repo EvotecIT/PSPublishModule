@@ -11,6 +11,28 @@ namespace PowerForgeStudio.Tests;
 
 public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
 {
+    [Fact]
+    public void CreateUnifiedReleaseBuildRequest_EnablesCheckpointModuleProvenance()
+    {
+        var root = Directory.CreateDirectory(
+            Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var releaseConfig = Path.Combine(root, "release.json");
+        File.WriteAllText(releaseConfig, "{}");
+        try
+        {
+            var request = ReleaseBuildExecutionService.CreateUnifiedReleaseBuildRequest(
+                releaseConfig,
+                "pwsh",
+                Path.Combine(root, "staging"));
+
+            Assert.True(request.CaptureModuleArtifactProvenance);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     [Theory]
     [InlineData(true, ReleasePublishReceiptStatus.Published)]
     [InlineData(false, ReleasePublishReceiptStatus.Failed)]

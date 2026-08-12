@@ -62,7 +62,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_BuildWithoutVirusTotal_DoesNotHashExistingModuleArtifacts()
+    public void Execute_OrdinaryBuildWithVirusTotal_DoesNotHashExistingModuleArtifacts()
     {
         var root = CreateSandbox();
         try
@@ -85,6 +85,12 @@ public sealed partial class PowerForgeReleaseServiceTests
                     RepositoryRoot = root,
                     ScriptPath = scriptPath,
                     ArtifactPaths = [artifactPath]
+                },
+                VirusTotal = new PowerForgeVirusTotalOptions
+                {
+                    Enabled = true,
+                    ApiKeyEnvName = "POWERFORGE_TEST_UNUSED_" + Guid.NewGuid().ToString("N"),
+                    ArtifactKinds = [VirusTotalArtifactKind.PowerShellModule]
                 }
             };
 
@@ -149,12 +155,46 @@ public sealed partial class PowerForgeReleaseServiceTests
             runTools: false,
             publishUnifiedGitHub: false));
 
-        Assert.True(PowerForgeReleaseService.ShouldCaptureVirusTotalModuleArtifactProvenance(
+        var wingetSpec = new PowerForgeReleaseSpec
+        {
+            Winget = new PowerForgeReleaseWingetOptions { Enabled = true, Submit = true },
+            VirusTotal = new PowerForgeVirusTotalOptions
+            {
+                Enabled = true,
+                ArtifactKinds = [VirusTotalArtifactKind.MsiPackage]
+            }
+        };
+        Assert.True(PowerForgeReleaseService.ShouldPublishVirusTotalMonitor(
+            wingetSpec,
+            new PowerForgeReleaseRequest(),
+            explicitAppleAction: false,
+            runModule: false,
+            runPackages: false,
+            runTools: true,
+            publishUnifiedGitHub: false));
+        Assert.False(PowerForgeReleaseService.ShouldPublishVirusTotalMonitor(
+            wingetSpec,
+            new PowerForgeReleaseRequest { SubmitWinget = false },
+            explicitAppleAction: false,
+            runModule: false,
+            runPackages: false,
+            runTools: true,
+            publishUnifiedGitHub: false));
+
+        Assert.False(PowerForgeReleaseService.ShouldCaptureVirusTotalModuleArtifactProvenance(
             spec,
             new PowerForgeReleaseRequest
             {
                 ModuleRunMode = ConfigurationGateMode.Build,
                 PublishNuget = true
+            },
+            runModule: true));
+        Assert.True(PowerForgeReleaseService.ShouldCaptureVirusTotalModuleArtifactProvenance(
+            spec,
+            new PowerForgeReleaseRequest
+            {
+                ModuleRunMode = ConfigurationGateMode.Build,
+                CaptureModuleArtifactProvenance = true
             },
             runModule: true));
         Assert.True(PowerForgeReleaseService.ShouldCaptureVirusTotalModuleArtifactProvenance(

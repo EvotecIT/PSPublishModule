@@ -48,7 +48,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = releasePath,
                     ModuleOnly = true,
-                    ModuleRunMode = ConfigurationGateMode.Build
+                    ModuleRunMode = ConfigurationGateMode.Build,
+                    CaptureModuleArtifactProvenance = true
                 });
 
             Assert.True(result.Success, result.ErrorMessage);

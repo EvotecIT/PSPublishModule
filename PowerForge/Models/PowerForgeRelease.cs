@@ -69,6 +69,8 @@ internal sealed class PowerForgeReleaseRequest
 
     internal bool CheckpointAppleApps { get; set; }
 
+    internal bool CaptureModuleArtifactProvenance { get; set; }
+
     /// <summary>Build Apple archives from a private detached exact-commit source worktree.</summary>
     internal bool RequireImmutableAppleSourceSnapshot { get; set; }
 
