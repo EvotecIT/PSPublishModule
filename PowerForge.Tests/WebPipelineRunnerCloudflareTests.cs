@@ -203,6 +203,7 @@ public class WebPipelineRunnerCloudflareTests
 
             Assert.True(result.Success, result.Steps.Single().Message);
             Assert.NotNull(requestCounter);
+            Assert.Contains(appPath, requestCounter!.Paths);
             Assert.Contains("/apps/converter/_framework/blazor.webassembly.abc123.js?v=release", requestCounter!.Paths);
         }
         finally
@@ -254,6 +255,80 @@ public class WebPipelineRunnerCloudflareTests
         {
             await StopServerAsync(listener, cts, serverTask);
             TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task RunPipeline_CloudflareVerify_RejectsCachedErrorResponse()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-cloudflare-cached-error-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
+        try
+        {
+            var port = GetFreePort();
+            (listener, cts, serverTask, _) = StartCloudflareStatusServer(
+                port, "HIT", responseStatus: HttpStatusCode.NotFound);
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "cloudflare",
+                      "operation": "verify",
+                      "baseUrl": "http://127.0.0.1:{{port}}",
+                      "warmupRequests": 0,
+                      "allowStatuses": "HIT",
+                      "paths": "/missing.js"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Contains("Cloudflare cache verify failed", result.Steps.Single().Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            await StopServerAsync(listener, cts, serverTask);
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task CloudflareVerifyCommand_ShouldCombineExplicitUrlsAndPaths()
+    {
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
+        RequestCounter? requestCounter = null;
+        try
+        {
+            var port = GetFreePort();
+            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(port, "HIT");
+            var baseUrl = $"http://127.0.0.1:{port}";
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand(
+                "cloudflare",
+                ["verify", "--base-url", baseUrl, "--url", $"{baseUrl}/explicit", "--path", "/from-path", "--warmup", "0", "--allow-status", "HIT"],
+                outputJson: false,
+                new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+
+            Assert.Equal(0, exitCode);
+            Assert.NotNull(requestCounter);
+            Assert.Contains("/explicit", requestCounter!.Paths);
+            Assert.Contains("/from-path", requestCounter.Paths);
+        }
+        finally
+        {
+            await StopServerAsync(listener, cts, serverTask);
         }
     }
 
@@ -313,7 +388,8 @@ public class WebPipelineRunnerCloudflareTests
         string? htmlPath = null,
         string? html = null,
         string? redirectPath = null,
-        string? redirectTarget = null)
+        string? redirectTarget = null,
+        HttpStatusCode responseStatus = HttpStatusCode.OK)
     {
         var listener = new HttpListener();
         listener.Prefixes.Add($"http://127.0.0.1:{port}/");
@@ -354,7 +430,7 @@ public class WebPipelineRunnerCloudflareTests
                 }
                 var content = string.Equals(context.Request.Url?.AbsolutePath, htmlPath, StringComparison.Ordinal) ? html ?? string.Empty : "ok";
                 var payload = Encoding.UTF8.GetBytes(content);
-                context.Response.StatusCode = 200;
+                context.Response.StatusCode = (int)responseStatus;
                 context.Response.Headers["cf-cache-status"] = cacheStatus;
                 context.Response.ContentType = string.Equals(context.Request.Url?.AbsolutePath, htmlPath, StringComparison.Ordinal) ? "text/html" : "text/plain";
                 context.Response.OutputStream.Write(payload, 0, payload.Length);

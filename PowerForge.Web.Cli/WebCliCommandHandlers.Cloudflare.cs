@@ -414,13 +414,14 @@ internal static partial class WebCliCommandHandlers
         if (urls.Count == 0 && paths.Count == 0 && siteProfile is not null)
             paths.AddRange(siteProfile.PurgePaths);
 
-        if (urls.Count == 0 && paths.Count > 0)
+        if (paths.Count > 0)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
                 return Fail("Missing --base-url (required when using --path/--paths).", outputJson, logger, "web.cloudflare.purge");
 
             urls.AddRange(paths.Select(p => CombineUrl(baseUrl, p)));
         }
+        urls = urls.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         var (ok, message) = CloudflareCachePurger.Purge(
             zoneId: zoneId,
@@ -474,13 +475,14 @@ internal static partial class WebCliCommandHandlers
         if (urls.Count == 0 && paths.Count == 0 && siteProfile is not null)
             paths.AddRange(siteProfile.VerifyPaths);
 
-        if (urls.Count == 0 && paths.Count > 0)
+        if (paths.Count > 0)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
                 return Fail("Missing --base-url (required when using --path/--paths).", outputJson, logger, "web.cloudflare.verify");
 
             urls.AddRange(paths.Select(p => CombineUrl(baseUrl, p)));
         }
+        urls = urls.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         if (urls.Count == 0)
             return Fail("Missing target URLs. Provide --url/--urls or --path/--paths.", outputJson, logger, "web.cloudflare.verify");

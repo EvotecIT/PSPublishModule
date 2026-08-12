@@ -37,13 +37,15 @@ internal static partial class WebPipelineRunner
             paths.AddRange(profilePaths);
         }
 
-        if (urls.Count == 0 && paths.Count > 0)
+        if (paths.Count > 0)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
                 throw new InvalidOperationException("cloudflare: missing 'baseUrl' (required when using 'paths').");
 
             urls.AddRange(paths.Select(p => CombineUrl(baseUrl, p)));
         }
+
+        urls = urls.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         if (operation.Equals("verify", StringComparison.OrdinalIgnoreCase))
         {

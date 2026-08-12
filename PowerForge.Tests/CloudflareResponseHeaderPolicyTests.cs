@@ -128,6 +128,29 @@ public sealed class CloudflareResponseHeaderPolicyTests
     }
 
     [Fact]
+    public void BuildManagedRules_ShouldRejectOversizedDiscoveryCorsExpression()
+    {
+        var readiness = new AgentReadinessSpec
+        {
+            Enabled = true,
+            ApiCatalog = new AgentApiCatalogSpec
+            {
+                Enabled = true,
+                OutputPath = "discovery/" + new string('a', 4096) + ".json"
+            }
+        };
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+                "example.com",
+                "Docs",
+                new AgentSecurityHeadersSpec { Hsts = false },
+                agentReadiness: readiness));
+
+        Assert.Contains("discovery resource CORS expression", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void RouteProfile_ShouldDisableCloudflareHeadersWhenAgentReadinessIsDisabled()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-cloudflare-disabled-" + Guid.NewGuid().ToString("N"));

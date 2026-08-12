@@ -126,7 +126,11 @@ internal static class CloudflareCacheVerifier
             if (response.Headers.TryGetValues("cf-cache-status", out var values))
                 cacheStatus = values.FirstOrDefault();
 
-            return true;
+            if (response.IsSuccessStatusCode)
+                return true;
+
+            error = $"HTTP {httpStatusCode} {response.ReasonPhrase}".TrimEnd();
+            return false;
         }
         catch (Exception ex)
         {

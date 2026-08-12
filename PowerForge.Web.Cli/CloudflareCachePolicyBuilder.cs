@@ -222,7 +222,7 @@ internal static class CloudflareCachePolicyBuilder
             : $"(starts_with(http.request.uri.path, \"{EscapeExpressionString(basePath)}\") and {function})";
     }
 
-    private static void ValidateExpressionLength(string ruleName, string expression)
+    internal static void ValidateExpressionLength(string ruleName, string expression)
     {
         if (expression.Length > MaxRuleExpressionLength)
         {

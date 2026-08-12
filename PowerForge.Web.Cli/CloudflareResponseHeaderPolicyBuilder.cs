@@ -39,10 +39,12 @@ internal static class CloudflareResponseHeaderPolicyBuilder
 
         if (headers.Count > 0)
         {
+            var securityExpression = BuildExpression(hostname, basePath);
+            CloudflareCachePolicyBuilder.ValidateExpressionLength("response security headers", securityExpression);
             rules.Add(new JsonObject
             {
                 ["description"] = $"{descriptionPrefix} security headers",
-                ["expression"] = BuildExpression(hostname, basePath),
+                ["expression"] = securityExpression,
                 ["action"] = "rewrite",
                 ["action_parameters"] = new JsonObject { ["headers"] = headers },
                 ["enabled"] = true
@@ -55,10 +57,12 @@ internal static class CloudflareResponseHeaderPolicyBuilder
         {
             var corsHeaders = new JsonObject();
             AddHeader(corsHeaders, "Access-Control-Allow-Origin", enabled: true, security.CorsAllowOrigin);
+            var corsExpression = BuildExactPathExpression(hostname, discoveryPaths);
+            CloudflareCachePolicyBuilder.ValidateExpressionLength("discovery resource CORS", corsExpression);
             rules.Add(new JsonObject
             {
                 ["description"] = $"{descriptionPrefix} discovery resource CORS",
-                ["expression"] = BuildExactPathExpression(hostname, discoveryPaths),
+                ["expression"] = corsExpression,
                 ["action"] = "rewrite",
                 ["action_parameters"] = new JsonObject { ["headers"] = corsHeaders },
                 ["enabled"] = true
