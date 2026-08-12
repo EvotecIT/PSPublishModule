@@ -74,9 +74,13 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         if (!TryGet(entry, "SourceDirty", out var sourceDirty) || sourceDirty.ValueKind != JsonValueKind.False)
             throw Invalid("PowerForge manifest must come from a clean source checkout.");
 
-        var sourceRevision = RequireHex(ReadString(entry, "SourceRevision"), 7, 64, "source revision");
+        var sourceRevision = RequireFullGitObjectId(ReadString(entry, "SourceRevision"), "source revision");
         var expectedRevision = RequireHex(request.ExpectedSourceRevision, 7, 64, "expected source revision");
-        if (!string.Equals(sourceRevision, expectedRevision, StringComparison.OrdinalIgnoreCase))
+        var abbreviatedExpected = expectedRevision.Length < 40;
+        if (abbreviatedExpected
+                ? !sourceRevision.StartsWith(expectedRevision, StringComparison.OrdinalIgnoreCase)
+                : sourceRevision.Length != expectedRevision.Length ||
+                  !string.Equals(sourceRevision, expectedRevision, StringComparison.OrdinalIgnoreCase))
         {
             throw Invalid("PowerForge manifest source revision does not match the release workflow commit.");
         }
@@ -422,6 +426,14 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         var normalized = RequireText(value, name);
         if (normalized.Length < minimum || normalized.Length > maximum || normalized.Any(ch => !Uri.IsHexDigit(ch)))
             throw Invalid($"PowerForge manifest does not contain a valid {name}.");
+        return normalized;
+    }
+
+    private static string RequireFullGitObjectId(string? value, string name)
+    {
+        var normalized = RequireText(value, name);
+        if ((normalized.Length != 40 && normalized.Length != 64) || normalized.Any(ch => !Uri.IsHexDigit(ch)))
+            throw Invalid($"PowerForge manifest does not contain a full valid {name}.");
         return normalized;
     }
 

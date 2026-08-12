@@ -38,6 +38,57 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_AcceptsAbbreviatedExpectedWorkflowCommit()
+    {
+        using var fixture = new ReleaseFixture();
+        var request = fixture.CreateRequest();
+        request.ExpectedSourceRevision = fixture.SourceRevision[..12];
+
+        DotNetPublishReleaseArtifact result = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal(fixture.SourceRevision, result.SourceRevision);
+    }
+
+    [Fact]
+    public void Verify_RejectsAbbreviatedManifestSourceRevision()
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteManifestWithSourceRevision(fixture.SourceRevision[..12]);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("full valid source revision", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_RejectsFullSha1AsPrefixOfSha256ManifestRevision()
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteManifestWithSourceRevision(fixture.SourceRevision + new string('b', 24));
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("workflow commit", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_AcceptsFullAndAbbreviatedSha256WorkflowCommit()
+    {
+        using var fixture = new ReleaseFixture();
+        string sourceRevision = new string('c', 64);
+        fixture.WriteManifestWithSourceRevision(sourceRevision);
+        var fullRequest = fixture.CreateRequest();
+        fullRequest.ExpectedSourceRevision = sourceRevision;
+        var abbreviatedRequest = fixture.CreateRequest();
+        abbreviatedRequest.ExpectedSourceRevision = sourceRevision[..20];
+
+        Assert.Equal(sourceRevision, fixture.CreateVerifier().Verify(fullRequest).SourceRevision);
+        Assert.Equal(sourceRevision, fixture.CreateVerifier().Verify(abbreviatedRequest).SourceRevision);
+    }
+
+    [Fact]
     public void Verify_RequiresCallerBoundSourceRevision()
     {
         using var fixture = new ReleaseFixture();
@@ -517,6 +568,40 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
                     }
                 }
             })));
+            RefreshChecksums(["Artifacts/Test-1.2.3.msi"]);
+        }
+
+        internal void WriteManifestWithSourceRevision(string sourceRevision)
+        {
+            File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    Category = "Installer",
+                    InstallerId = "Test.MSI",
+                    Target = "Service",
+                    Framework = "net8.0",
+                    Runtime = "win-x64",
+                    Style = "Portable",
+                    OutputFiles = new[] { "Artifacts/Test-1.2.3.msi" },
+                    SignedFiles = 1,
+                    SourceRevision = sourceRevision,
+                    SourceDirty = false,
+                    PackageMetadata = new[]
+                    {
+                        new
+                        {
+                            Path = "Artifacts/Test-1.2.3.msi",
+                            ProductName = "Test Product",
+                            Manufacturer = "Evotec",
+                            ProductVersion = "1.2.3",
+                            ProductCode = "{11111111-1111-1111-1111-111111111111}",
+                            UpgradeCode = "{22222222-2222-2222-2222-222222222222}",
+                            ReadError = (string?)null
+                        }
+                    }
+                }
+            }));
             RefreshChecksums(["Artifacts/Test-1.2.3.msi"]);
         }
 
