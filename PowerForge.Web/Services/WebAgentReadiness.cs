@@ -473,6 +473,12 @@ public static partial class WebAgentReadiness
 
         var agentsJsonUrl = ResolveRemoteOutputUrl(baseUrl, spec.AgentsJson?.OutputPath, "/agents.json");
         var agentsJson = await TryGetTextAsync(http, agentsJsonUrl, null, cancellationToken).ConfigureAwait(false);
+        var agentsWellKnownUrl = ResolveRemoteOutputUrl(baseUrl, spec.AgentsJson?.WellKnownOutputPath, "/.well-known/agents.json");
+        var agentsWellKnown = spec.AgentsJson?.Enabled == true
+            ? SameRemoteUrl(agentsWellKnownUrl, agentsJsonUrl)
+                ? agentsJson
+                : await TryGetTextAsync(http, agentsWellKnownUrl, null, cancellationToken).ConfigureAwait(false)
+            : null;
         var agentsJsonValid = agentsJson.Success && ValidateAgentsJsonText(agentsJson.Text);
         var agentsJsonExpected = spec.AgentsJson?.Enabled == true;
         AddCheck(checks, "agents-json", "agent-protocols", "agents.json",
@@ -496,6 +502,16 @@ public static partial class WebAgentReadiness
             mcpValid ? "MCP Server Card is valid." : (spec.McpServerCard?.Enabled == true ? "MCP Server Card was not found or is not valid." : "MCP Server Card verification is disabled by site policy."),
             mcpUrl);
 
+        AddRemoteDiscoveryCorsCheck(checks, spec,
+        [
+            (spec.ApiCatalog?.Enabled == true, apiCatalogUrl, apiCatalog.Response),
+            (spec.AgentSkills?.Enabled == true, agentSkillsUrl, agentSkills.Response),
+            (spec.AgentsJson?.Enabled == true, agentsJsonUrl, agentsJson.Response),
+            (spec.AgentsJson?.Enabled == true, agentsWellKnownUrl, agentsWellKnown?.Response),
+            (spec.A2AAgentCard?.Enabled == true, a2aUrl, a2a.Response),
+            (spec.McpServerCard?.Enabled == true, mcpUrl, mcp.Response)
+        ]);
+
         return new WebAgentReadinessResult
         {
             Operation = "scan",
@@ -506,7 +522,7 @@ public static partial class WebAgentReadiness
         };
     }
 
-    private static AgentReadinessSpec ResolveSpec(AgentReadinessSpec? spec)
+    internal static AgentReadinessSpec ResolveSpec(AgentReadinessSpec? spec)
     {
         if (spec is not null)
         {
@@ -538,12 +554,13 @@ public static partial class WebAgentReadiness
                 resolved.ApiCatalog ??= new AgentApiCatalogSpec();
                 resolved.AgentSkills ??= new AgentSkillsDiscoverySpec();
                 resolved.AgentsJson ??= new AgentDiscoveryDocumentSpec();
+                ValidateDiscoveryOutputPaths(resolved);
             }
 
             return resolved;
         }
 
-        return new AgentReadinessSpec
+        var defaults = new AgentReadinessSpec
         {
             Enabled = true,
             SecurityHeaders = new AgentSecurityHeadersSpec(),
@@ -553,6 +570,64 @@ public static partial class WebAgentReadiness
             AgentsJson = new AgentDiscoveryDocumentSpec(),
             Apache = new AgentApacheSupportSpec { Enabled = false }
         };
+        ValidateDiscoveryOutputPaths(defaults);
+        return defaults;
+    }
+
+    private static void ValidateDiscoveryOutputPaths(AgentReadinessSpec spec)
+    {
+        var owners = new Dictionary<string, (string DisplayName, string ResourceOwner)>(StringComparer.OrdinalIgnoreCase);
+
+        void Add(string displayName, string resourceOwner, string? configured, string fallback)
+        {
+            var value = string.IsNullOrWhiteSpace(configured) ? fallback : configured.Trim();
+            if (Uri.TryCreate(value, UriKind.Absolute, out _))
+                throw new ArgumentException($"Agent-readiness output path '{configured}' must be relative to the site root.");
+
+            var normalized = NormalizeDiscoveryOutputPath(value);
+            if (owners.TryGetValue(normalized, out var existing))
+            {
+                if (string.Equals(existing.ResourceOwner, resourceOwner, StringComparison.Ordinal))
+                    return;
+                throw new ArgumentException(
+                    $"Agent-readiness discovery output path '{normalized}' is configured for both {existing.DisplayName} and {displayName}.");
+            }
+            owners[normalized] = (displayName, resourceOwner);
+        }
+
+        if (spec.ApiCatalog?.Enabled == true)
+            Add("API Catalog", "api-catalog", spec.ApiCatalog.OutputPath, ".well-known/api-catalog");
+        if (spec.AgentSkills?.Enabled == true)
+            Add("Agent Skills", "agent-skills", spec.AgentSkills.IndexPath, ".well-known/agent-skills/index.json");
+        if (spec.AgentsJson?.Enabled == true)
+        {
+            Add("agents.json", "agents-json", spec.AgentsJson.OutputPath, "agents.json");
+            Add("well-known agents.json", "agents-json", spec.AgentsJson.WellKnownOutputPath, ".well-known/agents.json");
+        }
+        if (spec.A2AAgentCard?.Enabled == true)
+            Add("A2A Agent Card", "a2a-agent-card", spec.A2AAgentCard.OutputPath, ".well-known/agent-card.json");
+        if (spec.McpServerCard?.Enabled == true)
+            Add("MCP Server Card", "mcp-server-card", spec.McpServerCard.OutputPath, ".well-known/mcp/server-card.json");
+    }
+
+    private static string NormalizeDiscoveryOutputPath(string value)
+    {
+        var segments = new List<string>();
+        foreach (var segment in value.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".")
+                continue;
+            if (segment == "..")
+            {
+                if (segments.Count == 0)
+                    throw new ArgumentException($"Agent-readiness output path '{value}' resolves outside the site root.");
+                segments.RemoveAt(segments.Count - 1);
+                continue;
+            }
+            segments.Add(segment);
+        }
+
+        return "/" + string.Join("/", segments);
     }
 
     private static string UpdateRobots(string siteRoot, string? baseUrl, AgentReadinessSpec spec)

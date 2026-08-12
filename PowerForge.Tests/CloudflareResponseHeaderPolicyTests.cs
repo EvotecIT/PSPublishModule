@@ -99,16 +99,23 @@ public sealed class CloudflareResponseHeaderPolicyTests
         var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
             "example.com", "Docs", security, "/project/", readiness);
 
-        Assert.Equal(2, rules.Count);
-        var corsRule = Assert.IsType<JsonObject>(rules[1]);
-        var expression = corsRule["expression"]!.GetValue<string>();
+        Assert.Equal(3, rules.Count);
+        var apiRule = Assert.IsType<JsonObject>(rules.Single(rule =>
+            rule!["description"]!.GetValue<string>().EndsWith("discovery API catalog headers", StringComparison.Ordinal)));
+        var jsonRule = Assert.IsType<JsonObject>(rules.Single(rule =>
+            rule!["description"]!.GetValue<string>().EndsWith("discovery JSON headers", StringComparison.Ordinal)));
+        var expression = apiRule["expression"]!.GetValue<string>() + jsonRule["expression"]!.GetValue<string>();
         Assert.Contains("/project/discovery/catalog.json", expression, StringComparison.Ordinal);
         Assert.Contains("/project/skills/index.json", expression, StringComparison.Ordinal);
         Assert.Contains("/project/.well-known/agent-card.json", expression, StringComparison.Ordinal);
         Assert.Contains("/project/cards/mcp.json", expression, StringComparison.Ordinal);
         Assert.DoesNotContain("agents.json", expression, StringComparison.Ordinal);
         Assert.Equal("https://client.example",
-            corsRule["action_parameters"]!["headers"]!["Access-Control-Allow-Origin"]!["value"]!.GetValue<string>());
+            jsonRule["action_parameters"]!["headers"]!["Access-Control-Allow-Origin"]!["value"]!.GetValue<string>());
+        Assert.Equal("application/linkset+json; profile=\"https://www.rfc-editor.org/info/rfc9727\"",
+            apiRule["action_parameters"]!["headers"]!["Content-Type"]!["value"]!.GetValue<string>());
+        Assert.Equal("application/json",
+            jsonRule["action_parameters"]!["headers"]!["Content-Type"]!["value"]!.GetValue<string>());
     }
 
     [Fact]
@@ -124,7 +131,35 @@ public sealed class CloudflareResponseHeaderPolicyTests
                 ApiCatalog = new AgentApiCatalogSpec { Enabled = true }
             });
 
-        Assert.Single(rules);
+        Assert.Equal(3, rules.Count);
+        foreach (var discoveryRule in rules.Skip(1))
+        {
+            var discoveryHeaders = discoveryRule!["action_parameters"]!["headers"]!.AsObject();
+            Assert.True(discoveryHeaders.ContainsKey("Content-Type"));
+            Assert.False(discoveryHeaders.ContainsKey("Access-Control-Allow-Origin"));
+        }
+    }
+
+    [Fact]
+    public void BuildManagedRules_ShouldKeepDiscoveryContentTypeWhenSecurityHeadersAreDisabled()
+    {
+        var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+            "example.com",
+            "Docs",
+            new AgentSecurityHeadersSpec { Enabled = false, Hsts = false },
+            agentReadiness: new AgentReadinessSpec
+            {
+                Enabled = true,
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = true }
+            });
+
+        Assert.Equal(2, rules.Count);
+        var rule = Assert.IsType<JsonObject>(rules.Single(candidate =>
+            candidate!["description"]!.GetValue<string>().EndsWith("discovery API catalog headers", StringComparison.Ordinal)));
+        var headers = rule["action_parameters"]!["headers"]!.AsObject();
+        Assert.Equal("application/linkset+json; profile=\"https://www.rfc-editor.org/info/rfc9727\"",
+            headers["Content-Type"]!["value"]!.GetValue<string>());
+        Assert.False(headers.ContainsKey("Access-Control-Allow-Origin"));
     }
 
     [Fact]
@@ -147,7 +182,28 @@ public sealed class CloudflareResponseHeaderPolicyTests
                 new AgentSecurityHeadersSpec { Hsts = false },
                 agentReadiness: readiness));
 
-        Assert.Contains("discovery resource CORS expression", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("discovery API catalog headers expression", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuildManagedRules_ShouldRejectCollidingDiscoveryMediaTypePaths()
+    {
+        var readiness = new AgentReadinessSpec
+        {
+            Enabled = true,
+            ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/discovery.json" },
+            AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true, IndexPath = "custom/discovery.json" },
+            AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false }
+        };
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+                "example.com",
+                "Docs",
+                new AgentSecurityHeadersSpec { Hsts = false },
+                agentReadiness: readiness));
+
+        Assert.Contains("configured for both API Catalog and Agent Skills", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -172,6 +228,41 @@ public sealed class CloudflareResponseHeaderPolicyTests
             Assert.NotNull(profile.SecurityHeaders);
             Assert.False(profile.SecurityHeaders.Enabled);
             Assert.False(profile.SecurityHeaders.Hsts);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RouteProfile_ShouldMaterializeEffectiveDiscoveryDefaults()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-cloudflare-default-discovery-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath,
+                """
+                {
+                  "Name": "Defaults",
+                  "BaseUrl": "https://example.com/project/",
+                  "AgentReadiness": {
+                    "Enabled": true,
+                    "SecurityHeaders": { "Hsts": false }
+                  }
+                }
+                """);
+
+            var profile = CloudflareRouteProfileResolver.Load(configPath);
+            var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
+                "example.com", "Defaults", profile.SecurityHeaders, "/project/", profile.AgentReadiness);
+
+            Assert.NotNull(profile.AgentReadiness?.ApiCatalog);
+            Assert.NotNull(profile.AgentReadiness?.AgentSkills);
+            Assert.NotNull(profile.AgentReadiness?.AgentsJson);
+            Assert.Equal(3, rules.Count);
         }
         finally
         {
@@ -205,6 +296,29 @@ public sealed class CloudflareResponseHeaderPolicyTests
         Assert.Equal(1, result.ManagedRuleCount);
         Assert.Equal(1, result.PreservedRuleCount);
         Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public void Apply_DefinitiveUpdateRejection_ShouldNotExposeRollbackSnapshot()
+    {
+        var existingRules = new JsonArray { ExistingRule("custom-id", "Operator custom header") };
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(existingRules)),
+            JsonResponse(HttpStatusCode.Forbidden, """{"success":false,"errors":[{"message":"write denied"}]}"""));
+        using var client = NewClient(handler);
+
+        var result = CloudflareResponseHeaderPolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "officeimo.com",
+            "OfficeIMO",
+            new AgentSecurityHeadersSpec { Hsts = false },
+            dryRun: false,
+            client);
+
+        Assert.False(result.Success);
+        Assert.Null(result.Snapshot);
+        Assert.Equal(2, handler.Requests.Count);
     }
 
     [Fact]
@@ -259,7 +373,6 @@ public sealed class CloudflareResponseHeaderPolicyTests
             JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
             JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldHeaderRules)),
             JsonResponse(HttpStatusCode.BadRequest, """{"success":false,"errors":[{"message":"invalid transform"}]}"""),
-            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
             JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
         using var client = NewClient(handler);
 
@@ -275,13 +388,11 @@ public sealed class CloudflareResponseHeaderPolicyTests
 
         Assert.False(result.Success);
         Assert.Contains("previous site-policy state was restored", result.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(8, handler.Requests.Count);
-        Assert.Equal([HttpMethod.Get, HttpMethod.Get, HttpMethod.Get, HttpMethod.Put, HttpMethod.Get, HttpMethod.Put, HttpMethod.Put, HttpMethod.Put],
+        Assert.Equal(7, handler.Requests.Count);
+        Assert.Equal([HttpMethod.Get, HttpMethod.Get, HttpMethod.Get, HttpMethod.Put, HttpMethod.Get, HttpMethod.Put, HttpMethod.Put],
             handler.Requests.Select(request => request.Method).ToArray());
 
-        var restoredHeaders = JsonNode.Parse(handler.Requests[6].Body)!["rules"]!.AsArray();
-        var restoredCache = JsonNode.Parse(handler.Requests[7].Body)!["rules"]!.AsArray();
-        Assert.Equal("Operator header rule", Assert.Single(restoredHeaders)!["description"]!.GetValue<string>());
+        var restoredCache = JsonNode.Parse(handler.Requests[6].Body)!["rules"]!.AsArray();
         Assert.Equal("Operator cache rule", Assert.Single(restoredCache)!["description"]!.GetValue<string>());
     }
 
@@ -296,7 +407,6 @@ public sealed class CloudflareResponseHeaderPolicyTests
             JsonResponse(HttpStatusCode.OK, SuccessEnvelope("new-cache-ruleset")),
             JsonResponse(HttpStatusCode.OK, ExistingEnvelope(oldHeaderRules)),
             JsonResponse(HttpStatusCode.BadRequest, """{"success":false,"errors":[{"message":"invalid transform"}]}"""),
-            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
             JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
         using var client = NewClient(handler);
 
@@ -312,8 +422,9 @@ public sealed class CloudflareResponseHeaderPolicyTests
 
         Assert.False(result.Success);
         Assert.Contains("previous site-policy state was restored", result.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(HttpMethod.Delete, handler.Requests[7].Method);
-        Assert.EndsWith("/rulesets/new-cache-ruleset", handler.Requests[7].Uri.AbsolutePath, StringComparison.Ordinal);
+        Assert.Equal(7, handler.Requests.Count);
+        Assert.Equal(HttpMethod.Delete, handler.Requests[6].Method);
+        Assert.EndsWith("/rulesets/new-cache-ruleset", handler.Requests[6].Uri.AbsolutePath, StringComparison.Ordinal);
     }
 
     [Fact]

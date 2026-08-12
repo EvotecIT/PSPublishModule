@@ -190,7 +190,7 @@ public sealed class CloudflareCachePolicyTests
     {
         var handler = new SequenceHandler(
             JsonResponse(HttpStatusCode.NotFound, """{"success":false,"errors":[{"message":"not found"}]}"""),
-            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope("new-ruleset")));
         using var client = NewClient(handler);
 
         var result = CloudflareCachePolicyManager.Apply(
@@ -212,6 +212,80 @@ public sealed class CloudflareCachePolicyTests
         Assert.Equal("zone", payload["kind"]!.GetValue<string>());
         Assert.Equal("http_request_cache_settings", payload["phase"]!.GetValue<string>());
         Assert.Equal(3, payload["rules"]!.AsArray().Count);
+    }
+
+    [Fact]
+    public void Apply_ShouldFailWhenCreatedRulesetCannotBeIdentifiedForRollback()
+    {
+        var desiredRules = CloudflareCachePolicyBuilder.BuildManagedRules("example.com", "Example", htmlPaths: null);
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.NotFound, """{"success":false,"errors":[{"message":"not found"}]}"""),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(desiredRules)));
+        using var client = NewClient(handler);
+
+        var result = CloudflareCachePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "example.com",
+            "Example",
+            htmlPaths: null,
+            dryRun: false,
+            logger: null,
+            client);
+
+        Assert.False(result.Success);
+        Assert.Contains("could not be identified safely for rollback", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(3, handler.Requests.Count);
+    }
+
+    [Fact]
+    public void Apply_ShouldTreatServerErrorOnExistingRulesetWriteAsAmbiguous()
+    {
+        var existingRules = new JsonArray { ExistingRule("custom-id", "Operator custom rule", "true") };
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(existingRules)),
+            JsonResponse(HttpStatusCode.InternalServerError, """{"success":false,"errors":[{"message":"server error"}]}"""));
+        using var client = NewClient(handler);
+
+        var result = CloudflareCachePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "example.com",
+            "Example",
+            htmlPaths: null,
+            dryRun: false,
+            logger: null,
+            client);
+
+        Assert.False(result.Success);
+        Assert.NotNull(result.Reconciliation?.Snapshot);
+    }
+
+    [Fact]
+    public void Apply_ShouldReconcileAmbiguousServerErrorAfterCreate()
+    {
+        var desiredRules = CloudflareCachePolicyBuilder.BuildManagedRules("example.com", "Example", htmlPaths: null);
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.NotFound, """{"success":false,"errors":[{"message":"not found"}]}"""),
+            JsonResponse(HttpStatusCode.BadGateway, """{"success":false,"errors":[{"message":"upstream timeout"}]}"""),
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(desiredRules, "created-after-timeout")));
+        using var client = NewClient(handler);
+
+        var result = CloudflareCachePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "example.com",
+            "Example",
+            htmlPaths: null,
+            dryRun: false,
+            logger: null,
+            client);
+
+        Assert.False(result.Success);
+        Assert.NotNull(result.Reconciliation?.Snapshot);
+        Assert.Equal("created-after-timeout", result.Reconciliation?.AppliedRulesetId);
+        Assert.Equal(3, handler.Requests.Count);
     }
 
     [Fact]
@@ -434,16 +508,22 @@ public sealed class CloudflareCachePolicyTests
         ["enabled"] = true
     };
 
-    private static string ExistingEnvelope(JsonArray rules) => new JsonObject
+    private static string ExistingEnvelope(JsonArray rules, string? id = null)
     {
-        ["success"] = true,
-        ["result"] = new JsonObject { ["rules"] = rules }
-    }.ToJsonString();
+        var result = new JsonObject { ["rules"] = rules };
+        if (!string.IsNullOrWhiteSpace(id))
+            result["id"] = id;
+        return new JsonObject
+        {
+            ["success"] = true,
+            ["result"] = result
+        }.ToJsonString();
+    }
 
-    private static string SuccessEnvelope() => new JsonObject
+    private static string SuccessEnvelope(string? id = null) => new JsonObject
     {
         ["success"] = true,
-        ["result"] = new JsonObject()
+        ["result"] = string.IsNullOrWhiteSpace(id) ? new JsonObject() : new JsonObject { ["id"] = id }
     }.ToJsonString();
 
     private static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string body) => new(statusCode)

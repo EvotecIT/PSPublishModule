@@ -20,19 +20,21 @@ internal static class CloudflareResponseHeaderPolicyBuilder
         hostname = CloudflareCachePolicyBuilder.NormalizeHostname(hostname);
         policyName = CloudflareCachePolicyBuilder.NormalizePolicyName(policyName, hostname);
         basePath = CloudflareCachePolicyBuilder.NormalizeBasePath(basePath);
+        agentReadiness = agentReadiness is null ? null : WebAgentReadiness.ResolveSpec(agentReadiness);
         var security = securityHeaders ?? new AgentSecurityHeadersSpec();
-        if (!security.Enabled)
-            return new JsonArray();
 
         var headers = new JsonObject();
-        AddHeader(headers, "Strict-Transport-Security", security.Hsts, security.HstsValue);
-        AddHeader(headers, "Content-Security-Policy", security.ContentSecurityPolicy, security.ContentSecurityPolicyValue);
-        AddHeader(headers, "X-Content-Type-Options", security.XContentTypeOptions, "nosniff");
-        AddHeader(headers, "X-Frame-Options", security.XFrameOptions,
-            string.IsNullOrWhiteSpace(security.XFrameOptionsValue) ? "DENY" : security.XFrameOptionsValue);
-        AddHeader(headers, "Referrer-Policy", security.ReferrerPolicy,
-            string.IsNullOrWhiteSpace(security.ReferrerPolicyValue) ? "strict-origin-when-cross-origin" : security.ReferrerPolicyValue);
-        AddHeader(headers, "Permissions-Policy", security.PermissionsPolicy, security.PermissionsPolicyValue);
+        if (security.Enabled)
+        {
+            AddHeader(headers, "Strict-Transport-Security", security.Hsts, security.HstsValue);
+            AddHeader(headers, "Content-Security-Policy", security.ContentSecurityPolicy, security.ContentSecurityPolicyValue);
+            AddHeader(headers, "X-Content-Type-Options", security.XContentTypeOptions, "nosniff");
+            AddHeader(headers, "X-Frame-Options", security.XFrameOptions,
+                string.IsNullOrWhiteSpace(security.XFrameOptionsValue) ? "DENY" : security.XFrameOptionsValue);
+            AddHeader(headers, "Referrer-Policy", security.ReferrerPolicy,
+                string.IsNullOrWhiteSpace(security.ReferrerPolicyValue) ? "strict-origin-when-cross-origin" : security.ReferrerPolicyValue);
+            AddHeader(headers, "Permissions-Policy", security.PermissionsPolicy, security.PermissionsPolicyValue);
+        }
 
         var descriptionPrefix = CloudflareManagedRuleOwnership.BuildPrefix(policyName, hostname);
         var rules = new JsonArray();
@@ -51,20 +53,23 @@ internal static class CloudflareResponseHeaderPolicyBuilder
             });
         }
 
-        var discoveryPaths = BuildDiscoveryPaths(agentReadiness, basePath);
-        if (security.Enabled && security.CorsForWellKnown &&
-            !string.IsNullOrWhiteSpace(security.CorsAllowOrigin) && discoveryPaths.Length > 0)
+        foreach (var group in BuildDiscoveryHeaderGroups(agentReadiness, basePath))
         {
-            var corsHeaders = new JsonObject();
-            AddHeader(corsHeaders, "Access-Control-Allow-Origin", enabled: true, security.CorsAllowOrigin);
-            var corsExpression = BuildExactPathExpression(hostname, discoveryPaths);
-            CloudflareCachePolicyBuilder.ValidateExpressionLength("discovery resource CORS", corsExpression);
+            var resourceHeaders = new JsonObject();
+            AddHeader(resourceHeaders, "Content-Type", enabled: true, group.ContentType);
+            AddHeader(
+                resourceHeaders,
+                "Access-Control-Allow-Origin",
+                security.Enabled && security.CorsForWellKnown,
+                security.CorsAllowOrigin);
+            var resourceExpression = BuildExactPathExpression(hostname, group.Paths);
+            CloudflareCachePolicyBuilder.ValidateExpressionLength($"discovery {group.Name} headers", resourceExpression);
             rules.Add(new JsonObject
             {
-                ["description"] = $"{descriptionPrefix} discovery resource CORS",
-                ["expression"] = corsExpression,
+                ["description"] = $"{descriptionPrefix} discovery {group.Name} headers",
+                ["expression"] = resourceExpression,
                 ["action"] = "rewrite",
-                ["action_parameters"] = new JsonObject { ["headers"] = corsHeaders },
+                ["action_parameters"] = new JsonObject { ["headers"] = resourceHeaders },
                 ["enabled"] = true
             });
         }
@@ -101,27 +106,38 @@ internal static class CloudflareResponseHeaderPolicyBuilder
         return $"({hostExpression} and (http.request.uri.path eq \"{root}\" or starts_with(http.request.uri.path, \"{prefix}\")))";
     }
 
-    private static string[] BuildDiscoveryPaths(AgentReadinessSpec? readiness, string basePath)
+    private static (string Name, string ContentType, string[] Paths)[] BuildDiscoveryHeaderGroups(
+        AgentReadinessSpec? readiness,
+        string basePath)
     {
         if (readiness?.Enabled != true)
-            return Array.Empty<string>();
+            return Array.Empty<(string, string, string[])>();
 
-        var paths = new List<string>();
+        var groups = new List<(string Name, string ContentType, string[] Paths)>();
         if (readiness.ApiCatalog?.Enabled == true)
-            paths.Add(NormalizeDiscoveryPath(readiness.ApiCatalog.OutputPath, ".well-known/api-catalog", basePath));
+        {
+            groups.Add((
+                "API catalog",
+                "application/linkset+json; profile=\"https://www.rfc-editor.org/info/rfc9727\"",
+                [NormalizeDiscoveryPath(readiness.ApiCatalog.OutputPath, ".well-known/api-catalog", basePath)]));
+        }
+
+        var jsonPaths = new List<string>();
         if (readiness.AgentSkills?.Enabled == true)
-            paths.Add(NormalizeDiscoveryPath(readiness.AgentSkills.IndexPath, ".well-known/agent-skills/index.json", basePath));
+            jsonPaths.Add(NormalizeDiscoveryPath(readiness.AgentSkills.IndexPath, ".well-known/agent-skills/index.json", basePath));
         if (readiness.AgentsJson?.Enabled == true)
         {
-            paths.Add(NormalizeDiscoveryPath(readiness.AgentsJson.OutputPath, "agents.json", basePath));
-            paths.Add(NormalizeDiscoveryPath(readiness.AgentsJson.WellKnownOutputPath, ".well-known/agents.json", basePath));
+            jsonPaths.Add(NormalizeDiscoveryPath(readiness.AgentsJson.OutputPath, "agents.json", basePath));
+            jsonPaths.Add(NormalizeDiscoveryPath(readiness.AgentsJson.WellKnownOutputPath, ".well-known/agents.json", basePath));
         }
         if (readiness.A2AAgentCard?.Enabled == true)
-            paths.Add(NormalizeDiscoveryPath(readiness.A2AAgentCard.OutputPath, ".well-known/agent-card.json", basePath));
+            jsonPaths.Add(NormalizeDiscoveryPath(readiness.A2AAgentCard.OutputPath, ".well-known/agent-card.json", basePath));
         if (readiness.McpServerCard?.Enabled == true)
-            paths.Add(NormalizeDiscoveryPath(readiness.McpServerCard.OutputPath, ".well-known/mcp/server-card.json", basePath));
+            jsonPaths.Add(NormalizeDiscoveryPath(readiness.McpServerCard.OutputPath, ".well-known/mcp/server-card.json", basePath));
+        if (jsonPaths.Count > 0)
+            groups.Add(("JSON", "application/json", jsonPaths.Distinct(StringComparer.Ordinal).ToArray()));
 
-        return paths.Distinct(StringComparer.Ordinal).ToArray();
+        return groups.ToArray();
     }
 
     private static string NormalizeDiscoveryPath(string? configured, string fallback, string basePath)

@@ -111,7 +111,7 @@ internal static class CloudflareManagedRulesetManager
 
             if (!updateResponse.Success)
             {
-                if (!entrypointExists && updateResponse.TransportError is not null)
+                if (!entrypointExists && IsAmbiguousWriteFailure(updateResponse))
                 {
                     var reconciliation = CloudflareApiClient.Send(httpClient, HttpMethod.Get, entrypoint, apiToken, body: null);
                     if (reconciliation.Success &&
@@ -133,7 +133,32 @@ internal static class CloudflareManagedRulesetManager
                         snapshot);
                 }
 
-                return Failure(updateResponse.ErrorMessage, entrypointExists ? snapshot : null);
+                // A transport failure leaves the write outcome ambiguous and needs
+                // rollback state. A definitive HTTP rejection did not mutate the
+                // ruleset, so issuing a restore would create a second failing write.
+                return Failure(
+                    updateResponse.ErrorMessage,
+                    entrypointExists && IsAmbiguousWriteFailure(updateResponse) ? snapshot : null);
+            }
+
+            var appliedRulesetId = entrypointExists ? null : TryReadRulesetId(updateResponse.Result);
+            if (!entrypointExists && string.IsNullOrWhiteSpace(appliedRulesetId))
+            {
+                var reconciliation = CloudflareApiClient.Send(httpClient, HttpMethod.Get, entrypoint, apiToken, body: null);
+                if (reconciliation.Success &&
+                    TryReadRules(reconciliation.Result, out var reconciledRules) &&
+                    JsonNode.DeepEquals(
+                        NormalizeRulesForComparison(reconciledRules),
+                        NormalizeRulesForComparison(desiredRules)))
+                {
+                    appliedRulesetId = TryReadRulesetId(reconciliation.Result);
+                }
+
+                if (string.IsNullOrWhiteSpace(appliedRulesetId))
+                {
+                    return Failure(
+                        "Cloudflare created the ruleset but did not return an identifier, and the entry point could not be identified safely for rollback.");
+                }
             }
 
             return Success(
@@ -143,7 +168,7 @@ internal static class CloudflareManagedRulesetManager
                 preservedCount,
                 $"Applied {managedCount} Cloudflare {policyLabel} rule(s); preserved {preservedCount} unrelated rule(s).",
                 snapshot,
-                entrypointExists ? null : TryReadRulesetId(updateResponse.Result));
+                appliedRulesetId);
         }
         catch (Exception ex)
         {
@@ -327,6 +352,9 @@ internal static class CloudflareManagedRulesetManager
             return null;
         return id.GetString();
     }
+
+    private static bool IsAmbiguousWriteFailure(CloudflareApiResponse response) =>
+        response.TransportError is not null || (int)response.StatusCode >= 500;
 
     private static CloudflareManagedRulesetResult Failure(
         string message,

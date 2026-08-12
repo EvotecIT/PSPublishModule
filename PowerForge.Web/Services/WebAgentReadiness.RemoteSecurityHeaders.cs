@@ -32,10 +32,6 @@ public static partial class WebAgentReadiness
 
         AddRemoteHeaderCheck(checks, "security-referrer-policy", "Referrer-Policy", response, "Referrer-Policy", target, enabled && security.ReferrerPolicy);
         AddRemoteHeaderCheck(checks, "security-permissions-policy", "Permissions-Policy", response, "Permissions-Policy", target, enabled && security.PermissionsPolicy);
-        AddCheck(checks, "security-cors", "security-trust", "CORS",
-            HeaderExists(response, "Access-Control-Allow-Origin") ? "pass" : "warn",
-            HeaderExists(response, "Access-Control-Allow-Origin") ? "Homepage response includes CORS." : "Homepage response does not include CORS; this is usually only required on API or discovery resources.",
-            target);
     }
 
     private static void AddRemoteHeaderCheck(
@@ -56,5 +52,46 @@ public static partial class WebAgentReadiness
                     ? $"Homepage response includes {name}."
                     : $"Homepage response does not include {name}.",
             target);
+    }
+
+    private static void AddRemoteDiscoveryCorsCheck(
+        List<WebAgentReadinessCheck> checks,
+        AgentReadinessSpec readiness,
+        IReadOnlyCollection<(bool Enabled, string Url, HttpResponseMessage? Response)> resources)
+    {
+        var security = readiness.SecurityHeaders ?? new AgentSecurityHeadersSpec();
+        var expected = security.Enabled && security.CorsForWellKnown && !string.IsNullOrWhiteSpace(security.CorsAllowOrigin);
+        var enabledResources = resources.Where(static resource => resource.Enabled).ToArray();
+        if (!expected || enabledResources.Length == 0)
+        {
+            AddCheck(checks, "security-cors", "security-trust", "CORS", "info",
+                !expected
+                    ? "Discovery-resource CORS verification is disabled by site policy."
+                    : "No enabled discovery resources require CORS verification.",
+                enabledResources.FirstOrDefault().Url);
+            return;
+        }
+
+        var expectedOrigin = security.CorsAllowOrigin!.Trim();
+        var missing = enabledResources
+            .Where(resource => !HeaderHasExactValue(resource.Response, "Access-Control-Allow-Origin", expectedOrigin))
+            .Select(static resource => resource.Url)
+            .ToArray();
+        AddCheck(checks, "security-cors", "security-trust", "CORS",
+            missing.Length == 0 ? "pass" : "fail",
+            missing.Length == 0
+                ? $"Every enabled discovery resource allows origin '{expectedOrigin}'."
+                : $"Discovery-resource CORS is missing or differs from '{expectedOrigin}' at: {string.Join(", ", missing)}.",
+            missing.FirstOrDefault() ?? enabledResources[0].Url);
+    }
+
+    private static bool HeaderHasExactValue(HttpResponseMessage? response, string name, string expected)
+    {
+        if (response is null)
+            return false;
+
+        return (response.Headers.TryGetValues(name, out var values) ||
+                response.Content.Headers.TryGetValues(name, out values)) &&
+               values.Any(value => string.Equals(value.Trim(), expected, StringComparison.Ordinal));
     }
 }

@@ -1793,6 +1793,182 @@ public class WebAgentReadinessTests
     }
 
     [Fact]
+    public async Task Scan_ChecksCorsOnEnabledDiscoveryResourcesInsteadOfHomepage()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/custom/catalog"] = ("{\"linkset\":[{\"anchor\":\"/\"}]}", "application/linkset+json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(responses, corsOrigin: "https://client.example");
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec
+                {
+                    Enabled = true,
+                    Hsts = false,
+                    ContentSecurityPolicy = false,
+                    XContentTypeOptions = false,
+                    XFrameOptions = false,
+                    ReferrerPolicy = false,
+                    PermissionsPolicy = false,
+                    CorsForWellKnown = true,
+                    CorsAllowOrigin = "https://client.example"
+                },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/catalog" },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        });
+
+        Assert.Equal("pass", Assert.Single(result.Checks, check => check.Id == "security-cors").Status);
+        Assert.DoesNotContain("Access-Control-Allow-Origin", handler.HomepageHeaders);
+    }
+
+    [Fact]
+    public async Task Scan_DoesNotAcceptHomepageCorsWhenDiscoveryResourceLacksIt()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/custom/catalog"] = ("{\"linkset\":[{\"anchor\":\"/\"}]}", "application/linkset+json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(responses, homepageCorsOrigin: "*");
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec
+                {
+                    Enabled = true,
+                    Hsts = false,
+                    ContentSecurityPolicy = false,
+                    XContentTypeOptions = false,
+                    XFrameOptions = false,
+                    ReferrerPolicy = false,
+                    PermissionsPolicy = false,
+                    CorsForWellKnown = true,
+                    CorsAllowOrigin = "*"
+                },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/catalog" },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownNegotiation = false
+            }
+        });
+
+        Assert.Equal("fail", Assert.Single(result.Checks, check => check.Id == "security-cors").Status);
+        Assert.Contains("Access-Control-Allow-Origin", handler.HomepageHeaders);
+    }
+
+    [Fact]
+    public async Task Scan_RequiresCorsOnWellKnownAgentsJsonMirror()
+    {
+        var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
+        {
+            ["/agents.json"] = ("{\"name\":\"Example\",\"resources\":{}}", "application/json"),
+            ["/.well-known/agents.json"] = ("{\"name\":\"Example\",\"resources\":{}}", "application/json")
+        };
+        var handler = new ConfiguredDiscoveryScanHandler(
+            responses,
+            corsOrigin: "*",
+            corsPaths: ["/agents.json"]);
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = new AgentReadinessSpec
+            {
+                Enabled = true,
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec
+                {
+                    Enabled = true,
+                    Hsts = false,
+                    ContentSecurityPolicy = false,
+                    XContentTypeOptions = false,
+                    XFrameOptions = false,
+                    ReferrerPolicy = false,
+                    PermissionsPolicy = false,
+                    CorsForWellKnown = true,
+                    CorsAllowOrigin = "*"
+                },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = true },
+                MarkdownNegotiation = false
+            }
+        });
+
+        var cors = Assert.Single(result.Checks, check => check.Id == "security-cors");
+        Assert.Equal("fail", cors.Status);
+        Assert.Contains("/.well-known/agents.json", cors.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Prepare_RejectsCollidingEnabledDiscoveryOutputPathsBeforeWriting()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-collision-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var exception = Assert.Throws<ArgumentException>(() => WebAgentReadiness.Prepare(new WebAgentReadinessPrepareOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "custom/discovery.json" },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true, IndexPath = "custom/discovery.json" },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false }
+                }
+            }));
+
+            Assert.Contains("configured for both API Catalog and Agent Skills", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(root, "custom", "discovery.json")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ResolveSpec_AllowsAgentsJsonAliasesToShareOneOutputPath()
+    {
+        var resolved = WebAgentReadiness.ResolveSpec(new AgentReadinessSpec
+        {
+            Enabled = true,
+            ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+            AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+            AgentsJson = new AgentDiscoveryDocumentSpec
+            {
+                Enabled = true,
+                OutputPath = "agents.json",
+                WellKnownOutputPath = "agents.json"
+            }
+        });
+
+        Assert.Equal("agents.json", resolved.AgentsJson!.OutputPath);
+        Assert.Equal("agents.json", resolved.AgentsJson.WellKnownOutputPath);
+    }
+
+    [Fact]
     public async Task Scan_RequiresLinkTargetsForEveryEnabledDiscoverySurface()
     {
         var responses = new Dictionary<string, (string Content, string MediaType)>(StringComparer.Ordinal)
@@ -1925,9 +2101,13 @@ public class WebAgentReadinessTests
 
     private sealed class ConfiguredDiscoveryScanHandler(
         IReadOnlyDictionary<string, (string Content, string MediaType)> responses,
-        string? linkHeader = null) : HttpMessageHandler
+        string? linkHeader = null,
+        string? corsOrigin = null,
+        string? homepageCorsOrigin = null,
+        IReadOnlyCollection<string>? corsPaths = null) : HttpMessageHandler
     {
         internal List<string> Requests { get; } = [];
+        internal HashSet<string> HomepageHeaders { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -1946,13 +2126,23 @@ public class WebAgentReadinessTests
                     "</custom/a2a.json>; rel=\"service-desc\"; type=\"application/json\", " +
                     "</custom/mcp.json>; rel=\"service-desc\"; type=\"application/json\", " +
                     "</custom/openapi.json>; rel=\"service-desc\"; type=\"application/openapi+json\"");
+                if (!string.IsNullOrWhiteSpace(homepageCorsOrigin))
+                    response.Headers.TryAddWithoutValidation("Access-Control-Allow-Origin", homepageCorsOrigin);
+                foreach (var header in response.Headers)
+                    HomepageHeaders.Add(header.Key);
                 return Task.FromResult(response);
             }
 
             if (path == "/sitemap.xml")
                 return Task.FromResult(Response(HttpStatusCode.OK, "<urlset></urlset>", "application/xml"));
             if (responses.TryGetValue(path, out var configured))
-                return Task.FromResult(Response(HttpStatusCode.OK, configured.Content, configured.MediaType));
+            {
+                var response = Response(HttpStatusCode.OK, configured.Content, configured.MediaType);
+                if (!string.IsNullOrWhiteSpace(corsOrigin) &&
+                    (corsPaths is null || corsPaths.Contains(path, StringComparer.Ordinal)))
+                    response.Headers.TryAddWithoutValidation("Access-Control-Allow-Origin", corsOrigin);
+                return Task.FromResult(response);
+            }
             return Task.FromResult(Response(HttpStatusCode.NotFound, "not found", "text/plain"));
         }
 
