@@ -201,11 +201,11 @@ public sealed partial class WebAgentContentSecurityScanner
         if (!ValidatePackageSourceOptions("npm", tokens, path, line, findings))
             return;
         var verbIndex = FindKnownVerbIndex(
-            tokens, 1, new[] { "exec", "x", "dlx", "install", "i", "add", "config" },
+            tokens, 1, NodeVerbs,
             tokens[0], path, line, findings);
         if (verbIndex < 0)
             return;
-        var verb = tokens[verbIndex].ToLowerInvariant();
+        var verb = NormalizeNodeVerb(tokens[verbIndex]);
         if (verb == "config")
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
@@ -237,7 +237,7 @@ public sealed partial class WebAgentContentSecurityScanner
             AddRunnerOperand("npm", tokens[0] + " dlx", tokens, verbIndex + 1, path, line, references, findings);
             return;
         }
-        if (verb is not ("install" or "i" or "add"))
+        if (verb is not ("install" or "add"))
             return;
         AddMultipleOperands("npm", $"{tokens[0]} {tokens[verbIndex]}", tokens, verbIndex + 1, path, line, references, findings);
     }
@@ -550,11 +550,63 @@ public sealed partial class WebAgentContentSecurityScanner
         => FindOptionValue(tokens, start, "--version", "-v", "-Version", "-RequiredVersion");
 
     private static string[] Tokenize(string command)
-        => ShellTokenRegex.Matches(ShellContinuationRegex.Replace(command, " "))
+        => ShellTokenRegex.Matches(StripShellComment(ShellContinuationRegex.Replace(command, " ")))
             .Select(static token => token.Groups["quoted"].Success ? token.Groups["quoted"].Value : token.Groups["plain"].Value)
             .Select(NormalizeToken)
             .Where(static token => !string.IsNullOrWhiteSpace(token))
             .ToArray();
+
+    private static readonly string[] NodeVerbs =
+    {
+        "exec", "x", "dlx", "install", "i", "in", "ins", "inst", "insta", "instal",
+        "isnt", "isnta", "isntal", "isntall", "add", "config", "c", "conf"
+    };
+
+    private static string NormalizeNodeVerb(string verb)
+    {
+        verb = verb.ToLowerInvariant();
+        return verb switch
+        {
+            "i" or "in" or "ins" or "inst" or "insta" or "instal" or
+                "isnt" or "isnta" or "isntal" or "isntall" => "install",
+            "c" or "conf" => "config",
+            _ => verb
+        };
+    }
+
+    private static string StripShellComment(string command)
+    {
+        char quote = '\0';
+        var escaped = false;
+        for (var index = 0; index < command.Length; index++)
+        {
+            var current = command[index];
+            if (escaped)
+            {
+                escaped = false;
+                continue;
+            }
+            if (current == '\\' && quote != '\'')
+            {
+                escaped = true;
+                continue;
+            }
+            if (quote != '\0')
+            {
+                if (current == quote)
+                    quote = '\0';
+                continue;
+            }
+            if (current is '\'' or '"')
+            {
+                quote = current;
+                continue;
+            }
+            if (current == '#' && (index == 0 || char.IsWhiteSpace(command[index - 1])))
+                return command[..index].TrimEnd();
+        }
+        return command;
+    }
 
     private static string NormalizeExecutable(string executable)
     {

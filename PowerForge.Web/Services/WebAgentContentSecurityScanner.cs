@@ -104,6 +104,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                 ScanInvisibleUnicode(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
                 if (options.CheckPromptInjection)
                     ScanPromptInjection(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
+                ScanRemoteExecution(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
                 packages.AddRange(ExtractPackageReferences(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings));
                 ExtractUrls(segment.Text, urls);
             }
@@ -192,7 +193,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
         => (paths ?? Array.Empty<string>())
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(static path => path.Trim().Replace('\\', '/'))
-            .Distinct(StringComparer.OrdinalIgnoreCase);
+            .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     private static string ResolveArtifactPath(string siteRoot, string relativePath)
     {

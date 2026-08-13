@@ -105,8 +105,6 @@ public sealed partial class WebAgentContentSecurityScanner
                     throw;
             }
         }
-        if (lastError is not null)
-            throw new HttpRequestException($"At least one verified public address could not be checked for {endpoint}.", lastError);
         if (responseCount == 0)
             throw new HttpRequestException($"No verified public address accepted the connection to {endpoint}.", lastError);
     }

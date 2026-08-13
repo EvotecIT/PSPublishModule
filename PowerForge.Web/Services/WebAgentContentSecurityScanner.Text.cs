@@ -15,7 +15,7 @@ public sealed partial class WebAgentContentSecurityScanner
         (new Regex(@"\b(?:reveal|print|exfiltrate|send)\s+(?:the\s+)?(?:system\s+prompt|secrets?|credentials?|tokens?)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant), "secret-exfiltration-directive")
     };
     private static readonly Regex RemoteExecutionRegex = new(
-        @"\b(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b[^\r\n|;]*(?:\||;)\s*(?:sudo\s+)?(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression)\b",
+        @"\b(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b[^\r\n|;]*(?:\||;)\s*(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;]*[\\/])?(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression|cmd)(?:\.exe)?\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static void ScanInvisibleUnicode(
@@ -68,6 +68,15 @@ public sealed partial class WebAgentContentSecurityScanner
             }
         }
 
+    }
+
+    private static void ScanRemoteExecution(
+        string content,
+        string path,
+        List<WebAgentContentSecurityFinding> findings,
+        int lineOffset = 0,
+        bool countLogicalLines = true)
+    {
         foreach (Match match in RemoteExecutionRegex.Matches(content))
         {
             AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path, GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
