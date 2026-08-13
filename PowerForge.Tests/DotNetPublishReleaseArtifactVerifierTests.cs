@@ -39,15 +39,16 @@ public sealed partial class DotNetPublishReleaseArtifactVerifierTests
     }
 
     [Fact]
-    public void Verify_AcceptsAbbreviatedExpectedWorkflowCommit()
+    public void Verify_RejectsAbbreviatedExpectedWorkflowCommit()
     {
         using var fixture = new ReleaseFixture();
         var request = fixture.CreateRequest();
         request.ExpectedSourceRevision = fixture.SourceRevision[..12];
 
-        DotNetPublishReleaseArtifact result = fixture.CreateVerifier().Verify(request);
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
 
-        Assert.Equal(fixture.SourceRevision, result.SourceRevision);
+        Assert.Contains("full valid expected source revision", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -75,7 +76,7 @@ public sealed partial class DotNetPublishReleaseArtifactVerifierTests
     }
 
     [Fact]
-    public void Verify_AcceptsFullAndAbbreviatedSha256WorkflowCommit()
+    public void Verify_AcceptsFullAndRejectsAbbreviatedSha256WorkflowCommit()
     {
         using var fixture = new ReleaseFixture();
         string sourceRevision = new string('c', 64);
@@ -86,7 +87,9 @@ public sealed partial class DotNetPublishReleaseArtifactVerifierTests
         abbreviatedRequest.ExpectedSourceRevision = sourceRevision[..20];
 
         Assert.Equal(sourceRevision, fixture.CreateVerifier().Verify(fullRequest).SourceRevision);
-        Assert.Equal(sourceRevision, fixture.CreateVerifier().Verify(abbreviatedRequest).SourceRevision);
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(abbreviatedRequest));
+        Assert.Contains("full valid expected source revision", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

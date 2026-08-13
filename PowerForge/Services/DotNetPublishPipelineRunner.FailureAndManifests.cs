@@ -464,6 +464,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
             }
 
+            foreach (string configurationInputPath in plan.ConfigurationInputPaths ?? Array.Empty<string>())
+            {
+                string full = Path.GetFullPath(configurationInputPath);
+                if (!File.Exists(full))
+                    throw new FileNotFoundException("Effective dotnet-publish configuration input was not found.", full);
+                filesToHash[full] = ToManifestRelativePath(plan.ProjectRoot, full);
+            }
+
             if (!string.IsNullOrWhiteSpace(jsonPath) && File.Exists(jsonPath!))
             {
                 var full = Path.GetFullPath(jsonPath!);

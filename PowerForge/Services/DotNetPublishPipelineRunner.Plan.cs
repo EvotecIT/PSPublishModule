@@ -548,6 +548,9 @@ public sealed partial class DotNetPublishPipelineRunner
         return new DotNetPublishPlan
         {
             ProjectRoot = projectRoot,
+            ConfigurationInputPaths = !string.IsNullOrWhiteSpace(configPath) && File.Exists(configPath)
+                ? new[] { Path.GetFullPath(configPath) }
+                : Array.Empty<string>(),
             AllowOutputOutsideProjectRoot = spec.DotNet.AllowOutputOutsideProjectRoot,
             AllowManifestOutsideProjectRoot = spec.DotNet.AllowManifestOutsideProjectRoot,
             LockedOutputGuard = spec.DotNet.LockedOutputGuard,

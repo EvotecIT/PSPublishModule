@@ -40,6 +40,7 @@ internal static partial class Program
             string.IsNullOrWhiteSpace(configurationPath) ||
             string.IsNullOrWhiteSpace(installerId) ||
             string.IsNullOrWhiteSpace(sourceRevision) ||
+            !IsFullGitObjectId(sourceRevision) ||
             (enableSigning && disableSigning))
         {
             if (outputJson)
@@ -50,7 +51,9 @@ internal static partial class Program
                     Command = "dotnet.release-artifact.verify",
                     Success = false,
                     ExitCode = 2,
-                    Error = enableSigning && disableSigning
+                    Error = !string.IsNullOrWhiteSpace(sourceRevision) && !IsFullGitObjectId(sourceRevision)
+                        ? "Source revision must be a full 40- or 64-character hexadecimal Git object ID."
+                        : enableSigning && disableSigning
                         ? "Use either --sign or --no-sign, not both."
                         : "Project root, manifest, checksums, config, installer, and source revision are required."
                 });
@@ -160,6 +163,7 @@ internal static partial class Program
             string.IsNullOrWhiteSpace(artifactPath) ||
             string.IsNullOrWhiteSpace(checksumsPath) ||
             string.IsNullOrWhiteSpace(sourceRevision) ||
+            !IsFullGitObjectId(sourceRevision) ||
             (kind == PowerForgeReleaseArtifactKind.PortableCli &&
              (string.IsNullOrWhiteSpace(manifestPath) || string.IsNullOrWhiteSpace(configurationPath))) ||
             (kind == PowerForgeReleaseArtifactKind.PowerShellModule &&
@@ -171,7 +175,9 @@ internal static partial class Program
                 outputJson,
                 logger,
                 2,
-                enableSigning && disableSigning
+                !string.IsNullOrWhiteSpace(sourceRevision) && !IsFullGitObjectId(sourceRevision)
+                    ? "Source revision must be a full 40- or 64-character hexadecimal Git object ID."
+                    : enableSigning && disableSigning
                     ? "Use either --sign or --no-sign, not both."
                     : kind == PowerForgeReleaseArtifactKind.PowerShellModule &&
                       string.IsNullOrWhiteSpace(signThumbprint) && string.IsNullOrWhiteSpace(signSubjectName)
@@ -230,6 +236,12 @@ internal static partial class Program
         {
             return WriteGeneralReleaseArtifactError(outputJson, logger, 1, exception.Message);
         }
+    }
+
+    private static bool IsFullGitObjectId(string? value)
+    {
+        string candidate = value?.Trim() ?? string.Empty;
+        return (candidate.Length == 40 || candidate.Length == 64) && candidate.All(Uri.IsHexDigit);
     }
 
     private static int WriteGeneralReleaseArtifactError(bool outputJson, ILogger logger, int exitCode, string error)

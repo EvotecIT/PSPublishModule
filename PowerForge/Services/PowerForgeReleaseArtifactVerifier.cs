@@ -239,20 +239,16 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
     private static void ValidateRevision(string actual, string expected)
     {
-        bool abbreviated = expected.Length < 40;
-        bool matches = abbreviated
-            ? actual.StartsWith(expected, StringComparison.OrdinalIgnoreCase)
-            : actual.Length == expected.Length && string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
-        if (!matches)
+        if (actual.Length != expected.Length ||
+            !string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
             throw Invalid("PowerForge source provenance does not match the release workflow commit.");
     }
 
     private static string RequireExpectedRevision(string? value)
     {
-        string revision = DotNetPublishReleaseArtifactVerifier.RequireText(value, "expected source revision");
-        if (revision.Length < 7 || revision.Length > 64 || revision.Any(character => !Uri.IsHexDigit(character)))
-            throw Invalid("Expected source revision must be a hexadecimal Git object id with at least seven characters.");
-        return revision;
+        return DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(
+            value,
+            "expected source revision");
     }
 
     private static string NormalizeVersion(string? value)
@@ -265,20 +261,42 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         return parsed.ToString();
     }
 
-    private static void ValidateExpectedVersion(string? expected, string actual)
+    private static string NormalizePortableVersion(string? value)
+    {
+        string text = DotNetPublishReleaseArtifactVerifier.RequireText(value, "artifact version");
+        int metadataSeparator = text.IndexOf('+');
+        if (metadataSeparator >= 0)
+            text = text.Substring(0, metadataSeparator);
+        int prereleaseSeparator = text.IndexOf('-');
+        return prereleaseSeparator < 0
+            ? NormalizeVersion(text)
+            : NormalizeModuleVersion(text.Substring(0, prereleaseSeparator), text.Substring(prereleaseSeparator + 1));
+    }
+
+    private static void ValidateExpectedPortableVersion(string? expected, string actual)
     {
         if (!string.IsNullOrWhiteSpace(expected) &&
-            !string.Equals(NormalizeVersion(expected), actual, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(NormalizePortableVersion(expected), actual, StringComparison.OrdinalIgnoreCase))
             throw Invalid($"Release artifact version '{actual}' does not match expected version '{expected!.Trim()}'.");
     }
 
     private static string ReadPortableVersion(string path)
     {
         FileVersionInfo version = FileVersionInfo.GetVersionInfo(path);
-        string productVersion = (version.ProductVersion ?? string.Empty).Split('+')[0].Trim();
-        return Version.TryParse(productVersion, out _)
-            ? productVersion
-            : version.FileVersion ?? string.Empty;
+        string productVersion = (version.ProductVersion ?? string.Empty).Trim();
+        if (productVersion.Length > 0)
+        {
+            try
+            {
+                _ = NormalizePortableVersion(productVersion);
+                return productVersion;
+            }
+            catch (InvalidDataException)
+            {
+                // Windows resources commonly carry descriptive ProductVersion text; use numeric FileVersion then.
+            }
+        }
+        return version.FileVersion ?? string.Empty;
     }
 
     private static string NormalizeModuleVersion(string version, string? prerelease = null)

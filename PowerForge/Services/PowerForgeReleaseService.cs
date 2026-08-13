@@ -4175,7 +4175,15 @@ internal sealed partial class PowerForgeReleaseService
 
         ApplyDotNetRequestOverrides(spec, request);
         ApplyDotNetToolOutputSelection(spec, selectedOutputs);
-        return new DotNetPublishPipelineRunner(logger).Plan(spec, configPath);
+        DotNetPublishPlan plan = new DotNetPublishPipelineRunner(logger).Plan(spec, configPath);
+        string releaseConfigPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
+        plan.ConfigurationInputPaths = plan.ConfigurationInputPaths
+            .Concat(new[] { releaseConfigPath })
+            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return plan;
     }
 
     private static void ApplyDotNetRequestOverrides(DotNetPublishSpec spec, PowerForgeReleaseRequest request)

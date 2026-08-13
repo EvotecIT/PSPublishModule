@@ -667,6 +667,73 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
     }
 
+    [Fact]
+    public void WriteManifests_IncludesEveryEffectiveConfigurationInputInChecksums()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string releaseConfig = Path.Combine(root, "powerforge.release.json");
+            string publishConfig = Path.Combine(root, "powerforge.dotnetpublish.json");
+            File.WriteAllText(releaseConfig, "{}");
+            File.WriteAllText(publishConfig, "{}");
+            RunGit(root, "add powerforge.release.json powerforge.dotnetpublish.json");
+            RunGit(root, "commit -m \"configuration inputs\"");
+
+            string outputDirectory = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "app")).FullName;
+            string executablePath = Path.Combine(outputDirectory, "app.exe");
+            File.WriteAllText(executablePath, "payload");
+            string manifestPath = Path.Combine(root, "Artifacts", "manifest.json");
+            string checksumsPath = Path.Combine(root, "Artifacts", "SHA256SUMS.txt");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                ConfigurationInputPaths = new[] { releaseConfig, publishConfig },
+                Outputs = new DotNetPublishOutputs
+                {
+                    ManifestJsonPath = manifestPath,
+                    ChecksumsPath = checksumsPath
+                }
+            };
+            var artefacts = new List<DotNetPublishArtefactResult>
+            {
+                new()
+                {
+                    Category = DotNetPublishArtefactCategory.Publish,
+                    Target = "app",
+                    Framework = "net10.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.PortableCompat,
+                    PublishDir = outputDirectory,
+                    OutputDir = outputDirectory,
+                    ExePath = executablePath,
+                    Files = 1,
+                    TotalBytes = 7
+                }
+            };
+
+            InvokeWriteManifests(plan, artefacts);
+
+            string[] checksumLines = File.ReadAllLines(checksumsPath);
+            Assert.Contains(checksumLines, line => line.EndsWith("*powerforge.release.json", StringComparison.Ordinal));
+            Assert.Contains(checksumLines, line => line.EndsWith("*powerforge.dotnetpublish.json", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static void InvokeWriteManifests(
         DotNetPublishPlan plan,
         List<DotNetPublishArtefactResult> artefacts,

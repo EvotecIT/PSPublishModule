@@ -80,12 +80,17 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (requestedSignaturePaths.Length > 0 && !SamePhysicalPathSet(requestedSignaturePaths, signaturePaths))
             throw Invalid("Requested portable signature paths do not match the complete trusted signing selection.");
 
+        bool artifactIsArchive = IsZipArchive(artifactPath);
+        if (!artifactIsArchive &&
+            (signaturePaths.Length != 1 || !PathsEqual(signaturePaths[0], executablePath)))
+            throw Invalid("A direct portable executable artifact must be the only file in the trusted signing selection; use the ZIP artifact for multi-file outputs.");
+
         var signatures = new List<VerifiedSignature>();
         foreach (string signaturePath in signaturePaths)
         {
             EnsurePathWithinDirectory(outputDirectory, signaturePath, "Portable signature path");
             string signatureDigest = VerifyChecksummedFile(projectRoot, checksumsPath, signaturePath, "portable signed file");
-            if (IsZipArchive(artifactPath))
+            if (artifactIsArchive)
                 VerifyArchiveContainsFile(artifactPath, outputDirectory, signaturePath, signatureDigest);
             signatures.Add(VerifySignature(signaturePath, expected.SignerThumbprint, expected.SignerSubjectName));
         }
@@ -93,8 +98,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             throw Invalid("Portable release evidence must include the manifest executable signature.");
 
         VerifiedSignature signer = RequireOneSigner(signatures);
-        string version = NormalizeVersion(_readPortableVersion(executablePath));
-        ValidateExpectedVersion(request.ExpectedVersion, version);
+        string version = NormalizePortableVersion(_readPortableVersion(executablePath));
+        ValidateExpectedPortableVersion(request.ExpectedVersion, version);
         PowerForgeReleaseEvidenceFile[] evidence = BuildExternalEvidence(
             projectRoot,
             checksumsPath,

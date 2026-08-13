@@ -49,6 +49,51 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliPreservesPrereleaseIdentityAndIgnoresBuildMetadata()
+    {
+        using var fixture = new PortableFixture();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ExpectedVersion = "1.2.3-preview.1+expected";
+        fixture.WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3-preview.1", fixture.ComputeDigest(fixture.ArchivePath));
+        fixture.WriteChecksums();
+        PowerForgeReleaseArtifactVerifier verifier = new(
+            _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
+            _ => "1.2.3-preview.1+actual");
+
+        PowerForgeReleaseArtifactEvidence evidence = verifier.Verify(request);
+
+        Assert.Equal("1.2.3-preview.1", evidence.Version);
+    }
+
+    [Fact]
+    public void Verify_PortableCliDoesNotAdmitPrereleaseAsStableVersion()
+    {
+        using var fixture = new PortableFixture();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ExpectedVersion = "1.2.3";
+        PowerForgeReleaseArtifactVerifier verifier = new(
+            _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
+            _ => "1.2.3-preview.1+sha");
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() => verifier.Verify(request));
+
+        Assert.Contains("does not match expected version", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_PortableCliRequiresFullExpectedSourceRevision()
+    {
+        using var fixture = new PortableFixture();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ExpectedSourceRevision = SourceRevision.Substring(0, 12);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("full valid expected source revision", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PowerShellModuleRequiresExactPublisherSubject()
     {
         using var fixture = new ModuleFixture();
@@ -79,6 +124,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             fixture.CreateVerifier().Verify(request));
 
         Assert.Contains("artifact ID must match", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_PowerShellModuleRequiresFullExpectedSourceRevision()
+    {
+        using var fixture = new ModuleFixture();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ExpectedSourceRevision = SourceRevision.Substring(0, 12);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("full valid expected source revision", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 }
 

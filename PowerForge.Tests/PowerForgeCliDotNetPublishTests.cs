@@ -74,6 +74,19 @@ public sealed class PowerForgeCliDotNetPublishTests
     }
 
     [Fact]
+    public async Task ReleaseArtifactVerify_RequiresFullSourceRevisionAtCliBoundary()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var (exitCode, stdout, stderr) = await RunCliAsync(
+            repoRoot,
+            $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --artifact-id Sample --project-root . --artifact sample.zip --checksums SHA256SUMS.txt --source-revision abcdef1 --manifest manifest.json --config config.json --output json");
+
+        Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+        using JsonDocument document = JsonDocument.Parse(stdout);
+        Assert.Contains("full 40- or 64-character", document.RootElement.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ReleaseArtifactVerify_RealSignedPortableCliReturnsStableJsonEvidenceShape()
     {
         if (!OperatingSystem.IsWindows())

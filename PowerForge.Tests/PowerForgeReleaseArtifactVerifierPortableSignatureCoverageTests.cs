@@ -76,4 +76,21 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 
         Assert.Contains("signature is not valid", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Verify_PortableCliRejectsMultiFileSelectionForDirectExecutableArtifact()
+    {
+        using var fixture = new PortableFixture();
+        string dependencyPath = fixture.AddSignedDependency();
+        fixture.EnableDllSigning(dependencyPath);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = fixture.ExecutablePath;
+        request.SignaturePaths = Array.Empty<string>();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("direct portable executable", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ZIP", exception.Message, StringComparison.Ordinal);
+    }
 }
