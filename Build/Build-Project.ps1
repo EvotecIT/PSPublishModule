@@ -66,11 +66,13 @@ if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
     $ConfigPath = Join-Path $PSScriptRoot 'release.json'
 }
 
+$publishRequested = $Publish -or $RunMode -eq 'Publish'
+$fullPublishRequested = $Publish -or ($RunMode -eq 'Publish' -and -not $ModuleOnly)
 $operation = if ($Plan) {
     'Plan unified PowerForge release'
 } elseif ($Validate) {
     'Validate unified PowerForge release'
-} elseif ($Publish -or $RunMode -eq 'Publish' -or $PublishNuget -or $PublishProjectGitHub -or $PublishToolGitHub) {
+} elseif ($publishRequested -or $PublishNuget -or $PublishProjectGitHub -or $PublishToolGitHub) {
     'Publish unified PowerForge release'
 } else {
     'Build unified PowerForge release'
@@ -103,11 +105,20 @@ $moduleProject = Join-Path $repoRoot 'PSPublishModule\PSPublishModule.csproj'
 $moduleBinary = Join-Path $repoRoot "PSPublishModule\bin\$Configuration\$importFramework\PSPublishModule.dll"
 
 try {
-    if ($Publish -and $PackagesOnly) {
-        throw 'The full -Publish switch cannot be combined with -PackagesOnly. Use -PackagesOnly -PublishNuget for a package-only publication.'
+    if ($Publish -and $ModuleOnly) {
+        throw 'The full -Publish switch cannot be combined with -ModuleOnly. Use -ModuleOnly -RunMode Publish for an intentional module-only publication.'
     }
-    if ($Publish -and $ToolsOnly) {
-        throw 'The full -Publish switch cannot be combined with -ToolsOnly. Use -ToolsOnly -PublishToolGitHub for a tool-only publication.'
+    if ($publishRequested -and $PackagesOnly) {
+        throw 'A full publish request cannot be combined with -PackagesOnly. Use -PackagesOnly -PublishNuget for a package-only publication.'
+    }
+    if ($publishRequested -and $ToolsOnly) {
+        throw 'A full publish request cannot be combined with -ToolsOnly. Use -ToolsOnly -PublishToolGitHub for a tool-only publication.'
+    }
+    $hasLaneSpecificGitHubOverride =
+        $PSBoundParameters.ContainsKey('PublishProjectGitHub') -or
+        $PSBoundParameters.ContainsKey('PublishToolGitHub')
+    if ($fullPublishRequested -and $hasLaneSpecificGitHubOverride) {
+        throw 'A full publish request cannot be combined with lane-specific GitHub publication switches. The unified GitHub release is published last automatically.'
     }
 
     foreach ($framework in $bootstrapFrameworks) {
@@ -146,10 +157,12 @@ try {
     }
     $invokeParams.ConfigPath = $ConfigPath
     $invokeParams.Configuration = $Configuration
-    $invokeParams.ModuleRunMode = if ($Publish) { 'Publish' } else { $RunMode }
+    $invokeParams.ModuleRunMode = if ($publishRequested) { 'Publish' } else { $RunMode }
     $invokeParams.ErrorAction = 'Stop'
-    if ($Publish) {
+    if ($fullPublishRequested) {
         $invokeParams.PublishNuget = $true
+    }
+    if ($publishRequested) {
         if (-not $ModuleNoSign) {
             $invokeParams.ModuleSignModule = $true
         }
