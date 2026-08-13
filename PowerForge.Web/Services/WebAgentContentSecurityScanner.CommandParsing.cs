@@ -155,7 +155,8 @@ public sealed partial class WebAgentContentSecurityScanner
     private static readonly string[] NodeVerbs =
     {
         "exec", "x", "dlx", "install", "i", "in", "ins", "inst", "insta", "instal",
-        "isnt", "isnta", "isntal", "isntall", "add", "ci", "config", "c", "conf", "init", "create", "innit"
+        "isnt", "isnta", "isntal", "isntall", "add", "ci", "clean-install", "ic", "install-clean", "isntall-clean",
+        "config", "c", "conf", "init", "create", "innit"
     };
 
     private static string[] Tokenize(string command)
@@ -173,6 +174,7 @@ public sealed partial class WebAgentContentSecurityScanner
             "i" or "in" or "ins" or "inst" or "insta" or "instal" or
                 "isnt" or "isnta" or "isntal" or "isntall" => "install",
             "c" or "conf" => "config",
+            "clean-install" or "ic" or "install-clean" or "isntall-clean" => "ci",
             "create" or "innit" => "init",
             _ => verb
         };

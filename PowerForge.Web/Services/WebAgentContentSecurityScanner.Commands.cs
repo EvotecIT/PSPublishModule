@@ -5,16 +5,16 @@ namespace PowerForge.Web;
 public sealed partial class WebAgentContentSecurityScanner
 {
     private static readonly Regex CommandSegmentRegex = new(
-        @"(?<command>(?:dotnet|dnx|Install-Module|Install-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|npm|npx|pnpx|pnpm|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer|bundle)\b(?:[^\x5C`\r\n;&|]|[\x5C`]\r?\n)*)",
+        @"(?<command>(?:dotnet|dnx|Install-Module|Install-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|npm|npx|pnpx|pnpm|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|\^(?!\r?\n)|[\x5C`\^]\r?\n)*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ShellContinuationRegex = new(
-        @"[\x5C\`]\r?\n",
+        @"[\x5C\`\^]\r?\n",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex CommandEnvironmentPrefixRegex = new(
         @"(?:^|\s)(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|""[^""]*""|[^\s;&|]+)\s*)+(?:env\s+)?$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex PackageSourceEnvironmentRegex = new(
-        @"(?<![A-Za-z0-9_])(?:\$env:)?(?:NPM_CONFIG_[A-Za-z0-9_]+|PIP_INDEX_URL|PIP_EXTRA_INDEX_URL|PIP_FIND_LINKS|PIP_CONFIG_FILE|UV_INDEX_URL|UV_EXTRA_INDEX_URL|BUN_INSTALL_REGISTRY|GEM_HOST|BUNDLE_MIRROR__[A-Za-z0-9_]+|CARGO_REGISTRIES_[A-Za-z0-9_]+_INDEX)\s*=",
+        @"(?<![A-Za-z0-9_])(?:\$env:)?(?:NPM_CONFIG_[A-Za-z0-9_]+|PIP_INDEX_URL|PIP_EXTRA_INDEX_URL|PIP_FIND_LINKS|PIP_CONFIG_FILE|UV_INDEX_URL|UV_EXTRA_INDEX_URL|UV_DEFAULT_INDEX|UV_INDEX|UV_FIND_LINKS|UV_CONSTRAINT|UV_OVERRIDE|UV_BUILD_CONSTRAINT|UV_CONFIG_FILE|BUN_INSTALL_REGISTRY|GEM_HOST|BUNDLE_MIRROR__[A-Za-z0-9_]+|CARGO_REGISTRIES_[A-Za-z0-9_]+_INDEX)\s*=",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ShellTokenRegex = new(
         @"['""](?<quoted>[^'""]+)['""]|(?<plain>[^\s]+)",
@@ -279,7 +279,7 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         if (command == "uv")
         {
-            var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "pip", "add", "tool", "run" }, "uv", path, line, findings);
+            var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "pip", "add", "tool", "run", "sync" }, "uv", path, line, findings);
             var start = -1;
             if (verbIndex >= 0 && tokens[verbIndex].Equals("pip", StringComparison.OrdinalIgnoreCase))
             {
@@ -296,6 +296,11 @@ public sealed partial class WebAgentContentSecurityScanner
             }
             else if (verbIndex >= 0)
             {
+                if (tokens[verbIndex].Equals("sync", StringComparison.OrdinalIgnoreCase))
+                {
+                    AddUnverifiableOperand("uv sync", path, line, findings, "lockfile or project dependency set");
+                    return;
+                }
                 if (tokens[verbIndex].Equals("run", StringComparison.OrdinalIgnoreCase))
                 {
                     var dependencies = FindOptionValues(tokens, verbIndex + 1, "--with");

@@ -76,30 +76,39 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                     "Configured agent-facing artifact does not exist.");
                 continue;
             }
-            if (HasSymbolicLinkComponent(siteRoot, fullPath))
-            {
-                AddFinding(findings, "error", "PFAGENT.ARTIFACT.SYMLINK", configuredPath, null,
-                    "Configured agent-facing artifacts and their parent paths must not be symbolic links or junctions.");
-                continue;
-            }
-
-            var length = new FileInfo(fullPath).Length;
-            if (length > options.MaxArtifactBytes)
-            {
-                AddFinding(findings, "error", "PFAGENT.ARTIFACT.TOO_LARGE", configuredPath, null,
-                    $"Artifact is {length} bytes; the configured maximum is {options.MaxArtifactBytes} bytes.");
-                continue;
-            }
-
             string content;
             try
             {
-                content = File.ReadAllText(fullPath, new UTF8Encoding(false, true));
+                if (HasSymbolicLinkComponent(siteRoot, fullPath))
+                {
+                    AddFinding(findings, "error", "PFAGENT.ARTIFACT.SYMLINK", configuredPath, null,
+                        "Configured agent-facing artifacts and their parent paths must not be symbolic links or junctions.");
+                    continue;
+                }
+
+                var length = new FileInfo(fullPath).Length;
+                if (length > options.MaxArtifactBytes)
+                {
+                    AddFinding(findings, "error", "PFAGENT.ARTIFACT.TOO_LARGE", configuredPath, null,
+                        $"Artifact is {length} bytes; the configured maximum is {options.MaxArtifactBytes} bytes.");
+                    continue;
+                }
+
+                try
+                {
+                    content = File.ReadAllText(fullPath, new UTF8Encoding(false, true));
+                }
+                catch (DecoderFallbackException ex)
+                {
+                    AddFinding(findings, "error", "PFAGENT.TEXT.INVALID_UTF8", configuredPath, null,
+                        $"Artifact is not valid UTF-8: {ex.Message}");
+                    continue;
+                }
             }
-            catch (DecoderFallbackException ex)
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
             {
-                AddFinding(findings, "error", "PFAGENT.TEXT.INVALID_UTF8", configuredPath, null,
-                    $"Artifact is not valid UTF-8: {ex.Message}");
+                AddFinding(findings, "error", "PFAGENT.ARTIFACT.READ_FAILED", configuredPath, null,
+                    $"Artifact could not be inspected safely: {ex.Message}");
                 continue;
             }
 
