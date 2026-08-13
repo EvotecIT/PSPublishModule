@@ -152,6 +152,69 @@ public sealed class DotNetPublishMsiGitAuthorityTests
     }
 
     [Fact]
+    public void GitTagAuthority_RejectsSharedStatePathAcrossDifferentAuthorities()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var remote = Path.Combine(root, "authority.git");
+            var seed = Path.Combine(root, "seed");
+            InitializeRepository(remote, seed);
+            var spec = CreateSpec(seed);
+            var first = spec.Installers[0];
+            first.Versioning!.ReleaseGroup = "suite-a";
+            var second = CreateSpec(seed).Installers[0];
+            second.Id = "agent";
+            second.Versioning!.AuthorityKey = "agent";
+            second.Versioning.ReleaseGroup = "suite-b";
+            spec.Installers = new[] { first, second };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(
+                    spec,
+                    Path.Combine(seed, "powerforge.json")));
+
+            Assert.Contains("one canonical authority and ReleaseGroup per state path", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void GitTagAuthority_RejectsGroupedAndUngroupedOwnersRegardlessOfOrdering(bool groupedFirst)
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var remote = Path.Combine(root, "authority.git");
+            var seed = Path.Combine(root, "seed");
+            InitializeRepository(remote, seed);
+            var spec = CreateSpec(seed);
+            var grouped = spec.Installers[0];
+            grouped.Versioning!.ReleaseGroup = "suite";
+            var ungrouped = CreateSpec(seed).Installers[0];
+            ungrouped.Id = "agent";
+            ungrouped.Versioning!.StatePath = "Build/versioning/agent.msi.state.json";
+            spec.Installers = groupedFirst ? new[] { grouped, ungrouped } : new[] { ungrouped, grouped };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(
+                    spec,
+                    Path.Combine(seed, "powerforge.json")));
+
+            Assert.Contains("Every installer sharing an authority with a release group", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Authority_RejectsMajorMinorRegression()
     {
         var root = CreateTempRoot();

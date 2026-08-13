@@ -749,6 +749,62 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Plan_StatePathRejectsGroupedAndUngroupedOwnership(bool groupedFirst)
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            var grouped = CreateReleaseGroupInstaller("monitoring.msi", "MonitoringFiles");
+            var ungrouped = CreateReleaseGroupInstaller("standalone.msi", "StandaloneFiles");
+            ungrouped.Versioning!.ReleaseGroup = null;
+            spec.Installers = groupedFirst ? new[] { grouped, ungrouped } : new[] { ungrouped, grouped };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+
+            Assert.Contains("one canonical authority and ReleaseGroup per state path", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_MsiVersionStateUsesFileSystemCaseSemantics()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            var first = CreateReleaseGroupInstaller("monitoring.msi", "MonitoringFiles");
+            var second = CreateReleaseGroupInstaller("agent.msi", "AgentFiles");
+            first.Versioning!.ReleaseGroup = null;
+            second.Versioning!.ReleaseGroup = null;
+            first.Versioning.StatePath = "Build/versioning/Product.state.json";
+            second.Versioning.StatePath = "Build/versioning/product.state.json";
+            spec.Installers = new[] { first, second };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var distinctVersions = plan.MsiVersions.Values
+                .Select(version => version.Version)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+
+            Assert.Equal(OperatingSystem.IsWindows() ? 2 : 1, distinctVersions);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
     [InlineData(null, "app-1.0.1")]
     [InlineData("output", null)]
     public void VersionedMsiOutput_RequiresUnambiguousTarget(string? outputDirectory, string? outputName)
