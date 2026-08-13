@@ -89,6 +89,8 @@
     "Verify": { "$ref": "#/$defs/VerifyPolicySpec" },
     "AgentReadiness": { "$ref": "#/$defs/AgentReadinessSpec" },
     "agentReadiness": { "$ref": "#/$defs/AgentReadinessSpec" },
+    "Cloudflare": { "$ref": "#/$defs/CloudflareSitePolicySpec" },
+    "cloudflare": { "$ref": "#/$defs/CloudflareSitePolicySpec" },
     "Features": {
       "type": "array",
       "items": {
@@ -107,6 +109,28 @@
   },
   "required": ["Name", "BaseUrl", "Collections"],
   "$defs": {
+    "CloudflareSitePolicySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Cache": { "$ref": "#/$defs/CloudflareCacheSpec" },
+        "cache": { "$ref": "#/$defs/CloudflareCacheSpec" },
+        "PurgeMode": { "type": "string", "enum": ["files", "hostname", "everything"] },
+        "purgeMode": { "type": "string", "enum": ["files", "hostname", "everything"] },
+        "SmartTieredCache": { "type": ["boolean", "null"] },
+        "smartTieredCache": { "type": ["boolean", "null"] }
+      }
+    },
+    "CloudflareCacheSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "EdgeTtlSeconds": { "type": "integer", "minimum": 1, "maximum": 31536000, "default": 604800 },
+        "edgeTtlSeconds": { "type": "integer", "minimum": 1, "maximum": 31536000, "default": 604800 },
+        "BrowserTtlSeconds": { "type": "integer", "minimum": 1, "maximum": 31536000, "default": 300 },
+        "browserTtlSeconds": { "type": "integer", "minimum": 1, "maximum": 31536000, "default": 300 }
+      }
+    },
     "CollectionSpec": {
       "type": "object",
       "additionalProperties": false,

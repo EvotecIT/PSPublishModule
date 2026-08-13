@@ -16,6 +16,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web server bootstrap-plan --manifest <serverrecovery.json> [--out <dir>] [--output json]");
         Console.WriteLine("  powerforge-web server restore-secrets-plan --manifest <serverrecovery.json> [--out <dir>] [--archive <encrypted-secrets.tar.gz.age>] [--output json]");
         Console.WriteLine("  powerforge-web cloudflare purge --zone-id <id> [--token <token> | --token-env <env>]");
+        Console.WriteLine("                     [--purge-mode <files|hostname|everything>] [--hostname <host>]");
         Console.WriteLine("                     [--purge-everything] [--site-config <site.json>] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>] [--dry-run]");
         Console.WriteLine("  powerforge-web cloudflare verify [--site-config <site.json>] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>]");
         Console.WriteLine("                     [--warmup <n>] [--allow-status <HIT,REVALIDATED,EXPIRED,STALE>] [--timeout-ms <n>]");

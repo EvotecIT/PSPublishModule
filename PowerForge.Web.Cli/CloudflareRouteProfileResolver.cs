@@ -15,6 +15,7 @@ internal sealed class CloudflareSiteRouteProfile
     public string[] PurgePaths { get; init; } = Array.Empty<string>();
     public AgentSecurityHeadersSpec? SecurityHeaders { get; init; }
     public AgentReadinessSpec? AgentReadiness { get; init; }
+    public CloudflareSitePolicySpec? Cloudflare { get; init; }
 }
 
 internal static class CloudflareRouteProfileResolver
@@ -46,6 +47,7 @@ internal static class CloudflareRouteProfileResolver
         var verifyPaths = BuildVerifyPaths(spec);
         var purgePaths = BuildPurgePaths(verifyPaths);
         var agentReadiness = spec.AgentReadiness is null ? null : WebAgentReadiness.ResolveSpec(spec.AgentReadiness);
+        ValidateCloudflarePolicy(spec.Cloudflare);
 
         return new CloudflareSiteRouteProfile
         {
@@ -55,10 +57,28 @@ internal static class CloudflareRouteProfileResolver
             VerifyPaths = verifyPaths,
             PurgePaths = purgePaths,
             AgentReadiness = agentReadiness,
+            Cloudflare = spec.Cloudflare,
             SecurityHeaders = agentReadiness?.Enabled == false
                 ? new AgentSecurityHeadersSpec { Enabled = false, Hsts = false }
                 : agentReadiness?.SecurityHeaders
         };
+    }
+
+    private static void ValidateCloudflarePolicy(CloudflareSitePolicySpec? policy)
+    {
+        if (policy is null)
+            return;
+
+        policy.PurgeMode = (policy.PurgeMode ?? string.Empty).Trim().ToLowerInvariant();
+        if (policy.PurgeMode is not ("files" or "hostname" or "everything"))
+            throw new InvalidOperationException("Cloudflare.PurgeMode must be files, hostname, or everything.");
+
+        if (policy.Cache is null)
+            return;
+        if (policy.Cache.EdgeTtlSeconds is < 1 or > 31536000)
+            throw new InvalidOperationException("Cloudflare.Cache.EdgeTtlSeconds must be between 1 and 31536000.");
+        if (policy.Cache.BrowserTtlSeconds is < 1 or > 31536000)
+            throw new InvalidOperationException("Cloudflare.Cache.BrowserTtlSeconds must be between 1 and 31536000.");
     }
 
     private static string[] BuildVerifyPaths(SiteSpec spec)

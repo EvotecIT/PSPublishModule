@@ -20,6 +20,14 @@ internal static partial class WebPipelineRunner
         var paths = ReadStringList(step, "paths", "path").ToList();
         var discoverySources = ReadStringList(step, "discoverAssetsFrom", "discover-assets-from").ToArray();
         var assetPathPatterns = ReadStringList(step, "assetPathPatterns", "asset-path-patterns").ToArray();
+        var purgeModeValue = GetString(step, "purgeMode") ?? GetString(step, "purge-mode") ??
+                             siteProfile?.Cloudflare?.PurgeMode ?? "files";
+        if ((GetBool(step, "purgeEverything") ?? GetBool(step, "purge-everything")) == true)
+            purgeModeValue = "everything";
+        if ((GetBool(step, "purgeHostname") ?? GetBool(step, "purge-hostname")) == true)
+            purgeModeValue = "hostname";
+        if (!CloudflareCachePurger.TryParseMode(purgeModeValue, out var purgeMode))
+            throw new InvalidOperationException($"cloudflare: unsupported purge mode '{purgeModeValue}'. Use files, hostname, or everything.");
 
         // The profile fallback depends on what the caller configured, not on URLs
         // discovered later from deployed HTML. Preserve the normal route gate when
@@ -28,7 +36,9 @@ internal static partial class WebPipelineRunner
         {
             var profilePaths = operation.Equals("verify", StringComparison.OrdinalIgnoreCase)
                 ? siteProfile.VerifyPaths
-                : siteProfile.PurgePaths;
+                : purgeMode == CloudflareCachePurgeMode.Files
+                    ? siteProfile.PurgePaths
+                    : Array.Empty<string>();
             paths.AddRange(profilePaths);
         }
 
@@ -76,10 +86,26 @@ internal static partial class WebPipelineRunner
         if (string.IsNullOrWhiteSpace(token))
             throw new InvalidOperationException($"cloudflare: missing API token (set env '{tokenEnv}' or provide 'token').");
 
-        var purgeEverything = (GetBool(step, "purgeEverything") ?? GetBool(step, "purge-everything") ?? false);
         var dryRun = (GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? false);
+        IReadOnlyList<string> purgeTargets = urls;
+        if (purgeMode == CloudflareCachePurgeMode.Hostname)
+        {
+            var hostnames = ReadStringList(step, "hostnames", "hosts", "hostname", "host").ToList();
+            if (hostnames.Count == 0)
+            {
+                if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var siteUri) ||
+                    (siteUri.Scheme != Uri.UriSchemeHttp && siteUri.Scheme != Uri.UriSchemeHttps))
+                    throw new InvalidOperationException("cloudflare: hostname purge requires a siteConfig/baseUrl or explicit hostnames.");
+                hostnames.Add(siteUri.Host);
+            }
+            purgeTargets = hostnames;
+        }
+        else if (purgeMode == CloudflareCachePurgeMode.Everything)
+        {
+            purgeTargets = Array.Empty<string>();
+        }
 
-        ExecuteCloudflarePurge(zoneId, token, purgeEverything, dryRun, urls, stepResult);
+        ExecuteCloudflarePurge(zoneId, token, purgeMode, dryRun, purgeTargets, stepResult);
     }
 
     private static CloudflareSiteRouteProfile? LoadCloudflareSiteProfile(JsonElement step, string baseDir)
@@ -107,16 +133,16 @@ internal static partial class WebPipelineRunner
     private static void ExecuteCloudflarePurge(
         string zoneId,
         string token,
-        bool purgeEverything,
+        CloudflareCachePurgeMode purgeMode,
         bool dryRun,
-        IReadOnlyList<string> urls,
+        IReadOnlyList<string> targets,
         WebPipelineStepResult stepResult)
     {
         var (ok, message) = CloudflareCachePurger.Purge(
             zoneId: zoneId,
             apiToken: token,
-            purgeEverything: purgeEverything,
-            fileUrls: urls,
+            mode: purgeMode,
+            targets: targets,
             dryRun: dryRun,
             logger: null);
 

@@ -9,8 +9,8 @@ internal static class CloudflareCachePolicyBuilder
 {
     private const int MaxHtmlPaths = 64;
     private const int MaxRuleExpressionLength = 4096;
-    private const int HtmlEdgeTtlSeconds = 7200;
-    private const int HtmlBrowserTtlSeconds = 300;
+    private const int LegacyHtmlEdgeTtlSeconds = 7200;
+    private const int LegacyHtmlBrowserTtlSeconds = 300;
 
     private static readonly string[] DefaultHtmlPaths =
     {
@@ -31,7 +31,8 @@ internal static class CloudflareCachePolicyBuilder
         string hostname,
         string policyName,
         IReadOnlyCollection<string>? htmlPaths,
-        string? basePath = null)
+        string? basePath = null,
+        CloudflareCacheSpec? cache = null)
     {
         hostname = NormalizeHostname(hostname);
         policyName = NormalizePolicyName(policyName, hostname);
@@ -90,16 +91,30 @@ internal static class CloudflareCachePolicyBuilder
         ValidateExpressionLength("HTML docs and API", htmlExpression);
         var descriptionPrefix = CloudflareManagedRuleOwnership.BuildDescriptionPrefix(policyName, hostname, basePath);
 
+        var htmlEdgeTtlSeconds = cache?.EdgeTtlSeconds ?? LegacyHtmlEdgeTtlSeconds;
+        var htmlBrowserTtlSeconds = cache?.BrowserTtlSeconds ?? LegacyHtmlBrowserTtlSeconds;
+        ValidateTtl("edge", htmlEdgeTtlSeconds);
+        ValidateTtl("browser", htmlBrowserTtlSeconds);
+
+        var dataRule = cache is null
+            ? BuildRespectOriginRule($"{descriptionPrefix} data files", dataExpression)
+            : BuildOverrideRule($"{descriptionPrefix} data files", dataExpression, htmlEdgeTtlSeconds, htmlBrowserTtlSeconds);
+        var staticRule = cache is null
+            ? BuildRespectOriginRule($"{descriptionPrefix} static assets", staticExpression)
+            : BuildOverrideRule($"{descriptionPrefix} static assets", staticExpression, htmlEdgeTtlSeconds, htmlBrowserTtlSeconds);
+
         return new JsonArray
         {
-            BuildOverrideRule($"{descriptionPrefix} HTML docs and API", htmlExpression, HtmlEdgeTtlSeconds, HtmlBrowserTtlSeconds),
-            BuildRespectOriginRule($"{descriptionPrefix} data files", dataExpression),
-            // Stable asset names are common (including Blazor framework files).
-            // Respect origin validators/TTLs so a managed rule cannot pin an old
-            // deployment in edge or browser caches. Fingerprinted assets can still
-            // carry immutable Cache-Control from the generated origin output.
-            BuildRespectOriginRule($"{descriptionPrefix} static assets", staticExpression)
+            BuildOverrideRule($"{descriptionPrefix} HTML docs and API", htmlExpression, htmlEdgeTtlSeconds, htmlBrowserTtlSeconds),
+            dataRule,
+            staticRule
         };
+    }
+
+    private static void ValidateTtl(string name, int value)
+    {
+        if (value is < 1 or > 31536000)
+            throw new ArgumentOutOfRangeException(name, value, $"Cloudflare {name} TTL must be between 1 and 31536000 seconds.");
     }
 
     internal static string NormalizeHostname(string hostname)

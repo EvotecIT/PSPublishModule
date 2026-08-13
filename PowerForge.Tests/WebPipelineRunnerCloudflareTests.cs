@@ -161,6 +161,49 @@ public class WebPipelineRunnerCloudflareTests
     }
 
     [Fact]
+    public void RunPipeline_CloudflarePurge_ShouldUseHostnameModeFromSiteConfig()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-cloudflare-purge-hostname-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                """
+                {
+                  "Name": "Static Site",
+                  "BaseUrl": "https://static.example.com/",
+                  "Cloudflare": { "PurgeMode": "hostname" }
+                }
+                """);
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "cloudflare",
+                      "operation": "purge",
+                      "siteConfig": "./site.json",
+                      "zoneId": "0123456789abcdef0123456789abcdef",
+                      "token": "test-token",
+                      "dryRun": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success, result.Steps.Single().Message);
+            Assert.Contains("Dry run", result.Steps.Single().Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task RunPipeline_CloudflareVerify_DiscoversFingerprintAssetFromDeployedHtml()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-cloudflare-discovery-" + Guid.NewGuid().ToString("N"));
