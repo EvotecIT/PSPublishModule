@@ -237,8 +237,12 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             configuration.DotNet.AllowOutputOutsideProjectRoot);
     }
 
-    private static DotNetPublishSpec ReadConfiguredPublishSpec(string configurationPath)
+    internal static DotNetPublishSpec ReadConfiguredPublishSpec(string configurationPath) =>
+        ReadConfiguredPublishSpecWithInputs(configurationPath).Configuration;
+
+    internal static DotNetPublishConfiguredSpec ReadConfiguredPublishSpecWithInputs(string configurationPath)
     {
+        configurationPath = RequireFile(configurationPath, nameof(configurationPath));
         var json = File.ReadAllText(configurationPath);
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions
         {
@@ -247,8 +251,9 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         });
         if (!TryGet(document.RootElement, "Tools", out _))
         {
-            return JsonSerializer.Deserialize<DotNetPublishSpec>(json, ConfigurationJsonOptions)
+            var direct = JsonSerializer.Deserialize<DotNetPublishSpec>(json, ConfigurationJsonOptions)
                 ?? throw Invalid("PowerForge dotnet-publish configuration could not be deserialized.");
+            return new DotNetPublishConfiguredSpec(direct, new[] { configurationPath });
         }
 
         var release = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(json, ConfigurationJsonOptions)
@@ -259,6 +264,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             throw Invalid("Tools.DotNetPublish and Tools.DotNetPublishConfigPath are mutually exclusive.");
 
         DotNetPublishSpec configuration;
+        var inputPaths = new List<string> { configurationPath };
         if (tools.DotNetPublish is not null)
         {
             configuration = tools.DotNetPublish;
@@ -270,14 +276,16 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             var path = Path.GetFullPath(Path.IsPathRooted(configuredPath)
                 ? configuredPath
                 : Path.Combine(root, configuredPath));
-            var externalJson = File.ReadAllText(RequireFile(path, "Tools.DotNetPublishConfigPath"));
+            path = RequireFile(path, "Tools.DotNetPublishConfigPath");
+            var externalJson = File.ReadAllText(path);
             configuration = JsonSerializer.Deserialize<DotNetPublishSpec>(externalJson, ConfigurationJsonOptions)
                 ?? throw Invalid("Referenced PowerForge dotnet-publish configuration could not be deserialized.");
+            inputPaths.Add(path);
         }
 
         if (!string.IsNullOrWhiteSpace(tools.DotNetPublishProfile))
             configuration.Profile = tools.DotNetPublishProfile!.Trim();
-        return configuration;
+        return new DotNetPublishConfiguredSpec(configuration, inputPaths.ToArray());
     }
 
     private static void ValidatePackage(
@@ -405,7 +413,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             throw Invalid($"PowerForge manifest or configuration does not match MSI {name}.");
     }
 
-    private static AuthenticodeResult VerifyAuthenticode(string path)
+    internal static AuthenticodeResult VerifyAuthenticode(string path)
     {
         var status = WindowsAuthenticodeSignatureInspector.Verify(path);
         if (status != 0)
@@ -429,14 +437,14 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         }
     }
 
-    private static string ComputeSha256(string path)
+    internal static string ComputeSha256(string path)
     {
         using var input = File.OpenRead(path);
         using var hash = SHA256.Create();
         return BitConverter.ToString(hash.ComputeHash(input)).Replace("-", string.Empty);
     }
 
-    private static bool ChecksumContains(string path, string relativePath, string digest)
+    internal static bool ChecksumContains(string path, string relativePath, string digest)
     {
         var expected = relativePath.Replace('\\', '/');
         foreach (var line in File.ReadLines(path))
@@ -466,7 +474,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             .ToArray();
     }
 
-    private static string GetRelativePath(string root, string path)
+    internal static string GetRelativePath(string root, string path)
     {
 #if NET472
         return GetRelativePathViaUri(root, path);
@@ -506,7 +514,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         return options;
     }
 
-    private static string ResolveArtifactPath(string root, string relativePath, bool allowOutsideProjectRoot)
+    internal static string ResolveArtifactPath(string root, string relativePath, bool allowOutsideProjectRoot)
     {
         var platformPath = relativePath.Replace('/', Path.DirectorySeparatorChar);
         if (Path.IsPathRooted(platformPath) && !allowOutsideProjectRoot)
@@ -526,13 +534,13 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         return Directory.Exists(full) ? full : throw new DirectoryNotFoundException($"Directory was not found: {full}");
     }
 
-    private static string RequireFile(string? path, string name)
+    internal static string RequireFile(string? path, string name)
     {
         var full = Path.GetFullPath(RequireText(path, name));
         return File.Exists(full) ? full : throw new FileNotFoundException($"File was not found: {full}", full);
     }
 
-    private static string RequireText(string? value, string name)
+    internal static string RequireText(string? value, string name)
     {
         var normalized = value?.Trim() ?? string.Empty;
         return normalized.Length > 0 ? normalized : throw new InvalidDataException($"{name} is required.");
@@ -546,7 +554,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         return normalized;
     }
 
-    private static string RequireFullGitObjectId(string? value, string name)
+    internal static string RequireFullGitObjectId(string? value, string name)
     {
         var normalized = RequireText(value, name);
         if ((normalized.Length != 40 && normalized.Length != 64) || normalized.Any(ch => !Uri.IsHexDigit(ch)))
@@ -575,7 +583,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         return parsed.ToString("B").ToUpperInvariant();
     }
 
-    private static string NormalizeThumbprint(string? value)
+    internal static string NormalizeThumbprint(string? value)
     {
         var normalized = RequireText(value, "signing certificate thumbprint")
             .Replace(" ", string.Empty)

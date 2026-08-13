@@ -63,6 +63,14 @@ public sealed class ModuleSigningResult
     [JsonPropertyName("failedFilePaths")]
     public string[] FailedFilePaths { get; set; } = Array.Empty<string>();
 
+    /// <summary>Exact package file paths whose Authenticode signature was valid when signing completed.</summary>
+    [JsonPropertyName("verifiedFilePaths")]
+    public string[] VerifiedFilePaths { get; set; } = Array.Empty<string>();
+
+    /// <summary>Valid third-party signatures intentionally preserved by the signing pipeline.</summary>
+    [JsonPropertyName("preservedThirdPartySignatures")]
+    public ModuleSigningPreservedSignature[] PreservedThirdPartySignatures { get; set; } = Array.Empty<ModuleSigningPreservedSignature>();
+
     /// <summary>Total number of files already signed (by this cert + third-party).</summary>
     [JsonIgnore]
     public int AlreadySigned => Math.Max(0, AlreadySignedByThisCert + AlreadySignedOther);
@@ -79,4 +87,20 @@ public sealed class ModuleSigningResult
     public override string ToString()
         => $"matched={TotalMatched}, afterExclude={TotalAfterExclude}, alreadySignedOther={AlreadySignedOther}, " +
            $"alreadySignedByThisCert={AlreadySignedByThisCert}, signedNew={SignedNew}, resigned={Resigned}, failed={Failed}";
+}
+
+/// <summary>Identity of one valid third-party signature preserved by the module-signing pipeline.</summary>
+public sealed class ModuleSigningPreservedSignature
+{
+    /// <summary>Exact package file path.</summary>
+    [JsonPropertyName("filePath")]
+    public string FilePath { get; set; } = string.Empty;
+
+    /// <summary>Signer certificate subject.</summary>
+    [JsonPropertyName("subject")]
+    public string Subject { get; set; } = string.Empty;
+
+    /// <summary>Normalized signer certificate thumbprint.</summary>
+    [JsonPropertyName("thumbprint")]
+    public string Thumbprint { get; set; } = string.Empty;
 }

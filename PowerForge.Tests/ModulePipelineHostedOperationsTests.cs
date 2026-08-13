@@ -2193,6 +2193,16 @@ public sealed class ModulePipelineHostedOperationsTests
             FailedFilePaths = new[]
             {
                 modulePath
+            },
+            VerifiedFilePaths = new[] { manifestPath },
+            PreservedThirdPartySignatures = new[]
+            {
+                new ModuleSigningPreservedSignature
+                {
+                    FilePath = manifestPath,
+                    Subject = "CN=Vendor",
+                    Thumbprint = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                }
             }
         };
         var successSummary = new ModuleSigningResult
@@ -2200,7 +2210,8 @@ public sealed class ModulePipelineHostedOperationsTests
             TotalMatched = 1,
             TotalAfterExclude = 1,
             Attempted = 1,
-            SignedNew = 1
+            SignedNew = 1,
+            VerifiedFilePaths = new[] { modulePath }
         };
         var runner = new RecordingPowerShellRunner(request =>
         {
@@ -2230,6 +2241,10 @@ public sealed class ModulePipelineHostedOperationsTests
         Assert.Equal(new[] { modulePath }, requestedPackageFiles[1]);
         Assert.Equal(2, result.SignedNew);
         Assert.Equal(0, result.Failed);
+        Assert.Equal(
+            new[] { manifestPath, modulePath }.OrderBy(path => path),
+            result.VerifiedFilePaths.OrderBy(path => path));
+        Assert.Equal(manifestPath, Assert.Single(result.PreservedThirdPartySignatures).FilePath);
     }
 
     [Fact]
@@ -2514,6 +2529,39 @@ public sealed class ModulePipelineHostedOperationsTests
         var script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
 
         Assert.DoesNotContain("?.", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SigningScript_SummaryCarriesPreservedThirdPartySignerIdentity()
+    {
+        string script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
+        var ast = System.Management.Automation.Language.Parser.ParseInput(script, out _, out var parseErrors);
+        Assert.Empty(parseErrors);
+        var function = ast.Find(
+            node => node is System.Management.Automation.Language.FunctionDefinitionAst definition &&
+                    definition.Name.Equals("EmitSummary", StringComparison.Ordinal),
+            searchNestedScriptBlocks: true);
+        Assert.NotNull(function);
+
+        using var powerShell = System.Management.Automation.PowerShell.Create();
+        powerShell.AddScript(function!.Extent.Text + "\n" + """
+            EmitSummary -totalMatched 1 -totalAfterExclude 1 -alreadyByThis 0 -alreadyOther 1 `
+              -attempted 0 -signedNew 0 -resigned 0 -failed 0 -precheckFailure 0 -unknownError 0 `
+              -signingException 0 -certThumbprint 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' `
+              -failedFiles @() -failedFilePaths @() -verifiedFilePaths @('C:\Module\Vendor.dll') `
+              -preservedThirdPartySignatures @([ordered]@{ filePath = 'C:\Module\Vendor.dll'; subject = 'CN=Vendor'; thumbprint = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' })
+            """);
+
+        string summaryLine = powerShell.Invoke().Select(value => value.ToString())
+            .Single(line => line.StartsWith("PFSIGN::SUMMARY::", StringComparison.Ordinal));
+        string json = Encoding.UTF8.GetString(Convert.FromBase64String(summaryLine["PFSIGN::SUMMARY::".Length..]));
+        ModuleSigningResult summary = JsonSerializer.Deserialize<ModuleSigningResult>(json)!;
+
+        Assert.Empty(powerShell.Streams.Error);
+        ModuleSigningPreservedSignature preserved = Assert.Single(summary.PreservedThirdPartySignatures);
+        Assert.Equal("C:\\Module\\Vendor.dll", preserved.FilePath);
+        Assert.Equal("CN=Vendor", preserved.Subject);
+        Assert.Equal("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", preserved.Thumbprint);
     }
 
     private static string EncodeSigningSummary(ModuleSigningResult summary)

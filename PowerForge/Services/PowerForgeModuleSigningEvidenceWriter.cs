@@ -1,0 +1,170 @@
+using System.Text.Json;
+
+namespace PowerForge;
+
+/// <summary>
+/// Creates the immutable signing evidence consumed when a packed PowerShell module is verified for release.
+/// </summary>
+public static class PowerForgeModuleSigningEvidenceWriter
+{
+    /// <summary>
+    /// Creates signing evidence from the exact files verified by the shared module-signing pipeline.
+    /// </summary>
+    /// <param name="moduleRoot">Root directory of the staged module that was signed.</param>
+    /// <param name="moduleName">Module name.</param>
+    /// <param name="version">Module version.</param>
+    /// <param name="sourceRevision">Full Git source revision used by the build.</param>
+    /// <param name="manifestPath">Path to the module manifest under <paramref name="moduleRoot"/>.</param>
+    /// <param name="signingResult">Successful result returned by the shared module-signing pipeline.</param>
+    /// <returns>Normalized evidence suitable for serialization beside a packed module.</returns>
+    public static PowerForgeModuleSigningEvidence Create(
+        string moduleRoot,
+        string moduleName,
+        string version,
+        string sourceRevision,
+        string manifestPath,
+        ModuleSigningResult signingResult)
+    {
+        string root = RequireDirectory(moduleRoot, nameof(moduleRoot));
+        string name = RequireText(moduleName, nameof(moduleName));
+        string normalizedVersion = RequireVersion(version);
+        string revision = DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(sourceRevision, nameof(sourceRevision));
+        if (signingResult is null)
+            throw new ArgumentNullException(nameof(signingResult));
+        if (!signingResult.Success || signingResult.TotalAfterExclude < 1)
+            throw new InvalidOperationException("Module signing must complete successfully before release evidence can be created.");
+        StringComparer pathComparer = FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.Ordinal
+            ? StringComparer.Ordinal
+            : StringComparer.OrdinalIgnoreCase;
+
+        string manifest = ResolveFileUnderRoot(root, manifestPath, nameof(manifestPath));
+        string[] verifiedFiles = (signingResult.VerifiedFilePaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => ResolveFileUnderRoot(root, path, "verified signing path"))
+            .Distinct(pathComparer)
+            .OrderBy(path => path, pathComparer)
+            .ToArray();
+        if (verifiedFiles.Length != signingResult.TotalAfterExclude)
+            throw new InvalidOperationException(
+                "Module signing evidence requires one exact verified file path for every file selected by the signing pipeline.");
+        if (!verifiedFiles.Contains(manifest, pathComparer))
+            throw new InvalidOperationException("Module signing evidence must include the module manifest.");
+        PowerForgeModulePreservedSignature[] preservedThirdPartySignatures =
+            (signingResult.PreservedThirdPartySignatures ?? Array.Empty<ModuleSigningPreservedSignature>())
+            .Select(signature => CreatePreservedSignature(root, signature))
+            .OrderBy(signature => signature.Path, pathComparer)
+            .ToArray();
+        if (preservedThirdPartySignatures.Select(signature => signature.Path).Distinct(pathComparer).Count() !=
+            preservedThirdPartySignatures.Length)
+            throw new InvalidOperationException("Preserved third-party signing evidence contains duplicate file paths.");
+        if (preservedThirdPartySignatures.Length != signingResult.AlreadySignedOther)
+            throw new InvalidOperationException(
+                "Preserved third-party signer identities must cover every valid third-party signature reported by the signing pipeline.");
+        if (preservedThirdPartySignatures.Any(signature =>
+                !verifiedFiles.Contains(ResolveFileUnderRoot(root, signature.Path, "preserved third-party signing path"), pathComparer)))
+            throw new InvalidOperationException("Preserved third-party files must be part of the verified signing set.");
+        if (preservedThirdPartySignatures.Any(signature =>
+                pathComparer.Equals(ResolveFileUnderRoot(root, signature.Path, "preserved third-party signing path"), manifest)))
+            throw new InvalidOperationException("The module manifest must be owned by the configured release publisher.");
+
+        return new PowerForgeModuleSigningEvidence
+        {
+            ModuleName = name,
+            Version = normalizedVersion,
+            SourceRevision = revision.ToLowerInvariant(),
+            ManifestPath = NormalizeRelativePath(root, manifest),
+            SignableFiles = verifiedFiles.Select(path => NormalizeRelativePath(root, path)).ToArray(),
+            PreservedThirdPartySignatures = preservedThirdPartySignatures
+        };
+    }
+
+    /// <summary>
+    /// Writes signing evidence created from the exact files verified by the shared module-signing pipeline.
+    /// </summary>
+    /// <param name="outputPath">Destination JSON sidecar path.</param>
+    /// <param name="moduleRoot">Root directory of the staged module that was signed.</param>
+    /// <param name="moduleName">Module name.</param>
+    /// <param name="version">Module version.</param>
+    /// <param name="sourceRevision">Full Git source revision used by the build.</param>
+    /// <param name="manifestPath">Path to the module manifest under <paramref name="moduleRoot"/>.</param>
+    /// <param name="signingResult">Successful result returned by the shared module-signing pipeline.</param>
+    /// <returns>The normalized full path of the written sidecar.</returns>
+    public static string Write(
+        string outputPath,
+        string moduleRoot,
+        string moduleName,
+        string version,
+        string sourceRevision,
+        string manifestPath,
+        ModuleSigningResult signingResult)
+    {
+        string destination = Path.GetFullPath(RequireText(outputPath, nameof(outputPath)));
+        string? directory = Path.GetDirectoryName(destination);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+        PowerForgeModuleSigningEvidence evidence = Create(
+            moduleRoot,
+            moduleName,
+            version,
+            sourceRevision,
+            manifestPath,
+            signingResult);
+        File.WriteAllText(destination, JsonSerializer.Serialize(evidence, new JsonSerializerOptions { WriteIndented = true }));
+        return destination;
+    }
+
+    private static string RequireDirectory(string path, string parameterName)
+    {
+        string fullPath = Path.GetFullPath(RequireText(path, parameterName));
+        if (!Directory.Exists(fullPath))
+            throw new DirectoryNotFoundException($"{parameterName} was not found: {fullPath}");
+        return fullPath;
+    }
+
+    private static string ResolveFileUnderRoot(string root, string path, string label)
+    {
+        string candidate = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root, path));
+        string relative = FrameworkCompatibility.GetRelativePath(root, candidate);
+        if (Path.IsPathRooted(relative) || relative == ".." ||
+            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new InvalidOperationException($"{label} must stay under the staged module root.");
+        if (!File.Exists(candidate))
+            throw new FileNotFoundException($"{label} was not found.", candidate);
+        return candidate;
+    }
+
+    private static string NormalizeRelativePath(string root, string path) =>
+        FrameworkCompatibility.GetRelativePath(root, path).Replace('\\', '/');
+
+    private static PowerForgeModulePreservedSignature CreatePreservedSignature(
+        string root,
+        ModuleSigningPreservedSignature signature)
+    {
+        if (signature is null)
+            throw new InvalidOperationException("Preserved third-party signing evidence cannot contain null entries.");
+        string path = ResolveFileUnderRoot(root, signature.FilePath, "preserved third-party signing path");
+        string subject = RequireText(signature.Subject, "preserved third-party signer subject");
+        string thumbprint = DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(signature.Thumbprint);
+        return new PowerForgeModulePreservedSignature
+        {
+            Path = NormalizeRelativePath(root, path),
+            Subject = subject,
+            Thumbprint = thumbprint
+        };
+    }
+
+    private static string RequireText(string value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException($"{parameterName} is required.", parameterName);
+        return value.Trim();
+    }
+
+    private static string RequireVersion(string version)
+    {
+        string value = RequireText(version, nameof(version));
+        if (!Version.TryParse(value, out Version? parsed))
+            throw new ArgumentException("version must be a valid module version.", nameof(version));
+        return parsed.ToString();
+    }
+}

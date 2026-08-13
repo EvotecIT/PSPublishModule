@@ -105,7 +105,9 @@ function EmitSummary(
   [int]$signingException,
   [string]$certThumbprint,
   [object[]]$failedFiles,
-  [object[]]$failedFilePaths
+  [object[]]$failedFilePaths,
+  [object[]]$verifiedFilePaths,
+  [object[]]$preservedThirdPartySignatures
 ) {
   $summary = [ordered]@{
     totalMatched            = $totalMatched
@@ -122,6 +124,8 @@ function EmitSummary(
     certificateThumbprint   = $certThumbprint
     failedFiles             = @($failedFiles | Select-Object -First 25)
     failedFilePaths         = @($failedFilePaths)
+    verifiedFilePaths       = @($verifiedFilePaths)
+    preservedThirdPartySignatures = @($preservedThirdPartySignatures)
   }
 
   $json = $summary | ConvertTo-Json -Compress -Depth 6
@@ -275,6 +279,7 @@ try {
   $alreadyOther = 0
   $preStatus = @{}
   $preDisposition = @{}
+  $preservedThirdPartySignatures = New-Object 'System.Collections.Generic.List[object]'
   $attempted = 0
   $signedNew = 0
   $resigned = 0
@@ -319,7 +324,18 @@ try {
             $tp = [string]$sig.SignerCertificate.Thumbprint
           }
           if (-not [string]::IsNullOrWhiteSpace($tp)) { $tp = ($tp -replace '\s','').ToUpperInvariant() }
-          if (-not [string]::IsNullOrWhiteSpace($tp) -and $tp -eq $thisTp) { $alreadyByThis++ } else { $alreadyOther++ }
+          if (-not [string]::IsNullOrWhiteSpace($tp) -and $tp -eq $thisTp) {
+            $alreadyByThis++
+          } else {
+            $alreadyOther++
+            if (-not $overwrite) {
+              $preservedThirdPartySignatures.Add([ordered]@{
+                filePath = $f
+                subject = [string]$sig.SignerCertificate.Subject
+                thumbprint = $tp
+              }) | Out-Null
+            }
+          }
         } elseif ($preDisposition[$f] -eq 'Fail') {
           $precheckFailures[$f] = "precheck returned status $status"
         }
@@ -473,7 +489,9 @@ try {
     -signingException $signingException `
     -certThumbprint $thisTp `
     -failedFiles @($failedFiles) `
-    -failedFilePaths @($failedFilePaths)
+    -failedFilePaths @($failedFilePaths) `
+    -verifiedFilePaths @($all | Where-Object { -not $failedFilePaths.Contains($_) }) `
+    -preservedThirdPartySignatures $preservedThirdPartySignatures.ToArray()
 
   if ($failed -gt 0) { exit 2 } else { exit 0 }
 } catch {

@@ -1,5 +1,17 @@
 namespace PowerForge;
 
+internal sealed class DotNetPublishConfiguredSpec
+{
+    internal DotNetPublishConfiguredSpec(DotNetPublishSpec configuration, string[] inputPaths)
+    {
+        Configuration = configuration;
+        InputPaths = inputPaths;
+    }
+
+    internal DotNetPublishSpec Configuration { get; }
+    internal string[] InputPaths { get; }
+}
+
 /// <summary>
 /// Describes the inputs used to verify a release installer produced by PowerForge.
 /// </summary>
