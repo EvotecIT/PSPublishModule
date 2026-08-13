@@ -296,9 +296,18 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         if (command == "pipx")
         {
-            var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "install", "run" }, "pipx", path, line, findings);
-            if (verbIndex >= 0)
+            var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "install", "run", "inject" }, "pipx", path, line, findings);
+            if (verbIndex < 0)
+                return;
+            if (!tokens[verbIndex].Equals("inject", StringComparison.OrdinalIgnoreCase))
+            {
                 AddRunnerOperand("pypi", "pipx " + tokens[verbIndex], tokens, verbIndex + 1, path, line, references, findings);
+                return;
+            }
+
+            var environmentIndex = FindNextOperand(tokens, verbIndex + 1);
+            AddMultipleOperands("pypi", "pipx inject", tokens, environmentIndex < 0 ? tokens.Length : environmentIndex + 1,
+                path, line, references, findings);
         }
     }
 
@@ -383,8 +392,6 @@ public sealed partial class WebAgentContentSecurityScanner
                 : null;
             AddToken(ecosystem, command, token, optionVersion, path, line, references, findings);
             added = true;
-            if (ecosystem == "rubygems")
-                break;
         }
         if (!added)
             AddUnverifiableOperand(command, path, line, findings);
@@ -401,11 +408,6 @@ public sealed partial class WebAgentContentSecurityScanner
         ICollection<WebAgentContentSecurityFinding> findings)
     {
         token = NormalizeToken(token);
-        if (!IsCandidatePackageId(token))
-        {
-            AddUnverifiableOperand(command, path, line, findings, token);
-            return;
-        }
         if (ecosystem == "npm" && TryGetNpmSelector(token, out var npmSelector) && !IsNpmRegistrySelector(npmSelector))
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
@@ -413,6 +415,11 @@ public sealed partial class WebAgentContentSecurityScanner
             return;
         }
         var (id, embeddedVersion) = SplitPackageVersion(ecosystem, token);
+        if (!IsCandidatePackageId(id))
+        {
+            AddUnverifiableOperand(command, path, line, findings, token);
+            return;
+        }
         if (ecosystem == "npm" && embeddedVersion is not null && !IsNpmRegistrySelector(embeddedVersion))
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
@@ -659,6 +666,7 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("-RequiredVersion", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--tag", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--group", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--pip-args", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--python", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-X", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--repository", StringComparison.OrdinalIgnoreCase) ||
@@ -737,6 +745,10 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("--force", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-Force", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--user-install", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--clear-sources", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--include-apps", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--include-deps", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--system-site-packages", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--no-document", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--no-interaction", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--update-with-all-dependencies", StringComparison.OrdinalIgnoreCase) ||
