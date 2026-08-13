@@ -9,7 +9,7 @@ namespace PowerForge;
 /// Verifies that a signed MSI still matches the PowerForge build manifest, checksum catalog,
 /// source provenance, package identity, and signing configuration that produced it.
 /// </summary>
-public sealed class DotNetPublishReleaseArtifactVerifier
+public sealed partial class DotNetPublishReleaseArtifactVerifier
 {
     private static readonly JsonSerializerOptions ConfigurationJsonOptions = CreateConfigurationJsonOptions();
     private readonly Func<string, DotNetPublishMsiPackageMetadata> _readPackage;
@@ -453,25 +453,6 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         using var input = File.OpenRead(path);
         using var hash = SHA256.Create();
         return BitConverter.ToString(hash.ComputeHash(input)).Replace("-", string.Empty);
-    }
-
-    internal static bool ChecksumContains(string path, string relativePath, string digest)
-    {
-        var expected = relativePath.Replace('\\', '/');
-        foreach (var line in File.ReadLines(path))
-        {
-            var separator = line.IndexOf(" *", StringComparison.Ordinal);
-            if (separator <= 0) continue;
-            var listedDigest = line.Substring(0, separator).Trim();
-            var listedPath = line.Substring(separator + 2).Trim().Replace('\\', '/');
-            if (string.Equals(listedDigest, digest, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(listedPath, expected, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static JsonElement[] FilterEntries(JsonElement[] entries, string propertyName, string? selector)

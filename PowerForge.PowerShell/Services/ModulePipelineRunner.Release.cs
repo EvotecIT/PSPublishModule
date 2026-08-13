@@ -634,7 +634,7 @@ public sealed partial class ModulePipelineRunner
         var checksumsPath = Path.Combine(metadataRoot, "SHA256SUMS.txt");
         File.WriteAllLines(
             checksumsPath,
-            assetEntries.Select(static asset => $"{asset.sha256}  {asset.relativePath}"));
+            assetEntries.Select(static asset => $"{asset.sha256} *{asset.relativePath}"));
 
         return new[] { manifestPath, checksumsPath };
     }
