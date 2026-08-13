@@ -5,6 +5,33 @@ namespace PowerForge.Tests;
 
 public sealed class SigningScriptRetryTests
 {
+    [Theory]
+    [InlineData(false, 1, 0, 0, 1)]
+    [InlineData(true, 0, 1, 1, 0)]
+    public void ExistingThirdPartySignature_IsPreservedOrOverwrittenWithConsistentEvidence(
+        bool overwrite,
+        int expectedAlreadyOther,
+        int expectedAttempted,
+        int expectedResigned,
+        int expectedPreserved)
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return;
+
+        var evidence = RunExistingSignatureHarness(overwrite);
+
+        Assert.Equal(expectedAlreadyOther, evidence.AlreadySignedOther);
+        Assert.Equal(expectedAttempted, evidence.Attempted);
+        Assert.Equal(expectedResigned, evidence.Resigned);
+        Assert.Equal(expectedPreserved, evidence.PreservedThirdPartySignatures.Length);
+        if (!overwrite)
+        {
+            ModuleSigningPreservedSignature signature = Assert.Single(evidence.PreservedThirdPartySignatures);
+            Assert.Equal("CN=Vendor", signature.Subject);
+            Assert.Equal("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", signature.Thumbprint);
+        }
+    }
+
     [Fact]
     public void PowerShellCoreStoreProviderFailuresAreBoundedAndEmitEveryRetryPath()
     {
@@ -219,6 +246,87 @@ public sealed class SigningScriptRetryTests
                 File.ReadAllText(callLogPath).Length,
                 packageFilePaths,
                 File.ReadAllLines(certificateLookupLogPath));
+        }
+        finally
+        {
+            try { Directory.Delete(rootPath, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private static ModuleSigningResult RunExistingSignatureHarness(bool overwrite)
+    {
+        string rootPath = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N"))).FullName;
+        string packageFilePath = Path.Combine(rootPath, "Vendor.ps1");
+        string packageFileListPath = Path.Combine(rootPath, "package-files.txt");
+        try
+        {
+            File.WriteAllText(packageFilePath, "# test");
+            File.WriteAllText(packageFileListPath, packageFilePath);
+            string script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
+            string includeB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes("*.ps1"));
+            string harness = $$"""
+                $scriptText = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(script))}}'))
+                $rootPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(rootPath))}}'))
+                $packageFileListPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(packageFileListPath))}}'))
+                function Get-ChildItem {
+                  [CmdletBinding()]
+                  param([string]$Path, [switch]$CodeSigningCert)
+                  [pscustomobject]@{
+                    Thumbprint = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB'
+                    Subject = 'CN=Publisher'
+                    NotBefore = [DateTime]::Now.AddDays(-1)
+                    NotAfter = [DateTime]::Now.AddDays(1)
+                  }
+                }
+                function Get-AuthenticodeSignature {
+                  [CmdletBinding()]
+                  param([string]$FilePath)
+                  [pscustomobject]@{
+                    Status = 'Valid'
+                    SignerCertificate = [pscustomobject]@{
+                      Thumbprint = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+                      Subject = 'CN=Vendor'
+                    }
+                  }
+                }
+                function Set-AuthenticodeSignature {
+                  [CmdletBinding()]
+                  param(
+                    [string]$FilePath,
+                    [object]$Certificate,
+                    [string]$TimestampServer,
+                    [object]$IncludeChain,
+                    [string]$HashAlgorithm,
+                    [switch]$Force
+                  )
+                  [pscustomobject]@{ Status = 'Valid'; StatusMessage = '' }
+                }
+                & ([scriptblock]::Create($scriptText)) `
+                  -RootPath $rootPath `
+                  -PackageFileListPath $packageFileListPath `
+                  -IncludeB64 '{{includeB64}}' `
+                  -ExcludeB64 '' `
+                  -Thumbprint 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' `
+                  -PfxPath '' `
+                  -PfxBase64 '' `
+                  -PfxPassword '' `
+                  -OverwriteSigned '{{(overwrite ? "1" : "0")}}'
+                """;
+
+            using var powerShell = System.Management.Automation.PowerShell.Create();
+            powerShell.AddScript(harness);
+            string summaryLine = powerShell.Invoke().Select(item => item.ToString())
+                .Single(line => line.StartsWith("PFSIGN::SUMMARY::", StringComparison.Ordinal));
+            Assert.Empty(powerShell.Streams.Error);
+            string summaryJson = Encoding.UTF8.GetString(
+                Convert.FromBase64String(summaryLine["PFSIGN::SUMMARY::".Length..]));
+            return JsonSerializer.Deserialize<ModuleSigningResult>(
+                       summaryJson,
+                       new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                   ?? throw new InvalidOperationException("Signing summary was not produced.");
         }
         finally
         {

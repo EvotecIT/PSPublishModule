@@ -46,7 +46,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string checksumsPath,
         string? provenancePath,
         IEnumerable<string>? configurationPaths,
-        IEnumerable<string>? sbomPaths)
+        IEnumerable<string>? sbomPaths,
+        string artifactId,
+        string artifactVersion,
+        string artifactDigest)
     {
         var evidence = new List<PowerForgeReleaseEvidenceFile>
         {
@@ -68,11 +71,16 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         }
         foreach (string configurationPath in configurationPaths ?? Array.Empty<string>())
         {
+            string digest = VerifyChecksummedFile(
+                projectRoot,
+                checksumsPath,
+                configurationPath,
+                "PowerForge configuration");
             evidence.Add(new PowerForgeReleaseEvidenceFile
             {
                 Role = "configuration",
                 Path = configurationPath!,
-                Sha256 = DotNetPublishReleaseArtifactVerifier.ComputeSha256(configurationPath!)
+                Sha256 = digest
             });
         }
 
@@ -80,7 +88,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         {
             string path = ResolveRequestFile(projectRoot, configuredPath, "SBOM path");
             string digest = VerifyChecksummedFile(projectRoot, checksumsPath, path, "SBOM");
-            ValidateSbom(path);
+            ValidateSbom(path, artifactId, artifactVersion, artifactDigest);
             evidence.Add(new PowerForgeReleaseEvidenceFile { Role = "sbom", Path = path, Sha256 = digest });
         }
         return evidence.ToArray();
@@ -272,55 +280,34 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             : version.FileVersion ?? string.Empty;
     }
 
-    private static void ValidateSbom(string path)
+    private static string NormalizeModuleVersion(string version, string? prerelease = null)
     {
-        using JsonDocument document = ReadJson(path, "SBOM");
-        JsonElement root = document.RootElement;
-        if (root.ValueKind != JsonValueKind.Object)
-            throw Invalid($"SBOM '{Path.GetFileName(path)}' is not a recognizable CycloneDX or SPDX JSON document.");
+        string numeric = NormalizeVersion(version);
+        string label = (prerelease ?? string.Empty).Trim();
+        if (label.Length == 0)
+            return numeric;
+        if (label.StartsWith("-", StringComparison.Ordinal))
+            label = label.Substring(1);
+        if (label.Length == 0 || label.Any(character =>
+                !(char.IsLetterOrDigit(character) || character == '.' || character == '-')))
+            throw Invalid("PowerShell module prerelease label is not valid.");
+        return numeric + "-" + label;
+    }
 
-        if (string.Equals(ReadString(root, "bomFormat"), "CycloneDX", StringComparison.OrdinalIgnoreCase))
-        {
-            string specificationVersion = ReadString(root, "specVersion");
-            string serialNumber = ReadString(root, "serialNumber");
-            int version = ReadInt32(root, "version");
-            bool supportedVersion = specificationVersion == "1.4" ||
-                                    specificationVersion == "1.5" ||
-                                    specificationVersion == "1.6";
-            bool validSerialNumber = string.IsNullOrWhiteSpace(serialNumber) ||
-                                     (Uri.TryCreate(serialNumber, UriKind.Absolute, out Uri? serialUri) &&
-                                      string.Equals(serialUri.Scheme, "urn", StringComparison.OrdinalIgnoreCase));
-            if (!supportedVersion || version < 1 ||
-                !validSerialNumber ||
-                (!TryGet(root, "components", out JsonElement components) || components.ValueKind != JsonValueKind.Array) &&
-                (!TryGet(root, "metadata", out JsonElement metadata) || metadata.ValueKind != JsonValueKind.Object))
-            {
-                throw Invalid($"CycloneDX SBOM '{Path.GetFileName(path)}' is missing supported document-level fields.");
-            }
-            return;
-        }
+    private static void ValidateExpectedModuleVersion(string? expected, string actual)
+    {
+        if (!string.IsNullOrWhiteSpace(expected) &&
+            !string.Equals(NormalizeModuleVersionText(expected!), actual, StringComparison.OrdinalIgnoreCase))
+            throw Invalid($"Release artifact version '{actual}' does not match expected version '{expected!.Trim()}'.");
+    }
 
-        if (ReadString(root, "spdxVersion").StartsWith("SPDX-", StringComparison.OrdinalIgnoreCase))
-        {
-            string specificationVersion = ReadString(root, "spdxVersion");
-            bool supportedVersion = specificationVersion == "SPDX-2.2" || specificationVersion == "SPDX-2.3";
-            string dataLicense = ReadString(root, "dataLicense");
-            string documentNamespace = ReadString(root, "documentNamespace");
-            if (!supportedVersion || !string.Equals(dataLicense, "CC0-1.0", StringComparison.OrdinalIgnoreCase) ||
-                ReadString(root, "SPDXID") != "SPDXRef-DOCUMENT" ||
-                string.IsNullOrWhiteSpace(ReadString(root, "name")) ||
-                !Uri.TryCreate(documentNamespace, UriKind.Absolute, out _) ||
-                !TryGet(root, "creationInfo", out JsonElement creationInfo) || creationInfo.ValueKind != JsonValueKind.Object ||
-                string.IsNullOrWhiteSpace(ReadString(creationInfo, "created")) ||
-                !TryGet(creationInfo, "creators", out JsonElement creators) || creators.ValueKind != JsonValueKind.Array ||
-                creators.GetArrayLength() == 0)
-            {
-                throw Invalid($"SPDX SBOM '{Path.GetFileName(path)}' is missing supported document-level fields.");
-            }
-            return;
-        }
-
-        throw Invalid($"SBOM '{Path.GetFileName(path)}' is not a recognizable CycloneDX or SPDX JSON document.");
+    private static string NormalizeModuleVersionText(string value)
+    {
+        string text = DotNetPublishReleaseArtifactVerifier.RequireText(value, "artifact version");
+        int separator = text.IndexOf('-');
+        return separator < 0
+            ? NormalizeModuleVersion(text)
+            : NormalizeModuleVersion(text.Substring(0, separator), text.Substring(separator + 1));
     }
 
     private static JsonDocument ReadJson(string path, string label)

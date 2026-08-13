@@ -21,12 +21,14 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
             "Sample",
             "2.3.4",
             SourceRevision,
+            sourceDirty: false,
             fixture.ManifestPath,
             signingResult);
 
         Assert.Equal("Sample/Sample.psd1", evidence.ManifestPath);
         Assert.Equal(new[] { "Sample/Sample.psd1", "Sample/Sample.psm1" }, evidence.SignableFiles);
         Assert.Equal(SourceRevision, evidence.SourceRevision);
+        Assert.False(evidence.SourceDirty ?? true);
     }
 
     [Fact]
@@ -56,6 +58,7 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
             "Sample",
             "2.3.4",
             SourceRevision,
+            sourceDirty: false,
             fixture.ManifestPath,
             signingResult);
 
@@ -83,10 +86,61 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
                 "Sample",
                 "2.3.4",
                 SourceRevision,
+                sourceDirty: false,
                 fixture.ManifestPath,
                 signingResult));
 
         Assert.Contains("every file selected", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Create_BundledRequiredModuleMissingFromSigningResultFailsClosed()
+    {
+        using var fixture = new SigningFixture(includeVendorDependency: true);
+        var signingResult = new ModuleSigningResult
+        {
+            TotalMatched = 2,
+            TotalAfterExclude = 2,
+            SignedNew = 2,
+            VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath }
+        };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeModuleSigningEvidenceWriter.Create(
+                fixture.Root,
+                "Sample",
+                "2.3.4",
+                SourceRevision,
+                sourceDirty: false,
+                fixture.ManifestPath,
+                signingResult));
+
+        Assert.Contains("bundled required modules", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Create_DirtySourceFailsClosed()
+    {
+        using var fixture = new SigningFixture();
+        var signingResult = new ModuleSigningResult
+        {
+            TotalMatched = 2,
+            TotalAfterExclude = 2,
+            SignedNew = 2,
+            VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath }
+        };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeModuleSigningEvidenceWriter.Create(
+                fixture.Root,
+                "Sample",
+                "2.3.4",
+                SourceRevision,
+                sourceDirty: true,
+                fixture.ManifestPath,
+                signingResult));
+
+        Assert.Contains("dirty source", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class SigningFixture : IDisposable

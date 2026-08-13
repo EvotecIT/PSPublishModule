@@ -93,6 +93,31 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsConfigurationChangedAfterChecksumCatalogWasWritten()
+    {
+        using var fixture = new PortableFixture();
+        File.AppendAllText(fixture.ConfigurationPath, " ");
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("configuration SHA-256", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_PortableCliRejectsReferencedConfigurationChangedAfterChecksumCatalogWasWritten()
+    {
+        using var fixture = new PortableFixture();
+        string referenced = fixture.WriteReferencedConfiguration();
+        File.AppendAllText(referenced, " ");
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("configuration SHA-256", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsLabelOnlyCycloneDxDocument()
     {
         using var fixture = new PortableFixture();
@@ -126,6 +151,48 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         Assert.Contains("document-level fields", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Verify_PortableCliRejectsSbomForDifferentArtifact()
+    {
+        using var fixture = new PortableFixture();
+        fixture.WriteBoundCycloneDxSbom("Other.CLI", "1.2.3", fixture.ComputeDigest(fixture.ArchivePath));
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("does not bind", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_PortableCliAcceptsSpdxArtifactBinding()
+    {
+        using var fixture = new PortableFixture();
+        fixture.WriteSpdxSbom("Sample.CLI", "1.2.3", fixture.ComputeDigest(fixture.ArchivePath));
+        fixture.WriteChecksums();
+
+        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier().Verify(fixture.CreateRequest());
+
+        Assert.Contains(result.EvidenceFiles, evidence => evidence.Role == "sbom");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Verify_PortableCliRejectsExplicitNonCliKind(bool configuredKind)
+    {
+        using var fixture = new PortableFixture();
+        if (configuredKind)
+            fixture.WriteConfigurationKind("Service");
+        else
+            fixture.WriteManifestKind("Service");
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("not a CLI release target", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private abstract class FixtureBase : IDisposable
     {
         protected FixtureBase()
@@ -134,14 +201,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             Directory.CreateDirectory(Root);
             ChecksumsPath = Path.Combine(Root, "SHA256SUMS.txt");
             SbomPath = Path.Combine(Root, "sample.cdx.json");
-            File.WriteAllText(SbomPath, JsonSerializer.Serialize(new
-            {
-                bomFormat = "CycloneDX",
-                specVersion = "1.6",
-                serialNumber = "urn:uuid:00000000-0000-0000-0000-000000000001",
-                version = 1,
-                components = Array.Empty<object>()
-            }));
+            File.WriteAllText(SbomPath, "{}");
         }
 
         internal string Root { get; }
@@ -163,6 +223,44 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         }
 
         internal void WriteSbom(string content) => File.WriteAllText(SbomPath, content);
+
+        internal void WriteBoundCycloneDxSbom(string artifactId, string version, string digest) =>
+            WriteSbom(JsonSerializer.Serialize(new
+            {
+                bomFormat = "CycloneDX",
+                specVersion = "1.6",
+                serialNumber = "urn:uuid:00000000-0000-0000-0000-000000000001",
+                version = 1,
+                metadata = new
+                {
+                    component = new
+                    {
+                        name = artifactId,
+                        version,
+                        hashes = new[] { new { alg = "SHA-256", content = digest } }
+                    }
+                }
+            }));
+
+        internal void WriteSpdxSbom(string artifactId, string version, string digest) =>
+            WriteSbom(JsonSerializer.Serialize(new
+            {
+                spdxVersion = "SPDX-2.3",
+                dataLicense = "CC0-1.0",
+                SPDXID = "SPDXRef-DOCUMENT",
+                name = artifactId + " SBOM",
+                documentNamespace = "https://example.invalid/spdx/" + Guid.NewGuid().ToString("N"),
+                creationInfo = new { created = "2026-08-13T00:00:00Z", creators = new[] { "Tool: PowerForge" } },
+                packages = new[]
+                {
+                    new
+                    {
+                        name = artifactId,
+                        versionInfo = version,
+                        checksums = new[] { new { algorithm = "SHA256", checksumValue = digest } }
+                    }
+                }
+            }));
 
         internal PowerForgeReleaseArtifactVerifier CreateVerifier(string signerThumbprint = Thumbprint) =>
             new(
@@ -217,6 +315,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 {
                     Category = "Publish",
                     Target = "Sample.CLI",
+                    Kind = "Cli",
                     Runtime = "win-x64",
                     Framework = "net10.0",
                     Style = "PortableCompat",
@@ -228,6 +327,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     SourceDirty = false
                 }
             }));
+            WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
             WriteChecksums();
         }
 
@@ -264,7 +364,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         }
 
         internal void WriteChecksums() =>
-            base.WriteChecksums(ManifestPath, ExecutablePath, ArchivePath);
+            base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath);
 
         internal string AddSignedDependency()
         {
@@ -276,7 +376,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 using StreamWriter writer = new(entry.Open(), new UTF8Encoding(false));
                 writer.Write("signed dependency");
             }
-            base.WriteChecksums(ManifestPath, ExecutablePath, ArchivePath, dependencyPath);
+            WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
+            base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath, dependencyPath);
             return dependencyPath;
         }
 
@@ -308,6 +409,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     }
                 }
             }));
+            WriteChecksums();
         }
 
         internal string WriteReferencedConfiguration()
@@ -322,7 +424,56 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     DotNetPublishConfigPath = Path.GetFileName(referencedPath)
                 }
             }));
+            base.WriteChecksums(ManifestPath, ConfigurationPath, referencedPath, ExecutablePath, ArchivePath);
             return referencedPath;
+        }
+
+        internal void WriteConfigurationKind(string kind)
+        {
+            File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
+            {
+                SchemaVersion = 1,
+                DotNet = new { AllowOutputOutsideProjectRoot = false },
+                Targets = new[]
+                {
+                    new
+                    {
+                        Name = "Sample.CLI",
+                        Kind = kind,
+                        Publish = new
+                        {
+                            Framework = "net10.0",
+                            Runtimes = new[] { "win-x64" },
+                            Style = "PortableCompat",
+                            Sign = new { Enabled = true, Thumbprint }
+                        }
+                    }
+                }
+            }));
+            WriteChecksums();
+        }
+
+        internal void WriteManifestKind(string kind)
+        {
+            File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    Category = "Publish",
+                    Target = "Sample.CLI",
+                    Kind = kind,
+                    Runtime = "win-x64",
+                    Framework = "net10.0",
+                    Style = "PortableCompat",
+                    OutputDir = OutputDirectory,
+                    ZipPath = ArchivePath,
+                    ExePath = ExecutablePath,
+                    SignedFiles = 1,
+                    SourceRevision,
+                    SourceDirty = false
+                }
+            }));
+            WriteChecksums();
         }
     }
 

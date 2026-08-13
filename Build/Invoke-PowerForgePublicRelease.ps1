@@ -141,6 +141,7 @@ try {
             version       = $Version
             repository    = "https://github.com/$([string] $releaseConfig.GitHub.Owner)/$([string] $releaseConfig.GitHub.Repository)"
             commit        = $ExpectedCommit
+            sourceDirty   = $false
         } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $moduleProvenancePath -Encoding utf8BOM
         $moduleProvenanceCreated = $true
     }

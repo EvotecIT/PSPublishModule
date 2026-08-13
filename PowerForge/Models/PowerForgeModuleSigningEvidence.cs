@@ -4,7 +4,7 @@ namespace PowerForge;
 public sealed class PowerForgeModuleSigningEvidence
 {
     /// <summary>Evidence schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     /// <summary>Module name.</summary>
     public string ModuleName { get; set; } = string.Empty;
@@ -14,6 +14,9 @@ public sealed class PowerForgeModuleSigningEvidence
 
     /// <summary>Clean source revision used by the build.</summary>
     public string SourceRevision { get; set; } = string.Empty;
+
+    /// <summary>Whether tracked or untracked source changes were present when evidence was produced.</summary>
+    public bool? SourceDirty { get; set; }
 
     /// <summary>Archive-relative module manifest entry.</summary>
     public string ManifestPath { get; set; } = string.Empty;

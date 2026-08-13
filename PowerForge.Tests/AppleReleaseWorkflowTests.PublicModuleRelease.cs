@@ -31,6 +31,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("PowerForge.ReleaseProvenance.json", script, StringComparison.Ordinal);
         Assert.Contains("moduleName    = [string] $releaseConfig.Module.ModuleName", script, StringComparison.Ordinal);
         Assert.Contains("commit        = $ExpectedCommit", script, StringComparison.Ordinal);
+        Assert.Contains("sourceDirty   = $false", script, StringComparison.Ordinal);
         Assert.Contains("$moduleProvenanceCreated", script, StringComparison.Ordinal);
         Assert.Contains("\"PowerForge.ReleaseProvenance.json\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains(". .\\Build\\Private\\Assert-PowerForgeCommittedReleaseVersion.ps1", workflow, StringComparison.Ordinal);

@@ -33,6 +33,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 "specify RID, framework, and style for matrix builds.");
 
         JsonElement entry = entries[0];
+        string manifestKind = ReadString(entry, "Kind");
+        if (!string.IsNullOrWhiteSpace(manifestKind) &&
+            !string.Equals(manifestKind, DotNetPublishTargetKind.Cli.ToString(), StringComparison.OrdinalIgnoreCase))
+            throw Invalid($"PowerForge manifest target kind '{manifestKind}' is not a CLI release target.");
         if (ReadInt32(entry, "SignedFiles") < 1)
             throw Invalid("PowerForge manifest does not attest that the portable output was signed.");
         if (!TryGet(entry, "SourceDirty", out JsonElement sourceDirty) || sourceDirty.ValueKind != JsonValueKind.False)
@@ -80,7 +84,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             checksumsPath,
             manifestPath,
             expected.ConfigurationPaths,
-            request.SbomPaths);
+            request.SbomPaths,
+            artifactId,
+            version,
+            artifactDigest);
 
         return new PowerForgeReleaseArtifactEvidence
         {
@@ -125,6 +132,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             throw Invalid($"PowerForge configuration must define exactly one publish target '{targetName}'.");
 
         DotNetPublishTarget target = targets[0];
+        if (target.Kind != DotNetPublishTargetKind.Unknown && target.Kind != DotNetPublishTargetKind.Cli)
+            throw Invalid($"PowerForge configuration target kind '{target.Kind}' is not a CLI release target.");
         DotNetPublishSignOptions? sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
             configuration.SigningProfiles,
             string.IsNullOrWhiteSpace(request.SignProfile) ? target.Publish.SignProfile : request.SignProfile,

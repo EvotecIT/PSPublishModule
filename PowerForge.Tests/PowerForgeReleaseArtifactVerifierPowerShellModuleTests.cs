@@ -145,9 +145,61 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         Assert.Contains("unsafe entry", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Verify_PowerShellModuleRejectsDirtySigningEvidence()
+    {
+        using var fixture = new ModuleFixture();
+        fixture.WriteSigningEvidence(sourceDirty: true);
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("clean source checkout", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_PowerShellModuleRejectsDirtyEmbeddedProvenance()
+    {
+        using var fixture = new ModuleFixture();
+        fixture.WriteArchive(SourceRevision, provenanceDirty: true);
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("provenance must attest a clean", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_PowerShellModuleUsesFullPrereleaseIdentity()
+    {
+        using var fixture = new ModuleFixture();
+        fixture.PreparePrerelease("preview.2");
+
+        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier().Verify(fixture.CreateRequest());
+
+        Assert.Equal("2.3.4-preview.2", result.Version);
+    }
+
+    [Fact]
+    public void Verify_PowerShellModuleRejectsPrereleaseChannelMismatch()
+    {
+        using var fixture = new ModuleFixture();
+        fixture.PreparePrerelease("preview.2");
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ExpectedVersion = "2.3.4-preview.1";
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("does not match expected version", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class ModuleFixture : FixtureBase
     {
         private bool _hasVendorDependency;
+        private string _version = "2.3.4";
 
         internal ModuleFixture()
         {
@@ -169,7 +221,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             ArtifactPath = ArchivePath,
             ChecksumsPath = ChecksumsPath,
             ExpectedSourceRevision = SourceRevision,
-            ExpectedVersion = "2.3.4",
+            ExpectedVersion = _version,
             SignThumbprint = Thumbprint,
             SigningEvidencePath = SigningEvidencePath,
             SignaturePaths = _hasVendorDependency
@@ -183,11 +235,16 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             string? unexpectedSignableExtension = null,
             bool duplicateManifest = false,
             bool traversalEntry = false,
-            bool includeVendorDependency = false)
+            bool includeVendorDependency = false,
+            string? prerelease = null,
+            bool provenanceDirty = false)
         {
             if (File.Exists(ArchivePath)) File.Delete(ArchivePath);
             using ZipArchive archive = ZipFile.Open(ArchivePath, ZipArchiveMode.Create);
-            WriteEntry(archive, "Sample/Sample.psd1", "@{ RootModule = 'Sample.psm1'; ModuleVersion = '2.3.4' }");
+            string prereleaseData = string.IsNullOrWhiteSpace(prerelease)
+                ? string.Empty
+                : $"; PrivateData = @{{ PSData = @{{ Prerelease = '{prerelease}' }} }}";
+            WriteEntry(archive, "Sample/Sample.psd1", $"@{{ RootModule = 'Sample.psm1'; ModuleVersion = '2.3.4'{prereleaseData} }}");
             if (duplicateManifest)
                 WriteEntry(archive, "Sample/Sample.psd1", "@{ RootModule = 'Sample.psm1'; ModuleVersion = '2.3.4' }");
             WriteEntry(archive, "Sample/Sample.psm1", "# signed module");
@@ -200,13 +257,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             WriteEntry(archive, "Sample/PowerForge.ReleaseProvenance.json", JsonSerializer.Serialize(new
             {
                 moduleName = "Sample",
-                version = "2.3.4",
+                version = string.IsNullOrWhiteSpace(prerelease) ? "2.3.4" : "2.3.4-" + prerelease,
                 repository = "https://github.com/EvotecIT/Sample",
-                commit = sourceRevision
+                commit = sourceRevision,
+                sourceDirty = provenanceDirty
             }));
         }
 
-        internal void WriteChecksums() => base.WriteChecksums(ArchivePath, SigningEvidencePath);
+        internal void WriteChecksums()
+        {
+            WriteBoundCycloneDxSbom("Sample", _version, ComputeDigest(ArchivePath));
+            base.WriteChecksums(ArchivePath, SigningEvidencePath);
+        }
 
         internal void PrepareVendorDependency(string evidenceThumbprint)
         {
@@ -220,10 +282,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         {
             File.WriteAllText(SigningEvidencePath, JsonSerializer.Serialize(new PowerForgeModuleSigningEvidence
             {
-                SchemaVersion = 1,
+                SchemaVersion = 2,
                 ModuleName = "Sample",
                 Version = "2.3.4",
                 SourceRevision = SourceRevision,
+                SourceDirty = false,
                 ManifestPath = "Sample/Sample.psd1",
                 SignableFiles = new[] { "Sample/Sample.psd1", "Sample/Sample.psm1" },
                 PreservedThirdPartySignatures = new[]
@@ -236,6 +299,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     }
                 }
             }));
+            WriteChecksums();
+        }
+
+        internal void PreparePrerelease(string label)
+        {
+            _version = "2.3.4-" + label;
+            WriteArchive(SourceRevision, prerelease: label);
+            WriteSigningEvidence(version: _version);
             WriteChecksums();
         }
 
@@ -259,14 +330,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     : new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
                 _ => "1.2.3.0");
 
-        private void WriteSigningEvidence(string? vendorThumbprint = null)
+        internal void WriteSigningEvidence(
+            string? vendorThumbprint = null,
+            string? version = null,
+            bool? sourceDirty = false)
         {
             File.WriteAllText(SigningEvidencePath, JsonSerializer.Serialize(new PowerForgeModuleSigningEvidence
             {
-                SchemaVersion = 1,
+                SchemaVersion = 2,
                 ModuleName = "Sample",
-                Version = "2.3.4",
+                Version = version ?? _version,
                 SourceRevision = SourceRevision,
+                SourceDirty = sourceDirty,
                 ManifestPath = "Sample/Sample.psd1",
                 SignableFiles = vendorThumbprint is null
                     ? new[] { "Sample/Sample.psd1", "Sample/Sample.psm1" }

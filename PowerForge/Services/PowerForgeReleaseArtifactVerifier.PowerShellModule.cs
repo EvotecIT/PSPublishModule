@@ -33,8 +33,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string artifactDigest = VerifyChecksummedFile(projectRoot, checksumsPath, artifactPath, "PowerShell module artifact");
         VerifyChecksummedFile(projectRoot, checksumsPath, signingEvidencePath, "module signing evidence");
         PowerForgeModuleSigningEvidence signingEvidence = ReadSigningEvidence(signingEvidencePath);
-        if (signingEvidence.SchemaVersion != 1)
+        if (signingEvidence.SchemaVersion != 2)
             throw Invalid("Module signing evidence schema version is not supported.");
+        if (signingEvidence.SourceDirty is not false)
+            throw Invalid("Module signing evidence must attest a clean source checkout.");
         if (!string.Equals(signingEvidence.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase))
             throw Invalid($"Module signing evidence identifies '{signingEvidence.ModuleName}', expected '{moduleName}'.");
 
@@ -53,8 +55,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (!ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, "ModuleVersion", out string? manifestVersion) ||
             string.IsNullOrWhiteSpace(manifestVersion))
             throw Invalid("Packed module manifest does not declare ModuleVersion.");
-        string version = NormalizeVersion(manifestVersion);
-        ValidateExpectedVersion(request.ExpectedVersion, version);
+        string[] prereleaseValues = ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifestText, "Prerelease");
+        if (prereleaseValues.Length > 1)
+            throw Invalid("Packed module manifest declares more than one prerelease label.");
+        string prerelease = prereleaseValues.SingleOrDefault() ?? string.Empty;
+        string version = NormalizeModuleVersion(manifestVersion!, prerelease);
+        ValidateExpectedModuleVersion(request.ExpectedVersion, version);
         if (!ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, "RootModule", out string? rootModule) ||
             string.IsNullOrWhiteSpace(rootModule))
             throw Invalid("Packed module manifest must declare a RootModule entrypoint.");
@@ -66,7 +72,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             signingEvidence.SourceRevision,
             "module signing evidence source revision");
         ValidateRevision(sourceRevisionFromEvidence, expectedRevision);
-        if (!string.Equals(NormalizeVersion(signingEvidence.Version), version, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(NormalizeModuleVersionText(signingEvidence.Version), version, StringComparison.OrdinalIgnoreCase))
             throw Invalid("Module signing evidence version does not match the packed module manifest.");
         string[] signaturePaths = NormalizeSigningEvidencePaths(signingEvidence.SignableFiles);
         if (!signaturePaths.Contains(manifestPath, StringComparer.OrdinalIgnoreCase) ||
@@ -106,7 +112,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string actualModuleName = RequireJsonText(provenance.RootElement, "moduleName", "module provenance");
         if (!string.Equals(actualModuleName, moduleName, StringComparison.OrdinalIgnoreCase))
             throw Invalid($"Packed module provenance identifies '{actualModuleName}', expected '{moduleName}'.");
-        string provenanceVersion = NormalizeVersion(RequireJsonText(provenance.RootElement, "version", "module provenance"));
+        string provenanceVersion = NormalizeModuleVersionText(RequireJsonText(provenance.RootElement, "version", "module provenance"));
         if (!string.Equals(provenanceVersion, version, StringComparison.OrdinalIgnoreCase))
             throw Invalid("Packed module provenance version does not match the module manifest.");
         string sourceRevision = DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(
@@ -115,6 +121,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         ValidateRevision(sourceRevision, expectedRevision);
         if (!string.Equals(sourceRevision, sourceRevisionFromEvidence, StringComparison.OrdinalIgnoreCase))
             throw Invalid("Module signing evidence source revision does not match embedded provenance.");
+        if (!TryGet(provenance.RootElement, "sourceDirty", out JsonElement provenanceDirty) ||
+            provenanceDirty.ValueKind != JsonValueKind.False)
+            throw Invalid("Packed module provenance must attest a clean source checkout.");
 
         var signatures = new List<VerifiedSignature>();
         var signatureEvidence = new List<PowerForgeReleaseSignatureEvidence>();
@@ -169,7 +178,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             checksumsPath,
             provenancePath: null,
             configurationPaths: null,
-            sbomPaths: request.SbomPaths).ToList();
+            sbomPaths: request.SbomPaths,
+            artifactId: moduleName,
+            artifactVersion: version,
+            artifactDigest: artifactDigest).ToList();
         evidence.Add(new PowerForgeReleaseEvidenceFile
         {
             Role = "signing-policy",

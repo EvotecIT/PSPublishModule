@@ -79,6 +79,7 @@ public sealed class PowerForgeCliDotNetPublishTests
             DotNetPublishReleaseArtifactVerifier.AuthenticodeResult realSignature =
                 DotNetPublishReleaseArtifactVerifier.VerifyAuthenticode(executablePath);
             Assert.True(realSignature.IsValid);
+            string realVersion = ReadNormalizedPortableVersion(executablePath);
 
             string archivePath = Path.Combine(Path.GetDirectoryName(outputDirectory)!, "Sample.CLI.zip");
             using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
@@ -91,6 +92,7 @@ public sealed class PowerForgeCliDotNetPublishTests
                 {
                     Category = "Publish",
                     Target = "Sample.CLI",
+                    Kind = "Cli",
                     Runtime = "win-x64",
                     Framework = "net10.0",
                     Style = "PortableCompat",
@@ -129,10 +131,18 @@ public sealed class PowerForgeCliDotNetPublishTests
                 bomFormat = "CycloneDX",
                 specVersion = "1.6",
                 version = 1,
-                components = Array.Empty<object>()
+                metadata = new
+                {
+                    component = new
+                    {
+                        name = "Sample.CLI",
+                        version = realVersion,
+                        hashes = new[] { new { alg = "SHA-256", content = ComputeSha256(archivePath) } }
+                    }
+                }
             }));
             string checksumsPath = Path.Combine(tempRoot, "SHA256SUMS.txt");
-            File.WriteAllLines(checksumsPath, new[] { manifestPath, executablePath, archivePath, sbomPath }.Select(path =>
+            File.WriteAllLines(checksumsPath, new[] { manifestPath, configurationPath, executablePath, archivePath, sbomPath }.Select(path =>
                 $"{ComputeSha256(path)} *{Path.GetRelativePath(tempRoot, path).Replace('\\', '/')}"));
 
             var (exitCode, stdout, stderr) = await RunCliAsync(
@@ -295,5 +305,19 @@ public sealed class PowerForgeCliDotNetPublishTests
         }
 
         throw new InvalidOperationException("No embedded-signed Windows executable with a numeric version was available for real signature proof.");
+    }
+
+    private static string ReadNormalizedPortableVersion(string path)
+    {
+        FileVersionInfo version = FileVersionInfo.GetVersionInfo(path);
+        string value = (version.ProductVersion ?? string.Empty).Split('+')[0].Trim();
+        if (!Version.TryParse(value, out Version? parsed))
+        {
+            value = version.FileVersion ?? string.Empty;
+            parsed = Version.Parse(value);
+        }
+        return parsed.Revision == 0
+            ? new Version(parsed.Major, parsed.Minor, parsed.Build).ToString()
+            : parsed.ToString();
     }
 }
