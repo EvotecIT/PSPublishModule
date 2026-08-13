@@ -151,6 +151,8 @@ internal static partial class Program
         var manifestPath = TryGetOptionValue(commandArgs, "--manifest");
         var configurationPath = TryGetOptionValue(commandArgs, "--config");
         var signingEvidencePath = TryGetOptionValue(commandArgs, "--signing-evidence");
+        var signThumbprint = TryGetOptionValue(commandArgs, "--sign-thumbprint");
+        var signSubjectName = TryGetOptionValue(commandArgs, "--sign-subject-name");
         var enableSigning = commandArgs.Any(value => value.Equals("--sign", StringComparison.OrdinalIgnoreCase));
         var disableSigning = commandArgs.Any(value => value.Equals("--no-sign", StringComparison.OrdinalIgnoreCase));
         if (string.IsNullOrWhiteSpace(projectRoot) ||
@@ -160,7 +162,9 @@ internal static partial class Program
             string.IsNullOrWhiteSpace(sourceRevision) ||
             (kind == PowerForgeReleaseArtifactKind.PortableCli &&
              (string.IsNullOrWhiteSpace(manifestPath) || string.IsNullOrWhiteSpace(configurationPath))) ||
-            (kind == PowerForgeReleaseArtifactKind.PowerShellModule && string.IsNullOrWhiteSpace(signingEvidencePath)) ||
+            (kind == PowerForgeReleaseArtifactKind.PowerShellModule &&
+             (string.IsNullOrWhiteSpace(signingEvidencePath) ||
+              (string.IsNullOrWhiteSpace(signThumbprint) && string.IsNullOrWhiteSpace(signSubjectName)))) ||
             (enableSigning && disableSigning))
         {
             return WriteGeneralReleaseArtifactError(
@@ -169,7 +173,10 @@ internal static partial class Program
                 2,
                 enableSigning && disableSigning
                     ? "Use either --sign or --no-sign, not both."
-                    : "Kind, artifact ID, project root, artifact, checksums, source revision, portable manifest/config, and module signing evidence are required for their respective artifact kinds.");
+                    : kind == PowerForgeReleaseArtifactKind.PowerShellModule &&
+                      string.IsNullOrWhiteSpace(signThumbprint) && string.IsNullOrWhiteSpace(signSubjectName)
+                        ? "PowerShell module verification requires --sign-thumbprint or --sign-subject-name."
+                        : "Kind, artifact ID, project root, artifact, checksums, source revision, portable manifest/config, and module signing evidence are required for their respective artifact kinds.");
         }
 
         try
@@ -193,8 +200,8 @@ internal static partial class Program
                     Style = TryGetOptionValue(commandArgs, "--style"),
                     Profile = TryGetOptionValue(commandArgs, "--profile"),
                     SignProfile = TryGetOptionValue(commandArgs, "--sign-profile"),
-                    SignThumbprint = TryGetOptionValue(commandArgs, "--sign-thumbprint"),
-                    SignSubjectName = TryGetOptionValue(commandArgs, "--sign-subject-name"),
+                    SignThumbprint = signThumbprint,
+                    SignSubjectName = signSubjectName,
                     EnableSigning = enableSigning ? true : disableSigning ? false : null,
                     SignaturePaths = ParseRepeatedOptionValues(commandArgs, "--signature-path"),
                     SbomPaths = ParseRepeatedOptionValues(commandArgs, "--sbom")

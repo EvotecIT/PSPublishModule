@@ -27,7 +27,8 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             string revision = RunGit(root, "rev-parse HEAD").Trim();
 
             var output = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "Publish", "app")).FullName;
-            File.WriteAllText(Path.Combine(output, "app.dll"), "payload");
+            string signedOutputPath = Path.Combine(output, "app.dll");
+            File.WriteAllText(signedOutputPath, "payload");
             var manifestPath = Path.Combine(root, "Artifacts", "manifest.json");
             var versionStatePath = Path.Combine(root, "Artifacts", "Versioning", "app.msi.state.json");
             var stagingPath = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "Msi", "staging")).FullName;
@@ -85,7 +86,9 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                     PublishDir = output,
                     OutputDir = output,
                     Files = 1,
-                    TotalBytes = 7
+                    TotalBytes = 7,
+                    SignedFiles = 1,
+                    SignedFilePaths = new[] { signedOutputPath }
                 }
             };
             var msiBuilds = new List<DotNetPublishMsiBuildResult>
@@ -108,6 +111,12 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                     Assert.Equal(revision, entry.GetProperty("SourceRevision").GetString());
                     Assert.False(entry.GetProperty("SourceDirty").GetBoolean());
                 });
+                JsonElement publishEntry = document.RootElement.EnumerateArray()
+                    .Single(entry => entry.GetProperty("Category").GetString() == "Publish");
+                Assert.Equal(1, publishEntry.GetProperty("SignedFiles").GetInt32());
+                Assert.Equal(
+                    Path.GetRelativePath(root, signedOutputPath).Replace('\\', '/'),
+                    Assert.Single(publishEntry.GetProperty("SignedFilePaths").EnumerateArray()).GetString());
             }
 
             var untrackedSourcePath = Path.Combine(root, "untracked-input.cs");

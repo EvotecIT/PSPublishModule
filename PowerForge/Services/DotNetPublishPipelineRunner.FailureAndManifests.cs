@@ -520,6 +520,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 ServicePackage = a.ServicePackage,
                 StateTransfer = a.StateTransfer,
                 SignedFiles = a.SignedFiles > 0 ? a.SignedFiles : null,
+                SignedFilePaths = ToManifestOutputFiles(projectRoot, a.SignedFilePaths),
                 SourceRevision = provenance.Revision,
                 SourceDirty = provenance.Dirty
             })
@@ -597,6 +598,7 @@ public sealed partial class DotNetPublishPipelineRunner
         public DotNetPublishServicePackageResult? ServicePackage { get; set; }
         public DotNetPublishStateTransferResult? StateTransfer { get; set; }
         public int? SignedFiles { get; set; }
+        public string[]? SignedFilePaths { get; set; }
         public DotNetPublishMsiPackageMetadata[]? PackageMetadata { get; set; }
         public string? SourceRevision { get; set; }
         public bool? SourceDirty { get; set; }

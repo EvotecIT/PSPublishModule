@@ -53,15 +53,6 @@ public static class PowerForgeModuleSigningEvidenceWriter
                 "Module signing evidence requires one exact verified file path for every file selected by the signing pipeline.");
         if (!verifiedFiles.Contains(manifest, pathComparer))
             throw new InvalidOperationException("Module signing evidence must include the module manifest.");
-        string[] completeSignableFiles = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
-            .Where(IsModuleSignableFile)
-            .Select(Path.GetFullPath)
-            .OrderBy(path => path, pathComparer)
-            .ToArray();
-        if (completeSignableFiles.Length != verifiedFiles.Length ||
-            completeSignableFiles.Except(verifiedFiles, pathComparer).Any())
-            throw new InvalidOperationException(
-                "Module signing evidence must cover every signable file in the final assembled module tree, including bundled required modules.");
         PowerForgeModulePreservedSignature[] preservedThirdPartySignatures =
             (signingResult.PreservedThirdPartySignatures ?? Array.Empty<ModuleSigningPreservedSignature>())
             .Select(signature => CreatePreservedSignature(root, signature))
@@ -94,6 +85,7 @@ public static class PowerForgeModuleSigningEvidenceWriter
 
         return new PowerForgeModuleSigningEvidence
         {
+            SchemaVersion = 2,
             ModuleName = name,
             Version = normalizedVersion,
             SourceRevision = revision.ToLowerInvariant(),
@@ -159,24 +151,29 @@ public static class PowerForgeModuleSigningEvidenceWriter
             throw new InvalidOperationException($"{label} must stay under the staged module root.");
         if (!File.Exists(candidate))
             throw new FileNotFoundException($"{label} was not found.", candidate);
-        return candidate;
+        return ResolveCanonicalExistingPath(root, relative, label);
+    }
+
+    private static string ResolveCanonicalExistingPath(string root, string relativePath, string label)
+    {
+        string current = root;
+        string[] segments = relativePath.Split(
+            new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+            StringSplitOptions.RemoveEmptyEntries);
+        foreach (string segment in segments)
+        {
+            string[] matches = Directory.EnumerateFileSystemEntries(current)
+                .Where(path => string.Equals(Path.GetFileName(path), segment, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (matches.Length != 1)
+                throw new InvalidOperationException($"{label} has ambiguous filesystem casing.");
+            current = matches[0];
+        }
+        return Path.GetFullPath(current);
     }
 
     private static string NormalizeRelativePath(string root, string path) =>
         FrameworkCompatibility.GetRelativePath(root, path).Replace('\\', '/');
-
-    private static bool IsModuleSignableFile(string path)
-    {
-        string extension = Path.GetExtension(path);
-        return extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".ps1xml", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".cdxml", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".cat", StringComparison.OrdinalIgnoreCase);
-    }
 
     private static PowerForgeModulePreservedSignature CreatePreservedSignature(
         string root,

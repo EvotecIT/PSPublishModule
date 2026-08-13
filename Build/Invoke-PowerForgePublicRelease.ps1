@@ -36,6 +36,16 @@ $effectiveConfigPath = $null
 $releaseRecovery = $null
 $moduleProvenancePath = $null
 $moduleProvenanceCreated = $false
+$sourceDirty = $true
+[pscustomobject]@{
+    Success       = $false
+    Status        = 'Running'
+    Stage         = $releaseStage
+    Operation     = $Operation
+    Version       = $Version
+    ExpectedCommit = $ExpectedCommit
+    StartedAtUtc  = [DateTime]::UtcNow
+} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ReceiptPath -Encoding utf8
 
 try {
     if (-not $IsWindows) {
@@ -52,12 +62,14 @@ try {
         throw "Expected release commit '$ExpectedCommit', received '$actualCommit'."
     }
 
-    $checkoutChanges = @(& git -C $repositoryRoot status --porcelain --untracked-files=all)
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Unable to inspect the release checkout.'
-    }
-    if ($checkoutChanges.Count -gt 0) {
-        throw "The release checkout must start clean with no tracked or untracked changes: $($checkoutChanges -join ', ')"
+    $moduleProvenancePath = Join-Path $repositoryRoot 'Module\PowerForge.ReleaseProvenance.json'
+    . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Get-PowerForgeReleaseSourceState.ps1')
+    $sourceState = Get-PowerForgeReleaseSourceState `
+        -RepositoryRoot $repositoryRoot `
+        -GeneratedProvenancePath $moduleProvenancePath
+    $sourceDirty = [bool] $sourceState.SourceDirty
+    if ($sourceDirty) {
+        throw "The release checkout must start clean. Tracked or untracked changes: $(@($sourceState.Changes) -join ', ')"
     }
 
     New-Item -ItemType Directory -Path $receiptDirectory -Force | Out-Null
@@ -131,7 +143,6 @@ try {
             throw "Publish confirmation must exactly equal '$expectedConfirmation'."
         }
 
-        $moduleProvenancePath = Join-Path $repositoryRoot 'Module\PowerForge.ReleaseProvenance.json'
         if (Test-Path -LiteralPath $moduleProvenancePath) {
             throw "Refusing to overwrite existing module release provenance: $moduleProvenancePath"
         }
@@ -141,7 +152,7 @@ try {
             version       = $Version
             repository    = "https://github.com/$([string] $releaseConfig.GitHub.Owner)/$([string] $releaseConfig.GitHub.Repository)"
             commit        = $ExpectedCommit
-            sourceDirty   = $false
+            sourceDirty   = $sourceDirty
         } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $moduleProvenancePath -Encoding utf8BOM
         $moduleProvenanceCreated = $true
     }

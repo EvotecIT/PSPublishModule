@@ -4,7 +4,7 @@ namespace PowerForge;
 public sealed class PowerForgeModuleSigningEvidence
 {
     /// <summary>Evidence schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; }
 
     /// <summary>Module name.</summary>
     public string ModuleName { get; set; } = string.Empty;

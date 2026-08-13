@@ -43,15 +43,15 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         using ZipArchive archive = ZipFile.OpenRead(artifactPath);
         Dictionary<string, ZipArchiveEntry> entries = ValidateArchiveEntries(archive);
         string[] manifestEntries = entries.Keys.Where(entry =>
-                string.Equals(Path.GetFileName(entry), moduleName + ".psd1", StringComparison.OrdinalIgnoreCase))
+                string.Equals(Path.GetFileName(entry), moduleName + ".psd1", StringComparison.Ordinal))
             .ToArray();
         if (manifestEntries.Length != 1)
             throw Invalid($"Packed module artifact must contain exactly one '{moduleName}.psd1' manifest.");
         string manifestPath = manifestEntries[0];
-        if (!string.Equals(NormalizeArchivePath(signingEvidence.ManifestPath), manifestPath, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(NormalizeArchivePath(signingEvidence.ManifestPath), manifestPath, StringComparison.Ordinal))
             throw Invalid("Module signing evidence does not identify the packed module manifest.");
 
-        string manifestText = Encoding.UTF8.GetString(ReadEntryBytes(entries[manifestPath]));
+        string manifestText = DecodeModuleManifest(ReadEntryBytes(entries[manifestPath]));
         if (!ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, "ModuleVersion", out string? manifestVersion) ||
             string.IsNullOrWhiteSpace(manifestVersion))
             throw Invalid("Packed module manifest does not declare ModuleVersion.");
@@ -75,22 +75,15 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (!string.Equals(NormalizeModuleVersionText(signingEvidence.Version), version, StringComparison.OrdinalIgnoreCase))
             throw Invalid("Module signing evidence version does not match the packed module manifest.");
         string[] signaturePaths = NormalizeSigningEvidencePaths(signingEvidence.SignableFiles);
-        if (!signaturePaths.Contains(manifestPath, StringComparer.OrdinalIgnoreCase) ||
-            !signaturePaths.Contains(rootModulePath, StringComparer.OrdinalIgnoreCase))
+        if (!signaturePaths.Contains(manifestPath, StringComparer.Ordinal) ||
+            !signaturePaths.Contains(rootModulePath, StringComparer.Ordinal))
             throw Invalid("Module signing evidence must cover the module manifest and RootModule entrypoint.");
-        string[] uncoveredSignableFiles = entries.Keys
-            .Where(IsModuleSignableFile)
-            .Where(path => !signaturePaths.Contains(path, StringComparer.OrdinalIgnoreCase))
-            .ToArray();
-        if (uncoveredSignableFiles.Length > 0)
-            throw Invalid(
-                $"Module signing evidence omits signable module file '{uncoveredSignableFiles[0]}'.");
         string[] requestedSignaturePaths = (request.SignaturePaths ?? Array.Empty<string>())
             .Select(NormalizeArchivePath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
         if (requestedSignaturePaths.Length > 0 &&
-            (!requestedSignaturePaths.All(path => signaturePaths.Contains(path, StringComparer.OrdinalIgnoreCase)) ||
+            (!requestedSignaturePaths.All(path => signaturePaths.Contains(path, StringComparer.Ordinal)) ||
              requestedSignaturePaths.Length != signaturePaths.Length))
             throw Invalid("Requested module signature paths do not match the complete trusted signing evidence.");
         Dictionary<string, PowerForgeModulePreservedSignature> thirdPartySignatures =
@@ -101,7 +94,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         ZipArchiveEntry[] provenanceEntries = entries.Values.Where(entry =>
             string.Equals(Path.GetFileName(entry.FullName.Replace('\\', '/')),
                 PublishedRegistryProvenanceValidator.ModuleProvenanceFileName,
-                StringComparison.OrdinalIgnoreCase)).ToArray();
+                StringComparison.Ordinal)).ToArray();
         if (provenanceEntries.Length != 1)
             throw Invalid(
                 $"Packed module artifact must contain exactly one {PublishedRegistryProvenanceValidator.ModuleProvenanceFileName}.");
@@ -230,12 +223,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
     private static string[] NormalizeSigningEvidencePaths(IEnumerable<string>? values)
     {
-        string[] paths = (values ?? Array.Empty<string>())
-            .Select(NormalizeArchivePath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        string[] paths = (values ?? Array.Empty<string>()).Select(NormalizeArchivePath).ToArray();
         if (paths.Length == 0)
             throw Invalid("Module signing evidence must enumerate at least one signable file.");
+        if (paths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != paths.Length)
+            throw Invalid("Module signing evidence contains duplicate or case-conflicting file paths.");
         return paths;
     }
 
@@ -243,18 +235,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         IEnumerable<PowerForgeModulePreservedSignature>? values,
         IReadOnlyCollection<string> signaturePaths)
     {
-        var result = new Dictionary<string, PowerForgeModulePreservedSignature>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, PowerForgeModulePreservedSignature>(StringComparer.Ordinal);
+        var duplicateGuard = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (PowerForgeModulePreservedSignature signature in values ?? Array.Empty<PowerForgeModulePreservedSignature>())
         {
             if (signature is null)
                 throw Invalid("Preserved third-party signing evidence cannot contain null entries.");
             string path = NormalizeArchivePath(signature.Path);
-            if (!signaturePaths.Contains(path, StringComparer.OrdinalIgnoreCase))
+            if (!signaturePaths.Contains(path, StringComparer.Ordinal))
                 throw Invalid($"Preserved third-party signer identity refers to unverified file '{path}'.");
             if (string.IsNullOrWhiteSpace(signature.Subject))
                 throw Invalid($"Preserved third-party signer identity is missing a subject for '{path}'.");
             string thumbprint = DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(signature.Thumbprint);
-            if (result.ContainsKey(path))
+            if (!duplicateGuard.Add(path))
                 throw Invalid($"Preserved third-party signer identity contains duplicate file '{path}'.");
             result.Add(path, new PowerForgeModulePreservedSignature
             {
@@ -275,16 +268,43 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         return NormalizeArchivePath(combined);
     }
 
-    private static bool IsModuleSignableFile(string path)
+    private static string DecodeModuleManifest(byte[] bytes)
     {
-        string extension = Path.GetExtension(path);
-        return extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".ps1xml", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".cdxml", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".cat", StringComparison.OrdinalIgnoreCase);
+        if (bytes.Length >= 4 &&
+            ((bytes[0] == 0xFF && bytes[1] == 0xFE && bytes[2] == 0x00 && bytes[3] == 0x00) ||
+             (bytes[0] == 0x00 && bytes[1] == 0x00 && bytes[2] == 0xFE && bytes[3] == 0xFF)))
+            throw Invalid("Packed module manifest uses unsupported UTF-32 encoding.");
+
+        Encoding encoding;
+        int preambleLength;
+        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+        {
+            encoding = new UTF8Encoding(false, true);
+            preambleLength = 3;
+        }
+        else if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+        {
+            encoding = new UnicodeEncoding(false, false, true);
+            preambleLength = 2;
+        }
+        else if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
+        {
+            encoding = new UnicodeEncoding(true, false, true);
+            preambleLength = 2;
+        }
+        else
+        {
+            encoding = new UTF8Encoding(false, true);
+            preambleLength = 0;
+        }
+
+        try
+        {
+            return encoding.GetString(bytes, preambleLength, bytes.Length - preambleLength);
+        }
+        catch (DecoderFallbackException exception)
+        {
+            throw Invalid($"Packed module manifest encoding is malformed: {exception.Message}");
+        }
     }
 }

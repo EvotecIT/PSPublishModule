@@ -37,7 +37,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (!string.IsNullOrWhiteSpace(manifestKind) &&
             !string.Equals(manifestKind, DotNetPublishTargetKind.Cli.ToString(), StringComparison.OrdinalIgnoreCase))
             throw Invalid($"PowerForge manifest target kind '{manifestKind}' is not a CLI release target.");
-        if (ReadInt32(entry, "SignedFiles") < 1)
+        int signedFileCount = ReadInt32(entry, "SignedFiles");
+        if (signedFileCount < 1)
             throw Invalid("PowerForge manifest does not attest that the portable output was signed.");
         if (!TryGet(entry, "SourceDirty", out JsonElement sourceDirty) || sourceDirty.ValueKind != JsonValueKind.False)
             throw Invalid("PowerForge manifest must come from a clean source checkout.");
@@ -56,17 +57,30 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string artifactDigest = VerifyChecksummedFile(projectRoot, checksumsPath, artifactPath, "portable artifact");
         string executablePath = ResolveManifestPath(projectRoot, manifestExecutable, expected.AllowOutsideProjectRoot);
 
-        string[] configuredSignaturePaths = request.SignaturePaths ?? Array.Empty<string>();
-        string[] signaturePaths = configuredSignaturePaths.Length == 0
-            ? new[] { manifestExecutable }
-            : configuredSignaturePaths;
-        if (signaturePaths.Any(string.IsNullOrWhiteSpace))
-            throw Invalid("Portable signature paths cannot contain empty values.");
+        string[] expectedSignaturePaths = EnumeratePortableSigningFiles(outputDirectory, expected.Sign);
+        if (expectedSignaturePaths.Length != signedFileCount)
+            throw Invalid("PowerForge manifest signed-file count does not match the configured portable signing selection.");
+        string[] manifestSignaturePaths = ResolvePortableSignaturePaths(
+            projectRoot,
+            ReadStringArray(entry, "SignedFilePaths"),
+            expected.AllowOutsideProjectRoot,
+            "manifest signed-file path");
+        if (manifestSignaturePaths.Length > 0 && !SamePhysicalPathSet(manifestSignaturePaths, expectedSignaturePaths))
+            throw Invalid("PowerForge manifest signed-file paths do not match the configured portable signing selection.");
+        string[] requestedSignaturePaths = ResolvePortableSignaturePaths(
+            projectRoot,
+            request.SignaturePaths,
+            expected.AllowOutsideProjectRoot,
+            "requested signature path");
+        string[] signaturePaths = manifestSignaturePaths.Length > 0
+            ? manifestSignaturePaths
+            : expectedSignaturePaths;
+        if (requestedSignaturePaths.Length > 0 && !SamePhysicalPathSet(requestedSignaturePaths, signaturePaths))
+            throw Invalid("Requested portable signature paths do not match the complete trusted signing selection.");
 
         var signatures = new List<VerifiedSignature>();
-        foreach (string configuredPath in signaturePaths)
+        foreach (string signaturePath in signaturePaths)
         {
-            string signaturePath = ResolveManifestPath(projectRoot, configuredPath, expected.AllowOutsideProjectRoot);
             EnsurePathWithinDirectory(outputDirectory, signaturePath, "Portable signature path");
             string signatureDigest = VerifyChecksummedFile(projectRoot, checksumsPath, signaturePath, "portable signed file");
             if (IsZipArchive(artifactPath))
@@ -171,6 +185,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             configuration,
             target,
             configured.InputPaths,
+            sign,
             signerThumbprint,
             signerSubject,
             configuration.DotNet.AllowOutputOutsideProjectRoot);
@@ -214,6 +229,38 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             exclude.Any(rule => RuleMatches(target.Name, runtime, framework, style, rule)))
             throw Invalid("PowerForge manifest portable dimensions are excluded by the configured publish matrix.");
     }
+
+    private static string[] EnumeratePortableSigningFiles(string outputDirectory, DotNetPublishSignOptions sign)
+    {
+        var paths = new List<string>();
+        paths.AddRange(Directory.EnumerateFiles(outputDirectory, "*.exe", SearchOption.AllDirectories));
+        if (sign.IncludeDlls)
+            paths.AddRange(Directory.EnumerateFiles(outputDirectory, "*.dll", SearchOption.AllDirectories));
+        return paths.Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string[] ResolvePortableSignaturePaths(
+        string projectRoot,
+        IEnumerable<string>? values,
+        bool allowOutsideProjectRoot,
+        string label)
+    {
+        string[] configured = (values ?? Array.Empty<string>()).ToArray();
+        if (configured.Any(string.IsNullOrWhiteSpace))
+            throw Invalid($"Portable {label}s cannot contain empty values.");
+        string[] paths = configured
+            .Select(path => ResolveManifestPath(projectRoot, path, allowOutsideProjectRoot))
+            .ToArray();
+        if (paths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != paths.Length)
+            throw Invalid($"Portable {label}s must be unique.");
+        return paths;
+    }
+
+    private static bool SamePhysicalPathSet(IReadOnlyCollection<string> left, IReadOnlyCollection<string> right) =>
+        left.Count == right.Count && left.All(path => right.Any(candidate => PathsEqual(path, candidate)));
 
     private static string[] NormalizeConfiguredStrings(IEnumerable<string>? values) =>
         (values ?? Array.Empty<string>())

@@ -60,6 +60,20 @@ public sealed class PowerForgeCliDotNetPublishTests
     }
 
     [Fact]
+    public async Task ReleaseArtifactVerify_PowerShellModuleRequiresPublisherIdentityAtCliBoundary()
+    {
+        var repoRoot = FindRepositoryRoot();
+        const string revision = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        var (exitCode, stdout, stderr) = await RunCliAsync(
+            repoRoot,
+            $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind powershell-module --artifact-id Sample --project-root . --artifact sample.nupkg --checksums SHA256SUMS.txt --source-revision {revision} --signing-evidence sample.signing.json --output json");
+
+        Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+        using JsonDocument document = JsonDocument.Parse(stdout);
+        Assert.Contains("--sign-thumbprint or --sign-subject-name", document.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ReleaseArtifactVerify_RealSignedPortableCliReturnsStableJsonEvidenceShape()
     {
         if (!OperatingSystem.IsWindows())
@@ -100,6 +114,7 @@ public sealed class PowerForgeCliDotNetPublishTests
                     ZipPath = archivePath,
                     ExePath = executablePath,
                     SignedFiles = 1,
+                    SignedFilePaths = new[] { executablePath },
                     SourceRevision = sourceRevision,
                     SourceDirty = false
                 }

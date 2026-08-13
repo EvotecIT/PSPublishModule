@@ -8,9 +8,9 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private int TrySignOutput(string outputDir, DotNetPublishSignOptions sign)
+    private string[] TrySignOutput(string outputDir, DotNetPublishSignOptions sign)
     {
-        if (sign is null || !sign.Enabled) return 0;
+        if (sign is null || !sign.Enabled) return Array.Empty<string>();
         var targets = new List<string>();
         try
         {
@@ -23,8 +23,7 @@ public sealed partial class DotNetPublishPipelineRunner
             // ignore
         }
 
-        var signed = TrySignFiles(targets, outputDir, sign, scope: "publish outputs");
-        return signed.Length;
+        return TrySignFiles(targets, outputDir, sign, scope: "publish outputs");
     }
 
     private string[] TrySignFiles(

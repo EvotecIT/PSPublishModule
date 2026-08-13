@@ -29,6 +29,7 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
         Assert.Equal(new[] { "Sample/Sample.psd1", "Sample/Sample.psm1" }, evidence.SignableFiles);
         Assert.Equal(SourceRevision, evidence.SourceRevision);
         Assert.False(evidence.SourceDirty ?? true);
+        Assert.Equal(2, evidence.SchemaVersion);
     }
 
     [Fact]
@@ -94,7 +95,7 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
     }
 
     [Fact]
-    public void Create_BundledRequiredModuleMissingFromSigningResultFailsClosed()
+    public void Create_PolicyExcludedDependencyIsNotAddedToSigningEvidence()
     {
         using var fixture = new SigningFixture(includeVendorDependency: true);
         var signingResult = new ModuleSigningResult
@@ -105,17 +106,16 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
             VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath }
         };
 
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            PowerForgeModuleSigningEvidenceWriter.Create(
-                fixture.Root,
-                "Sample",
-                "2.3.4",
-                SourceRevision,
-                sourceDirty: false,
-                fixture.ManifestPath,
-                signingResult));
+        PowerForgeModuleSigningEvidence evidence = PowerForgeModuleSigningEvidenceWriter.Create(
+            fixture.Root,
+            "Sample",
+            "2.3.4",
+            SourceRevision,
+            sourceDirty: false,
+            fixture.ManifestPath,
+            signingResult);
 
-        Assert.Contains("bundled required modules", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(evidence.SignableFiles, path => path.EndsWith("Vendor.dll", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

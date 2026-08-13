@@ -391,9 +391,9 @@ public sealed partial class DotNetPublishPipelineRunner
         if (target.Publish.Service is not null)
             servicePackage = TryCreateServicePackage(outputDir, target.Name, rid, target.Publish.Service);
 
-        var signedFiles = 0;
+        string[] signedFilePaths = Array.Empty<string>();
         if (target.Publish.Sign?.Enabled == true)
-            signedFiles = TrySignOutput(outputDir, target.Publish.Sign);
+            signedFilePaths = TrySignOutput(outputDir, target.Publish.Sign);
 
         string? zipPath = null;
         if (target.Publish.Zip)
@@ -425,7 +425,8 @@ public sealed partial class DotNetPublishPipelineRunner
             Cleanup = cleanup,
             ServicePackage = servicePackage,
             StateTransfer = stateTransfer,
-            SignedFiles = signedFiles
+            SignedFiles = signedFilePaths.Length,
+            SignedFilePaths = signedFilePaths
         };
     }
 

@@ -31,7 +31,8 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("PowerForge.ReleaseProvenance.json", script, StringComparison.Ordinal);
         Assert.Contains("moduleName    = [string] $releaseConfig.Module.ModuleName", script, StringComparison.Ordinal);
         Assert.Contains("commit        = $ExpectedCommit", script, StringComparison.Ordinal);
-        Assert.Contains("sourceDirty   = $false", script, StringComparison.Ordinal);
+        Assert.Contains("sourceDirty   = $sourceDirty", script, StringComparison.Ordinal);
+        Assert.Contains("Get-PowerForgeReleaseSourceState", script, StringComparison.Ordinal);
         Assert.Contains("$moduleProvenanceCreated", script, StringComparison.Ordinal);
         Assert.Contains("\"PowerForge.ReleaseProvenance.json\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains(". .\\Build\\Private\\Assert-PowerForgeCommittedReleaseVersion.ps1", workflow, StringComparison.Ordinal);
@@ -54,6 +55,39 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.DoesNotContain("pull_request:", workflow, StringComparison.Ordinal);
         Assert.Contains("\"PlanOutputPath\": \"../Artefacts/ProjectBuild/project.build.plan.json\"", releaseConfig, StringComparison.Ordinal);
         Assert.Contains("\"Commitish\"", releaseSchema, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PublicModuleReleaseSourceStateIncludesUntrackedInputsAndExcludesOnlyGeneratedProvenance()
+    {
+        var repository = Directory.CreateTempSubdirectory();
+        try
+        {
+            Run("git", repository.FullName, "init").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.name", "PowerForge Tests").EnsureSuccess();
+            Directory.CreateDirectory(Path.Combine(repository.FullName, "Module"));
+            File.WriteAllText(Path.Combine(repository.FullName, "tracked.txt"), "tracked");
+            Run("git", repository.FullName, "add", "tracked.txt").EnsureSuccess();
+            Run("git", repository.FullName, "commit", "-m", "fixture").EnsureSuccess();
+
+            string provenance = Path.Combine(repository.FullName, "Module", "PowerForge.ReleaseProvenance.json");
+            File.WriteAllText(provenance, "{}");
+            string helper = Path.Combine(FindRepoRoot(), "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1");
+            string command = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                             $"Get-PowerForgeReleaseSourceState -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedProvenancePath '{provenance.Replace("'", "''", StringComparison.Ordinal)}' | ConvertTo-Json -Compress";
+            var clean = Run("pwsh", repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            Assert.Contains("\"SourceDirty\":false", clean.StandardOutput, StringComparison.OrdinalIgnoreCase);
+
+            File.WriteAllText(Path.Combine(repository.FullName, "Module", "untracked-input.ps1"), "'input'");
+            var dirty = Run("pwsh", repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            Assert.Contains("\"SourceDirty\":true", dirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("untracked-input.ps1", dirty.StandardOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { repository.Delete(recursive: true); } catch { }
+        }
     }
 
     [Fact]

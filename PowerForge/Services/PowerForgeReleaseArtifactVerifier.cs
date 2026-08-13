@@ -149,13 +149,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
     private static Dictionary<string, ZipArchiveEntry> ValidateArchiveEntries(ZipArchive archive)
     {
-        var entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
+        var entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.Ordinal);
+        var duplicateGuard = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (ZipArchiveEntry entry in archive.Entries)
         {
             string normalized = NormalizeArchivePath(entry.FullName);
             if (normalized.Length == 0 || entry.FullName.EndsWith("/", StringComparison.Ordinal) || entry.FullName.EndsWith("\\", StringComparison.Ordinal))
                 continue;
-            if (entries.ContainsKey(normalized))
+            if (!duplicateGuard.Add(normalized))
                 throw Invalid($"Release archive contains duplicate entry '{normalized}'.");
             entries.Add(normalized, entry);
         }
@@ -350,6 +351,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     private static int ReadInt32(JsonElement element, string name) =>
         TryGet(element, name, out JsonElement value) && value.TryGetInt32(out int result) ? result : 0;
 
+    private static string[] ReadStringArray(JsonElement element, string name)
+    {
+        if (!TryGet(element, name, out JsonElement value))
+            return Array.Empty<string>();
+        if (value.ValueKind != JsonValueKind.Array)
+            throw Invalid($"PowerForge manifest property '{name}' must be an array.");
+        return value.EnumerateArray().Select(item =>
+            item.ValueKind == JsonValueKind.String
+                ? item.GetString() ?? string.Empty
+                : throw Invalid($"PowerForge manifest property '{name}' must contain only strings.")).ToArray();
+    }
+
     private static bool TryGet(JsonElement element, string name, out JsonElement value)
     {
         if (element.ValueKind == JsonValueKind.Object)
@@ -410,6 +423,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             DotNetPublishSpec configuration,
             DotNetPublishTarget target,
             string[] configurationPaths,
+            DotNetPublishSignOptions sign,
             string? signerThumbprint,
             string? signerSubjectName,
             bool allowOutsideProjectRoot)
@@ -417,6 +431,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             Configuration = configuration;
             Target = target;
             ConfigurationPaths = configurationPaths;
+            Sign = sign;
             SignerThumbprint = signerThumbprint;
             SignerSubjectName = signerSubjectName;
             AllowOutsideProjectRoot = allowOutsideProjectRoot;
@@ -425,6 +440,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         internal DotNetPublishSpec Configuration { get; }
         internal DotNetPublishTarget Target { get; }
         internal string[] ConfigurationPaths { get; }
+        internal DotNetPublishSignOptions Sign { get; }
         internal string? SignerThumbprint { get; }
         internal string? SignerSubjectName { get; }
         internal bool AllowOutsideProjectRoot { get; }

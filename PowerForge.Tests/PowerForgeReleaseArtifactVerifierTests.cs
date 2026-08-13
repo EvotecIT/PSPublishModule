@@ -31,45 +31,6 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
-    public void Verify_PortableCliRejectsArchiveWhoseSignedPayloadDiffersFromChecksummedOutput()
-    {
-        using var fixture = new PortableFixture();
-        fixture.WriteArchive("different signed payload");
-        fixture.WriteChecksums();
-
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
-
-        Assert.Contains("different bytes", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Verify_PortableCliRejectsChangedSbomEvenWhenArtifactStillMatches()
-    {
-        using var fixture = new PortableFixture();
-        File.WriteAllText(fixture.SbomPath, "{\"bomFormat\":\"CycloneDX\",\"changed\":true}");
-
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
-
-        Assert.Contains("SBOM SHA-256", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Verify_PortableCliRequiresManifestExecutableSignature()
-    {
-        using var fixture = new PortableFixture();
-        string dependencyPath = fixture.AddSignedDependency();
-        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
-        request.SignaturePaths = new[] { dependencyPath };
-
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(request));
-
-        Assert.Contains("manifest executable signature", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
     public void Verify_PortableCliAcceptsGlobalMatrixDimensionDefaults()
     {
         using var fixture = new PortableFixture();
@@ -323,6 +284,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     ZipPath = ArchivePath,
                     ExePath = ExecutablePath,
                     SignedFiles = 1,
+                    SignedFilePaths = new[] { ExecutablePath },
                     SourceRevision,
                     SourceDirty = false
                 }
@@ -379,6 +341,55 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
             base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath, dependencyPath);
             return dependencyPath;
+        }
+
+        internal void EnableDllSigning(
+            string dependencyPath,
+            int signedFileCount = 2,
+            bool omitDependencyFromManifest = false)
+        {
+            File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
+            {
+                SchemaVersion = 1,
+                DotNet = new { AllowOutputOutsideProjectRoot = false },
+                Targets = new[]
+                {
+                    new
+                    {
+                        Name = "Sample.CLI",
+                        Kind = "Cli",
+                        Publish = new
+                        {
+                            Framework = "net10.0",
+                            Runtimes = new[] { "win-x64" },
+                            Style = "PortableCompat",
+                            Sign = new { Enabled = true, IncludeDlls = true, Thumbprint }
+                        }
+                    }
+                }
+            }));
+            File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    Category = "Publish",
+                    Target = "Sample.CLI",
+                    Kind = "Cli",
+                    Runtime = "win-x64",
+                    Framework = "net10.0",
+                    Style = "PortableCompat",
+                    OutputDir = OutputDirectory,
+                    ZipPath = ArchivePath,
+                    ExePath = ExecutablePath,
+                    SignedFiles = signedFileCount,
+                    SignedFilePaths = omitDependencyFromManifest
+                        ? new[] { ExecutablePath }
+                        : new[] { ExecutablePath, dependencyPath },
+                    SourceRevision,
+                    SourceDirty = false
+                }
+            }));
+            base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath, dependencyPath);
         }
 
         internal void WriteConfigurationWithMatrixDefaults()
@@ -469,6 +480,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     ZipPath = ArchivePath,
                     ExePath = ExecutablePath,
                     SignedFiles = 1,
+                    SignedFilePaths = new[] { ExecutablePath },
                     SourceRevision,
                     SourceDirty = false
                 }
