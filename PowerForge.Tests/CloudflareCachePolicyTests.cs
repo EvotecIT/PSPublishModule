@@ -47,6 +47,10 @@ public sealed class CloudflareCachePolicyTests
         Assert.Contains("/*.mp4", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Contains("/*.webm", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Contains("/*.ogg", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("/_framework/*", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("/_content/*", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("/*.br", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("/*.gz", staticRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Equal("override_origin", htmlRule["action_parameters"]!["browser_ttl"]!["mode"]!.GetValue<string>());
         Assert.Equal(300, htmlRule["action_parameters"]!["browser_ttl"]!["default"]!.GetValue<int>());
         Assert.Equal("respect_origin", staticRule["action_parameters"]!["edge_ttl"]!["mode"]!.GetValue<string>());
@@ -80,6 +84,22 @@ public sealed class CloudflareCachePolicyTests
         Assert.Contains("starts_with(http.request.uri.path, \"/project/\")", htmlExpression, StringComparison.Ordinal);
         Assert.Contains("ends_with(http.request.uri.path, \".htm\")", htmlExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("uri.path eq \"/docs/\"", htmlExpression, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildManagedRules_StaticProfileFallback_ShouldStayInsideSiteBasePath()
+    {
+        var rules = CloudflareCachePolicyBuilder.BuildManagedRules(
+            "example.com",
+            "Project",
+            htmlPaths: null,
+            basePath: "/product docs/",
+            cache: new PowerForge.Web.CloudflareCacheSpec());
+
+        var expression = rules[2]!["expression"]!.GetValue<string>();
+        Assert.Contains("http.request.uri.path eq \"/product%20docs\"", expression, StringComparison.Ordinal);
+        Assert.Contains("http.request.uri.path wildcard \"/product%20docs/*\"", expression, StringComparison.Ordinal);
+        Assert.DoesNotContain("and true", expression, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -519,6 +539,19 @@ public sealed class CloudflareCachePolicyTests
         Assert.Contains("ends_with(http.request.uri.path, \"/\")", expression, StringComparison.Ordinal);
         Assert.DoesNotContain("project-500", expression, StringComparison.Ordinal);
         Assert.True(expression.Length < 1024, "Large navigation inventories should compile to a compact HTML policy.");
+    }
+
+    [Fact]
+    public void BuildManagedRules_ShouldCollapseLargeHtmRouteInventories()
+    {
+        var routes = Enumerable.Range(1, 500).Select(index => $"/api/project-{index}.htm").ToArray();
+
+        var rules = CloudflareCachePolicyBuilder.BuildManagedRules("officeimo.com", "OfficeIMO", routes);
+
+        var expression = rules[0]!["expression"]!.GetValue<string>();
+        Assert.Contains("ends_with(http.request.uri.path, \".htm\")", expression, StringComparison.Ordinal);
+        Assert.DoesNotContain("project-500", expression, StringComparison.Ordinal);
+        Assert.True(expression.Length < 1024, "Large .htm inventories should compile to a compact HTML policy.");
     }
 
     private static JsonObject ExistingRule(string id, string description, string expression, string action = "set_cache_settings") => new()

@@ -106,8 +106,10 @@ For a generated static site, opt in to a longer edge TTL and hostname-wide purge
 }
 ```
 
-This applies the configured edge TTL to successful HTML, data/discovery, and
-static asset responses. Responses below 200 and at or above 500 are not cached;
+This applies the configured edge TTL to every successful GET response for the
+opted-in static site, including HTML, data/discovery, static assets, and
+precompressed Blazor resources. Responses below 200 and at or above 500 are not
+cached;
 3xx and 4xx responses receive a zero edge TTL. Seven days is the edge default
 when the `Cache` block is present. Browser caching remains origin-controlled
 because a Cloudflare purge cannot remove an object already stored in a visitor's
@@ -171,6 +173,10 @@ powerforge-web cloudflare purge \
   --token-env CLOUDFLARE_API_TOKEN \
   --site-config ./site.json
 ```
+
+Cloudflare accepts at most 30 normalized hostnames or 100 URLs in one purge
+request. PowerForge validates the applicable mode-specific limit before sending
+the request.
 
 Verify public cache behavior:
 

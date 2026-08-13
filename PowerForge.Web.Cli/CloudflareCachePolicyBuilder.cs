@@ -38,6 +38,9 @@ internal static class CloudflareCachePolicyBuilder
         policyName = NormalizePolicyName(policyName, hostname);
         basePath = NormalizeBasePath(basePath);
         var hostFilter = $"http.host eq \"{hostname}\" and http.request.method eq \"GET\" and ";
+        var allGetExpression = basePath == "/"
+            ? $"(http.host eq \"{hostname}\" and http.request.method eq \"GET\")"
+            : $"({hostFilter}({BuildPathClause("eq", basePath.TrimEnd('/'))} or {BuildPathClause("wildcard", basePath + "*")}))";
 
         var staticExpression = $"({hostFilter}(" + string.Join(" or ", new[]
         {
@@ -48,6 +51,8 @@ internal static class CloudflareCachePolicyBuilder
             BuildPathClause("wildcard", CombineBasePath(basePath, "/images/*")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/img/*")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/media/*")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/_framework/*")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/_content/*")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.map")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.css")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.js")),
@@ -68,6 +73,8 @@ internal static class CloudflareCachePolicyBuilder
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.mp4")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.webm")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.ogg")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.br")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.gz")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.pdf")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.zip")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.wasm")),
@@ -110,7 +117,7 @@ internal static class CloudflareCachePolicyBuilder
             : BuildOverrideRule($"{descriptionPrefix} data files", dataExpression, htmlEdgeTtlSeconds, browserTtlSeconds: null);
         var staticRule = cache is null
             ? BuildRespectOriginRule($"{descriptionPrefix} static assets", staticExpression)
-            : BuildOverrideRule($"{descriptionPrefix} static assets", staticExpression, htmlEdgeTtlSeconds, browserTtlSeconds: null);
+            : BuildOverrideRule($"{descriptionPrefix} static assets", allGetExpression, htmlEdgeTtlSeconds, browserTtlSeconds: null);
 
         return new JsonArray
         {
@@ -177,11 +184,12 @@ internal static class CloudflareCachePolicyBuilder
             .Where(path => path is not null)
             .Cast<string>()
             .Select(path => CombineBasePath(basePath, path))
-            // Directory routes and .html files are already covered by the compact
+            // Directory routes plus .html and .htm files are already covered by the compact
             // provider-wide clauses. Keep only exceptional extensionless routes so
             // large documentation menus do not inflate the Cloudflare expression.
             .Where(path => !path.EndsWith("/", StringComparison.Ordinal) &&
-                           !path.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+                           !path.EndsWith(".html", StringComparison.OrdinalIgnoreCase) &&
+                           !path.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(MaxHtmlPaths + 1)
             .ToArray();

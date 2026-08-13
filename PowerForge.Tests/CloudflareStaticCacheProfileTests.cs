@@ -38,6 +38,12 @@ public sealed class CloudflareStaticCacheProfileTests
             Assert.Equal(299, successRange["status_code_range"]!["to"]!.GetValue<int>());
             Assert.Equal(604800, successRange["value"]!.GetValue<int>());
         }
+
+        var fallback = rules[2]!;
+        Assert.EndsWith("static assets", fallback["description"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Equal(
+            "(http.host eq \"officeimo.com\" and http.request.method eq \"GET\")",
+            fallback["expression"]!.GetValue<string>());
     }
 
     [Fact]
@@ -178,6 +184,71 @@ public sealed class CloudflareStaticCacheProfileTests
         Assert.Equal("officeimo.com", Assert.Single(payload["hosts"]!.AsArray())!.GetValue<string>());
         Assert.Null(payload["files"]);
         Assert.Null(payload["purge_everything"]);
+    }
+
+    [Fact]
+    public void Purge_Hostname_ShouldRejectMoreThanThirtyNormalizedTargets()
+    {
+        var handler = new SequenceHandler();
+        using var client = NewClient(handler);
+        var hostnames = Enumerable.Range(1, 31).Select(index => $"site-{index}.example.com").ToArray();
+
+        var result = CloudflareCachePurger.Purge(
+            ZoneId,
+            "secret-token",
+            CloudflareCachePurgeMode.Hostname,
+            hostnames,
+            dryRun: false,
+            logger: null,
+            client);
+
+        Assert.False(result.ok);
+        Assert.Contains("at most 30 hostnames", result.message, StringComparison.Ordinal);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public void Purge_Hostname_ShouldApplyTheLimitAfterNormalization()
+    {
+        var handler = new SequenceHandler();
+        using var client = NewClient(handler);
+        var hostnames = Enumerable.Range(1, 30)
+            .Select(index => $"site-{index}.example.com")
+            .Append("SITE-1.EXAMPLE.COM.")
+            .ToArray();
+
+        var result = CloudflareCachePurger.Purge(
+            ZoneId,
+            "secret-token",
+            CloudflareCachePurgeMode.Hostname,
+            hostnames,
+            dryRun: true,
+            logger: null,
+            client);
+
+        Assert.True(result.ok, result.message);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public void Purge_Files_ShouldRetainTheHundredUrlLimit()
+    {
+        var handler = new SequenceHandler();
+        using var client = NewClient(handler);
+        var urls = Enumerable.Range(1, 101).Select(index => $"https://example.com/assets/{index}.js").ToArray();
+
+        var result = CloudflareCachePurger.Purge(
+            ZoneId,
+            "secret-token",
+            CloudflareCachePurgeMode.Files,
+            urls,
+            dryRun: false,
+            logger: null,
+            client);
+
+        Assert.False(result.ok);
+        Assert.Contains("at most 100 URLs", result.message, StringComparison.Ordinal);
+        Assert.Empty(handler.Requests);
     }
 
     [Fact]

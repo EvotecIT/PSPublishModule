@@ -14,6 +14,8 @@ internal enum CloudflareCachePurgeMode
 
 internal static class CloudflareCachePurger
 {
+    private const int MaxFileTargets = 100;
+    private const int MaxHostnameTargets = 30;
 
     internal static (bool ok, string message) Purge(
         string zoneId,
@@ -38,11 +40,12 @@ internal static class CloudflareCachePurger
 
         if (mode != CloudflareCachePurgeMode.Everything && normalizedTargets.Length == 0)
             return (false, $"Nothing to purge in {FormatMode(mode)} mode.");
-        if (normalizedTargets.Length > 100)
-            return (false, "Cloudflare purge accepts at most 100 targets per request.");
 
         if (mode == CloudflareCachePurgeMode.Files)
         {
+            if (normalizedTargets.Length > MaxFileTargets)
+                return (false, $"Cloudflare file purge accepts at most {MaxFileTargets} URLs per request.");
+
             foreach (var target in normalizedTargets)
             {
                 if (!Uri.TryCreate(target, UriKind.Absolute, out var uri) ||
@@ -64,6 +67,9 @@ internal static class CloudflareCachePurger
             {
                 return (false, ex.Message);
             }
+
+            if (normalizedTargets.Length > MaxHostnameTargets)
+                return (false, $"Cloudflare hostname purge accepts at most {MaxHostnameTargets} hostnames per request.");
         }
 
         if (dryRun)
