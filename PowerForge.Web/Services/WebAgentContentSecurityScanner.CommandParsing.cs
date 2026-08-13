@@ -4,6 +4,63 @@ namespace PowerForge.Web;
 
 public sealed partial class WebAgentContentSecurityScanner
 {
+    private static bool RejectPersistentPackageConfiguration(
+        string executable,
+        string[] tokens,
+        string path,
+        int line,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        var changesConfiguration = executable is "register-psrepository" or "set-psrepository" or
+                "register-psresourcerepository" or "set-psresourcerepository" ||
+            executable == "dotnet" && tokens.Length > 2 && tokens[1].Equals("nuget", StringComparison.OrdinalIgnoreCase) &&
+                tokens.Any(static token => token.Equals("source", StringComparison.OrdinalIgnoreCase)) ||
+            executable == "gem" && tokens.Skip(1).Any(static token => token.Equals("sources", StringComparison.OrdinalIgnoreCase)) ||
+            executable is "composer" or "bundle" && tokens.Skip(1).Any(static token => token.Equals("config", StringComparison.OrdinalIgnoreCase)) ||
+            executable is "pip" or "pip3" && tokens.Skip(1).Any(static token => token.Equals("config", StringComparison.OrdinalIgnoreCase)) ||
+            executable is "python" or "python3" or "py" && tokens.Skip(1).Any(static token => token.Equals("config", StringComparison.OrdinalIgnoreCase)) ||
+            executable == "cargo" && tokens.Skip(1).Any(static token => token.Equals("config", StringComparison.OrdinalIgnoreCase));
+        if (!changesConfiguration)
+            return false;
+
+        AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+            $"Package-manager configuration command '{string.Join(' ', tokens)}' can change the source used by later installation commands.");
+        return true;
+    }
+
+    private static bool TrySkipOption(string[] tokens, ref int index)
+    {
+        var option = tokens[index];
+        var equals = option.IndexOf('=');
+        if (equals > 0)
+        {
+            var name = option[..equals];
+            return OptionConsumesValue(name) || OptionIsFlag(name);
+        }
+        if (OptionIsFlag(option))
+            return true;
+        if (!OptionConsumesValue(option) || index + 1 >= tokens.Length)
+            return false;
+        index++;
+        return true;
+    }
+
+    private static string NormalizeToken(string token)
+        => token.Trim().Trim('\'', '"', (char)0x60, ',', ';');
+
+    private static string? NormalizeVersion(string token)
+    {
+        var normalized = NormalizeToken(token).TrimStart('v');
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static bool IsCandidatePackageId(string? id)
+        => !string.IsNullOrWhiteSpace(id) &&
+           id.Length <= 256 &&
+           id[0] != '-' &&
+           id.IndexOfAny(new[] { '$', '{', '}', '<', '>', '*', '?', '%', '(', ')' }) < 0 &&
+           !Uri.TryCreate(id, UriKind.Absolute, out _);
+
     private static readonly string[] NodeVerbs =
     {
         "exec", "x", "dlx", "install", "i", "in", "ins", "inst", "insta", "instal",

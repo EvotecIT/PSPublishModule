@@ -59,6 +59,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
             throw new DirectoryNotFoundException($"Site root not found: {siteRoot}");
 
         var findings = new List<WebAgentContentSecurityFinding>();
+        var selectorsValid = ValidatePackageSelectors(options, findings);
         var packages = new List<WebAgentPackageReference>();
         var urls = new HashSet<Uri>(UriComparer.Instance);
         var artifactCount = 0;
@@ -130,9 +131,10 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
             AddFinding(findings, "error", "PFAGENT.PACKAGE.LIMIT_EXCEEDED", null, null,
                 $"Artifacts contain {packages.Count} unique package references; the configured maximum is {options.MaxPackageReferences}. No registry requests were sent.");
         }
-        else if (options.VerifyPackages && !findings.Any(static finding =>
+        else if (options.VerifyPackages && selectorsValid && !findings.Any(static finding =>
                      finding.Code is "PFAGENT.PACKAGE.UNTRUSTED_SOURCE" or
-                         "PFAGENT.PACKAGE.UNVERIFIABLE_ENVIRONMENT"))
+                         "PFAGENT.PACKAGE.UNVERIFIABLE_ENVIRONMENT" or
+                         "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND"))
         {
             var catalog = LoadOwnerCatalog(options, findings);
             var verificationCache = new Dictionary<string, PackageVerificationOutcome>(StringComparer.OrdinalIgnoreCase);

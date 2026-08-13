@@ -5,7 +5,7 @@ namespace PowerForge.Web;
 public sealed partial class WebAgentContentSecurityScanner
 {
     private static readonly Regex CommandSegmentRegex = new(
-        @"(?<command>(?:dotnet|dnx|Install-Module|Install-PSResource|npm|npx|pnpx|pnpm|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer)\b(?:[^\x5C`\r\n;&|]|[\x5C`]\r?\n)*)",
+        @"(?<command>(?:dotnet|dnx|Install-Module|Install-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|npm|npx|pnpx|pnpm|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer|bundle)\b(?:[^\x5C`\r\n;&|]|[\x5C`]\r?\n)*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ShellContinuationRegex = new(
         @"[\x5C\`]\r?\n",
@@ -44,6 +44,8 @@ public sealed partial class WebAgentContentSecurityScanner
             tokens[0] = NormalizeExecutable(tokens[0]);
             var executable = tokens[0];
             var line = GetReportedLine(content, match.Index, lineOffset, countLogicalLines);
+            if (RejectPersistentPackageConfiguration(executable, tokens, path, line, findings))
+                continue;
             switch (executable)
             {
                 case "dotnet":
@@ -605,7 +607,9 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         if (ecosystem == "packagist")
         {
-            var separator = token.IndexOf(':');
+            var colon = token.IndexOf(':');
+            var equals = token.IndexOf('=');
+            var separator = colon < 0 ? equals : equals < 0 ? colon : Math.Min(colon, equals);
             return separator > 0
                 ? (token[..separator], NormalizeVersion(token[(separator + 1)..]))
                 : (token, null);
@@ -758,30 +762,4 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("-AcceptLicense", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-TrustRepository", StringComparison.OrdinalIgnoreCase);
 
-    private static bool TrySkipOption(string[] tokens, ref int index)
-    {
-        var option = tokens[index];
-        if (option.Contains('=') || OptionIsFlag(option))
-            return true;
-        if (!OptionConsumesValue(option) || index + 1 >= tokens.Length)
-            return false;
-        index++;
-        return true;
-    }
-
-    private static string NormalizeToken(string token)
-        => token.Trim().Trim('\'', '"', (char)0x60, ',', ';');
-
-    private static string? NormalizeVersion(string token)
-    {
-        var normalized = NormalizeToken(token).TrimStart('v');
-        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
-    }
-
-    private static bool IsCandidatePackageId(string? id)
-        => !string.IsNullOrWhiteSpace(id) &&
-           id.Length <= 256 &&
-           id[0] != '-' &&
-           id.IndexOfAny(new[] { '$', '{', '}', '<', '>', '*', '?', '%', '(', ')' }) < 0 &&
-           !Uri.TryCreate(id, UriKind.Absolute, out _);
 }

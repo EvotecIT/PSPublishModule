@@ -408,6 +408,37 @@ public sealed partial class WebAgentContentSecurityScanner
     private static bool MatchesAnySelector(string value, IEnumerable<string>? selectors)
         => (selectors ?? Array.Empty<string>()).Any(selector => WildcardMatches(value, selector));
 
+    private static bool ValidatePackageSelectors(
+        WebAgentContentSecurityOptions options,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        var valid = true;
+        Validate(options.RequireOwnerVerification, ownerRequired: true, nameof(options.RequireOwnerVerification));
+        Validate(options.RegistryVerifiedPackages, ownerRequired: false, nameof(options.RegistryVerifiedPackages));
+        return valid;
+
+        void Validate(IEnumerable<string>? selectors, bool ownerRequired, string optionName)
+        {
+            foreach (var selector in selectors ?? Array.Empty<string>())
+            {
+                var value = selector?.Trim() ?? string.Empty;
+                var separator = value.IndexOf(':');
+                var ecosystem = separator > 0 ? value[..separator].ToLowerInvariant() : string.Empty;
+                var pattern = separator > 0 && separator == value.LastIndexOf(':') ? value[(separator + 1)..] : string.Empty;
+                var ecosystemValid = ownerRequired
+                    ? ecosystem is "nuget" or "powershellgallery"
+                    : ecosystem is "nuget" or "powershellgallery" or "npm" or "pypi" or "crates" or "rubygems" or "packagist";
+                if (ecosystemValid && !string.IsNullOrWhiteSpace(pattern) &&
+                    !pattern.Any(static character => char.IsWhiteSpace(character) || character > 0x7F))
+                    continue;
+
+                valid = false;
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.INVALID_SELECTOR", null, null,
+                    $"{optionName} entry '{value}' must use a supported ecosystem:pattern selector.");
+            }
+        }
+    }
+
     private static bool IsValidPackageId(string ecosystem, string id)
     {
         if (string.IsNullOrWhiteSpace(id) || id.Length > 256 || id.Any(static character => character > 0x7F))

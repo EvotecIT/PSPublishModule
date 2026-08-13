@@ -725,8 +725,8 @@ public static partial class WebSiteAuditor
             foreach (var finding in agentResult.Findings)
             {
                 var message = finding.Line.HasValue
-                    ? $"line {finding.Line.Value}: {finding.Message}"
-                    : finding.Message;
+                    ? $"[{finding.Code}] line {finding.Line.Value}: {finding.Message}"
+                    : $"[{finding.Code}] {finding.Message}";
                 AddIssue(
                     finding.Severity,
                     "agent-content",
