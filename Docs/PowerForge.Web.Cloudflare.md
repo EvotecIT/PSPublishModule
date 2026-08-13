@@ -98,8 +98,7 @@ For a generated static site, opt in to a longer edge TTL and hostname-wide purge
 {
   "Cloudflare": {
     "Cache": {
-      "EdgeTtlSeconds": 604800,
-      "BrowserTtlSeconds": 300
+      "EdgeTtlSeconds": 604800
     },
     "PurgeMode": "hostname",
     "SmartTieredCache": true
@@ -107,11 +106,12 @@ For a generated static site, opt in to a longer edge TTL and hostname-wide purge
 }
 ```
 
-This applies the configured TTL to successful HTML, data/discovery, and static
-asset responses. Responses below 200 and at or above 500 are not cached; 3xx and
-4xx responses receive a zero edge TTL. Seven days is the edge default when the
-`Cache` block is present. The browser default remains five minutes because a
-Cloudflare purge cannot remove an object already stored in a visitor's browser.
+This applies the configured edge TTL to successful HTML, data/discovery, and
+static asset responses. Responses below 200 and at or above 500 are not cached;
+3xx and 4xx responses receive a zero edge TTL. Seven days is the edge default
+when the `Cache` block is present. Browser caching remains origin-controlled
+because a Cloudflare purge cannot remove an object already stored in a visitor's
+browser.
 
 Query strings remain part of the normal cache key. This avoids serving the wrong
 representation when an application uses query parameters for behavior rather

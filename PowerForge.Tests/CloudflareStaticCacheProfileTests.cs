@@ -21,8 +21,7 @@ public sealed class CloudflareStaticCacheProfileTests
             htmlPaths: null,
             cache: new CloudflareCacheSpec
             {
-                EdgeTtlSeconds = 604800,
-                BrowserTtlSeconds = 300
+                EdgeTtlSeconds = 604800
             });
 
         Assert.Equal(3, rules.Count);
@@ -31,8 +30,8 @@ public sealed class CloudflareStaticCacheProfileTests
             var parameters = rule!["action_parameters"]!;
             Assert.Equal("override_origin", parameters["edge_ttl"]!["mode"]!.GetValue<string>());
             Assert.Equal(604800, parameters["edge_ttl"]!["default"]!.GetValue<int>());
-            Assert.Equal("override_origin", parameters["browser_ttl"]!["mode"]!.GetValue<string>());
-            Assert.Equal(300, parameters["browser_ttl"]!["default"]!.GetValue<int>());
+            Assert.Equal("respect_origin", parameters["browser_ttl"]!["mode"]!.GetValue<string>());
+            Assert.Null(parameters["browser_ttl"]!["default"]);
 
             var successRange = parameters["edge_ttl"]!["status_code_ttl"]!.AsArray()[1]!;
             Assert.Equal(200, successRange["status_code_range"]!["from"]!.GetValue<int>());
@@ -56,10 +55,9 @@ public sealed class CloudflareStaticCacheProfileTests
                   "BaseUrl": "https://officeimo.com/",
                   "Cloudflare": {
                     "Cache": {
-                      "EdgeTtlSeconds": 604800,
-                      "BrowserTtlSeconds": 300
+                      "EdgeTtlSeconds": 604800
                     },
-                    "PurgeMode": "HOSTNAME",
+                    "PurgeMode": "hostname",
                     "SmartTieredCache": true
                   }
                 }
@@ -70,8 +68,36 @@ public sealed class CloudflareStaticCacheProfileTests
             Assert.NotNull(profile.Cloudflare);
             Assert.Equal("hostname", profile.Cloudflare.PurgeMode);
             Assert.Equal(604800, profile.Cloudflare.Cache?.EdgeTtlSeconds);
-            Assert.Equal(300, profile.Cloudflare.Cache?.BrowserTtlSeconds);
             Assert.True(profile.Cloudflare.SmartTieredCache);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RouteProfile_ShouldRejectPurgeModeThatTheSchemaRejects()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-cloudflare-purge-mode-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath,
+                """
+                {
+                  "Name": "OfficeIMO",
+                  "BaseUrl": "https://officeimo.com/",
+                  "Cloudflare": {
+                    "PurgeMode": "HOSTNAME"
+                  }
+                }
+                """);
+
+            var exception = Assert.Throws<InvalidOperationException>(() => CloudflareRouteProfileResolver.Load(configPath));
+
+            Assert.Contains("files, hostname, or everything", exception.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -208,6 +234,29 @@ public sealed class CloudflareStaticCacheProfileTests
     }
 
     [Fact]
+    public void SmartTieredCache_ShouldNotOwnAChangeAfterDefinitiveWriteRejection()
+    {
+        var handler = new SequenceHandler(
+            SmartTieredResponse("off"),
+            JsonResponse(HttpStatusCode.Forbidden, """{"success":false,"errors":[{"message":"setting locked"}]}"""),
+            SmartTieredResponse("on"));
+        using var client = NewClient(handler);
+
+        var result = CloudflareSmartTieredCacheManager.Apply(
+            ZoneId,
+            "secret-token",
+            enabled: true,
+            dryRun: false,
+            client);
+
+        Assert.False(result.Success);
+        Assert.False(result.Changed);
+        Assert.False(result.PreviousEnabled);
+        Assert.Contains("HTTP 403", result.Message, StringComparison.Ordinal);
+        Assert.Equal([HttpMethod.Get, HttpMethod.Patch], handler.Requests.Select(request => request.Method).ToArray());
+    }
+
+    [Fact]
     public void SmartTieredCache_ShouldRestorePreviousStateWhenWriteVerificationFails()
     {
         var handler = new SequenceHandler(
@@ -311,6 +360,7 @@ public sealed class CloudflareStaticCacheProfileTests
         Assert.Contains("Smart Tiered Cache rollback was incomplete", result.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Rollback was incomplete", result.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("previous site-policy state was restored", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(13, handler.Requests.Count);
     }
 
     private static JsonObject ExistingRule(string id, string description, string action) => new()

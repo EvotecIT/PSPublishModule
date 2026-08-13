@@ -71,6 +71,16 @@ internal static class CloudflareSmartTieredCacheManager
 
             var payload = new JsonObject { ["value"] = enabled ? "on" : "off" };
             var write = CloudflareApiClient.Send(httpClient, HttpMethod.Patch, relativePath, apiToken, payload);
+            var writeWasAmbiguous = IsAmbiguousWriteFailure(write);
+            if (!write.Success && !writeWasAmbiguous)
+            {
+                return Failure(
+                    false,
+                    enabled,
+                    $"Smart Tiered Cache update failed: {write.ErrorMessage}",
+                    current.PreviousEnabled);
+            }
+
             var verified = ReadCurrent(httpClient, relativePath, apiToken, dryRun: false, enabled);
             if (verified.Success && verified.PreviousEnabled == enabled)
             {
@@ -81,7 +91,7 @@ internal static class CloudflareSmartTieredCacheManager
                     Changed = true,
                     Enabled = enabled,
                     PreviousEnabled = current.PreviousEnabled,
-                    Message = write.Success
+                    Message = !writeWasAmbiguous
                         ? $"Smart Tiered Cache was {(enabled ? "enabled" : "disabled")}."
                         : $"Smart Tiered Cache reached the requested state after an ambiguous API response."
                 };
@@ -179,6 +189,9 @@ internal static class CloudflareSmartTieredCacheManager
     {
         var payload = new JsonObject { ["value"] = previousEnabled ? "on" : "off" };
         var write = CloudflareApiClient.Send(httpClient, HttpMethod.Patch, relativePath, apiToken, payload);
+        if (!write.Success && !IsAmbiguousWriteFailure(write))
+            return $"Smart Tiered Cache recovery was incomplete: {write.ErrorMessage}";
+
         var verified = ReadCurrent(httpClient, relativePath, apiToken, dryRun: false, previousEnabled);
         if (verified.Success && verified.PreviousEnabled == previousEnabled)
             return "The previous Smart Tiered Cache state was restored.";
@@ -186,4 +199,8 @@ internal static class CloudflareSmartTieredCacheManager
         var error = write.Success ? verified.Message : write.ErrorMessage;
         return $"Smart Tiered Cache recovery was incomplete: {error}";
     }
+
+    private static bool IsAmbiguousWriteFailure(CloudflareApiResponse response) =>
+        !response.Success &&
+        (response.TransportError is not null || (int)response.StatusCode >= 500);
 }

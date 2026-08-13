@@ -92,20 +92,22 @@ internal static class CloudflareCachePolicyBuilder
         var descriptionPrefix = CloudflareManagedRuleOwnership.BuildDescriptionPrefix(policyName, hostname, basePath);
 
         var htmlEdgeTtlSeconds = cache?.EdgeTtlSeconds ?? LegacyHtmlEdgeTtlSeconds;
-        var htmlBrowserTtlSeconds = cache?.BrowserTtlSeconds ?? LegacyHtmlBrowserTtlSeconds;
         ValidateTtl("edge", htmlEdgeTtlSeconds);
-        ValidateTtl("browser", htmlBrowserTtlSeconds);
 
         var dataRule = cache is null
             ? BuildRespectOriginRule($"{descriptionPrefix} data files", dataExpression)
-            : BuildOverrideRule($"{descriptionPrefix} data files", dataExpression, htmlEdgeTtlSeconds, htmlBrowserTtlSeconds);
+            : BuildOverrideRule($"{descriptionPrefix} data files", dataExpression, htmlEdgeTtlSeconds, browserTtlSeconds: null);
         var staticRule = cache is null
             ? BuildRespectOriginRule($"{descriptionPrefix} static assets", staticExpression)
-            : BuildOverrideRule($"{descriptionPrefix} static assets", staticExpression, htmlEdgeTtlSeconds, htmlBrowserTtlSeconds);
+            : BuildOverrideRule($"{descriptionPrefix} static assets", staticExpression, htmlEdgeTtlSeconds, browserTtlSeconds: null);
 
         return new JsonArray
         {
-            BuildOverrideRule($"{descriptionPrefix} HTML docs and API", htmlExpression, htmlEdgeTtlSeconds, htmlBrowserTtlSeconds),
+            BuildOverrideRule(
+                $"{descriptionPrefix} HTML docs and API",
+                htmlExpression,
+                htmlEdgeTtlSeconds,
+                cache is null ? LegacyHtmlBrowserTtlSeconds : null),
             dataRule,
             staticRule
         };
@@ -250,8 +252,15 @@ internal static class CloudflareCachePolicyBuilder
         string description,
         string expression,
         int edgeTtlSeconds,
-        int browserTtlSeconds)
+        int? browserTtlSeconds)
     {
+        var browserTtl = browserTtlSeconds.HasValue
+            ? new JsonObject
+            {
+                ["mode"] = "override_origin",
+                ["default"] = browserTtlSeconds.Value
+            }
+            : new JsonObject { ["mode"] = "respect_origin" };
         var actionParameters = new JsonObject
         {
             ["cache"] = true,
@@ -261,11 +270,7 @@ internal static class CloudflareCachePolicyBuilder
                 ["default"] = edgeTtlSeconds,
                 ["status_code_ttl"] = BuildStatusCodeTtls(edgeTtlSeconds)
             },
-            ["browser_ttl"] = new JsonObject
-            {
-                ["mode"] = "override_origin",
-                ["default"] = browserTtlSeconds
-            },
+            ["browser_ttl"] = browserTtl,
             ["respect_strong_etags"] = true
         };
 

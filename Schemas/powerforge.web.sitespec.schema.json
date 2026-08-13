@@ -126,9 +126,7 @@
       "additionalProperties": false,
       "properties": {
         "EdgeTtlSeconds": { "type": "integer", "minimum": 1, "maximum": 31536000, "default": 604800 },
-        "edgeTtlSeconds": { "type": "integer", "minimum": 1, "maximum": 31536000, "default": 604800 },
-        "BrowserTtlSeconds": { "type": "integer", "minimum": 1, "maximum": 31536000, "default": 300 },
-        "browserTtlSeconds": { "type": "integer", "minimum": 1, "maximum": 31536000, "default": 300 }
+        "edgeTtlSeconds": { "type": "integer", "minimum": 1, "maximum": 31536000, "default": 604800 }
       }
     },
     "CollectionSpec": {

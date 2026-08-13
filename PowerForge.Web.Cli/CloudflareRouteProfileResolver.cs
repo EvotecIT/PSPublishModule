@@ -69,7 +69,7 @@ internal static class CloudflareRouteProfileResolver
         if (policy is null)
             return;
 
-        policy.PurgeMode = (policy.PurgeMode ?? string.Empty).Trim().ToLowerInvariant();
+        policy.PurgeMode = (policy.PurgeMode ?? string.Empty).Trim();
         if (policy.PurgeMode is not ("files" or "hostname" or "everything"))
             throw new InvalidOperationException("Cloudflare.PurgeMode must be files, hostname, or everything.");
 
@@ -77,8 +77,6 @@ internal static class CloudflareRouteProfileResolver
             return;
         if (policy.Cache.EdgeTtlSeconds is < 1 or > 31536000)
             throw new InvalidOperationException("Cloudflare.Cache.EdgeTtlSeconds must be between 1 and 31536000.");
-        if (policy.Cache.BrowserTtlSeconds is < 1 or > 31536000)
-            throw new InvalidOperationException("Cloudflare.Cache.BrowserTtlSeconds must be between 1 and 31536000.");
     }
 
     private static string[] BuildVerifyPaths(SiteSpec spec)

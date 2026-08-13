@@ -16,12 +16,9 @@ public sealed class CloudflareSitePolicySpec
     public bool? SmartTieredCache { get; set; }
 }
 
-/// <summary>Defines Cloudflare edge and browser TTL overrides for successful static-site responses.</summary>
+/// <summary>Defines Cloudflare edge TTL overrides for successful static-site responses.</summary>
 public sealed class CloudflareCacheSpec
 {
     /// <summary>Cloudflare edge TTL in seconds. Seven days is the static-site default.</summary>
     public int EdgeTtlSeconds { get; set; } = 604800;
-
-    /// <summary>Browser TTL in seconds. Keep this short because an edge purge cannot clear visitor browsers.</summary>
-    public int BrowserTtlSeconds { get; set; } = 300;
 }
