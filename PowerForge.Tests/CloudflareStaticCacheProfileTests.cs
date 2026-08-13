@@ -105,6 +105,27 @@ public sealed class CloudflareStaticCacheProfileTests
         }
     }
 
+    [Theory]
+    [InlineData("HOSTNAME")]
+    [InlineData("host")]
+    [InlineData("hosts")]
+    [InlineData("all")]
+    [InlineData(" hostname ")]
+    public void PipelinePurgeMode_ShouldRejectValuesOutsideItsSchema(string value)
+    {
+        Assert.False(CloudflareCachePurger.TryParseCanonicalMode(value, out _));
+    }
+
+    [Theory]
+    [InlineData("files")]
+    [InlineData("hostname")]
+    [InlineData("everything")]
+    public void PipelinePurgeMode_ShouldAcceptEverySchemaValue(string value)
+    {
+        Assert.True(CloudflareCachePurger.TryParseCanonicalMode(value, out var actual));
+        Assert.Equal(value, CloudflareCachePurger.FormatMode(actual));
+    }
+
     [Fact]
     public void Schemas_ShouldExposeTheStaticCacheAndHostnamePurgeContracts()
     {
@@ -121,6 +142,15 @@ public sealed class CloudflareStaticCacheProfileTests
         Assert.Contains("purgeMode", pipelineText, StringComparison.Ordinal);
         Assert.Contains("purgeHostname", pipelineText, StringComparison.Ordinal);
         Assert.Contains("hostnames", pipelineText, StringComparison.Ordinal);
+        var cloudflareStep = pipelineSchema.RootElement.GetProperty("$defs").GetProperty("CloudflareStep");
+        Assert.Equal(
+            ["files", "hostname", "everything"],
+            cloudflareStep.GetProperty("properties").GetProperty("purgeMode").GetProperty("enum")
+                .EnumerateArray().Select(value => value.GetString()!).ToArray());
+        Assert.Equal(
+            ["files", "hostname", "everything"],
+            cloudflareStep.GetProperty("properties").GetProperty("purge-mode").GetProperty("enum")
+                .EnumerateArray().Select(value => value.GetString()!).ToArray());
     }
 
     [Fact]

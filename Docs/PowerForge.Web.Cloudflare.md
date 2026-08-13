@@ -33,7 +33,7 @@ powerforge-web cloudflare site-policy apply \
 ```
 
 The token needs write access to Cache Rules and Transform Rules for the target
-zone. Add Zone Settings Write when `Cloudflare.SmartTieredCache` is configured,
+zone. Add Cache Settings Write when `Cloudflare.SmartTieredCache` is configured,
 and add Cache Purge when the same token runs the post-deploy purge step. Keep the
 token in a protected environment or secret and pass only its environment-variable
 name to the CLI.
@@ -88,9 +88,9 @@ Sites without a `Cloudflare.Cache` block retain the compatibility policy:
 
 | Rule | Edge TTL | Browser TTL | Notes |
 | --- | ---: | ---: | --- |
-| HTML, docs, and API | 2 hours | 5 minutes | Includes directory routes and `.html`; does not cache 3xx/4xx/5xx responses. |
+| HTML, docs, and API | 2 hours | 5 minutes | Includes directory routes plus `.html` and `.htm`; does not cache 3xx/4xx/5xx responses. |
 | Data and discovery | Origin-controlled | Origin-controlled | Covers JSON, XML, text, sitemap, and LLM discovery files. |
-| Static assets | Origin-controlled | Origin-controlled | Covers CSS, JavaScript, images, fonts, maps, PDFs, archives, and Blazor binaries. |
+| Static assets | Origin-controlled | Origin-controlled | Covers CSS, JavaScript, images, fonts, audio/video media, maps, PDFs, archives, and Blazor binaries. |
 
 For a generated static site, opt in to a longer edge TTL and hostname-wide purge:
 

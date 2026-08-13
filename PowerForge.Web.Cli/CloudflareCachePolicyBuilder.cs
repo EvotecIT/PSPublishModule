@@ -47,6 +47,7 @@ internal static class CloudflareCachePolicyBuilder
             BuildPathClause("wildcard", CombineBasePath(basePath, "/fonts/*")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/images/*")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/img/*")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/media/*")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.map")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.css")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.js")),
@@ -56,9 +57,17 @@ internal static class CloudflareCachePolicyBuilder
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.jpeg")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.webp")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.svg")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.svgz")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.gif")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.apng")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.avif")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.ico")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.woff")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.woff2")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.ttf")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.mp4")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.webm")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.ogg")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.pdf")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.zip")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.wasm")),
@@ -84,6 +93,8 @@ internal static class CloudflareCachePolicyBuilder
         routeClauses.Add(BuildScopedPathFunctionClause(basePath, "ends_with", "/"));
         routeClauses.Add(BuildScopedPathFunctionClause(basePath, "ends_with", ".html"));
         routeClauses.Add(BuildPathClause("wildcard", CombineBasePath(basePath, "/*.html")));
+        routeClauses.Add(BuildScopedPathFunctionClause(basePath, "ends_with", ".htm"));
+        routeClauses.Add(BuildPathClause("wildcard", CombineBasePath(basePath, "/*.htm")));
         var htmlExpression = $"({hostFilter}(" + string.Join(" or ", routeClauses) + "))";
 
         ValidateExpressionLength("static assets", staticExpression);

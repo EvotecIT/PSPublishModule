@@ -26,7 +26,7 @@ internal static partial class WebPipelineRunner
             purgeModeValue = "everything";
         if ((GetBool(step, "purgeHostname") ?? GetBool(step, "purge-hostname")) == true)
             purgeModeValue = "hostname";
-        if (!CloudflareCachePurger.TryParseMode(purgeModeValue, out var purgeMode))
+        if (!CloudflareCachePurger.TryParseCanonicalMode(purgeModeValue, out var purgeMode))
             throw new InvalidOperationException($"cloudflare: unsupported purge mode '{purgeModeValue}'. Use files, hostname, or everything.");
 
         // The profile fallback depends on what the caller configured, not on URLs

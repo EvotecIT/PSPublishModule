@@ -133,6 +133,25 @@ internal static class CloudflareCachePurger
         }
     }
 
+    internal static bool TryParseCanonicalMode(string? raw, out CloudflareCachePurgeMode mode)
+    {
+        switch (raw)
+        {
+            case "files":
+                mode = CloudflareCachePurgeMode.Files;
+                return true;
+            case "hostname":
+                mode = CloudflareCachePurgeMode.Hostname;
+                return true;
+            case "everything":
+                mode = CloudflareCachePurgeMode.Everything;
+                return true;
+            default:
+                mode = default;
+                return false;
+        }
+    }
+
     internal static string FormatMode(CloudflareCachePurgeMode mode) => mode switch
     {
         CloudflareCachePurgeMode.Hostname => "hostname",
