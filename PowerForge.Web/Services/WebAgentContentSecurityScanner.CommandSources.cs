@@ -53,6 +53,7 @@ public sealed partial class WebAgentContentSecurityScanner
                         option.Equals("--index", StringComparison.OrdinalIgnoreCase),
             "rubygems" => option.Equals("--source", StringComparison.OrdinalIgnoreCase) ||
                           option.Equals("-s", StringComparison.OrdinalIgnoreCase) ||
+                          option.Equals("--local", StringComparison.OrdinalIgnoreCase) ||
                           option.Equals("--config-file", StringComparison.OrdinalIgnoreCase),
             "packagist" => option.Equals("--repository", StringComparison.OrdinalIgnoreCase),
             _ => false

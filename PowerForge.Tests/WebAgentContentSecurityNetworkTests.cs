@@ -250,6 +250,23 @@ public sealed partial class WebAgentContentSecurityScannerTests
     }
 
     [Fact]
+    public void HostFingerprintProbe_DrainsChunkedBoundedResponse()
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StreamContent(new ChunkedReadStream("prefix No such app suffix", 3))
+        };
+        var method = typeof(WebAgentContentSecurityScanner).GetMethod(
+            "InspectTakeoverResponse", BindingFlags.NonPublic | BindingFlags.Static);
+        var findings = new List<WebAgentContentSecurityFinding>();
+
+        Assert.NotNull(method);
+        method!.Invoke(null, new object[] { new Uri("https://example.test/"), response, 5, findings, CancellationToken.None });
+
+        Assert.Contains(findings, issue => issue.Code == "PFAGENT.HOST.DANGLING_SERVICE");
+    }
+
+    [Fact]
     public void HostAddressPolicy_RejectsLocalUseNat64Prefix()
     {
         var method = typeof(WebAgentContentSecurityScanner).GetMethod(

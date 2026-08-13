@@ -60,6 +60,15 @@ public sealed partial class WebAgentContentSecurityScannerTests
         }
     }
 
+    private sealed class ChunkedReadStream(string content, int chunkSize) : MemoryStream(Encoding.UTF8.GetBytes(content))
+    {
+        public override int Read(byte[] buffer, int offset, int count)
+            => base.Read(buffer, offset, Math.Min(count, chunkSize));
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            => base.ReadAsync(buffer[..Math.Min(buffer.Length, chunkSize)], cancellationToken);
+    }
+
     private sealed class FailingReadStream : Stream
     {
         public override bool CanRead => true;
@@ -76,4 +85,3 @@ public sealed partial class WebAgentContentSecurityScannerTests
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }
-

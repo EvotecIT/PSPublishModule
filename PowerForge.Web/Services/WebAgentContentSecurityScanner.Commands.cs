@@ -88,10 +88,10 @@ public sealed partial class WebAgentContentSecurityScanner
                     ParsePositionalInstall("crates", "cargo", tokens, new[] { "add", "install" }, path, line, references, findings);
                     break;
                 case "gem":
-                    ParsePositionalInstall("rubygems", "gem", tokens, new[] { "install" }, path, line, references, findings);
+                    ParsePositionalInstall("rubygems", "gem", tokens, new[] { "install", "i" }, path, line, references, findings);
                     break;
                 case "composer":
-                    ParsePositionalInstall("packagist", "composer", tokens, new[] { "require" }, path, line, references, findings);
+                    ParseComposer(tokens, path, line, references, findings);
                     break;
             }
         }
@@ -179,16 +179,7 @@ public sealed partial class WebAgentContentSecurityScanner
         if (!ValidatePackageSourceOptions("powershellgallery", tokens, path, line, findings))
             return;
         var nameIndex = Array.FindIndex(tokens, 1, token => token.Equals("-Name", StringComparison.OrdinalIgnoreCase));
-        AddSingleOperand(
-            "powershellgallery",
-            tokens[0],
-            tokens,
-            nameIndex >= 0 ? nameIndex + 1 : 1,
-            path,
-            line,
-            references,
-            findings,
-            nameIndex >= 0);
+        AddPowerShellNames(tokens[0], tokens, nameIndex >= 0 ? nameIndex + 1 : 1, path, line, references, findings);
     }
 
     private static void ParseNode(
@@ -280,13 +271,20 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         if (command == "uv")
         {
-            var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "pip", "add" }, "uv", path, line, findings);
+            var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "pip", "add", "tool" }, "uv", path, line, findings);
             var start = -1;
             if (verbIndex >= 0 && tokens[verbIndex].Equals("pip", StringComparison.OrdinalIgnoreCase))
             {
                 var installIndex = FindVerbIndex(tokens, verbIndex + 1, "install", "uv pip", path, line, findings);
                 if (installIndex >= 0)
                     start = installIndex + 1;
+            }
+            else if (verbIndex >= 0 && tokens[verbIndex].Equals("tool", StringComparison.OrdinalIgnoreCase))
+            {
+                var installIndex = FindVerbIndex(tokens, verbIndex + 1, "install", "uv tool", path, line, findings);
+                if (installIndex >= 0)
+                    AddRunnerOperand("pypi", "uv tool install", tokens, installIndex + 1, path, line, references, findings);
+                return;
             }
             else if (verbIndex >= 0)
             {

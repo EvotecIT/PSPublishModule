@@ -166,6 +166,94 @@ public sealed partial class WebAgentContentSecurityScannerTests
         }
     }
 
+    [Theory]
+    [InlineData("gem i missing-gem")]
+    [InlineData("uv tool install missing-package")]
+    public void Scan_CoversAdditionalDocumentedInstallAliases(string command)
+    {
+        using var handler = new RegistryHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
+        using var client = new HttpClient(handler);
+        using var scanner = new WebAgentContentSecurityScanner(client);
+        var root = CreateArtifact("llms.txt", command);
+        try
+        {
+            var result = scanner.Scan(new WebAgentContentSecurityOptions { SiteRoot = root, Files = new[] { "llms.txt" } });
+            Assert.False(result.Success);
+            Assert.Equal(1, result.PackageReferenceCount);
+            Assert.Contains(result.Findings, issue => issue.Code == "PFAGENT.PACKAGE.NOT_FOUND");
+        }
+        finally { TryDeleteDirectory(root); }
+    }
+
+    [Theory]
+    [InlineData("composer install")]
+    [InlineData("composer i")]
+    public void Scan_RejectsComposerLockfileInstalls(string command)
+    {
+        using var handler = new RegistryHandler(_ => throw new InvalidOperationException("Registry must not be called."));
+        using var client = new HttpClient(handler);
+        using var scanner = new WebAgentContentSecurityScanner(client);
+        var root = CreateArtifact("llms.txt", command);
+        try
+        {
+            var result = scanner.Scan(new WebAgentContentSecurityOptions { SiteRoot = root, Files = new[] { "llms.txt" } });
+            Assert.False(result.Success);
+            Assert.Contains(result.Findings, issue => issue.Code == "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND");
+            Assert.Equal(0, handler.RequestCount);
+        }
+        finally { TryDeleteDirectory(root); }
+    }
+
+    [Fact]
+    public void Scan_VerifiesEveryPowerShellModuleName()
+    {
+        using var handler = new RegistryHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
+        using var client = new HttpClient(handler);
+        using var scanner = new WebAgentContentSecurityScanner(client);
+        var root = CreateArtifact("llms.txt", "Install-Module -Name Safe, Missing -RequiredVersion 1.0.0");
+        try
+        {
+            var result = scanner.Scan(new WebAgentContentSecurityOptions { SiteRoot = root, Files = new[] { "llms.txt" } });
+            Assert.False(result.Success);
+            Assert.Equal(2, result.PackageReferenceCount);
+            Assert.Equal(2, handler.RequestCount);
+        }
+        finally { TryDeleteDirectory(root); }
+    }
+
+    [Fact]
+    public void Scan_RejectsRubyGemsLocalInstallMode()
+    {
+        using var handler = new RegistryHandler(_ => throw new InvalidOperationException("Registry must not be called."));
+        using var client = new HttpClient(handler);
+        using var scanner = new WebAgentContentSecurityScanner(client);
+        var root = CreateArtifact("llms.txt", "gem install safe-gem --local");
+        try
+        {
+            var result = scanner.Scan(new WebAgentContentSecurityOptions { SiteRoot = root, Files = new[] { "llms.txt" } });
+            Assert.False(result.Success);
+            Assert.Contains(result.Findings, issue => issue.Code == "PFAGENT.PACKAGE.UNTRUSTED_SOURCE");
+            Assert.Equal(0, handler.RequestCount);
+        }
+        finally { TryDeleteDirectory(root); }
+    }
+
+    [Fact]
+    public void Scan_DoesNotMistakeConfigPackageOperandForConfigurationVerb()
+    {
+        using var handler = new RegistryHandler(_ => JsonResponse("""{"releases":{"1.0.0":[]}}"""));
+        using var client = new HttpClient(handler);
+        using var scanner = new WebAgentContentSecurityScanner(client);
+        var root = CreateArtifact("llms.txt", "pip install config");
+        try
+        {
+            var result = scanner.Scan(new WebAgentContentSecurityOptions { SiteRoot = root, Files = new[] { "llms.txt" } });
+            Assert.True(result.Success);
+            Assert.Equal(1, result.VerifiedPackageCount);
+        }
+        finally { TryDeleteDirectory(root); }
+    }
+
     [Fact]
     public void Scan_RejectsPackageManagerConfigurationCommands()
     {

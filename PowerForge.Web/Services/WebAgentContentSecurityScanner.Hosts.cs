@@ -124,7 +124,15 @@ public sealed partial class WebAgentContentSecurityScanner
         using var stream = response.Content.ReadAsStream(bodyCancellation.Token);
         using var reader = new StreamReader(stream);
         var buffer = new char[16 * 1024];
-        var count = reader.ReadAsync(buffer.AsMemory(), bodyCancellation.Token).AsTask().GetAwaiter().GetResult();
+        var count = 0;
+        while (count < buffer.Length)
+        {
+            var read = reader.ReadAsync(buffer.AsMemory(count, buffer.Length - count), bodyCancellation.Token)
+                .AsTask().GetAwaiter().GetResult();
+            if (read == 0)
+                break;
+            count += read;
+        }
         var body = new string(buffer, 0, count);
         var fingerprints = new[]
         {

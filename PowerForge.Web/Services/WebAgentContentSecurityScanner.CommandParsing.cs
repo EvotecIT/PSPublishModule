@@ -4,6 +4,52 @@ namespace PowerForge.Web;
 
 public sealed partial class WebAgentContentSecurityScanner
 {
+    private static void ParseComposer(
+        string[] tokens,
+        string path,
+        int line,
+        ICollection<WebAgentPackageReference> references,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        if (!ValidatePackageSourceOptions("packagist", tokens, path, line, findings))
+            return;
+        var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "require", "install", "i" }, "composer", path, line, findings);
+        if (verbIndex < 0)
+            return;
+        if (tokens[verbIndex].Equals("install", StringComparison.OrdinalIgnoreCase) ||
+            tokens[verbIndex].Equals("i", StringComparison.OrdinalIgnoreCase))
+        {
+            AddUnverifiableOperand("composer install", path, line, findings, "lockfile dependency set");
+            return;
+        }
+        AddMultipleOperands("packagist", "composer require", tokens, verbIndex + 1, path, line, references, findings);
+    }
+
+    private static void AddPowerShellNames(
+        string command,
+        string[] tokens,
+        int start,
+        string path,
+        int line,
+        ICollection<WebAgentPackageReference> references,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        var added = false;
+        var version = FindVersionOption(tokens, 0);
+        for (var index = start; index < tokens.Length; index++)
+        {
+            if (tokens[index].StartsWith("-", StringComparison.Ordinal))
+                break;
+            foreach (var name in tokens[index].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                AddToken("powershellgallery", command, name, version, path, line, references, findings);
+                added = true;
+            }
+        }
+        if (!added)
+            AddUnverifiableOperand(command, path, line, findings);
+    }
+
     private static bool RejectPersistentPackageConfiguration(
         string executable,
         string[] tokens,
@@ -13,13 +59,15 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         var changesConfiguration = executable is "register-psrepository" or "set-psrepository" or
                 "register-psresourcerepository" or "set-psresourcerepository" ||
-            executable == "dotnet" && tokens.Length > 2 && tokens[1].Equals("nuget", StringComparison.OrdinalIgnoreCase) &&
-                tokens.Any(static token => token.Equals("source", StringComparison.OrdinalIgnoreCase)) ||
-            executable == "gem" && tokens.Skip(1).Any(static token => token.Equals("sources", StringComparison.OrdinalIgnoreCase)) ||
-            executable is "composer" or "bundle" && tokens.Skip(1).Any(static token => token.Equals("config", StringComparison.OrdinalIgnoreCase)) ||
-            executable is "pip" or "pip3" && tokens.Skip(1).Any(static token => token.Equals("config", StringComparison.OrdinalIgnoreCase)) ||
-            executable is "python" or "python3" or "py" && tokens.Skip(1).Any(static token => token.Equals("config", StringComparison.OrdinalIgnoreCase)) ||
-            executable == "cargo" && tokens.Skip(1).Any(static token => token.Equals("config", StringComparison.OrdinalIgnoreCase));
+            executable == "dotnet" && tokens.Length > 3 && tokens[1].Equals("nuget", StringComparison.OrdinalIgnoreCase) &&
+                tokens[3].Equals("source", StringComparison.OrdinalIgnoreCase) ||
+            executable == "gem" && tokens.Length > 1 && tokens[1].Equals("sources", StringComparison.OrdinalIgnoreCase) ||
+            executable is "composer" or "bundle" && tokens.Length > 1 && tokens[1].Equals("config", StringComparison.OrdinalIgnoreCase) ||
+            executable is "pip" or "pip3" && tokens.Length > 1 && tokens[1].Equals("config", StringComparison.OrdinalIgnoreCase) ||
+            executable is "python" or "python3" or "py" && tokens.Length > 3 &&
+                tokens[1].Equals("-m", StringComparison.OrdinalIgnoreCase) && tokens[2].Equals("pip", StringComparison.OrdinalIgnoreCase) &&
+                tokens[3].Equals("config", StringComparison.OrdinalIgnoreCase) ||
+            executable == "cargo" && tokens.Length > 1 && tokens[1].Equals("config", StringComparison.OrdinalIgnoreCase);
         if (!changesConfiguration)
             return false;
 
