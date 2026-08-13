@@ -21,6 +21,16 @@ internal sealed class PowerForgeModulePackageReleaseCheckpoint
     public string ConfigPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// True when this checkpoint is approved for NuGet publication.
+    /// </summary>
+    public bool PublishNuget { get; set; }
+
+    /// <summary>
+    /// True when this checkpoint is approved for GitHub release publication.
+    /// </summary>
+    public bool PublishGitHub { get; set; }
+
+    /// <summary>
     /// Project release plan approved by the build and signing checkpoint.
     /// </summary>
     public DotNetRepositoryReleaseResult Release { get; set; } = new();

@@ -187,6 +187,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             PublishToolGitHub = false,
             ModuleRunMode = ConfigurationGateMode.Build,
             ModuleStagingPath = moduleStagingPath,
+            CaptureModuleArtifactProvenance = true,
             ModuleNoSign = true,
             ModuleSkipInstall = true,
             EnableSigning = false,

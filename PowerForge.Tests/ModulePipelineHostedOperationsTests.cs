@@ -2153,7 +2153,21 @@ public sealed class ModulePipelineHostedOperationsTests
         Assert.Equal(PowerShellInvocationMode.File, request.InvocationMode);
         Assert.True(request.PreferPwsh);
         Assert.Equal(new[] { @"C:\Temp\TestModule\TestModule.psm1" }, packageFiles);
+        Assert.Equal(TimeSpan.FromSeconds(605), request.Timeout);
         Assert.Equal(1, result.SignedNew);
+    }
+
+    [Theory]
+    [InlineData(0, 600)]
+    [InlineData(228, 1740)]
+    [InlineData(int.MaxValue, 3600)]
+    public void CalculateSigningTimeout_PackageWorkload_ScalesWithinBoundedLimits(
+        int packageFileCount,
+        int expectedSeconds)
+    {
+        var timeout = PowerShellModulePipelineHostedOperations.CalculateSigningTimeout(packageFileCount);
+
+        Assert.Equal(TimeSpan.FromSeconds(expectedSeconds), timeout);
     }
 
     [Fact]

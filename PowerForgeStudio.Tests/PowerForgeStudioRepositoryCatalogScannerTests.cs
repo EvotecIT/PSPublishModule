@@ -3,7 +3,7 @@ using PowerForgeStudio.Orchestrator.Catalog;
 
 namespace PowerForgeStudio.Tests;
 
-public sealed class PowerForgeStudioRepositoryCatalogScannerTests
+public sealed partial class PowerForgeStudioRepositoryCatalogScannerTests
 {
     [Fact]
     public void InspectRepository_ForwardSlashWorktreePath_IsDetectedAsWorktree()

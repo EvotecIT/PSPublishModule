@@ -132,6 +132,9 @@ Unified release entrypoint
   - `Outputs.Staging.*NameTemplate` values let the staged copies use release-facing names instead of raw internal build names
 - `Winget` in `release.json` when you want PowerForge to emit portable/signed release manifests from the same staged assets
   - set `Winget.Submit: true` (or pass `--submit-winget`) to submit the generated manifests with `wingetcreate` after the release assets are available
+- `VirusTotal` in `release.json` when a project explicitly opts into registering selected final packages with VirusTotal Monitor
+  - choose an explicit `ArtifactKinds` allowlist and exactly one API-key source; source archives and arbitrary repository files are never eligible
+  - see [VirusTotal Monitor release publishing](PSPublishModule.VirusTotalMonitor.md) for the full contract
 - top-level `GitHub` in `release.json` when you want the unified staged release itself uploaded as one repo release instead of using package-host or per-target tool release publishing
   - `--keep-symbols` for symbol-preserving tool/app outputs
   - `--skip-release-checksums` when you want the staged release folder but do not want a top-level `SHA256SUMS.txt`

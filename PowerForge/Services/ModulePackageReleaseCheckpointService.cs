@@ -52,6 +52,8 @@ internal sealed class ModulePackageReleaseCheckpointService
                 Key = lane.Key,
                 Name = lane.Name,
                 ConfigPath = Path.GetFullPath(lane.ConfigPath),
+                PublishNuget = lane.PublishNuget,
+                PublishGitHub = lane.PublishGitHub,
                 Release = execution.Result.Release
             });
         }

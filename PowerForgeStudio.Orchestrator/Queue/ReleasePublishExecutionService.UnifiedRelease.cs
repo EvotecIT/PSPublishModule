@@ -58,6 +58,7 @@ public sealed partial class ReleasePublishExecutionService
 
             UnifiedReleaseConfigFingerprint.Validate(configPath, buildResult.UnifiedReleaseConfigSha256);
             var spec = PowerForgeReleaseService.LoadConfiguration(configPath!);
+            var modulePublisherActive = HasEnabledModulePublisher(configPath!, spec);
             var targets = new List<ReleasePublishTarget>();
             var assets = unified.ReleaseAssets
                 .Concat(unified.ReleaseAssetEntries.Select(static entry => entry.StagedPath ?? entry.Path))
@@ -149,6 +150,21 @@ public sealed partial class ReleasePublishExecutionService
                     Destination: "Configured module package destinations"));
             }
 
+            if (PowerForgeReleaseService.ShouldPublishVirusTotalMonitorFromCheckpoint(
+                    spec,
+                    unified,
+                    modulePublisherActive))
+            {
+                targets.Add(new ReleasePublishTarget(
+                    RootPath: item.RootPath,
+                    RepositoryName: item.RepositoryName,
+                    AdapterKind: "UnifiedRelease",
+                    TargetName: "VirusTotal Monitor registration",
+                    TargetKind: "VirusTotal",
+                    SourcePath: configPath,
+                    Destination: "Configured VirusTotal Monitor project"));
+            }
+
             var enabledAppleApps = spec.AppleApps?.Apps.Count(static app => app.Enabled) ?? 0;
             if (enabledAppleApps > 0 && HasConfiguredApplePublishAction(spec.AppleApps!))
             {
@@ -198,11 +214,15 @@ public sealed partial class ReleasePublishExecutionService
                 repository.UnifiedReleaseConfigPath!,
                 buildResult.UnifiedReleaseConfigSha256);
             var spec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
+            var builtReleaseResult = JsonSerializer.Deserialize<PowerForgeReleaseResult>(
+                    buildResult.UnifiedReleaseStateJson!)
+                ?? throw new InvalidOperationException("Unified release build state could not be deserialized.");
+            ApplySignedCheckpointArtifacts(builtReleaseResult, signingResult);
             cancellationToken.ThrowIfCancellationRequested();
             var result = await Task.Run(
                     () => _publishUnifiedRelease(
                         repository.UnifiedReleaseConfigPath!,
-                        buildResult.UnifiedReleaseStateJson!,
+                        JsonSerializer.Serialize(builtReleaseResult),
                         cancellationToken),
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -248,6 +268,32 @@ public sealed partial class ReleasePublishExecutionService
                     result.WingetManifestPaths.FirstOrDefault()));
             }
 
+            if (result.VirusTotalMonitor is { } virusTotal)
+            {
+                var virusTotalStatus = !virusTotal.Success
+                    ? ReleasePublishReceiptStatus.Failed
+                    : virusTotal.Artifacts.Length == 0
+                        ? ReleasePublishReceiptStatus.Skipped
+                        : ReleasePublishReceiptStatus.Published;
+                receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                    repository.RootPath,
+                    repository.Name,
+                    "UnifiedRelease",
+                    "VirusTotal Monitor",
+                    "VirusTotal",
+                    result.VirusTotalMonitorReceiptPath ?? "VirusTotal Monitor",
+                    virusTotalStatus,
+                    virusTotalStatus switch
+                    {
+                        ReleasePublishReceiptStatus.Published =>
+                            $"Registered {virusTotal.Artifacts.Length} artifact(s) with VirusTotal Monitor. Analysis remains asynchronous.",
+                        ReleasePublishReceiptStatus.Skipped =>
+                            "VirusTotal Monitor registration was skipped because no configured final release artifacts matched.",
+                        _ => virusTotal.ErrorMessage ?? "VirusTotal Monitor registration failed."
+                    },
+                    virusTotal.Artifacts.FirstOrDefault()?.SourcePath));
+            }
+
             foreach (var apple in result.AppleApps)
             {
                 receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
@@ -279,6 +325,93 @@ public sealed partial class ReleasePublishExecutionService
         }
     }
 
+    private ReleasePublishReceipt? PrepareUnifiedReleaseVirusTotalPreflight(
+        PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
+        ReleaseSigningExecutionResult signingResult,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
+            return null;
+
+        var buildResult = _checkpointSerializer.TryDeserialize<ReleaseBuildExecutionResult>(
+            signingResult.SourceCheckpointStateJson);
+        if (buildResult is null || string.IsNullOrWhiteSpace(buildResult.UnifiedReleaseStateJson))
+        {
+            return FailedReceipt(
+                repository.RootPath,
+                repository.Name,
+                "UnifiedRelease",
+                "Configuration",
+                repository.UnifiedReleaseConfigPath,
+                "Unified release build state was not preserved through the signing checkpoint.");
+        }
+
+        PowerForgeReleaseSpec spec;
+        PowerForgeReleaseResult builtReleaseResult;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            UnifiedReleaseConfigFingerprint.Validate(
+                repository.UnifiedReleaseConfigPath!,
+                buildResult.UnifiedReleaseConfigSha256);
+            spec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
+            builtReleaseResult = JsonSerializer.Deserialize<PowerForgeReleaseResult>(
+                    buildResult.UnifiedReleaseStateJson!)
+                ?? throw new InvalidOperationException("Unified release build state could not be deserialized.");
+            ApplySignedCheckpointArtifacts(builtReleaseResult, signingResult);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return FailedReceipt(
+                repository.RootPath,
+                repository.Name,
+                "UnifiedRelease",
+                "Configuration",
+                repository.UnifiedReleaseConfigPath,
+                FirstLine(ex.Message) ?? "Unified release configuration preflight failed.");
+        }
+
+        var modulePublisherActive = HasEnabledModulePublisher(
+            repository.UnifiedReleaseConfigPath!,
+            spec);
+        if (!PowerForgeReleaseService.ShouldPublishVirusTotalMonitorFromCheckpoint(
+                spec,
+                builtReleaseResult,
+                modulePublisherActive))
+            return null;
+
+        try
+        {
+            PowerForgeReleaseService.PrepareVirusTotalPublishPreflight(
+                spec,
+                repository.UnifiedReleaseConfigPath!,
+                builtReleaseResult,
+                modulePublisherActive);
+            return null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                repository.RootPath,
+                repository.Name,
+                "UnifiedRelease",
+                "VirusTotal Monitor",
+                "VirusTotal",
+                "Configured VirusTotal Monitor project",
+                ReleasePublishReceiptStatus.Failed,
+                FirstLine(ex.Message) ?? "VirusTotal Monitor preflight failed.",
+                sourcePath: null);
+        }
+    }
+
     private static PowerForgeReleaseResult PublishUnifiedRelease(
         string configPath,
         string stateJson,
@@ -290,42 +423,12 @@ public sealed partial class ReleasePublishExecutionService
         PrepareApplePublishFromCheckpoint(spec, builtResult);
         return new PowerForgeReleaseService(new NullLogger()).PublishBuiltReleaseOutputs(
             spec,
-            CreateUnifiedPublishRequest(configPath, builtResult, cancellationToken),
+            CreateUnifiedPublishRequest(
+                configPath,
+                spec,
+                builtResult,
+                cancellationToken),
             builtResult);
-    }
-
-    internal static PowerForgeReleaseRequest CreateUnifiedPublishRequest(
-        string configPath,
-        PowerForgeReleaseResult builtResult,
-        CancellationToken cancellationToken = default)
-    {
-        var applePlan = builtResult.AppleAppPlan;
-        return new PowerForgeReleaseRequest
-        {
-            ConfigPath = configPath,
-            ModuleHostPath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
-            ModuleRunMode = ConfigurationGateMode.Publish,
-            AppleMarketingVersion = applePlan?.RequestedMarketingVersion,
-            AppleSourceCommit = applePlan?.SourceCommit,
-            RequireImmutableAppleSourceSnapshot =
-                applePlan?.RequireImmutableSourceSnapshot == true ||
-                !string.IsNullOrWhiteSpace(applePlan?.SourceCommit),
-            AppleExpectedPlanSha256 = builtResult.AppleReceipt?.PlanSha256,
-            AppleExpectedArchiveSha256ByTarget = applePlan?.Apps
-                .Where(static app => !string.IsNullOrWhiteSpace(app.ExpectedArchiveSha256))
-                .ToDictionary(
-                    static app => app.Name,
-                    static app => app.ExpectedArchiveSha256!,
-                    StringComparer.OrdinalIgnoreCase)
-                ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-            AppleAdoptExistingBuild = applePlan?.AdoptExistingBuild == true,
-            AppleResume = applePlan?.Automation.Resume,
-            AppleWaitForProcessing = applePlan?.Automation.WaitForProcessing,
-            AppleProcessingTimeoutSeconds = applePlan?.Automation.ProcessingTimeoutSeconds,
-            ApplePollIntervalSeconds = applePlan?.Automation.PollIntervalSeconds,
-            AppleActionConfirmed = true,
-            CancellationToken = cancellationToken
-        };
     }
 
     internal static void PrepareApplePublishFromCheckpoint(

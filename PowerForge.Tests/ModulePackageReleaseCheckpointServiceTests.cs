@@ -79,6 +79,8 @@ public sealed class ModulePackageReleaseCheckpointServiceTests
             var project = Assert.Single(checkpoint.Release.Projects);
 
             Assert.Equal(Path.GetFullPath(projectPath), Path.GetFullPath(project.CsprojPath));
+            Assert.True(checkpoint.PublishNuget);
+            Assert.False(checkpoint.PublishGitHub);
         }
         finally
         {

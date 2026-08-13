@@ -32,6 +32,8 @@ internal sealed class PowerForgeReleaseSpec
 
     public PowerForgeReleaseGitHubOptions? GitHub { get; set; }
 
+    public PowerForgeVirusTotalOptions? VirusTotal { get; set; }
+
     public PowerForgeReleaseWingetOptions? Winget { get; set; }
 }
 
@@ -66,6 +68,10 @@ internal sealed class PowerForgeReleaseRequest
     public bool SkipAppleApps { get; set; }
 
     internal bool CheckpointAppleApps { get; set; }
+
+    internal bool CaptureModuleArtifactProvenance { get; set; }
+
+    internal bool ModulePublisherActive { get; set; }
 
     /// <summary>Build Apple archives from a private detached exact-commit source worktree.</summary>
     internal bool RequireImmutableAppleSourceSnapshot { get; set; }
@@ -277,6 +283,8 @@ internal sealed class PowerForgeReleaseResult
 
     public string[] ModuleAssets { get; set; } = Array.Empty<string>();
 
+    public string[] ModuleProducedAssets { get; set; } = Array.Empty<string>();
+
     public PowerForgeModulePackageReleaseCheckpoint[] ModulePackagePlans { get; set; } =
         Array.Empty<PowerForgeModulePackageReleaseCheckpoint>();
 
@@ -309,6 +317,10 @@ internal sealed class PowerForgeReleaseResult
     public PowerForgeReleaseAssetEntry[] ReleaseAssetEntries { get; set; } = Array.Empty<PowerForgeReleaseAssetEntry>();
 
     public PowerForgeUnifiedGitHubReleaseResult? UnifiedGitHubRelease { get; set; }
+
+    public VirusTotalMonitorPublishResult? VirusTotalMonitor { get; set; }
+
+    public string? VirusTotalMonitorReceiptPath { get; set; }
 
     public string? ReleaseManifestPath { get; set; }
 
@@ -1059,53 +1071,6 @@ internal sealed class PowerForgeModuleReleaseOptions
     public string[] ArtifactPaths { get; set; } = Array.Empty<string>();
 }
 
-internal sealed class PowerForgeModuleReleasePlanSummary
-{
-    public string? ModuleName { get; set; }
-
-    public string RepositoryRoot { get; set; } = string.Empty;
-
-    public string? ConfigPath { get; set; }
-
-    public string? ScriptPath { get; set; }
-
-    public string ModulePath { get; set; } = string.Empty;
-
-    public string? ManifestPath { get; set; }
-
-    public string? Configuration { get; set; }
-
-    public string? Framework { get; set; }
-
-    public ConfigurationGateMode RunMode { get; set; } = ConfigurationGateMode.Build;
-
-    public bool IncludesPackages { get; set; }
-
-    public bool IncludesProjectPackages { get; set; }
-
-    public int TimeoutSeconds { get; set; }
-
-    public bool NoDotnetBuild { get; set; }
-
-    public string? ModuleVersion { get; set; }
-
-    public string? PreReleaseTag { get; set; }
-
-    public string? StagingPath { get; set; }
-
-    public bool NoSign { get; set; }
-
-    public bool SkipInstall { get; set; }
-
-    public bool SignModule { get; set; }
-
-    public bool PowerForgeReleaseStage { get; set; }
-
-    public bool UnifiedGitHubRelease { get; set; }
-
-    public string[] ArtifactPaths { get; set; } = Array.Empty<string>();
-}
-
 internal sealed class PowerForgeReleaseAssetEntry
 {
     public string Path { get; set; } = string.Empty;
@@ -1131,6 +1096,8 @@ internal sealed class PowerForgeReleaseAssetEntry
     public string? RelativeStagePath { get; set; }
 
     public string? StagedPath { get; set; }
+
+    public bool IsFinalPackageOutput { get; set; }
 }
 
 internal sealed class PowerForgeWorkspaceValidationOptions

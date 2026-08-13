@@ -270,4 +270,20 @@ public sealed partial class ReleasePublishExecutionService
                 segment.Configuration.Enabled &&
                 segment.Configuration.Destination == destination);
     }
+
+    private static bool HasEnabledModulePublisher(
+        string releaseConfigPath,
+        PowerForgeReleaseSpec spec)
+    {
+        if (spec.Module is null)
+            return false;
+        if (string.IsNullOrWhiteSpace(spec.Module.ConfigPath))
+            return true;
+
+        var moduleInput = UnifiedReleaseModuleInputResolver.Resolve(releaseConfigPath, spec.Module);
+        var context = new ModulePipelineConfigurationService().Load(moduleInput.ConfigPath!);
+        return (context.Spec.Segments ?? [])
+            .OfType<ConfigurationPublishSegment>()
+            .Any(static segment => segment.Configuration.Enabled);
+    }
 }

@@ -207,6 +207,15 @@
         "resolved": "4.6.2",
         "contentHash": "yQgmjfFximrNm9LIV3mL6T5MzjeC+epeE5rl4hXxAlYmxby7RM1dPSkIKXk9HNkl6G54h2JHOmLD46+Pey+IRg=="
       },
+      "VirusTotalAnalyzer": {
+        "type": "Transitive",
+        "resolved": "1.0.0",
+        "contentHash": "sg2uLSJS37PyZenldT55a+B93ct2bvz3653uU0FwFtv1v3bcrG453O7/n1hcSp9DO4burBNIyEu00O8ZWHptNQ==",
+        "dependencies": {
+          "Microsoft.Bcl.AsyncInterfaces": "10.0.10",
+          "System.Text.Json": "10.0.10"
+        }
+      },
       "xunit.abstractions": {
         "type": "Transitive",
         "resolved": "2.0.3",
@@ -253,7 +262,8 @@
           "NuGet.Configuration": "[7.6.0, )",
           "System.Reflection.Metadata": "[10.0.10, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
-          "System.Text.Json": "[10.0.10, )"
+          "System.Text.Json": "[10.0.10, )",
+          "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
       "powerforge.powershell": {

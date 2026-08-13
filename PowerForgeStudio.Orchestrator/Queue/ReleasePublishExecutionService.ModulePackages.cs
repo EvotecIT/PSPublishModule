@@ -254,6 +254,14 @@ public sealed partial class ReleasePublishExecutionService
         }
     }
 
+    private static void ApplySignedCheckpointArtifacts(
+        PowerForgeReleaseResult result,
+        ReleaseSigningExecutionResult signingResult)
+    {
+        foreach (var checkpoint in result.ModulePackagePlans ?? [])
+            ApplySignedCheckpointArtifacts(checkpoint.Release, signingResult);
+    }
+
     private static string[] ResolveSignedArtifacts(
         IEnumerable<string> checkpointedPaths,
         IReadOnlyList<string> signedPaths,
