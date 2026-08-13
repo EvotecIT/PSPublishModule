@@ -14,7 +14,7 @@ public sealed partial class WebAgentContentSecurityScanner
         @"(?:^|\s)(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|""[^""]*""|[^\s;&|]+)\s*)+(?:env\s+)?$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex PackageSourceEnvironmentRegex = new(
-        @"(?<![A-Za-z0-9_])(?:\$env:)?(?:NPM_CONFIG_[A-Za-z0-9_]+|PIP_INDEX_URL|PIP_EXTRA_INDEX_URL|PIP_CONFIG_FILE|UV_INDEX_URL|UV_EXTRA_INDEX_URL|BUN_INSTALL_REGISTRY|GEM_HOST|BUNDLE_MIRROR__[A-Za-z0-9_]+|CARGO_REGISTRIES_[A-Za-z0-9_]+_INDEX)\s*=",
+        @"(?<![A-Za-z0-9_])(?:\$env:)?(?:NPM_CONFIG_[A-Za-z0-9_]+|PIP_INDEX_URL|PIP_EXTRA_INDEX_URL|PIP_FIND_LINKS|PIP_CONFIG_FILE|UV_INDEX_URL|UV_EXTRA_INDEX_URL|BUN_INSTALL_REGISTRY|GEM_HOST|BUNDLE_MIRROR__[A-Za-z0-9_]+|CARGO_REGISTRIES_[A-Za-z0-9_]+_INDEX)\s*=",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ShellTokenRegex = new(
         @"['""](?<quoted>[^'""]+)['""]|(?<plain>[^\s]+)",
@@ -92,6 +92,9 @@ public sealed partial class WebAgentContentSecurityScanner
                     break;
                 case "composer":
                     ParseComposer(tokens, path, line, references, findings);
+                    break;
+                case "bundle":
+                    ParseBundle(tokens, path, line, references, findings);
                     break;
             }
         }
@@ -236,6 +239,11 @@ public sealed partial class WebAgentContentSecurityScanner
             AddRunnerOperand("npm", tokens[0] + " dlx", tokens, verbIndex + 1, path, line, references, findings);
             return;
         }
+        if (verb == "init")
+        {
+            AddNodeInitializer(tokens, verbIndex + 1, path, line, references, findings);
+            return;
+        }
         if (verb is not ("install" or "add"))
             return;
         AddMultipleOperands("npm", $"{tokens[0]} {tokens[verbIndex]}", tokens, verbIndex + 1, path, line, references, findings);
@@ -271,7 +279,7 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         if (command == "uv")
         {
-            var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "pip", "add", "tool" }, "uv", path, line, findings);
+            var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "pip", "add", "tool", "run" }, "uv", path, line, findings);
             var start = -1;
             if (verbIndex >= 0 && tokens[verbIndex].Equals("pip", StringComparison.OrdinalIgnoreCase))
             {
@@ -288,6 +296,16 @@ public sealed partial class WebAgentContentSecurityScanner
             }
             else if (verbIndex >= 0)
             {
+                if (tokens[verbIndex].Equals("run", StringComparison.OrdinalIgnoreCase))
+                {
+                    var dependencies = FindOptionValues(tokens, verbIndex + 1, "--with");
+                    if (dependencies.Count == 0)
+                        AddUnverifiableOperand("uv run", path, line, findings, "project dependency set");
+                    else
+                        foreach (var dependency in dependencies)
+                            AddToken("pypi", "uv run --with", dependency, null, path, line, references, findings);
+                    return;
+                }
                 start = verbIndex + 1;
             }
             if (start >= 0)
@@ -380,6 +398,11 @@ public sealed partial class WebAgentContentSecurityScanner
                 continue;
             if (token.StartsWith("-", StringComparison.Ordinal))
             {
+                if (ecosystem == "rubygems" && token.Equals("-v", StringComparison.OrdinalIgnoreCase) && index + 1 < tokens.Length)
+                {
+                    index++;
+                    continue;
+                }
                 if (!TrySkipOption(tokens, ref index))
                 {
                     AddUnverifiableOperand(command, path, line, findings, token);
@@ -663,7 +686,6 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("-s", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--index", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--version", StringComparison.OrdinalIgnoreCase) ||
-           option.Equals("-v", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-Version", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-RequiredVersion", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--tag", StringComparison.OrdinalIgnoreCase) ||
@@ -720,6 +742,7 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("--disable-pip-version-check", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--no-color", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--no-input", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("-v", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--save-dev", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-D", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--no-save", StringComparison.OrdinalIgnoreCase) ||

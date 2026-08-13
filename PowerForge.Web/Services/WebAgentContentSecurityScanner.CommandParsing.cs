@@ -25,6 +25,49 @@ public sealed partial class WebAgentContentSecurityScanner
         AddMultipleOperands("packagist", "composer require", tokens, verbIndex + 1, path, line, references, findings);
     }
 
+    private static void ParseBundle(
+        string[] tokens,
+        string path,
+        int line,
+        ICollection<WebAgentPackageReference> references,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        if (!ValidatePackageSourceOptions("rubygems", tokens, path, line, findings))
+            return;
+        var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "add", "install" }, "bundle", path, line, findings);
+        if (verbIndex < 0)
+            return;
+        if (tokens[verbIndex].Equals("install", StringComparison.OrdinalIgnoreCase))
+        {
+            AddUnverifiableOperand("bundle install", path, line, findings, "lockfile dependency set");
+            return;
+        }
+        AddMultipleOperands("rubygems", "bundle add", tokens, verbIndex + 1, path, line, references, findings);
+    }
+
+    private static void AddNodeInitializer(
+        string[] tokens,
+        int start,
+        string path,
+        int line,
+        ICollection<WebAgentPackageReference> references,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        var index = FindNextOperand(tokens, start);
+        if (index < 0)
+        {
+            AddUnverifiableOperand("npm init", path, line, findings, "initializer package");
+            return;
+        }
+        var operand = NormalizeToken(tokens[index]);
+        var package = operand.StartsWith('@')
+            ? operand.Contains('/')
+                ? operand[..operand.IndexOf('/')] + "/create-" + operand[(operand.IndexOf('/') + 1)..]
+                : operand + "/create"
+            : "create-" + operand;
+        AddToken("npm", "npm init", package, null, path, line, references, findings);
+    }
+
     private static void AddPowerShellNames(
         string command,
         string[] tokens,
@@ -112,7 +155,7 @@ public sealed partial class WebAgentContentSecurityScanner
     private static readonly string[] NodeVerbs =
     {
         "exec", "x", "dlx", "install", "i", "in", "ins", "inst", "insta", "instal",
-        "isnt", "isnta", "isntal", "isntall", "add", "ci", "config", "c", "conf"
+        "isnt", "isnta", "isntal", "isntall", "add", "ci", "config", "c", "conf", "init", "create", "innit"
     };
 
     private static string[] Tokenize(string command)
@@ -130,6 +173,7 @@ public sealed partial class WebAgentContentSecurityScanner
             "i" or "in" or "ins" or "inst" or "insta" or "instal" or
                 "isnt" or "isnta" or "isntal" or "isntall" => "install",
             "c" or "conf" => "config",
+            "create" or "innit" => "init",
             _ => verb
         };
     }

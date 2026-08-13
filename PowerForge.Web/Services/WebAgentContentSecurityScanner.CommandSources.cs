@@ -14,6 +14,15 @@ public sealed partial class WebAgentContentSecurityScanner
             var token = tokens[index];
             var separator = token.IndexOf('=');
             var option = separator > 0 ? token[..separator] : token;
+            if (ecosystem == "pypi" && (option.Equals("-r", StringComparison.OrdinalIgnoreCase) ||
+                                        option.Equals("--requirement", StringComparison.OrdinalIgnoreCase) ||
+                                        option.Equals("-c", StringComparison.OrdinalIgnoreCase) ||
+                                        option.Equals("--constraint", StringComparison.OrdinalIgnoreCase)))
+            {
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND", path, line,
+                    $"Python dependency input '{option}' can introduce packages that are not statically verifiable from the command.");
+                return false;
+            }
             if (!IsPackageSourceOption(ecosystem, option))
                 continue;
 
@@ -43,8 +52,10 @@ public sealed partial class WebAgentContentSecurityScanner
             "npm" => option.Equals("--registry", StringComparison.OrdinalIgnoreCase) ||
                      option.Equals("--userconfig", StringComparison.OrdinalIgnoreCase) ||
                      option.Equals("--globalconfig", StringComparison.OrdinalIgnoreCase),
-            "pypi" => option.Equals("--index-url", StringComparison.OrdinalIgnoreCase) ||
-                      option.Equals("-i", StringComparison.OrdinalIgnoreCase) ||
+             "pypi" => option.Equals("--index-url", StringComparison.OrdinalIgnoreCase) ||
+                       option.Equals("-i", StringComparison.OrdinalIgnoreCase) ||
+                       option.Equals("--index", StringComparison.OrdinalIgnoreCase) ||
+                       option.Equals("--default-index", StringComparison.OrdinalIgnoreCase) ||
                       option.Equals("--extra-index-url", StringComparison.OrdinalIgnoreCase) ||
                       option.Equals("--find-links", StringComparison.OrdinalIgnoreCase) ||
                       option.Equals("-f", StringComparison.OrdinalIgnoreCase) ||
@@ -74,7 +85,9 @@ public sealed partial class WebAgentContentSecurityScanner
             "powershellgallery" => value.Equals("PSGallery", StringComparison.OrdinalIgnoreCase),
             "npm" => value.Equals("https://registry.npmjs.org", StringComparison.OrdinalIgnoreCase),
             "pypi" when option.Equals("--index-url", StringComparison.OrdinalIgnoreCase) ||
-                        option.Equals("-i", StringComparison.OrdinalIgnoreCase) =>
+                        option.Equals("-i", StringComparison.OrdinalIgnoreCase) ||
+                        option.Equals("--index", StringComparison.OrdinalIgnoreCase) ||
+                        option.Equals("--default-index", StringComparison.OrdinalIgnoreCase) =>
                 value.Equals("https://pypi.org/simple", StringComparison.OrdinalIgnoreCase),
             "crates" when option.Equals("--registry", StringComparison.OrdinalIgnoreCase) =>
                 value.Equals("crates-io", StringComparison.OrdinalIgnoreCase),
