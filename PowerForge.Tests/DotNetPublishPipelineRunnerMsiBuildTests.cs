@@ -657,6 +657,97 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         }
     }
 
+    [Fact]
+    public void Plan_ReleaseGroupAllowsOverwriteForOnePlanPerInstaller()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            var monitoring = CreateReleaseGroupInstaller("monitoring.msi", "MonitoringFiles");
+            var agent = CreateReleaseGroupInstaller("agent.msi", "AgentFiles");
+            monitoring.Versioning!.AllowOutputOverwrite = true;
+            agent.Versioning!.AllowOutputOverwrite = true;
+            spec.Installers = new[] { monitoring, agent };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+
+            Assert.Equal(2, plan.MsiVersions.Count);
+            Assert.All(plan.MsiVersions.Values, version => Assert.True(version.AllowOutputOverwrite));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_ReleaseGroupCanonicalizesEquivalentDatesAndPublishProperties()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            var monitoring = CreateReleaseGroupInstaller("monitoring.msi", "MonitoringFiles");
+            var agent = CreateReleaseGroupInstaller("agent.msi", "AgentFiles");
+            monitoring.Versioning!.FloorDateUtc = "2026-08-01";
+            monitoring.Versioning.PublishProperties = Array.Empty<string>();
+            agent.Versioning!.FloorDateUtc = "20260801";
+            agent.Versioning.PublishProperties = new[]
+            {
+                "InformationalVersion",
+                "AssemblyVersion",
+                "Version",
+                "FileVersion",
+                "PackageVersion"
+            };
+            spec.Installers = new[] { monitoring, agent };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+
+            Assert.Equal(2, plan.MsiVersions.Count);
+            Assert.Single(plan.MsiVersions.Values.Select(version => version.Version).Distinct(StringComparer.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_ReleaseGroupComparesStatePathsUsingFileSystemSemantics()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            var monitoring = CreateReleaseGroupInstaller("monitoring.msi", "MonitoringFiles");
+            var agent = CreateReleaseGroupInstaller("agent.msi", "AgentFiles");
+            monitoring.Versioning!.StatePath = "Build/versioning/Product.state.json";
+            agent.Versioning!.StatePath = "Build/versioning/product.state.json";
+            spec.Installers = new[] { monitoring, agent };
+
+            if (OperatingSystem.IsWindows())
+            {
+                var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+                Assert.Equal(2, plan.MsiVersions.Count);
+            }
+            else
+            {
+                var exception = Assert.Throws<InvalidOperationException>(() =>
+                    new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+                Assert.Contains("resolved authority differs", exception.Message, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData(null, "app-1.0.1")]
     [InlineData("output", null)]
