@@ -1652,6 +1652,7 @@ internal static partial class WebPipelineRunner
 
         var apiLevelText = GetString(step, "apiLevel") ?? GetString(step, "api-level");
         var contentKindText = GetString(step, "contentKind") ?? GetString(step, "content-kind");
+        var installPolicyText = GetString(step, "installPolicy") ?? GetString(step, "install-policy");
         var apiIndexPaths = (GetArrayOfStrings(step, "apiIndexes") ??
                              GetArrayOfStrings(step, "api-indexes") ??
                              Array.Empty<string>())
@@ -1670,6 +1671,12 @@ internal static partial class WebPipelineRunner
         {
             SiteRoot = siteRoot,
             ContentKind = ParseLlmsContentKind(contentKindText),
+            InstallCommandPolicy = ParseLlmsInstallCommandPolicy(installPolicyText),
+            PublicationCatalogPath = ResolvePath(baseDir, GetString(step, "publicationCatalog") ?? GetString(step, "publication-catalog")),
+            NuGetOwner = GetString(step, "nugetOwner") ?? GetString(step, "nuget-owner"),
+            PowerShellGalleryOwner = GetString(step, "powerShellGalleryOwner") ?? GetString(step, "powershell-gallery-owner"),
+            PublicationCatalogMaxAgeHours = GetInt(step, "publicationCatalogMaxAgeHours") ??
+                                            GetInt(step, "publication-catalog-max-age-hours") ?? 0,
             ProjectFile = ResolvePath(baseDir, GetString(step, "project")),
             PackageFiles = packageFiles,
             ApiIndexPath = ResolvePath(baseDir, GetString(step, "apiIndex") ?? GetString(step, "api-index")),

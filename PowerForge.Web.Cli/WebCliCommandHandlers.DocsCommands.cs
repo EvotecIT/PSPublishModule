@@ -519,6 +519,11 @@ internal static partial class WebCliCommandHandlers
                        TryGetOptionValue(subArgs, "--path");
         var projectFile = TryGetOptionValue(subArgs, "--project");
         var contentKindText = TryGetOptionValue(subArgs, "--content-kind");
+        var installPolicyText = TryGetOptionValue(subArgs, "--install-policy");
+        var publicationCatalog = TryGetOptionValue(subArgs, "--publication-catalog");
+        var nugetOwner = TryGetOptionValue(subArgs, "--nuget-owner");
+        var powerShellGalleryOwner = TryGetOptionValue(subArgs, "--powershell-gallery-owner");
+        var publicationCatalogMaxAgeHoursText = TryGetOptionValue(subArgs, "--publication-catalog-max-age-hours");
         var packageFiles = ReadOptionList(subArgs, "--package-files");
         var apiIndex = TryGetOptionValue(subArgs, "--api-index");
         var apiIndexes = ReadOptionList(subArgs, "--api-indexes");
@@ -557,11 +562,28 @@ internal static partial class WebCliCommandHandlers
                 return Fail("Invalid --content-kind. Expected Package or Site.", outputJson, logger, "web.llms");
             contentKind = parsedContentKind;
         }
+        var installPolicy = WebLlmsInstallCommandPolicy.Declared;
+        if (!string.IsNullOrWhiteSpace(installPolicyText))
+        {
+            if (!Enum.TryParse<WebLlmsInstallCommandPolicy>(installPolicyText, true, out var parsedInstallPolicy) ||
+                !Enum.IsDefined(parsedInstallPolicy))
+                return Fail(
+                    "Invalid --install-policy. Expected Declared, VerifiedCatalog, or None.",
+                    outputJson,
+                    logger,
+                    "web.llms");
+            installPolicy = parsedInstallPolicy;
+        }
 
         var result = WebLlmsGenerator.Generate(new WebLlmsOptions
         {
             SiteRoot = siteRoot,
             ContentKind = contentKind,
+            InstallCommandPolicy = installPolicy,
+            PublicationCatalogPath = publicationCatalog,
+            NuGetOwner = nugetOwner,
+            PowerShellGalleryOwner = powerShellGalleryOwner,
+            PublicationCatalogMaxAgeHours = ParseIntOption(publicationCatalogMaxAgeHoursText, 0),
             ProjectFile = projectFile,
             PackageFiles = packageFiles.ToArray(),
             ApiIndexPath = apiIndex,

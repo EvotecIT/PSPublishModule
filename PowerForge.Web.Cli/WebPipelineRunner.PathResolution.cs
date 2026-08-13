@@ -148,6 +148,15 @@ internal static partial class WebPipelineRunner
         throw new InvalidOperationException($"Unsupported LLMS content kind '{value}'. Expected Package or Site.");
     }
 
+    private static WebLlmsInstallCommandPolicy ParseLlmsInstallCommandPolicy(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return WebLlmsInstallCommandPolicy.Declared;
+        if (Enum.TryParse<WebLlmsInstallCommandPolicy>(value, true, out var parsed) && Enum.IsDefined(parsed))
+            return parsed;
+        throw new InvalidOperationException(
+            $"Unsupported LLMS install command policy '{value}'. Expected Declared, VerifiedCatalog, or None.");
+    }
+
     private static void TryResolveApiFragmentsFromTheme(string siteConfigPath, ref string? head, ref string? header, ref string? footer)
     {
         if (string.IsNullOrWhiteSpace(siteConfigPath))

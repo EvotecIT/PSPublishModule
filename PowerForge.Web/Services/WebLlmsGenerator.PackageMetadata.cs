@@ -594,7 +594,7 @@ public static partial class WebLlmsGenerator
     {
         public string Id { get; set; } = string.Empty;
         public string? Version { get; set; }
-        public string InstallCommand { get; set; } = string.Empty;
+        public string? InstallCommand { get; set; }
         public bool IsPowerShellModule { get; set; }
         public bool IsDotNetTool { get; set; }
         public string? ToolCommandName { get; set; }

@@ -44,12 +44,15 @@ public static partial class WebLlmsGenerator
             if (typeCount.HasValue) lines.Add($"- API types: {typeCount.Value}");
             if (apiCatalogs.Count > 1) lines.Add($"- API catalogs: {apiCatalogs.Count}");
             lines.Add(string.Empty);
-            lines.Add("## Install");
-            if (packages.Count == 0)
-                lines.Add($"- {FormatInlineCode(legacyInstallCommand!)}");
-            else
-                AppendPackageInstallMarkdown(lines, packages);
-            lines.Add(string.Empty);
+            if (!string.IsNullOrWhiteSpace(legacyInstallCommand) || packages.Any(HasInstallCommand))
+            {
+                lines.Add("## Install");
+                if (packages.Count == 0)
+                    lines.Add($"- {FormatInlineCode(legacyInstallCommand!)}");
+                else
+                    AppendPackageInstallMarkdown(lines, packages);
+                lines.Add(string.Empty);
+            }
         }
         if (quickstart is not null)
         {
@@ -100,17 +103,18 @@ public static partial class WebLlmsGenerator
             if (packages.Count == 0)
             {
                 payload["package"] = packageId;
-                payload["install"] = new[] { legacyInstallCommand };
+                if (!string.IsNullOrWhiteSpace(legacyInstallCommand))
+                    payload["install"] = new[] { legacyInstallCommand };
             }
             else
             {
-                payload["packages"] = packages.Select(static package => new Dictionary<string, object?>
-                {
-                    ["id"] = package.Id,
-                    ["version"] = package.Version,
-                    ["install"] = package.InstallCommand
-                }).ToArray();
-                payload["install"] = packages.Select(static package => package.InstallCommand).ToArray();
+                payload["packages"] = packages.Select(CreatePackagePayload).ToArray();
+                var installCommands = packages
+                    .Select(static package => package.InstallCommand)
+                    .Where(static command => !string.IsNullOrWhiteSpace(command))
+                    .ToArray();
+                if (installCommands.Length > 0)
+                    payload["install"] = installCommands;
             }
         }
         if (apiCatalogs.Count == 1)
@@ -163,7 +167,8 @@ public static partial class WebLlmsGenerator
         if (!string.IsNullOrWhiteSpace(options.License)) lines.Add($"- License: {options.License}");
         if (!string.IsNullOrWhiteSpace(options.Targets)) lines.Add($"- Targets: {options.Targets}");
 
-        if (includePackageContent)
+        if (includePackageContent &&
+            (!string.IsNullOrWhiteSpace(legacyInstallCommand) || packages.Any(HasInstallCommand)))
         {
             lines.Add(string.Empty);
             lines.Add("## Installation");
@@ -227,11 +232,28 @@ public static partial class WebLlmsGenerator
     {
         foreach (var package in packages)
         {
+            if (!HasInstallCommand(package))
+                continue;
             var version = string.IsNullOrWhiteSpace(package.Version)
                 ? string.Empty
                 : $" — source version `{package.Version}`";
-            lines.Add($"- {FormatInlineCode(package.InstallCommand)}{version}");
+            lines.Add($"- {FormatInlineCode(package.InstallCommand!)}{version}");
         }
+    }
+
+    private static bool HasInstallCommand(PackageInfo package)
+        => !string.IsNullOrWhiteSpace(package.InstallCommand);
+
+    private static Dictionary<string, object?> CreatePackagePayload(PackageInfo package)
+    {
+        var payload = new Dictionary<string, object?>
+        {
+            ["id"] = package.Id,
+            ["version"] = package.Version
+        };
+        if (HasInstallCommand(package))
+            payload["install"] = package.InstallCommand;
+        return payload;
     }
 
     private static string FormatInlineCode(string value)

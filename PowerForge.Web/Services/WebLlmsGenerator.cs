@@ -15,6 +15,16 @@ public sealed class WebLlmsOptions
     public string[] PackageFiles { get; set; } = Array.Empty<string>();
     /// <summary>Content shape to generate. Site content omits package and installation metadata.</summary>
     public WebLlmsContentKind ContentKind { get; set; } = WebLlmsContentKind.Package;
+    /// <summary>Controls whether package installation commands are emitted.</summary>
+    public WebLlmsInstallCommandPolicy InstallCommandPolicy { get; set; } = WebLlmsInstallCommandPolicy.Declared;
+    /// <summary>Optional owner-scoped ecosystem stats catalog used by VerifiedCatalog installation policy.</summary>
+    public string? PublicationCatalogPath { get; set; }
+    /// <summary>Expected NuGet owner for verified .NET package and tool commands.</summary>
+    public string? NuGetOwner { get; set; }
+    /// <summary>Expected PowerShell Gallery owner for verified module commands.</summary>
+    public string? PowerShellGalleryOwner { get; set; }
+    /// <summary>Maximum accepted publication catalog age in hours; zero disables the age check.</summary>
+    public int PublicationCatalogMaxAgeHours { get; set; }
     /// <summary>Optional API index path.</summary>
     public string? ApiIndexPath { get; set; }
     /// <summary>Optional API index paths for sites that publish more than one API catalog.</summary>
@@ -61,6 +71,16 @@ public static partial class WebLlmsGenerator
                 nameof(options.ContentKind),
                 options.ContentKind,
                 "Unsupported LLMS content kind. Expected Package or Site.");
+        if (!Enum.IsDefined(options.InstallCommandPolicy))
+            throw new ArgumentOutOfRangeException(
+                nameof(options.InstallCommandPolicy),
+                options.InstallCommandPolicy,
+                "Unsupported LLMS install command policy. Expected Declared, VerifiedCatalog, or None.");
+        if (options.PublicationCatalogMaxAgeHours < 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(options.PublicationCatalogMaxAgeHours),
+                options.PublicationCatalogMaxAgeHours,
+                "Publication catalog maximum age cannot be negative.");
         if (!Enum.IsDefined(options.ApiDetailLevel))
             throw new ArgumentOutOfRangeException(
                 nameof(options.ApiDetailLevel),
@@ -119,6 +139,13 @@ public static partial class WebLlmsGenerator
                 primaryPackage?.IsPowerShellModule ?? projectInfo.IsPowerShellModule,
                 primaryPackage?.IsDotNetTool ?? projectInfo.IsDotNetTool)
             : null;
+        var installCommandCount = ApplyInstallCommandPolicy(
+            options,
+            packages,
+            packageId,
+            version,
+            projectInfo.IsPowerShellModule,
+            ref legacyInstallCommand);
         var overview = ResolveOverview(options, projectInfo, siteRoot, name, apiCatalogs.Count > 0);
         WriteLlmsTxt(llmsTxtPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart, options.DiscoveryContentPath, includePackageContent);
         WriteLlmsJson(llmsJsonPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, quickstart, includePackageContent);
@@ -133,6 +160,7 @@ public static partial class WebLlmsGenerator
             PackageId = packageId ?? string.Empty,
             Version = version ?? string.Empty,
             PackageCount = includePackageContent ? packages.Count == 0 ? 1 : packages.Count : 0,
+            InstallCommandCount = installCommandCount,
             ApiTypeCount = typeCount,
             ApiCatalogCount = apiCatalogs.Count
         };

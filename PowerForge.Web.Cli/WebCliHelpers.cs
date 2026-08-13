@@ -144,6 +144,8 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web links ignore-404 --source <404-suggestions.json> --config <site.json> (--path <url>|--without-suggestions|--all) [--reason <text>] [--review-csv <file>] [--output json]");
         Console.WriteLine("  powerforge-web contributions validate --root <dir> [--fail-on-warnings|--strict] [--output json]");
         Console.WriteLine("  powerforge-web llms --site-root <dir> [--content-kind Package|Site] [--project <path>] [--package-files <path[,path...]>] [--api-index <path>] [--api-indexes <path[,path...]>]");
+        Console.WriteLine("                     [--install-policy Declared|VerifiedCatalog|None] [--publication-catalog <file>] [--nuget-owner <owner>] [--powershell-gallery-owner <owner>]");
+        Console.WriteLine("                     [--publication-catalog-max-age-hours <hours>]");
         Console.WriteLine("                     [--api-base /api]");
         Console.WriteLine("                     [--name <Name>] [--package <Id>] [--version <X.Y.Z>] [--quickstart <file>]");
         Console.WriteLine("                     [--overview <text>] [--license <text>] [--targets <text>] [--discovery <file>] [--extra <file>]");

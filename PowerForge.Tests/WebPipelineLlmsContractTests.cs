@@ -148,6 +148,66 @@ public sealed class WebPipelineLlmsContractTests
     }
 
     [Fact]
+    public void LlmsStep_schema_declares_verified_install_catalog_contract()
+    {
+        var schemaDocument = JsonNode.Parse(File.ReadAllText(GetRepoPath(
+            "Schemas",
+            "powerforge.web.pipelinespec.schema.json")))!;
+        var properties = schemaDocument["$defs"]!["LlmsStep"]!["properties"]!;
+
+        foreach (var propertyName in new[] { "installPolicy", "install-policy" })
+        {
+            var values = properties[propertyName]!["enum"]!.AsArray()
+                .Select(static value => value!.GetValue<string>())
+                .ToArray();
+            Assert.Equal(new[] { "Declared", "VerifiedCatalog", "None" }, values);
+        }
+        foreach (var propertyName in new[]
+                 {
+                     "publicationCatalog", "publication-catalog", "nugetOwner", "nuget-owner",
+                     "powerShellGalleryOwner", "powershell-gallery-owner",
+                     "publicationCatalogMaxAgeHours", "publication-catalog-max-age-hours"
+                 })
+            Assert.NotNull(properties[propertyName]);
+    }
+
+    [Fact]
+    public void Llms_fingerprint_changes_when_publication_catalog_changes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-publication-fingerprint-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var catalogPath = Path.Combine(root, "publication.json");
+            File.WriteAllText(catalogPath, "{\"nuget\":{\"owner\":\"Evotec\",\"packages\":[]}}");
+            using var document = JsonDocument.Parse(
+                """
+                {
+                  "task": "llms",
+                  "siteRoot": "_site",
+                  "installPolicy": "VerifiedCatalog",
+                  "publicationCatalog": "publication.json"
+                }
+                """);
+            var method = typeof(WebPipelineRunner).GetMethod(
+                "ComputeStepFingerprint",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var first = (string)method!.Invoke(null, new object?[] { root, document.RootElement, null })!;
+            File.WriteAllText(catalogPath, "{\"nuget\":{\"owner\":\"Evotec\",\"packages\":[{\"id\":\"Example\"}]}}");
+            var second = (string)method.Invoke(null, new object?[] { root, document.RootElement, null })!;
+
+            Assert.NotEqual(first, second);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void LlmsStep_schema_declares_supported_path_aliases_and_api_index_arrays()
     {
         var schemaDocument = JsonNode.Parse(File.ReadAllText(GetRepoPath(
