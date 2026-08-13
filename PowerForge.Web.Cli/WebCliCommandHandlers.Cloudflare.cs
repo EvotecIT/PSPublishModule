@@ -265,7 +265,8 @@ internal static partial class WebCliCommandHandlers
             htmlPaths,
             dryRun,
             logger,
-            basePath: basePath);
+            basePath: basePath,
+            cache: siteProfile?.Cloudflare?.Cache);
 
         if (outputJson)
         {
@@ -340,7 +341,9 @@ internal static partial class WebCliCommandHandlers
             siteProfile.SecurityHeaders,
             dryRun,
             basePath: basePath,
-            agentReadiness: siteProfile.AgentReadiness);
+            agentReadiness: siteProfile.AgentReadiness,
+            cache: siteProfile.Cloudflare?.Cache,
+            smartTieredCache: siteProfile.Cloudflare?.SmartTieredCache);
         if (!result.Success)
             return Fail(result.Message, outputJson, logger, command);
 
@@ -362,6 +365,8 @@ internal static partial class WebCliCommandHandlers
                 ["changed"] = result.Changed,
                 ["responseHeaderManagedRuleCount"] = result.ResponseHeaderManagedRuleCount,
                 ["cacheManagedRuleCount"] = result.CacheManagedRuleCount,
+                ["smartTieredCacheManaged"] = result.SmartTieredCacheManaged,
+                ["smartTieredCacheEnabled"] = result.SmartTieredCacheEnabled,
                 ["message"] = message
             }, WebCliJson.Options);
             WebCliJsonWriter.Write(new WebCliJsonEnvelope
@@ -401,7 +406,16 @@ internal static partial class WebCliCommandHandlers
         if (string.IsNullOrWhiteSpace(token))
             return Fail($"Missing Cloudflare API token. Provide --token or set env var '{tokenEnv}'.", outputJson, logger, "web.cloudflare.purge");
 
-        var purgeEverything = HasOption(subArgs, "--purge-everything") || HasOption(subArgs, "--purgeEverything");
+        var purgeModeValue = TryGetOptionValue(subArgs, "--purge-mode") ??
+                             TryGetOptionValue(subArgs, "--purgeMode") ??
+                             siteProfile?.Cloudflare?.PurgeMode ??
+                             "files";
+        if (HasOption(subArgs, "--purge-everything") || HasOption(subArgs, "--purgeEverything"))
+            purgeModeValue = "everything";
+        if (HasOption(subArgs, "--purge-hostname") || HasOption(subArgs, "--purgeHostname"))
+            purgeModeValue = "hostname";
+        if (!CloudflareCachePurger.TryParseMode(purgeModeValue, out var purgeMode))
+            return Fail($"Unsupported purge mode '{purgeModeValue}'. Use files, hostname, or everything.", outputJson, logger, "web.cloudflare.purge");
         var dryRun = HasOption(subArgs, "--dry-run") || HasOption(subArgs, "--dryRun");
 
         var baseUrl = TryGetOptionValue(subArgs, "--base-url") ??
@@ -411,7 +425,7 @@ internal static partial class WebCliCommandHandlers
 
         var urls = ReadOptionList(subArgs, "--url", "--urls");
         var paths = ReadOptionList(subArgs, "--path", "--paths");
-        if (urls.Count == 0 && paths.Count == 0 && siteProfile is not null)
+        if (purgeMode == CloudflareCachePurgeMode.Files && urls.Count == 0 && paths.Count == 0 && siteProfile is not null)
             paths.AddRange(siteProfile.PurgePaths);
 
         if (paths.Count > 0)
@@ -423,26 +437,43 @@ internal static partial class WebCliCommandHandlers
         }
         urls = urls.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
+        IReadOnlyList<string> purgeTargets = urls;
+        if (purgeMode == CloudflareCachePurgeMode.Hostname)
+        {
+            var hostnames = ReadOptionList(subArgs, "--hostname", "--hostnames", "--host", "--hosts");
+            if (hostnames.Count == 0)
+            {
+                if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var siteUri) ||
+                    (siteUri.Scheme != Uri.UriSchemeHttp && siteUri.Scheme != Uri.UriSchemeHttps))
+                    return Fail("Hostname purge requires --site-config/--base-url or an explicit --hostname.", outputJson, logger, "web.cloudflare.purge");
+                hostnames.Add(siteUri.Host);
+            }
+            purgeTargets = hostnames;
+        }
+        else if (purgeMode == CloudflareCachePurgeMode.Everything)
+        {
+            purgeTargets = Array.Empty<string>();
+        }
+
         var (ok, message) = CloudflareCachePurger.Purge(
             zoneId: zoneId,
             apiToken: token,
-            purgeEverything: purgeEverything,
-            fileUrls: urls,
+            mode: purgeMode,
+            targets: purgeTargets,
             dryRun: dryRun,
             logger: logger);
 
         if (outputJson)
         {
-            var element = JsonSerializer.SerializeToElement(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["siteConfig"] = siteProfile?.SiteConfigPath,
-                ["zoneId"] = zoneId,
-                ["baseUrl"] = baseUrl,
-                ["purgeEverything"] = purgeEverything,
-                ["urlCount"] = urls.Count,
-                ["dryRun"] = dryRun,
-                ["message"] = message
-            }, WebCliJson.Options);
+            var element = BuildCloudflarePurgeResult(
+                siteProfile?.SiteConfigPath,
+                zoneId,
+                baseUrl,
+                purgeMode,
+                urls.Count,
+                purgeTargets.Count,
+                dryRun,
+                message);
 
             WebCliJsonWriter.Write(new WebCliJsonEnvelope
             {
@@ -459,6 +490,29 @@ internal static partial class WebCliCommandHandlers
         else logger.Error(message);
         return ok ? 0 : 1;
     }
+
+    internal static JsonElement BuildCloudflarePurgeResult(
+        string? siteConfig,
+        string zoneId,
+        string? baseUrl,
+        CloudflareCachePurgeMode purgeMode,
+        int urlCount,
+        int targetCount,
+        bool dryRun,
+        string message) => JsonSerializer.SerializeToElement(
+        new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["siteConfig"] = siteConfig,
+            ["zoneId"] = zoneId,
+            ["baseUrl"] = baseUrl,
+            ["purgeEverything"] = purgeMode == CloudflareCachePurgeMode.Everything,
+            ["urlCount"] = urlCount,
+            ["purgeMode"] = CloudflareCachePurger.FormatMode(purgeMode),
+            ["targetCount"] = targetCount,
+            ["dryRun"] = dryRun,
+            ["message"] = message
+        },
+        WebCliJson.Options);
 
     private static int HandleCloudflareVerify(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {

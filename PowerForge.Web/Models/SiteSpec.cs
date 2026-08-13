@@ -106,6 +106,8 @@ public sealed class SiteSpec
     public VerifyPolicySpec? Verify { get; set; }
     /// <summary>Agent-readiness discovery and policy output settings.</summary>
     public AgentReadinessSpec? AgentReadiness { get; set; }
+    /// <summary>Optional Cloudflare delivery policy for the generated static website.</summary>
+    public CloudflareSitePolicySpec? Cloudflare { get; set; }
     /// <summary>Build cache configuration.</summary>
     public BuildCacheSpec? Cache { get; set; }
 }

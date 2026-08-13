@@ -1,122 +1,175 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
-using System.Text;
-using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace PowerForge.Web.Cli;
 
+internal enum CloudflareCachePurgeMode
+{
+    Files,
+    Hostname,
+    Everything
+}
+
 internal static class CloudflareCachePurger
 {
-    private sealed class CloudflareResponse
-    {
-        public bool Success { get; set; }
-        public CloudflareMessage[] Errors { get; set; } = Array.Empty<CloudflareMessage>();
-        public CloudflareMessage[] Messages { get; set; } = Array.Empty<CloudflareMessage>();
-    }
-
-    private sealed class CloudflareMessage
-    {
-        public int Code { get; set; }
-        public string Message { get; set; } = string.Empty;
-    }
+    private const int MaxFileTargets = 100;
+    private const int MaxHostnameTargets = 30;
 
     internal static (bool ok, string message) Purge(
         string zoneId,
         string apiToken,
-        bool purgeEverything,
-        IReadOnlyList<string> fileUrls,
+        CloudflareCachePurgeMode mode,
+        IReadOnlyList<string> targets,
         bool dryRun,
-        WebConsoleLogger? logger)
+        WebConsoleLogger? logger,
+        HttpClient? httpClient = null)
     {
-        if (string.IsNullOrWhiteSpace(zoneId))
-            return (false, "Missing zoneId.");
+        var normalizedZoneId = (zoneId ?? string.Empty).Trim();
+        if (normalizedZoneId.Length != 32 || normalizedZoneId.Any(character => !Uri.IsHexDigit(character)))
+            return (false, "Cloudflare zoneId must be a 32-character hexadecimal identifier.");
         if (string.IsNullOrWhiteSpace(apiToken))
             return (false, "Missing apiToken.");
 
-        var urls = (fileUrls ?? Array.Empty<string>())
-            .Where(u => !string.IsNullOrWhiteSpace(u))
-            .Select(u => u.Trim())
+        var normalizedTargets = (targets ?? Array.Empty<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        if (!purgeEverything && urls.Length == 0)
-            return (false, "Nothing to purge: provide at least one URL/path or use purgeEverything.");
+        if (mode != CloudflareCachePurgeMode.Everything && normalizedTargets.Length == 0)
+            return (false, $"Nothing to purge in {FormatMode(mode)} mode.");
+
+        if (mode == CloudflareCachePurgeMode.Files)
+        {
+            if (normalizedTargets.Length > MaxFileTargets)
+                return (false, $"Cloudflare file purge accepts at most {MaxFileTargets} URLs per request.");
+
+            foreach (var target in normalizedTargets)
+            {
+                if (!Uri.TryCreate(target, UriKind.Absolute, out var uri) ||
+                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+                    string.IsNullOrWhiteSpace(uri.Host))
+                    return (false, $"Cloudflare file purge target must be an absolute HTTP or HTTPS URL: '{target}'.");
+            }
+        }
+        else if (mode == CloudflareCachePurgeMode.Hostname)
+        {
+            try
+            {
+                normalizedTargets = normalizedTargets
+                    .Select(CloudflareCachePolicyBuilder.NormalizeHostname)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            catch (ArgumentException ex)
+            {
+                return (false, ex.Message);
+            }
+
+            if (normalizedTargets.Length > MaxHostnameTargets)
+                return (false, $"Cloudflare hostname purge accepts at most {MaxHostnameTargets} hostnames per request.");
+        }
 
         if (dryRun)
         {
-            logger?.Info($"Cloudflare purge dry-run (zone={zoneId}, purgeEverything={purgeEverything}, urls={urls.Length}).");
-            foreach (var u in urls.Take(50))
-                logger?.Info($"  - {u}");
-            if (urls.Length > 50)
-                logger?.Info($"  ... ({urls.Length - 50} more)");
+            logger?.Info($"Cloudflare purge dry-run (zone={normalizedZoneId}, mode={FormatMode(mode)}, targets={normalizedTargets.Length}).");
+            foreach (var target in normalizedTargets.Take(50))
+                logger?.Info($"  - {target}");
+            if (normalizedTargets.Length > 50)
+                logger?.Info($"  ... ({normalizedTargets.Length - 50} more)");
             return (true, "Dry run.");
         }
 
-        using var http = new HttpClient
+        var payload = mode switch
         {
-            BaseAddress = new Uri("https://api.cloudflare.com/client/v4/")
+            CloudflareCachePurgeMode.Everything => new JsonObject { ["purge_everything"] = true },
+            CloudflareCachePurgeMode.Hostname => new JsonObject { ["hosts"] = BuildTargetArray(normalizedTargets) },
+            _ => new JsonObject { ["files"] = BuildTargetArray(normalizedTargets) }
         };
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"zones/{Uri.EscapeDataString(zoneId)}/purge_cache");
-        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {apiToken}");
-
-        var payload = purgeEverything
-            ? new Dictionary<string, object?> { ["purge_everything"] = true }
-            : new Dictionary<string, object?> { ["files"] = urls };
-
-        var json = JsonSerializer.Serialize(payload, WebCliJson.Options);
-        request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        HttpResponseMessage response;
+        var ownsHttpClient = httpClient is null;
+        httpClient ??= new HttpClient { BaseAddress = new Uri("https://api.cloudflare.com/client/v4/") };
         try
         {
-            response = http.Send(request);
-        }
-        catch (Exception ex)
-        {
-            return (false, $"Cloudflare purge request failed: {ex.GetType().Name}: {ex.Message}");
-        }
+            var response = CloudflareApiClient.Send(
+                httpClient,
+                HttpMethod.Post,
+                $"zones/{normalizedZoneId}/purge_cache",
+                apiToken,
+                payload);
+            if (!response.Success)
+                return (false, $"Cloudflare purge failed: {response.ErrorMessage}");
 
-        var body = string.Empty;
-        try
-        {
-            body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            return mode switch
+            {
+                CloudflareCachePurgeMode.Everything => (true, "Purged everything."),
+                CloudflareCachePurgeMode.Hostname => (true, $"Purged {normalizedTargets.Length} hostname(s)."),
+                _ => (true, $"Purged {normalizedTargets.Length} URL(s).")
+            };
         }
-        catch
+        finally
         {
-            // ignored: best-effort error message below
+            if (ownsHttpClient)
+                httpClient.Dispose();
         }
+    }
 
-        if (!response.IsSuccessStatusCode)
+    internal static bool TryParseMode(string? raw, out CloudflareCachePurgeMode mode)
+    {
+        switch ((raw ?? string.Empty).Trim().ToLowerInvariant())
         {
-            var status = (int)response.StatusCode;
-            var text = string.IsNullOrWhiteSpace(body) ? response.ReasonPhrase ?? "HTTP error" : body.Trim();
-            return (false, $"Cloudflare purge failed (HTTP {status}): {text}");
+            case "":
+            case "files":
+                mode = CloudflareCachePurgeMode.Files;
+                return true;
+            case "hostname":
+            case "host":
+            case "hosts":
+                mode = CloudflareCachePurgeMode.Hostname;
+                return true;
+            case "everything":
+            case "all":
+                mode = CloudflareCachePurgeMode.Everything;
+                return true;
+            default:
+                mode = default;
+                return false;
         }
+    }
 
-        CloudflareResponse? parsed = null;
-        try
+    internal static bool TryParseCanonicalMode(string? raw, out CloudflareCachePurgeMode mode)
+    {
+        switch (raw)
         {
-            parsed = JsonSerializer.Deserialize<CloudflareResponse>(body, WebCliJson.Options);
+            case "files":
+                mode = CloudflareCachePurgeMode.Files;
+                return true;
+            case "hostname":
+                mode = CloudflareCachePurgeMode.Hostname;
+                return true;
+            case "everything":
+                mode = CloudflareCachePurgeMode.Everything;
+                return true;
+            default:
+                mode = default;
+                return false;
         }
-        catch
-        {
-            // If the API shape changes, fall back to HTTP status success.
-        }
+    }
 
-        if (parsed is not null && !parsed.Success)
-        {
-            var error = parsed.Errors?.FirstOrDefault()?.Message;
-            if (string.IsNullOrWhiteSpace(error))
-                error = parsed.Messages?.FirstOrDefault()?.Message;
-            if (string.IsNullOrWhiteSpace(error))
-                error = "Unknown Cloudflare API error.";
-            return (false, $"Cloudflare purge failed: {error}");
-        }
+    internal static string FormatMode(CloudflareCachePurgeMode mode) => mode switch
+    {
+        CloudflareCachePurgeMode.Hostname => "hostname",
+        CloudflareCachePurgeMode.Everything => "everything",
+        _ => "files"
+    };
 
-        return (true, purgeEverything ? "Purged everything." : $"Purged {urls.Length} URL(s).");
+    private static JsonArray BuildTargetArray(IEnumerable<string> targets)
+    {
+        var array = new JsonArray();
+        foreach (var target in targets)
+            array.Add(target);
+        return array;
     }
 }
-

@@ -1,13 +1,14 @@
 # Cloudflare Site Policy, Purge, and Verification
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 PowerForge.Web owns the repeatable Cloudflare policy for static sites behind the
 Cloudflare proxy. It can:
 
 - reconcile host-scoped cache rules without replacing unrelated rules
 - set response security headers from the site's existing `AgentReadiness.SecurityHeaders` policy
-- purge deployed routes
+- optionally reconcile Smart Tiered Cache for the zone
+- purge individual URLs, a hostname, or the entire zone after deployment
 - verify live `CF-Cache-Status` behavior after warmup
 
 GitHub Pages does not consume `_headers`. A proxied GitHub Pages site therefore
@@ -32,20 +33,23 @@ powerforge-web cloudflare site-policy apply \
 ```
 
 The token needs write access to Cache Rules and Transform Rules for the target
-zone. Add Cache Purge permission when the same token also runs the post-deploy
-purge step. Keep the token in a protected environment or secret and pass only
-its environment-variable name to the CLI.
+zone. Add Cache Settings Write when `Cloudflare.SmartTieredCache` is configured,
+and add Cache Purge when the same token runs the post-deploy purge step. Keep the
+token in a protected environment or secret and pass only its environment-variable
+name to the CLI.
 
-The command manages two Cloudflare ruleset phases:
+The command manages two Cloudflare ruleset phases and, when configured, the
+zone's Smart Tiered Cache setting:
 
 - `http_request_cache_settings`: three cache rules
 - `http_response_headers_transform`: zero to five response-header rules (site-wide security, homepage discovery links, API Catalog media type/CORS, JSON discovery media type/CORS, and Markdown artifact media type/CORS, as configured)
 
 Rules outside the site's `PowerForge <Name>:` description prefix retain their
 positions. PowerForge avoids a write when the effective policy is already
-current. The combined command preflights both ruleset phases before its first
-write. If the second phase fails, it restores the snapshots taken before the
-operation and reports any incomplete rollback explicitly.
+current. The combined command preflights every managed surface before its first
+write. If a later write fails, it restores the snapshots and the previous Smart
+Tiered Cache state taken before the operation and reports any incomplete rollback
+explicitly.
 
 ## HSTS must be an explicit site decision
 
@@ -75,24 +79,47 @@ while DNS remains proxied. Keep HSTS disabled until that renewal path is stable,
 or until the site has moved to a host whose certificate lifecycle Cloudflare
 controls.
 
-## Standard cache policy
+## Cache policy
 
 The policy uses Free-plan-compatible Rules language (`eq`, `wildcard`,
 `starts_with()`, and `ends_with()`), not the paid `matches` operator.
 
+Sites without a `Cloudflare.Cache` block retain the compatibility policy:
+
 | Rule | Edge TTL | Browser TTL | Notes |
 | --- | ---: | ---: | --- |
-| HTML, docs, and API | 2 hours | 5 minutes | Includes directory routes and `.html`; does not cache 3xx/4xx/5xx responses. |
+| HTML, docs, and API | 2 hours | 5 minutes | Includes directory routes plus `.html` and `.htm`; does not cache 3xx/4xx/5xx responses. |
 | Data and discovery | Origin-controlled | Origin-controlled | Covers JSON, XML, text, sitemap, and LLM discovery files. |
-| Static assets | Origin-controlled | Origin-controlled | Covers CSS, JavaScript, images, fonts, maps, PDFs, archives, and Blazor binaries without pinning stable filenames to a long TTL. |
+| Static assets | Origin-controlled | Origin-controlled | Covers CSS, JavaScript, images, fonts, audio/video media, maps, PDFs, archives, and Blazor binaries. |
+
+For a generated static site, opt in to a longer edge TTL and hostname-wide purge:
+
+```json
+{
+  "Cloudflare": {
+    "Cache": {
+      "EdgeTtlSeconds": 604800
+    },
+    "PurgeMode": "hostname",
+    "SmartTieredCache": true
+  }
+}
+```
+
+This applies the configured edge TTL to every successful GET response for the
+opted-in static site, including HTML, data/discovery, static assets, and
+precompressed Blazor resources. Responses below 200 and at or above 500 are not
+cached;
+3xx and 4xx responses receive a zero edge TTL. Seven days is the edge default
+when the `Cache` block is present. Browser caching remains origin-controlled
+because a Cloudflare purge cannot remove an object already stored in a visitor's
+browser.
 
 Query strings remain part of the normal cache key. This avoids serving the wrong
 representation when an application uses query parameters for behavior rather
-than cache busting. Strong ETags remain enabled. Deployments should purge changed
-HTML and discovery paths after the origin update. PowerForge does not infer
-immutability from filename shape or override origin TTLs for stable asset URLs.
-Generated `_headers` grants a long immutable policy only to exact asset paths
-whose content hash PowerForge created.
+than cache busting. Strong ETags remain enabled. PowerForge does not infer
+immutability from filename shape. Generated `_headers` grants a long immutable
+policy only to exact asset paths whose content hash PowerForge created.
 
 Large documentation navigation trees do not produce one expression clause per
 directory. PowerForge represents trailing-slash and `.html` routes compactly and
@@ -136,7 +163,9 @@ backward compatibility.
 
 ## Purge and verify after deployment
 
-Purge routes inferred from `site.json`:
+The purge command uses `Cloudflare.PurgeMode` from `site.json`. With the static
+profile above, it purges every cached object for the site's hostname after the
+new origin content is available:
 
 ```bash
 powerforge-web cloudflare purge \
@@ -144,6 +173,10 @@ powerforge-web cloudflare purge \
   --token-env CLOUDFLARE_API_TOKEN \
   --site-config ./site.json
 ```
+
+Cloudflare accepts at most 30 normalized hostnames or 100 URLs in one purge
+request. PowerForge validates the applicable mode-specific limit before sending
+the request.
 
 Verify public cache behavior:
 
@@ -173,7 +206,10 @@ did not use the intended cache policy.
 
 Run purge only after the new origin content is available. A first request may be
 `MISS`; warmup followed by an allowed cache status proves that the edge can
-actually retain the response.
+actually retain the response. Prefer hostname purge for a generated static site
+with many routes; file purge remains useful when only a small, explicit URL set
+should be invalidated. Use zone-wide `everything` purge only when every hostname
+in the zone must be cleared.
 
 ## Cloudflare Pages readiness gate
 

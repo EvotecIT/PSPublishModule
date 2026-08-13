@@ -9,8 +9,8 @@ internal static class CloudflareCachePolicyBuilder
 {
     private const int MaxHtmlPaths = 64;
     private const int MaxRuleExpressionLength = 4096;
-    private const int HtmlEdgeTtlSeconds = 7200;
-    private const int HtmlBrowserTtlSeconds = 300;
+    private const int LegacyHtmlEdgeTtlSeconds = 7200;
+    private const int LegacyHtmlBrowserTtlSeconds = 300;
 
     private static readonly string[] DefaultHtmlPaths =
     {
@@ -31,12 +31,16 @@ internal static class CloudflareCachePolicyBuilder
         string hostname,
         string policyName,
         IReadOnlyCollection<string>? htmlPaths,
-        string? basePath = null)
+        string? basePath = null,
+        CloudflareCacheSpec? cache = null)
     {
         hostname = NormalizeHostname(hostname);
         policyName = NormalizePolicyName(policyName, hostname);
         basePath = NormalizeBasePath(basePath);
         var hostFilter = $"http.host eq \"{hostname}\" and http.request.method eq \"GET\" and ";
+        var allGetExpression = basePath == "/"
+            ? $"(http.host eq \"{hostname}\" and http.request.method eq \"GET\")"
+            : $"({hostFilter}({BuildPathClause("eq", basePath.TrimEnd('/'))} or {BuildPathClause("wildcard", basePath + "*")}))";
 
         var staticExpression = $"({hostFilter}(" + string.Join(" or ", new[]
         {
@@ -46,6 +50,9 @@ internal static class CloudflareCachePolicyBuilder
             BuildPathClause("wildcard", CombineBasePath(basePath, "/fonts/*")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/images/*")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/img/*")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/media/*")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/_framework/*")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/_content/*")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.map")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.css")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.js")),
@@ -55,9 +62,19 @@ internal static class CloudflareCachePolicyBuilder
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.jpeg")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.webp")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.svg")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.svgz")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.gif")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.apng")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.avif")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.ico")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.woff")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.woff2")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.ttf")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.mp4")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.webm")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.ogg")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.br")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.gz")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.pdf")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.zip")),
             BuildPathClause("wildcard", CombineBasePath(basePath, "/*.wasm")),
@@ -83,6 +100,8 @@ internal static class CloudflareCachePolicyBuilder
         routeClauses.Add(BuildScopedPathFunctionClause(basePath, "ends_with", "/"));
         routeClauses.Add(BuildScopedPathFunctionClause(basePath, "ends_with", ".html"));
         routeClauses.Add(BuildPathClause("wildcard", CombineBasePath(basePath, "/*.html")));
+        routeClauses.Add(BuildScopedPathFunctionClause(basePath, "ends_with", ".htm"));
+        routeClauses.Add(BuildPathClause("wildcard", CombineBasePath(basePath, "/*.htm")));
         var htmlExpression = $"({hostFilter}(" + string.Join(" or ", routeClauses) + "))";
 
         ValidateExpressionLength("static assets", staticExpression);
@@ -90,16 +109,32 @@ internal static class CloudflareCachePolicyBuilder
         ValidateExpressionLength("HTML docs and API", htmlExpression);
         var descriptionPrefix = CloudflareManagedRuleOwnership.BuildDescriptionPrefix(policyName, hostname, basePath);
 
+        var htmlEdgeTtlSeconds = cache?.EdgeTtlSeconds ?? LegacyHtmlEdgeTtlSeconds;
+        ValidateTtl("edge", htmlEdgeTtlSeconds);
+
+        var dataRule = cache is null
+            ? BuildRespectOriginRule($"{descriptionPrefix} data files", dataExpression)
+            : BuildOverrideRule($"{descriptionPrefix} data files", dataExpression, htmlEdgeTtlSeconds, browserTtlSeconds: null);
+        var staticRule = cache is null
+            ? BuildRespectOriginRule($"{descriptionPrefix} static assets", staticExpression)
+            : BuildOverrideRule($"{descriptionPrefix} static assets", allGetExpression, htmlEdgeTtlSeconds, browserTtlSeconds: null);
+
         return new JsonArray
         {
-            BuildOverrideRule($"{descriptionPrefix} HTML docs and API", htmlExpression, HtmlEdgeTtlSeconds, HtmlBrowserTtlSeconds),
-            BuildRespectOriginRule($"{descriptionPrefix} data files", dataExpression),
-            // Stable asset names are common (including Blazor framework files).
-            // Respect origin validators/TTLs so a managed rule cannot pin an old
-            // deployment in edge or browser caches. Fingerprinted assets can still
-            // carry immutable Cache-Control from the generated origin output.
-            BuildRespectOriginRule($"{descriptionPrefix} static assets", staticExpression)
+            BuildOverrideRule(
+                $"{descriptionPrefix} HTML docs and API",
+                htmlExpression,
+                htmlEdgeTtlSeconds,
+                cache is null ? LegacyHtmlBrowserTtlSeconds : null),
+            dataRule,
+            staticRule
         };
+    }
+
+    private static void ValidateTtl(string name, int value)
+    {
+        if (value is < 1 or > 31536000)
+            throw new ArgumentOutOfRangeException(name, value, $"Cloudflare {name} TTL must be between 1 and 31536000 seconds.");
     }
 
     internal static string NormalizeHostname(string hostname)
@@ -149,11 +184,12 @@ internal static class CloudflareCachePolicyBuilder
             .Where(path => path is not null)
             .Cast<string>()
             .Select(path => CombineBasePath(basePath, path))
-            // Directory routes and .html files are already covered by the compact
+            // Directory routes plus .html and .htm files are already covered by the compact
             // provider-wide clauses. Keep only exceptional extensionless routes so
             // large documentation menus do not inflate the Cloudflare expression.
             .Where(path => !path.EndsWith("/", StringComparison.Ordinal) &&
-                           !path.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+                           !path.EndsWith(".html", StringComparison.OrdinalIgnoreCase) &&
+                           !path.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(MaxHtmlPaths + 1)
             .ToArray();
@@ -235,8 +271,15 @@ internal static class CloudflareCachePolicyBuilder
         string description,
         string expression,
         int edgeTtlSeconds,
-        int browserTtlSeconds)
+        int? browserTtlSeconds)
     {
+        var browserTtl = browserTtlSeconds.HasValue
+            ? new JsonObject
+            {
+                ["mode"] = "override_origin",
+                ["default"] = browserTtlSeconds.Value
+            }
+            : new JsonObject { ["mode"] = "respect_origin" };
         var actionParameters = new JsonObject
         {
             ["cache"] = true,
@@ -246,11 +289,7 @@ internal static class CloudflareCachePolicyBuilder
                 ["default"] = edgeTtlSeconds,
                 ["status_code_ttl"] = BuildStatusCodeTtls(edgeTtlSeconds)
             },
-            ["browser_ttl"] = new JsonObject
-            {
-                ["mode"] = "override_origin",
-                ["default"] = browserTtlSeconds
-            },
+            ["browser_ttl"] = browserTtl,
             ["respect_strong_etags"] = true
         };
 

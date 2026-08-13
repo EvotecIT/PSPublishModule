@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json.Nodes;
+using PowerForge.Web;
 
 namespace PowerForge.Web.Cli;
 
@@ -33,7 +34,8 @@ internal static class CloudflareCachePolicyManager
         bool dryRun,
         WebConsoleLogger? logger,
         HttpClient? httpClient = null,
-        string? basePath = null)
+        string? basePath = null,
+        CloudflareCacheSpec? cache = null)
     {
         if (!TryValidateInputs(zoneId, apiToken, ref hostname, ref policyName, out var error))
             return Failure(error, hostname, policyName, dryRun);
@@ -41,7 +43,7 @@ internal static class CloudflareCachePolicyManager
         JsonArray managedRules;
         try
         {
-            managedRules = CloudflareCachePolicyBuilder.BuildManagedRules(hostname, policyName, htmlPaths, basePath);
+            managedRules = CloudflareCachePolicyBuilder.BuildManagedRules(hostname, policyName, htmlPaths, basePath, cache);
         }
         catch (ArgumentException ex)
         {
