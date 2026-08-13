@@ -186,6 +186,11 @@ public sealed partial class WebAgentContentSecurityScanner
         {
             return new PackageVerificationOutcome(false, "PFAGENT.PACKAGE.REGISTRY_RESPONSE_TOO_LARGE", ex.Message);
         }
+        catch (IOException ex)
+        {
+            return new PackageVerificationOutcome(false, "PFAGENT.PACKAGE.REGISTRY_UNAVAILABLE",
+                $"Registry response stream failed for '{package.Id}': {ex.Message}");
+        }
     }
 
     private PackageVerificationOutcome VerifyJsonVersions(

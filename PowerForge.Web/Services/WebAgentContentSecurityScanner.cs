@@ -75,6 +75,12 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                     "Configured agent-facing artifact does not exist.");
                 continue;
             }
+            if (HasSymbolicLinkComponent(siteRoot, fullPath))
+            {
+                AddFinding(findings, "error", "PFAGENT.ARTIFACT.SYMLINK", configuredPath, null,
+                    "Configured agent-facing artifacts and their parent paths must not be symbolic links or junctions.");
+                continue;
+            }
 
             var length = new FileInfo(fullPath).Length;
             if (length > options.MaxArtifactBytes)
@@ -209,6 +215,24 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
             throw new InvalidOperationException($"Agent-content artifact path escapes siteRoot: {relativePath}");
         }
         return fullPath;
+    }
+
+    private static bool HasSymbolicLinkComponent(string siteRoot, string fullPath)
+    {
+        var relative = Path.GetRelativePath(siteRoot, fullPath);
+        var current = siteRoot;
+        foreach (var segment in relative.Split(
+                     new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, segment);
+            FileSystemInfo info = Directory.Exists(current)
+                ? new DirectoryInfo(current)
+                : new FileInfo(current);
+            if (!string.IsNullOrWhiteSpace(info.LinkTarget))
+                return true;
+        }
+        return false;
     }
 
     private static IReadOnlyList<TextSegment> ExtractTextSegments(

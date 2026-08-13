@@ -147,6 +147,7 @@ public static partial class WebLlmsGenerator
             packageId,
             version,
             projectInfo.IsPowerShellModule,
+            projectInfo.IsDotNetTool,
             ref legacyInstallCommand);
         var overview = ResolveOverview(options, projectInfo, siteRoot, name, apiCatalogs.Count > 0);
         WriteLlmsTxt(llmsTxtPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart, options.DiscoveryContentPath, includePackageContent);
@@ -466,12 +467,22 @@ public static partial class WebLlmsGenerator
         return "csharp";
     }
 
-    private static string CreateInstallCommand(string packageId, bool isPowerShellModule, bool isDotNetTool)
+    private static string CreateInstallCommand(
+        string packageId,
+        bool isPowerShellModule,
+        bool isDotNetTool,
+        string? exactVersion = null)
         => isPowerShellModule
-            ? $"Install-Module {packageId}"
+            ? string.IsNullOrWhiteSpace(exactVersion)
+                ? $"Install-Module {packageId}"
+                : $"Install-Module {packageId} -RequiredVersion {exactVersion}"
             : isDotNetTool
-                ? $"dotnet tool install --global {packageId}"
-                : $"dotnet add package {packageId}";
+                ? string.IsNullOrWhiteSpace(exactVersion)
+                    ? $"dotnet tool install --global {packageId}"
+                    : $"dotnet tool install --global {packageId} --version {exactVersion}"
+                : string.IsNullOrWhiteSpace(exactVersion)
+                    ? $"dotnet add package {packageId}"
+                    : $"dotnet add package {packageId} --version {exactVersion}";
 
     private static void AppendApiDetails(List<string> lines, WebLlmsOptions options, IReadOnlyList<ApiCatalogInfo> apiCatalogs)
     {

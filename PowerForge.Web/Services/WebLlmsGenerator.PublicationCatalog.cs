@@ -8,6 +8,7 @@ public static partial class WebLlmsGenerator
         string? packageId,
         string? version,
         bool projectIsPowerShellModule,
+        bool projectIsDotNetTool,
         ref string? legacyInstallCommand)
     {
         if (options.ContentKind != WebLlmsContentKind.Package)
@@ -38,7 +39,17 @@ public static partial class WebLlmsGenerator
         {
             if (string.IsNullOrWhiteSpace(packageId) ||
                 !Contains(catalog, packageId, version, projectIsPowerShellModule, options))
+            {
                 legacyInstallCommand = null;
+            }
+            else
+            {
+                legacyInstallCommand = CreateInstallCommand(
+                    packageId,
+                    projectIsPowerShellModule,
+                    projectIsDotNetTool,
+                    version);
+            }
             return string.IsNullOrWhiteSpace(legacyInstallCommand) ? 0 : 1;
         }
 
@@ -46,6 +57,12 @@ public static partial class WebLlmsGenerator
         {
             if (!Contains(catalog, package.Id, package.Version, package.IsPowerShellModule, options))
                 package.InstallCommand = null;
+            else
+                package.InstallCommand = CreateInstallCommand(
+                    package.Id,
+                    package.IsPowerShellModule,
+                    package.IsDotNetTool,
+                    package.Version);
         }
 
         return packages.Count(HasInstallCommand);

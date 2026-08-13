@@ -24,7 +24,18 @@ public sealed class WebLlmsPublicationCatalogTests
         });
 
         Assert.Equal(1, result.InstallCommandCount);
-        Assert.Contains("dotnet add package Published.Package", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        Assert.Contains("dotnet add package Published.Package --version 1.2.3", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+
+        using var scanner = new WebAgentContentSecurityScanner();
+        var scan = scanner.Scan(new WebAgentContentSecurityOptions
+        {
+            SiteRoot = fixture.Root,
+            Files = new[] { "llms.txt", "llms-full.txt", "llms.json" },
+            PublicationCatalogPath = catalog,
+            NuGetOwner = "Evotec",
+            RequireOwnerVerification = new[] { "nuget:*" }
+        });
+        Assert.True(scan.Success, string.Join(" | ", scan.Findings.Select(static finding => finding.Message)));
     }
 
     [Fact]
@@ -217,7 +228,7 @@ public sealed class WebLlmsPublicationCatalogTests
         });
 
         Assert.Equal(1, result.InstallCommandCount);
-        Assert.Contains("Install-Module PublishedModule", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        Assert.Contains("Install-Module PublishedModule -RequiredVersion 1.2.3", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -246,8 +257,8 @@ public sealed class WebLlmsPublicationCatalogTests
         Assert.Equal(2, result.InstallCommandCount);
         var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
         var llmsJson = File.ReadAllText(result.LlmsJsonPath);
-        Assert.Contains("dotnet add package Shared.Package", llmsTxt, StringComparison.Ordinal);
-        Assert.Contains("Install-Module Shared.Package", llmsTxt, StringComparison.Ordinal);
+        Assert.Contains("dotnet add package Shared.Package --version 1.2.3", llmsTxt, StringComparison.Ordinal);
+        Assert.Contains("Install-Module Shared.Package -RequiredVersion 1.2.3", llmsTxt, StringComparison.Ordinal);
         Assert.Contains("\"source\": \"nuget\"", llmsJson, StringComparison.Ordinal);
         Assert.Contains("\"source\": \"powerShellGallery\"", llmsJson, StringComparison.Ordinal);
     }
