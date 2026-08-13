@@ -51,6 +51,14 @@ public sealed class WebAuditResult
     public int RenderedFailedRequestCount { get; set; }
     /// <summary>Total low-contrast findings detected during rendered checks.</summary>
     public int RenderedContrastIssueCount { get; set; }
+    /// <summary>Total agent-readable artifacts scanned.</summary>
+    public int AgentArtifactCount { get; set; }
+    /// <summary>Total package references extracted from agent-readable artifacts.</summary>
+    public int AgentPackageReferenceCount { get; set; }
+    /// <summary>Total package references verified successfully.</summary>
+    public int AgentVerifiedPackageCount { get; set; }
+    /// <summary>Total external hosts checked from agent-readable artifacts.</summary>
+    public int AgentExternalHostCount { get; set; }
     /// <summary>Total errors emitted by audit.</summary>
     public int ErrorCount { get; set; }
     /// <summary>Total warnings emitted by audit.</summary>

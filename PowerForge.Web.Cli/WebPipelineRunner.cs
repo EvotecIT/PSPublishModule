@@ -53,7 +53,7 @@ internal static partial class WebPipelineRunner
         "psManifestPath", "ps-manifest-path", "powerShellManifestPath", "powershell-manifest-path",
         "psCommandMetadataPath", "ps-command-metadata-path", "powerShellCommandMetadataPath", "powershell-command-metadata-path",
         "catalog", "catalogPath", "catalog-path",
-        "publicationCatalog", "publication-catalog",
+        "publicationCatalog", "publication-catalog", "agentPublicationCatalog", "agent-publication-catalog",
         "sourcesRoot", "sources-root", "contentRoot", "content-root",
         "apiRoot", "api-root", "examplesRoot", "examples-root",
         "sourceDocsPaths", "source-docs-paths", "sourceApiPaths", "source-api-paths",

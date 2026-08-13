@@ -83,6 +83,11 @@ internal static partial class WebCliHelpers
         Console.WriteLine("                     [--sarif] [--sarif-path <file>]");
         Console.WriteLine("                     [--warning-preview <n>] [--error-preview <n>]");
         Console.WriteLine("                     [--suppress-issue <code|substring|wildcard|re:...>]");
+        Console.WriteLine("                     [--agent-content-security] [--agent-content-file <path>] [--agent-publication-catalog <file>]");
+        Console.WriteLine("                     [--agent-nuget-owner <owner>] [--agent-powershell-gallery-owner <owner>] [--agent-require-owner <ecosystem:pattern>]");
+        Console.WriteLine("                     [--agent-registry-package <ecosystem:id>] [--agent-no-package-verification] [--agent-verify-external-hosts]");
+        Console.WriteLine("                     [--agent-trusted-domain <domain>] [--agent-request-timeout-seconds <n>] [--agent-max-artifact-bytes <n>] [--agent-no-prompt-injection]");
+        Console.WriteLine("                     [--agent-max-package-references <n>] [--agent-max-external-hosts <n>] [--agent-max-registry-response-bytes <n>] [--agent-max-network-duration-seconds <n>]");
         Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban]");
         Console.WriteLine("                     [--maintenance-profile conservative|balanced|aggressive] [--starter-profile standard|multi-project-api-suite]");
         Console.WriteLine("                     [--suite-project-slug <slug>] [--suite-project-name <name>] [--suite-project-surface powershell|dotnet] [--output json]");

@@ -101,6 +101,41 @@ internal static partial class WebPipelineRunner
         var maxTotalFiles = GetInt(step, "maxTotalFiles") ?? GetInt(step, "max-total-files") ?? 0;
         var maxFileBytes = GetLong(step, "maxFileBytes") ?? GetLong(step, "max-file-bytes") ?? 0;
         var suppressIssues = GetArrayOfStrings(step, "suppressIssues") ?? GetArrayOfStrings(step, "suppress-issues");
+        var checkAgentContentSecurity = GetStrictAgentBool(
+            step, false, "checkAgentContentSecurity", "check-agent-content-security");
+        var agentContentFiles = GetStrictAgentStringArray(
+            step, "agentContentFiles", "agent-content-files");
+        var agentPublicationCatalog = ResolvePath(baseDir,
+            GetStrictAgentString(step, "agentPublicationCatalog", "agent-publication-catalog"));
+        var agentPublicationCatalogMaxAgeHours = GetStrictAgentInt(
+            step, 0, 0, "agentPublicationCatalogMaxAgeHours", "agent-publication-catalog-max-age-hours");
+        var agentNuGetOwner = GetStrictAgentString(step, "agentNuGetOwner", "agent-nuget-owner");
+        var agentPowerShellGalleryOwner = GetStrictAgentString(
+            step, "agentPowerShellGalleryOwner", "agent-powershell-gallery-owner");
+        var agentRequireOwnerVerification = GetStrictAgentStringArray(
+            step, "agentRequireOwnerVerification", "agent-require-owner-verification");
+        var agentRegistryVerifiedPackages = GetStrictAgentStringArray(
+            step, "agentRegistryVerifiedPackages", "agent-registry-verified-packages");
+        var agentVerifyPackages = GetStrictAgentBool(
+            step, true, "agentVerifyPackages", "agent-verify-packages");
+        var agentVerifyExternalHosts = GetStrictAgentBool(
+            step, false, "agentVerifyExternalHosts", "agent-verify-external-hosts");
+        var agentTrustedDomains = GetStrictAgentStringArray(
+            step, "agentTrustedDomains", "agent-trusted-domains");
+        var agentRequestTimeoutSeconds = GetStrictAgentInt(
+            step, 15, 1, "agentRequestTimeoutSeconds", "agent-request-timeout-seconds");
+        var agentMaxArtifactBytes = GetStrictAgentLong(
+            step, 5 * 1024 * 1024, 1, "agentMaxArtifactBytes", "agent-max-artifact-bytes");
+        var agentMaxPackageReferences = GetStrictAgentInt(
+            step, 100, 1, "agentMaxPackageReferences", "agent-max-package-references");
+        var agentMaxExternalHosts = GetStrictAgentInt(
+            step, 100, 1, "agentMaxExternalHosts", "agent-max-external-hosts");
+        var agentMaxRegistryResponseBytes = GetStrictAgentLong(
+            step, 2 * 1024 * 1024, 1, "agentMaxRegistryResponseBytes", "agent-max-registry-response-bytes");
+        var agentMaxNetworkDurationSeconds = GetStrictAgentInt(
+            step, 120, 1, "agentMaxNetworkDurationSeconds", "agent-max-network-duration-seconds");
+        var agentCheckPromptInjection = GetStrictAgentBool(
+            step, true, "agentCheckPromptInjection", "agent-check-prompt-injection");
 
         EnforceExplicitAuditCheckContract(step, "audit");
 
@@ -235,7 +270,31 @@ internal static partial class WebPipelineRunner
             CheckUnicodeReplacementChars = checkReplacement,
             CheckNetworkHints = checkNetworkHints ?? true,
             CheckRenderBlockingResources = checkRenderBlocking ?? true,
-            MaxHeadBlockingResources = maxHeadBlockingResources ?? new WebAuditOptions().MaxHeadBlockingResources
+            MaxHeadBlockingResources = maxHeadBlockingResources ?? new WebAuditOptions().MaxHeadBlockingResources,
+            AgentContentSecurity = checkAgentContentSecurity
+                ? new WebAgentContentSecurityOptions
+                {
+                    SiteRoot = siteRoot,
+                    Files = agentContentFiles ?? new[] { "llms.txt", "llms-full.txt", "llms.json" },
+                    PublicationCatalogPath = agentPublicationCatalog,
+                    PublicationCatalogMaxAgeHours = agentPublicationCatalogMaxAgeHours,
+                    NuGetOwner = agentNuGetOwner,
+                    PowerShellGalleryOwner = agentPowerShellGalleryOwner,
+                    RequireOwnerVerification = agentRequireOwnerVerification ??
+                        BuildDefaultAgentOwnerSelectors(agentNuGetOwner, agentPowerShellGalleryOwner),
+                    RegistryVerifiedPackages = agentRegistryVerifiedPackages ?? Array.Empty<string>(),
+                    VerifyPackages = agentVerifyPackages,
+                    VerifyExternalHosts = agentVerifyExternalHosts,
+                    TrustedDomains = agentTrustedDomains ?? Array.Empty<string>(),
+                    RequestTimeoutSeconds = agentRequestTimeoutSeconds,
+                    MaxArtifactBytes = agentMaxArtifactBytes,
+                    MaxPackageReferences = agentMaxPackageReferences,
+                    MaxExternalHosts = agentMaxExternalHosts,
+                    MaxRegistryResponseBytes = agentMaxRegistryResponseBytes,
+                    MaxNetworkDurationSeconds = agentMaxNetworkDurationSeconds,
+                    CheckPromptInjection = agentCheckPromptInjection
+                }
+                : null
         });
 
         string? baselineWrittenPath = null;
@@ -255,5 +314,92 @@ internal static partial class WebPipelineRunner
 
         if (!audit.Success)
             throw new InvalidOperationException(stepResult.Message);
+    }
+
+    private static string[] BuildDefaultAgentOwnerSelectors(string? nuGetOwner, string? powerShellGalleryOwner)
+    {
+        var selectors = new List<string>(2);
+        if (!string.IsNullOrWhiteSpace(nuGetOwner))
+            selectors.Add("nuget:*");
+        if (!string.IsNullOrWhiteSpace(powerShellGalleryOwner))
+            selectors.Add("powershellgallery:*");
+        return selectors.ToArray();
+    }
+
+    private static int GetStrictAgentInt(
+        JsonElement step,
+        int fallback,
+        int minimum,
+        params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!step.TryGetProperty(name, out var value))
+                continue;
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var parsed) || parsed < minimum)
+                throw new InvalidOperationException($"{name} must be an integer greater than or equal to {minimum}.");
+            return parsed;
+        }
+        return fallback;
+    }
+
+    private static long GetStrictAgentLong(
+        JsonElement step,
+        long fallback,
+        long minimum,
+        params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!step.TryGetProperty(name, out var value))
+                continue;
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out var parsed) || parsed < minimum)
+                throw new InvalidOperationException($"{name} must be an integer greater than or equal to {minimum}.");
+            return parsed;
+        }
+        return fallback;
+    }
+
+    private static bool GetStrictAgentBool(JsonElement step, bool fallback, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!step.TryGetProperty(name, out var value))
+                continue;
+            if (value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                throw new InvalidOperationException($"{name} must be a boolean.");
+            return value.GetBoolean();
+        }
+        return fallback;
+    }
+
+    private static string? GetStrictAgentString(JsonElement step, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!step.TryGetProperty(name, out var value))
+                continue;
+            if (value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString()))
+                throw new InvalidOperationException($"{name} must be a non-empty string.");
+            return value.GetString()!.Trim();
+        }
+        return null;
+    }
+
+    private static string[]? GetStrictAgentStringArray(JsonElement step, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!step.TryGetProperty(name, out var value))
+                continue;
+            if (value.ValueKind != JsonValueKind.Array ||
+                value.EnumerateArray().Any(static item =>
+                    item.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(item.GetString())))
+            {
+                throw new InvalidOperationException($"{name} must be an array of non-empty strings.");
+            }
+            return value.EnumerateArray().Select(static item => item.GetString()!.Trim()).ToArray();
+        }
+        return null;
     }
 }

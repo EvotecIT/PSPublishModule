@@ -57,6 +57,25 @@ Notes:
 | --- | --- |
 | `PFWEB.GITSYNC.SECURITY` | Inline token detected in `git-sync` config; prefer `tokenEnv` + CI secrets. |
 
+## Agent Content Audit Codes
+
+These identifiers are emitted directly by the optional final-artifact scanner.
+Within a site audit they are retained in the normalized issue rule/hint under
+category `agent-content`, so the findings flow through baseline, summary, and
+SARIF output.
+
+| Code / Prefix | Meaning |
+| --- | --- |
+| `PFAGENT.ARTIFACT` | A configured machine-facing artifact is missing, oversized, or invalid JSON. |
+| `PFAGENT.TEXT` | Invalid UTF-8, invisible Unicode controls, or a high-confidence prompt directive. |
+| `PFAGENT.COMMAND.REMOTE_EXECUTION` | Downloaded content is piped directly into a shell or interpreter. |
+| `PFAGENT.PACKAGE.INVALID_ID` | A package identifier uses an invalid registry shape or non-ASCII lookalike characters. |
+| `PFAGENT.PACKAGE.NOT_FOUND` | The referenced package is not registered. |
+| `PFAGENT.PACKAGE.VERSION_NOT_FOUND` | The referenced exact version is not registered. |
+| `PFAGENT.PACKAGE.OWNER_*` | Required owner-scoped publication proof is absent or mismatched. |
+| `PFAGENT.PACKAGE.REGISTRY_*` | Registry verification timed out, was unavailable, or returned malformed data. |
+| `PFAGENT.HOST` | An optional external-host check found an unresolved, non-public, or dangling-service destination. |
+
 ## Suppression Examples
 
 `site.json`:

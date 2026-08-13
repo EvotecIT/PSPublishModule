@@ -587,7 +587,8 @@ internal static partial class WebCliCommandHandlers
             CheckMediaEmbeds = checkMediaEmbeds,
             CheckNetworkHints = checkNetworkHints,
             CheckRenderBlockingResources = checkRenderBlocking,
-            MaxHeadBlockingResources = maxHeadBlockingResources
+            MaxHeadBlockingResources = maxHeadBlockingResources,
+            AgentContentSecurity = BuildAgentContentSecurityOptions(subArgs, siteRoot, baselineRoot)
         });
 
         string? writtenBaselinePath = null;
@@ -644,6 +645,8 @@ internal static partial class WebCliCommandHandlers
         logger.Info($"Pages: {result.PageCount}");
         logger.Info($"Links: {result.LinkCount} (broken {result.BrokenLinkCount})");
         logger.Info($"Assets: {result.AssetCount} (missing {result.MissingAssetCount})");
+        if (result.AgentArtifactCount > 0)
+            logger.Info($"Agent content: {result.AgentArtifactCount} artifacts, {result.AgentPackageReferenceCount} package references ({result.AgentVerifiedPackageCount} verified), {result.AgentExternalHostCount} external hosts checked");
         logger.Info($"Navigation: checked {result.NavCheckedCount}, ignored {result.NavIgnoredCount}, coverage {result.NavCoveragePercent:0.0}%, mismatches {result.NavMismatchCount}");
         if (result.RequiredRouteCount > 0)
             logger.Info($"Required routes: {result.RequiredRouteCount} (missing {result.MissingRequiredRouteCount})");

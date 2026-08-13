@@ -70,6 +70,14 @@ internal static partial class WebPipelineRunner
         if (!IsCacheableTask(task))
             return false;
 
+        if (task.Equals("audit", StringComparison.OrdinalIgnoreCase) &&
+            (GetBool(step, "checkAgentContentSecurity") ?? GetBool(step, "check-agent-content-security") ?? false))
+        {
+            // Owner catalogs have freshness windows and registry/DNS evidence is live.
+            // A cache hit must never bypass those security checks.
+            return false;
+        }
+
         if (task.Equals("agent-ready", StringComparison.OrdinalIgnoreCase) ||
             task.Equals("agentready", StringComparison.OrdinalIgnoreCase))
         {
@@ -228,6 +236,20 @@ internal static partial class WebPipelineRunner
                     if (!string.IsNullOrWhiteSpace(nestedResolved))
                         yield return Path.GetFullPath(nestedResolved);
                 }
+            }
+        }
+
+        if (string.Equals(GetString(step, "task"), "audit", StringComparison.OrdinalIgnoreCase) &&
+            (GetBool(step, "checkAgentContentSecurity") ?? GetBool(step, "check-agent-content-security") ?? false))
+        {
+            var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+            var agentFiles = GetArrayOfStrings(step, "agentContentFiles") ??
+                             GetArrayOfStrings(step, "agent-content-files") ??
+                             new[] { "llms.txt", "llms-full.txt", "llms.json" };
+            if (!string.IsNullOrWhiteSpace(siteRoot))
+            {
+                foreach (var agentFile in agentFiles.Where(static path => !string.IsNullOrWhiteSpace(path)))
+                    yield return Path.GetFullPath(Path.Combine(siteRoot, agentFile));
             }
         }
 

@@ -148,6 +148,8 @@ public sealed class WebAuditOptions
     public bool CheckMetaCharset { get; set; } = true;
     /// <summary>When true, warn when replacement characters are present in output.</summary>
     public bool CheckUnicodeReplacementChars { get; set; } = true;
+    /// <summary>Optional final-artifact security scan for agent-readable content.</summary>
+    public WebAgentContentSecurityOptions? AgentContentSecurity { get; set; }
     /// <summary>Optional baseline file path for issue key suppression/diffing.</summary>
     public string? BaselinePath { get; set; }
     /// <summary>
