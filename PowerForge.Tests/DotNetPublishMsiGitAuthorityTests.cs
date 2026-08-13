@@ -12,6 +12,7 @@ public sealed class DotNetPublishMsiGitAuthorityTests
         const string json = """
             {
               "Enabled": true,
+              "ReleaseGroup": "product-release",
               "Monotonic": true,
               "StatePath": "Build/versioning/app.json",
               "Authority": "GitTags",
@@ -26,7 +27,8 @@ public sealed class DotNetPublishMsiGitAuthorityTests
         var versioning = JsonSerializer.Deserialize<DotNetPublishMsiVersionOptions>(json, options);
 
         Assert.NotNull(versioning);
-        Assert.Equal(DotNetPublishMsiVersionAuthorityKind.GitTags, versioning!.Authority);
+        Assert.Equal("product-release", versioning!.ReleaseGroup);
+        Assert.Equal(DotNetPublishMsiVersionAuthorityKind.GitTags, versioning.Authority);
         Assert.Equal("syncse", versioning.AuthorityKey);
         Assert.Equal("origin", versioning.GitRemote);
         Assert.Equal("powerforge-msi", versioning.GitTagPrefix);

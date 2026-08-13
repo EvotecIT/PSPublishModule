@@ -537,6 +537,126 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         }
     }
 
+    [Fact]
+    public void Plan_ReleaseGroupSharesOneVersionAndReservationAcrossInstallers()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            spec.Installers = new[]
+            {
+                CreateReleaseGroupInstaller("monitoring.msi", "MonitoringFiles"),
+                CreateReleaseGroupInstaller("agent.msi", "AgentFiles")
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+
+            Assert.Equal(2, plan.MsiVersions.Count);
+            var versions = plan.MsiVersions.Values.ToArray();
+            Assert.Single(versions.Select(version => version.Version).Distinct(StringComparer.OrdinalIgnoreCase));
+            Assert.Single(versions.Select(version => version.StatePath).Distinct(StringComparer.OrdinalIgnoreCase));
+
+            const string reservationOwner = "shared-release-owner";
+            foreach (var version in versions)
+            {
+                DotNetPublishPipelineRunner.ReserveMsiVersionState(
+                    version,
+                    "shared release group test",
+                    reservationOwner);
+            }
+
+            var state = File.ReadAllText(versions[0].StatePath!);
+            Assert.Contains($"\"ReservationOwner\": \"{reservationOwner}\"", state, StringComparison.Ordinal);
+            Assert.True(DotNetPublishPipelineRunner.ReleaseMsiVersionStateReservation(versions[0], reservationOwner));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_ReleaseGroupRejectsDifferentVersionAuthorities()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            var monitoring = CreateReleaseGroupInstaller("monitoring.msi", "MonitoringFiles");
+            var agent = CreateReleaseGroupInstaller("agent.msi", "AgentFiles");
+            agent.Versioning!.StatePath = "Build/versioning/agent.state.json";
+            spec.Installers = new[] { monitoring, agent };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+
+            Assert.Contains("release group 'product-release'", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("resolved authority differs", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void Plan_ReleaseGroupRequiresMonotonicPublishVersioning(bool monotonic, bool applyToPublish)
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            var installer = CreateReleaseGroupInstaller("app.msi", "ProductFiles");
+            installer.Versioning!.Monotonic = monotonic;
+            installer.Versioning.ApplyToPublish = applyToPublish;
+            spec.Installers = new[] { installer };
+
+            var exception = Assert.Throws<ArgumentException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+
+            Assert.Contains("ReleaseGroup requires Monotonic=true and ApplyToPublish=true", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Plan_ReleaseGroupExcludesDisabledInstallersRegardlessOfOrdering(bool disabledFirst)
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            var enabled = CreateReleaseGroupInstaller("enabled.msi", "EnabledFiles");
+            var disabled = CreateReleaseGroupInstaller("disabled.msi", "DisabledFiles");
+            disabled.Versioning!.Enabled = false;
+            spec.Installers = disabledFirst
+                ? new[] { disabled, enabled }
+                : new[] { enabled, disabled };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+
+            var version = Assert.Single(plan.MsiVersions);
+            Assert.StartsWith("enabled.msi|", version.Key, StringComparison.OrdinalIgnoreCase);
+            Assert.False(string.IsNullOrWhiteSpace(version.Value.Version));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData(null, "app-1.0.1")]
     [InlineData("output", null)]
@@ -2649,6 +2769,27 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             CompanyFolderName = "Evotec",
             InstallDirectoryName = "App",
             PayloadComponentGroupId = payloadComponentGroupId
+        };
+    }
+
+    private static DotNetPublishInstaller CreateReleaseGroupInstaller(string id, string payloadComponentGroupId)
+    {
+        return new DotNetPublishInstaller
+        {
+            Id = id,
+            PrepareFromTarget = "app",
+            Authoring = CreateSimpleAuthoring(payloadComponentGroupId),
+            Versioning = new DotNetPublishMsiVersionOptions
+            {
+                ReleaseGroup = "product-release",
+                Enabled = true,
+                Major = 27,
+                Minor = 0,
+                FloorDateUtc = "2026-08-01",
+                Monotonic = true,
+                StatePath = "Build/versioning/product-release.state.json",
+                ApplyToPublish = true
+            }
         };
     }
 
