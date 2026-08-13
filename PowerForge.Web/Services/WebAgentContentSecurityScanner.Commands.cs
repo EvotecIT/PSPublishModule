@@ -5,7 +5,16 @@ namespace PowerForge.Web;
 public sealed partial class WebAgentContentSecurityScanner
 {
     private static readonly Regex CommandSegmentRegex = new(
-        @"(?<command>(?:dotnet|dnx|Install-Module|Install-PSResource|npm|npx|pnpx|pnpm|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer)\b[^\r\n;&|]*)",
+        @"(?<command>(?:dotnet|dnx|Install-Module|Install-PSResource|npm|npx|pnpx|pnpm|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer)\b(?:[^\x5C`\r\n;&|]|[\x5C`]\r?\n)*)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex ShellContinuationRegex = new(
+        @"[\x5C\`]\r?\n",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex CommandEnvironmentPrefixRegex = new(
+        @"(?:^|\s)(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|""[^""]*""|[^\s;&|]+)\s*)+(?:env\s+)?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex PackageSourceEnvironmentRegex = new(
+        @"(?<![A-Za-z0-9_])(?:\$env:)?(?:NPM_CONFIG_[A-Za-z0-9_]+|PIP_INDEX_URL|PIP_EXTRA_INDEX_URL|PIP_CONFIG_FILE|UV_INDEX_URL|UV_EXTRA_INDEX_URL|BUN_INSTALL_REGISTRY|GEM_HOST|BUNDLE_MIRROR__[A-Za-z0-9_]+|CARGO_REGISTRIES_[A-Za-z0-9_]+_INDEX)\s*=",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ShellTokenRegex = new(
         @"['""](?<quoted>[^'""]+)['""]|(?<plain>[^\s]+)",
@@ -15,18 +24,26 @@ public sealed partial class WebAgentContentSecurityScanner
         string content,
         string path,
         int lineOffset,
+        bool countLogicalLines,
         List<WebAgentContentSecurityFinding> findings)
     {
         var references = new List<WebAgentPackageReference>();
         foreach (Match match in CommandSegmentRegex.Matches(content))
         {
+            if (HasCommandScopedEnvironmentPrefix(content, match.Index))
+            {
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.UNVERIFIABLE_ENVIRONMENT", path,
+                    GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                    "Package commands with command-scoped environment assignments cannot be proven to use the canonical public registry.");
+                continue;
+            }
             var tokens = Tokenize(match.Groups["command"].Value);
             if (tokens.Length < 2)
                 continue;
 
             tokens[0] = NormalizeExecutable(tokens[0]);
             var executable = tokens[0];
-            var line = lineOffset + GetLineNumber(content, match.Index);
+            var line = GetReportedLine(content, match.Index, lineOffset, countLogicalLines);
             switch (executable)
             {
                 case "dotnet":
@@ -77,6 +94,46 @@ public sealed partial class WebAgentContentSecurityScanner
             }
         }
         return references;
+    }
+
+    private static void ScanPackageSourceEnvironmentOverrides(
+        string content,
+        string path,
+        int lineOffset,
+        bool countLogicalLines,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        foreach (Match match in PackageSourceEnvironmentRegex.Matches(content))
+        {
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path,
+                GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                $"Package source environment override '{match.Value.TrimEnd('=')}' is not allowed in machine-facing installation instructions.");
+        }
+    }
+
+    private static bool HasCommandScopedEnvironmentPrefix(string content, int commandIndex)
+    {
+        var start = commandIndex - 1;
+        while (start >= 0)
+        {
+            if (content[start] is ';' or '&' or '|')
+                break;
+            if (content[start] is '\r' or '\n')
+            {
+                var previous = start - 1;
+                if (content[start] == '\n' && previous >= 0 && content[previous] == '\r')
+                    previous--;
+                while (previous >= 0 && content[previous] is ' ' or '\t')
+                    previous--;
+                if (previous < 0 || content[previous] is not ('\\' or '`'))
+                    break;
+                start = previous - 1;
+                continue;
+            }
+            start--;
+        }
+        var prefix = ShellContinuationRegex.Replace(content[(start + 1)..commandIndex], " ");
+        return CommandEnvironmentPrefixRegex.IsMatch(prefix);
     }
 
     private static void ParseDotNet(
@@ -143,27 +200,46 @@ public sealed partial class WebAgentContentSecurityScanner
             return;
         if (!ValidatePackageSourceOptions("npm", tokens, path, line, findings))
             return;
-        var verb = tokens[1].ToLowerInvariant();
+        var verbIndex = FindKnownVerbIndex(
+            tokens, 1, new[] { "exec", "x", "dlx", "install", "i", "add", "config" },
+            tokens[0], path, line, findings);
+        if (verbIndex < 0)
+            return;
+        var verb = tokens[verbIndex].ToLowerInvariant();
+        if (verb == "config")
+        {
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                $"Package-manager configuration command '{string.Join(' ', tokens)}' can change the registry used by later installation commands.");
+            return;
+        }
         if ((tokens[0].Equals("npm", StringComparison.OrdinalIgnoreCase) ||
              tokens[0].Equals("pnpm", StringComparison.OrdinalIgnoreCase)) &&
             verb is "exec" or "x")
         {
-            var packageOption = FindOptionValue(tokens, 2, "--package", "-p");
-            if (packageOption is not null)
-                AddToken("npm", "npm exec", packageOption, null, path, line, references, findings);
+            var packageOptions = FindOptionValues(tokens, verbIndex + 1, "--package", "-p");
+            if (packageOptions.Count > 0)
+            {
+                foreach (var packageOption in packageOptions)
+                {
+                    if (string.IsNullOrWhiteSpace(packageOption))
+                        AddUnverifiableOperand("npm exec", path, line, findings, "--package");
+                    else
+                        AddToken("npm", "npm exec", packageOption, null, path, line, references, findings);
+                }
+            }
             else
-                AddRunnerOperand("npm", "npm exec", tokens, 2, path, line, references, findings);
+                AddRunnerOperand("npm", "npm exec", tokens, verbIndex + 1, path, line, references, findings);
             return;
         }
         if ((tokens[0].Equals("pnpm", StringComparison.OrdinalIgnoreCase) ||
              tokens[0].Equals("yarn", StringComparison.OrdinalIgnoreCase)) && verb == "dlx")
         {
-            AddRunnerOperand("npm", tokens[0] + " dlx", tokens, 2, path, line, references, findings);
+            AddRunnerOperand("npm", tokens[0] + " dlx", tokens, verbIndex + 1, path, line, references, findings);
             return;
         }
         if (verb is not ("install" or "i" or "add"))
             return;
-        AddMultipleOperands("npm", $"{tokens[0]} {tokens[1]}", tokens, 2, path, line, references, findings);
+        AddMultipleOperands("npm", $"{tokens[0]} {tokens[verbIndex]}", tokens, verbIndex + 1, path, line, references, findings);
     }
 
     private static void ParsePython(
@@ -178,32 +254,46 @@ public sealed partial class WebAgentContentSecurityScanner
         var command = tokens[0].ToLowerInvariant();
         if (command is "python" or "python3" or "py")
         {
-            if (tokens.Length < 4 || tokens[1] != "-m" || !tokens[2].Equals("pip", StringComparison.OrdinalIgnoreCase) ||
-                !tokens[3].Equals("install", StringComparison.OrdinalIgnoreCase))
+            var moduleIndex = FindPythonModuleIndex(tokens, path, line, findings);
+            if (moduleIndex < 0 || moduleIndex + 1 >= tokens.Length ||
+                !tokens[moduleIndex + 1].Equals("pip", StringComparison.OrdinalIgnoreCase))
                 return;
-            AddMultipleOperands("pypi", $"{tokens[0]} -m pip install", tokens, 4, path, line, references, findings);
+            var installIndex = FindVerbIndex(tokens, moduleIndex + 2, "install", $"{tokens[0]} -m pip", path, line, findings);
+            if (installIndex >= 0)
+                AddMultipleOperands("pypi", $"{tokens[0]} -m pip install", tokens, installIndex + 1, path, line, references, findings);
             return;
         }
         if (command is "pip" or "pip3")
         {
-            if (tokens[1].Equals("install", StringComparison.OrdinalIgnoreCase))
-                AddMultipleOperands("pypi", tokens[0] + " install", tokens, 2, path, line, references, findings);
+            var installIndex = FindVerbIndex(tokens, 1, "install", tokens[0], path, line, findings);
+            if (installIndex >= 0)
+                AddMultipleOperands("pypi", tokens[0] + " install", tokens, installIndex + 1, path, line, references, findings);
             return;
         }
         if (command == "uv")
         {
-            var start = tokens.Length > 2 && tokens[1].Equals("pip", StringComparison.OrdinalIgnoreCase) &&
-                        tokens[2].Equals("install", StringComparison.OrdinalIgnoreCase)
-                ? 3
-                : tokens[1].Equals("add", StringComparison.OrdinalIgnoreCase) ? 2 : -1;
+            var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "pip", "add" }, "uv", path, line, findings);
+            var start = -1;
+            if (verbIndex >= 0 && tokens[verbIndex].Equals("pip", StringComparison.OrdinalIgnoreCase))
+            {
+                var installIndex = FindVerbIndex(tokens, verbIndex + 1, "install", "uv pip", path, line, findings);
+                if (installIndex >= 0)
+                    start = installIndex + 1;
+            }
+            else if (verbIndex >= 0)
+            {
+                start = verbIndex + 1;
+            }
             if (start >= 0)
                 AddMultipleOperands("pypi", "uv", tokens, start, path, line, references, findings);
             return;
         }
-        if (command == "pipx" &&
-            (tokens[1].Equals("install", StringComparison.OrdinalIgnoreCase) ||
-             tokens[1].Equals("run", StringComparison.OrdinalIgnoreCase)))
-            AddRunnerOperand("pypi", "pipx " + tokens[1], tokens, 2, path, line, references, findings);
+        if (command == "pipx")
+        {
+            var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "install", "run" }, "pipx", path, line, findings);
+            if (verbIndex >= 0)
+                AddRunnerOperand("pypi", "pipx " + tokens[verbIndex], tokens, verbIndex + 1, path, line, references, findings);
+        }
     }
 
     private static void ParsePositionalInstall(
@@ -216,11 +306,13 @@ public sealed partial class WebAgentContentSecurityScanner
         ICollection<WebAgentPackageReference> references,
         ICollection<WebAgentContentSecurityFinding> findings)
     {
-        if (tokens.Length < 3 || !verbs.Contains(tokens[1], StringComparer.OrdinalIgnoreCase))
+        if (tokens.Length < 3)
             return;
         if (!ValidatePackageSourceOptions(ecosystem, tokens, path, line, findings))
             return;
-        AddMultipleOperands(ecosystem, command + " " + tokens[1], tokens, 2, path, line, references, findings);
+        var verbIndex = FindKnownVerbIndex(tokens, 1, verbs, command, path, line, findings);
+        if (verbIndex >= 0)
+            AddMultipleOperands(ecosystem, command + " " + tokens[verbIndex], tokens, verbIndex + 1, path, line, references, findings);
     }
 
     private static void AddRunnerOperand(
@@ -308,7 +400,19 @@ public sealed partial class WebAgentContentSecurityScanner
             AddUnverifiableOperand(command, path, line, findings, token);
             return;
         }
+        if (ecosystem == "npm" && TryGetNpmSelector(token, out var npmSelector) && !IsNpmRegistrySelector(npmSelector))
+        {
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                $"npm package operand '{token}' uses a non-registry or unsupported package selector.");
+            return;
+        }
         var (id, embeddedVersion) = SplitPackageVersion(ecosystem, token);
+        if (ecosystem == "npm" && embeddedVersion is not null && !IsNpmRegistrySelector(embeddedVersion))
+        {
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                $"npm package operand '{token}' uses a non-registry or unsupported package selector.");
+            return;
+        }
         references.Add(new WebAgentPackageReference
         {
             Ecosystem = ecosystem,
@@ -350,87 +454,103 @@ public sealed partial class WebAgentContentSecurityScanner
         return null;
     }
 
-    private static string? FindVersionOption(string[] tokens, int start)
-        => FindOptionValue(tokens, start, "--version", "-v", "-Version", "-RequiredVersion");
+    private static List<string> FindOptionValues(string[] tokens, int start, params string[] names)
+    {
+        var values = new List<string>();
+        for (var index = start; index < tokens.Length; index++)
+        {
+            foreach (var name in names)
+            {
+                if (tokens[index].Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    values.Add(index + 1 < tokens.Length ? tokens[++index] : string.Empty);
+                    break;
+                }
+                if (tokens[index].StartsWith(name + "=", StringComparison.OrdinalIgnoreCase))
+                {
+                    values.Add(tokens[index][(name.Length + 1)..]);
+                    break;
+                }
+            }
+        }
+        return values;
+    }
 
-    private static bool ValidatePackageSourceOptions(
-        string ecosystem,
+    private static int FindVerbIndex(
+        string[] tokens,
+        int start,
+        string verb,
+        string command,
+        string path,
+        int line,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        for (var index = start; index < tokens.Length; index++)
+        {
+            if (tokens[index].Equals(verb, StringComparison.OrdinalIgnoreCase))
+                return index;
+            if (tokens[index].StartsWith("-", StringComparison.Ordinal) && TrySkipOption(tokens, ref index))
+                continue;
+            AddUnverifiableOperand(command, path, line, findings, tokens[index]);
+            return -1;
+        }
+        AddUnverifiableOperand(command, path, line, findings);
+        return -1;
+    }
+
+    private static int FindKnownVerbIndex(
+        string[] tokens,
+        int start,
+        IReadOnlyCollection<string> verbs,
+        string command,
+        string path,
+        int line,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        var candidateVerbIndex = Array.FindIndex(
+            tokens,
+            start,
+            token => verbs.Contains(token, StringComparer.OrdinalIgnoreCase));
+        if (candidateVerbIndex < 0)
+            return -1;
+        for (var index = start; index < tokens.Length; index++)
+        {
+            if (verbs.Contains(tokens[index], StringComparer.OrdinalIgnoreCase))
+                return index;
+            if (tokens[index].StartsWith("-", StringComparison.Ordinal) && TrySkipOption(tokens, ref index))
+                continue;
+            AddUnverifiableOperand(command, path, line, findings, tokens[index]);
+            return -1;
+        }
+        return -1;
+    }
+
+    private static int FindPythonModuleIndex(
         string[] tokens,
         string path,
         int line,
         ICollection<WebAgentContentSecurityFinding> findings)
     {
-        for (var index = 1; index < tokens.Length; index++)
+        var moduleIndex = Array.FindIndex(tokens, 1, static token => token.Equals("-m", StringComparison.OrdinalIgnoreCase));
+        if (moduleIndex < 0)
+            return -1;
+        for (var index = 1; index < moduleIndex; index++)
         {
-            var token = tokens[index];
-            var separator = token.IndexOf('=');
-            var option = separator > 0 ? token[..separator] : token;
-            if (!IsPackageSourceOption(ecosystem, option))
+            if (Regex.IsMatch(tokens[index], @"^-\d+(?:\.\d+)?$", RegexOptions.CultureInvariant))
                 continue;
-
-            var value = separator > 0
-                ? token[(separator + 1)..]
-                : index + 1 < tokens.Length ? tokens[index + 1] : string.Empty;
-            if (IsCanonicalPackageSource(ecosystem, option, value))
+            if (tokens[index].StartsWith("-", StringComparison.Ordinal) && TrySkipOption(tokens, ref index))
                 continue;
-
-            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
-                string.IsNullOrWhiteSpace(value)
-                    ? $"Package source option '{option}' does not have a statically verifiable public-registry value."
-                    : $"Package source option '{option}' redirects installation to untrusted source '{value}'.");
-            return false;
+            AddUnverifiableOperand(tokens[0] + " -m pip", path, line, findings, tokens[index]);
+            return -1;
         }
-        return true;
+        return moduleIndex;
     }
 
-    private static bool IsPackageSourceOption(string ecosystem, string option)
-        => ecosystem switch
-        {
-            "nuget" => option.Equals("--source", StringComparison.OrdinalIgnoreCase) ||
-                       option.Equals("-s", StringComparison.OrdinalIgnoreCase) ||
-                       option.Equals("--add-source", StringComparison.OrdinalIgnoreCase) ||
-                       option.Equals("--configfile", StringComparison.OrdinalIgnoreCase),
-            "powershellgallery" => option.Equals("-Repository", StringComparison.OrdinalIgnoreCase),
-            "npm" => option.Equals("--registry", StringComparison.OrdinalIgnoreCase),
-            "pypi" => option.Equals("--index-url", StringComparison.OrdinalIgnoreCase) ||
-                      option.Equals("-i", StringComparison.OrdinalIgnoreCase) ||
-                      option.Equals("--extra-index-url", StringComparison.OrdinalIgnoreCase) ||
-                      option.Equals("--find-links", StringComparison.OrdinalIgnoreCase) ||
-                      option.Equals("-f", StringComparison.OrdinalIgnoreCase) ||
-                      option.Equals("--config-file", StringComparison.OrdinalIgnoreCase),
-            "crates" => option.Equals("--registry", StringComparison.OrdinalIgnoreCase) ||
-                        option.Equals("--index", StringComparison.OrdinalIgnoreCase),
-            "rubygems" => option.Equals("--source", StringComparison.OrdinalIgnoreCase),
-            "packagist" => option.Equals("--repository", StringComparison.OrdinalIgnoreCase),
-            _ => false
-        };
-
-    private static bool IsCanonicalPackageSource(string ecosystem, string option, string value)
-    {
-        value = NormalizeToken(value).TrimEnd('/');
-        if (string.IsNullOrWhiteSpace(value))
-            return false;
-
-        return ecosystem switch
-        {
-            "nuget" when option.Equals("--source", StringComparison.OrdinalIgnoreCase) ||
-                          option.Equals("-s", StringComparison.OrdinalIgnoreCase) =>
-                value.Equals("nuget.org", StringComparison.OrdinalIgnoreCase) ||
-                value.Equals("https://api.nuget.org/v3/index.json", StringComparison.OrdinalIgnoreCase),
-            "powershellgallery" => value.Equals("PSGallery", StringComparison.OrdinalIgnoreCase),
-            "npm" => value.Equals("https://registry.npmjs.org", StringComparison.OrdinalIgnoreCase),
-            "pypi" when option.Equals("--index-url", StringComparison.OrdinalIgnoreCase) ||
-                        option.Equals("-i", StringComparison.OrdinalIgnoreCase) =>
-                value.Equals("https://pypi.org/simple", StringComparison.OrdinalIgnoreCase),
-            "crates" when option.Equals("--registry", StringComparison.OrdinalIgnoreCase) =>
-                value.Equals("crates-io", StringComparison.OrdinalIgnoreCase),
-            "rubygems" => value.Equals("https://rubygems.org", StringComparison.OrdinalIgnoreCase),
-            _ => false
-        };
-    }
+    private static string? FindVersionOption(string[] tokens, int start)
+        => FindOptionValue(tokens, start, "--version", "-v", "-Version", "-RequiredVersion");
 
     private static string[] Tokenize(string command)
-        => ShellTokenRegex.Matches(command)
+        => ShellTokenRegex.Matches(ShellContinuationRegex.Replace(command, " "))
             .Select(static token => token.Groups["quoted"].Success ? token.Groups["quoted"].Value : token.Groups["plain"].Value)
             .Select(NormalizeToken)
             .Where(static token => !string.IsNullOrWhiteSpace(token))
@@ -506,6 +626,30 @@ public sealed partial class WebAgentContentSecurityScanner
         return bracket > 0 ? token[..bracket] : token;
     }
 
+    private static bool IsNpmRegistrySelector(string selector)
+    {
+        selector = selector.Trim();
+        if (string.IsNullOrWhiteSpace(selector))
+            return false;
+        return !selector.Contains(':', StringComparison.Ordinal) &&
+               !selector.StartsWith(".", StringComparison.Ordinal) &&
+               !selector.StartsWith("/", StringComparison.Ordinal) &&
+               !selector.StartsWith("\\", StringComparison.Ordinal) &&
+               !selector.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryGetNpmSelector(string token, out string selector)
+    {
+        var separator = token.StartsWith('@') ? token.IndexOf('@', 1) : token.IndexOf('@');
+        if (separator <= 0)
+        {
+            selector = string.Empty;
+            return false;
+        }
+        selector = token[(separator + 1)..];
+        return true;
+    }
+
     private static bool OptionConsumesValue(string option)
         => option.Equals("--index-url", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--extra-index-url", StringComparison.OrdinalIgnoreCase) ||
@@ -518,6 +662,8 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("-c", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--constraint", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--registry", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--userconfig", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--globalconfig", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--source", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-s", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--index", StringComparison.OrdinalIgnoreCase) ||
@@ -528,12 +674,23 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("--tag", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--group", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--python", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("-X", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--repository", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-Repository", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-i", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--find-links", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-f", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--config-file", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--timeout", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--retries", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--trusted-host", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--cert", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--client-cert", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--cache-dir", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--log", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--omit", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--include", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--color", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--scope", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-Scope", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--framework", StringComparison.OrdinalIgnoreCase) ||
@@ -561,9 +718,23 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("--interactive", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--ignore-failed-sources", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--no-cache", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--quiet", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("-q", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--isolated", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--disable-pip-version-check", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--no-color", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--no-input", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--save-dev", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-D", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--no-save", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--no-audit", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--no-fund", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--package-lock-only", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--legacy-peer-deps", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--strict-peer-deps", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--foreground-scripts", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--workspaces", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--include-workspace-root", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--exact", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-E", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--ignore-scripts", StringComparison.OrdinalIgnoreCase) ||

@@ -12,11 +12,15 @@ public sealed partial class WebAgentContentSecurityScanner
         CancellationToken networkBudget)
     {
         var hosts = urls
-            .Select(static uri => uri.IdnHost.TrimEnd('.'))
-            .Where(static host => !string.IsNullOrWhiteSpace(host))
-            .Where(host => !IsTrustedDomain(host, options.TrustedDomains))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static host => host, StringComparer.OrdinalIgnoreCase)
+            .Where(static uri => !string.IsNullOrWhiteSpace(uri.IdnHost))
+            .Where(uri => !IsTrustedDomain(uri.IdnHost.TrimEnd('.'), options.TrustedDomains))
+            .GroupBy(static uri => uri.IdnHost.TrimEnd('.'), StringComparer.OrdinalIgnoreCase)
+            .Select(static group => new HostTargets(
+                group.Key,
+                group.Select(static uri => new UriBuilder(uri.Scheme, uri.IdnHost, uri.IsDefaultPort ? -1 : uri.Port).Uri)
+                    .Distinct(UriComparer.Instance)
+                    .ToArray()))
+            .OrderBy(static target => target.Host, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         if (hosts.Length > options.MaxExternalHosts)
@@ -26,7 +30,8 @@ public sealed partial class WebAgentContentSecurityScanner
             return 0;
         }
 
-        foreach (var host in hosts)
+        var checkedHosts = 0;
+        foreach (var target in hosts)
         {
             if (networkBudget.IsCancellationRequested)
             {
@@ -34,6 +39,8 @@ public sealed partial class WebAgentContentSecurityScanner
                     $"Network verification exceeded the configured {options.MaxNetworkDurationSeconds}-second total time budget.");
                 break;
             }
+            checkedHosts++;
+            var host = target.Host;
             try
             {
                 using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(networkBudget);
@@ -52,7 +59,8 @@ public sealed partial class WebAgentContentSecurityScanner
                     continue;
                 }
 
-                VerifyTakeoverFingerprint(host, addresses[0], options.RequestTimeoutSeconds, findings, networkBudget);
+                foreach (var endpoint in target.Endpoints)
+                    VerifyTakeoverFingerprint(endpoint, addresses, options.RequestTimeoutSeconds, findings, networkBudget);
             }
             catch (Exception ex) when (ex is SocketException or OperationCanceledException or HttpRequestException)
             {
@@ -60,34 +68,65 @@ public sealed partial class WebAgentContentSecurityScanner
                     $"External hostname '{host}' could not be verified: {ex.Message}");
             }
         }
-        return hosts.Length;
+        return checkedHosts;
     }
 
     private void VerifyTakeoverFingerprint(
-        string host,
-        IPAddress verifiedAddress,
+        Uri endpoint,
+        IReadOnlyList<IPAddress> verifiedAddresses,
         int timeoutSeconds,
         List<WebAgentContentSecurityFinding> findings,
         CancellationToken networkBudget)
     {
-        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(networkBudget);
-        cancellation.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
-        using var pinnedClient = _pinVerifiedExternalHostAddress
-            ? CreatePinnedHttpClient(verifiedAddress, timeoutSeconds)
-            : null;
-        var client = pinnedClient ?? _httpClient;
-        using var response = client.GetAsync(
-                new UriBuilder(Uri.UriSchemeHttps, host).Uri,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellation.Token)
-            .GetAwaiter().GetResult();
+        Exception? lastError = null;
+        var responseCount = 0;
+        var addresses = _pinVerifiedExternalHostAddress
+            ? verifiedAddresses
+            : new[] { verifiedAddresses[0] };
+        foreach (var verifiedAddress in addresses)
+        {
+            try
+            {
+                using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(networkBudget);
+                cancellation.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+                using var pinnedClient = _pinVerifiedExternalHostAddress
+                    ? CreatePinnedHttpClient(verifiedAddress, timeoutSeconds)
+                    : null;
+                var client = pinnedClient ?? _httpClient;
+                using var response = client.GetAsync(endpoint, HttpCompletionOption.ResponseHeadersRead, cancellation.Token)
+                    .GetAwaiter().GetResult();
+                responseCount++;
+                InspectTakeoverResponse(endpoint, response, timeoutSeconds, findings, networkBudget);
+            }
+            catch (Exception ex) when (ex is SocketException or OperationCanceledException or HttpRequestException)
+            {
+                lastError = ex;
+                if (networkBudget.IsCancellationRequested)
+                    throw;
+            }
+        }
+        if (lastError is not null)
+            throw new HttpRequestException($"At least one verified public address could not be checked for {endpoint}.", lastError);
+        if (responseCount == 0)
+            throw new HttpRequestException($"No verified public address accepted the connection to {endpoint}.", lastError);
+    }
+
+    private static void InspectTakeoverResponse(
+        Uri endpoint,
+        HttpResponseMessage response,
+        int timeoutSeconds,
+        List<WebAgentContentSecurityFinding> findings,
+        CancellationToken networkBudget)
+    {
         if ((int)response.StatusCode < 400)
             return;
 
-        using var stream = response.Content.ReadAsStream(cancellation.Token);
+        using var bodyCancellation = CancellationTokenSource.CreateLinkedTokenSource(networkBudget);
+        bodyCancellation.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+        using var stream = response.Content.ReadAsStream(bodyCancellation.Token);
         using var reader = new StreamReader(stream);
         var buffer = new char[16 * 1024];
-        var count = reader.ReadAsync(buffer.AsMemory(), cancellation.Token).AsTask().GetAwaiter().GetResult();
+        var count = reader.ReadAsync(buffer.AsMemory(), bodyCancellation.Token).AsTask().GetAwaiter().GetResult();
         var body = new string(buffer, 0, count);
         var fingerprints = new[]
         {
@@ -102,7 +141,7 @@ public sealed partial class WebAgentContentSecurityScanner
         if (fingerprint is not null)
         {
             AddFinding(findings, "error", "PFAGENT.HOST.DANGLING_SERVICE", null, null,
-                $"External hostname '{host}' returned a known unclaimed-service fingerprint: {fingerprint}.");
+                $"External endpoint '{endpoint}' returned a known unclaimed-service fingerprint: {fingerprint}.");
         }
     }
 
@@ -188,9 +227,12 @@ public sealed partial class WebAgentContentSecurityScanner
                  bytes.Length >= 4 && bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x00 && bytes[3] == 0x00 ||
                  bytes.Length >= 6 && bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x00 && bytes[3] == 0x02 && bytes[4] == 0x00 && bytes[5] == 0x00 ||
                  bytes.Length >= 4 && bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0D && bytes[3] == 0xB8 ||
+                 bytes.Length >= 6 && bytes[0] == 0x00 && bytes[1] == 0x64 && bytes[2] == 0xFF && bytes[3] == 0x9B && bytes[4] == 0x00 && bytes[5] == 0x01 ||
                  bytes[0] == 0xFC ||
                  bytes[0] == 0xFD);
     }
+
+    private sealed record HostTargets(string Host, Uri[] Endpoints);
 
     private static bool TryExtractEmbeddedIPv4(byte[] bytes, out IPAddress address)
     {

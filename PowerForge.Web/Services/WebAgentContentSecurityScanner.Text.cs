@@ -21,12 +21,14 @@ public sealed partial class WebAgentContentSecurityScanner
     private static void ScanInvisibleUnicode(
         string content,
         string path,
-        List<WebAgentContentSecurityFinding> findings)
+        List<WebAgentContentSecurityFinding> findings,
+        int lineOffset = 0,
+        bool countLogicalLines = true)
     {
         var line = 1;
         for (var index = 0; index < content.Length;)
         {
-            if (content[index] == '\n')
+            if (countLogicalLines && content[index] == '\n')
                 line++;
 
             if (!Rune.TryGetRuneAt(content, index, out var rune))
@@ -42,7 +44,7 @@ public sealed partial class WebAgentContentSecurityScanner
             if (isBidi || isTag || isZeroWidth)
             {
                 var kind = isBidi ? "bidirectional control" : isTag ? "Unicode tag character" : "zero-width control";
-                AddFinding(findings, "error", "PFAGENT.TEXT.INVISIBLE_UNICODE", path, line,
+                AddFinding(findings, "error", "PFAGENT.TEXT.INVISIBLE_UNICODE", path, lineOffset + line,
                     $"Artifact contains a {kind} U+{value:X4}; machine-facing instructions must not contain invisible control characters.");
             }
 
@@ -53,20 +55,22 @@ public sealed partial class WebAgentContentSecurityScanner
     private static void ScanPromptInjection(
         string content,
         string path,
-        List<WebAgentContentSecurityFinding> findings)
+        List<WebAgentContentSecurityFinding> findings,
+        int lineOffset = 0,
+        bool countLogicalLines = true)
     {
         foreach (var (pattern, label) in PromptInjectionPatterns)
         {
             foreach (Match match in pattern.Matches(content))
             {
-                AddFinding(findings, "warning", "PFAGENT.TEXT.PROMPT_DIRECTIVE", path, GetLineNumber(content, match.Index),
+                AddFinding(findings, "warning", "PFAGENT.TEXT.PROMPT_DIRECTIVE", path, GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
                     $"Potential agent-directed prompt injection phrase detected ({label}). Review the surrounding content.");
             }
         }
 
         foreach (Match match in RemoteExecutionRegex.Matches(content))
         {
-            AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path, GetLineNumber(content, match.Index),
+            AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path, GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
                 "Downloaded content is piped directly to an interpreter. Prefer a pinned, integrity-checked artifact and a separate execution step.");
         }
     }
@@ -93,4 +97,7 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         return line;
     }
+
+    private static int GetReportedLine(string content, int index, int lineOffset, bool countLogicalLines)
+        => lineOffset + (countLogicalLines ? GetLineNumber(content, index) : 1);
 }

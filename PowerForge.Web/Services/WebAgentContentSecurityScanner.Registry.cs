@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -46,7 +47,7 @@ public sealed partial class WebAgentContentSecurityScanner
                     $"Package selector '{selector}' requires owner verification, but this ecosystem has no configured expected owner.");
                 return false;
             }
-            if (!WebPublicationCatalog.HasExactVersion(package.Version))
+            if (!HasExactRegistryVersion(package.Ecosystem, package.Version))
             {
                 AddPackageFinding(findings, package, "PFAGENT.PACKAGE.EXACT_VERSION_REQUIRED",
                     "Owner-verified installation commands must pin an exact package version.");
@@ -102,45 +103,54 @@ public sealed partial class WebAgentContentSecurityScanner
             return package.Ecosystem switch
             {
                 "nuget" => VerifyJsonVersions(
+                    "nuget",
                     $"https://api.nuget.org/v3-flatcontainer/{Uri.EscapeDataString(package.Id.ToLowerInvariant())}/index.json",
                     package.Version,
-                    static root => root.TryGetProperty("versions", out var versions) && versions.ValueKind == JsonValueKind.Array
-                        ? versions.EnumerateArray().Select(static value => value.GetString()).Where(static value => !string.IsNullOrWhiteSpace(value))!
+                    static root => root.ValueKind == JsonValueKind.Object &&
+                                   root.TryGetProperty("versions", out var versions) && versions.ValueKind == JsonValueKind.Array
+                        ? versions.EnumerateArray()
+                            .Where(static value => value.ValueKind == JsonValueKind.String)
+                            .Select(static value => value.GetString())
+                            .Where(static value => !string.IsNullOrWhiteSpace(value))!
                         : Enumerable.Empty<string?>(),
                     options.MaxRegistryResponseBytes,
                     cancellation.Token),
                 "npm" => VerifyJsonVersions(
+                    "npm",
                     $"https://registry.npmjs.org/{Uri.EscapeDataString(package.Id)}",
                     package.Version,
-                    static root => root.TryGetProperty("versions", out var versions) && versions.ValueKind == JsonValueKind.Object
+                    static root => root.ValueKind == JsonValueKind.Object &&
+                                   root.TryGetProperty("versions", out var versions) && versions.ValueKind == JsonValueKind.Object
                         ? versions.EnumerateObject().Select(static property => property.Name)
                         : Enumerable.Empty<string>(),
                     options.MaxRegistryResponseBytes,
                     cancellation.Token),
                 "pypi" => VerifyJsonVersions(
+                    "pypi",
                     $"https://pypi.org/pypi/{Uri.EscapeDataString(package.Id)}/json",
                     package.Version,
-                    static root => root.TryGetProperty("releases", out var releases) && releases.ValueKind == JsonValueKind.Object
+                    static root => root.ValueKind == JsonValueKind.Object &&
+                                   root.TryGetProperty("releases", out var releases) && releases.ValueKind == JsonValueKind.Object
                         ? releases.EnumerateObject().Select(static property => property.Name)
                         : Enumerable.Empty<string>(),
                     options.MaxRegistryResponseBytes,
                     cancellation.Token),
                 "crates" => VerifyJsonVersions(
+                    "crates",
                     $"https://crates.io/api/v1/crates/{Uri.EscapeDataString(package.Id)}",
                     package.Version,
-                    static root => root.TryGetProperty("versions", out var versions) && versions.ValueKind == JsonValueKind.Array
+                    static root => root.ValueKind == JsonValueKind.Object &&
+                                   root.TryGetProperty("versions", out var versions) && versions.ValueKind == JsonValueKind.Array
                         ? versions.EnumerateArray()
-                            .Where(static value => value.ValueKind == JsonValueKind.Object && value.TryGetProperty("num", out _))
+                            .Where(static value => value.ValueKind == JsonValueKind.Object &&
+                                                   value.TryGetProperty("num", out var number) &&
+                                                   number.ValueKind == JsonValueKind.String)
                             .Select(static value => value.GetProperty("num").GetString())
                             .Where(static value => !string.IsNullOrWhiteSpace(value))!
                         : Enumerable.Empty<string?>(),
                     options.MaxRegistryResponseBytes,
                     cancellation.Token),
-                "rubygems" => VerifySimpleEndpoint(
-                    !WebPublicationCatalog.HasExactVersion(package.Version)
-                        ? $"https://rubygems.org/api/v1/gems/{Uri.EscapeDataString(package.Id)}.json"
-                        : $"https://rubygems.org/api/v2/rubygems/{Uri.EscapeDataString(package.Id)}/versions/{Uri.EscapeDataString(package.Version!)}.json",
-                    cancellation.Token),
+                "rubygems" => VerifyRubyGems(package, options.MaxRegistryResponseBytes, cancellation.Token),
                 "packagist" => VerifyPackagist(package, options.MaxRegistryResponseBytes, cancellation.Token),
                 "powershellgallery" => VerifyPowerShellGallery(package, options.MaxRegistryResponseBytes, cancellation.Token),
                 _ => new PackageVerificationOutcome(false, "PFAGENT.PACKAGE.UNSUPPORTED_ECOSYSTEM",
@@ -162,6 +172,11 @@ public sealed partial class WebAgentContentSecurityScanner
             return new PackageVerificationOutcome(false, "PFAGENT.PACKAGE.REGISTRY_INVALID_RESPONSE",
                 $"Registry returned invalid JSON for '{package.Id}': {ex.Message}");
         }
+        catch (InvalidOperationException ex)
+        {
+            return new PackageVerificationOutcome(false, "PFAGENT.PACKAGE.REGISTRY_INVALID_RESPONSE",
+                $"Registry returned an unexpected response shape for '{package.Id}': {ex.Message}");
+        }
         catch (XmlException ex)
         {
             return new PackageVerificationOutcome(false, "PFAGENT.PACKAGE.REGISTRY_INVALID_RESPONSE",
@@ -174,6 +189,7 @@ public sealed partial class WebAgentContentSecurityScanner
     }
 
     private PackageVerificationOutcome VerifyJsonVersions(
+        string ecosystem,
         string url,
         string? expectedVersion,
         Func<JsonElement, IEnumerable<string?>> readVersions,
@@ -186,23 +202,46 @@ public sealed partial class WebAgentContentSecurityScanner
             return MissingPackage(url);
         response.EnsureSuccessStatusCode();
         using var document = JsonDocument.Parse(ReadBoundedContent(response, maxResponseBytes, cancellationToken));
-        if (!WebPublicationCatalog.HasExactVersion(expectedVersion))
+        var versions = readVersions(document.RootElement)
+            .Where(static version => !string.IsNullOrWhiteSpace(version))
+            .Select(static version => version!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (versions.Length == 0)
+            return InvalidRegistryResponse("Registry response did not contain a non-empty package version collection.");
+        if (!HasExactRegistryVersion(ecosystem, expectedVersion))
             return Verified();
 
-        return readVersions(document.RootElement)
-            .Any(version => VersionsEqual(version, expectedVersion))
+        return versions.Any(version => VersionsEqual(version, expectedVersion))
             ? Verified()
             : MissingVersion(expectedVersion!);
     }
 
-    private PackageVerificationOutcome VerifySimpleEndpoint(string url, CancellationToken cancellationToken)
+    private PackageVerificationOutcome VerifyRubyGems(
+        WebAgentPackageReference package,
+        long maxResponseBytes,
+        CancellationToken cancellationToken)
     {
+        var hasExactVersion = HasExactRegistryVersion("rubygems", package.Version);
+        var url = !hasExactVersion
+            ? $"https://rubygems.org/api/v1/gems/{Uri.EscapeDataString(package.Id)}.json"
+            : $"https://rubygems.org/api/v2/rubygems/{Uri.EscapeDataString(package.Id)}/versions/{Uri.EscapeDataString(package.Version!)}.json";
         using var response = _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .GetAwaiter().GetResult();
         if (response.StatusCode == HttpStatusCode.NotFound)
             return MissingPackage(url);
         response.EnsureSuccessStatusCode();
-        return Verified();
+        using var document = JsonDocument.Parse(ReadBoundedContent(response, maxResponseBytes, cancellationToken));
+        if (document.RootElement.ValueKind != JsonValueKind.Object ||
+            !document.RootElement.TryGetProperty("version", out var versionElement) ||
+            versionElement.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(versionElement.GetString()))
+        {
+            return InvalidRegistryResponse("RubyGems response did not contain package version metadata.");
+        }
+        return !hasExactVersion || VersionsEqual(versionElement.GetString(), package.Version)
+            ? Verified()
+            : MissingVersion(package.Version!);
     }
 
     private PackageVerificationOutcome VerifyPackagist(
@@ -217,17 +256,19 @@ public sealed partial class WebAgentContentSecurityScanner
             return MissingPackage(url);
         response.EnsureSuccessStatusCode();
         using var document = JsonDocument.Parse(ReadBoundedContent(response, maxResponseBytes, cancellationToken));
-        if (!WebPublicationCatalog.HasExactVersion(package.Version))
-            return Verified();
         if (!document.RootElement.TryGetProperty("packages", out var packages) ||
             packages.ValueKind != JsonValueKind.Object ||
             !packages.TryGetProperty(package.Id, out var versions) ||
-            versions.ValueKind != JsonValueKind.Array)
-            return MissingVersion(package.Version!);
+            versions.ValueKind != JsonValueKind.Array ||
+            versions.GetArrayLength() == 0)
+            return InvalidRegistryResponse("Packagist response did not contain a non-empty package version collection.");
+        if (!HasExactRegistryVersion("packagist", package.Version))
+            return Verified();
 
         return versions.EnumerateArray().Any(version =>
                    version.ValueKind == JsonValueKind.Object &&
                    version.TryGetProperty("version", out var value) &&
+                   value.ValueKind == JsonValueKind.String &&
                    VersionsEqual(value.GetString(), package.Version))
             ? Verified()
             : MissingVersion(package.Version!);
@@ -248,10 +289,19 @@ public sealed partial class WebAgentContentSecurityScanner
         using var stream = new MemoryStream(ReadBoundedContent(response, maxResponseBytes, cancellationToken), writable: false);
         using var reader = XmlReader.Create(stream, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
         var document = XDocument.Load(reader, LoadOptions.None);
+        var atom = XNamespace.Get("http://www.w3.org/2005/Atom");
         var data = XNamespace.Get("http://schemas.microsoft.com/ado/2007/08/dataservices");
-        var versions = document.Descendants(data + "Version").Select(static element => element.Value);
-        if (!WebPublicationCatalog.HasExactVersion(package.Version))
-            return versions.Any() ? Verified() : MissingPackage(url);
+        if (document.Root?.Name != atom + "feed")
+            return InvalidRegistryResponse("PowerShell Gallery response was not an Atom feed.");
+        var versions = document.Root.Elements(atom + "entry")
+            .SelectMany(entry => entry.Descendants(data + "Version"))
+            .Select(static element => element.Value.Trim())
+            .Where(static version => !string.IsNullOrWhiteSpace(version))
+            .ToArray();
+        if (!HasExactRegistryVersion("powershellgallery", package.Version))
+            return versions.Length > 0
+                ? Verified()
+                : InvalidRegistryResponse("PowerShell Gallery response did not contain non-empty package version metadata.");
         return versions.Any(version => VersionsEqual(version, package.Version))
             ? Verified()
             : MissingVersion(package.Version!);
@@ -267,6 +317,9 @@ public sealed partial class WebAgentContentSecurityScanner
     private static PackageVerificationOutcome MissingVersion(string expectedVersion)
         => new(false, "PFAGENT.PACKAGE.VERSION_NOT_FOUND",
             $"Exact package version '{expectedVersion}' is not registered.");
+
+    private static PackageVerificationOutcome InvalidRegistryResponse(string message)
+        => new(false, "PFAGENT.PACKAGE.REGISTRY_INVALID_RESPONSE", message);
 
     private static byte[] ReadBoundedContent(
         HttpResponseMessage response,
@@ -296,6 +349,27 @@ public sealed partial class WebAgentContentSecurityScanner
             left?.Trim().TrimStart('v'),
             right?.Trim().TrimStart('v'),
             StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasExactRegistryVersion(string ecosystem, string? version)
+    {
+        if (!WebPublicationCatalog.HasExactVersion(version))
+            return false;
+        if (ecosystem is "nuget" or "powershellgallery")
+        {
+            return Regex.IsMatch(
+                version!,
+                @"^v?\d+\.\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$",
+                RegexOptions.CultureInvariant);
+        }
+        if (ecosystem is "npm" or "crates")
+        {
+            return Regex.IsMatch(
+                version!,
+                @"^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$",
+                RegexOptions.CultureInvariant);
+        }
+        return true;
+    }
 
     private static void AddPackageFinding(
         ICollection<WebAgentContentSecurityFinding> findings,

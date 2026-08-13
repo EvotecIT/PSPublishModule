@@ -100,10 +100,11 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
             var segments = ExtractTextSegments(content, Path.GetExtension(fullPath), configuredPath, findings);
             foreach (var segment in segments)
             {
-                ScanInvisibleUnicode(segment.Text, configuredPath, findings);
+                ScanPackageSourceEnvironmentOverrides(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings);
+                ScanInvisibleUnicode(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
                 if (options.CheckPromptInjection)
-                    ScanPromptInjection(segment.Text, configuredPath, findings);
-                packages.AddRange(ExtractPackageReferences(segment.Text, configuredPath, segment.LineOffset, findings));
+                    ScanPromptInjection(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
+                packages.AddRange(ExtractPackageReferences(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings));
                 ExtractUrls(segment.Text, urls);
             }
         }
@@ -122,7 +123,9 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
             AddFinding(findings, "error", "PFAGENT.PACKAGE.LIMIT_EXCEEDED", null, null,
                 $"Artifacts contain {packages.Count} unique package references; the configured maximum is {options.MaxPackageReferences}. No registry requests were sent.");
         }
-        else if (options.VerifyPackages)
+        else if (options.VerifyPackages && !findings.Any(static finding =>
+                     finding.Code is "PFAGENT.PACKAGE.UNTRUSTED_SOURCE" or
+                         "PFAGENT.PACKAGE.UNVERIFIABLE_ENVIRONMENT"))
         {
             var catalog = LoadOwnerCatalog(options, findings);
             var verificationCache = new Dictionary<string, PackageVerificationOutcome>(StringComparer.OrdinalIgnoreCase);
@@ -214,13 +217,31 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
         List<WebAgentContentSecurityFinding> findings)
     {
         if (!extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
-            return new[] { new TextSegment(content, 0) };
+            return new[] { new TextSegment(content, 0, true) };
 
         var segments = new List<TextSegment>();
         try
         {
-            using var document = JsonDocument.Parse(content);
-            CollectJsonStrings(document.RootElement, segments);
+            var utf8 = Encoding.UTF8.GetBytes(content);
+            var reader = new Utf8JsonReader(utf8, isFinalBlock: true, state: default);
+            var scannedThrough = 0;
+            var physicalLineOffset = 0;
+            while (reader.Read())
+            {
+                if (reader.TokenType is not (JsonTokenType.String or JsonTokenType.PropertyName))
+                    continue;
+                var value = reader.GetString();
+                if (string.IsNullOrWhiteSpace(value))
+                    continue;
+                var tokenStart = checked((int)reader.TokenStartIndex);
+                for (var index = scannedThrough; index < tokenStart; index++)
+                {
+                    if (utf8[index] == (byte)'\n')
+                        physicalLineOffset++;
+                }
+                scannedThrough = tokenStart;
+                segments.Add(new TextSegment(value, physicalLineOffset, false));
+            }
         }
         catch (JsonException ex)
         {
@@ -228,30 +249,6 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                 $"Configured JSON artifact is invalid: {ex.Message}");
         }
         return segments;
-    }
-
-    private static void CollectJsonStrings(JsonElement element, List<TextSegment> segments)
-    {
-        switch (element.ValueKind)
-        {
-            case JsonValueKind.String:
-                var value = element.GetString();
-                if (!string.IsNullOrWhiteSpace(value))
-                    segments.Add(new TextSegment(value, 0));
-                break;
-            case JsonValueKind.Array:
-                foreach (var item in element.EnumerateArray())
-                    CollectJsonStrings(item, segments);
-                break;
-            case JsonValueKind.Object:
-                foreach (var property in element.EnumerateObject())
-                {
-                    if (!string.IsNullOrWhiteSpace(property.Name))
-                        segments.Add(new TextSegment(property.Name, 0));
-                    CollectJsonStrings(property.Value, segments);
-                }
-                break;
-        }
     }
 
     private static void AddFinding(
@@ -273,7 +270,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
     private static string PackageIdentityKey(WebAgentPackageReference package)
         => string.Create(CultureInfo.InvariantCulture, $"{package.Ecosystem}|{package.Id}|{package.Version}");
 
-    private sealed record TextSegment(string Text, int LineOffset);
+    private sealed record TextSegment(string Text, int LineOffset, bool CountLogicalLines);
 
     private sealed class UriComparer : IEqualityComparer<Uri>
     {
