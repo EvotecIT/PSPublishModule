@@ -34,6 +34,10 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("sourceDirty   = $sourceDirty", script, StringComparison.Ordinal);
         Assert.Contains("Get-PowerForgeReleaseSourceState", script, StringComparison.Ordinal);
         Assert.Contains("$moduleProvenanceCreated", script, StringComparison.Ordinal);
+        Assert.True(
+            script.IndexOf("Get-PowerForgeReleaseSourceState", StringComparison.Ordinal) <
+            script.IndexOf("New-Item -ItemType Directory -Path $receiptDirectory", StringComparison.Ordinal),
+            "Release receipts must not be created until the checkout is proven clean.");
         Assert.Contains("\"PowerForge.ReleaseProvenance.json\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains(". .\\Build\\Private\\Assert-PowerForgeCommittedReleaseVersion.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("$releaseConfig.GitHub | Add-Member -NotePropertyName Commitish", script, StringComparison.Ordinal);
@@ -78,6 +82,14 @@ public sealed partial class AppleReleaseWorkflowTests
                              $"Get-PowerForgeReleaseSourceState -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedProvenancePath '{provenance.Replace("'", "''", StringComparison.Ordinal)}' | ConvertTo-Json -Compress";
             var clean = Run("pwsh", repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
             Assert.Contains("\"SourceDirty\":false", clean.StandardOutput, StringComparison.OrdinalIgnoreCase);
+
+            string receiptDirectory = Path.Combine(repository.FullName, "Artefacts", "Release", "receipts");
+            Directory.CreateDirectory(receiptDirectory);
+            File.WriteAllText(Path.Combine(receiptDirectory, "publish.json"), "{}");
+            var receiptDirty = Run("pwsh", repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            Assert.Contains("\"SourceDirty\":true", receiptDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("publish.json", receiptDirty.StandardOutput, StringComparison.Ordinal);
+            Directory.Delete(Path.Combine(repository.FullName, "Artefacts"), recursive: true);
 
             File.WriteAllText(Path.Combine(repository.FullName, "Module", "untracked-input.ps1"), "'input'");
             var dirty = Run("pwsh", repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
@@ -206,16 +218,35 @@ public sealed partial class AppleReleaseWorkflowTests
     public void PublicModuleReleaseWritesReceiptForPreflightFailure()
     {
         var root = FindRepoRoot();
+        var repository = Directory.CreateTempSubdirectory();
         var receiptDirectory = Directory.CreateTempSubdirectory();
         try
         {
+            string buildDirectory = Path.Combine(repository.FullName, "Build");
+            string privateDirectory = Path.Combine(buildDirectory, "Private");
+            Directory.CreateDirectory(privateDirectory);
+            File.Copy(
+                Path.Combine(root, "Build", "Invoke-PowerForgePublicRelease.ps1"),
+                Path.Combine(buildDirectory, "Invoke-PowerForgePublicRelease.ps1"));
+            File.Copy(
+                Path.Combine(root, "Build", "release.json"),
+                Path.Combine(buildDirectory, "release.json"));
+            File.Copy(
+                Path.Combine(root, "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1"),
+                Path.Combine(privateDirectory, "Get-PowerForgeReleaseSourceState.ps1"));
+            Run("git", repository.FullName, "init").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.name", "PowerForge Tests").EnsureSuccess();
+            Run("git", repository.FullName, "add", ".").EnsureSuccess();
+            Run("git", repository.FullName, "commit", "-m", "fixture").EnsureSuccess();
+
             var receiptPath = Path.Combine(receiptDirectory.FullName, "failure.json");
             var result = Run(
                 "pwsh",
-                root,
+                repository.FullName,
                 "-NoProfile",
                 "-File",
-                Path.Combine(root, "Build", "Invoke-PowerForgePublicRelease.ps1"),
+                Path.Combine(buildDirectory, "Invoke-PowerForgePublicRelease.ps1"),
                 "-Operation",
                 "Plan",
                 "-Version",
@@ -234,7 +265,8 @@ public sealed partial class AppleReleaseWorkflowTests
         }
         finally
         {
-            receiptDirectory.Delete(recursive: true);
+            try { repository.Delete(recursive: true); } catch { }
+            try { receiptDirectory.Delete(recursive: true); } catch { }
         }
     }
 }

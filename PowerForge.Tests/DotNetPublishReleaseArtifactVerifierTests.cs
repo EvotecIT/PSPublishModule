@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 
 namespace PowerForge.Tests;
 
-public sealed class DotNetPublishReleaseArtifactVerifierTests
+public sealed partial class DotNetPublishReleaseArtifactVerifierTests
 {
     private const string Thumbprint = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
@@ -475,7 +475,7 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
                 {
                     Id = "Test.MSI",
                     Authoring = ReleaseFixture.AuthoringIdentity,
-                    Sign = new { Enabled = true, SubjectName = "Test Publisher" }
+                    Sign = new { Enabled = true, SubjectName = "CN=Test Publisher" }
                 }
             }
         });
@@ -564,7 +564,7 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
         });
         var request = fixture.CreateRequest();
         request.SignProfile = "release";
-        request.SignSubjectName = "Test Publisher";
+        request.SignSubjectName = "CN=Test Publisher";
 
         DotNetPublishReleaseArtifact result = fixture.CreateVerifier(new string('B', 40)).Verify(request);
 
@@ -603,7 +603,7 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
         var request = fixture.CreateRequest();
         request.EnableSigning = false;
         request.SignThumbprint = Thumbprint;
-        request.SignSubjectName = "Test Publisher";
+        request.SignSubjectName = "CN=Test Publisher";
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(
             () => fixture.CreateVerifier().Verify(request));
@@ -928,7 +928,7 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
                     "CN=Test Publisher",
                     Thumbprint));
 
-        private DotNetPublishMsiPackageMetadata ReadPackageMetadata() => new()
+        internal DotNetPublishMsiPackageMetadata ReadPackageMetadata() => new()
         {
             Path = ArtifactPath,
             ProductName = "Test Product",

@@ -9,6 +9,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     {
         string projectRoot = RequireDirectory(request.ProjectRoot, nameof(request.ProjectRoot));
         string artifactId = DotNetPublishReleaseArtifactVerifier.RequireText(request.ArtifactId, nameof(request.ArtifactId));
+        string target = string.IsNullOrWhiteSpace(request.Target) ? artifactId : request.Target!.Trim();
+        if (!string.Equals(target, artifactId, StringComparison.OrdinalIgnoreCase))
+            throw Invalid("Portable release artifact ID must match the selected publish target.");
         string checksumsPath = ResolveRequestFile(projectRoot, request.ChecksumsPath, nameof(request.ChecksumsPath));
         string manifestPath = ResolveRequestFile(projectRoot, request.ManifestPath, nameof(request.ManifestPath));
         string configurationPath = ResolveRequestFile(projectRoot, request.ConfigurationPath, nameof(request.ConfigurationPath));
@@ -20,7 +23,6 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (manifest.RootElement.ValueKind != JsonValueKind.Array)
             throw Invalid("PowerForge manifest must contain a JSON array.");
 
-        string target = string.IsNullOrWhiteSpace(request.Target) ? artifactId : request.Target!.Trim();
         JsonElement[] entries = manifest.RootElement.EnumerateArray()
             .Where(entry => Is(entry, "Category", "Publish") && Is(entry, "Target", target))
             .ToArray();

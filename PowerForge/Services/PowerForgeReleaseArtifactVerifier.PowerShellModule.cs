@@ -11,6 +11,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     {
         string projectRoot = RequireDirectory(request.ProjectRoot, nameof(request.ProjectRoot));
         string moduleName = DotNetPublishReleaseArtifactVerifier.RequireText(request.ArtifactId, nameof(request.ArtifactId));
+        string? selectedTarget = request.Target?.Trim();
+        if (!string.IsNullOrWhiteSpace(selectedTarget) &&
+            !string.Equals(selectedTarget, moduleName, StringComparison.OrdinalIgnoreCase))
+            throw Invalid("PowerShell module artifact ID must match the selected target when one is provided.");
         string checksumsPath = ResolveRequestFile(projectRoot, request.ChecksumsPath, nameof(request.ChecksumsPath));
         string artifactPath = ResolveRequestFile(projectRoot, request.ArtifactPath, nameof(request.ArtifactPath));
         string signingEvidencePath = ResolveRequestFile(

@@ -37,15 +37,7 @@ $releaseRecovery = $null
 $moduleProvenancePath = $null
 $moduleProvenanceCreated = $false
 $sourceDirty = $true
-[pscustomobject]@{
-    Success       = $false
-    Status        = 'Running'
-    Stage         = $releaseStage
-    Operation     = $Operation
-    Version       = $Version
-    ExpectedCommit = $ExpectedCommit
-    StartedAtUtc  = [DateTime]::UtcNow
-} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ReceiptPath -Encoding utf8
+$receiptInitialized = $false
 
 try {
     if (-not $IsWindows) {
@@ -56,11 +48,6 @@ try {
         $ConfigPath = Join-Path $PSScriptRoot 'release.json'
     }
     $ConfigPath = (Resolve-Path -LiteralPath $ConfigPath).Path
-
-    $actualCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
-    if ($LASTEXITCODE -ne 0 -or $actualCommit -ine $ExpectedCommit) {
-        throw "Expected release commit '$ExpectedCommit', received '$actualCommit'."
-    }
 
     $moduleProvenancePath = Join-Path $repositoryRoot 'Module\PowerForge.ReleaseProvenance.json'
     . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Get-PowerForgeReleaseSourceState.ps1')
@@ -73,6 +60,21 @@ try {
     }
 
     New-Item -ItemType Directory -Path $receiptDirectory -Force | Out-Null
+    [pscustomobject]@{
+        Success        = $false
+        Status         = 'Running'
+        Stage          = $releaseStage
+        Operation      = $Operation
+        Version        = $Version
+        ExpectedCommit = $ExpectedCommit
+        StartedAtUtc   = [DateTime]::UtcNow
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ReceiptPath -Encoding utf8
+    $receiptInitialized = $true
+
+    $actualCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or $actualCommit -ine $ExpectedCommit) {
+        throw "Expected release commit '$ExpectedCommit', received '$actualCommit'."
+    }
 
     $releaseConfig = Get-Content -Raw -LiteralPath $ConfigPath | ConvertFrom-Json -Depth 100
     $moduleConfigPath = Join-Path $repositoryRoot 'powerforge.json'
@@ -214,19 +216,20 @@ try {
     if ($null -ne $outputTail -and $outputTail.Length -gt 20000) {
         $outputTail = $outputTail.Substring($outputTail.Length - 20000)
     }
-    New-Item -ItemType Directory -Path $receiptDirectory -Force | Out-Null
-    [pscustomobject]@{
-        Success        = $false
-        Status         = 'Failed'
-        Stage          = $releaseStage
-        Operation      = $Operation
-        Version        = $Version
-        ExpectedCommit = $ExpectedCommit
-        ActualCommit   = $actualCommit
-        ErrorMessage   = $_.Exception.Message
-        OutputTail     = $outputTail
-        FailedAtUtc    = [DateTime]::UtcNow
-    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ReceiptPath -Encoding utf8
+    if ($receiptInitialized) {
+        [pscustomobject]@{
+            Success        = $false
+            Status         = 'Failed'
+            Stage          = $releaseStage
+            Operation      = $Operation
+            Version        = $Version
+            ExpectedCommit = $ExpectedCommit
+            ActualCommit   = $actualCommit
+            ErrorMessage   = $_.Exception.Message
+            OutputTail     = $outputTail
+            FailedAtUtc    = [DateTime]::UtcNow
+        } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ReceiptPath -Encoding utf8
+    }
     throw
 } finally {
     if (-not [string]::IsNullOrWhiteSpace($effectiveConfigPath)) {

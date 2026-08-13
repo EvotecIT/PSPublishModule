@@ -142,7 +142,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             throw Invalid("Installer signature does not use the configured release certificate.");
         if (expected.SignerThumbprint is null &&
             expected.SignerSubjectName is not null &&
-            signature.Subject.IndexOf(expected.SignerSubjectName, StringComparison.OrdinalIgnoreCase) < 0)
+            !CertificateSubjectsEqual(signature.Subject, expected.SignerSubjectName))
         {
             throw Invalid("Installer signature does not match the configured release certificate subject.");
         }
@@ -162,6 +162,20 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             SignerSubject = signature.Subject,
             SignerThumbprint = signature.Thumbprint
         };
+    }
+
+    internal static bool CertificateSubjectsEqual(string actual, string expected)
+    {
+        try
+        {
+            X500DistinguishedName actualName = new(actual);
+            X500DistinguishedName expectedName = new(expected);
+            return actualName.RawData.SequenceEqual(expectedName.RawData);
+        }
+        catch (CryptographicException)
+        {
+            return false;
+        }
     }
 
     private static ExpectedInstaller ReadExpectedInstaller(
