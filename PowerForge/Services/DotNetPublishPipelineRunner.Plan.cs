@@ -1372,6 +1372,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (versioning is null) return null;
         return new DotNetPublishMsiVersionOptions
         {
+            ReleaseGroup = versioning.ReleaseGroup,
             Enabled = versioning.Enabled,
             Pattern = versioning.Pattern,
             Major = versioning.Major,
@@ -1996,7 +1997,10 @@ public sealed partial class DotNetPublishPipelineRunner
             AllowOutputOutsideProjectRoot = allowOutputOutsideProjectRoot,
             Configuration = configuration
         };
-        var plannedStates = new Dictionary<string, MsiVersionState>(StringComparer.OrdinalIgnoreCase);
+        var plannedStates = new Dictionary<string, MsiVersionState>(MsiVersionCoordinationKeyComparer.Instance);
+        var releaseGroups = new Dictionary<string, MsiReleaseGroupPlan>(StringComparer.OrdinalIgnoreCase);
+        var authorityReleaseGroups = new List<MsiVersionAuthorityUsage>();
+        var statePathAuthorities = new List<MsiVersionAuthorityUsage>();
 
         foreach (var target in targets ?? Array.Empty<DotNetPublishTargetPlan>())
         {
@@ -2004,7 +2008,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 foreach (var installer in installers.Where(i => string.Equals(i.PrepareFromTarget, target.Name, StringComparison.OrdinalIgnoreCase)))
                 {
-                    if (installer.Versioning?.ApplyToPublish != true)
+                    if (installer.Versioning is not { Enabled: true, ApplyToPublish: true })
                         continue;
 
                     if (!InstallerMatchesCombo(installer, combo))
@@ -2018,9 +2022,78 @@ public sealed partial class DotNetPublishPipelineRunner
                         Runtime = combo.Runtime,
                         Style = combo.Style
                     };
-                    var resolved = ResolveMsiVersion(probePlan, installer, step, plannedStates);
+                    var releaseGroup = string.IsNullOrWhiteSpace(installer.Versioning?.ReleaseGroup)
+                        ? null
+                        : installer.Versioning!.ReleaseGroup!.Trim();
+                    var isFirstPlanForInstallerInReleaseGroup = false;
+                    MsiVersionResolution resolved;
+                    if (string.IsNullOrWhiteSpace(releaseGroup))
+                    {
+                        resolved = ResolveMsiVersion(probePlan, installer, step, plannedStates);
+                    }
+                    else
+                    {
+                        var normalizedGroup = releaseGroup!;
+                        var compatibility = BuildMsiReleaseGroupCompatibility(probePlan, installer, step);
+                        if (releaseGroups.TryGetValue(normalizedGroup, out var existingGroup))
+                        {
+                            if (!existingGroup.Compatibility.Matches(compatibility))
+                            {
+                                throw new InvalidOperationException(
+                                    $"Installer '{installer.Id}' cannot join MSI release group '{normalizedGroup}' because its " +
+                                    $"version policy or resolved authority differs from installer '{existingGroup.InstallerId}'. " +
+                                    "Use the same version line, state path, authority key, Git remote, tag prefix, patch cap, and overwrite policy for every installer in the group.");
+                            }
+
+                            resolved = existingGroup.Resolution;
+                            isFirstPlanForInstallerInReleaseGroup = existingGroup.InstallerIds.Add(installer.Id);
+                        }
+                        else
+                        {
+                            resolved = ResolveMsiVersion(probePlan, installer, step, plannedStates);
+                            releaseGroups[normalizedGroup] = new MsiReleaseGroupPlan(
+                                installer.Id,
+                                compatibility,
+                                resolved);
+                            isFirstPlanForInstallerInReleaseGroup = true;
+                        }
+                    }
                     if (string.IsNullOrWhiteSpace(resolved.Version))
                         continue;
+
+                    if (!string.IsNullOrWhiteSpace(resolved.CoordinationKey))
+                    {
+                        var authorityOwner = releaseGroup ?? string.Empty;
+                        if (!string.IsNullOrWhiteSpace(resolved.StatePath))
+                        {
+                            var existingStatePath = statePathAuthorities.FirstOrDefault(usage => usage.MatchesStatePath(resolved.StatePath!));
+                            if (existingStatePath is not null
+                                && (!MsiVersionCoordinationKeyComparer.Instance.Equals(existingStatePath.CoordinationKey, resolved.CoordinationKey!)
+                                    || !string.Equals(existingStatePath.ReleaseGroup, authorityOwner, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                throw new InvalidOperationException(
+                                    $"Installer '{installer.Id}' cannot use MSI version state path '{resolved.StatePath}' because it is already " +
+                                    "assigned to a different version authority or ReleaseGroup. Use one canonical authority and ReleaseGroup per state path.");
+                            }
+
+                            if (existingStatePath is null)
+                                statePathAuthorities.Add(new MsiVersionAuthorityUsage(resolved, authorityOwner));
+                        }
+
+                        var existingAuthority = authorityReleaseGroups.FirstOrDefault(usage => usage.Matches(resolved));
+                        if (existingAuthority is not null
+                            && !string.Equals(existingAuthority.ReleaseGroup, authorityOwner, StringComparison.OrdinalIgnoreCase)
+                            && (!string.IsNullOrWhiteSpace(existingAuthority.ReleaseGroup) || !string.IsNullOrWhiteSpace(authorityOwner)))
+                        {
+                            throw new InvalidOperationException(
+                                $"Installer '{installer.Id}' cannot use version authority '{resolved.CoordinationKey}' because it is already " +
+                                $"assigned to {(string.IsNullOrWhiteSpace(existingAuthority.ReleaseGroup) ? "an ungrouped installer" : $"release group '{existingAuthority.ReleaseGroup}'")}. " +
+                                "Every installer sharing an authority with a release group must use that same ReleaseGroup.");
+                        }
+
+                        if (existingAuthority is null)
+                            authorityReleaseGroups.Add(new MsiVersionAuthorityUsage(resolved, authorityOwner));
+                    }
 
                     var key = BuildMsiVersionKey(installer.Id, target.Name, combo.Framework, combo.Runtime, combo.Style);
                     versions[key] = new DotNetPublishMsiVersionPlan
@@ -2035,13 +2108,14 @@ public sealed partial class DotNetPublishPipelineRunner
                         GitRemote = resolved.GitRemote,
                         GitTagPrefix = resolved.GitTagPrefix,
                         AuthorityWorkingDirectory = projectRoot,
-                        AllowOutputOverwrite = installer.Versioning.AllowOutputOverwrite
+                        AllowOutputOverwrite = installer.Versioning!.AllowOutputOverwrite
                     };
 
                     if (!string.IsNullOrWhiteSpace(resolved.CoordinationKey) && resolved.Patch.HasValue)
                     {
-                        if (installer.Versioning.AllowOutputOverwrite
-                            && plannedStates.ContainsKey(resolved.CoordinationKey!))
+                        if (installer.Versioning!.AllowOutputOverwrite
+                            && plannedStates.ContainsKey(resolved.CoordinationKey!)
+                            && !isFirstPlanForInstallerInReleaseGroup)
                         {
                             throw new InvalidOperationException(
                                 $"Installer '{installer.Id}' enables Versioning.AllowOutputOverwrite, but multiple publish " +
@@ -2050,18 +2124,207 @@ public sealed partial class DotNetPublishPipelineRunner
                                 "or Versioning.AuthorityKey so every completed output has an authoritative version to reuse.");
                         }
 
-                        plannedStates[resolved.CoordinationKey!] = new MsiVersionState
+                        var candidateState = new MsiVersionState
                         {
                             LastPatch = resolved.Patch.Value,
                             Version = resolved.Version!,
                             UpdatedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture)
                         };
+                        plannedStates.TryGetValue(resolved.CoordinationKey!, out var currentState);
+                        plannedStates[resolved.CoordinationKey!] = SelectLatestMsiVersionState(currentState, candidateState)!;
                     }
                 }
             }
         }
 
         return versions;
+    }
+
+    private static MsiReleaseGroupCompatibility BuildMsiReleaseGroupCompatibility(
+        DotNetPublishPlan plan,
+        DotNetPublishInstallerPlan installer,
+        DotNetPublishStep step)
+    {
+        var versioning = installer.Versioning
+            ?? throw new InvalidOperationException($"Installer '{installer.Id}' has no MSI version policy.");
+        var tokens = BuildMsiVersionTemplateTokens(plan, installer, step);
+        var statePath = versioning.Monotonic
+            ? ResolveMsiVersionStatePath(plan, installer, tokens)
+            : string.Empty;
+        var authorityKey = versioning.Authority == DotNetPublishMsiVersionAuthorityKind.GitTags
+            ? NormalizeMsiGitRefPath(
+                ApplyTemplate(
+                    string.IsNullOrWhiteSpace(versioning.AuthorityKey) ? installer.Id : versioning.AuthorityKey!,
+                    tokens),
+                "MSI version authority key")
+            : string.Empty;
+        var remote = versioning.Authority == DotNetPublishMsiVersionAuthorityKind.GitTags
+            ? NormalizeMsiGitRemote(versioning.GitRemote)
+            : string.Empty;
+        var tagPrefix = versioning.Authority == DotNetPublishMsiVersionAuthorityKind.GitTags
+            ? NormalizeMsiGitRefPath(versioning.GitTagPrefix, "MSI version Git tag prefix", "powerforge-msi")
+            : string.Empty;
+        var floorDate = string.Empty;
+        if (!string.IsNullOrWhiteSpace(versioning.FloorDateUtc))
+        {
+            if (!TryParseUtcDate(versioning.FloorDateUtc!, out var parsedFloorDate))
+                throw new InvalidOperationException($"Invalid MSI floor date '{versioning.FloorDateUtc}'.");
+            floorDate = parsedFloorDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+        var publishProperties = ResolvePublishVersionProperties(versioning)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase);
+
+        return new MsiReleaseGroupCompatibility(
+            statePath,
+            string.Join(
+                "\n",
+                versioning.Pattern,
+                versioning.Major.ToString(CultureInfo.InvariantCulture),
+                versioning.Minor.ToString(CultureInfo.InvariantCulture),
+                floorDate,
+                versioning.Monotonic,
+                versioning.Authority,
+                versioning.PatchCap.ToString(CultureInfo.InvariantCulture),
+                versioning.AllowOutputOverwrite),
+            authorityKey,
+            remote,
+            tagPrefix,
+            versioning.PropertyName?.Trim() ?? "ProductVersion",
+            string.Join(",", publishProperties));
+    }
+
+    private sealed class MsiReleaseGroupCompatibility
+    {
+        public string StatePath { get; }
+        public string PolicyKey { get; }
+        public string AuthorityKey { get; }
+        public string GitRemote { get; }
+        public string GitTagPrefix { get; }
+        public string PropertyName { get; }
+        public string PublishPropertiesKey { get; }
+
+        public MsiReleaseGroupCompatibility(
+            string statePath,
+            string policyKey,
+            string authorityKey,
+            string gitRemote,
+            string gitTagPrefix,
+            string propertyName,
+            string publishPropertiesKey)
+        {
+            StatePath = statePath;
+            PolicyKey = policyKey;
+            AuthorityKey = authorityKey;
+            GitRemote = gitRemote;
+            GitTagPrefix = gitTagPrefix;
+            PropertyName = propertyName;
+            PublishPropertiesKey = publishPropertiesKey;
+        }
+
+        public bool Matches(MsiReleaseGroupCompatibility other)
+        {
+            var leftComparison = FrameworkCompatibility.GetPathStringComparisonForPath(StatePath);
+            var rightComparison = FrameworkCompatibility.GetPathStringComparisonForPath(other.StatePath);
+            var pathComparison = leftComparison == StringComparison.Ordinal || rightComparison == StringComparison.Ordinal
+                ? StringComparison.Ordinal
+                : StringComparison.OrdinalIgnoreCase;
+            return string.Equals(StatePath, other.StatePath, pathComparison)
+                   && string.Equals(PolicyKey, other.PolicyKey, StringComparison.Ordinal)
+                   && string.Equals(AuthorityKey, other.AuthorityKey, StringComparison.Ordinal)
+                   && string.Equals(GitRemote, other.GitRemote, StringComparison.Ordinal)
+                   && string.Equals(GitTagPrefix, other.GitTagPrefix, StringComparison.Ordinal)
+                   && string.Equals(PropertyName, other.PropertyName, StringComparison.OrdinalIgnoreCase)
+                   && string.Equals(PublishPropertiesKey, other.PublishPropertiesKey, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private sealed class MsiReleaseGroupPlan
+    {
+        public string InstallerId { get; }
+        public HashSet<string> InstallerIds { get; }
+        public MsiReleaseGroupCompatibility Compatibility { get; }
+        public MsiVersionResolution Resolution { get; }
+
+        public MsiReleaseGroupPlan(
+            string installerId,
+            MsiReleaseGroupCompatibility compatibility,
+            MsiVersionResolution resolution)
+        {
+            InstallerId = installerId;
+            InstallerIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { installerId };
+            Compatibility = compatibility;
+            Resolution = resolution;
+        }
+    }
+
+    private sealed class MsiVersionAuthorityUsage
+    {
+        public DotNetPublishMsiVersionAuthorityKind Authority { get; }
+        public string CoordinationKey { get; }
+        public string ReleaseGroup { get; }
+        public string? StatePath { get; }
+
+        public MsiVersionAuthorityUsage(MsiVersionResolution resolution, string releaseGroup)
+        {
+            Authority = resolution.Authority;
+            CoordinationKey = resolution.CoordinationKey!;
+            ReleaseGroup = releaseGroup;
+            StatePath = resolution.StatePath;
+        }
+
+        public bool Matches(MsiVersionResolution resolution)
+        {
+            if (Authority != resolution.Authority || string.IsNullOrWhiteSpace(resolution.CoordinationKey))
+                return false;
+
+            return MsiVersionCoordinationKeyComparer.Instance.Equals(CoordinationKey, resolution.CoordinationKey!);
+        }
+
+        public bool MatchesStatePath(string statePath)
+        {
+            if (string.IsNullOrWhiteSpace(StatePath))
+                return false;
+
+            var leftComparison = FrameworkCompatibility.GetPathStringComparisonForPath(StatePath!);
+            var rightComparison = FrameworkCompatibility.GetPathStringComparisonForPath(statePath);
+            var comparison = leftComparison == StringComparison.Ordinal || rightComparison == StringComparison.Ordinal
+                ? StringComparison.Ordinal
+                : StringComparison.OrdinalIgnoreCase;
+            return string.Equals(StatePath, statePath, comparison);
+        }
+    }
+
+    private sealed class MsiVersionCoordinationKeyComparer : IEqualityComparer<string>
+    {
+        public static MsiVersionCoordinationKeyComparer Instance { get; } = new();
+
+        public bool Equals(string? left, string? right)
+        {
+            if (ReferenceEquals(left, right))
+                return true;
+            if (left is null || right is null)
+                return false;
+
+            var leftIsGit = left.StartsWith("git:", StringComparison.Ordinal);
+            var rightIsGit = right.StartsWith("git:", StringComparison.Ordinal);
+            if (leftIsGit || rightIsGit)
+                return leftIsGit && rightIsGit && string.Equals(left, right, StringComparison.Ordinal);
+
+            var leftComparison = FrameworkCompatibility.GetPathStringComparisonForPath(left);
+            var rightComparison = FrameworkCompatibility.GetPathStringComparisonForPath(right);
+            var comparison = leftComparison == StringComparison.Ordinal || rightComparison == StringComparison.Ordinal
+                ? StringComparison.Ordinal
+                : StringComparison.OrdinalIgnoreCase;
+            return string.Equals(left, right, comparison);
+        }
+
+        public int GetHashCode(string value)
+        {
+            if (value.StartsWith("git:", StringComparison.Ordinal))
+                return StringComparer.Ordinal.GetHashCode(value);
+
+            return StringComparer.OrdinalIgnoreCase.GetHashCode(value);
+        }
     }
 
     private static DotNetPublishInstallerPlan[] BuildInstallerPlans(
@@ -2827,6 +3090,15 @@ public sealed partial class DotNetPublishPipelineRunner
         var clone = CloneMsiVersionOptions(versioning);
         if (clone is null) return null;
         if (!clone.Enabled) return clone;
+
+        clone.ReleaseGroup = string.IsNullOrWhiteSpace(clone.ReleaseGroup)
+            ? null
+            : clone.ReleaseGroup!.Trim();
+        if (clone.ReleaseGroup is not null && (!clone.Monotonic || !clone.ApplyToPublish))
+        {
+            throw new ArgumentException(
+                $"Installer '{installerId}' Versioning.ReleaseGroup requires Monotonic=true and ApplyToPublish=true.");
+        }
 
         if (!Enum.IsDefined(typeof(DotNetPublishMsiVersionPattern), clone.Pattern))
             throw new ArgumentException($"Installer '{installerId}' Versioning.Pattern is not supported.");

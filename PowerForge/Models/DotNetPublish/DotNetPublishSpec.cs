@@ -690,6 +690,13 @@ public sealed class DotNetPublishBundleMetadataOptions
 public sealed class DotNetPublishMsiVersionOptions
 {
     /// <summary>
+    /// Optional release-level version group shared by multiple installers.
+    /// Installers in the same group resolve and reserve one version atomically.
+    /// Their version authority settings must be identical after template expansion.
+    /// </summary>
+    public string? ReleaseGroup { get; set; }
+
+    /// <summary>
     /// Enables MSI version policy.
     /// </summary>
     public bool Enabled { get; set; }
