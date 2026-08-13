@@ -7,7 +7,7 @@
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>CS1591</WarningsAsErrors>
-    <VersionPrefix>3.0.107</VersionPrefix>
+    <VersionPrefix>3.0.108</VersionPrefix>
     <PackageId>PowerForge.PowerShell</PackageId>
     <Description>PowerForge PowerShell-hosted module pipeline services.</Description>
     <AssemblyName>PowerForge.PowerShell</AssemblyName>
