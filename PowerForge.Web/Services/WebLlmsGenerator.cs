@@ -72,21 +72,27 @@ public static partial class WebLlmsGenerator
             throw new DirectoryNotFoundException($"Site root not found: {siteRoot}");
 
         var includePackageContent = options.ContentKind == WebLlmsContentKind.Package;
-        var projectInfo = ReadProjectInfo(options.ProjectFile, includePackageContent);
+        var configuredName = string.IsNullOrWhiteSpace(options.Name) ? null : options.Name.Trim();
+        var configuredPackageId = string.IsNullOrWhiteSpace(options.PackageId) ? null : options.PackageId.Trim();
+        var configuredVersion = string.IsNullOrWhiteSpace(options.Version) ? null : options.Version.Trim();
+        var projectInfo = ReadProjectInfo(
+            options.ProjectFile,
+            includePackageContent,
+            requirePackageId: includePackageContent && configuredPackageId is null,
+            requireVersion: includePackageContent && configuredVersion is null);
         var packages = includePackageContent
             ? ResolvePackages(options.PackageFiles)
             : new List<PackageInfo>();
-        var configuredName = string.IsNullOrWhiteSpace(options.Name) ? null : options.Name.Trim();
         var name = includePackageContent
-            ? configuredName ?? projectInfo.Name ?? options.PackageId ?? projectInfo.PackageId ?? packages.FirstOrDefault()?.Id
+            ? configuredName ?? configuredPackageId ?? projectInfo.PackageId ?? projectInfo.Name ?? packages.FirstOrDefault()?.Id
             : configuredName ?? TryReadNameFromHomepage(siteRoot) ?? projectInfo.Name;
         if (string.IsNullOrWhiteSpace(name))
             throw new InvalidOperationException("LLMS content name could not be resolved. Configure name or provide usable project/homepage metadata.");
         var packageId = includePackageContent
-            ? options.PackageId ?? projectInfo.PackageId ?? packages.FirstOrDefault()?.Id ?? name
+            ? configuredPackageId ?? projectInfo.PackageId ?? packages.FirstOrDefault()?.Id ?? name
             : null;
         var version = includePackageContent
-            ? options.Version ?? ResolveSuiteVersion(packages) ?? projectInfo.Version ?? "unknown"
+            ? configuredVersion ?? ResolveSuiteVersion(packages) ?? projectInfo.Version ?? "unknown"
             : null;
 
         var apiCatalogs = ResolveApiCatalogs(options, siteRoot);

@@ -1488,6 +1488,103 @@ public class WebLlmsGeneratorTests
         }
     }
 
+    [Fact]
+    public void Generate_ExplicitPackageOverridesAvoidStrictReadsOfUnusedProjectMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-explicit-project-overrides-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectPath = Path.Combine(root, "Generated.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <PackageId Condition="'$(Configuration)' == 'Release'">Generated.Package</PackageId>
+                    <Version>$(GeneratedVersion)</Version>
+                    <PackAsTool>false</PackAsTool>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ProjectFile = projectPath,
+                PackageId = "Explicit.Package",
+                Version = "4.5.6"
+            });
+
+            Assert.Equal("Explicit.Package", result.Name);
+            Assert.Equal("Explicit.Package", result.PackageId);
+            Assert.Equal("4.5.6", result.Version);
+            Assert.Contains("dotnet add package Explicit.Package", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_PrefersResolvedPackageIdOverProjectFilenameForPackageName()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-package-name-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectPath = Path.Combine(root, "Internal.BuildName.csproj");
+            File.WriteAllText(projectPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>Public.Package</PackageId><Version>1.0.0</Version></PropertyGroup></Project>");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ProjectFile = projectPath
+            });
+
+            Assert.Equal("Public.Package", result.Name);
+            Assert.StartsWith("# Public.Package", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_SkipsMissingImportGuardedByExists()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-optional-import-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><PackageId>Example.Package</PackageId><Version>1.2.3</Version></PropertyGroup>
+                  <Import Project="Optional.targets" Condition="Exists('Optional.targets')" />
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+
+            Assert.Contains("dotnet add package Example.Package", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

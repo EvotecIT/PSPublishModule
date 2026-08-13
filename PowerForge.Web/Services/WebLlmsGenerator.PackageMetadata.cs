@@ -56,7 +56,11 @@ public static partial class WebLlmsGenerator
         return versions.Length == 1 ? versions[0] : "varies by package";
     }
 
-    private static ProjectInfo ReadProjectInfo(string? projectFile, bool requirePackageMetadata = false)
+    private static ProjectInfo ReadProjectInfo(
+        string? projectFile,
+        bool requirePackageMetadata = false,
+        bool requirePackageId = true,
+        bool requireVersion = true)
     {
         if (string.IsNullOrWhiteSpace(projectFile))
             return new ProjectInfo();
@@ -95,19 +99,19 @@ public static partial class WebLlmsGenerator
             };
         }
 
-        var packageId = GetMsBuildProperty(properties, "PackageId", throwOnUnresolved: true);
+        var packageId = GetMsBuildProperty(properties, "PackageId", throwOnUnresolved: requirePackageId);
         if (packageId is null)
-            assemblyName = GetMsBuildProperty(properties, "AssemblyName", throwOnUnresolved: true);
+            assemblyName = GetMsBuildProperty(properties, "AssemblyName", throwOnUnresolved: requirePackageId);
 
-        var version = GetMsBuildProperty(properties, "PackageVersion", throwOnUnresolved: true);
+        var version = GetMsBuildProperty(properties, "PackageVersion", throwOnUnresolved: requireVersion);
         if (version is null)
-            version = GetMsBuildProperty(properties, "Version", throwOnUnresolved: true);
+            version = GetMsBuildProperty(properties, "Version", throwOnUnresolved: requireVersion);
         if (version is null)
         {
-            var versionPrefix = GetMsBuildProperty(properties, "VersionPrefix", throwOnUnresolved: true);
+            var versionPrefix = GetMsBuildProperty(properties, "VersionPrefix", throwOnUnresolved: requireVersion);
             var versionSuffix = versionPrefix is null
                 ? null
-                : GetMsBuildProperty(properties, "VersionSuffix", throwOnUnresolved: true);
+                : GetMsBuildProperty(properties, "VersionSuffix", throwOnUnresolved: requireVersion);
             version = CombineMsBuildVersion(versionPrefix, versionSuffix);
         }
         var packAsTool = GetMsBuildProperty(properties, "PackAsTool", throwOnUnresolved: true);
@@ -138,7 +142,7 @@ public static partial class WebLlmsGenerator
     {
         if (string.IsNullOrWhiteSpace(projectFile) || !File.Exists(projectFile))
             return Array.Empty<string>();
-        if (!Path.GetExtension(projectFile).Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+        if (Path.GetExtension(projectFile).Equals(".psd1", StringComparison.OrdinalIgnoreCase))
             return new[] { Path.GetFullPath(projectFile) };
 
         return ReadMsBuildProperties(Path.GetFullPath(projectFile)).InputPaths
@@ -253,6 +257,11 @@ public static partial class WebLlmsGenerator
         var importedPath = Path.GetFullPath(normalizedImportPath, Path.GetDirectoryName(importingFile) ?? string.Empty);
         if (!File.Exists(importedPath))
         {
+            properties.InputPaths.Add(importedPath);
+            if (ConditionProvesMissingImportIsSkipped(inheritedCondition, importingFile, properties) ||
+                ConditionProvesMissingImportIsSkipped(import.Attribute("Condition")?.Value, importingFile, properties))
+                return;
+
             MarkAllPackageMetadataConditional(properties);
             return;
         }
@@ -294,6 +303,8 @@ public static partial class WebLlmsGenerator
             names.Add(property.Name.LocalName);
 
         var directory = Path.GetDirectoryName(fullPath) ?? string.Empty;
+        var conditionProperties = new MsBuildPropertySet();
+        conditionProperties.Values["MSBuildThisFileDirectory"] = directory + Path.DirectorySeparatorChar;
         foreach (var import in document.Descendants().Where(static element => element.Name.LocalName == "Import"))
         {
             var expression = import.Attribute("Project")?.Value ?? string.Empty;
@@ -310,8 +321,12 @@ public static partial class WebLlmsGenerator
                 .Replace('\\', Path.DirectorySeparatorChar)
                 .Replace('/', Path.DirectorySeparatorChar);
             var importedPath = Path.GetFullPath(normalizedPath, directory);
+            inputPaths.Add(importedPath);
             if (!File.Exists(importedPath))
             {
+                if (ConditionProvesMissingImportIsSkipped(import.Attribute("Condition")?.Value, fullPath, conditionProperties))
+                    continue;
+
                 foreach (var metadataName in PackageMetadataPropertyNames)
                     names.Add(metadataName);
                 continue;
@@ -319,6 +334,38 @@ public static partial class WebLlmsGenerator
 
             CollectImportedPropertyNames(importedPath, names, inputPaths, visited);
         }
+    }
+
+    private static bool ConditionProvesMissingImportIsSkipped(
+        string? condition,
+        string importingFile,
+        MsBuildPropertySet properties)
+    {
+        if (string.IsNullOrWhiteSpace(condition))
+            return false;
+
+        var expandedCondition = ExpandMsBuildPropertyAtAssignment(condition, properties);
+        if (Regex.IsMatch(expandedCondition, @"\bor\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            return false;
+
+        foreach (Match match in Regex.Matches(
+                     expandedCondition,
+                     @"(?<![!\w])Exists\s*\(\s*(?<quote>['""])(?<path>.*?)\k<quote>\s*\)",
+                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+        {
+            var candidate = match.Groups["path"].Value;
+            if (string.IsNullOrWhiteSpace(candidate) || candidate.Contains("$(", StringComparison.Ordinal))
+                continue;
+
+            var normalizedPath = candidate
+                .Replace('\\', Path.DirectorySeparatorChar)
+                .Replace('/', Path.DirectorySeparatorChar);
+            var fullPath = Path.GetFullPath(normalizedPath, Path.GetDirectoryName(importingFile) ?? string.Empty);
+            if (!File.Exists(fullPath))
+                return true;
+        }
+
+        return false;
     }
 
     private static void MarkConditionalProperties(XElement? root, MsBuildPropertySet properties)

@@ -315,6 +315,120 @@ public sealed class WebPipelineLlmsContractTests
         }
     }
 
+    [Theory]
+    [InlineData(".fsproj")]
+    [InlineData(".vbproj")]
+    public void Llms_fingerprint_tracks_implicit_metadata_for_all_msbuild_project_types(string extension)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-project-type-fingerprint-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectName = "Example" + extension;
+            File.WriteAllText(Path.Combine(root, projectName), "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+            var metadataPath = Path.Combine(root, "Directory.Build.props");
+            File.WriteAllText(metadataPath, "<Project><PropertyGroup><PackageId>Example.One</PackageId></PropertyGroup></Project>");
+            using var document = JsonDocument.Parse(
+                $$"""
+                {
+                  "task": "llms",
+                  "siteRoot": "_site",
+                  "packageFiles": ["{{projectName}}"]
+                }
+                """);
+            var method = typeof(WebPipelineRunner).GetMethod(
+                "ComputeStepFingerprint",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var first = (string)method!.Invoke(null, new object?[] { root, document.RootElement, null })!;
+            File.WriteAllText(metadataPath, "<Project><PropertyGroup><PackageId>Example.Two.Longer</PackageId></PropertyGroup></Project>");
+            var second = (string)method.Invoke(null, new object?[] { root, document.RootElement, null })!;
+
+            Assert.NotEqual(first, second);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Llms_site_fingerprint_ignores_package_only_project_inputs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-site-package-fingerprint-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var obsoleteProject = Path.Combine(root, "Obsolete.csproj");
+            File.WriteAllText(obsoleteProject, "<not-valid-msbuild");
+            using var document = JsonDocument.Parse(
+                """
+                {
+                  "task": "llms",
+                  "siteRoot": "_site",
+                  "contentKind": "Site",
+                  "name": "Example Portal",
+                  "packageFiles": ["Obsolete.csproj"]
+                }
+                """);
+            var method = typeof(WebPipelineRunner).GetMethod(
+                "ComputeStepFingerprint",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var first = (string)method!.Invoke(null, new object?[] { root, document.RootElement, null })!;
+            File.WriteAllText(obsoleteProject, "still-not-valid-msbuild");
+            var second = (string)method.Invoke(null, new object?[] { root, document.RootElement, null })!;
+
+            Assert.Equal(first, second);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Llms_fingerprint_changes_when_optional_import_appears()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-optional-import-fingerprint-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "Example.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><Import Project=\"Optional.targets\" Condition=\"Exists('Optional.targets')\" /></Project>");
+            using var document = JsonDocument.Parse(
+                """
+                {
+                  "task": "llms",
+                  "siteRoot": "_site",
+                  "packageFiles": ["Example.csproj"]
+                }
+                """);
+            var method = typeof(WebPipelineRunner).GetMethod(
+                "ComputeStepFingerprint",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var first = (string)method!.Invoke(null, new object?[] { root, document.RootElement, null })!;
+            File.WriteAllText(
+                Path.Combine(root, "Optional.targets"),
+                "<Project><PropertyGroup><PackageId>Example.Optional</PackageId></PropertyGroup></Project>");
+            var second = (string)method.Invoke(null, new object?[] { root, document.RootElement, null })!;
+
+            Assert.NotEqual(first, second);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string GetRepoPath(params string[] relativePath)
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
