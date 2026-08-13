@@ -75,6 +75,55 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void PublishBuiltReleaseOutputs_StudioModulePublisher_PublishesVirusTotalMonitor()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var artifactPath = Path.Combine(root, "Example.msi");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(artifactPath, "signed installer");
+            var monitorCalled = false;
+            var service = CreateReleaseService(
+                root,
+                new List<ModuleExecutionSnapshot>(),
+                new PowerForgeToolReleaseResult { Success = true },
+                publishVirusTotalMonitor: (_, _) =>
+                {
+                    monitorCalled = true;
+                    return new VirusTotalMonitorPublishResult { Success = true };
+                });
+            var spec = CreateVirusTotalInstallerSpec();
+            spec.Packages = null;
+            spec.Module = new PowerForgeModuleReleaseOptions();
+            var builtResult = CreateBuiltInstallerResult(artifactPath);
+            builtResult.ModulePlan = new PowerForgeModuleReleasePlanSummary
+            {
+                RunMode = ConfigurationGateMode.Build
+            };
+
+            var result = service.PublishBuiltReleaseOutputs(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ResolvedReleaseVersion = "1.2.3",
+                    ModulePublisherActive = true
+                },
+                builtResult);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.True(monitorCalled);
+            Assert.NotNull(result.VirusTotalMonitor);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void PublishBuiltReleaseOutputs_MatchingDestinationFromDifferentAggregateVersion_ResumesItem()
     {
         var root = CreateSandbox();

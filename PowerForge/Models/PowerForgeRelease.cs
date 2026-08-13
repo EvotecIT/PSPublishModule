@@ -71,6 +71,8 @@ internal sealed class PowerForgeReleaseRequest
 
     internal bool CaptureModuleArtifactProvenance { get; set; }
 
+    internal bool ModulePublisherActive { get; set; }
+
     /// <summary>Build Apple archives from a private detached exact-commit source worktree.</summary>
     internal bool RequireImmutableAppleSourceSnapshot { get; set; }
 

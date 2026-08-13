@@ -1035,11 +1035,15 @@ internal sealed partial class PowerForgeReleaseService
 
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
-        var publishVirusTotalMonitor = ShouldPublishVirusTotalMonitorFromCheckpoint(spec, builtResult);
+        var publishVirusTotalMonitor = ShouldPublishVirusTotalMonitorFromCheckpoint(
+            spec,
+            builtResult,
+            request.ModulePublisherActive);
         var virusTotalApiKey = PrepareVirusTotalPublishPreflight(
             spec,
             configPath,
-            builtResult);
+            builtResult,
+            request.ModulePublisherActive);
         var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, builtResult);
 
         if (spec.AppleApps is not null)
