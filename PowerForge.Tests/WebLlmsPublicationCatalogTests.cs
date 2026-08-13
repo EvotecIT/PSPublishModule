@@ -93,6 +93,29 @@ public sealed class WebLlmsPublicationCatalogTests
     }
 
     [Fact]
+    public void VerifiedCatalog_OmitsCommandWhenTheSourceVersionIsUnknown()
+    {
+        using var fixture = new PublicationFixture();
+        var project = fixture.WriteFile(
+            "Unknown.csproj",
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>Unknown.Package</PackageId></PropertyGroup></Project>");
+        var catalog = fixture.WriteCatalog("Evotec", ["Unknown.Package"]);
+
+        var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            ProjectFile = project,
+            InstallCommandPolicy = WebLlmsInstallCommandPolicy.VerifiedCatalog,
+            PublicationCatalogPath = catalog,
+            NuGetOwner = "Evotec"
+        });
+
+        Assert.Equal("unknown", result.Version);
+        Assert.Equal(0, result.InstallCommandCount);
+        Assert.DoesNotContain("## Install", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void VerifiedCatalog_RejectsStalePublicationProof()
     {
         using var fixture = new PublicationFixture();
@@ -198,6 +221,68 @@ public sealed class WebLlmsPublicationCatalogTests
     }
 
     [Fact]
+    public void VerifiedCatalog_PreservesNuGetAndPowerShellPackagesWithTheSameIdentifier()
+    {
+        using var fixture = new PublicationFixture();
+        var project = fixture.WriteProject("Shared.Package");
+        var module = fixture.WriteModule("Shared.Package");
+        var catalog = fixture.WriteCatalog(
+            "Evotec",
+            ["Shared.Package"],
+            powerShellGalleryOwner: "Przemyslaw.Klys",
+            powerShellModules: ["Shared.Package"]);
+
+        var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            PackageFiles = [project, module],
+            InstallCommandPolicy = WebLlmsInstallCommandPolicy.VerifiedCatalog,
+            PublicationCatalogPath = catalog,
+            NuGetOwner = "Evotec",
+            PowerShellGalleryOwner = "Przemyslaw.Klys"
+        });
+
+        Assert.Equal(2, result.PackageCount);
+        Assert.Equal(2, result.InstallCommandCount);
+        var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+        var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+        Assert.Contains("dotnet add package Shared.Package", llmsTxt, StringComparison.Ordinal);
+        Assert.Contains("Install-Module Shared.Package", llmsTxt, StringComparison.Ordinal);
+        Assert.Contains("\"source\": \"nuget\"", llmsJson, StringComparison.Ordinal);
+        Assert.Contains("\"source\": \"powerShellGallery\"", llmsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void VerifiedCatalog_OmitsInstallSectionsWhenNoPackageInAMultiChannelSuiteIsCurrent()
+    {
+        using var fixture = new PublicationFixture();
+        var project = fixture.WriteProject("Shared.Package");
+        var module = fixture.WriteModule("Shared.Package");
+        var catalog = fixture.WriteCatalog(
+            "Evotec",
+            ["Shared.Package"],
+            powerShellGalleryOwner: "Przemyslaw.Klys",
+            powerShellModules: ["Shared.Package"],
+            packageVersion: "1.2.2");
+
+        var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            PackageFiles = [project, module],
+            InstallCommandPolicy = WebLlmsInstallCommandPolicy.VerifiedCatalog,
+            PublicationCatalogPath = catalog,
+            NuGetOwner = "Evotec",
+            PowerShellGalleryOwner = "Przemyslaw.Klys"
+        });
+
+        Assert.Equal(2, result.PackageCount);
+        Assert.Equal(0, result.InstallCommandCount);
+        Assert.DoesNotContain("## Install", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        Assert.DoesNotContain("## Installation", File.ReadAllText(result.LlmsFullPath), StringComparison.Ordinal);
+        Assert.DoesNotContain("\"install\"", File.ReadAllText(result.LlmsJsonPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NonePolicy_OmitsDeclaredInstallationCommandsWithoutARegistryCatalog()
     {
         using var fixture = new PublicationFixture();
@@ -294,6 +379,46 @@ public sealed class WebLlmsPublicationCatalogTests
 
         Assert.Equal("Targeted.Package", result.PackageId);
         Assert.Equal("1.2.3", result.Version);
+    }
+
+    [Fact]
+    public void PackageMetadata_ResolvesProvableProjectNameConditions()
+    {
+        using var fixture = new PublicationFixture();
+        fixture.WriteFile(
+            "Directory.Build.props",
+            "<Project><PropertyGroup Condition=\"'$(MSBuildProjectName)' == 'Different'\"><PackageId>Wrong.Package</PackageId></PropertyGroup><PropertyGroup Condition=\"'$(MSBuildProjectName)' == 'Conditional'\"><PackageId>Conditional.Package</PackageId></PropertyGroup></Project>");
+        var project = fixture.WriteFile(
+            "Conditional.csproj",
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><Version>1.2.3</Version></PropertyGroup></Project>");
+
+        var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            ProjectFile = project
+        });
+
+        Assert.Equal("Conditional.Package", result.PackageId);
+        Assert.Equal("1.2.3", result.Version);
+    }
+
+    [Theory]
+    [InlineData("@(Flavor)")]
+    [InlineData("%(Flavor.Identity)")]
+    public void PackageMetadata_RejectsUnresolvedItemExpressionsInConditions(string expression)
+    {
+        using var fixture = new PublicationFixture();
+        var project = fixture.WriteFile(
+            "Conditional.csproj",
+            $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><Version>1.2.3</Version><PackageId Condition=\"'{expression}' != ''\">Conditional.Package</PackageId></PropertyGroup></Project>");
+
+        var exception = Assert.Throws<InvalidDataException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            ProjectFile = project
+        }));
+
+        Assert.Contains("Cannot resolve MSBuild property 'PackageId'", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]

@@ -44,7 +44,7 @@ public static partial class WebLlmsGenerator
             if (typeCount.HasValue) lines.Add($"- API types: {typeCount.Value}");
             if (apiCatalogs.Count > 1) lines.Add($"- API catalogs: {apiCatalogs.Count}");
             lines.Add(string.Empty);
-            if (!string.IsNullOrWhiteSpace(legacyInstallCommand) || packages.Any(HasInstallCommand))
+            if (HasAnyInstallCommand(legacyInstallCommand, packages))
             {
                 lines.Add("## Install");
                 if (packages.Count == 0)
@@ -167,8 +167,7 @@ public static partial class WebLlmsGenerator
         if (!string.IsNullOrWhiteSpace(options.License)) lines.Add($"- License: {options.License}");
         if (!string.IsNullOrWhiteSpace(options.Targets)) lines.Add($"- Targets: {options.Targets}");
 
-        if (includePackageContent &&
-            (!string.IsNullOrWhiteSpace(legacyInstallCommand) || packages.Any(HasInstallCommand)))
+        if (includePackageContent && HasAnyInstallCommand(legacyInstallCommand, packages))
         {
             lines.Add(string.Empty);
             lines.Add("## Installation");
@@ -244,12 +243,20 @@ public static partial class WebLlmsGenerator
     private static bool HasInstallCommand(PackageInfo package)
         => !string.IsNullOrWhiteSpace(package.InstallCommand);
 
+    private static bool HasAnyInstallCommand(
+        string? legacyInstallCommand,
+        IReadOnlyList<PackageInfo> packages)
+        => packages.Count == 0
+            ? !string.IsNullOrWhiteSpace(legacyInstallCommand)
+            : packages.Any(HasInstallCommand);
+
     private static Dictionary<string, object?> CreatePackagePayload(PackageInfo package)
     {
         var payload = new Dictionary<string, object?>
         {
             ["id"] = package.Id,
-            ["version"] = package.Version
+            ["version"] = package.Version,
+            ["source"] = package.IsPowerShellModule ? "powerShellGallery" : "nuget"
         };
         if (HasInstallCommand(package))
             payload["install"] = package.InstallCommand;
