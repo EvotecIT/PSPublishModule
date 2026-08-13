@@ -170,6 +170,57 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
         Assert.Contains("dirty source", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Create_BenignRootModuleDotSegmentUsesCanonicalPackedPath()
+    {
+        using var fixture = new SigningFixture();
+        File.WriteAllText(fixture.ManifestPath, "@{ ModuleVersion = '2.3.4'; RootModule = './Sample.psm1' }");
+        var signingResult = new ModuleSigningResult
+        {
+            TotalMatched = 3,
+            TotalAfterExclude = 3,
+            SignedNew = 3,
+            VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath, fixture.SourceAttestationPath }
+        };
+
+        PowerForgeModuleSigningEvidence evidence = PowerForgeModuleSigningEvidenceWriter.Create(
+            fixture.Root,
+            "Sample",
+            "2.3.4",
+            SourceRevision,
+            sourceDirty: false,
+            fixture.ManifestPath,
+            signingResult);
+
+        Assert.Contains("Sample/Sample.psm1", evidence.SignableFiles);
+    }
+
+    [Fact]
+    public void Create_EscapingRootModuleFailsClosed()
+    {
+        using var fixture = new SigningFixture();
+        File.WriteAllText(fixture.ManifestPath, "@{ ModuleVersion = '2.3.4'; RootModule = '../Sample.psm1' }");
+        var signingResult = new ModuleSigningResult
+        {
+            TotalMatched = 3,
+            TotalAfterExclude = 3,
+            SignedNew = 3,
+            VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath, fixture.SourceAttestationPath }
+        };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeModuleSigningEvidenceWriter.Create(
+                fixture.Root,
+                "Sample",
+                "2.3.4",
+                SourceRevision,
+                sourceDirty: false,
+                fixture.ManifestPath,
+                signingResult));
+
+        Assert.Contains("must stay under", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class SigningFixture : IDisposable
     {
         public SigningFixture(bool includeVendorDependency = false)

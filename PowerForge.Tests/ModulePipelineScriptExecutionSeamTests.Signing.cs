@@ -74,6 +74,84 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         }
     }
 
+    [Fact]
+    public void Run_MultiplePackedArtifactsAggregateEverySigningResult()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var hostedOperations = new FakeHostedOperations();
+            hostedOperations.SigningResults.Enqueue(CreateSigningResult("stage.psd1", signedNew: 1));
+            hostedOperations.SigningResults.Enqueue(CreateSigningResult("packed-one.psd1", signedNew: 2));
+            hostedOperations.SigningResults.Enqueue(CreateSigningResult(
+                "packed-two.psd1",
+                signedNew: 0,
+                alreadySignedOther: 1,
+                vendorPath: "vendor.dll"));
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "PackedOne"));
+            spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
+            {
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = ArtefactType.Packed,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = Path.Combine(root.FullName, "Artefacts", "PackedTwo"),
+                        ArtefactName = moduleName + "-second.zip"
+                    }
+                }
+            }).ToArray();
+
+            ModulePipelineResult result = runner.Run(spec, runner.Plan(spec));
+
+            ModuleSigningResult aggregate = Assert.IsType<ModuleSigningResult>(result.SigningResult);
+            Assert.Equal(3, hostedOperations.SignCalls);
+            Assert.Equal(3, aggregate.TotalAfterExclude);
+            Assert.Equal(3, aggregate.SignedNew);
+            Assert.Equal(1, aggregate.AlreadySignedOther);
+            Assert.Equal(new[] { "stage.psd1", "packed-one.psd1", "packed-two.psd1" }, aggregate.VerifiedFilePaths);
+            ModuleSigningPreservedSignature vendor = Assert.Single(aggregate.PreservedThirdPartySignatures);
+            Assert.Equal("vendor.dll", vendor.FilePath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    private static ModuleSigningResult CreateSigningResult(
+        string verifiedPath,
+        int signedNew,
+        int alreadySignedOther = 0,
+        string? vendorPath = null)
+        => new()
+        {
+            TotalMatched = 1,
+            TotalAfterExclude = 1,
+            SignedNew = signedNew,
+            AlreadySignedOther = alreadySignedOther,
+            CertificateThumbprint = "ABC123",
+            VerifiedFilePaths = new[] { verifiedPath },
+            PreservedThirdPartySignatures = vendorPath is null
+                ? Array.Empty<ModuleSigningPreservedSignature>()
+                : new[]
+                {
+                    new ModuleSigningPreservedSignature
+                    {
+                        FilePath = vendorPath,
+                        Subject = "CN=Vendor",
+                        Thumbprint = "DEF456"
+                    }
+                }
+        };
+
     private static ModulePipelineSpec CreateSignedPackedSpec(string sourcePath, string moduleName, string outputRoot)
     {
         return new ModulePipelineSpec

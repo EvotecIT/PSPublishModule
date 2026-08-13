@@ -41,6 +41,11 @@ public sealed partial class AppleReleaseWorkflowTests
             script.IndexOf("Get-PowerForgeReleaseSourceState", StringComparison.Ordinal) <
             script.IndexOf("New-Item -ItemType Directory -Path $receiptDirectory", StringComparison.Ordinal),
             "Release receipts must not be created until the checkout is proven clean.");
+        Assert.True(
+            script.IndexOf("Remove-Item -LiteralPath $ReceiptPath", StringComparison.Ordinal) <
+            script.IndexOf("& $buildScript @buildParameters", StringComparison.Ordinal),
+            "A prior untracked receipt must be removed before portable provenance is captured.");
+        Assert.DoesNotContain("Status         = 'Running'", script, StringComparison.Ordinal);
         Assert.Contains("\"PowerForge.ReleaseProvenance.json\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains("\"PowerForge.ReleaseProvenance.psd1\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains(". .\\Build\\Private\\Assert-PowerForgeCommittedReleaseVersion.ps1", workflow, StringComparison.Ordinal);

@@ -668,7 +668,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void WriteManifests_IncludesEveryEffectiveConfigurationInputInChecksums()
+    public void WriteManifests_UntrackedEffectiveConfigurationIsHashedWithoutDirtyingSource()
     {
         string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -678,12 +678,13 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunGit(root, "init");
             RunGit(root, "config user.name \"PowerForge Tests\"");
             RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
-            string releaseConfig = Path.Combine(root, "powerforge.release.json");
-            string publishConfig = Path.Combine(root, "powerforge.dotnetpublish.json");
+            File.WriteAllText(Path.Combine(root, "tracked.txt"), "tracked");
+            RunGit(root, "add tracked.txt");
+            RunGit(root, "commit -m \"tracked source\"");
+            string releaseConfig = Path.Combine(root, ".release.authorized.123.json");
+            string publishConfig = Path.Combine(root, "powerforge.dotnetpublish.generated.json");
             File.WriteAllText(releaseConfig, "{}");
             File.WriteAllText(publishConfig, "{}");
-            RunGit(root, "add powerforge.release.json powerforge.dotnetpublish.json");
-            RunGit(root, "commit -m \"configuration inputs\"");
 
             string outputDirectory = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "app")).FullName;
             string executablePath = Path.Combine(outputDirectory, "app.exe");
@@ -720,8 +721,15 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             InvokeWriteManifests(plan, artefacts);
 
             string[] checksumLines = File.ReadAllLines(checksumsPath);
-            Assert.Contains(checksumLines, line => line.EndsWith("*powerforge.release.json", StringComparison.Ordinal));
-            Assert.Contains(checksumLines, line => line.EndsWith("*powerforge.dotnetpublish.json", StringComparison.Ordinal));
+            Assert.Contains(checksumLines, line => line.EndsWith("*.release.authorized.123.json", StringComparison.Ordinal));
+            Assert.Contains(checksumLines, line => line.EndsWith("*powerforge.dotnetpublish.generated.json", StringComparison.Ordinal));
+            using (JsonDocument cleanManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+                Assert.False(cleanManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+
+            File.WriteAllText(Path.Combine(root, "untracked-input.txt"), "input");
+            InvokeWriteManifests(plan, artefacts);
+            using JsonDocument dirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            Assert.True(dirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
         }
         finally
         {

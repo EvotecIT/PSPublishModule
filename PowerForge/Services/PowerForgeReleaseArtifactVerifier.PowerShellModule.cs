@@ -297,11 +297,33 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     {
         if (IsRootedArchiveReference(relativePath))
             throw Invalid($"Packed module path '{relativePath}' must be relative to the primary manifest.");
+        string normalizedReference = NormalizeRelativeArchiveReference(relativePath);
         string manifestDirectory = Path.GetDirectoryName(manifestPath.Replace('/', Path.DirectorySeparatorChar)) ?? string.Empty;
         string combined = string.IsNullOrWhiteSpace(manifestDirectory)
-            ? relativePath
-            : manifestDirectory.Replace(Path.DirectorySeparatorChar, '/') + "/" + relativePath;
+            ? normalizedReference
+            : manifestDirectory.Replace(Path.DirectorySeparatorChar, '/') + "/" + normalizedReference;
         return NormalizeArchivePath(combined);
+    }
+
+    private static string NormalizeRelativeArchiveReference(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw Invalid("Packed module relative path is required.");
+        string value = path.Trim().Replace('\\', '/');
+        var segments = new List<string>();
+        foreach (string segment in value.Split('/'))
+        {
+            if (segment.Length == 0)
+                throw Invalid($"Packed module path '{path}' contains an empty segment.");
+            if (segment == ".")
+                continue;
+            if (segment == "..")
+                throw Invalid($"Packed module path '{path}' must not escape the primary manifest directory.");
+            segments.Add(segment);
+        }
+        if (segments.Count == 0)
+            throw Invalid($"Packed module path '{path}' does not identify a file.");
+        return string.Join("/", segments);
     }
 
     private static string GetArchiveParentDirectoryName(string path)

@@ -35,6 +35,35 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         Assert.Contains("must be relative", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("./Sample.psm1")]
+    [InlineData(".\\Sample.psm1")]
+    public void Verify_PowerShellModuleNormalizesBenignRootModuleDotSegment(string rootModule)
+    {
+        using var fixture = new ModuleFixture();
+        fixture.WriteArchive(SourceRevision, rootModuleValue: rootModule);
+        fixture.WriteChecksums();
+
+        PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(fixture.CreateRequest());
+
+        Assert.Equal("Sample", evidence.ArtifactId);
+    }
+
+    [Theory]
+    [InlineData("../Sample.psm1")]
+    [InlineData("sub/../../Sample.psm1")]
+    public void Verify_PowerShellModuleRejectsEscapingRootModuleDotSegment(string rootModule)
+    {
+        using var fixture = new ModuleFixture();
+        fixture.WriteArchive(SourceRevision, rootModuleValue: rootModule);
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("must not escape", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Verify_PowerShellModuleRejectsOversizedManifestMetadata()
     {

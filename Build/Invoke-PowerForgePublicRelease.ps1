@@ -70,16 +70,12 @@ try {
         throw "The release checkout must start clean. Tracked or untracked changes: $(@($sourceState.Changes) -join ', ')"
     }
 
+    & git -C $repositoryRoot ls-files --error-unmatch -- $ReceiptPath *> $null
+    $receiptIsTracked = $LASTEXITCODE -eq 0
+    if (-not $receiptIsTracked -and (Test-Path -LiteralPath $ReceiptPath)) {
+        Remove-Item -LiteralPath $ReceiptPath -Force
+    }
     New-Item -ItemType Directory -Path $receiptDirectory -Force | Out-Null
-    [pscustomobject]@{
-        Success        = $false
-        Status         = 'Running'
-        Stage          = $releaseStage
-        Operation      = $Operation
-        Version        = $Version
-        ExpectedCommit = $ExpectedCommit
-        StartedAtUtc   = [DateTime]::UtcNow
-    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ReceiptPath -Encoding utf8
     $receiptInitialized = $true
 
     $actualCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()

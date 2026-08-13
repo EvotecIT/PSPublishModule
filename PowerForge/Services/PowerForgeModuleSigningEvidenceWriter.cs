@@ -73,10 +73,7 @@ public static class PowerForgeModuleSigningEvidenceWriter
         string? rootModule = ModuleManifestValueReader.ReadTopLevelString(manifest, "RootModule");
         if (string.IsNullOrWhiteSpace(rootModule))
             throw new InvalidOperationException("The module manifest must declare a RootModule entrypoint.");
-        string rootModulePath = ResolveFileUnderRoot(
-            root,
-            Path.Combine(Path.GetDirectoryName(manifest) ?? root, rootModule!),
-            "RootModule entrypoint");
+        string rootModulePath = ResolveModuleEntrypoint(root, manifest, rootModule!);
         if (!verifiedFiles.Contains(rootModulePath, pathComparer))
             throw new InvalidOperationException("Module signing evidence must include the RootModule entrypoint.");
         if (preservedThirdPartySignatures.Any(signature =>
@@ -203,6 +200,20 @@ public static class PowerForgeModuleSigningEvidenceWriter
         if (!File.Exists(candidate))
             throw new FileNotFoundException($"{label} was not found.", candidate);
         return ResolveCanonicalExistingPath(root, relative, label);
+    }
+
+    private static string ResolveModuleEntrypoint(string root, string manifestPath, string rootModule)
+    {
+        if (Path.IsPathRooted(rootModule) || rootModule.StartsWith("\\", StringComparison.Ordinal) ||
+            rootModule.StartsWith("/", StringComparison.Ordinal))
+            throw new InvalidOperationException("RootModule entrypoint must be relative to the primary module manifest.");
+        string manifestDirectory = Path.GetDirectoryName(manifestPath) ?? root;
+        string candidate = Path.GetFullPath(Path.Combine(manifestDirectory, rootModule));
+        string relativeToManifest = FrameworkCompatibility.GetRelativePath(manifestDirectory, candidate);
+        if (Path.IsPathRooted(relativeToManifest) || relativeToManifest == ".." ||
+            relativeToManifest.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new InvalidOperationException("RootModule entrypoint must stay under the primary module manifest directory.");
+        return ResolveFileUnderRoot(root, candidate, "RootModule entrypoint");
     }
 
     private static string ResolveCanonicalExistingPath(string root, string relativePath, string label)
