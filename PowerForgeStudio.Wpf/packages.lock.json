@@ -187,7 +187,7 @@
       "VirusTotalAnalyzer": {
         "type": "Transitive",
         "resolved": "1.0.0",
-        "contentHash": "ypnCefDNRHblcj8glXeqFor/IE/dU9ndpY4UUMHR8/F/rf6fmqjl7V0Nvfgft8nWDmB8KPd0AuRN6YF/pBLD7A=="
+        "contentHash": "sg2uLSJS37PyZenldT55a+B93ct2bvz3653uU0FwFtv1v3bcrG453O7/n1hcSp9DO4burBNIyEu00O8ZWHptNQ=="
       },
       "dbaclientx.core": {
         "type": "Project"
