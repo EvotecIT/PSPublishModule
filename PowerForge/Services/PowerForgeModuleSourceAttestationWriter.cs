@@ -49,6 +49,32 @@ public static class PowerForgeModuleSourceAttestationWriter
         return destination;
     }
 
+    /// <summary>
+    /// Binds the complete final packed-layout signing inventory into the source attestation before its final signature is applied.
+    /// </summary>
+    /// <param name="manifestPath">Primary module manifest beside the source attestation.</param>
+    /// <param name="moduleRoot">Root directory whose relative paths mirror the packed archive.</param>
+    /// <param name="signingResult">Successful signing result for the final packed layout.</param>
+    /// <returns>The normalized full path of the rewritten attestation.</returns>
+    public static string BindSigningInventory(
+        string manifestPath,
+        string moduleRoot,
+        ModuleSigningResult signingResult)
+    {
+        string manifest = Path.GetFullPath(RequireText(manifestPath, nameof(manifestPath)));
+        string destination = Path.Combine(
+            Path.GetDirectoryName(manifest) ?? throw new InvalidOperationException("Primary module manifest directory could not be resolved."),
+            FileName);
+        if (!File.Exists(destination))
+            throw new FileNotFoundException("Signed module source attestation was not found.", destination);
+        PowerForgeModuleSourceAttestation existing = Read(File.ReadAllBytes(destination));
+        string inventorySha256 = PowerForgeModuleSigningEvidenceWriter.ComputeSigningInventorySha256(
+            moduleRoot,
+            signingResult);
+        WriteContent(destination, existing.ModuleName, existing.Version, existing.SourceRevision, inventorySha256);
+        return destination;
+    }
+
     internal static PowerForgeModuleSourceAttestation Read(byte[] bytes)
     {
         string text;
@@ -62,17 +88,52 @@ public static class PowerForgeModuleSourceAttestationWriter
         }
 
         string schema = ReadRequired(text, "SchemaVersion");
-        if (!string.Equals(schema, "1", StringComparison.Ordinal))
+        if (!string.Equals(schema, "1", StringComparison.Ordinal) &&
+            !string.Equals(schema, "2", StringComparison.Ordinal))
             throw new InvalidDataException("Signed module source attestation schema version is not supported.");
         string dirty = ReadRequired(text, "SourceDirty");
         if (!string.Equals(dirty, "false", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Signed module source attestation must bind a clean source checkout.");
+        string? signingInventorySha256 = string.Equals(schema, "2", StringComparison.Ordinal)
+            ? RequireSha256(ReadRequired(text, "SigningInventorySha256"))
+            : null;
         return new PowerForgeModuleSourceAttestation(
             ReadRequired(text, "ModuleName"),
             ReadRequired(text, "Version"),
             DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(
                 ReadRequired(text, "SourceRevision"),
-                "signed module source revision"));
+                "signed module source revision"),
+            signingInventorySha256);
+    }
+
+    private static void WriteContent(
+        string destination,
+        string moduleName,
+        string version,
+        string sourceRevision,
+        string signingInventorySha256)
+    {
+        string content = string.Join(Environment.NewLine, new[]
+        {
+            "@{",
+            "    SchemaVersion = '2'",
+            $"    ModuleName = '{RequireSafeValue(moduleName, nameof(moduleName))}'",
+            $"    Version = '{RequireSafeValue(version, nameof(version))}'",
+            $"    SourceRevision = '{DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(sourceRevision, nameof(sourceRevision)).ToLowerInvariant()}'",
+            "    SourceDirty = 'false'",
+            $"    SigningInventorySha256 = '{RequireSha256(signingInventorySha256)}'",
+            "}",
+            string.Empty
+        });
+        File.WriteAllText(destination, content, new UTF8Encoding(false));
+    }
+
+    private static string RequireSha256(string value)
+    {
+        string normalized = RequireText(value, nameof(value));
+        if (normalized.Length != 64 || normalized.Any(character => !Uri.IsHexDigit(character)))
+            throw new InvalidDataException("Signed module signing inventory SHA-256 is malformed.");
+        return normalized.ToLowerInvariant();
     }
 
     private static string ReadRequired(string text, string name)
@@ -103,14 +164,20 @@ public static class PowerForgeModuleSourceAttestationWriter
 
 internal sealed class PowerForgeModuleSourceAttestation
 {
-    internal PowerForgeModuleSourceAttestation(string moduleName, string version, string sourceRevision)
+    internal PowerForgeModuleSourceAttestation(
+        string moduleName,
+        string version,
+        string sourceRevision,
+        string? signingInventorySha256)
     {
         ModuleName = moduleName;
         Version = version;
         SourceRevision = sourceRevision;
+        SigningInventorySha256 = signingInventorySha256;
     }
 
     internal string ModuleName { get; }
     internal string Version { get; }
     internal string SourceRevision { get; }
+    internal string? SigningInventorySha256 { get; }
 }

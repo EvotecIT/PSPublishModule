@@ -9,23 +9,39 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     private const long MaxModuleSignedEntryBytes = 512L * 1024L * 1024L;
     private const long MaxModuleSignedEntriesBytes = 2L * 1024L * 1024L * 1024L;
 
-    private static void VerifyArchiveContainsFile(
+    private static void VerifyPortableArchiveInventory(
+        string projectRoot,
+        string checksumsPath,
         string archivePath,
-        string outputDirectory,
-        string representedPath,
-        string expectedDigest)
+        string outputDirectory)
     {
-        string relative = DotNetPublishReleaseArtifactVerifier.GetRelativePath(outputDirectory, representedPath).Replace('\\', '/');
         using ZipArchive archive = ZipFile.OpenRead(archivePath);
         Dictionary<string, ZipArchiveEntry> entries = ValidateArchiveEntries(archive);
-        if (!entries.TryGetValue(NormalizeArchivePath(relative), out ZipArchiveEntry? entry) || entry.Length == 0)
-            throw Invalid($"Portable archive does not contain signed file '{relative}'.");
-        long representedLength = new FileInfo(representedPath).Length;
-        if (entry.Length != representedLength)
-            throw Invalid($"Portable archive contains different bytes for signed file '{relative}'.");
-        string digest = ComputeSha256(entry);
-        if (!string.Equals(digest, expectedDigest, StringComparison.OrdinalIgnoreCase))
-            throw Invalid($"Portable archive contains different bytes for signed file '{relative}'.");
+        Dictionary<string, string> outputFiles = Directory.EnumerateFiles(outputDirectory, "*", SearchOption.AllDirectories)
+            .ToDictionary(
+                path => NormalizeArchivePath(
+                    DotNetPublishReleaseArtifactVerifier.GetRelativePath(outputDirectory, path).Replace('\\', '/')),
+                Path.GetFullPath,
+                StringComparer.Ordinal);
+        if (outputFiles.Count != entries.Count ||
+            outputFiles.Keys.Any(path => !entries.ContainsKey(path)) ||
+            entries.Keys.Any(path => !outputFiles.ContainsKey(path)))
+            throw Invalid("Portable archive entries do not exactly match the trusted publish output inventory.");
+
+        foreach (KeyValuePair<string, string> outputFile in outputFiles)
+        {
+            string relative = outputFile.Key;
+            string representedPath = outputFile.Value;
+            ZipArchiveEntry entry = entries[relative];
+            string expectedDigest = VerifyChecksummedFile(
+                projectRoot,
+                checksumsPath,
+                representedPath,
+                $"portable output file '{relative}'");
+            if (entry.Length != new FileInfo(representedPath).Length ||
+                !string.Equals(ComputeSha256(entry), expectedDigest, StringComparison.OrdinalIgnoreCase))
+                throw Invalid($"Portable archive contains different bytes for output file '{relative}'.");
+        }
     }
 
     private static Dictionary<string, ZipArchiveEntry> ValidateArchiveEntries(ZipArchive archive)

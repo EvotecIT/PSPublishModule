@@ -17,20 +17,40 @@ public sealed partial class ModulePipelineRunner
         string[] packageFiles = Directory.EnumerateFiles(context.RootPath, "*", SearchOption.AllDirectories)
             .Select(Path.GetFullPath)
             .ToArray();
+        string[] includePatterns = BuildSigningIncludePatterns(signing);
+        string[] excludeSubstrings = BuildSigningExcludeSubstrings(
+            signing,
+            plan.Delivery,
+            excludeBundledRequiredModules: false);
         ModuleSigningResult signingResult = _hostedOperations.SignModuleOutput(
             context.ModuleName,
             context.RootPath,
             packageFiles,
-            BuildSigningIncludePatterns(signing),
-            BuildSigningExcludeSubstrings(signing, plan.Delivery, excludeBundledRequiredModules: false),
+            includePatterns,
+            excludeSubstrings,
             signing);
-        state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);
 
         string sourceAttestationPath = Path.Combine(
             context.MainModulePath,
             PowerForgeModuleSourceAttestationWriter.FileName);
         if (!File.Exists(sourceAttestationPath))
+        {
+            state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);
             return Array.Empty<string>();
+        }
+
+        PowerForgeModuleSourceAttestationWriter.BindSigningInventory(
+            context.ManifestPath,
+            context.RootPath,
+            signingResult);
+        signingResult = _hostedOperations.SignModuleOutput(
+            context.ModuleName,
+            context.RootPath,
+            packageFiles,
+            includePatterns,
+            excludeSubstrings,
+            signing);
+        state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);
 
         string evidencePath = context.OutputPath + ".signing.json";
         return new[]

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace PowerForge;
@@ -42,31 +44,11 @@ public static class PowerForgeModuleSigningEvidenceWriter
             : StringComparer.OrdinalIgnoreCase;
 
         string manifest = ResolveFileUnderRoot(root, manifestPath, nameof(manifestPath));
-        string[] verifiedFiles = (signingResult.VerifiedFilePaths ?? Array.Empty<string>())
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Select(path => ResolveFileUnderRoot(root, path, "verified signing path"))
-            .Distinct(pathComparer)
-            .OrderBy(path => path, pathComparer)
-            .ToArray();
-        if (verifiedFiles.Length != signingResult.TotalAfterExclude)
-            throw new InvalidOperationException(
-                "Module signing evidence requires one exact verified file path for every file selected by the signing pipeline.");
+        NormalizedSigningInventory inventory = NormalizeSigningInventory(root, signingResult, pathComparer);
+        string[] verifiedFiles = inventory.VerifiedFiles;
+        PowerForgeModulePreservedSignature[] preservedThirdPartySignatures = inventory.PreservedThirdPartySignatures;
         if (!verifiedFiles.Contains(manifest, pathComparer))
             throw new InvalidOperationException("Module signing evidence must include the module manifest.");
-        PowerForgeModulePreservedSignature[] preservedThirdPartySignatures =
-            (signingResult.PreservedThirdPartySignatures ?? Array.Empty<ModuleSigningPreservedSignature>())
-            .Select(signature => CreatePreservedSignature(root, signature))
-            .OrderBy(signature => signature.Path, pathComparer)
-            .ToArray();
-        if (preservedThirdPartySignatures.Select(signature => signature.Path).Distinct(pathComparer).Count() !=
-            preservedThirdPartySignatures.Length)
-            throw new InvalidOperationException("Preserved third-party signing evidence contains duplicate file paths.");
-        if (preservedThirdPartySignatures.Length != signingResult.AlreadySignedOther)
-            throw new InvalidOperationException(
-                "Preserved third-party signer identities must cover every valid third-party signature reported by the signing pipeline.");
-        if (preservedThirdPartySignatures.Any(signature =>
-                !verifiedFiles.Contains(ResolveFileUnderRoot(root, signature.Path, "preserved third-party signing path"), pathComparer)))
-            throw new InvalidOperationException("Preserved third-party files must be part of the verified signing set.");
         if (preservedThirdPartySignatures.Any(signature =>
                 pathComparer.Equals(ResolveFileUnderRoot(root, signature.Path, "preserved third-party signing path"), manifest)))
             throw new InvalidOperationException("The module manifest must be owned by the configured release publisher.");
@@ -96,16 +78,22 @@ public static class PowerForgeModuleSigningEvidenceWriter
             !string.Equals(sourceAttestation.Version, normalizedVersion, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(sourceAttestation.SourceRevision, revision, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Signed module source attestation does not match the signing evidence identity.");
+        string[] signableFiles = verifiedFiles.Select(path => NormalizeRelativePath(root, path)).ToArray();
+        string signingInventorySha256 = ComputeSigningInventorySha256(signableFiles, preservedThirdPartySignatures);
+        if (!string.Equals(sourceAttestation.SigningInventorySha256, signingInventorySha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Signed module source attestation does not bind the complete final signing inventory.");
 
         return new PowerForgeModuleSigningEvidence
         {
-            SchemaVersion = 2,
+            SchemaVersion = 3,
             ModuleName = name,
             Version = normalizedVersion,
             SourceRevision = revision.ToLowerInvariant(),
             SourceDirty = false,
             ManifestPath = NormalizeRelativePath(root, manifest),
-            SignableFiles = verifiedFiles.Select(path => NormalizeRelativePath(root, path)).ToArray(),
+            SignableFiles = signableFiles,
+            SigningInventorySha256 = signingInventorySha256,
             PreservedThirdPartySignatures = preservedThirdPartySignatures
         };
     }
@@ -180,6 +168,92 @@ public static class PowerForgeModuleSigningEvidenceWriter
             sourceDirty: false,
             manifest,
             signingResult);
+    }
+
+    internal static string ComputeSigningInventorySha256(
+        string moduleRoot,
+        ModuleSigningResult signingResult)
+    {
+        string root = RequireDirectory(moduleRoot, nameof(moduleRoot));
+        StringComparer pathComparer = FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.Ordinal
+            ? StringComparer.Ordinal
+            : StringComparer.OrdinalIgnoreCase;
+        NormalizedSigningInventory inventory = NormalizeSigningInventory(root, signingResult, pathComparer);
+        return ComputeSigningInventorySha256(
+            inventory.VerifiedFiles.Select(path => NormalizeRelativePath(root, path)),
+            inventory.PreservedThirdPartySignatures);
+    }
+
+    internal static string ComputeSigningInventorySha256(
+        IEnumerable<string> signableFiles,
+        IEnumerable<PowerForgeModulePreservedSignature>? preservedThirdPartySignatures)
+    {
+        string[] paths = signableFiles
+            .Select(path => RequireText(path, "signable file path").Replace('\\', '/'))
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+        Dictionary<string, PowerForgeModulePreservedSignature> preserved =
+            (preservedThirdPartySignatures ?? Array.Empty<PowerForgeModulePreservedSignature>())
+            .ToDictionary(signature => signature.Path.Replace('\\', '/'), StringComparer.Ordinal);
+        var canonical = new StringBuilder();
+        foreach (string path in paths)
+        {
+            bool thirdParty = preserved.TryGetValue(path, out PowerForgeModulePreservedSignature? signature);
+            AppendCanonical(canonical, path);
+            AppendCanonical(canonical, thirdParty ? "third-party" : "publisher");
+            AppendCanonical(canonical, thirdParty ? signature!.Subject.Trim() : string.Empty);
+            AppendCanonical(canonical, thirdParty
+                ? DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(signature!.Thumbprint)
+                : string.Empty);
+            canonical.Append('\n');
+        }
+        using SHA256 sha256 = SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(Encoding.UTF8.GetBytes(canonical.ToString())))
+            .Replace("-", string.Empty)
+            .ToLowerInvariant();
+    }
+
+    private static void AppendCanonical(StringBuilder builder, string value)
+    {
+        builder.Append(value.Length);
+        builder.Append(':');
+        builder.Append(value);
+        builder.Append('|');
+    }
+
+    private static NormalizedSigningInventory NormalizeSigningInventory(
+        string root,
+        ModuleSigningResult signingResult,
+        StringComparer pathComparer)
+    {
+        if (signingResult is null)
+            throw new ArgumentNullException(nameof(signingResult));
+        if (!signingResult.Success || signingResult.TotalAfterExclude < 1)
+            throw new InvalidOperationException("Module signing must complete successfully before release evidence can be created.");
+        string[] verifiedFiles = (signingResult.VerifiedFilePaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => ResolveFileUnderRoot(root, path, "verified signing path"))
+            .Distinct(pathComparer)
+            .OrderBy(path => path, pathComparer)
+            .ToArray();
+        if (verifiedFiles.Length != signingResult.TotalAfterExclude)
+            throw new InvalidOperationException(
+                "Module signing evidence requires one exact verified file path for every file selected by the signing pipeline.");
+        PowerForgeModulePreservedSignature[] preservedThirdPartySignatures =
+            (signingResult.PreservedThirdPartySignatures ?? Array.Empty<ModuleSigningPreservedSignature>())
+            .Select(signature => CreatePreservedSignature(root, signature))
+            .OrderBy(signature => signature.Path, pathComparer)
+            .ToArray();
+        if (preservedThirdPartySignatures.Select(signature => signature.Path).Distinct(pathComparer).Count() !=
+            preservedThirdPartySignatures.Length)
+            throw new InvalidOperationException("Preserved third-party signing evidence contains duplicate file paths.");
+        if (preservedThirdPartySignatures.Length != signingResult.AlreadySignedOther)
+            throw new InvalidOperationException(
+                "Preserved third-party signer identities must cover every valid third-party signature reported by the signing pipeline.");
+        if (preservedThirdPartySignatures.Any(signature =>
+                !verifiedFiles.Contains(ResolveFileUnderRoot(root, signature.Path, "preserved third-party signing path"), pathComparer)))
+            throw new InvalidOperationException("Preserved third-party files must be part of the verified signing set.");
+        return new NormalizedSigningInventory(verifiedFiles, preservedThirdPartySignatures);
     }
 
     private static string RequireDirectory(string path, string parameterName)
@@ -275,5 +349,20 @@ public static class PowerForgeModuleSigningEvidenceWriter
             ? new Version(parsed.Major, parsed.Minor, parsed.Build).ToString()
             : parsed.ToString();
         return prerelease.Length == 0 ? normalized : normalized + "-" + prerelease;
+    }
+
+    private sealed class NormalizedSigningInventory
+    {
+        internal NormalizedSigningInventory(
+            string[] verifiedFiles,
+            PowerForgeModulePreservedSignature[] preservedThirdPartySignatures)
+        {
+            VerifiedFiles = verifiedFiles;
+            PreservedThirdPartySignatures = preservedThirdPartySignatures;
+        }
+
+        internal string[] VerifiedFiles { get; }
+
+        internal PowerForgeModulePreservedSignature[] PreservedThirdPartySignatures { get; }
     }
 }

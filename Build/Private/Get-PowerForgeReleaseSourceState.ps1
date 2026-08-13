@@ -9,9 +9,9 @@ function Get-PowerForgeReleaseSourceState {
     .PARAMETER ReceiptPath
     Resolved public-release receipt path. An untracked receipt is excluded only when it is under the dedicated release-receipts directory.
     .PARAMETER GeneratedConfigurationPath
-    Exact deterministic effective-configuration output created by the public-release wrapper after this preflight.
+    Deterministic effective-configuration output created by the public-release wrapper after this preflight. Prior untracked outputs in the same reserved namespace are also excluded.
     .NOTES
-    The exact untracked public-release receipt and authorized wrapper configuration are excluded. Tracked changes remain release inputs.
+    The exact untracked public-release receipt and deterministic authorized wrapper configurations are excluded. Tracked changes remain release inputs.
     #>
     [CmdletBinding()]
     param(
@@ -49,6 +49,7 @@ function Get-PowerForgeReleaseSourceState {
     }
 
     $relativeGeneratedConfiguration = $null
+    $relativeGeneratedConfigurationDirectory = $null
     if (-not [string]::IsNullOrWhiteSpace($GeneratedConfigurationPath)) {
         $generatedConfiguration = [IO.Path]::GetFullPath($GeneratedConfigurationPath)
         $generatedConfigurationUri = [Uri] $generatedConfiguration
@@ -59,6 +60,7 @@ function Get-PowerForgeReleaseSourceState {
             throw 'Generated authorized release configuration must use the deterministic .release.authorized.<version>.<commit>.json name.'
         }
         $relativeGeneratedConfiguration = [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($generatedConfigurationUri).ToString()).Replace('\', '/')
+        $relativeGeneratedConfigurationDirectory = [IO.Path]::GetDirectoryName($relativeGeneratedConfiguration).Replace('\', '/')
     }
 
     $trackedChanges = @(& git -C $root status --porcelain=v1 --untracked-files=no -- . ":(exclude,literal)$relativeProvenance")
@@ -71,12 +73,18 @@ function Get-PowerForgeReleaseSourceState {
     if (-not [string]::IsNullOrWhiteSpace($relativeReceipt)) {
         $untrackedPathspecs.Add(":(exclude,top,literal)$relativeReceipt")
     }
-    if (-not [string]::IsNullOrWhiteSpace($relativeGeneratedConfiguration)) {
-        $untrackedPathspecs.Add(":(exclude,top,literal)$relativeGeneratedConfiguration")
-    }
     $untrackedInputs = @(& git -C $root ls-files --others --exclude-standard -- @untrackedPathspecs)
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to inspect untracked release inputs.'
+    }
+    if (-not [string]::IsNullOrWhiteSpace($relativeGeneratedConfiguration)) {
+        $untrackedInputs = @($untrackedInputs | Where-Object {
+            $candidate = ([string] $_).Replace('\', '/')
+            $candidateDirectory = [IO.Path]::GetDirectoryName($candidate).Replace('\', '/')
+            $candidateName = [IO.Path]::GetFileName($candidate)
+            -not ($candidateDirectory -ieq $relativeGeneratedConfigurationDirectory -and
+                $candidateName -match '^\.release\.authorized\.\d+\.\d+\.\d+\.[0-9a-fA-F]{40}\.json$')
+        })
     }
     $changes = @(
         $trackedChanges

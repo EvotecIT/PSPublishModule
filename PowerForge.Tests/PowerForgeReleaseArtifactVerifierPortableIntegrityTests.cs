@@ -27,6 +27,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsExtraArchiveEntryOutsideTrustedOutputInventory()
+    {
+        using var fixture = new PortableFixture();
+        fixture.AddUnexpectedArchiveEntry("Injected.dll", "untrusted payload");
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("exactly match", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("inventory", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsChangedSbomEvenWhenArtifactStillMatches()
     {
         using var fixture = new PortableFixture();
@@ -40,6 +53,20 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 
     private sealed partial class PortableFixture
     {
+        internal void AddUnexpectedArchiveEntry(string name, string content)
+        {
+            using (System.IO.Compression.ZipArchive archive = System.IO.Compression.ZipFile.Open(
+                       ArchivePath,
+                       System.IO.Compression.ZipArchiveMode.Update))
+            {
+                System.IO.Compression.ZipArchiveEntry entry = archive.CreateEntry(name);
+                using var writer = new StreamWriter(entry.Open());
+                writer.Write(content);
+            }
+            WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
+            WriteChecksums();
+        }
+
         internal void WriteLargePayload(int length)
         {
             byte[] payload = Enumerable.Repeat((byte)'x', length).ToArray();

@@ -99,6 +99,8 @@ try {
         -Version $Version `
         -DisableVersionUpdates:($Operation -eq 'Publish')
     $releaseConfig.GitHub | Add-Member -NotePropertyName Commitish -NotePropertyValue $ExpectedCommit -Force
+    . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Assert-PowerForgeNoInlineReleaseSecrets.ps1')
+    Assert-PowerForgeNoInlineReleaseSecrets -Configuration $releaseConfig
 
     $certificateThumbprint = [string] $releaseConfig.Packages.CertificateThumbprint
     $certificateStore = [string] $releaseConfig.Packages.CertificateStore

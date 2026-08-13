@@ -84,14 +84,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (!artifactIsArchive &&
             (signaturePaths.Length != 1 || !PathsEqual(signaturePaths[0], executablePath)))
             throw Invalid("A direct portable executable artifact must be the only file in the trusted signing selection; use the ZIP artifact for multi-file outputs.");
+        if (artifactIsArchive)
+            VerifyPortableArchiveInventory(projectRoot, checksumsPath, artifactPath, outputDirectory);
 
         var signatures = new List<VerifiedSignature>();
         foreach (string signaturePath in signaturePaths)
         {
             EnsurePathWithinDirectory(outputDirectory, signaturePath, "Portable signature path");
-            string signatureDigest = VerifyChecksummedFile(projectRoot, checksumsPath, signaturePath, "portable signed file");
-            if (artifactIsArchive)
-                VerifyArchiveContainsFile(artifactPath, outputDirectory, signaturePath, signatureDigest);
+            VerifyChecksummedFile(projectRoot, checksumsPath, signaturePath, "portable signed file");
             signatures.Add(VerifySignature(signaturePath, expected.SignerThumbprint, expected.SignerSubjectName));
         }
         if (!signatures.Any(signature => PathsEqual(signature.PhysicalPath, executablePath)))

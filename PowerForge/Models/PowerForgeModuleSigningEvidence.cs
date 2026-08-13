@@ -24,6 +24,9 @@ public sealed class PowerForgeModuleSigningEvidence
     /// <summary>Archive-relative files whose Authenticode signatures were verified by the build.</summary>
     public string[] SignableFiles { get; set; } = Array.Empty<string>();
 
+    /// <summary>SHA-256 binding of the complete signable-file inventory and signer ownership recorded in signed module provenance.</summary>
+    public string SigningInventorySha256 { get; set; } = string.Empty;
+
     /// <summary>Verified third-party signatures intentionally preserved by the signing pipeline.</summary>
     public PowerForgeModulePreservedSignature[] PreservedThirdPartySignatures { get; set; } = Array.Empty<PowerForgeModulePreservedSignature>();
 }

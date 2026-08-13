@@ -107,6 +107,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         Assert.Contains("owned", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Verify_PowerShellModuleRejectsSidecarThatOmitsSignedInventoryEntry()
+    {
+        using var fixture = new ModuleFixture();
+        fixture.PrepareSigningInventoryOmission();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("complete signing inventory", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(".ps1xml")]
     [InlineData(".cdxml")]
@@ -197,7 +209,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             string? signedSourceRevision = null,
             bool includeDependencyProvenance = false,
             bool omitPrimaryProvenance = false,
-            bool directoryCollision = false)
+            bool directoryCollision = false,
+            bool includeBoundHelper = false,
+            string? vendorThumbprint = null)
         {
             if (File.Exists(ArchivePath)) File.Delete(ArchivePath);
             using ZipArchive archive = ZipFile.Open(ArchivePath, ZipArchiveMode.Create);
@@ -214,14 +228,20 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 _ = archive.CreateEntry("Sample/Sample.psm1/");
             WriteEntry(archive, "Sample/Sample.psm1", "# signed module");
             string signedVersion = string.IsNullOrWhiteSpace(prerelease) ? "2.3.4" : "2.3.4-" + prerelease;
+            string[] boundSignableFiles = GetSignableFiles(includeVendorDependency, includeBoundHelper);
+            PowerForgeModulePreservedSignature[] boundPreservedSignatures = GetPreservedSignatures(vendorThumbprint);
+            string signingInventorySha256 = PowerForgeModuleSigningEvidenceWriter.ComputeSigningInventorySha256(
+                boundSignableFiles,
+                boundPreservedSignatures);
             WriteEntry(archive, "Sample/PowerForge.ReleaseProvenance.psd1", string.Join(Environment.NewLine, new[]
             {
                 "@{",
-                "    SchemaVersion = '1'",
+                "    SchemaVersion = '2'",
                 "    ModuleName = 'Sample'",
                 $"    Version = '{signedVersion}'",
                 $"    SourceRevision = '{signedSourceRevision ?? sourceRevision}'",
                 "    SourceDirty = 'false'",
+                $"    SigningInventorySha256 = '{signingInventorySha256}'",
                 "}",
                 string.Empty
             }));
@@ -229,6 +249,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 WriteEntry(archive, "Sample/evil" + unexpectedSignableExtension, "unsigned executable payload");
             if (includeVendorDependency)
                 WriteEntry(archive, "Sample/lib/Vendor.dll", "valid vendor-signed dependency");
+            if (includeBoundHelper)
+                WriteEntry(archive, "Sample/Private/Helper.ps1", "function Invoke-Helper { }");
             if (traversalEntry)
                 WriteEntry(archive, "../escape.ps1", "# unsafe payload");
             if (!omitPrimaryProvenance)
@@ -255,8 +277,15 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         internal void PrepareVendorDependency(string evidenceThumbprint)
         {
             _hasVendorDependency = true;
-            WriteArchive(SourceRevision, includeVendorDependency: true);
+            WriteArchive(SourceRevision, includeVendorDependency: true, vendorThumbprint: evidenceThumbprint);
             WriteSigningEvidence(evidenceThumbprint);
+            WriteChecksums();
+        }
+
+        internal void PrepareSigningInventoryOmission()
+        {
+            WriteArchive(SourceRevision, includeBoundHelper: true);
+            WriteSigningEvidence();
             WriteChecksums();
         }
 
@@ -264,13 +293,24 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         {
             File.WriteAllText(SigningEvidencePath, JsonSerializer.Serialize(new PowerForgeModuleSigningEvidence
             {
-                SchemaVersion = 2,
+                SchemaVersion = 3,
                 ModuleName = "Sample",
                 Version = "2.3.4",
                 SourceRevision = SourceRevision,
                 SourceDirty = false,
                 ManifestPath = "Sample/Sample.psd1",
                 SignableFiles = new[] { "Sample/Sample.psd1", "Sample/Sample.psm1", "Sample/PowerForge.ReleaseProvenance.psd1" },
+                SigningInventorySha256 = PowerForgeModuleSigningEvidenceWriter.ComputeSigningInventorySha256(
+                    new[] { "Sample/Sample.psd1", "Sample/Sample.psm1", "Sample/PowerForge.ReleaseProvenance.psd1" },
+                    new[]
+                    {
+                        new PowerForgeModulePreservedSignature
+                        {
+                            Path = "Sample/Sample.psm1",
+                            Subject = "CN=Vendor",
+                            Thumbprint = evidenceThumbprint
+                        }
+                    }),
                 PreservedThirdPartySignatures = new[]
                 {
                     new PowerForgeModulePreservedSignature
@@ -321,7 +361,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         {
             var evidence = new PowerForgeModuleSigningEvidence
             {
-                SchemaVersion = includeSchemaVersion ? 2 : 0,
+                SchemaVersion = includeSchemaVersion ? 3 : 0,
                 ModuleName = "Sample",
                 Version = version ?? _version,
                 SourceRevision = SourceRevision,
@@ -342,6 +382,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                         }
                     }
             };
+            evidence.SigningInventorySha256 = PowerForgeModuleSigningEvidenceWriter.ComputeSigningInventorySha256(
+                evidence.SignableFiles,
+                evidence.PreservedThirdPartySignatures);
             string json = JsonSerializer.Serialize(evidence);
             if (!includeSchemaVersion)
             {
@@ -373,5 +416,33 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             Encoding selected = encoding ?? new UTF8Encoding(false, true);
             return selected.GetPreamble().Concat(selected.GetBytes(content)).ToArray();
         }
+
+        private static string[] GetSignableFiles(bool includeVendorDependency, bool includeBoundHelper)
+        {
+            var paths = new List<string>
+            {
+                "Sample/Sample.psd1",
+                "Sample/Sample.psm1",
+                "Sample/PowerForge.ReleaseProvenance.psd1"
+            };
+            if (includeVendorDependency)
+                paths.Add("Sample/lib/Vendor.dll");
+            if (includeBoundHelper)
+                paths.Add("Sample/Private/Helper.ps1");
+            return paths.ToArray();
+        }
+
+        private static PowerForgeModulePreservedSignature[] GetPreservedSignatures(string? vendorThumbprint) =>
+            string.IsNullOrWhiteSpace(vendorThumbprint)
+                ? Array.Empty<PowerForgeModulePreservedSignature>()
+                : new[]
+                {
+                    new PowerForgeModulePreservedSignature
+                    {
+                        Path = "Sample/lib/Vendor.dll",
+                        Subject = "CN=Vendor",
+                        Thumbprint = vendorThumbprint
+                    }
+                };
     }
 }

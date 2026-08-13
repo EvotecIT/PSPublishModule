@@ -37,7 +37,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string artifactDigest = VerifyChecksummedFile(projectRoot, checksumsPath, artifactPath, "PowerShell module artifact");
         VerifyChecksummedFile(projectRoot, checksumsPath, signingEvidencePath, "module signing evidence");
         PowerForgeModuleSigningEvidence signingEvidence = ReadSigningEvidence(signingEvidencePath);
-        if (signingEvidence.SchemaVersion != 2)
+        if (signingEvidence.SchemaVersion != 3)
             throw Invalid("Module signing evidence schema version is not supported.");
         if (signingEvidence.SourceDirty is not false)
             throw Invalid("Module signing evidence must attest a clean source checkout.");
@@ -97,6 +97,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             throw Invalid("Requested module signature paths do not match the complete trusted signing evidence.");
         Dictionary<string, PowerForgeModulePreservedSignature> thirdPartySignatures =
             NormalizePreservedThirdPartySignatures(signingEvidence.PreservedThirdPartySignatures, signaturePaths);
+        string computedSigningInventorySha256 = PowerForgeModuleSigningEvidenceWriter.ComputeSigningInventorySha256(
+            signaturePaths,
+            thirdPartySignatures.Values);
+        if (!string.Equals(
+                signingEvidence.SigningInventorySha256,
+                computedSigningInventorySha256,
+                StringComparison.OrdinalIgnoreCase))
+            throw Invalid("Module signing evidence inventory digest does not match its complete signable-file inventory.");
         if (thirdPartySignatures.ContainsKey(manifestPath) ||
             thirdPartySignatures.ContainsKey(rootModulePath) ||
             thirdPartySignatures.ContainsKey(signedProvenancePath))
@@ -137,6 +145,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         ValidateRevision(signedProvenance.SourceRevision, expectedRevision);
         if (!string.Equals(signedProvenance.SourceRevision, sourceRevision, StringComparison.OrdinalIgnoreCase))
             throw Invalid("Signed module source attestation does not match embedded module provenance.");
+        if (!string.Equals(
+                signedProvenance.SigningInventorySha256,
+                computedSigningInventorySha256,
+                StringComparison.OrdinalIgnoreCase))
+            throw Invalid("Signed module source attestation does not bind the complete signing inventory.");
 
         var signatures = new List<VerifiedSignature>();
         var signatureEvidence = new List<PowerForgeReleaseSignatureEvidence>();

@@ -15,6 +15,7 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
             SignedNew = 3,
             VerifiedFilePaths = new[] { fixture.ModulePath, fixture.ManifestPath, fixture.SourceAttestationPath }
         };
+        fixture.BindSigningInventory(signingResult);
 
         PowerForgeModuleSigningEvidence evidence = PowerForgeModuleSigningEvidenceWriter.Create(
             fixture.Root,
@@ -31,7 +32,8 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
             evidence.SignableFiles);
         Assert.Equal(SourceRevision, evidence.SourceRevision);
         Assert.False(evidence.SourceDirty ?? true);
-        Assert.Equal(2, evidence.SchemaVersion);
+        Assert.Equal(3, evidence.SchemaVersion);
+        Assert.Equal(64, evidence.SigningInventorySha256.Length);
     }
 
     [Fact]
@@ -46,6 +48,7 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
             SignedNew = 3,
             VerifiedFilePaths = new[] { fixture.ModulePath, fixture.ManifestPath, fixture.SourceAttestationPath }
         };
+        fixture.BindSigningInventory(signingResult);
 
         string written = PowerForgeModuleSigningEvidenceWriter.WriteFromSignedSourceAttestation(
             outputPath,
@@ -80,6 +83,7 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
                 }
             }
         };
+        fixture.BindSigningInventory(signingResult);
 
         PowerForgeModuleSigningEvidence evidence = PowerForgeModuleSigningEvidenceWriter.Create(
             fixture.Root,
@@ -132,6 +136,7 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
             SignedNew = 3,
             VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath, fixture.SourceAttestationPath }
         };
+        fixture.BindSigningInventory(signingResult);
 
         PowerForgeModuleSigningEvidence evidence = PowerForgeModuleSigningEvidenceWriter.Create(
             fixture.Root,
@@ -156,6 +161,7 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
             SignedNew = 3,
             VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath, fixture.SourceAttestationPath }
         };
+        fixture.BindSigningInventory(signingResult);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
             PowerForgeModuleSigningEvidenceWriter.Create(
@@ -182,6 +188,7 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
             SignedNew = 3,
             VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath, fixture.SourceAttestationPath }
         };
+        fixture.BindSigningInventory(signingResult);
 
         PowerForgeModuleSigningEvidence evidence = PowerForgeModuleSigningEvidenceWriter.Create(
             fixture.Root,
@@ -255,6 +262,14 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
         public string SourceAttestationPath { get; }
 
         public string? VendorPath { get; }
+
+        public void BindSigningInventory(ModuleSigningResult signingResult)
+        {
+            PowerForgeModuleSourceAttestationWriter.BindSigningInventory(
+                ManifestPath,
+                Root,
+                signingResult);
+        }
 
         public void Dispose()
         {

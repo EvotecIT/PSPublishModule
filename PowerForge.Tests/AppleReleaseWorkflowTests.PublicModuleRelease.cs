@@ -125,6 +125,20 @@ public sealed partial class AppleReleaseWorkflowTests
             var generatedConfigClean = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
             Assert.Contains("\"SourceDirty\":false", generatedConfigClean.StandardOutput, StringComparison.OrdinalIgnoreCase);
 
+            string priorGeneratedConfigurationPath = Path.Combine(
+                repository.FullName,
+                ".release.authorized.9.8.7.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.json");
+            File.WriteAllText(priorGeneratedConfigurationPath, "{ \"prior\": true }");
+            var priorGeneratedConfigClean = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            Assert.Contains("\"SourceDirty\":false", priorGeneratedConfigClean.StandardOutput, StringComparison.OrdinalIgnoreCase);
+
+            string malformedGeneratedConfigurationPath = Path.Combine(repository.FullName, ".release.authorized.previous.json");
+            File.WriteAllText(malformedGeneratedConfigurationPath, "{}");
+            var malformedGeneratedConfigDirty = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            Assert.Contains("\"SourceDirty\":true", malformedGeneratedConfigDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(".release.authorized.previous.json", malformedGeneratedConfigDirty.StandardOutput, StringComparison.Ordinal);
+            File.Delete(malformedGeneratedConfigurationPath);
+
             string callerConfigPath = Path.Combine(repository.FullName, "caller-config.json");
             File.WriteAllText(callerConfigPath, "{}");
             var callerConfigDirty = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
@@ -155,6 +169,38 @@ public sealed partial class AppleReleaseWorkflowTests
                       "if ($result.Module.ModuleVersion -ne '3.0.81') { throw 'Module version was not pinned.' }; " +
                       "if (@($result.Packages.VersionTracks.PSObject.Properties | Where-Object { $_.Value.ExpectedVersion -ne '3.0.81' }).Count -ne 0) { throw 'A package track was not pinned.' }; " +
                       "if ($result.Packages.UpdateVersions -ne $false) { throw 'Version mutation remained enabled.' }";
+
+        Run("pwsh", root, "-NoProfile", "-Command", command).EnsureSuccess();
+    }
+
+    [Theory]
+    [InlineData("{\"GitHub\":{\"Token\":\"secret\"}}", "GitHub.Token")]
+    [InlineData("{\"Winget\":{\"Submission\":{\"Token\":\"secret\"}}}", "Winget.Submission.Token")]
+    [InlineData("{\"VirusTotal\":{\"ApiKey\":\"secret\"}}", "VirusTotal.ApiKey")]
+    [InlineData("{\"Packages\":{\"PublishApiKey\":\"secret\"}}", "Packages.PublishApiKey")]
+    public void PublicModuleReleaseRejectsInlineSecretsBeforeEvidencePersistence(string json, string expectedPath)
+    {
+        string root = FindRepoRoot();
+        string helper = Path.Combine(root, "Build", "Private", "Assert-PowerForgeNoInlineReleaseSecrets.ps1");
+        string command = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                         $"$config = '{json.Replace("'", "''", StringComparison.Ordinal)}' | ConvertFrom-Json; " +
+                         "Assert-PowerForgeNoInlineReleaseSecrets -Configuration $config";
+
+        ProcessResult result = Run("pwsh", root, "-NoProfile", "-Command", command);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains(expectedPath, result.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("authorized configuration evidence", result.StandardError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PublicModuleReleaseAllowsSecretFileAndEnvironmentReferences()
+    {
+        string root = FindRepoRoot();
+        string helper = Path.Combine(root, "Build", "Private", "Assert-PowerForgeNoInlineReleaseSecrets.ps1");
+        string command = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                         "$config = '{\"GitHub\":{\"TokenFilePath\":\"token.txt\"},\"Winget\":{\"Submission\":{\"TokenEnvName\":\"WINGET_TOKEN\"}},\"VirusTotal\":{\"ApiKeyFilePath\":\"vt.txt\"}}' | ConvertFrom-Json; " +
+                         "Assert-PowerForgeNoInlineReleaseSecrets -Configuration $config";
 
         Run("pwsh", root, "-NoProfile", "-Command", command).EnsureSuccess();
     }
