@@ -12,12 +12,6 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state,
         PackedArtefactFinalizationContext context)
     {
-        string sourceAttestationPath = Path.Combine(
-            context.MainModulePath,
-            PowerForgeModuleSourceAttestationWriter.FileName);
-        if (!File.Exists(sourceAttestationPath))
-            return Array.Empty<string>();
-
         SigningOptionsConfiguration signing = plan.Signing ?? throw new InvalidOperationException(
             "Signing is enabled but no signing options were provided.");
         string[] packageFiles = Directory.EnumerateFiles(context.RootPath, "*", SearchOption.AllDirectories)
@@ -31,6 +25,12 @@ public sealed partial class ModulePipelineRunner
             BuildSigningExcludeSubstrings(signing, plan.Delivery, excludeBundledRequiredModules: false),
             signing);
         state.SigningResult = signingResult;
+
+        string sourceAttestationPath = Path.Combine(
+            context.MainModulePath,
+            PowerForgeModuleSourceAttestationWriter.FileName);
+        if (!File.Exists(sourceAttestationPath))
+            return Array.Empty<string>();
 
         string evidencePath = context.OutputPath + ".signing.json";
         return new[]

@@ -43,7 +43,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     private PowerForgeReleaseEvidenceFile[] BuildExternalEvidence(
         string projectRoot,
         string checksumsPath,
-        string? provenancePath,
+        string? manifestPath,
         IEnumerable<string>? configurationPaths,
         IEnumerable<string>? sbomPaths,
         string artifactId,
@@ -59,13 +59,13 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 Sha256 = DotNetPublishReleaseArtifactVerifier.ComputeSha256(checksumsPath)
             }
         };
-        if (!string.IsNullOrWhiteSpace(provenancePath))
+        if (!string.IsNullOrWhiteSpace(manifestPath))
         {
             evidence.Add(new PowerForgeReleaseEvidenceFile
             {
-                Role = "provenance",
-                Path = provenancePath!,
-                Sha256 = DotNetPublishReleaseArtifactVerifier.ComputeSha256(provenancePath!)
+                Role = "manifest",
+                Path = manifestPath!,
+                Sha256 = DotNetPublishReleaseArtifactVerifier.ComputeSha256(manifestPath!)
             });
         }
         foreach (string configurationPath in configurationPaths ?? Array.Empty<string>())

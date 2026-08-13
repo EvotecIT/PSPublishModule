@@ -570,6 +570,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         public string[] LastExcludePatterns { get; private set; } = Array.Empty<string>();
         public ModuleSigningResult NextSigningResult { get; set; } = new();
         public bool AutoSuccessfulSigningResult { get; set; }
+        public List<string> SigningRootPaths { get; } = new();
         public List<string> OperationOrder { get; } = new();
         public string[] LastDocumentationCommands { get; private set; } = Array.Empty<string>();
 
@@ -681,6 +682,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         {
             OperationOrder.Add("Sign");
             SignCalls++;
+            SigningRootPaths.Add(Path.GetFullPath(rootPath));
             LastPackageFilePaths = packageFilePaths ?? Array.Empty<string>();
             LastIncludePatterns = includePatterns ?? Array.Empty<string>();
             LastExcludePatterns = excludeSubstrings ?? Array.Empty<string>();

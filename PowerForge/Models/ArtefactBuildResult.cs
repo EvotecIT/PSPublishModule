@@ -20,7 +20,7 @@ public sealed class ArtefactBuildResult
     /// <summary>Extra files/directories copied into the artefact output.</summary>
     public ArtefactCopyEntry[] CopiedItems { get; }
 
-    /// <summary>Evidence files emitted from the final assembled artefact.</summary>
+    /// <summary>Evidence files emitted from the final assembled artefact. Their lifecycle remains owned by the producer.</summary>
     public string[] EvidencePaths { get; }
 
     /// <summary>

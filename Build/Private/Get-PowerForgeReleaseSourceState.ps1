@@ -6,8 +6,10 @@ function Get-PowerForgeReleaseSourceState {
     Repository checkout to inspect.
     .PARAMETER GeneratedProvenancePath
     The single generated provenance file excluded from release-source state.
+    .PARAMETER ReceiptPath
+    Resolved public-release receipt path. An untracked receipt is excluded only when it is under the dedicated release-receipts directory.
     .NOTES
-    The exact untracked default public-release receipt is also excluded. Tracked receipt changes remain release inputs.
+    The exact untracked public-release receipt is excluded. Tracked receipt changes remain release inputs.
     #>
     [CmdletBinding()]
     param(
@@ -15,7 +17,10 @@ function Get-PowerForgeReleaseSourceState {
         [string] $RepositoryRoot,
 
         [Parameter(Mandatory)]
-        [string] $GeneratedProvenancePath
+        [string] $GeneratedProvenancePath,
+
+        [Parameter(Mandatory)]
+        [string] $ReceiptPath
     )
 
     $root = [IO.Path]::GetFullPath($RepositoryRoot)
@@ -27,15 +32,29 @@ function Get-PowerForgeReleaseSourceState {
         throw 'Generated release provenance must stay under the release checkout.'
     }
     $relativeProvenance = [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($provenanceUri).ToString()).Replace('\', '/')
-    $relativeDefaultReceipt = 'release-receipts/powerforge-public-release.json'
+    $receipt = [IO.Path]::GetFullPath($ReceiptPath)
+    $receiptUri = [Uri] $receipt
+    $relativeReceipt = $null
+    if ($rootUri.IsBaseOf($receiptUri)) {
+        $receiptRoot = [IO.Path]::GetFullPath((Join-Path $root 'release-receipts'))
+        $receiptRootUri = [Uri] ($receiptRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar)
+        if (-not $receiptRootUri.IsBaseOf($receiptUri)) {
+            throw 'An in-checkout release receipt must stay under the dedicated release-receipts directory.'
+        }
+        $relativeReceipt = [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($receiptUri).ToString()).Replace('\', '/')
+    }
 
     $trackedChanges = @(& git -C $root status --porcelain=v1 --untracked-files=no -- . ":(exclude,literal)$relativeProvenance")
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to inspect tracked release inputs.'
     }
-    $untrackedInputs = @(& git -C $root ls-files --others --exclude-standard -- . `
-        ":(exclude,literal)$relativeProvenance" `
-        ":(exclude,top,literal)$relativeDefaultReceipt")
+    $untrackedPathspecs = [Collections.Generic.List[string]]::new()
+    $untrackedPathspecs.Add('.')
+    $untrackedPathspecs.Add(":(exclude,literal)$relativeProvenance")
+    if (-not [string]::IsNullOrWhiteSpace($relativeReceipt)) {
+        $untrackedPathspecs.Add(":(exclude,top,literal)$relativeReceipt")
+    }
+    $untrackedInputs = @(& git -C $root ls-files --others --exclude-standard -- @untrackedPathspecs)
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to inspect untracked release inputs.'
     }

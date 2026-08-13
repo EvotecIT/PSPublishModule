@@ -63,7 +63,8 @@ try {
     . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Get-PowerForgeReleaseSourceState.ps1')
     $sourceState = Get-PowerForgeReleaseSourceState `
         -RepositoryRoot $repositoryRoot `
-        -GeneratedProvenancePath $moduleProvenancePath
+        -GeneratedProvenancePath $moduleProvenancePath `
+        -ReceiptPath $ReceiptPath
     $sourceDirty = [bool] $sourceState.SourceDirty
     if ($sourceDirty) {
         throw "The release checkout must start clean. Tracked or untracked changes: $(@($sourceState.Changes) -join ', ')"

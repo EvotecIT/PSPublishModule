@@ -65,8 +65,10 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("\"Commitish\"", releaseSchema, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void PublicModuleReleaseSourceStateExcludesPriorDefaultReceiptButNotTrackedOrUntrackedInputs()
+    [Theory]
+    [InlineData("powershell")]
+    [InlineData("pwsh")]
+    public void PublicModuleReleaseSourceStateExcludesPriorExactCustomReceiptButNotTrackedOrSiblingInputs(string shell)
     {
         var repository = Directory.CreateTempSubdirectory();
         try
@@ -81,28 +83,35 @@ public sealed partial class AppleReleaseWorkflowTests
 
             string provenance = Path.Combine(repository.FullName, "Module", "PowerForge.ReleaseProvenance.json");
             File.WriteAllText(provenance, "{}");
+            Directory.CreateDirectory(Path.Combine(repository.FullName, "release-receipts"));
+            string receiptPath = Path.Combine(repository.FullName, "release-receipts", "custom-release.json");
             string helper = Path.Combine(FindRepoRoot(), "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1");
             string command = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
-                             $"Get-PowerForgeReleaseSourceState -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedProvenancePath '{provenance.Replace("'", "''", StringComparison.Ordinal)}' | ConvertTo-Json -Compress";
-            var clean = Run("pwsh", repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+                             $"Get-PowerForgeReleaseSourceState -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedProvenancePath '{provenance.Replace("'", "''", StringComparison.Ordinal)}' -ReceiptPath '{receiptPath.Replace("'", "''", StringComparison.Ordinal)}' | ConvertTo-Json -Compress";
+            var clean = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
             Assert.Contains("\"SourceDirty\":false", clean.StandardOutput, StringComparison.OrdinalIgnoreCase);
 
-            Directory.CreateDirectory(Path.Combine(repository.FullName, "release-receipts"));
-            string defaultReceipt = Path.Combine(repository.FullName, "release-receipts", "powerforge-public-release.json");
-            File.WriteAllText(defaultReceipt, "{}");
-            var receiptDirty = Run("pwsh", repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            File.WriteAllText(receiptPath, "{}");
+            var receiptDirty = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
             Assert.Contains("\"SourceDirty\":false", receiptDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
 
-            Run("git", repository.FullName, "add", "release-receipts/powerforge-public-release.json").EnsureSuccess();
+            string siblingReceipt = Path.Combine(repository.FullName, "release-receipts", "other-release.json");
+            File.WriteAllText(siblingReceipt, "{}");
+            var siblingReceiptDirty = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            Assert.Contains("\"SourceDirty\":true", siblingReceiptDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("other-release.json", siblingReceiptDirty.StandardOutput, StringComparison.Ordinal);
+            File.Delete(siblingReceipt);
+
+            Run("git", repository.FullName, "add", "release-receipts/custom-release.json").EnsureSuccess();
             Run("git", repository.FullName, "commit", "-m", "tracked receipt fixture").EnsureSuccess();
-            File.WriteAllText(defaultReceipt, "modified tracked receipt");
-            var trackedReceiptDirty = Run("pwsh", repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            File.WriteAllText(receiptPath, "modified tracked receipt");
+            var trackedReceiptDirty = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
             Assert.Contains("\"SourceDirty\":true", trackedReceiptDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("powerforge-public-release.json", trackedReceiptDirty.StandardOutput, StringComparison.Ordinal);
-            File.WriteAllText(defaultReceipt, "{}");
+            Assert.Contains("custom-release.json", trackedReceiptDirty.StandardOutput, StringComparison.Ordinal);
+            File.WriteAllText(receiptPath, "{}");
 
             File.WriteAllText(Path.Combine(repository.FullName, "Module", "untracked-input.ps1"), "'input'");
-            var dirty = Run("pwsh", repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            var dirty = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
             Assert.Contains("\"SourceDirty\":true", dirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("untracked-input.ps1", dirty.StandardOutput, StringComparison.Ordinal);
         }

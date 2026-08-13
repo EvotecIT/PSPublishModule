@@ -27,47 +27,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             var hostedOperations = new FakeHostedOperations { AutoSuccessfulSigningResult = true };
             var runner = CreateRunner(hostedOperations);
             string outputRoot = Path.Combine(root.FullName, "Artefacts", "Packed");
-            var spec = new ModulePipelineSpec
-            {
-                Build = new ModuleBuildSpec
-                {
-                    Name = moduleName,
-                    SourcePath = root.FullName,
-                    Version = "1.0.0"
-                },
-                Install = new ModulePipelineInstallOptions { Enabled = false },
-                Segments = new IConfigurationSegment[]
-                {
-                    new ConfigurationOptionsSegment
-                    {
-                        Options = new ConfigurationOptions
-                        {
-                            Signing = new SigningOptionsConfiguration { CertificateThumbprint = "ABC123" }
-                        }
-                    },
-                    new ConfigurationBuildSegment
-                    {
-                        BuildModule = new BuildModuleConfiguration { SignMerged = true }
-                    },
-                    new ConfigurationInformationSegment
-                    {
-                        Configuration = new InformationConfiguration
-                        {
-                            IncludeRoot = new[] { "*.psd1", "*.psm1", "PowerForge.ReleaseProvenance.json" }
-                        }
-                    },
-                    new ConfigurationArtefactSegment
-                    {
-                        ArtefactType = ArtefactType.Packed,
-                        Configuration = new ArtefactConfiguration
-                        {
-                            Enabled = true,
-                            Path = outputRoot,
-                            ArtefactName = "TestModule.zip"
-                        }
-                    }
-                }
-            };
+            ModulePipelineSpec spec = CreateSignedPackedSpec(root.FullName, moduleName, outputRoot);
 
             ModulePipelineResult result = runner.Run(spec, runner.Plan(spec));
 
@@ -83,6 +43,80 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         {
             try { root.Delete(recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public void Run_SignedPackedArtifactWithoutAttestationStillRunsFinalLayoutSigning()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var hostedOperations = new FakeHostedOperations { AutoSuccessfulSigningResult = true };
+            var runner = CreateRunner(hostedOperations);
+            string outputRoot = Path.Combine(root.FullName, "Artefacts", "Packed");
+            ModulePipelineSpec spec = CreateSignedPackedSpec(root.FullName, moduleName, outputRoot);
+
+            ModulePipelineResult result = runner.Run(spec, runner.Plan(spec));
+
+            ArtefactBuildResult artefact = Assert.Single(result.ArtefactResults);
+            Assert.Empty(artefact.EvidencePaths);
+            Assert.Equal(2, hostedOperations.SignCalls);
+            Assert.Equal(2, hostedOperations.SigningRootPaths.Count);
+            Assert.NotEqual(hostedOperations.SigningRootPaths[0], hostedOperations.SigningRootPaths[1]);
+            Assert.DoesNotContain("Modules", hostedOperations.LastExcludePatterns, StringComparer.OrdinalIgnoreCase);
+            Assert.True(File.Exists(artefact.OutputPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    private static ModulePipelineSpec CreateSignedPackedSpec(string sourcePath, string moduleName, string outputRoot)
+    {
+        return new ModulePipelineSpec
+        {
+            Build = new ModuleBuildSpec
+            {
+                Name = moduleName,
+                SourcePath = sourcePath,
+                Version = "1.0.0"
+            },
+            Install = new ModulePipelineInstallOptions { Enabled = false },
+            Segments = new IConfigurationSegment[]
+            {
+                new ConfigurationOptionsSegment
+                {
+                    Options = new ConfigurationOptions
+                    {
+                        Signing = new SigningOptionsConfiguration { CertificateThumbprint = "ABC123" }
+                    }
+                },
+                new ConfigurationBuildSegment
+                {
+                    BuildModule = new BuildModuleConfiguration { SignMerged = true }
+                },
+                new ConfigurationInformationSegment
+                {
+                    Configuration = new InformationConfiguration
+                    {
+                        IncludeRoot = new[] { "*.psd1", "*.psm1", "PowerForge.ReleaseProvenance.json" }
+                    }
+                },
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = ArtefactType.Packed,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = outputRoot,
+                        ArtefactName = moduleName + ".zip"
+                    }
+                }
+            }
+        };
     }
 
     [Fact]

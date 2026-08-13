@@ -23,7 +23,7 @@ public sealed partial class ArtefactBuilder
     /// <param name="information">Optional include/exclude configuration for packaging.</param>
     /// <param name="delivery">Optional delivery configuration used to auto-include bundled internals.</param>
     /// <param name="includeScriptFolders">When false, skips packaging script-only folders (Public/Private/Classes/Enums).</param>
-    /// <param name="finalizePackedArtefact">Optional finalizer invoked after the complete packed layout is assembled and before it is archived. Returned files are recorded as release evidence.</param>
+    /// <param name="finalizePackedArtefact">Optional finalizer invoked after the complete packed layout is assembled and before it is archived. Returned files are recorded as release evidence and remain owned by the callback.</param>
     public ArtefactBuildResult Build(
         ConfigurationArtefactSegment segment,
         string projectRoot,
@@ -219,14 +219,6 @@ public sealed partial class ArtefactBuilder
             }
 
             CreateZipFromDirectoryContents(tempRoot, zipPath);
-        }
-        catch
-        {
-            foreach (string evidencePath in evidencePaths)
-            {
-                try { File.Delete(evidencePath); } catch { /* best effort after failed artefact finalization */ }
-            }
-            throw;
         }
         finally
         {

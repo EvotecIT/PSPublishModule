@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using PowerForge;
 
 namespace PowerForge.Tests;
@@ -6,6 +7,56 @@ namespace PowerForge.Tests;
 [Collection(ProcessEnvironmentCollection.Name)]
 public sealed class ArtefactBuilderLayoutTests
 {
+    [Fact]
+    public void Build_PackedArchiveFailurePreservesCallerOwnedEvidence()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            WriteStagingFixture(stagingRoot.FullName, moduleName);
+            string outputRoot = Path.Combine(root.FullName, "Artefacts", "Packed");
+            Directory.CreateDirectory(outputRoot);
+            string archivePath = Path.Combine(outputRoot, "DemoModule.zip");
+            string evidencePath = Path.Combine(root.FullName, "caller-owned", "policy.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(evidencePath)!);
+            File.WriteAllText(evidencePath, "caller-owned");
+            var segment = new ConfigurationArtefactSegment
+            {
+                ArtefactType = ArtefactType.Packed,
+                Configuration = new ArtefactConfiguration
+                {
+                    Enabled = true,
+                    Path = outputRoot,
+                    ArtefactName = "DemoModule.zip"
+                }
+            };
+
+            using (var lockedArchive = new FileStream(archivePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+            {
+                Assert.ThrowsAny<IOException>(() => new ArtefactBuilder(new NullLogger()).Build(
+                    segment,
+                    root.FullName,
+                    stagingRoot.FullName,
+                    moduleName,
+                    "1.0.0",
+                    null,
+                    Array.Empty<RequiredModuleReference>(),
+                    finalizePackedArtefact: _ => new[] { evidencePath }));
+            }
+
+            Assert.Equal("caller-owned", File.ReadAllText(evidencePath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void Build_PackedFinalizerObservesCompleteLayoutAndCarriesEvidence()
     {

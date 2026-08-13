@@ -25,7 +25,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         Assert.Equal(Thumbprint, result.SignerThumbprint);
         Assert.Equal("valid", result.SignatureStatus);
         Assert.Equal(fixture.ComputeDigest(fixture.ArchivePath), result.Sha256);
-        Assert.Contains(result.EvidenceFiles, item => item.Role == "provenance" && item.Path == fixture.ManifestPath);
+        Assert.Contains(result.EvidenceFiles, item => item.Role == "manifest" && item.Path == fixture.ManifestPath);
+        Assert.DoesNotContain(result.EvidenceFiles, item => item.Role == "provenance");
         Assert.Contains(result.EvidenceFiles, item => item.Role == "configuration" && item.Path == fixture.ConfigurationPath);
         Assert.Contains(result.EvidenceFiles, item => item.Role == "sbom" && item.Path == fixture.SbomPath);
     }

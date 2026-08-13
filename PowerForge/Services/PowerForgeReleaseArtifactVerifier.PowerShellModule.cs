@@ -197,7 +197,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         var evidence = BuildExternalEvidence(
             projectRoot,
             checksumsPath,
-            provenancePath: null,
+            manifestPath: null,
             configurationPaths: null,
             sbomPaths: request.SbomPaths,
             artifactId: moduleName,
