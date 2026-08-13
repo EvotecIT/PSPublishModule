@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -731,7 +732,9 @@ public static partial class WebSiteAuditor
                     "agent-content",
                     finding.Path,
                     message,
-                    finding.Code);
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{finding.Code}|{finding.Line?.ToString(CultureInfo.InvariantCulture) ?? "-"}|{finding.Message}"));
             }
         }
 

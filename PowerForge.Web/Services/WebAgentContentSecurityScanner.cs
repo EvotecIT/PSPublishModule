@@ -271,7 +271,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
         });
 
     private static string PackageIdentityKey(WebAgentPackageReference package)
-        => string.Create(CultureInfo.InvariantCulture, $"{package.Ecosystem}|{package.Id}|{package.Version}|{package.Path}|{package.Line}");
+        => string.Create(CultureInfo.InvariantCulture, $"{package.Ecosystem}|{package.Id}|{package.Version}");
 
     private sealed record TextSegment(string Text, int LineOffset);
 

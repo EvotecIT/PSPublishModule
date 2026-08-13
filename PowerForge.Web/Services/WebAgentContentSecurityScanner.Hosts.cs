@@ -139,10 +139,13 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         foreach (var configured in trustedDomains ?? Array.Empty<string>())
         {
-            var trusted = configured.Trim().TrimEnd('.').TrimStart('.');
+            var configuredValue = configured.Trim();
+            var includeSubdomains = configuredValue.StartsWith(".", StringComparison.Ordinal);
+            var trusted = configuredValue.TrimEnd('.').TrimStart('.');
             if (string.IsNullOrWhiteSpace(trusted))
                 continue;
             if (host.Equals(trusted, StringComparison.OrdinalIgnoreCase) ||
+                includeSubdomains &&
                 host.EndsWith("." + trusted, StringComparison.OrdinalIgnoreCase))
                 return true;
         }

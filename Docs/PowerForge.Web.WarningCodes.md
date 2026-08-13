@@ -72,6 +72,7 @@ SARIF output.
 | `PFAGENT.PACKAGE.INVALID_ID` | A package identifier uses an invalid registry shape or non-ASCII lookalike characters. |
 | `PFAGENT.PACKAGE.NOT_FOUND` | The referenced package is not registered. |
 | `PFAGENT.PACKAGE.VERSION_NOT_FOUND` | The referenced exact version is not registered. |
+| `PFAGENT.PACKAGE.UNTRUSTED_SOURCE` | An install command overrides its ecosystem's canonical public registry. |
 | `PFAGENT.PACKAGE.OWNER_*` | Required owner-scoped publication proof is absent or mismatched. |
 | `PFAGENT.PACKAGE.REGISTRY_*` | Registry verification timed out, was unavailable, or returned malformed data. |
 | `PFAGENT.HOST` | An optional external-host check found an unresolved, non-public, or dangling-service destination. |

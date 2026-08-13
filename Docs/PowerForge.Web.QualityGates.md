@@ -96,6 +96,7 @@ The scanner:
 - warns on high-confidence prompt overrides and downloaded scripts piped into an interpreter;
 - extracts NuGet, PowerShell Gallery, npm, PyPI, crates.io, RubyGems, and Packagist install commands;
 - verifies package existence and exact versions against public registries;
+- rejects package commands that redirect resolution to non-canonical feeds, repositories, indexes, or config files;
 - can require exact-version NuGet and PowerShell Gallery commands to match an owner-scoped publication catalog;
 - can optionally resolve external hosts and detect selected dangling-service fingerprints without fetching unique report paths.
 
