@@ -194,14 +194,14 @@ public static partial class WebLlmsGenerator
 
             if (!section.Packages.TryGetValue(packageId, out var publishedVersion))
                 return false;
-            if (!RequiresExactPublicationVersion(expectedVersion))
-                return true;
+            if (!HasExactSourceVersion(expectedVersion))
+                return false;
 
             return string.Equals(publishedVersion, expectedVersion!.Trim(), StringComparison.OrdinalIgnoreCase);
         }
     }
 
-    private static bool RequiresExactPublicationVersion(string? version)
+    private static bool HasExactSourceVersion(string? version)
         => !string.IsNullOrWhiteSpace(version) &&
            !string.Equals(version, "unknown", StringComparison.OrdinalIgnoreCase) &&
            !string.Equals(version, "varies by package", StringComparison.OrdinalIgnoreCase);

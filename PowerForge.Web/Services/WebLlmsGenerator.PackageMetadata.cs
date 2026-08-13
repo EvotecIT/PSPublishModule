@@ -40,7 +40,8 @@ public static partial class WebLlmsGenerator
         }
 
         return packages
-            .GroupBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(
+                static package => (package.Id.ToUpperInvariant(), package.IsPowerShellModule))
             .Select(static group => group.First())
             .ToList();
     }
@@ -278,19 +279,68 @@ public static partial class WebLlmsGenerator
 
     private static void EvaluatePropertyGroup(XElement group, MsBuildPropertySet properties)
     {
-        var groupConditional = !string.IsNullOrWhiteSpace(group.Attribute("Condition")?.Value);
+        var groupConditionKnown = TryEvaluateSimpleMsBuildCondition(
+            group.Attribute("Condition")?.Value,
+            properties,
+            out var groupApplies);
+        if (groupConditionKnown && !groupApplies)
+            return;
+
         foreach (var property in group.Elements())
         {
             var name = property.Name.LocalName;
-            if (groupConditional || !string.IsNullOrWhiteSpace(property.Attribute("Condition")?.Value))
+            if (!groupConditionKnown ||
+                !TryEvaluateSimpleMsBuildCondition(
+                    property.Attribute("Condition")?.Value,
+                    properties,
+                    out var propertyApplies))
             {
                 properties.ConditionalNames.Add(name);
                 continue;
             }
+            if (!propertyApplies)
+                continue;
 
             properties.Values[name] = ExpandMsBuildPropertyAtAssignment(property.Value.Trim(), properties);
             properties.ConditionalNames.Remove(name);
         }
+    }
+
+    private static bool TryEvaluateSimpleMsBuildCondition(
+        string? condition,
+        MsBuildPropertySet properties,
+        out bool result)
+    {
+        if (string.IsNullOrWhiteSpace(condition))
+        {
+            result = true;
+            return true;
+        }
+
+        var expanded = ExpandMsBuildPropertyAtAssignment(condition, properties);
+        if (expanded.Contains("$(", StringComparison.Ordinal) ||
+            expanded.Contains("@(", StringComparison.Ordinal) ||
+            expanded.Contains("%(", StringComparison.Ordinal))
+        {
+            result = false;
+            return false;
+        }
+
+        var match = Regex.Match(
+            expanded,
+            "^\\s*(?<left>'[^']*'|\\\"[^\\\"]*\\\")\\s*(?<operator>==|!=)\\s*(?<right>'[^']*'|\\\"[^\\\"]*\\\")\\s*$",
+            RegexOptions.CultureInvariant);
+        if (!match.Success)
+        {
+            result = false;
+            return false;
+        }
+
+        var left = match.Groups["left"].Value[1..^1];
+        var right = match.Groups["right"].Value[1..^1];
+        var equal = string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        result = match.Groups["operator"].Value == "==" ? equal : !equal;
+        return true;
     }
 
     private static void EvaluateImport(XElement import, string importingFile, MsBuildPropertySet properties, string? inheritedCondition = null)
