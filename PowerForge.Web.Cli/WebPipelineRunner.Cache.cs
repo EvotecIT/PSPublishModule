@@ -168,9 +168,19 @@ internal static partial class WebPipelineRunner
         if (step.ValueKind != JsonValueKind.Object)
             yield break;
 
+        var isLlmsSite = string.Equals(GetString(step, "task"), "llms", StringComparison.OrdinalIgnoreCase) &&
+                         string.Equals(
+                             GetString(step, "contentKind") ?? GetString(step, "content-kind"),
+                             "Site",
+                             StringComparison.OrdinalIgnoreCase);
+
         foreach (var property in step.EnumerateObject())
         {
             if (!FingerprintPathKeys.Contains(property.Name))
+                continue;
+            if (isLlmsSite &&
+                (string.Equals(property.Name, "packageFiles", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(property.Name, "package-files", StringComparison.OrdinalIgnoreCase)))
                 continue;
 
             if (property.Value.ValueKind == JsonValueKind.String)
@@ -219,6 +229,27 @@ internal static partial class WebPipelineRunner
                         yield return Path.GetFullPath(nestedResolved);
                 }
             }
+        }
+
+        if (!string.Equals(GetString(step, "task"), "llms", StringComparison.OrdinalIgnoreCase))
+            yield break;
+
+        var projectFiles = new List<string?>
+        {
+            GetString(step, "project")
+        };
+        if (!isLlmsSite)
+        {
+            projectFiles.AddRange(GetArrayOfStrings(step, "packageFiles") ?? Array.Empty<string>());
+            projectFiles.AddRange(GetArrayOfStrings(step, "package-files") ?? Array.Empty<string>());
+        }
+        foreach (var projectFile in projectFiles.Where(static path => !string.IsNullOrWhiteSpace(path)))
+        {
+            var resolvedProject = ResolvePath(baseDir, projectFile);
+            if (string.IsNullOrWhiteSpace(resolvedProject) || !File.Exists(resolvedProject))
+                continue;
+            foreach (var input in WebLlmsGenerator.DiscoverMsBuildMetadataInputs(resolvedProject))
+                yield return input;
         }
     }
 

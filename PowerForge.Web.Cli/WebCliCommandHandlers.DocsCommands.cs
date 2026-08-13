@@ -518,6 +518,12 @@ internal static partial class WebCliCommandHandlers
                        TryGetOptionValue(subArgs, "--root") ??
                        TryGetOptionValue(subArgs, "--path");
         var projectFile = TryGetOptionValue(subArgs, "--project");
+        var contentKindText = TryGetOptionValue(subArgs, "--content-kind");
+        var installPolicyText = TryGetOptionValue(subArgs, "--install-policy");
+        var publicationCatalog = TryGetOptionValue(subArgs, "--publication-catalog");
+        var nugetOwner = TryGetOptionValue(subArgs, "--nuget-owner");
+        var powerShellGalleryOwner = TryGetOptionValue(subArgs, "--powershell-gallery-owner");
+        var publicationCatalogMaxAgeHoursText = TryGetOptionValue(subArgs, "--publication-catalog-max-age-hours");
         var packageFiles = ReadOptionList(subArgs, "--package-files");
         var apiIndex = TryGetOptionValue(subArgs, "--api-index");
         var apiIndexes = ReadOptionList(subArgs, "--api-indexes");
@@ -539,15 +545,56 @@ internal static partial class WebCliCommandHandlers
             return Fail("Missing required --site-root.", outputJson, logger, "web.llms");
 
         var apiLevel = WebApiDetailLevel.None;
-        if (!string.IsNullOrWhiteSpace(apiLevelText) &&
-            Enum.TryParse<WebApiDetailLevel>(apiLevelText, true, out var parsedLevel))
+        if (!string.IsNullOrWhiteSpace(apiLevelText))
+        {
+            if (!Enum.TryParse<WebApiDetailLevel>(apiLevelText, true, out var parsedLevel) ||
+                !Enum.IsDefined(parsedLevel))
+                return Fail("Invalid --api-level. Expected None, Summary, or Full.", outputJson, logger, "web.llms");
             apiLevel = parsedLevel;
+        }
         var apiMaxTypes = ParseIntOption(apiMaxTypesText, 200);
         var apiMaxMembers = ParseIntOption(apiMaxMembersText, 2000);
+        var publicationCatalogMaxAgeHours = 0;
+        if (!string.IsNullOrWhiteSpace(publicationCatalogMaxAgeHoursText) &&
+            (!int.TryParse(publicationCatalogMaxAgeHoursText, out publicationCatalogMaxAgeHours) ||
+             publicationCatalogMaxAgeHours < 0))
+        {
+            return Fail(
+                "Invalid --publication-catalog-max-age-hours. Expected a nonnegative integer.",
+                outputJson,
+                logger,
+                "web.llms");
+        }
+        var contentKind = WebLlmsContentKind.Package;
+        if (!string.IsNullOrWhiteSpace(contentKindText))
+        {
+            if (!Enum.TryParse<WebLlmsContentKind>(contentKindText, true, out var parsedContentKind) ||
+                !Enum.IsDefined(parsedContentKind))
+                return Fail("Invalid --content-kind. Expected Package or Site.", outputJson, logger, "web.llms");
+            contentKind = parsedContentKind;
+        }
+        var installPolicy = WebLlmsInstallCommandPolicy.Declared;
+        if (!string.IsNullOrWhiteSpace(installPolicyText))
+        {
+            if (!Enum.TryParse<WebLlmsInstallCommandPolicy>(installPolicyText, true, out var parsedInstallPolicy) ||
+                !Enum.IsDefined(parsedInstallPolicy))
+                return Fail(
+                    "Invalid --install-policy. Expected Declared, VerifiedCatalog, or None.",
+                    outputJson,
+                    logger,
+                    "web.llms");
+            installPolicy = parsedInstallPolicy;
+        }
 
         var result = WebLlmsGenerator.Generate(new WebLlmsOptions
         {
             SiteRoot = siteRoot,
+            ContentKind = contentKind,
+            InstallCommandPolicy = installPolicy,
+            PublicationCatalogPath = publicationCatalog,
+            NuGetOwner = nugetOwner,
+            PowerShellGalleryOwner = powerShellGalleryOwner,
+            PublicationCatalogMaxAgeHours = publicationCatalogMaxAgeHours,
             ProjectFile = projectFile,
             PackageFiles = packageFiles.ToArray(),
             ApiIndexPath = apiIndex,

@@ -1651,6 +1651,8 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException("llms requires siteRoot.");
 
         var apiLevelText = GetString(step, "apiLevel") ?? GetString(step, "api-level");
+        var contentKindText = GetString(step, "contentKind") ?? GetString(step, "content-kind");
+        var installPolicyText = GetString(step, "installPolicy") ?? GetString(step, "install-policy");
         var apiIndexPaths = (GetArrayOfStrings(step, "apiIndexes") ??
                              GetArrayOfStrings(step, "api-indexes") ??
                              Array.Empty<string>())
@@ -1668,11 +1670,18 @@ internal static partial class WebPipelineRunner
         var res = WebLlmsGenerator.Generate(new WebLlmsOptions
         {
             SiteRoot = siteRoot,
+            ContentKind = ParseLlmsContentKind(contentKindText),
+            InstallCommandPolicy = ParseLlmsInstallCommandPolicy(installPolicyText),
+            PublicationCatalogPath = ResolvePath(baseDir, GetString(step, "publicationCatalog") ?? GetString(step, "publication-catalog")),
+            NuGetOwner = GetString(step, "nugetOwner") ?? GetString(step, "nuget-owner"),
+            PowerShellGalleryOwner = GetString(step, "powerShellGalleryOwner") ?? GetString(step, "powershell-gallery-owner"),
+            PublicationCatalogMaxAgeHours = GetInt(step, "publicationCatalogMaxAgeHours") ??
+                                            GetInt(step, "publication-catalog-max-age-hours") ?? 0,
             ProjectFile = ResolvePath(baseDir, GetString(step, "project")),
             PackageFiles = packageFiles,
             ApiIndexPath = ResolvePath(baseDir, GetString(step, "apiIndex") ?? GetString(step, "api-index")),
             ApiIndexPaths = apiIndexPaths,
-            ApiBase = GetString(step, "apiBase") ?? "/api",
+            ApiBase = GetString(step, "apiBase") ?? GetString(step, "api-base") ?? "/api",
             Name = GetString(step, "name"),
             PackageId = GetString(step, "package") ?? GetString(step, "packageId"),
             Version = GetString(step, "version"),
@@ -1687,7 +1696,9 @@ internal static partial class WebPipelineRunner
             ApiMaxMembers = GetInt(step, "apiMaxMembers") ?? 2000
         });
         stepResult.Success = true;
-        stepResult.Message = $"LLMS generated ({res.Version})";
+        stepResult.Message = res.PackageCount == 0
+            ? "LLMS generated (site)"
+            : $"LLMS generated ({res.Version})";
     }
 
     private static void ExecuteCompatibilityMatrix(JsonElement step, string baseDir, WebPipelineStepResult stepResult)

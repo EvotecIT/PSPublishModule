@@ -6,6 +6,256 @@ using Xunit;
 public class WebLlmsGeneratorTests
 {
     [Fact]
+    public void Generate_SiteContentOmitsInventedPackageMetadataAndKeepsCuratedQuickstart()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-site-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var quickstartPath = Path.Combine(root, "quickstart.txt");
+            File.WriteAllText(quickstartPath, "search --query example");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                Name = "Example Portal",
+                PackageId = "example.invalid",
+                Version = "1.2.3",
+                QuickstartPath = quickstartPath
+            });
+
+            Assert.Equal(0, result.PackageCount);
+            Assert.Empty(result.PackageId);
+            Assert.Empty(result.Version);
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("# Example Portal", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("> Example Portal website.", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("API reference", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("search --query example", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("## Metadata", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("## Install", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("## Machine-friendly API data", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("Slug rule:", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("example.invalid", llmsTxt, StringComparison.Ordinal);
+
+            var llmsFull = File.ReadAllText(result.LlmsFullPath);
+            Assert.DoesNotContain("## Installation", llmsFull, StringComparison.Ordinal);
+            Assert.DoesNotContain("- Package:", llmsFull, StringComparison.Ordinal);
+            Assert.DoesNotContain("- Version:", llmsFull, StringComparison.Ordinal);
+            Assert.DoesNotContain("## API Resources", llmsFull, StringComparison.Ordinal);
+
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.DoesNotContain("\"package\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"version\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"install\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"api\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"apiCatalogs\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"apiTypeCount\"", llmsJson, StringComparison.Ordinal);
+            Assert.Contains("\"quickstartLanguage\": \"shell\"", llmsJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RejectsUndefinedContentKind()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-content-kind-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var exception = Assert.Throws<ArgumentOutOfRangeException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = (WebLlmsContentKind)42
+            }));
+
+            Assert.Equal("ContentKind", exception.ParamName);
+            Assert.Contains("Expected Package or Site", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RejectsUndefinedApiDetailLevel()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-api-level-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var exception = Assert.Throws<ArgumentOutOfRangeException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Product",
+                PackageId = "Example.Product",
+                ApiDetailLevel = (WebApiDetailLevel)42
+            }));
+
+            Assert.Equal("ApiDetailLevel", exception.ParamName);
+            Assert.Contains("Expected None, Summary, or Full", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RecognizesCSharpInTextQuickstart()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-csharp-text-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var quickstartPath = Path.Combine(root, "quickstart.txt");
+            File.WriteAllText(quickstartPath,
+                """
+                using Example.Product;
+
+                var client = new ExampleClient();
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Product",
+                PackageId = "Example.Product",
+                QuickstartPath = quickstartPath
+            });
+
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.Contains("\"quickstartLanguage\": \"csharp\"", llmsJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_DotNetPackageWithoutCuratedQuickstartOmitsPlaceholderSection()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-no-placeholder-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Product",
+                PackageId = "Example.Product"
+            });
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("dotnet add package Example.Product", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("## Quickstart", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("TODO", llmsTxt, StringComparison.OrdinalIgnoreCase);
+
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.DoesNotContain("\"quickstart\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"quickstartLanguage\"", llmsJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_ThrowsWhenConfiguredQuickstartDoesNotExist()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-missing-quickstart-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var missingPath = Path.Combine(root, "missing.cs");
+            var exception = Assert.Throws<FileNotFoundException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Product",
+                PackageId = "Example.Product",
+                QuickstartPath = missingPath
+            }));
+
+            Assert.Equal(missingPath, exception.FileName);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("Install-Module Example.Product", "powershell")]
+    [InlineData("Write-Host 'Ready'", "powershell")]
+    [InlineData("Select-Object -Property Name", "powershell")]
+    [InlineData("ForEach-Object { $_.Name }", "powershell")]
+    [InlineData("dotnet run", "shell")]
+    [InlineData("npm install", "shell")]
+    public void Generate_InfersCuratedTextQuickstartLanguage(string content, string language)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-text-language-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var quickstartPath = Path.Combine(root, "quickstart.txt");
+            File.WriteAllText(quickstartPath, content);
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Product",
+                PackageId = "Example.Product",
+                QuickstartPath = quickstartPath
+            });
+
+            Assert.Contains($"\"quickstartLanguage\": \"{language}\"", File.ReadAllText(result.LlmsJsonPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RejectsEmptyConfiguredQuickstart()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-empty-quickstart-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var quickstartPath = Path.Combine(root, "quickstart.txt");
+            File.WriteAllText(quickstartPath, " \r\n");
+            var exception = Assert.Throws<InvalidDataException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Product",
+                PackageId = "Example.Product",
+                QuickstartPath = quickstartPath
+            }));
+            Assert.Contains("quickstart file is empty", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Generate_WritesRecommendedLlmsTxtMarkdownLinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-markdown-links-" + Guid.NewGuid().ToString("N"));
@@ -13,6 +263,7 @@ public class WebLlmsGeneratorTests
 
         try
         {
+            WriteApiIndex(root, string.Empty, "Example.Product", 1);
             var result = WebLlmsGenerator.Generate(new WebLlmsOptions
             {
                 SiteRoot = root,
@@ -28,10 +279,127 @@ public class WebLlmsGeneratorTests
             Assert.Contains("- [API index](/projects/example/api/index.json):", llmsTxt, StringComparison.Ordinal);
             Assert.Contains("- [API search](/projects/example/api/search.json):", llmsTxt, StringComparison.Ordinal);
             Assert.Contains("- [API type template](/projects/example/api/types/{slug}.json):", llmsTxt, StringComparison.Ordinal);
+            const string slugRule = "lower-case; remove generic arity markers (one or two backticks followed by digits); replace remaining non-alphanumerics with dashes; collapse and trim dashes";
+            Assert.Contains($"Slug rule: {slugRule}.", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains($"- Slug rule: {slugRule}.", File.ReadAllText(result.LlmsFullPath), StringComparison.Ordinal);
+            Assert.Contains($"\"slugRule\": \"{slugRule}\"", File.ReadAllText(result.LlmsJsonPath), StringComparison.Ordinal);
         }
         finally
         {
             TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_SiteNameComesFromHomepageInsteadOfOutputDirectory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-site-title-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<html><head><title>Example Portal</title></head><body><h1>Ignored Heading</h1></body></html>");
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site
+            });
+
+            Assert.Equal("Example Portal", result.Name);
+            Assert.Contains("# Example Portal", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+            Assert.DoesNotContain(Path.GetFileName(root), File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RejectsMissingAndInvalidConfiguredApiIndexes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-invalid-api-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var missing = Path.Combine(root, "api", "missing.json");
+            Assert.Throws<FileNotFoundException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                Name = "Example Portal",
+                ApiIndexPath = missing
+            }));
+
+            Directory.CreateDirectory(Path.GetDirectoryName(missing)!);
+            File.WriteAllText(missing, "{ invalid");
+            Assert.Throws<InvalidDataException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                Name = "Example Portal",
+                ApiIndexPath = missing
+            }));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_PackageWithoutPresentApiIndexOmitsApiResources()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-package-no-api-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Product",
+                PackageId = "Example.Product"
+            });
+
+            Assert.Equal(0, result.ApiCatalogCount);
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.DoesNotContain("API index", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("API reference", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"api\"", File.ReadAllText(result.LlmsJsonPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RejectsExternalMultipleApiIndexesWhoseRoutesCannotBeProven()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-external-api-site-" + Guid.NewGuid().ToString("N"));
+        var external = Path.Combine(Path.GetTempPath(), "pf-web-llms-external-api-data-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(external);
+
+        try
+        {
+            var first = WriteApiIndex(external, "first", "Example.First", 1);
+            var second = WriteApiIndex(external, "second", "Example.Second", 1);
+            var exception = Assert.Throws<InvalidOperationException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                Name = "Example Portal",
+                ApiIndexPaths = new[] { first, second }
+            }));
+            Assert.Contains("Cannot infer a published API route", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+            TryDeleteDirectory(external);
         }
     }
 
@@ -43,6 +411,7 @@ public class WebLlmsGeneratorTests
 
         try
         {
+            WriteApiIndex(root, string.Empty, "Example.Product", 1);
             var discoveryPath = Path.Combine(root, "discovery.md");
             var extraPath = Path.Combine(root, "extra.md");
             File.WriteAllText(discoveryPath,
@@ -68,8 +437,97 @@ public class WebLlmsGeneratorTests
             Assert.Contains("[Compare libraries](/comparisons/)", llmsTxt, StringComparison.Ordinal);
             Assert.Contains("[License policy](/licensing/)", llmsTxt, StringComparison.Ordinal);
             Assert.DoesNotContain("Full-only implementation notes", llmsTxt, StringComparison.Ordinal);
+            Assert.True(
+                llmsTxt.IndexOf("[License policy](/licensing/)", StringComparison.Ordinal) <
+                llmsTxt.IndexOf("Slug rule:", StringComparison.Ordinal));
             Assert.Contains("[Compare libraries](/comparisons/)", llmsFull, StringComparison.Ordinal);
             Assert.Contains("Full-only implementation notes", llmsFull, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_SiteContentPublishesPresentDefaultAndExplicitApiCatalogs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-site-api-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var defaultDirectory = Path.Combine(root, "api");
+            Directory.CreateDirectory(defaultDirectory);
+            var defaultIndex = Path.Combine(defaultDirectory, "index.json");
+            File.WriteAllText(defaultIndex,
+                """
+                {
+                  "title": "Example API Reference",
+                  "typeCount": 3,
+                  "types": []
+                }
+                """);
+
+            var implicitResult = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                Name = "Example Portal"
+            });
+
+            Assert.Equal(1, implicitResult.ApiCatalogCount);
+            Assert.Equal(3, implicitResult.ApiTypeCount);
+            Assert.Contains("[API index](/api/index.json)", File.ReadAllText(implicitResult.LlmsTxtPath), StringComparison.Ordinal);
+            Assert.Contains("\"apiTypeCount\": 3", File.ReadAllText(implicitResult.LlmsJsonPath), StringComparison.Ordinal);
+
+            var explicitIndex = WriteApiIndex(root, "custom", "Example.Custom", 5);
+            var explicitResult = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                Name = "Example Portal",
+                ApiIndexPath = explicitIndex,
+                ApiBase = "/reference"
+            });
+
+            Assert.Equal(1, explicitResult.ApiCatalogCount);
+            Assert.Equal(5, explicitResult.ApiTypeCount);
+            Assert.Contains("[API index](/reference/index.json)", File.ReadAllText(explicitResult.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_SiteContentAggregatesExplicitApiCatalogs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-site-multi-api-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var firstIndex = WriteApiIndex(root, "first", "Example.First", 2);
+            var secondIndex = WriteApiIndex(root, "second", "Example.Second", 4);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                Name = "Example Portal",
+                ApiIndexPaths = new[] { firstIndex, secondIndex }
+            });
+
+            Assert.Equal(2, result.ApiCatalogCount);
+            Assert.Equal(6, result.ApiTypeCount);
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.Contains("[Example.First API index](/api/first/index.json)", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("[Example.Second API search](/api/second/search.json)", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("\"apiCatalogs\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"package\"", llmsJson, StringComparison.Ordinal);
         }
         finally
         {
@@ -210,7 +668,8 @@ public class WebLlmsGeneratorTests
             });
 
             var llmsFull = File.ReadAllText(result.LlmsFullPath);
-            Assert.Contains("Example Product documentation site and API reference.", llmsFull, StringComparison.Ordinal);
+            Assert.Contains("Example Product documentation.", llmsFull, StringComparison.Ordinal);
+            Assert.DoesNotContain("API reference", llmsFull, StringComparison.Ordinal);
             Assert.DoesNotContain("QR codes", llmsFull, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("barcodes", llmsFull, StringComparison.OrdinalIgnoreCase);
         }
@@ -623,7 +1082,7 @@ public class WebLlmsGeneratorTests
     }
 
     [Fact]
-    public void Generate_FallsBackFromUnresolvedMsBuildMetadata()
+    public void Generate_RejectsUnresolvedMsBuildPackageMetadata()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-msbuild-properties-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -642,18 +1101,351 @@ public class WebLlmsGeneratorTests
                 </Project>
                 """);
 
+            var exception = Assert.Throws<InvalidDataException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            }));
+            Assert.Contains("Cannot resolve MSBuild property", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_ResolvesPackageIdentityFromDirectoryBuildProps()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-central-props-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Directory.Build.props"),
+                "<Project><PropertyGroup><SharedPackageId>Example.Central</SharedPackageId><PackageId>$(SharedPackageId)</PackageId></PropertyGroup></Project>");
+            var projectPath = Path.Combine(root, "DifferentFileName.csproj");
+            File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><Version>1.0.0</Version></PropertyGroup></Project>");
+
             var result = WebLlmsGenerator.Generate(new WebLlmsOptions
             {
                 SiteRoot = root,
                 PackageFiles = new[] { projectPath }
             });
 
-            Assert.Equal("unknown", result.Version);
+            Assert.Contains("dotnet add package Example.Central", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_SiteIgnoresUnresolvedPackageOnlyProjectMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-site-project-metadata-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<html><head><title>Example Portal</title></head><body></body></html>");
+            var projectPath = Path.Combine(root, "Internal.Project.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <Version>$(GitVersion)</Version>
+                    <PackageId>$(PublishedPackageId)</PackageId>
+                    <Description>Example portal documentation.</Description>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                ProjectFile = projectPath
+            });
+
+            Assert.Equal("Example Portal", result.Name);
             var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
-            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
-            Assert.Contains("dotnet add package Example.Indirect", llmsTxt, StringComparison.Ordinal);
-            Assert.DoesNotContain("$(", llmsTxt, StringComparison.Ordinal);
-            Assert.DoesNotContain("$(", llmsJson, StringComparison.Ordinal);
+            Assert.Contains("Example portal documentation.", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("GitVersion", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("PublishedPackageId", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RejectsPackageMetadataInsideChooseBranches()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-conditional-package-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectPath = Path.Combine(root, "Conditional.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <Choose>
+                    <When Condition="'$(Configuration)' == 'Release'">
+                      <PropertyGroup><PackageId>Example.Release</PackageId></PropertyGroup>
+                    </When>
+                    <Otherwise>
+                      <PropertyGroup><PackageId>Example.Debug</PackageId></PropertyGroup>
+                    </Otherwise>
+                  </Choose>
+                </Project>
+                """);
+
+            var exception = Assert.Throws<InvalidDataException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            }));
+            Assert.Contains("Cannot resolve MSBuild property 'PackageId'", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_ExpandsMsBuildPropertiesAtAssignmentTime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-assignment-order-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Directory.Build.props"),
+                "<Project><PropertyGroup><BaseName>Example.Initial</BaseName><PackageId>$(BaseName)</PackageId></PropertyGroup></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><BaseName>Example.Later</BaseName><Version>1.0.0</Version></PropertyGroup></Project>");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("dotnet add package Example.Initial", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("Example.Later", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_UsesPackageMetadataAssignedInDirectoryBuildTargets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-late-package-metadata-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Directory.Build.targets"),
+                "<Project><PropertyGroup><PackageId>Example.Late</PackageId></PropertyGroup></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>Example.Early</PackageId></PropertyGroup></Project>");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+            Assert.Contains("dotnet add package Example.Late", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_FollowsImportedPostProjectPackageMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-imported-targets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Package.targets"),
+                "<Project><PropertyGroup><PackageId>Example.Imported</PackageId></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(root, "Directory.Build.targets"),
+                "<Project><Import Project=\"Package.targets\" /></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>Example.Early</PackageId></PropertyGroup></Project>");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+            Assert.Contains("dotnet add package Example.Imported", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_AllowsUnrelatedImportBeforeFinalPackageMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-unrelated-import-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Unrelated.props"),
+                "<Project><PropertyGroup><NoWarn>CS1591</NoWarn></PropertyGroup></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <Import Project="Unrelated.props" />
+                  <PropertyGroup><PackageId>Example.Final</PackageId><Version>1.2.3</Version></PropertyGroup>
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("dotnet add package Example.Final", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("source version `1.2.3`", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_AllowsConditionalImportThatCannotAlterPackageMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-unrelated-conditional-import-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Warnings.props"),
+                "<Project><PropertyGroup><NoWarn>CS1591</NoWarn></PropertyGroup></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><PackageId>Example.Package</PackageId><Version>1.0.0</Version></PropertyGroup>
+                  <Import Project="Warnings.props" Condition="'$(IncludeWarnings)' == 'true'" />
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+            Assert.Contains("dotnet add package Example.Package", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_IgnoresUnresolvedOptionalDescriptionAndUnusedVersionFallbacks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-optional-metadata-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <PackageId>Example.Package</PackageId>
+                    <Version>2.3.4</Version>
+                    <VersionPrefix Condition="'$(Configuration)' == 'Release'">9.9.9</VersionPrefix>
+                    <Description>$(GeneratedDescription)</Description>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("dotnet add package Example.Package", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("source version `2.3.4`", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("GeneratedDescription", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_TreatsBlankConfiguredSiteNameAsAbsent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-blank-site-name-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<html><head><title>Example Portal</title></head><body></body></html>");
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ContentKind = WebLlmsContentKind.Site,
+                Name = "   "
+            });
+            Assert.Equal("Example Portal", result.Name);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RejectsMissingConfiguredProjectFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-missing-project-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var missing = Path.Combine(root, "Missing.csproj");
+            var exception = Assert.Throws<FileNotFoundException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Product",
+                PackageId = "Example.Product",
+                ProjectFile = missing
+            }));
+            Assert.Equal(missing, exception.FileName);
         }
         finally
         {
@@ -692,6 +1484,201 @@ public class WebLlmsGeneratorTests
             Assert.Contains("- Suite version: 2026.7.0", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
             Assert.Contains("\"version\": \"2026.7.0\"", File.ReadAllText(result.LlmsJsonPath), StringComparison.Ordinal);
             Assert.Contains("- Suite version: 2026.7.0", File.ReadAllText(result.LlmsFullPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_ExplicitPackageOverridesAvoidStrictReadsOfUnusedProjectMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-explicit-project-overrides-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectPath = Path.Combine(root, "Generated.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <PackageId Condition="'$(Configuration)' == 'Release'">Generated.Package</PackageId>
+                    <Version>$(GeneratedVersion)</Version>
+                    <PackAsTool>false</PackAsTool>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ProjectFile = projectPath,
+                PackageId = "Explicit.Package",
+                Version = "4.5.6"
+            });
+
+            Assert.Equal("Explicit.Package", result.Name);
+            Assert.Equal("Explicit.Package", result.PackageId);
+            Assert.Equal("4.5.6", result.Version);
+            Assert.Contains("dotnet add package Explicit.Package", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_PrefersResolvedPackageIdOverProjectFilenameForPackageName()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-package-name-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectPath = Path.Combine(root, "Internal.BuildName.csproj");
+            File.WriteAllText(projectPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>Public.Package</PackageId><Version>1.0.0</Version></PropertyGroup></Project>");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ProjectFile = projectPath
+            });
+
+            Assert.Equal("Public.Package", result.Name);
+            Assert.StartsWith("# Public.Package", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_SkipsMissingImportGuardedByExists()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-optional-import-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><PackageId>Example.Package</PackageId><Version>1.2.3</Version></PropertyGroup>
+                  <Import Project="Optional.targets" Condition="Exists('Optional.targets')" />
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+
+            Assert.Contains("dotnet add package Example.Package", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_UsesPackageManifestsWithoutStrictAggregatorProjectMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-manifest-suite-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var aggregatorPath = Path.Combine(root, "Suite.csproj");
+            File.WriteAllText(aggregatorPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>$(GeneratedId)</PackageId><Version Condition=\"'$(Configuration)' == 'Release'\">9.9.9</Version><Description>Example suite.</Description></PropertyGroup></Project>");
+            var packagePath = Path.Combine(root, "Product.csproj");
+            File.WriteAllText(packagePath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>Example.Product</PackageId><Version>2.3.4</Version></PropertyGroup></Project>");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Suite",
+                ProjectFile = aggregatorPath,
+                PackageFiles = new[] { packagePath }
+            });
+
+            Assert.Equal("Example Suite", result.Name);
+            Assert.Equal("Example.Product", result.PackageId);
+            Assert.Equal("2.3.4", result.Version);
+            Assert.Contains("Example suite.", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_HonorsDirectoryBuildTargetsOptOut()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-targets-opt-out-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "Directory.Build.targets"),
+                "<Project><PropertyGroup><PackageId>Wrong.Package</PackageId><Version>9.9.9</Version></PropertyGroup></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets><PackageId>Right.Package</PackageId><Version>1.2.3</Version></PropertyGroup></Project>");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("dotnet add package Right.Package", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("Wrong.Package", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_HonorsExplicitDirectoryBuildTargetsPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-targets-path-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "Directory.Build.targets"),
+                "<Project><PropertyGroup><PackageId>Wrong.Package</PackageId></PropertyGroup></Project>");
+            var customTargetsPath = Path.Combine(root, "Package.targets");
+            File.WriteAllText(
+                customTargetsPath,
+                "<Project><PropertyGroup><PackageId>Right.Package</PackageId><Version>3.4.5</Version></PropertyGroup></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><DirectoryBuildTargetsPath>{customTargetsPath}</DirectoryBuildTargetsPath></PropertyGroup></Project>");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+
+            Assert.Contains("dotnet add package Right.Package", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
         }
         finally
         {

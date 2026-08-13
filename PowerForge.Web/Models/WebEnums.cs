@@ -73,6 +73,26 @@ public enum WebApiDetailLevel
     Full
 }
 
+/// <summary>Content shape emitted by the LLMS generator.</summary>
+public enum WebLlmsContentKind
+{
+    /// <summary>Describe an installable package, module, tool, or package suite.</summary>
+    Package,
+    /// <summary>Describe a website or product portal without inventing package metadata.</summary>
+    Site
+}
+
+/// <summary>Controls whether LLMS installation commands are emitted.</summary>
+public enum WebLlmsInstallCommandPolicy
+{
+    /// <summary>Emit commands derived from configured project or package metadata.</summary>
+    Declared,
+    /// <summary>Emit commands only for packages present in an owner-scoped publication catalog.</summary>
+    VerifiedCatalog,
+    /// <summary>Do not emit installation commands.</summary>
+    None
+}
+
 /// <summary>Repository provider selection.</summary>
 public enum RepositoryProvider
 {
