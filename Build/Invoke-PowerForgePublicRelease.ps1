@@ -57,6 +57,12 @@ try {
         $ConfigPath = Join-Path $PSScriptRoot 'release.json'
     }
     $ConfigPath = (Resolve-Path -LiteralPath $ConfigPath).Path
+    if ([IO.Path]::GetFileName($ConfigPath) -match '^\.release\.authorized\.') {
+        throw 'ConfigPath must identify a caller-owned source configuration, not a generated authorized configuration.'
+    }
+    $effectiveConfigPath = Join-Path `
+        (Split-Path -Parent $ConfigPath) `
+        ".release.authorized.$Version.$($ExpectedCommit.ToLowerInvariant()).json"
 
     $moduleProvenancePath = Join-Path $repositoryRoot 'Module\PowerForge.ReleaseProvenance.json'
     $moduleSignedProvenancePath = Join-Path $repositoryRoot 'Module\PowerForge.ReleaseProvenance.psd1'
@@ -64,7 +70,8 @@ try {
     $sourceState = Get-PowerForgeReleaseSourceState `
         -RepositoryRoot $repositoryRoot `
         -GeneratedProvenancePath $moduleProvenancePath `
-        -ReceiptPath $ReceiptPath
+        -ReceiptPath $ReceiptPath `
+        -GeneratedConfigurationPath $effectiveConfigPath
     $sourceDirty = [bool] $sourceState.SourceDirty
     if ($sourceDirty) {
         throw "The release checkout must start clean. Tracked or untracked changes: $(@($sourceState.Changes) -join ', ')"
@@ -179,14 +186,15 @@ try {
         $moduleSignedProvenanceCreated = $true
     }
 
-    $effectiveConfigPath = Join-Path (Split-Path -Parent $ConfigPath) ".release.authorized.$PID.json"
     $releaseConfig | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $effectiveConfigPath -Encoding utf8
+    $effectiveConfigSha256 = (Get-FileHash -LiteralPath $effectiveConfigPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
     $releaseStage = 'Build'
     $buildScript = Join-Path $PSScriptRoot 'Build-Project.ps1'
     $buildParameters = @{
         ModuleVersion = $Version
         ConfigPath    = $effectiveConfigPath
+        GeneratedConfigurationInputSha256 = $effectiveConfigSha256
         Json          = $true
     }
     switch ($Operation) {
@@ -229,6 +237,8 @@ try {
         CertificateThumbprint = $certificateThumbprint
         CertificateExpiresUtc = $certificate.NotAfter.ToUniversalTime()
         GitHubRecovery         = $releaseRecovery
+        EffectiveConfigPath    = $effectiveConfigPath
+        EffectiveConfigSha256  = $effectiveConfigSha256
         ReceiptPath           = $ReceiptPath
     }
 } catch {
@@ -245,6 +255,7 @@ try {
             Version        = $Version
             ExpectedCommit = $ExpectedCommit
             ActualCommit   = $actualCommit
+            EffectiveConfigPath = $effectiveConfigPath
             ErrorMessage   = $_.Exception.Message
             OutputTail     = $outputTail
             FailedAtUtc    = [DateTime]::UtcNow
@@ -252,9 +263,6 @@ try {
     }
     throw
 } finally {
-    if (-not [string]::IsNullOrWhiteSpace($effectiveConfigPath)) {
-        Remove-Item -LiteralPath $effectiveConfigPath -Force -ErrorAction SilentlyContinue
-    }
     if ($moduleProvenanceCreated -and -not [string]::IsNullOrWhiteSpace($moduleProvenancePath)) {
         Remove-Item -LiteralPath $moduleProvenancePath -Force -ErrorAction SilentlyContinue
     }

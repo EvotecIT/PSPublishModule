@@ -8,8 +8,10 @@ function Get-PowerForgeReleaseSourceState {
     The single generated provenance file excluded from release-source state.
     .PARAMETER ReceiptPath
     Resolved public-release receipt path. An untracked receipt is excluded only when it is under the dedicated release-receipts directory.
+    .PARAMETER GeneratedConfigurationPath
+    Exact deterministic effective-configuration output created by the public-release wrapper after this preflight.
     .NOTES
-    The exact untracked public-release receipt is excluded. Tracked receipt changes remain release inputs.
+    The exact untracked public-release receipt and authorized wrapper configuration are excluded. Tracked changes remain release inputs.
     #>
     [CmdletBinding()]
     param(
@@ -20,7 +22,9 @@ function Get-PowerForgeReleaseSourceState {
         [string] $GeneratedProvenancePath,
 
         [Parameter(Mandatory)]
-        [string] $ReceiptPath
+        [string] $ReceiptPath,
+
+        [string] $GeneratedConfigurationPath
     )
 
     $root = [IO.Path]::GetFullPath($RepositoryRoot)
@@ -44,6 +48,19 @@ function Get-PowerForgeReleaseSourceState {
         $relativeReceipt = [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($receiptUri).ToString()).Replace('\', '/')
     }
 
+    $relativeGeneratedConfiguration = $null
+    if (-not [string]::IsNullOrWhiteSpace($GeneratedConfigurationPath)) {
+        $generatedConfiguration = [IO.Path]::GetFullPath($GeneratedConfigurationPath)
+        $generatedConfigurationUri = [Uri] $generatedConfiguration
+        if (-not $rootUri.IsBaseOf($generatedConfigurationUri)) {
+            throw 'Generated authorized release configuration must stay under the release checkout.'
+        }
+        if ([IO.Path]::GetFileName($generatedConfiguration) -notmatch '^\.release\.authorized\.\d+\.\d+\.\d+\.[0-9a-fA-F]{40}\.json$') {
+            throw 'Generated authorized release configuration must use the deterministic .release.authorized.<version>.<commit>.json name.'
+        }
+        $relativeGeneratedConfiguration = [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($generatedConfigurationUri).ToString()).Replace('\', '/')
+    }
+
     $trackedChanges = @(& git -C $root status --porcelain=v1 --untracked-files=no -- . ":(exclude,literal)$relativeProvenance")
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to inspect tracked release inputs.'
@@ -53,6 +70,9 @@ function Get-PowerForgeReleaseSourceState {
     $untrackedPathspecs.Add(":(exclude,literal)$relativeProvenance")
     if (-not [string]::IsNullOrWhiteSpace($relativeReceipt)) {
         $untrackedPathspecs.Add(":(exclude,top,literal)$relativeReceipt")
+    }
+    if (-not [string]::IsNullOrWhiteSpace($relativeGeneratedConfiguration)) {
+        $untrackedPathspecs.Add(":(exclude,top,literal)$relativeGeneratedConfiguration")
     }
     $untrackedInputs = @(& git -C $root ls-files --others --exclude-standard -- @untrackedPathspecs)
     if ($LASTEXITCODE -ne 0) {

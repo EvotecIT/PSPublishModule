@@ -167,7 +167,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<DotNetPublishStorePackageResult> storePackages,
         IEnumerable<DotNetPublishMsiBuildResult> msiBuilds)
     {
-        foreach (string configurationInputPath in plan.ConfigurationInputPaths ?? Array.Empty<string>())
+        foreach (string configurationInputPath in plan.GeneratedConfigurationInputPaths ?? Array.Empty<string>())
             yield return configurationInputPath;
 
         yield return plan.Outputs.ManifestJsonPath ?? string.Empty;

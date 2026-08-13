@@ -3938,6 +3938,11 @@ internal sealed partial class PowerForgeReleaseService
                 .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
                 .Select(path => path!));
 
+            assets.AddRange(
+                (plan.GeneratedConfigurationInputPaths ?? Array.Empty<string>())
+                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                .Select(Path.GetFullPath));
+
             var uniqueAssets = assets
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -4183,6 +4188,7 @@ internal sealed partial class PowerForgeReleaseService
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        BindGeneratedConfigurationInput(plan, request, releaseConfigPath);
         return plan;
     }
 
@@ -4807,6 +4813,8 @@ internal sealed partial class PowerForgeReleaseService
                 Source = "ReleaseOutputs",
                 IsFinalPackageOutput = false
             }));
+
+        assets.AddRange(CreateGeneratedConfigurationAssetEntries(dotNetPlan));
 
         return assets.ToArray();
     }

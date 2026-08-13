@@ -162,6 +162,22 @@ public sealed class PowerForgeReleaseRequestMapperTests
     }
 
     [Fact]
+    public void Build_MapsAuthorizedGeneratedConfigurationDigest()
+    {
+        string digest = new('a', 64);
+
+        PowerForgeReleaseRequest request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+            "/repo/.release.authorized.3.0.81.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json",
+            defaults: null,
+            new PSPublishModule.PowerForgeReleaseInvocationOptions
+            {
+                GeneratedConfigurationInputSha256 = digest
+            });
+
+        Assert.Equal(digest, request.GeneratedConfigurationInputSha256);
+    }
+
+    [Fact]
     public void Build_MapsModuleReleaseOverrides()
     {
         var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(

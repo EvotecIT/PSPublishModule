@@ -34,6 +34,9 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("commit        = $ExpectedCommit", script, StringComparison.Ordinal);
         Assert.Contains("sourceDirty   = $sourceDirty", script, StringComparison.Ordinal);
         Assert.Contains("Get-PowerForgeReleaseSourceState", script, StringComparison.Ordinal);
+        Assert.Contains("GeneratedConfigurationInputSha256", script, StringComparison.Ordinal);
+        Assert.Contains("EffectiveConfigSha256", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Remove-Item -LiteralPath $effectiveConfigPath", script, StringComparison.Ordinal);
         Assert.Contains("$moduleProvenanceCreated", script, StringComparison.Ordinal);
         Assert.Contains("$moduleSignedProvenanceCreated", script, StringComparison.Ordinal);
         Assert.Contains("ReceiptPath must stay outside the release checkout", script, StringComparison.Ordinal);
@@ -73,7 +76,7 @@ public sealed partial class AppleReleaseWorkflowTests
     [Theory]
     [InlineData("powershell")]
     [InlineData("pwsh")]
-    public void PublicModuleReleaseSourceStateExcludesPriorExactCustomReceiptButNotTrackedOrSiblingInputs(string shell)
+    public void PublicModuleReleaseSourceStateExcludesOnlyExactGeneratedOutputs(string shell)
     {
         var repository = Directory.CreateTempSubdirectory();
         try
@@ -90,9 +93,12 @@ public sealed partial class AppleReleaseWorkflowTests
             File.WriteAllText(provenance, "{}");
             Directory.CreateDirectory(Path.Combine(repository.FullName, "release-receipts"));
             string receiptPath = Path.Combine(repository.FullName, "release-receipts", "custom-release.json");
+            string generatedConfigurationPath = Path.Combine(
+                repository.FullName,
+                ".release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
             string helper = Path.Combine(FindRepoRoot(), "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1");
             string command = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
-                             $"Get-PowerForgeReleaseSourceState -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedProvenancePath '{provenance.Replace("'", "''", StringComparison.Ordinal)}' -ReceiptPath '{receiptPath.Replace("'", "''", StringComparison.Ordinal)}' | ConvertTo-Json -Compress";
+                             $"Get-PowerForgeReleaseSourceState -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedProvenancePath '{provenance.Replace("'", "''", StringComparison.Ordinal)}' -ReceiptPath '{receiptPath.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedConfigurationPath '{generatedConfigurationPath.Replace("'", "''", StringComparison.Ordinal)}' | ConvertTo-Json -Compress";
             var clean = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
             Assert.Contains("\"SourceDirty\":false", clean.StandardOutput, StringComparison.OrdinalIgnoreCase);
 
@@ -114,6 +120,17 @@ public sealed partial class AppleReleaseWorkflowTests
             Assert.Contains("\"SourceDirty\":true", trackedReceiptDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("custom-release.json", trackedReceiptDirty.StandardOutput, StringComparison.Ordinal);
             File.WriteAllText(receiptPath, "{}");
+
+            File.WriteAllText(generatedConfigurationPath, "{ \"effective\": true }");
+            var generatedConfigClean = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            Assert.Contains("\"SourceDirty\":false", generatedConfigClean.StandardOutput, StringComparison.OrdinalIgnoreCase);
+
+            string callerConfigPath = Path.Combine(repository.FullName, "caller-config.json");
+            File.WriteAllText(callerConfigPath, "{}");
+            var callerConfigDirty = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            Assert.Contains("\"SourceDirty\":true", callerConfigDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("caller-config.json", callerConfigDirty.StandardOutput, StringComparison.Ordinal);
+            File.Delete(callerConfigPath);
 
             File.WriteAllText(Path.Combine(repository.FullName, "Module", "untracked-input.ps1"), "'input'");
             var dirty = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();

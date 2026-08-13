@@ -24,6 +24,8 @@ internal sealed class PowerForgeReleaseInvocationOptions
 
     public string? Configuration { get; set; }
 
+    public string? GeneratedConfigurationInputSha256 { get; set; }
+
     public string? ReleaseVersion { get; set; }
 
     public string? ModuleFramework { get; set; }

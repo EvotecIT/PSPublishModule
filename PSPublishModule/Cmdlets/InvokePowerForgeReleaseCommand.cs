@@ -102,6 +102,15 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     public string? Configuration { get; set; }
 
     /// <summary>
+    /// SHA-256 of an effective configuration created by the trusted public-release wrapper after
+    /// its clean-source preflight. This internal handoff keeps arbitrary caller configuration in
+    /// source provenance while identifying the single generated configuration by exact content.
+    /// </summary>
+    [Parameter(DontShow = true)]
+    [ValidatePattern("^[0-9a-fA-F]{64}$")]
+    public string? GeneratedConfigurationInputSha256 { get; set; }
+
+    /// <summary>
     /// Target framework used by the native module-release lane.
     /// </summary>
     [Parameter]
@@ -788,6 +797,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             KeepSymbols = ResolveRequestedFlag(boundParameters, nameof(KeepSymbols)),
             EnableSigning = ResolveRequestedFlag(boundParameters, nameof(Sign)),
             Configuration = NormalizeNullable(Configuration),
+            GeneratedConfigurationInputSha256 = NormalizeNullable(GeneratedConfigurationInputSha256),
             ReleaseVersion = NormalizeNullable(ReleaseVersion),
             ModuleVersion = NormalizeNullable(ModuleVersion),
             ModulePreReleaseTag = NormalizeNullable(ModulePreReleaseTag),

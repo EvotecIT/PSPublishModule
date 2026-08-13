@@ -47,6 +47,7 @@ internal sealed class PowerForgeReleaseRequest
     internal CancellationToken CancellationToken { get; set; }
     internal string? ExactConfigurationContent { get; set; }
     internal string? LoadedConfigurationSha256 { get; set; }
+    internal string? GeneratedConfigurationInputSha256 { get; set; }
 
     public string ConfigPath { get; set; } = string.Empty;
 

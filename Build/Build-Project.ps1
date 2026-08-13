@@ -3,6 +3,8 @@ param(
     [string] $ConfigPath,
     [ValidateSet('Release', 'Debug')]
     [string] $Configuration = 'Release',
+    [ValidatePattern('^[0-9a-fA-F]{64}$')]
+    [string] $GeneratedConfigurationInputSha256,
     [Alias('ModuleRunMode')]
     [ValidateSet('Manifest', 'Documentation', 'Build', 'Publish')]
     [string] $RunMode = 'Build',

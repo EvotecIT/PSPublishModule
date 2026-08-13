@@ -668,7 +668,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void WriteManifests_UntrackedEffectiveConfigurationIsHashedWithoutDirtyingSource()
+    public void WriteManifests_OnlyAuthorizedGeneratedConfigurationIsExcludedFromDirtySource()
     {
         string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -681,8 +681,8 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(Path.Combine(root, "tracked.txt"), "tracked");
             RunGit(root, "add tracked.txt");
             RunGit(root, "commit -m \"tracked source\"");
-            string releaseConfig = Path.Combine(root, ".release.authorized.123.json");
-            string publishConfig = Path.Combine(root, "powerforge.dotnetpublish.generated.json");
+            string releaseConfig = Path.Combine(root, ".release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
+            string publishConfig = Path.Combine(root, "powerforge.dotnetpublish.caller.json");
             File.WriteAllText(releaseConfig, "{}");
             File.WriteAllText(publishConfig, "{}");
 
@@ -695,6 +695,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             {
                 ProjectRoot = root,
                 ConfigurationInputPaths = new[] { releaseConfig, publishConfig },
+                GeneratedConfigurationInputPaths = new[] { releaseConfig },
                 Outputs = new DotNetPublishOutputs
                 {
                     ManifestJsonPath = manifestPath,
@@ -721,8 +722,14 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             InvokeWriteManifests(plan, artefacts);
 
             string[] checksumLines = File.ReadAllLines(checksumsPath);
-            Assert.Contains(checksumLines, line => line.EndsWith("*.release.authorized.123.json", StringComparison.Ordinal));
-            Assert.Contains(checksumLines, line => line.EndsWith("*powerforge.dotnetpublish.generated.json", StringComparison.Ordinal));
+            Assert.Contains(checksumLines, line => line.EndsWith("*.release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json", StringComparison.Ordinal));
+            Assert.Contains(checksumLines, line => line.EndsWith("*powerforge.dotnetpublish.caller.json", StringComparison.Ordinal));
+            using (JsonDocument callerDirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+                Assert.True(callerDirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+
+            RunGit(root, "add powerforge.dotnetpublish.caller.json");
+            RunGit(root, "commit -m \"tracked caller configuration\"");
+            InvokeWriteManifests(plan, artefacts);
             using (JsonDocument cleanManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
                 Assert.False(cleanManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
 
