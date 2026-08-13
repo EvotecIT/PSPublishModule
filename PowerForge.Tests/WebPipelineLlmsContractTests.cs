@@ -339,6 +339,44 @@ public sealed class WebPipelineLlmsContractTests
         }
     }
 
+    [Theory]
+    [InlineData("Directory.Build.props")]
+    [InlineData("Directory.Build.targets")]
+    public void Llms_fingerprint_changes_when_implicit_msbuild_metadata_appears(string metadataFileName)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-msbuild-appearance-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Example.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+            using var document = JsonDocument.Parse(
+                """
+                {
+                  "task": "llms",
+                  "siteRoot": "_site",
+                  "packageFiles": ["Example.csproj"]
+                }
+                """);
+            var method = typeof(WebPipelineRunner).GetMethod(
+                "ComputeStepFingerprint",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var first = (string)method!.Invoke(null, new object?[] { root, document.RootElement, null })!;
+            File.WriteAllText(
+                Path.Combine(root, metadataFileName),
+                "<Project><PropertyGroup><PackageId>Example.Published</PackageId></PropertyGroup></Project>");
+            var second = (string)method.Invoke(null, new object?[] { root, document.RootElement, null })!;
+
+            Assert.NotEqual(first, second);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     [Fact]
     public void Llms_fingerprint_changes_when_imported_msbuild_metadata_changes()
     {

@@ -155,7 +155,7 @@ public static partial class WebLlmsGenerator
         var properties = new MsBuildPropertySet();
         properties.Values["MSBuildProjectName"] = Path.GetFileNameWithoutExtension(projectFile);
 
-        var propsPath = FindNearestBuildFile(projectFile, "Directory.Build.props");
+        var propsPath = FindNearestBuildFile(projectFile, "Directory.Build.props", properties.InputPaths);
         if (propsPath is not null)
             ReadMsBuildPropertyFile(propsPath, properties);
 
@@ -181,7 +181,7 @@ public static partial class WebLlmsGenerator
 
         var configuredPath = GetMsBuildProperty(properties, "DirectoryBuildTargetsPath", throwOnUnresolved: false);
         if (configuredPath is null)
-            return FindNearestBuildFile(projectFile, "Directory.Build.targets");
+            return FindNearestBuildFile(projectFile, "Directory.Build.targets", properties.InputPaths);
         if (!Path.IsPathRooted(configuredPath))
         {
             MarkAllPackageMetadataConditional(properties);
@@ -199,14 +199,18 @@ public static partial class WebLlmsGenerator
         return null;
     }
 
-    private static string? FindNearestBuildFile(string projectFile, string fileName)
+    private static string? FindNearestBuildFile(
+        string projectFile,
+        string fileName,
+        ISet<string> inputPaths)
     {
         var directory = Path.GetDirectoryName(projectFile);
         while (!string.IsNullOrWhiteSpace(directory))
         {
-            var candidate = Path.Combine(directory, fileName);
+            var candidate = Path.GetFullPath(Path.Combine(directory, fileName));
             if (File.Exists(candidate))
                 return candidate;
+            inputPaths.Add(candidate);
             directory = Directory.GetParent(directory)?.FullName;
         }
 
