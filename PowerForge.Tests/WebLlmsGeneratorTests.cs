@@ -200,6 +200,9 @@ public class WebLlmsGeneratorTests
 
     [Theory]
     [InlineData("Install-Module Example.Product", "powershell")]
+    [InlineData("Write-Host 'Ready'", "powershell")]
+    [InlineData("Select-Object -Property Name", "powershell")]
+    [InlineData("ForEach-Object { $_.Name }", "powershell")]
     [InlineData("dotnet run", "shell")]
     [InlineData("npm install", "shell")]
     public void Generate_InfersCuratedTextQuickstartLanguage(string content, string language)
@@ -1578,6 +1581,104 @@ public class WebLlmsGeneratorTests
             });
 
             Assert.Contains("dotnet add package Example.Package", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_UsesPackageManifestsWithoutStrictAggregatorProjectMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-manifest-suite-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var aggregatorPath = Path.Combine(root, "Suite.csproj");
+            File.WriteAllText(aggregatorPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>$(GeneratedId)</PackageId><Version Condition=\"'$(Configuration)' == 'Release'\">9.9.9</Version><Description>Example suite.</Description></PropertyGroup></Project>");
+            var packagePath = Path.Combine(root, "Product.csproj");
+            File.WriteAllText(packagePath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>Example.Product</PackageId><Version>2.3.4</Version></PropertyGroup></Project>");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Suite",
+                ProjectFile = aggregatorPath,
+                PackageFiles = new[] { packagePath }
+            });
+
+            Assert.Equal("Example Suite", result.Name);
+            Assert.Equal("Example.Product", result.PackageId);
+            Assert.Equal("2.3.4", result.Version);
+            Assert.Contains("Example suite.", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_HonorsDirectoryBuildTargetsOptOut()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-targets-opt-out-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "Directory.Build.targets"),
+                "<Project><PropertyGroup><PackageId>Wrong.Package</PackageId><Version>9.9.9</Version></PropertyGroup></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets><PackageId>Right.Package</PackageId><Version>1.2.3</Version></PropertyGroup></Project>");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("dotnet add package Right.Package", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("Wrong.Package", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_HonorsExplicitDirectoryBuildTargetsPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-targets-path-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "Directory.Build.targets"),
+                "<Project><PropertyGroup><PackageId>Wrong.Package</PackageId></PropertyGroup></Project>");
+            var customTargetsPath = Path.Combine(root, "Package.targets");
+            File.WriteAllText(
+                customTargetsPath,
+                "<Project><PropertyGroup><PackageId>Right.Package</PackageId><Version>3.4.5</Version></PropertyGroup></Project>");
+            var projectPath = Path.Combine(root, "Example.csproj");
+            File.WriteAllText(projectPath,
+                $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><DirectoryBuildTargetsPath>{customTargetsPath}</DirectoryBuildTargetsPath></PropertyGroup></Project>");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+
+            Assert.Contains("dotnet add package Right.Package", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
         }
         finally
         {

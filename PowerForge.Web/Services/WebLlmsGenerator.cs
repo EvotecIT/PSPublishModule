@@ -75,21 +75,23 @@ public static partial class WebLlmsGenerator
         var configuredName = string.IsNullOrWhiteSpace(options.Name) ? null : options.Name.Trim();
         var configuredPackageId = string.IsNullOrWhiteSpace(options.PackageId) ? null : options.PackageId.Trim();
         var configuredVersion = string.IsNullOrWhiteSpace(options.Version) ? null : options.Version.Trim();
-        var projectInfo = ReadProjectInfo(
-            options.ProjectFile,
-            includePackageContent,
-            requirePackageId: includePackageContent && configuredPackageId is null,
-            requireVersion: includePackageContent && configuredVersion is null);
         var packages = includePackageContent
             ? ResolvePackages(options.PackageFiles)
             : new List<PackageInfo>();
+        var primaryPackage = packages.FirstOrDefault();
+        var useProjectPackageMetadata = includePackageContent && primaryPackage is null;
+        var projectInfo = ReadProjectInfo(
+            options.ProjectFile,
+            useProjectPackageMetadata,
+            requirePackageId: useProjectPackageMetadata && configuredPackageId is null,
+            requireVersion: useProjectPackageMetadata && configuredVersion is null);
         var name = includePackageContent
-            ? configuredName ?? configuredPackageId ?? projectInfo.PackageId ?? projectInfo.Name ?? packages.FirstOrDefault()?.Id
+            ? configuredName ?? configuredPackageId ?? primaryPackage?.Id ?? projectInfo.PackageId ?? projectInfo.Name
             : configuredName ?? TryReadNameFromHomepage(siteRoot) ?? projectInfo.Name;
         if (string.IsNullOrWhiteSpace(name))
             throw new InvalidOperationException("LLMS content name could not be resolved. Configure name or provide usable project/homepage metadata.");
         var packageId = includePackageContent
-            ? configuredPackageId ?? projectInfo.PackageId ?? packages.FirstOrDefault()?.Id ?? name
+            ? configuredPackageId ?? primaryPackage?.Id ?? projectInfo.PackageId ?? name
             : null;
         var version = includePackageContent
             ? configuredVersion ?? ResolveSuiteVersion(packages) ?? projectInfo.Version ?? "unknown"
@@ -104,7 +106,6 @@ public static partial class WebLlmsGenerator
         var llmsJsonPath = Path.Combine(siteRoot, "llms.json");
         var llmsFullPath = Path.Combine(siteRoot, "llms-full.txt");
 
-        var primaryPackage = packages.FirstOrDefault();
         var quickstart = ResolveQuickstart(
             options.QuickstartPath,
             primaryPackage?.Id ?? name,
@@ -113,7 +114,10 @@ public static partial class WebLlmsGenerator
             primaryPackage?.ToolCommandName ?? projectInfo.ToolCommandName,
             includePackageContent);
         var legacyInstallCommand = includePackageContent
-            ? CreateInstallCommand(packageId!, projectInfo.IsPowerShellModule, projectInfo.IsDotNetTool)
+            ? CreateInstallCommand(
+                packageId!,
+                primaryPackage?.IsPowerShellModule ?? projectInfo.IsPowerShellModule,
+                primaryPackage?.IsDotNetTool ?? projectInfo.IsDotNetTool)
             : null;
         var overview = ResolveOverview(options, projectInfo, siteRoot, name, apiCatalogs.Count > 0);
         WriteLlmsTxt(llmsTxtPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart, options.DiscoveryContentPath, includePackageContent);
@@ -417,7 +421,7 @@ public static partial class WebLlmsGenerator
 
         if (content.Contains("Import-Module", StringComparison.OrdinalIgnoreCase) ||
             content.Contains("Get-Command", StringComparison.OrdinalIgnoreCase) ||
-            Regex.IsMatch(content, @"(?m)^\s*(Get|Set|New|Add|Remove|Install|Update|Export|Import|Invoke|Connect|Disconnect|Start|Stop|Test)-[A-Za-z0-9]+"))
+            Regex.IsMatch(content, @"(?m)^\s*[A-Z][A-Za-z0-9]*-[A-Z][A-Za-z0-9]*\b"))
             return "powershell";
 
         if (Regex.IsMatch(content, @"(?m)^\s*(using\s+[A-Za-z_][A-Za-z0-9_.]*\s*;|namespace\s+[A-Za-z_]|(?:var|await|new)\s+.+;)"))

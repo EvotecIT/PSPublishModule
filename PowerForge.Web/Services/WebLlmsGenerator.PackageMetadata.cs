@@ -160,10 +160,43 @@ public static partial class WebLlmsGenerator
             ReadMsBuildPropertyFile(propsPath, properties);
 
         ReadMsBuildPropertyFile(projectFile, properties);
-        var targetsPath = FindNearestBuildFile(projectFile, "Directory.Build.targets");
+        var targetsPath = ResolveDirectoryBuildTargetsPath(projectFile, properties);
         if (targetsPath is not null)
             ReadMsBuildPropertyFile(targetsPath, properties);
         return properties;
+    }
+
+    private static string? ResolveDirectoryBuildTargetsPath(string projectFile, MsBuildPropertySet properties)
+    {
+        if (IsMsBuildPropertyUnresolved(properties, "ImportDirectoryBuildTargets") ||
+            IsMsBuildPropertyUnresolved(properties, "DirectoryBuildTargetsPath"))
+        {
+            MarkAllPackageMetadataConditional(properties);
+            return null;
+        }
+
+        var importTargets = GetMsBuildProperty(properties, "ImportDirectoryBuildTargets", throwOnUnresolved: false);
+        if (string.Equals(importTargets, "false", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var configuredPath = GetMsBuildProperty(properties, "DirectoryBuildTargetsPath", throwOnUnresolved: false);
+        if (configuredPath is null)
+            return FindNearestBuildFile(projectFile, "Directory.Build.targets");
+        if (!Path.IsPathRooted(configuredPath))
+        {
+            MarkAllPackageMetadataConditional(properties);
+            return null;
+        }
+
+        var normalizedPath = configuredPath
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+        var fullPath = Path.GetFullPath(normalizedPath, Path.GetDirectoryName(projectFile) ?? string.Empty);
+        if (File.Exists(fullPath))
+            return fullPath;
+
+        properties.InputPaths.Add(fullPath);
+        return null;
     }
 
     private static string? FindNearestBuildFile(string projectFile, string fileName)
@@ -424,6 +457,14 @@ public static partial class WebLlmsGenerator
         return NormalizeEmpty(value);
     }
 
+    private static bool IsMsBuildPropertyUnresolved(MsBuildPropertySet properties, string name)
+    {
+        if (properties.ConditionalNames.Contains(name))
+            return true;
+        return properties.Values.TryGetValue(name, out var value) &&
+               (value.Contains("$(", StringComparison.Ordinal) || value.Contains("%(", StringComparison.Ordinal));
+    }
+
     private sealed class MsBuildPropertySet
     {
         public Dictionary<string, string> Values { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -434,7 +475,8 @@ public static partial class WebLlmsGenerator
     private static readonly HashSet<string> PackageMetadataPropertyNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "AssemblyName", "RootNamespace", "PackageId", "PackageVersion", "Version", "VersionPrefix",
-        "VersionSuffix", "Description", "PackAsTool", "ToolCommandName"
+        "VersionSuffix", "Description", "PackAsTool", "ToolCommandName", "ImportDirectoryBuildTargets",
+        "DirectoryBuildTargetsPath"
     };
 
     private static string? CombineMsBuildVersion(string? versionPrefix, string? versionSuffix)
