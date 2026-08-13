@@ -96,6 +96,42 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
     }
 
     [Fact]
+    public void CreateModuleAssetEntries_IncludesSigningEvidenceBoundToSiblingArchiveVersion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string archivePath = Path.Combine(root, "ExampleModule.zip");
+        string evidencePath = archivePath + ".signing.json";
+        try
+        {
+            using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry manifest = archive.CreateEntry("ExampleModule/ExampleModule.psd1");
+                using (var writer = new StreamWriter(manifest.Open()))
+                    writer.Write("@{ ModuleVersion = '1.2.3'; RootModule = 'ExampleModule.psm1' }");
+                archive.CreateEntry("ExampleModule/ExampleModule.psm1");
+            }
+            File.WriteAllText(evidencePath, "{}");
+
+            PowerForgeReleaseAssetEntry[] entries = PowerForgeReleaseService.CreateModuleAssetEntries(
+                root,
+                new PowerForgeModuleReleasePlanSummary
+                {
+                    ModuleName = "ExampleModule",
+                    ModuleVersion = "1.2.3",
+                    ManifestPath = Path.Combine(root, "ExampleModule.psd1")
+                }).ToArray();
+
+            Assert.Contains(entries, entry => entry.Path == archivePath);
+            Assert.Contains(entries, entry => entry.Path == evidencePath);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void CreateModuleAssetEntries_SourceRepositoryArchive_IsNotVerifiedFinalPackage()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));

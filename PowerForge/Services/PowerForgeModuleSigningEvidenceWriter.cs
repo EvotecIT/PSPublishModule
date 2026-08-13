@@ -151,6 +151,40 @@ public static class PowerForgeModuleSigningEvidenceWriter
         return destination;
     }
 
+    /// <summary>
+    /// Writes signing evidence using the signed source attestation beside the primary module manifest.
+    /// </summary>
+    /// <param name="outputPath">Destination JSON sidecar path.</param>
+    /// <param name="moduleRoot">Root directory whose relative paths exactly mirror the final packed archive layout.</param>
+    /// <param name="moduleName">Expected primary module name.</param>
+    /// <param name="version">Expected module version.</param>
+    /// <param name="manifestPath">Path to the primary module manifest under <paramref name="moduleRoot"/>.</param>
+    /// <param name="signingResult">Successful result returned by the shared module-signing pipeline.</param>
+    /// <returns>The normalized full path of the written sidecar.</returns>
+    public static string WriteFromSignedSourceAttestation(
+        string outputPath,
+        string moduleRoot,
+        string moduleName,
+        string version,
+        string manifestPath,
+        ModuleSigningResult signingResult)
+    {
+        string manifest = ResolveFileUnderRoot(RequireDirectory(moduleRoot, nameof(moduleRoot)), manifestPath, nameof(manifestPath));
+        string attestationPath = Path.Combine(
+            Path.GetDirectoryName(manifest) ?? throw new InvalidOperationException("Module manifest directory could not be resolved."),
+            PowerForgeModuleSourceAttestationWriter.FileName);
+        PowerForgeModuleSourceAttestation attestation = PowerForgeModuleSourceAttestationWriter.Read(File.ReadAllBytes(attestationPath));
+        return Write(
+            outputPath,
+            moduleRoot,
+            moduleName,
+            version,
+            attestation.SourceRevision,
+            sourceDirty: false,
+            manifest,
+            signingResult);
+    }
+
     private static string RequireDirectory(string path, string parameterName)
     {
         string fullPath = Path.GetFullPath(RequireText(path, parameterName));

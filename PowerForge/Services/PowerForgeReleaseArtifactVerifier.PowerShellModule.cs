@@ -47,7 +47,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         using ZipArchive archive = ZipFile.OpenRead(artifactPath);
         Dictionary<string, ZipArchiveEntry> entries = ValidateArchiveEntries(archive);
         string[] manifestEntries = entries.Keys.Where(entry =>
-                string.Equals(Path.GetFileName(entry), moduleName + ".psd1", StringComparison.Ordinal))
+                string.Equals(Path.GetFileName(entry), moduleName + ".psd1", StringComparison.Ordinal) &&
+                string.Equals(GetArchiveParentDirectoryName(entry), moduleName, StringComparison.Ordinal))
             .ToArray();
         if (manifestEntries.Length != 1)
             throw Invalid($"Packed module artifact must contain exactly one '{moduleName}.psd1' manifest.");
@@ -55,7 +56,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (!string.Equals(NormalizeArchivePath(signingEvidence.ManifestPath), manifestPath, StringComparison.Ordinal))
             throw Invalid("Module signing evidence does not identify the packed module manifest.");
 
-        string manifestText = DecodeModuleManifest(ReadEntryBytes(entries[manifestPath]));
+        string manifestText = DecodeModuleManifest(ReadBoundedEntryBytes(entries[manifestPath], "Packed module manifest"));
         if (!ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, "ModuleVersion", out string? manifestVersion) ||
             string.IsNullOrWhiteSpace(manifestVersion))
             throw Invalid("Packed module manifest does not declare ModuleVersion.");
@@ -109,7 +110,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (!entries.TryGetValue(signedProvenancePath, out ZipArchiveEntry? signedProvenanceEntry))
             throw Invalid($"Primary packed module must contain {PowerForgeModuleSourceAttestationWriter.FileName} beside its manifest.");
 
-        byte[] provenanceBytes = ReadEntryBytes(provenanceEntry);
+        byte[] provenanceBytes = ReadBoundedEntryBytes(provenanceEntry, "Packed module provenance");
         using JsonDocument provenance = JsonDocument.Parse(provenanceBytes);
         string actualModuleName = RequireJsonText(provenance.RootElement, "moduleName", "module provenance");
         if (!string.Equals(actualModuleName, moduleName, StringComparison.OrdinalIgnoreCase))
@@ -126,7 +127,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (!TryGet(provenance.RootElement, "sourceDirty", out JsonElement provenanceDirty) ||
             provenanceDirty.ValueKind != JsonValueKind.False)
             throw Invalid("Packed module provenance must attest a clean source checkout.");
-        byte[] signedProvenanceBytes = ReadEntryBytes(signedProvenanceEntry);
+        byte[] signedProvenanceBytes = ReadBoundedEntryBytes(signedProvenanceEntry, "Signed module source attestation");
         PowerForgeModuleSourceAttestation signedProvenance =
             PowerForgeModuleSourceAttestationWriter.Read(signedProvenanceBytes);
         if (!string.Equals(signedProvenance.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase))
@@ -143,17 +144,25 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         Directory.CreateDirectory(tempRoot);
         try
         {
+            long extractedBytes = 0;
             foreach (string configuredPath in signaturePaths)
             {
                 string entryPath = NormalizeArchivePath(configuredPath);
                 if (!entries.TryGetValue(entryPath, out ZipArchiveEntry? signatureEntry) || signatureEntry.Length == 0)
                     throw Invalid($"Signed module entry '{entryPath}' was not found exactly once in the archive.");
+                if (signatureEntry.Length > MaxModuleSignedEntryBytes)
+                    throw Invalid($"Signed module entry '{entryPath}' exceeds the {MaxModuleSignedEntryBytes} byte limit.");
+                extractedBytes = checked(extractedBytes + signatureEntry.Length);
+                if (extractedBytes > MaxModuleSignedEntriesBytes)
+                    throw Invalid($"Signed module entries exceed the {MaxModuleSignedEntriesBytes} byte aggregate limit.");
                 string extractedPath = Path.Combine(
                     tempRoot,
                     signatures.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) + "-" + Path.GetFileName(entryPath));
                 using (Stream input = signatureEntry.Open())
                 using (FileStream output = File.Create(extractedPath))
-                    input.CopyTo(output);
+                    CopyBounded(input, output, signatureEntry.Length, $"Signed module entry '{entryPath}'");
+                if (new FileInfo(extractedPath).Length != signatureEntry.Length)
+                    throw Invalid($"Signed module entry '{entryPath}' did not extract to its declared size.");
                 bool isThirdParty = thirdPartySignatures.TryGetValue(entryPath, out PowerForgeModulePreservedSignature? preserved);
                 VerifiedSignature signature = VerifySignature(
                     extractedPath,
@@ -236,7 +245,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         try
         {
             return JsonSerializer.Deserialize<PowerForgeModuleSigningEvidence>(
-                       File.ReadAllText(path),
+                       ReadBoundedFileBytes(path, "Module signing evidence"),
                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                    ?? throw Invalid("Module signing evidence could not be deserialized.");
         }
@@ -286,11 +295,36 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
     private static string ResolveArchiveRelativePath(string manifestPath, string relativePath)
     {
+        if (IsRootedArchiveReference(relativePath))
+            throw Invalid($"Packed module path '{relativePath}' must be relative to the primary manifest.");
         string manifestDirectory = Path.GetDirectoryName(manifestPath.Replace('/', Path.DirectorySeparatorChar)) ?? string.Empty;
         string combined = string.IsNullOrWhiteSpace(manifestDirectory)
             ? relativePath
             : manifestDirectory.Replace(Path.DirectorySeparatorChar, '/') + "/" + relativePath;
         return NormalizeArchivePath(combined);
+    }
+
+    private static string GetArchiveParentDirectoryName(string path)
+    {
+        string normalized = NormalizeArchivePath(path);
+        int separator = normalized.LastIndexOf('/');
+        if (separator <= 0)
+            return string.Empty;
+        string parent = normalized.Substring(0, separator);
+        int parentSeparator = parent.LastIndexOf('/');
+        return parentSeparator < 0 ? parent : parent.Substring(parentSeparator + 1);
+    }
+
+    private static bool IsRootedArchiveReference(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+        string value = path.Trim();
+        if (value.StartsWith("/", StringComparison.Ordinal) ||
+            value.StartsWith("\\", StringComparison.Ordinal) ||
+            value.StartsWith("//", StringComparison.Ordinal))
+            return true;
+        return value.Length >= 2 && char.IsLetter(value[0]) && value[1] == ':';
     }
 
     private static string DecodeModuleManifest(byte[] bytes)

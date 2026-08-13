@@ -721,7 +721,10 @@ public sealed partial class ModulePipelineRunner
                         requiredModules: packagingRequiredModules,
                         information: plan.Information,
                         delivery: plan.Delivery,
-                        includeScriptFolders: !state.PackageWithoutScriptFolders));
+                        includeScriptFolders: !state.PackageWithoutScriptFolders,
+                        finalizePackedArtefact: plan.SignModule
+                            ? context => FinalizeSignedPackedArtefact(plan, state, context)
+                            : null));
                     session.Done(step);
                 }
                 catch (Exception ex)

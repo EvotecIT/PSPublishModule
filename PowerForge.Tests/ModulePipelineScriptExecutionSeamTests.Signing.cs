@@ -6,6 +6,86 @@ namespace PowerForge.Tests;
 public sealed partial class ModulePipelineScriptExecutionSeamTests
 {
     [Fact]
+    public void Run_SignedPackedArtifactEmitsEvidenceFromFinalLayout()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string sourceRevision = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string manifestPath = Path.Combine(root.FullName, moduleName + ".psd1");
+            _ = PowerForgeModuleSourceAttestationWriter.Write(
+                manifestPath,
+                moduleName,
+                "1.0.0",
+                sourceRevision,
+                sourceDirty: false);
+            File.WriteAllText(
+                Path.Combine(root.FullName, PublishedRegistryProvenanceValidator.ModuleProvenanceFileName),
+                "{\"moduleName\":\"TestModule\",\"version\":\"1.0.0\",\"commit\":\"" + sourceRevision + "\",\"sourceDirty\":false}");
+            var hostedOperations = new FakeHostedOperations { AutoSuccessfulSigningResult = true };
+            var runner = CreateRunner(hostedOperations);
+            string outputRoot = Path.Combine(root.FullName, "Artefacts", "Packed");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationOptionsSegment
+                    {
+                        Options = new ConfigurationOptions
+                        {
+                            Signing = new SigningOptionsConfiguration { CertificateThumbprint = "ABC123" }
+                        }
+                    },
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { SignMerged = true }
+                    },
+                    new ConfigurationInformationSegment
+                    {
+                        Configuration = new InformationConfiguration
+                        {
+                            IncludeRoot = new[] { "*.psd1", "*.psm1", "PowerForge.ReleaseProvenance.json" }
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = outputRoot,
+                            ArtefactName = "TestModule.zip"
+                        }
+                    }
+                }
+            };
+
+            ModulePipelineResult result = runner.Run(spec, runner.Plan(spec));
+
+            ArtefactBuildResult artefact = Assert.Single(result.ArtefactResults);
+            string evidencePath = Assert.Single(artefact.EvidencePaths);
+            Assert.True(File.Exists(evidencePath));
+            Assert.Equal(2, hostedOperations.SignCalls);
+            Assert.DoesNotContain("Modules", hostedOperations.LastExcludePatterns, StringComparer.OrdinalIgnoreCase);
+            using var archive = System.IO.Compression.ZipFile.OpenRead(artefact.OutputPath);
+            Assert.Contains(archive.Entries, entry => entry.FullName == "TestModule/PowerForge.ReleaseProvenance.psd1");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void SignBuiltModuleOutput_UsesInjectedHostedOperations()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

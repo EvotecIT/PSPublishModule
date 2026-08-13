@@ -492,7 +492,7 @@ public sealed partial class ModulePipelineRunner
         }
 
         return selected
-            .Select(static artefact => artefact.OutputPath)
+            .SelectMany(static artefact => new[] { artefact.OutputPath }.Concat(artefact.EvidencePaths))
             .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
             .Select(static path => Path.GetFullPath(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)

@@ -238,7 +238,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         }
     }
 
-    private sealed class PortableFixture : FixtureBase
+    private sealed partial class PortableFixture : FixtureBase
     {
         internal PortableFixture()
         {

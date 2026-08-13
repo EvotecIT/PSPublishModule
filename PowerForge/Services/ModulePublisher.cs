@@ -958,7 +958,11 @@ public sealed partial class ModulePublisher
         var isPreRelease = !string.IsNullOrWhiteSpace(plan.PreRelease) && !publish.DoNotMarkAsPreRelease;
 
         var selected = SelectPackedArtefacts(artefactResults, publish.ID);
-        var assets = selected.Select(a => a.OutputPath).ToArray();
+        var assets = selected
+            .SelectMany(static artefact => new[] { artefact.OutputPath }.Concat(artefact.EvidencePaths))
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var missingAsset = assets.FirstOrDefault(static asset => string.IsNullOrWhiteSpace(asset) || !File.Exists(asset));
         if (missingAsset is not null)
             throw new FileNotFoundException($"GitHub release asset was not found: {missingAsset}", missingAsset);

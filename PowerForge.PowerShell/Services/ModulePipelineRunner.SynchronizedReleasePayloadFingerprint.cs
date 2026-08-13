@@ -115,7 +115,11 @@ public sealed partial class ModulePipelineRunner
                 ResolveReleaseStageRoot(plan, plan.Release.Configuration));
         }
         foreach (var artefact in state.ArtefactResults)
+        {
             AddSynchronizedReleaseSourceExclusion(exclusions, artefact.OutputPath);
+            foreach (string evidencePath in artefact.EvidencePaths)
+                AddSynchronizedReleaseSourceExclusion(exclusions, evidencePath);
+        }
         foreach (var execution in state.ProjectBuildResults)
         {
             AddSynchronizedReleaseSourceExclusion(exclusions, execution.StagingPath);
@@ -250,7 +254,13 @@ public sealed partial class ModulePipelineRunner
             {
                 CopySynchronizedReleasePayloadPath(
                     artefact.Result.OutputPath,
-                    ResolveSynchronizedReleaseArtefactCacheEntry(temporaryPath, artefact));
+                    ResolveSynchronizedReleaseArtefactPayloadCacheEntry(temporaryPath, artefact));
+                foreach (SynchronizedReleasePayloadEvidence evidence in artefact.Evidence)
+                {
+                    CopySynchronizedReleasePayloadPath(
+                        evidence.Path,
+                        ResolveSynchronizedReleaseArtefactEvidenceCacheEntry(temporaryPath, artefact, evidence));
+                }
             }
             foreach (var lane in ResolveSynchronizedReleasePayloadLanes(state))
             {
@@ -365,8 +375,17 @@ public sealed partial class ModulePipelineRunner
                 components,
                 $"artefact/{artefact.CacheKey}/payload",
                 ResolveCachedSynchronizedReleasePayloadPath(
-                    ResolveSynchronizedReleaseArtefactCacheEntry(cachePath, artefact),
+                    ResolveSynchronizedReleaseArtefactPayloadCacheEntry(cachePath, artefact),
                     artefact.IsDirectory));
+            foreach (SynchronizedReleasePayloadEvidence evidence in artefact.Evidence)
+            {
+                AddSynchronizedReleaseExactPayloadPath(
+                    components,
+                    $"artefact/{artefact.CacheKey}/evidence/{evidence.CacheKey}",
+                    ResolveCachedSynchronizedReleasePayloadPath(
+                        ResolveSynchronizedReleaseArtefactEvidenceCacheEntry(cachePath, artefact, evidence),
+                        directory: false));
+            }
         }
         foreach (var lane in ResolveSynchronizedReleasePayloadLanes(state))
         {
@@ -435,9 +454,16 @@ public sealed partial class ModulePipelineRunner
         foreach (var artefact in ResolveSynchronizedReleasePayloadArtefacts(state))
         {
             RestoreCachedSynchronizedReleasePayloadPath(
-                ResolveSynchronizedReleaseArtefactCacheEntry(cachePath, artefact),
+                ResolveSynchronizedReleaseArtefactPayloadCacheEntry(cachePath, artefact),
                 artefact.Result.OutputPath,
                 artefact.IsDirectory);
+            foreach (SynchronizedReleasePayloadEvidence evidence in artefact.Evidence)
+            {
+                RestoreCachedSynchronizedReleasePayloadPath(
+                    ResolveSynchronizedReleaseArtefactEvidenceCacheEntry(cachePath, artefact, evidence),
+                    evidence.Path,
+                    directory: false);
+            }
         }
         foreach (var lane in ResolveSynchronizedReleasePayloadLanes(state))
         {

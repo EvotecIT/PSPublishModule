@@ -35,6 +35,31 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
     }
 
     [Fact]
+    public void WriteFromSignedSourceAttestation_UsesSignedIdentityAndWritesSidecar()
+    {
+        using var fixture = new SigningFixture();
+        string outputPath = Path.Combine(fixture.Root, "Sample.zip.signing.json");
+        var signingResult = new ModuleSigningResult
+        {
+            TotalMatched = 3,
+            TotalAfterExclude = 3,
+            SignedNew = 3,
+            VerifiedFilePaths = new[] { fixture.ModulePath, fixture.ManifestPath, fixture.SourceAttestationPath }
+        };
+
+        string written = PowerForgeModuleSigningEvidenceWriter.WriteFromSignedSourceAttestation(
+            outputPath,
+            fixture.Root,
+            "Sample",
+            "2.3.4",
+            fixture.ManifestPath,
+            signingResult);
+
+        Assert.Equal(Path.GetFullPath(outputPath), written);
+        Assert.Contains(SourceRevision, File.ReadAllText(written), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Create_PreservedThirdPartySignatureCarriesNormalizedIdentity()
     {
         using var fixture = new SigningFixture(includeVendorDependency: true);

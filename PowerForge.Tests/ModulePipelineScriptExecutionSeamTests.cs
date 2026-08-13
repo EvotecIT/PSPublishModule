@@ -569,6 +569,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         public string[] LastIncludePatterns { get; private set; } = Array.Empty<string>();
         public string[] LastExcludePatterns { get; private set; } = Array.Empty<string>();
         public ModuleSigningResult NextSigningResult { get; set; } = new();
+        public bool AutoSuccessfulSigningResult { get; set; }
         public List<string> OperationOrder { get; } = new();
         public string[] LastDocumentationCommands { get; private set; } = Array.Empty<string>();
 
@@ -683,7 +684,22 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             LastPackageFilePaths = packageFilePaths ?? Array.Empty<string>();
             LastIncludePatterns = includePatterns ?? Array.Empty<string>();
             LastExcludePatterns = excludeSubstrings ?? Array.Empty<string>();
-            return NextSigningResult;
+            if (!AutoSuccessfulSigningResult)
+                return NextSigningResult;
+
+            string[] verified = LastPackageFilePaths
+                .Where(path => LastIncludePatterns.Any(pattern =>
+                    string.Equals("*" + Path.GetExtension(path), pattern, StringComparison.OrdinalIgnoreCase)))
+                .Where(path => !LastExcludePatterns.Any(excluded =>
+                    path.IndexOf(excluded, StringComparison.OrdinalIgnoreCase) >= 0))
+                .ToArray();
+            return new ModuleSigningResult
+            {
+                TotalMatched = verified.Length,
+                TotalAfterExclude = verified.Length,
+                SignedNew = verified.Length,
+                VerifiedFilePaths = verified
+            };
         }
     }
 

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -129,57 +128,6 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (!DotNetPublishReleaseArtifactVerifier.ChecksumContains(checksumsPath, relativePath, digest))
             throw Invalid($"{label} SHA-256 does not match the PowerForge checksum catalog.");
         return digest;
-    }
-
-    private static void VerifyArchiveContainsFile(
-        string archivePath,
-        string outputDirectory,
-        string representedPath,
-        string expectedDigest)
-    {
-        string relative = DotNetPublishReleaseArtifactVerifier.GetRelativePath(outputDirectory, representedPath).Replace('\\', '/');
-        using ZipArchive archive = ZipFile.OpenRead(archivePath);
-        Dictionary<string, ZipArchiveEntry> entries = ValidateArchiveEntries(archive);
-        if (!entries.TryGetValue(NormalizeArchivePath(relative), out ZipArchiveEntry? entry) || entry.Length == 0)
-            throw Invalid($"Portable archive does not contain signed file '{relative}'.");
-        string digest = ComputeSha256(ReadEntryBytes(entry));
-        if (!string.Equals(digest, expectedDigest, StringComparison.OrdinalIgnoreCase))
-            throw Invalid($"Portable archive contains different bytes for signed file '{relative}'.");
-    }
-
-    private static Dictionary<string, ZipArchiveEntry> ValidateArchiveEntries(ZipArchive archive)
-    {
-        var entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.Ordinal);
-        var duplicateGuard = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (ZipArchiveEntry entry in archive.Entries)
-        {
-            string normalized = NormalizeArchivePath(entry.FullName);
-            if (!duplicateGuard.Add(normalized))
-                throw Invalid($"Release archive contains duplicate entry '{normalized}'.");
-            if (normalized.Length == 0 || entry.FullName.EndsWith("/", StringComparison.Ordinal) || entry.FullName.EndsWith("\\", StringComparison.Ordinal))
-                continue;
-            entries.Add(normalized, entry);
-        }
-        return entries;
-    }
-
-    private static string NormalizeArchivePath(string? value)
-    {
-        string path = DotNetPublishReleaseArtifactVerifier.RequireText(value, "archive entry path").Replace('\\', '/');
-        if (path.StartsWith("/", StringComparison.Ordinal) || Path.IsPathRooted(path))
-            throw Invalid($"Release archive contains unsafe entry '{path}'.");
-        string[] segments = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length == 0 || segments.Any(segment => segment == "." || segment == ".."))
-            throw Invalid($"Release archive contains unsafe entry '{path}'.");
-        return string.Join("/", segments);
-    }
-
-    private static byte[] ReadEntryBytes(ZipArchiveEntry entry)
-    {
-        using Stream input = entry.Open();
-        using var output = new MemoryStream();
-        input.CopyTo(output);
-        return output.ToArray();
     }
 
     private static string ComputeSha256(byte[] bytes)

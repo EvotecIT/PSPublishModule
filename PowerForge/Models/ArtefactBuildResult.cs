@@ -20,6 +20,9 @@ public sealed class ArtefactBuildResult
     /// <summary>Extra files/directories copied into the artefact output.</summary>
     public ArtefactCopyEntry[] CopiedItems { get; }
 
+    /// <summary>Evidence files emitted from the final assembled artefact.</summary>
+    public string[] EvidencePaths { get; }
+
     /// <summary>
     /// Creates a new result instance.
     /// </summary>
@@ -28,16 +31,17 @@ public sealed class ArtefactBuildResult
         string? id,
         string outputPath,
         ArtefactModuleEntry[] modules,
-        ArtefactCopyEntry[] copiedItems)
+        ArtefactCopyEntry[] copiedItems,
+        string[]? evidencePaths = null)
     {
         Type = type;
         Id = id;
         OutputPath = outputPath;
         Modules = modules ?? Array.Empty<ArtefactModuleEntry>();
         CopiedItems = copiedItems ?? Array.Empty<ArtefactCopyEntry>();
+        EvidencePaths = evidencePaths ?? Array.Empty<string>();
     }
 }
-
 /// <summary>
 /// Represents a module folder that was included in an artefact.
 /// </summary>
@@ -91,4 +95,3 @@ public sealed class ArtefactCopyEntry
         IsDirectory = isDirectory;
     }
 }
-

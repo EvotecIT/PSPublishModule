@@ -63,6 +63,13 @@ internal sealed partial class PowerForgeReleaseService
         string path,
         PowerForgeModuleReleasePlanSummary? plan)
     {
+        const string signingEvidenceSuffix = ".zip.signing.json";
+        if (path.EndsWith(signingEvidenceSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            string archivePath = path.Substring(0, path.Length - ".signing.json".Length);
+            return File.Exists(archivePath) && IsModuleArtifactForResolvedVersion(archivePath, plan);
+        }
+
         var resolvedVersion = ResolveModuleReleaseVersion(plan);
         if (string.IsNullOrWhiteSpace(resolvedVersion))
             return true;

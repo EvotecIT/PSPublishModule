@@ -5,6 +5,50 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseArtifactVerifierTests
 {
     [Fact]
+    public void Verify_PowerShellModuleRejectsPrimaryManifestOutsideNamedModuleDirectory()
+    {
+        using var fixture = new ModuleFixture();
+        fixture.WriteArchive(SourceRevision, manifestEntryPath: "Payload/Sample.psd1");
+        fixture.WriteSigningEvidence(manifestPath: "Payload/Sample.psd1");
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("exactly one", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("C:\\payload\\Sample.psm1")]
+    [InlineData("\\\\server\\share\\Sample.psm1")]
+    [InlineData("\\\\?\\C:\\payload\\Sample.psm1")]
+    [InlineData("/payload/Sample.psm1")]
+    public void Verify_PowerShellModuleRejectsRootedRootModule(string rootModule)
+    {
+        using var fixture = new ModuleFixture();
+        fixture.WriteArchive(SourceRevision, rootModuleValue: rootModule);
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("must be relative", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_PowerShellModuleRejectsOversizedManifestMetadata()
+    {
+        using var fixture = new ModuleFixture();
+        fixture.WriteArchive(SourceRevision, manifestBytes: new byte[4 * 1024 * 1024 + 1]);
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("metadata limit", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PowerShellModuleRejectsDuplicateArchiveEntry()
     {
         using var fixture = new ModuleFixture();

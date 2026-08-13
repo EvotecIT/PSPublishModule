@@ -6,6 +6,58 @@ namespace PowerForge.Tests;
 [Collection(ProcessEnvironmentCollection.Name)]
 public sealed class ArtefactBuilderLayoutTests
 {
+    [Fact]
+    public void Build_PackedFinalizerObservesCompleteLayoutAndCarriesEvidence()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            WriteStagingFixture(stagingRoot.FullName, moduleName);
+            string outputRoot = Path.Combine(root.FullName, "Artefacts", "Packed");
+            string? observedManifest = null;
+            string evidencePath = Path.Combine(outputRoot, "DemoModule.zip.signing.json");
+            var segment = new ConfigurationArtefactSegment
+            {
+                ArtefactType = ArtefactType.Packed,
+                Configuration = new ArtefactConfiguration
+                {
+                    Enabled = true,
+                    Path = outputRoot,
+                    ArtefactName = "DemoModule.zip"
+                }
+            };
+
+            ArtefactBuildResult result = new ArtefactBuilder(new NullLogger()).Build(
+                segment,
+                root.FullName,
+                stagingRoot.FullName,
+                moduleName,
+                "1.0.0",
+                null,
+                Array.Empty<RequiredModuleReference>(),
+                finalizePackedArtefact: context =>
+                {
+                    observedManifest = context.ManifestPath;
+                    Assert.True(File.Exists(context.ManifestPath));
+                    File.WriteAllText(Path.Combine(context.MainModulePath, "finalized.txt"), "finalized");
+                    Directory.CreateDirectory(Path.GetDirectoryName(evidencePath)!);
+                    File.WriteAllText(evidencePath, "{}");
+                    return new[] { evidencePath };
+                });
+
+            Assert.NotNull(observedManifest);
+            Assert.Equal(new[] { Path.GetFullPath(evidencePath) }, result.EvidencePaths);
+            using ZipArchive archive = ZipFile.OpenRead(result.OutputPath);
+            Assert.Contains(archive.Entries, entry => entry.FullName == "DemoModule/finalized.txt");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
     [InlineData(ArtefactType.Unpacked)]
     [InlineData(ArtefactType.Packed)]
