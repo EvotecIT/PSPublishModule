@@ -545,12 +545,20 @@ public sealed partial class DotNetPublishPipelineRunner
 
         steps.Add(new DotNetPublishStep { Key = "manifest", Kind = DotNetPublishStepKind.Manifest, Title = "Write manifest" });
 
+        string sourceRevision = ReadGitText(projectRoot, "rev-parse HEAD")?.Trim()
+            ?? Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim()
+            ?? string.Empty;
+        if ((sourceRevision.Length != 40 && sourceRevision.Length != 64) ||
+            sourceRevision.Any(character => !Uri.IsHexDigit(character)))
+            sourceRevision = string.Empty;
+
         return new DotNetPublishPlan
         {
             ProjectRoot = projectRoot,
             ConfigurationInputPaths = !string.IsNullOrWhiteSpace(configPath) && File.Exists(configPath)
                 ? new[] { Path.GetFullPath(configPath) }
                 : Array.Empty<string>(),
+            SourceRevision = sourceRevision,
             AllowOutputOutsideProjectRoot = spec.DotNet.AllowOutputOutsideProjectRoot,
             AllowManifestOutsideProjectRoot = spec.DotNet.AllowManifestOutsideProjectRoot,
             LockedOutputGuard = spec.DotNet.LockedOutputGuard,

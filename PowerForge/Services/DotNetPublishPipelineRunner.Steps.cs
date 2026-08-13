@@ -500,6 +500,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 merged[kv.Key] = kv.Value;
         }
 
+        if (!string.IsNullOrWhiteSpace(plan.SourceRevision))
+        {
+            // Command-line global properties ensure the publisher-signed ProductVersion carries the exact source object ID.
+            merged["SourceRevisionId"] = plan.SourceRevision;
+            merged["IncludeSourceRevisionInInformationalVersion"] = "true";
+        }
+
         ApplyPublishMsiVersionProperties(merged, plan, target.Name, framework, runtime, style);
         return merged;
     }

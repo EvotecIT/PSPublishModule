@@ -27,6 +27,13 @@ if ([string]::IsNullOrWhiteSpace($ReceiptPath)) {
     $ReceiptPath = Join-Path ([IO.Path]::GetTempPath()) 'PowerForge.PublicRelease\powerforge-public-release.json'
 }
 $ReceiptPath = [IO.Path]::GetFullPath($ReceiptPath)
+$releaseReceiptRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot 'release-receipts'))
+$repositoryUri = [Uri] ($repositoryRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar)
+$releaseReceiptUri = [Uri] ($releaseReceiptRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar)
+$receiptUri = [Uri] $ReceiptPath
+if ($repositoryUri.IsBaseOf($receiptUri) -and -not $releaseReceiptUri.IsBaseOf($receiptUri)) {
+    throw 'ReceiptPath must stay outside the release checkout or under its dedicated release-receipts directory.'
+}
 $receiptDirectory = Split-Path -Parent $ReceiptPath
 
 $releaseStage = 'Preflight'
@@ -36,6 +43,8 @@ $effectiveConfigPath = $null
 $releaseRecovery = $null
 $moduleProvenancePath = $null
 $moduleProvenanceCreated = $false
+$moduleSignedProvenancePath = $null
+$moduleSignedProvenanceCreated = $false
 $sourceDirty = $true
 $receiptInitialized = $false
 
@@ -50,6 +59,7 @@ try {
     $ConfigPath = (Resolve-Path -LiteralPath $ConfigPath).Path
 
     $moduleProvenancePath = Join-Path $repositoryRoot 'Module\PowerForge.ReleaseProvenance.json'
+    $moduleSignedProvenancePath = Join-Path $repositoryRoot 'Module\PowerForge.ReleaseProvenance.psd1'
     . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Get-PowerForgeReleaseSourceState.ps1')
     $sourceState = Get-PowerForgeReleaseSourceState `
         -RepositoryRoot $repositoryRoot `
@@ -157,6 +167,19 @@ try {
             sourceDirty   = $sourceDirty
         } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $moduleProvenancePath -Encoding utf8BOM
         $moduleProvenanceCreated = $true
+        if (Test-Path -LiteralPath $moduleSignedProvenancePath) {
+            throw "Refusing to overwrite existing signed module release provenance: $moduleSignedProvenancePath"
+        }
+        @"
+@{
+    SchemaVersion = '1'
+    ModuleName = '$([string] $releaseConfig.Module.ModuleName)'
+    Version = '$Version'
+    SourceRevision = '$($ExpectedCommit.ToLowerInvariant())'
+    SourceDirty = 'false'
+}
+"@ | Set-Content -LiteralPath $moduleSignedProvenancePath -Encoding utf8
+        $moduleSignedProvenanceCreated = $true
     }
 
     $effectiveConfigPath = Join-Path (Split-Path -Parent $ConfigPath) ".release.authorized.$PID.json"
@@ -237,5 +260,8 @@ try {
     }
     if ($moduleProvenanceCreated -and -not [string]::IsNullOrWhiteSpace($moduleProvenancePath)) {
         Remove-Item -LiteralPath $moduleProvenancePath -Force -ErrorAction SilentlyContinue
+    }
+    if ($moduleSignedProvenanceCreated -and -not [string]::IsNullOrWhiteSpace($moduleSignedProvenancePath)) {
+        Remove-Item -LiteralPath $moduleSignedProvenancePath -Force -ErrorAction SilentlyContinue
     }
 }

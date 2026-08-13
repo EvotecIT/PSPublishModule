@@ -98,7 +98,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             throw Invalid("Portable release evidence must include the manifest executable signature.");
 
         VerifiedSignature signer = RequireOneSigner(signatures);
-        string version = NormalizePortableVersion(_readPortableVersion(executablePath));
+        string signedProductVersion = _readPortableVersion(executablePath);
+        ValidatePortableSourceBinding(signedProductVersion, expectedRevision);
+        string version = NormalizePortableVersion(signedProductVersion);
         ValidateExpectedPortableVersion(request.ExpectedVersion, version);
         PowerForgeReleaseEvidenceFile[] evidence = BuildExternalEvidence(
             projectRoot,

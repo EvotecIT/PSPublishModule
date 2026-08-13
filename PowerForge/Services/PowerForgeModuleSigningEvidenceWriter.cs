@@ -82,6 +82,23 @@ public static class PowerForgeModuleSigningEvidenceWriter
         if (preservedThirdPartySignatures.Any(signature =>
                 pathComparer.Equals(ResolveFileUnderRoot(root, signature.Path, "preserved third-party signing path"), rootModulePath)))
             throw new InvalidOperationException("The RootModule entrypoint must be owned by the configured release publisher.");
+        string sourceAttestationPath = ResolveFileUnderRoot(
+            root,
+            Path.Combine(Path.GetDirectoryName(manifest) ?? root, PowerForgeModuleSourceAttestationWriter.FileName),
+            "signed source attestation");
+        if (!verifiedFiles.Contains(sourceAttestationPath, pathComparer))
+            throw new InvalidOperationException("Module signing evidence must include the signed source attestation.");
+        if (preservedThirdPartySignatures.Any(signature =>
+                pathComparer.Equals(
+                    ResolveFileUnderRoot(root, signature.Path, "preserved third-party signing path"),
+                    sourceAttestationPath)))
+            throw new InvalidOperationException("The source attestation must be owned by the configured release publisher.");
+        PowerForgeModuleSourceAttestation sourceAttestation =
+            PowerForgeModuleSourceAttestationWriter.Read(File.ReadAllBytes(sourceAttestationPath));
+        if (!string.Equals(sourceAttestation.ModuleName, name, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(sourceAttestation.Version, normalizedVersion, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(sourceAttestation.SourceRevision, revision, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Signed module source attestation does not match the signing evidence identity.");
 
         return new PowerForgeModuleSigningEvidence
         {

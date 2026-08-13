@@ -69,7 +69,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             path => path.EndsWith("Dependency.dll", StringComparison.OrdinalIgnoreCase)
                 ? new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(false, unchecked((int)0x800B0100), string.Empty, string.Empty)
                 : new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
-            _ => "1.2.3.0");
+            _ => "1.2.3+" + SourceRevision);
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
             verifier.Verify(request));

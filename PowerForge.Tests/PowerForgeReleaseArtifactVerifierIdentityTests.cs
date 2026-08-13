@@ -15,7 +15,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 0,
                 "CN=Publisher Malware LLC",
                 new string('D', 40)),
-            _ => "1.2.3.0");
+            _ => "1.2.3+" + SourceRevision);
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() => verifier.Verify(request));
 
@@ -58,7 +58,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         fixture.WriteChecksums();
         PowerForgeReleaseArtifactVerifier verifier = new(
             _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
-            _ => "1.2.3-preview.1+actual");
+            _ => "1.2.3-preview.1+actual." + SourceRevision);
 
         PowerForgeReleaseArtifactEvidence evidence = verifier.Verify(request);
 
@@ -73,7 +73,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         request.ExpectedVersion = "1.2.3";
         PowerForgeReleaseArtifactVerifier verifier = new(
             _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
-            _ => "1.2.3-preview.1+sha");
+            _ => "1.2.3-preview.1+sha." + SourceRevision);
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() => verifier.Verify(request));
 
@@ -94,6 +94,34 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRegeneratedCatalogCannotRebindSignedPayload()
+    {
+        using var fixture = new PortableFixture();
+        PowerForgeReleaseArtifactVerifier verifier = new(
+            _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
+            _ => "1.2.3+" + new string('c', 40));
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            verifier.Verify(fixture.CreateRequest()));
+
+        Assert.Contains("publisher-signed portable product version", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DefaultVerifier_DeclaresWindowsOnlyAuthenticodeBoundary()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.NotNull(new PowerForgeReleaseArtifactVerifier());
+            return;
+        }
+
+        PlatformNotSupportedException exception = Assert.Throws<PlatformNotSupportedException>(
+            () => new PowerForgeReleaseArtifactVerifier());
+        Assert.Contains("Windows", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PowerShellModuleRequiresExactPublisherSubject()
     {
         using var fixture = new ModuleFixture();
@@ -106,7 +134,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 0,
                 "CN=Publisher Malware LLC",
                 new string('D', 40)),
-            _ => "1.2.3.0");
+            _ => "1.2.3+" + SourceRevision);
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() => verifier.Verify(request));
 

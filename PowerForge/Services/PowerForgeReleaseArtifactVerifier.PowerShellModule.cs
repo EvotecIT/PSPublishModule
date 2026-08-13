@@ -79,9 +79,13 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (!string.Equals(NormalizeModuleVersionText(signingEvidence.Version), version, StringComparison.OrdinalIgnoreCase))
             throw Invalid("Module signing evidence version does not match the packed module manifest.");
         string[] signaturePaths = NormalizeSigningEvidencePaths(signingEvidence.SignableFiles);
+        string signedProvenancePath = ResolveArchiveRelativePath(
+            manifestPath,
+            PowerForgeModuleSourceAttestationWriter.FileName);
         if (!signaturePaths.Contains(manifestPath, StringComparer.Ordinal) ||
-            !signaturePaths.Contains(rootModulePath, StringComparer.Ordinal))
-            throw Invalid("Module signing evidence must cover the module manifest and RootModule entrypoint.");
+            !signaturePaths.Contains(rootModulePath, StringComparer.Ordinal) ||
+            !signaturePaths.Contains(signedProvenancePath, StringComparer.Ordinal))
+            throw Invalid("Module signing evidence must cover the manifest, RootModule, and signed source attestation.");
         string[] requestedSignaturePaths = (request.SignaturePaths ?? Array.Empty<string>())
             .Select(NormalizeArchivePath)
             .Distinct(StringComparer.Ordinal)
@@ -92,18 +96,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             throw Invalid("Requested module signature paths do not match the complete trusted signing evidence.");
         Dictionary<string, PowerForgeModulePreservedSignature> thirdPartySignatures =
             NormalizePreservedThirdPartySignatures(signingEvidence.PreservedThirdPartySignatures, signaturePaths);
-        if (thirdPartySignatures.ContainsKey(manifestPath) || thirdPartySignatures.ContainsKey(rootModulePath))
-            throw Invalid("The module manifest and RootModule must be owned by the configured release publisher.");
+        if (thirdPartySignatures.ContainsKey(manifestPath) ||
+            thirdPartySignatures.ContainsKey(rootModulePath) ||
+            thirdPartySignatures.ContainsKey(signedProvenancePath))
+            throw Invalid("The module manifest, RootModule, and source attestation must be owned by the configured release publisher.");
 
-        ZipArchiveEntry[] provenanceEntries = entries.Values.Where(entry =>
-            string.Equals(Path.GetFileName(entry.FullName.Replace('\\', '/')),
-                PublishedRegistryProvenanceValidator.ModuleProvenanceFileName,
-                StringComparison.Ordinal)).ToArray();
-        if (provenanceEntries.Length != 1)
-            throw Invalid(
-                $"Packed module artifact must contain exactly one {PublishedRegistryProvenanceValidator.ModuleProvenanceFileName}.");
+        string provenancePath = ResolveArchiveRelativePath(
+            manifestPath,
+            PublishedRegistryProvenanceValidator.ModuleProvenanceFileName);
+        if (!entries.TryGetValue(provenancePath, out ZipArchiveEntry? provenanceEntry))
+            throw Invalid($"Primary packed module must contain {PublishedRegistryProvenanceValidator.ModuleProvenanceFileName} beside its manifest.");
+        if (!entries.TryGetValue(signedProvenancePath, out ZipArchiveEntry? signedProvenanceEntry))
+            throw Invalid($"Primary packed module must contain {PowerForgeModuleSourceAttestationWriter.FileName} beside its manifest.");
 
-        ZipArchiveEntry provenanceEntry = provenanceEntries[0];
         byte[] provenanceBytes = ReadEntryBytes(provenanceEntry);
         using JsonDocument provenance = JsonDocument.Parse(provenanceBytes);
         string actualModuleName = RequireJsonText(provenance.RootElement, "moduleName", "module provenance");
@@ -121,6 +126,16 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (!TryGet(provenance.RootElement, "sourceDirty", out JsonElement provenanceDirty) ||
             provenanceDirty.ValueKind != JsonValueKind.False)
             throw Invalid("Packed module provenance must attest a clean source checkout.");
+        byte[] signedProvenanceBytes = ReadEntryBytes(signedProvenanceEntry);
+        PowerForgeModuleSourceAttestation signedProvenance =
+            PowerForgeModuleSourceAttestationWriter.Read(signedProvenanceBytes);
+        if (!string.Equals(signedProvenance.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase))
+            throw Invalid("Signed module source attestation does not identify the primary module.");
+        if (!string.Equals(NormalizeModuleVersionText(signedProvenance.Version), version, StringComparison.OrdinalIgnoreCase))
+            throw Invalid("Signed module source attestation version does not match the primary module manifest.");
+        ValidateRevision(signedProvenance.SourceRevision, expectedRevision);
+        if (!string.Equals(signedProvenance.SourceRevision, sourceRevision, StringComparison.OrdinalIgnoreCase))
+            throw Invalid("Signed module source attestation does not match embedded module provenance.");
 
         var signatures = new List<VerifiedSignature>();
         var signatureEvidence = new List<PowerForgeReleaseSignatureEvidence>();
@@ -190,6 +205,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             Role = "provenance",
             Path = artifactPath + "!" + NormalizeArchivePath(provenanceEntry.FullName),
             Sha256 = ComputeSha256(provenanceBytes)
+        });
+        evidence.Add(new PowerForgeReleaseEvidenceFile
+        {
+            Role = "signed-provenance",
+            Path = artifactPath + "!" + signedProvenancePath,
+            Sha256 = ComputeSha256(signedProvenanceBytes)
         });
 
         return new PowerForgeReleaseArtifactEvidence

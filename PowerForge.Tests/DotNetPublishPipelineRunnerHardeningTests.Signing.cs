@@ -111,11 +111,11 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                 OnSignFailure = DotNetPublishPolicyMode.Fail
             };
 
-            var signedCount = Assert.IsType<int>(GetTrySignOutputMethod().Invoke(
+            string[] signedFiles = Assert.IsType<string[]>(GetTrySignOutputMethod().Invoke(
                 new DotNetPublishPipelineRunner(new NullLogger(), processRunner, _ => true),
                 new object[] { outputDir, sign }));
 
-            Assert.Equal(1, signedCount);
+            Assert.Equal(executable, Assert.Single(signedFiles));
             Assert.Empty(requests);
         }
         finally
@@ -150,11 +150,11 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                 OnSignFailure = DotNetPublishPolicyMode.Fail
             };
 
-            var signedCount = Assert.IsType<int>(GetTrySignOutputMethod().Invoke(
+            string[] signedFiles = Assert.IsType<string[]>(GetTrySignOutputMethod().Invoke(
                 new DotNetPublishPipelineRunner(new NullLogger(), processRunner, _ => true),
                 new object[] { outputDir, sign }));
 
-            Assert.Equal(1, signedCount);
+            Assert.Equal(Path.Combine(outputDir, "app.exe"), Assert.Single(signedFiles));
             Assert.Equal("sign", Assert.Single(requests).Arguments[0]);
         }
         finally

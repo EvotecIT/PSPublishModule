@@ -10,10 +10,10 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
         using var fixture = new SigningFixture();
         var signingResult = new ModuleSigningResult
         {
-            TotalMatched = 2,
-            TotalAfterExclude = 2,
-            SignedNew = 2,
-            VerifiedFilePaths = new[] { fixture.ModulePath, fixture.ManifestPath }
+            TotalMatched = 3,
+            TotalAfterExclude = 3,
+            SignedNew = 3,
+            VerifiedFilePaths = new[] { fixture.ModulePath, fixture.ManifestPath, fixture.SourceAttestationPath }
         };
 
         PowerForgeModuleSigningEvidence evidence = PowerForgeModuleSigningEvidenceWriter.Create(
@@ -26,7 +26,9 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
             signingResult);
 
         Assert.Equal("Sample/Sample.psd1", evidence.ManifestPath);
-        Assert.Equal(new[] { "Sample/Sample.psd1", "Sample/Sample.psm1" }, evidence.SignableFiles);
+        Assert.Equal(
+            new[] { "Sample/PowerForge.ReleaseProvenance.psd1", "Sample/Sample.psd1", "Sample/Sample.psm1" },
+            evidence.SignableFiles);
         Assert.Equal(SourceRevision, evidence.SourceRevision);
         Assert.False(evidence.SourceDirty ?? true);
         Assert.Equal(2, evidence.SchemaVersion);
@@ -38,11 +40,11 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
         using var fixture = new SigningFixture(includeVendorDependency: true);
         var signingResult = new ModuleSigningResult
         {
-            TotalMatched = 3,
-            TotalAfterExclude = 3,
-            SignedNew = 2,
+            TotalMatched = 4,
+            TotalAfterExclude = 4,
+            SignedNew = 3,
             AlreadySignedOther = 1,
-            VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath, fixture.VendorPath! },
+            VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath, fixture.SourceAttestationPath, fixture.VendorPath! },
             PreservedThirdPartySignatures = new[]
             {
                 new ModuleSigningPreservedSignature
@@ -75,9 +77,9 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
         using var fixture = new SigningFixture();
         var signingResult = new ModuleSigningResult
         {
-            TotalMatched = 2,
-            TotalAfterExclude = 2,
-            SignedNew = 2,
+            TotalMatched = 3,
+            TotalAfterExclude = 3,
+            SignedNew = 3,
             VerifiedFilePaths = new[] { fixture.ManifestPath }
         };
 
@@ -100,10 +102,10 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
         using var fixture = new SigningFixture(includeVendorDependency: true);
         var signingResult = new ModuleSigningResult
         {
-            TotalMatched = 2,
-            TotalAfterExclude = 2,
-            SignedNew = 2,
-            VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath }
+            TotalMatched = 3,
+            TotalAfterExclude = 3,
+            SignedNew = 3,
+            VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath, fixture.SourceAttestationPath }
         };
 
         PowerForgeModuleSigningEvidence evidence = PowerForgeModuleSigningEvidenceWriter.Create(
@@ -124,10 +126,10 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
         using var fixture = new SigningFixture();
         var signingResult = new ModuleSigningResult
         {
-            TotalMatched = 2,
-            TotalAfterExclude = 2,
-            SignedNew = 2,
-            VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath }
+            TotalMatched = 3,
+            TotalAfterExclude = 3,
+            SignedNew = 3,
+            VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath, fixture.SourceAttestationPath }
         };
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
@@ -155,6 +157,12 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
             VendorPath = includeVendorDependency ? Path.Combine(moduleRoot, "lib", "Vendor.dll") : null;
             File.WriteAllText(ManifestPath, "@{ ModuleVersion = '2.3.4'; RootModule = 'Sample.psm1' }");
             File.WriteAllText(ModulePath, "function Get-Sample { 'ok' }");
+            SourceAttestationPath = PowerForgeModuleSourceAttestationWriter.Write(
+                ManifestPath,
+                "Sample",
+                "2.3.4",
+                SourceRevision,
+                sourceDirty: false);
             if (VendorPath is not null)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(VendorPath)!);
@@ -167,6 +175,8 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
         public string ManifestPath { get; }
 
         public string ModulePath { get; }
+
+        public string SourceAttestationPath { get; }
 
         public string? VendorPath { get; }
 

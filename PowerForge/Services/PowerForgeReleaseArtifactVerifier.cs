@@ -16,7 +16,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
     /// <summary>Creates a verifier backed by WinTrust and signed-file version metadata.</summary>
     public PowerForgeReleaseArtifactVerifier()
-        : this(DotNetPublishReleaseArtifactVerifier.VerifyAuthenticode, ReadPortableVersion)
+        : this(CreateDefaultAuthenticodeVerifier(), ReadPortableVersion)
     {
     }
 
@@ -154,10 +154,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         foreach (ZipArchiveEntry entry in archive.Entries)
         {
             string normalized = NormalizeArchivePath(entry.FullName);
-            if (normalized.Length == 0 || entry.FullName.EndsWith("/", StringComparison.Ordinal) || entry.FullName.EndsWith("\\", StringComparison.Ordinal))
-                continue;
             if (!duplicateGuard.Add(normalized))
                 throw Invalid($"Release archive contains duplicate entry '{normalized}'.");
+            if (normalized.Length == 0 || entry.FullName.EndsWith("/", StringComparison.Ordinal) || entry.FullName.EndsWith("\\", StringComparison.Ordinal))
+                continue;
             entries.Add(normalized, entry);
         }
         return entries;
@@ -293,7 +293,16 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             }
             catch (InvalidDataException)
             {
-                // Windows resources commonly carry descriptive ProductVersion text; use numeric FileVersion then.
+                // Windows resources can carry descriptive ProductVersion text. Preserve any signed source object ID
+                // while using the numeric FileVersion for the semantic artifact identity.
+                string fileVersion = version.FileVersion ?? string.Empty;
+                string? sourceRevision = System.Text.RegularExpressions.Regex.Matches(
+                        productVersion,
+                        @"(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{64}|[0-9A-Fa-f]{40})(?![0-9A-Fa-f])")
+                    .Cast<System.Text.RegularExpressions.Match>()
+                    .Select(match => match.Value)
+                    .FirstOrDefault();
+                return sourceRevision is null ? fileVersion : fileVersion + "+" + sourceRevision;
             }
         }
         return version.FileVersion ?? string.Empty;

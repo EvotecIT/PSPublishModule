@@ -21,7 +21,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         Assert.Equal("valid", result.SignatureStatus);
         Assert.Contains(result.SignaturePaths, path => path.EndsWith("!Sample/Sample.psm1", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.SignaturePaths, path => path.EndsWith("!Sample/Sample.psd1", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.SignaturePaths, path => path.EndsWith("!Sample/PowerForge.ReleaseProvenance.psd1", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.EvidenceFiles, item => item.Role == "provenance" && item.Path.Contains("!Sample/PowerForge.ReleaseProvenance.json", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.EvidenceFiles, item => item.Role == "signed-provenance" && item.Path.Contains("!Sample/PowerForge.ReleaseProvenance.psd1", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.EvidenceFiles, item => item.Role == "signing-policy" && item.Path == fixture.SigningEvidencePath);
         Assert.Contains(result.EvidenceFiles, item => item.Role == "sbom");
     }
@@ -101,7 +103,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
             fixture.CreateRootVendorAwareVerifier(VendorThumbprint).Verify(fixture.CreateRequest()));
 
-        Assert.Contains("RootModule must be owned", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("RootModule", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("owned", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -116,153 +119,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 
         PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(fixture.CreateRequest());
 
-        Assert.Equal(2, evidence.SignaturePaths.Length);
-    }
-
-    [Fact]
-    public void Verify_PowerShellModuleRejectsDuplicateArchiveEntry()
-    {
-        using var fixture = new ModuleFixture();
-        fixture.WriteArchive(SourceRevision, duplicateManifest: true);
-        fixture.WriteChecksums();
-
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
-
-        Assert.Contains("duplicate entry", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Verify_PowerShellModuleRejectsTraversalArchiveEntry()
-    {
-        using var fixture = new ModuleFixture();
-        fixture.WriteArchive(SourceRevision, traversalEntry: true);
-        fixture.WriteChecksums();
-
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
-
-        Assert.Contains("unsafe entry", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Verify_PowerShellModuleRejectsCaseConflictingDuplicateArchiveEntry()
-    {
-        using var fixture = new ModuleFixture();
-        fixture.WriteArchive(SourceRevision, caseDuplicateManifest: true);
-        fixture.WriteChecksums();
-
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
-
-        Assert.Contains("duplicate entry", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Verify_PowerShellModuleRequiresExactCaseForManifestEntry()
-    {
-        using var fixture = new ModuleFixture();
-        fixture.WriteArchive(SourceRevision, manifestEntryPath: "Sample/sample.psd1");
-        fixture.WriteChecksums();
-
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
-
-        Assert.Contains("exactly one 'Sample.psd1'", exception.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Verify_PowerShellModuleRequiresExactCaseForRootModuleEntry()
-    {
-        using var fixture = new ModuleFixture();
-        fixture.WriteArchive(SourceRevision, rootModuleValue: "Sample.Psm1");
-        fixture.WriteChecksums();
-
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
-
-        Assert.Contains("RootModule", exception.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Verify_PowerShellModuleRequiresExactCaseForSigningEvidencePaths()
-    {
-        using var fixture = new ModuleFixture();
-        fixture.WriteSigningEvidence(manifestPath: "Sample/sample.psd1");
-        fixture.WriteChecksums();
-
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
-
-        Assert.Contains("does not identify", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Verify_PowerShellModuleRejectsSigningEvidenceWithoutSchemaVersion()
-    {
-        using var fixture = new ModuleFixture();
-        fixture.WriteSigningEvidence(includeSchemaVersion: false);
-        fixture.WriteChecksums();
-
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
-
-        Assert.Contains("schema version", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Verify_PowerShellModuleAcceptsBomEncodedUtf16Manifest(bool bigEndian)
-    {
-        using var fixture = new ModuleFixture();
-        fixture.WriteArchive(SourceRevision, manifestEncoding: new UnicodeEncoding(bigEndian, true, true));
-        fixture.WriteChecksums();
-
-        PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(fixture.CreateRequest());
-
-        Assert.Equal("2.3.4", evidence.Version);
-    }
-
-    [Theory]
-    [InlineData(new byte[] { 0xC3, 0x28 })]
-    [InlineData(new byte[] { 0xFF, 0xFE, 0x41 })]
-    public void Verify_PowerShellModuleRejectsMalformedManifestEncoding(byte[] manifestBytes)
-    {
-        using var fixture = new ModuleFixture();
-        fixture.WriteArchive(SourceRevision, manifestBytes: manifestBytes);
-        fixture.WriteChecksums();
-
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
-
-        Assert.Contains("encoding is malformed", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Verify_PowerShellModuleRejectsDirtySigningEvidence()
-    {
-        using var fixture = new ModuleFixture();
-        fixture.WriteSigningEvidence(sourceDirty: true);
-        fixture.WriteChecksums();
-
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
-
-        Assert.Contains("clean source checkout", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Verify_PowerShellModuleRejectsDirtyEmbeddedProvenance()
-    {
-        using var fixture = new ModuleFixture();
-        fixture.WriteArchive(SourceRevision, provenanceDirty: true);
-        fixture.WriteChecksums();
-
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
-
-        Assert.Contains("provenance must attest a clean", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(3, evidence.SignaturePaths.Length);
     }
 
     [Fact]
@@ -319,8 +176,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             SignThumbprint = Thumbprint,
             SigningEvidencePath = SigningEvidencePath,
             SignaturePaths = _hasVendorDependency
-                ? new[] { "Sample/Sample.psd1", "Sample/Sample.psm1", "Sample/lib/Vendor.dll" }
-                : new[] { "Sample/Sample.psd1", "Sample/Sample.psm1" },
+                ? new[] { "Sample/Sample.psd1", "Sample/Sample.psm1", "Sample/PowerForge.ReleaseProvenance.psd1", "Sample/lib/Vendor.dll" }
+                : new[] { "Sample/Sample.psd1", "Sample/Sample.psm1", "Sample/PowerForge.ReleaseProvenance.psd1" },
             SbomPaths = new[] { SbomPath }
         };
 
@@ -336,7 +193,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             string manifestEntryPath = "Sample/Sample.psd1",
             string rootModuleValue = "Sample.psm1",
             Encoding? manifestEncoding = null,
-            byte[]? manifestBytes = null)
+            byte[]? manifestBytes = null,
+            string? signedSourceRevision = null,
+            bool includeDependencyProvenance = false,
+            bool omitPrimaryProvenance = false,
+            bool directoryCollision = false)
         {
             if (File.Exists(ArchivePath)) File.Delete(ArchivePath);
             using ZipArchive archive = ZipFile.Open(ArchivePath, ZipArchiveMode.Create);
@@ -349,21 +210,40 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 WriteEntry(archive, "Sample/Sample.psd1", "@{ RootModule = 'Sample.psm1'; ModuleVersion = '2.3.4' }");
             if (caseDuplicateManifest)
                 WriteEntry(archive, "Sample/sample.psd1", "@{ RootModule = 'Sample.psm1'; ModuleVersion = '2.3.4' }");
+            if (directoryCollision)
+                _ = archive.CreateEntry("Sample/Sample.psm1/");
             WriteEntry(archive, "Sample/Sample.psm1", "# signed module");
+            string signedVersion = string.IsNullOrWhiteSpace(prerelease) ? "2.3.4" : "2.3.4-" + prerelease;
+            WriteEntry(archive, "Sample/PowerForge.ReleaseProvenance.psd1", string.Join(Environment.NewLine, new[]
+            {
+                "@{",
+                "    SchemaVersion = '1'",
+                "    ModuleName = 'Sample'",
+                $"    Version = '{signedVersion}'",
+                $"    SourceRevision = '{signedSourceRevision ?? sourceRevision}'",
+                "    SourceDirty = 'false'",
+                "}",
+                string.Empty
+            }));
             if (!string.IsNullOrWhiteSpace(unexpectedSignableExtension))
                 WriteEntry(archive, "Sample/evil" + unexpectedSignableExtension, "unsigned executable payload");
             if (includeVendorDependency)
                 WriteEntry(archive, "Sample/lib/Vendor.dll", "valid vendor-signed dependency");
             if (traversalEntry)
                 WriteEntry(archive, "../escape.ps1", "# unsafe payload");
-            WriteEntry(archive, "Sample/PowerForge.ReleaseProvenance.json", JsonSerializer.Serialize(new
+            if (!omitPrimaryProvenance)
             {
-                moduleName = "Sample",
-                version = string.IsNullOrWhiteSpace(prerelease) ? "2.3.4" : "2.3.4-" + prerelease,
-                repository = "https://github.com/EvotecIT/Sample",
-                commit = sourceRevision,
-                sourceDirty = provenanceDirty
-            }));
+                WriteEntry(archive, "Sample/PowerForge.ReleaseProvenance.json", JsonSerializer.Serialize(new
+                {
+                    moduleName = "Sample",
+                    version = string.IsNullOrWhiteSpace(prerelease) ? "2.3.4" : "2.3.4-" + prerelease,
+                    repository = "https://github.com/EvotecIT/Sample",
+                    commit = sourceRevision,
+                    sourceDirty = provenanceDirty
+                }));
+            }
+            if (includeDependencyProvenance)
+                WriteEntry(archive, "Sample/Internals/Modules/Dependency/PowerForge.ReleaseProvenance.json", "{}");
         }
 
         internal void WriteChecksums()
@@ -390,7 +270,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 SourceRevision = SourceRevision,
                 SourceDirty = false,
                 ManifestPath = "Sample/Sample.psd1",
-                SignableFiles = new[] { "Sample/Sample.psd1", "Sample/Sample.psm1" },
+                SignableFiles = new[] { "Sample/Sample.psd1", "Sample/Sample.psm1", "Sample/PowerForge.ReleaseProvenance.psd1" },
                 PreservedThirdPartySignatures = new[]
                 {
                     new PowerForgeModulePreservedSignature
@@ -448,8 +328,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 SourceDirty = sourceDirty,
                 ManifestPath = manifestPath,
                 SignableFiles = vendorThumbprint is null
-                    ? new[] { "Sample/Sample.psd1", "Sample/Sample.psm1" }
-                    : new[] { "Sample/Sample.psd1", "Sample/Sample.psm1", "Sample/lib/Vendor.dll" },
+                    ? new[] { "Sample/Sample.psd1", "Sample/Sample.psm1", "Sample/PowerForge.ReleaseProvenance.psd1" }
+                    : new[] { "Sample/Sample.psd1", "Sample/Sample.psm1", "Sample/PowerForge.ReleaseProvenance.psd1", "Sample/lib/Vendor.dll" },
                 PreservedThirdPartySignatures = vendorThumbprint is null
                     ? Array.Empty<PowerForgeModulePreservedSignature>()
                     : new[]

@@ -471,6 +471,35 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void BuildPublishMsBuildProperties_BindsSignedProductVersionToPlanSourceRevision()
+    {
+        const string sourceRevision = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        var plan = new DotNetPublishPlan
+        {
+            SourceRevision = sourceRevision,
+            MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SourceRevisionId"] = new string('c', 40),
+                ["IncludeSourceRevisionInInformationalVersion"] = "false"
+            }
+        };
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "app",
+            ProjectPath = "App.csproj",
+            Publish = new DotNetPublishPublishOptions()
+        };
+
+        Dictionary<string, string> merged = DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
+            plan,
+            target,
+            DotNetPublishStyle.PortableCompat);
+
+        Assert.Equal(sourceRevision, merged["SourceRevisionId"]);
+        Assert.Equal("true", merged["IncludeSourceRevisionInInformationalVersion"]);
+    }
+
+    [Fact]
     public void BuildPublishArguments_AppendsMergedOverridesAfterStyleDefaults()
     {
         var plan = new DotNetPublishPlan

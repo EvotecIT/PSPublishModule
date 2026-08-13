@@ -230,7 +230,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     0,
                     "CN=Publisher",
                     signerThumbprint),
-                _ => "1.2.3.0");
+                _ => "1.2.3+" + SourceRevision);
 
         public void Dispose()
         {

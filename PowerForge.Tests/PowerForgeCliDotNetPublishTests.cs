@@ -94,7 +94,6 @@ public sealed class PowerForgeCliDotNetPublishTests
 
         var repoRoot = FindRepositoryRoot();
         var tempRoot = CreateTempDirectory();
-        const string sourceRevision = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
         try
         {
@@ -102,6 +101,7 @@ public sealed class PowerForgeCliDotNetPublishTests
             Directory.CreateDirectory(outputDirectory);
             string executablePath = Path.Combine(outputDirectory, "Sample.CLI.exe");
             var signedWindowsExecutable = FindSignedWindowsExecutable();
+            string sourceRevision = ReadPortableSourceRevision(signedWindowsExecutable);
             File.Copy(signedWindowsExecutable, executablePath);
             DotNetPublishReleaseArtifactVerifier.AuthenticodeResult realSignature =
                 DotNetPublishReleaseArtifactVerifier.VerifyAuthenticode(executablePath);
@@ -328,11 +328,29 @@ public sealed class PowerForgeCliDotNetPublishTests
                 continue;
             FileVersionInfo version = FileVersionInfo.GetVersionInfo(candidate);
             string productVersion = (version.ProductVersion ?? string.Empty).Split('+')[0].Trim();
-            if (Version.TryParse(productVersion, out _) || Version.TryParse(version.FileVersion, out _))
+            if ((Version.TryParse(productVersion, out _) || Version.TryParse(version.FileVersion, out _)) &&
+                TryReadPortableSourceRevision(version.ProductVersion, out _))
                 return candidate;
         }
 
         throw new InvalidOperationException("No embedded-signed Windows executable with a numeric version was available for real signature proof.");
+    }
+
+    private static string ReadPortableSourceRevision(string path)
+    {
+        FileVersionInfo version = FileVersionInfo.GetVersionInfo(path);
+        return TryReadPortableSourceRevision(version.ProductVersion, out string sourceRevision)
+            ? sourceRevision
+            : throw new InvalidOperationException("Signed Windows executable does not carry a full source object ID.");
+    }
+
+    private static bool TryReadPortableSourceRevision(string? productVersion, out string sourceRevision)
+    {
+        System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(
+            productVersion ?? string.Empty,
+            @"(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{64}|[0-9A-Fa-f]{40})(?![0-9A-Fa-f])");
+        sourceRevision = match.Success ? match.Value : string.Empty;
+        return match.Success;
     }
 
     private static string ReadNormalizedPortableVersion(string path)

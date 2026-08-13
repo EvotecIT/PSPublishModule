@@ -11,6 +11,9 @@ public sealed class DotNetPublishPlan
     /// <summary>Effective configuration files that must be included in generated release checksums.</summary>
     public string[] ConfigurationInputPaths { get; set; } = Array.Empty<string>();
 
+    /// <summary>Full Git object ID embedded into signed portable executable version metadata.</summary>
+    public string SourceRevision { get; set; } = string.Empty;
+
     /// <summary>When true, output/zip paths may resolve outside <see cref="ProjectRoot"/>.</summary>
     public bool AllowOutputOutsideProjectRoot { get; set; }
 

@@ -145,7 +145,6 @@ internal static partial class Program
                 2,
                 "Release artifact kind must be portable-cli or powershell-module.");
         }
-
         var projectRoot = TryGetOptionValue(commandArgs, "--project-root");
         var artifactId = TryGetOptionValue(commandArgs, "--artifact-id");
         var artifactPath = TryGetOptionValue(commandArgs, "--artifact");
@@ -183,6 +182,14 @@ internal static partial class Program
                       string.IsNullOrWhiteSpace(signThumbprint) && string.IsNullOrWhiteSpace(signSubjectName)
                         ? "PowerShell module verification requires --sign-thumbprint or --sign-subject-name."
                         : "Kind, artifact ID, project root, artifact, checksums, source revision, portable manifest/config, and module signing evidence are required for their respective artifact kinds.");
+        }
+        if (!OperatingSystem.IsWindows())
+        {
+            return WriteGeneralReleaseArtifactError(
+                outputJson,
+                logger,
+                2,
+                "Release artifact Authenticode verification is currently supported only on Windows.");
         }
 
         try

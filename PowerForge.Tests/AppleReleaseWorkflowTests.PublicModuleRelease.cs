@@ -29,16 +29,20 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("Enable-PowerForgeVerifiedGitHubReleaseRecovery", script, StringComparison.Ordinal);
         Assert.Contains("Get-PowerForgeReleasePackageIds", script, StringComparison.Ordinal);
         Assert.Contains("PowerForge.ReleaseProvenance.json", script, StringComparison.Ordinal);
+        Assert.Contains("PowerForge.ReleaseProvenance.psd1", script, StringComparison.Ordinal);
         Assert.Contains("moduleName    = [string] $releaseConfig.Module.ModuleName", script, StringComparison.Ordinal);
         Assert.Contains("commit        = $ExpectedCommit", script, StringComparison.Ordinal);
         Assert.Contains("sourceDirty   = $sourceDirty", script, StringComparison.Ordinal);
         Assert.Contains("Get-PowerForgeReleaseSourceState", script, StringComparison.Ordinal);
         Assert.Contains("$moduleProvenanceCreated", script, StringComparison.Ordinal);
+        Assert.Contains("$moduleSignedProvenanceCreated", script, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPath must stay outside the release checkout", script, StringComparison.Ordinal);
         Assert.True(
             script.IndexOf("Get-PowerForgeReleaseSourceState", StringComparison.Ordinal) <
             script.IndexOf("New-Item -ItemType Directory -Path $receiptDirectory", StringComparison.Ordinal),
             "Release receipts must not be created until the checkout is proven clean.");
         Assert.Contains("\"PowerForge.ReleaseProvenance.json\"", moduleConfig, StringComparison.Ordinal);
+        Assert.Contains("\"PowerForge.ReleaseProvenance.psd1\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains(". .\\Build\\Private\\Assert-PowerForgeCommittedReleaseVersion.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("$releaseConfig.GitHub | Add-Member -NotePropertyName Commitish", script, StringComparison.Ordinal);
         Assert.Contains("ExpectedTagCommitSha = gitHub.Commitish", Read(root, "PowerForge", "Services", "PowerForgeReleaseService.cs"), StringComparison.Ordinal);
@@ -267,6 +271,50 @@ public sealed partial class AppleReleaseWorkflowTests
         {
             try { repository.Delete(recursive: true); } catch { }
             try { receiptDirectory.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void PublicModuleReleaseRejectsReceiptPathThatCouldOverwriteTrackedInput()
+    {
+        var sourceRoot = FindRepoRoot();
+        var repository = Directory.CreateTempSubdirectory();
+        try
+        {
+            string buildDirectory = Path.Combine(repository.FullName, "Build");
+            Directory.CreateDirectory(buildDirectory);
+            string scriptPath = Path.Combine(buildDirectory, "Invoke-PowerForgePublicRelease.ps1");
+            string trackedInputPath = Path.Combine(buildDirectory, "release.json");
+            File.Copy(Path.Combine(sourceRoot, "Build", "Invoke-PowerForgePublicRelease.ps1"), scriptPath);
+            File.WriteAllText(trackedInputPath, "tracked-input");
+            Run("git", repository.FullName, "init").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.name", "PowerForge Tests").EnsureSuccess();
+            Run("git", repository.FullName, "add", ".").EnsureSuccess();
+            Run("git", repository.FullName, "commit", "-m", "fixture").EnsureSuccess();
+
+            var result = Run(
+                "pwsh",
+                repository.FullName,
+                "-NoProfile",
+                "-File",
+                scriptPath,
+                "-Operation",
+                "Plan",
+                "-Version",
+                "3.0.81",
+                "-ExpectedCommit",
+                new string('0', 40),
+                "-ReceiptPath",
+                trackedInputPath);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Equal("tracked-input", File.ReadAllText(trackedInputPath));
+            Assert.Contains("dedicated release-receipts", result.StandardError, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { repository.Delete(recursive: true); } catch { }
         }
     }
 }
