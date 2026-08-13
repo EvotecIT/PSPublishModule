@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PowerForge.Web;
+using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
@@ -112,6 +113,52 @@ public sealed class WebLlmsPublicationCatalogTests
     }
 
     [Fact]
+    public void VerifiedCatalog_RejectsPreservedNuGetRegistryData()
+    {
+        using var fixture = new PublicationFixture();
+        var project = fixture.WriteProject("Published.Package");
+        var catalog = fixture.WriteCatalog(
+            "Evotec",
+            ["Published.Package"],
+            warnings: ["Preserved existing NuGet stats after upstream fetch warnings returned empty data."]);
+
+        var exception = Assert.Throws<InvalidDataException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            ProjectFile = project,
+            InstallCommandPolicy = WebLlmsInstallCommandPolicy.VerifiedCatalog,
+            PublicationCatalogPath = catalog,
+            NuGetOwner = "Evotec"
+        }));
+
+        Assert.Contains("preserved stale NuGet data", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void VerifiedCatalog_RejectsPreservedPowerShellGalleryRegistryData()
+    {
+        using var fixture = new PublicationFixture();
+        var module = fixture.WriteModule("PublishedModule");
+        var catalog = fixture.WriteCatalog(
+            "Evotec",
+            [],
+            powerShellGalleryOwner: "Przemyslaw.Klys",
+            powerShellModules: ["PublishedModule"],
+            warnings: ["Preserved existing PowerShell Gallery stats after upstream fetch warnings returned empty data."]);
+
+        var exception = Assert.Throws<InvalidDataException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            ProjectFile = module,
+            InstallCommandPolicy = WebLlmsInstallCommandPolicy.VerifiedCatalog,
+            PublicationCatalogPath = catalog,
+            PowerShellGalleryOwner = "Przemyslaw.Klys"
+        }));
+
+        Assert.Contains("preserved stale PowerShell Gallery data", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void VerifiedCatalog_RejectsNegativeMaximumCatalogAge()
     {
         using var fixture = new PublicationFixture();
@@ -167,6 +214,106 @@ public sealed class WebLlmsPublicationCatalogTests
         Assert.DoesNotContain("## Install", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void NonePolicy_DoesNotRequireConditionalToolMetadata()
+    {
+        using var fixture = new PublicationFixture();
+        var project = fixture.WriteFile(
+            "ConditionalTool.csproj",
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>Conditional.Tool</PackageId><Version>1.2.3</Version><PackAsTool Condition=\"'$(Configuration)' == 'Release'\">true</PackAsTool></PropertyGroup></Project>");
+        var quickstart = fixture.WriteFile("quickstart.txt", "Conditional.Tool --help");
+
+        var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            ProjectFile = project,
+            QuickstartPath = quickstart,
+            InstallCommandPolicy = WebLlmsInstallCommandPolicy.None
+        });
+
+        Assert.Equal(0, result.InstallCommandCount);
+        Assert.DoesNotContain("## Install", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NonePolicy_DoesNotRequireConditionalToolMetadataFromPackageFiles()
+    {
+        using var fixture = new PublicationFixture();
+        var project = fixture.WriteFile(
+            "ConditionalTool.csproj",
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>Conditional.Tool</PackageId><Version>1.2.3</Version><PackAsTool Condition=\"'$(Configuration)' == 'Release'\">true</PackAsTool></PropertyGroup></Project>");
+
+        var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            PackageFiles = [project],
+            InstallCommandPolicy = WebLlmsInstallCommandPolicy.None
+        });
+
+        Assert.Equal(0, result.InstallCommandCount);
+        Assert.DoesNotContain("## Install", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PackageMetadata_ResolvesImportsUsingStandardProjectDirectoryProperty()
+    {
+        using var fixture = new PublicationFixture();
+        fixture.WriteFile(
+            "package.props",
+            "<Project><PropertyGroup><PackageId>Imported.Package</PackageId><Version>1.2.3</Version></PropertyGroup></Project>");
+        var project = fixture.WriteFile(
+            "Imported.csproj",
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><Import Project=\"$(MSBuildProjectDirectory)/package.props\" /></Project>");
+
+        var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            ProjectFile = project
+        });
+
+        Assert.Equal("Imported.Package", result.PackageId);
+        Assert.Equal("1.2.3", result.Version);
+    }
+
+    [Fact]
+    public void PackageMetadata_ResolvesDirectoryBuildTargetsPathUsingStandardProjectDirectoryProperty()
+    {
+        using var fixture = new PublicationFixture();
+        fixture.WriteFile(
+            "package.targets",
+            "<Project><PropertyGroup><PackageId>Targeted.Package</PackageId><Version>1.2.3</Version></PropertyGroup></Project>");
+        var project = fixture.WriteFile(
+            "Targeted.csproj",
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><DirectoryBuildTargetsPath>$(MSBuildProjectDirectory)/package.targets</DirectoryBuildTargetsPath></PropertyGroup></Project>");
+
+        var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            ProjectFile = project
+        });
+
+        Assert.Equal("Targeted.Package", result.PackageId);
+        Assert.Equal("1.2.3", result.Version);
+    }
+
+    [Theory]
+    [InlineData("not-a-number")]
+    [InlineData("999999999999999999999999")]
+    [InlineData("-1")]
+    public void Cli_RejectsMalformedPublicationCatalogAge(string value)
+    {
+        using var fixture = new PublicationFixture();
+
+        var exitCode = WebCliCommandHandlers.HandleSubCommand(
+            "llms",
+            ["--site-root", fixture.Root, "--publication-catalog-max-age-hours", value],
+            outputJson: false,
+            new WebConsoleLogger(),
+            outputSchemaVersion: 1);
+
+        Assert.Equal(2, exitCode);
+    }
+
     private sealed class PublicationFixture : IDisposable
     {
         public PublicationFixture()
@@ -199,12 +346,14 @@ public sealed class WebLlmsPublicationCatalogTests
             DateTimeOffset? generatedAt = null,
             string? powerShellGalleryOwner = null,
             string[]? powerShellModules = null,
-            string packageVersion = "1.2.3")
+            string packageVersion = "1.2.3",
+            string[]? warnings = null)
         {
             var path = Path.Combine(Root, "publication-catalog.json");
             var payload = new
             {
                 generatedAtUtc = (generatedAt ?? DateTimeOffset.UtcNow).ToString("O"),
+                warnings = warnings ?? [],
                 nuget = new
                 {
                     owner = nugetOwner,
@@ -219,6 +368,13 @@ public sealed class WebLlmsPublicationCatalogTests
                     }
             };
             File.WriteAllText(path, JsonSerializer.Serialize(payload));
+            return path;
+        }
+
+        public string WriteFile(string fileName, string content)
+        {
+            var path = Path.Combine(Root, fileName);
+            File.WriteAllText(path, content);
             return path;
         }
 

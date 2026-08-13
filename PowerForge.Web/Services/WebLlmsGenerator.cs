@@ -95,8 +95,9 @@ public static partial class WebLlmsGenerator
         var configuredName = string.IsNullOrWhiteSpace(options.Name) ? null : options.Name.Trim();
         var configuredPackageId = string.IsNullOrWhiteSpace(options.PackageId) ? null : options.PackageId.Trim();
         var configuredVersion = string.IsNullOrWhiteSpace(options.Version) ? null : options.Version.Trim();
+        var requireInstallMetadata = options.InstallCommandPolicy != WebLlmsInstallCommandPolicy.None;
         var packages = includePackageContent
-            ? ResolvePackages(options.PackageFiles)
+            ? ResolvePackages(options.PackageFiles, requireInstallMetadata)
             : new List<PackageInfo>();
         var primaryPackage = packages.FirstOrDefault();
         var useProjectPackageMetadata = includePackageContent && primaryPackage is null;
@@ -104,7 +105,8 @@ public static partial class WebLlmsGenerator
             options.ProjectFile,
             useProjectPackageMetadata,
             requirePackageId: useProjectPackageMetadata && configuredPackageId is null,
-            requireVersion: useProjectPackageMetadata && configuredVersion is null);
+            requireVersion: useProjectPackageMetadata && configuredVersion is null,
+            requireInstallMetadata: requireInstallMetadata);
         var name = includePackageContent
             ? configuredName ?? configuredPackageId ?? primaryPackage?.Id ?? projectInfo.PackageId ?? projectInfo.Name
             : configuredName ?? TryReadNameFromHomepage(siteRoot) ?? projectInfo.Name;

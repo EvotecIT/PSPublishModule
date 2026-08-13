@@ -554,6 +554,17 @@ internal static partial class WebCliCommandHandlers
         }
         var apiMaxTypes = ParseIntOption(apiMaxTypesText, 200);
         var apiMaxMembers = ParseIntOption(apiMaxMembersText, 2000);
+        var publicationCatalogMaxAgeHours = 0;
+        if (!string.IsNullOrWhiteSpace(publicationCatalogMaxAgeHoursText) &&
+            (!int.TryParse(publicationCatalogMaxAgeHoursText, out publicationCatalogMaxAgeHours) ||
+             publicationCatalogMaxAgeHours < 0))
+        {
+            return Fail(
+                "Invalid --publication-catalog-max-age-hours. Expected a nonnegative integer.",
+                outputJson,
+                logger,
+                "web.llms");
+        }
         var contentKind = WebLlmsContentKind.Package;
         if (!string.IsNullOrWhiteSpace(contentKindText))
         {
@@ -583,7 +594,7 @@ internal static partial class WebCliCommandHandlers
             PublicationCatalogPath = publicationCatalog,
             NuGetOwner = nugetOwner,
             PowerShellGalleryOwner = powerShellGalleryOwner,
-            PublicationCatalogMaxAgeHours = ParseIntOption(publicationCatalogMaxAgeHoursText, 0),
+            PublicationCatalogMaxAgeHours = publicationCatalogMaxAgeHours,
             ProjectFile = projectFile,
             PackageFiles = packageFiles.ToArray(),
             ApiIndexPath = apiIndex,

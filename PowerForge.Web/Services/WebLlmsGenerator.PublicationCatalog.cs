@@ -74,10 +74,27 @@ public static partial class WebLlmsGenerator
                 throw new InvalidDataException($"Configured LLMS publication catalog must be a JSON object: {path}");
 
             ValidateCatalogAge(root, path, options.PublicationCatalogMaxAgeHours);
+            var warnings = ReadCatalogWarnings(root);
             return new PublicationCatalog(
                 ReadCatalogSection(root, "nuget", "packages"),
-                ReadCatalogSection(root, "powerShellGallery", "modules"));
+                ReadCatalogSection(root, "powerShellGallery", "modules"),
+                warnings);
         }
+    }
+
+    private static string[] ReadCatalogWarnings(JsonElement root)
+    {
+        if (!root.TryGetProperty("warnings", out var warnings) || warnings.ValueKind is JsonValueKind.Null)
+            return Array.Empty<string>();
+        if (warnings.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("LLMS publication catalog 'warnings' must be an array.");
+
+        return warnings.EnumerateArray()
+            .Where(static warning => warning.ValueKind == JsonValueKind.String)
+            .Select(static warning => warning.GetString()?.Trim())
+            .Where(static warning => !string.IsNullOrWhiteSpace(warning))
+            .Select(static warning => warning!)
+            .ToArray();
     }
 
     private static void ValidateCatalogAge(JsonElement root, string path, int maxAgeHours)
@@ -145,7 +162,8 @@ public static partial class WebLlmsGenerator
 
     private sealed record PublicationCatalog(
         PublicationCatalogSection? NuGet,
-        PublicationCatalogSection? PowerShellGallery)
+        PublicationCatalogSection? PowerShellGallery,
+        string[] Warnings)
     {
         public bool Contains(
             string packageId,
@@ -166,6 +184,13 @@ public static partial class WebLlmsGenerator
             if (!string.Equals(section.Owner, expectedOwner.Trim(), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException(
                     $"LLMS publication catalog {sourceName} owner '{section.Owner}' does not match expected owner '{expectedOwner.Trim()}'.");
+            if (Warnings.Any(warning =>
+                    warning.Contains(sourceName, StringComparison.OrdinalIgnoreCase) &&
+                    warning.Contains("preserv", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidDataException(
+                    $"LLMS publication catalog contains preserved stale {sourceName} data and cannot verify installation commands.");
+            }
 
             if (!section.Packages.TryGetValue(packageId, out var publishedVersion))
                 return false;

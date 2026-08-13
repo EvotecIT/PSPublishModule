@@ -6,7 +6,9 @@ namespace PowerForge.Web;
 
 public static partial class WebLlmsGenerator
 {
-    private static List<PackageInfo> ResolvePackages(IEnumerable<string>? packageFiles)
+    private static List<PackageInfo> ResolvePackages(
+        IEnumerable<string>? packageFiles,
+        bool requireInstallMetadata)
     {
         var packages = new List<PackageInfo>();
         foreach (var packageFile in packageFiles ?? Array.Empty<string>())
@@ -18,7 +20,10 @@ public static partial class WebLlmsGenerator
             if (!File.Exists(fullPath))
                 throw new FileNotFoundException($"Configured package manifest not found: {fullPath}", fullPath);
 
-            var project = ReadProjectInfo(fullPath, requirePackageMetadata: true);
+            var project = ReadProjectInfo(
+                fullPath,
+                requirePackageMetadata: true,
+                requireInstallMetadata: requireInstallMetadata);
             var id = project.PackageId ?? project.Name ?? Path.GetFileNameWithoutExtension(fullPath);
             if (string.IsNullOrWhiteSpace(id))
                 continue;
@@ -60,7 +65,8 @@ public static partial class WebLlmsGenerator
         string? projectFile,
         bool requirePackageMetadata = false,
         bool requirePackageId = true,
-        bool requireVersion = true)
+        bool requireVersion = true,
+        bool requireInstallMetadata = true)
     {
         if (string.IsNullOrWhiteSpace(projectFile))
             return new ProjectInfo();
@@ -114,14 +120,20 @@ public static partial class WebLlmsGenerator
                 : GetMsBuildProperty(properties, "VersionSuffix", throwOnUnresolved: requireVersion);
             version = CombineMsBuildVersion(versionPrefix, versionSuffix);
         }
-        var packAsTool = GetMsBuildProperty(properties, "PackAsTool", throwOnUnresolved: true);
+        var packAsTool = GetMsBuildProperty(
+            properties,
+            "PackAsTool",
+            throwOnUnresolved: requireInstallMetadata);
         var isDotNetTool = string.Equals(packAsTool, "true", StringComparison.OrdinalIgnoreCase);
         var toolCommandName = isDotNetTool
-            ? GetMsBuildProperty(properties, "ToolCommandName", throwOnUnresolved: true)
+            ? GetMsBuildProperty(properties, "ToolCommandName", throwOnUnresolved: requireInstallMetadata)
             : null;
         if (isDotNetTool && toolCommandName is null)
         {
-            assemblyName = GetMsBuildProperty(properties, "AssemblyName", throwOnUnresolved: true);
+            assemblyName = GetMsBuildProperty(
+                properties,
+                "AssemblyName",
+                throwOnUnresolved: requireInstallMetadata);
             toolCommandName = assemblyName ?? projectName;
         }
 
@@ -152,15 +164,21 @@ public static partial class WebLlmsGenerator
 
     private static MsBuildPropertySet ReadMsBuildProperties(string projectFile)
     {
+        var projectFullPath = Path.GetFullPath(projectFile);
+        var projectDirectory = Path.GetDirectoryName(projectFullPath) ?? string.Empty;
         var properties = new MsBuildPropertySet();
-        properties.Values["MSBuildProjectName"] = Path.GetFileNameWithoutExtension(projectFile);
+        properties.Values["MSBuildProjectDirectory"] = projectDirectory;
+        properties.Values["MSBuildProjectExtension"] = Path.GetExtension(projectFullPath);
+        properties.Values["MSBuildProjectFile"] = Path.GetFileName(projectFullPath);
+        properties.Values["MSBuildProjectFullPath"] = projectFullPath;
+        properties.Values["MSBuildProjectName"] = Path.GetFileNameWithoutExtension(projectFullPath);
 
-        var propsPath = FindNearestBuildFile(projectFile, "Directory.Build.props", properties.InputPaths);
+        var propsPath = FindNearestBuildFile(projectFullPath, "Directory.Build.props", properties.InputPaths);
         if (propsPath is not null)
             ReadMsBuildPropertyFile(propsPath, properties);
 
-        ReadMsBuildPropertyFile(projectFile, properties);
-        var targetsPath = ResolveDirectoryBuildTargetsPath(projectFile, properties);
+        ReadMsBuildPropertyFile(projectFullPath, properties);
+        var targetsPath = ResolveDirectoryBuildTargetsPath(projectFullPath, properties);
         if (targetsPath is not null)
             ReadMsBuildPropertyFile(targetsPath, properties);
         return properties;
