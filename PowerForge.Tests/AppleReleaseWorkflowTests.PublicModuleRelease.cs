@@ -66,7 +66,7 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     [Fact]
-    public void PublicModuleReleaseSourceStateIncludesUntrackedInputsAndExcludesOnlyGeneratedProvenance()
+    public void PublicModuleReleaseSourceStateExcludesPriorDefaultReceiptButNotTrackedOrUntrackedInputs()
     {
         var repository = Directory.CreateTempSubdirectory();
         try
@@ -87,13 +87,19 @@ public sealed partial class AppleReleaseWorkflowTests
             var clean = Run("pwsh", repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
             Assert.Contains("\"SourceDirty\":false", clean.StandardOutput, StringComparison.OrdinalIgnoreCase);
 
-            string receiptDirectory = Path.Combine(repository.FullName, "Artefacts", "Release", "receipts");
-            Directory.CreateDirectory(receiptDirectory);
-            File.WriteAllText(Path.Combine(receiptDirectory, "publish.json"), "{}");
+            Directory.CreateDirectory(Path.Combine(repository.FullName, "release-receipts"));
+            string defaultReceipt = Path.Combine(repository.FullName, "release-receipts", "powerforge-public-release.json");
+            File.WriteAllText(defaultReceipt, "{}");
             var receiptDirty = Run("pwsh", repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
-            Assert.Contains("\"SourceDirty\":true", receiptDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("publish.json", receiptDirty.StandardOutput, StringComparison.Ordinal);
-            Directory.Delete(Path.Combine(repository.FullName, "Artefacts"), recursive: true);
+            Assert.Contains("\"SourceDirty\":false", receiptDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
+
+            Run("git", repository.FullName, "add", "release-receipts/powerforge-public-release.json").EnsureSuccess();
+            Run("git", repository.FullName, "commit", "-m", "tracked receipt fixture").EnsureSuccess();
+            File.WriteAllText(defaultReceipt, "modified tracked receipt");
+            var trackedReceiptDirty = Run("pwsh", repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            Assert.Contains("\"SourceDirty\":true", trackedReceiptDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("powerforge-public-release.json", trackedReceiptDirty.StandardOutput, StringComparison.Ordinal);
+            File.WriteAllText(defaultReceipt, "{}");
 
             File.WriteAllText(Path.Combine(repository.FullName, "Module", "untracked-input.ps1"), "'input'");
             var dirty = Run("pwsh", repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();

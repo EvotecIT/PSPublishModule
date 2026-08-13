@@ -36,6 +36,38 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRequiresConfiguredOrRequestedPublisherIdentity()
+    {
+        using var fixture = new PortableFixture();
+        File.WriteAllText(fixture.ConfigurationPath, System.Text.Json.JsonSerializer.Serialize(new
+        {
+            SchemaVersion = 1,
+            DotNet = new { AllowOutputOutsideProjectRoot = false },
+            Targets = new[]
+            {
+                new
+                {
+                    Name = "Sample.CLI",
+                    Kind = "Cli",
+                    Publish = new
+                    {
+                        Framework = "net10.0",
+                        Runtimes = new[] { "win-x64" },
+                        Style = "PortableCompat",
+                        Sign = new { Enabled = true }
+                    }
+                }
+            }
+        }));
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("publisher thumbprint or exact subject", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsArtifactIdThatDiffersFromSelectedTarget()
     {
         using var fixture = new PortableFixture();

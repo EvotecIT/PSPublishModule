@@ -87,6 +87,53 @@ public sealed class PowerForgeCliDotNetPublishTests
     }
 
     [Fact]
+    public async Task ReleaseArtifactVerify_PortableCliRequiresPublisherIdentityFromConfigOrOverride()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        string repoRoot = FindRepositoryRoot();
+        string tempRoot = CreateTempDirectory();
+        try
+        {
+            string manifestPath = Path.Combine(tempRoot, "manifest.json");
+            string checksumsPath = Path.Combine(tempRoot, "SHA256SUMS.txt");
+            string configurationPath = Path.Combine(tempRoot, "powerforge.dotnetpublish.json");
+            File.WriteAllText(manifestPath, "[]");
+            File.WriteAllText(checksumsPath, string.Empty);
+            File.WriteAllText(configurationPath, JsonSerializer.Serialize(new
+            {
+                SchemaVersion = 1,
+                Targets = new[]
+                {
+                    new
+                    {
+                        Name = "Sample.CLI",
+                        Kind = "Cli",
+                        Publish = new { Sign = new { Enabled = true } }
+                    }
+                }
+            }));
+
+            var (exitCode, stdout, stderr) = await RunCliAsync(
+                repoRoot,
+                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --artifact-id Sample.CLI --project-root \"{tempRoot}\" --artifact missing.zip --checksums \"{checksumsPath}\" --source-revision {new string('b', 40)} --manifest \"{manifestPath}\" --config \"{configurationPath}\" --output json");
+
+            Assert.True(exitCode == 1, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+            using JsonDocument document = JsonDocument.Parse(stdout);
+            Assert.Contains(
+                "publisher thumbprint or exact subject",
+                document.RootElement.GetProperty("error").GetString(),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ReleaseArtifactVerify_RealSignedPortableCliReturnsStableJsonEvidenceShape()
     {
         if (!OperatingSystem.IsWindows())

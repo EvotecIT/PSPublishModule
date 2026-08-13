@@ -190,6 +190,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string? signerSubject = signerThumbprint is not null || string.IsNullOrWhiteSpace(sign.SubjectName)
             ? null
             : sign.SubjectName!.Trim();
+        if (signerThumbprint is null && signerSubject is null)
+        {
+            throw Invalid(
+                "Portable release verification requires a configured or requested publisher thumbprint or exact subject name.");
+        }
         return new ExpectedPortable(
             configuration,
             target,
