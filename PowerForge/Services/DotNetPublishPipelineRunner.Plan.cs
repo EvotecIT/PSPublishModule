@@ -175,7 +175,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     ? null
                     : new Dictionary<string, string>(t.Publish.MsBuildProperties, StringComparer.OrdinalIgnoreCase),
                 StyleOverrides = CloneStyleOverrides(t.Publish.StyleOverrides),
-                Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+                Sign = ResolvePlanSigningOptions(
+                    projectRoot,
                     spec.SigningProfiles,
                     t.Publish.SignProfile,
                     t.Publish.Sign,
@@ -692,6 +693,45 @@ public sealed partial class DotNetPublishPipelineRunner
             selectedTargets.Select(t => t.Name),
             StringComparer.OrdinalIgnoreCase);
 
+        var allTargetNames = new HashSet<string>(
+            (spec.Targets ?? Array.Empty<DotNetPublishTarget>())
+                .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Name))
+                .Select(t => t.Name.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var installer in spec.Installers ?? Array.Empty<DotNetPublishInstaller>())
+        {
+            if (installer?.Versioning is null)
+                continue;
+
+            var missingAdditionalTargets = (installer.Versioning.AdditionalPublishTargets ?? Array.Empty<string>())
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name.Trim())
+                .Where(name => !allTargetNames.Contains(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (missingAdditionalTargets.Length > 0)
+                throw new ArgumentException(
+                    $"Installer '{installer.Id}' references unknown additional publish target(s): {string.Join(", ", missingAdditionalTargets)}.",
+                    nameof(spec));
+        }
+
+        var selectedInstallers = CloneInstallers(spec.Installers ?? Array.Empty<DotNetPublishInstaller>())
+            .Where(i =>
+                string.IsNullOrWhiteSpace(i.PrepareFromTarget)
+                || selectedTargetNames.Contains(i.PrepareFromTarget.Trim()))
+            .ToArray();
+        foreach (var installer in selectedInstallers)
+        {
+            if (installer.Versioning is null)
+                continue;
+
+            installer.Versioning.AdditionalPublishTargets = (installer.Versioning.AdditionalPublishTargets ?? Array.Empty<string>())
+                .Where(name => !string.IsNullOrWhiteSpace(name) && selectedTargetNames.Contains(name.Trim()))
+                .Select(name => name.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
         var runtimes = (profile.Runtimes ?? Array.Empty<string>())
             .Where(r => !string.IsNullOrWhiteSpace(r))
             .Select(r => r.Trim())
@@ -745,11 +785,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     string.IsNullOrWhiteSpace(b.PrepareFromTarget)
                     || selectedTargetNames.Contains(b.PrepareFromTarget.Trim()))
                 .ToArray(),
-            Installers = CloneInstallers(spec.Installers)
-                .Where(i =>
-                    string.IsNullOrWhiteSpace(i.PrepareFromTarget)
-                    || selectedTargetNames.Contains(i.PrepareFromTarget.Trim()))
-                .ToArray(),
+            Installers = selectedInstallers,
             StorePackages = CloneStorePackages(spec.StorePackages)
                 .Where(i =>
                     string.IsNullOrWhiteSpace(i.PrepareFromTarget)
@@ -2000,7 +2036,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     OutputPath = generated.OutputPath.Trim(),
                     Tokens = CloneDictionary(generated.Tokens) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
                     Overwrite = generated.Overwrite,
-                    Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+                    Sign = ResolvePlanSigningOptions(
+                        projectRoot,
                         signingProfiles,
                         generated.SignProfile,
                         generated.Sign,
@@ -2052,7 +2089,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 ModuleIncludes = moduleIncludePlans.ToArray(),
                 GeneratedScripts = generatedScriptPlans.ToArray(),
                 Scripts = scriptPlans.ToArray(),
-                PostProcess = NormalizeBundlePostProcess(id, bundle.PostProcess, signingProfiles)
+                PostProcess = NormalizeBundlePostProcess(projectRoot, id, bundle.PostProcess, signingProfiles)
             });
         }
 
@@ -2597,7 +2634,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 HarvestExcludePatterns = NormalizeStrings(installer.HarvestExcludePatterns),
                 Versioning = NormalizeInstallerVersioning(id, installer.Versioning),
                 MsBuildProperties = CloneDictionary(installer.MsBuildProperties),
-                Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+                Sign = ResolvePlanSigningOptions(
+                    projectRoot,
                     signingProfiles,
                     installer.SignProfile,
                     installer.Sign,
@@ -3295,6 +3333,7 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     private static DotNetPublishBundlePostProcessOptions? NormalizeBundlePostProcess(
+        string projectRoot,
         string bundleId,
         DotNetPublishBundlePostProcessOptions? options,
         IReadOnlyDictionary<string, DotNetPublishSignOptions>? signingProfiles)
@@ -3320,7 +3359,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
         clone.DeletePatterns = NormalizeStrings(clone.DeletePatterns);
         clone.SignPatterns = NormalizeStrings(clone.SignPatterns);
-        clone.Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+        clone.Sign = ResolvePlanSigningOptions(
+            projectRoot,
             signingProfiles,
             clone.SignProfile,
             clone.Sign,
@@ -3349,6 +3389,31 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return clone;
+    }
+
+    private static DotNetPublishSignOptions? ResolvePlanSigningOptions(
+        string projectRoot,
+        IReadOnlyDictionary<string, DotNetPublishSignOptions>? signingProfiles,
+        string? signProfile,
+        DotNetPublishSignOptions? inline,
+        DotNetPublishSignPatch? overrides,
+        string context)
+    {
+        var sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+            signingProfiles,
+            signProfile,
+            inline,
+            overrides,
+            context);
+        if (sign?.Provider == DotNetPublishSigningProvider.AzureArtifactSigning
+            && sign.AzureArtifactSigning is not null
+            && !string.IsNullOrWhiteSpace(sign.AzureArtifactSigning.DlibPath)
+            && !Path.IsPathRooted(sign.AzureArtifactSigning.DlibPath))
+        {
+            sign.AzureArtifactSigning.DlibPath = ResolvePath(projectRoot, sign.AzureArtifactSigning.DlibPath!);
+        }
+
+        return sign;
     }
 
     private static DotNetPublishMsiClientLicenseOptions? NormalizeInstallerClientLicense(

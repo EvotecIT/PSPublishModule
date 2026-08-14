@@ -7,6 +7,28 @@ namespace PowerForge.Tests;
 public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 {
     [Fact]
+    public void Plan_ResolvesRelativeAzureDlibPathAgainstProjectRoot()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string project = CreateProjectFile(root, "App.csproj");
+            DotNetPublishSpec spec = CreateBaseSpec(root, project);
+            spec.Targets[0].Publish.Sign = AzureSign(Path.Combine("tools", "Azure.CodeSigning.Dlib.dll"));
+
+            DotNetPublishPlan plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+
+            Assert.Equal(
+                Path.Combine(root, "tools", "Azure.CodeSigning.Dlib.dll"),
+                Assert.Single(plan.Targets).Publish.Sign?.AzureArtifactSigning?.DlibPath);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void TrySignOutput_AzureArtifactSigningUsesDlibMetadataWithoutLocalCertificateSelectors()
     {
         if (!DotNetPublishPipelineRunner.IsWindows()) return;

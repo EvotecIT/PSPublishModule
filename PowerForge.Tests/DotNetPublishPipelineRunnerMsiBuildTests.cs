@@ -635,6 +635,56 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void Plan_ProfileMayExcludeAValidCompanionPortableTarget()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string app = CreateProject(root, "App/App.csproj");
+            string portable = CreateProject(root, "Portable/Portable.csproj");
+            DotNetPublishSpec spec = CreateBaseSpec(root, app);
+            spec.Targets = spec.Targets.Concat(new[]
+            {
+                new DotNetPublishTarget
+                {
+                    Name = "portable",
+                    ProjectPath = portable,
+                    Kind = DotNetPublishTargetKind.Cli,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net8.0",
+                        Runtimes = new[] { "win-x64" },
+                        Style = DotNetPublishStyle.PortableCompat,
+                        UseStaging = false
+                    }
+                }
+            }).ToArray();
+            spec.Profiles = new[]
+            {
+                new DotNetPublishProfile
+                {
+                    Name = "monitoring",
+                    Default = true,
+                    Targets = new[] { "app" }
+                }
+            };
+            DotNetPublishInstaller installer = CreateReleaseGroupInstaller("monitoring.msi", "MonitoringFiles");
+            installer.Versioning!.AdditionalPublishTargets = new[] { "portable" };
+            spec.Installers = new[] { installer };
+
+            DotNetPublishPlan plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+
+            Assert.Equal("app", Assert.Single(plan.Targets).Name);
+            Assert.Empty(Assert.Single(plan.Installers).Versioning!.AdditionalPublishTargets);
+            Assert.Single(plan.MsiVersions);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_ReleaseGroupRejectsDifferentVersionAuthorities()
     {
         var root = CreateTempRoot();
