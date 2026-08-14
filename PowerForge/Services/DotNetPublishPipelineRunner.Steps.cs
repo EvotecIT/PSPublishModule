@@ -401,10 +401,11 @@ public sealed partial class DotNetPublishPipelineRunner
                     ?? throw new InvalidOperationException(
                         "Signed portable output does not contain a primary executable matching the configured project identity.");
                 FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(executable);
-                string executableIdentity = FirstText(
+                string executableIdentity = ResolvePortableExecutableIdentity(
                     versionInfo.ProductName,
                     versionInfo.InternalName,
-                    Path.GetFileNameWithoutExtension(executable));
+                    versionInfo.OriginalFilename,
+                    executable);
                 if (!PortableExecutableIdentityMatches(
                         executableIdentity,
                         target.ExecutableIdentities))

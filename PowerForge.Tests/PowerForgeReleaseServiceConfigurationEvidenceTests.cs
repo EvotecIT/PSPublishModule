@@ -105,7 +105,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.Copy(publishConfigPath, stagedPublishConfigPath);
             string releaseConfigPath = Path.Combine(
                 evidenceRoot,
-                ".release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
+                ".release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
             File.WriteAllText(releaseConfigPath, $$"""
 {
   "Tools": { "DotNetPublishConfigPath": "{{Path.GetFileName(stagedPublishConfigPath)}}" }

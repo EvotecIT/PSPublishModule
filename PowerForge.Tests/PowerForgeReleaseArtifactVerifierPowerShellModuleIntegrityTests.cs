@@ -143,7 +143,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
-    public void Verify_PowerShellModuleRequiresExactCaseForManifestEntry()
+    public void Verify_PowerShellModuleRequiresManifestPathCaseToMatchSigningEvidence()
     {
         using var fixture = new ModuleFixture();
         fixture.WriteArchive(SourceRevision, manifestEntryPath: "Sample/sample.psd1");
@@ -152,7 +152,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
             fixture.CreateVerifier().Verify(fixture.CreateRequest()));
 
-        Assert.Contains("exactly one 'Sample.psd1'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("signing evidence does not identify", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

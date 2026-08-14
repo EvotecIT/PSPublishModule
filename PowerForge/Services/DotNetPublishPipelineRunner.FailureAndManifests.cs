@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 namespace PowerForge;
 
@@ -360,7 +361,8 @@ public sealed partial class DotNetPublishPipelineRunner
             cleanTrackedGeneratedPaths,
             cleanTrackedGeneratedProvenanceState,
             msiReservationOwner,
-            plan.GeneratedConfigurationInputPaths);
+            plan.GeneratedConfigurationInputPaths,
+            EnumerateDotNetBuildInputRoots(plan.Targets));
         var manifestEntries = BuildManifestEntries(
             plan.ProjectRoot,
             orderedArtefacts,
@@ -513,6 +515,64 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return (jsonPath, txtPath, checksumsPath);
+    }
+
+    private static IEnumerable<string> EnumerateDotNetBuildInputRoots(
+        IEnumerable<DotNetPublishTargetPlan>? targets)
+        => EnumerateDotNetBuildInputRootsFromProjectPaths(
+            (targets ?? Array.Empty<DotNetPublishTargetPlan>()).Select(target => target.ProjectPath));
+
+    internal static IEnumerable<string> EnumerateDotNetBuildInputRootsFromProjectPaths(
+        IEnumerable<string>? projectPaths)
+    {
+        var pending = new Queue<string>((projectPaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath));
+        var visitedProjects = new HashSet<string>(
+            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var yieldedDirectories = new HashSet<string>(
+            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+        while (pending.Count > 0)
+        {
+            string projectPath = pending.Dequeue();
+            if (!visitedProjects.Add(projectPath) || !File.Exists(projectPath))
+                continue;
+
+            string projectDirectory = Path.GetDirectoryName(projectPath)
+                ?? throw new InvalidOperationException($"Project directory could not be resolved for '{projectPath}'.");
+            if (yieldedDirectories.Add(projectDirectory))
+                yield return projectDirectory;
+
+            XDocument project;
+            try
+            {
+                project = XDocument.Load(projectPath, LoadOptions.None);
+            }
+            catch
+            {
+                // The project itself is already an explicit provenance input. If it cannot be
+                // parsed here, the build will fail before a release artifact can be admitted.
+                continue;
+            }
+
+            foreach (string reference in project.Descendants()
+                         .Where(element => string.Equals(
+                             element.Name.LocalName,
+                             "ProjectReference",
+                             StringComparison.Ordinal))
+                         .Select(element => element.Attribute("Include")?.Value)
+                         .Where(value => !string.IsNullOrWhiteSpace(value))!)
+            {
+                if (reference.IndexOf("$(", StringComparison.Ordinal) >= 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Project reference '{reference}' in '{projectPath}' cannot be resolved for release provenance. " +
+                        "Use a concrete project path for a verifiable public release.");
+                }
+                pending.Enqueue(Path.GetFullPath(Path.Combine(projectDirectory, reference)));
+            }
+        }
     }
 
     private static List<DotNetPublishManifestEntry> BuildManifestEntries(

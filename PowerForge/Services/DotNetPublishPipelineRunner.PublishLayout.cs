@@ -303,12 +303,11 @@ public sealed partial class DotNetPublishPipelineRunner
             .Where(path =>
             {
                 FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(path);
-                string[] identities =
-                {
-                    versionInfo.ProductName ?? string.Empty,
-                    versionInfo.InternalName ?? string.Empty,
-                    Path.GetFileNameWithoutExtension(path)
-                };
+                string[] identities = ResolvePortableExecutableIdentityCandidates(
+                    versionInfo.ProductName,
+                    versionInfo.InternalName,
+                    versionInfo.OriginalFilename,
+                    path);
                 return identities.Any(identity => expected.Contains(
                     NormalizePortableExecutableIdentity(identity),
                     StringComparer.OrdinalIgnoreCase));

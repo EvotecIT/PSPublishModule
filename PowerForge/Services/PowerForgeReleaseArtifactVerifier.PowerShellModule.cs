@@ -48,8 +48,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         Dictionary<string, ZipArchiveEntry> entries = ValidateArchiveEntries(archive);
         ValidateModuleArchiveBounds(entries);
         string[] manifestEntries = entries.Keys.Where(entry =>
-                string.Equals(Path.GetFileName(entry), moduleName + ".psd1", StringComparison.Ordinal) &&
-                string.Equals(GetArchiveParentDirectoryName(entry), moduleName, StringComparison.Ordinal))
+                string.Equals(Path.GetFileName(entry), moduleName + ".psd1", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(GetArchiveParentDirectoryName(entry), moduleName, StringComparison.OrdinalIgnoreCase))
             .ToArray();
         if (manifestEntries.Length != 1)
             throw Invalid($"Packed module artifact must contain exactly one '{moduleName}.psd1' manifest.");

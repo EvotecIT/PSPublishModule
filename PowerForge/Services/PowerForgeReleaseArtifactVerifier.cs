@@ -269,9 +269,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     private static string ReadPortableIdentity(string path)
     {
         FileVersionInfo version = FileVersionInfo.GetVersionInfo(path);
-        return new[] { version.ProductName, version.InternalName, version.OriginalFilename, Path.GetFileNameWithoutExtension(path) }
-            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim()
-            ?? throw Invalid("Signed portable executable identity metadata is missing.");
+        return DotNetPublishPipelineRunner.ResolvePortableExecutableIdentity(
+            version.ProductName,
+            version.InternalName,
+            version.OriginalFilename,
+            path);
     }
 
     private static string NormalizeModuleVersion(string version, string? prerelease = null)

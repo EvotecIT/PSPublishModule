@@ -55,6 +55,33 @@ public sealed partial class DotNetPublishPipelineRunner
             StringComparison.OrdinalIgnoreCase));
     }
 
+    internal static string ResolvePortableExecutableIdentity(
+        string? productName,
+        string? internalName,
+        string? originalFileName,
+        string executablePath)
+        => FirstText(ResolvePortableExecutableIdentityCandidates(
+            productName,
+            internalName,
+            originalFileName,
+            executablePath));
+
+    internal static string[] ResolvePortableExecutableIdentityCandidates(
+        string? productName,
+        string? internalName,
+        string? originalFileName,
+        string executablePath)
+        => new[]
+        {
+            productName,
+            internalName,
+            originalFileName,
+            Path.GetFileNameWithoutExtension(executablePath)
+        }
+        .Where(value => !string.IsNullOrWhiteSpace(value))
+        .Select(value => value!.Trim())
+        .ToArray();
+
     private static bool IsStaticPortableExecutableIdentity(string? value) =>
         !string.IsNullOrWhiteSpace(value) &&
         value!.IndexOf("$(", StringComparison.Ordinal) < 0 &&

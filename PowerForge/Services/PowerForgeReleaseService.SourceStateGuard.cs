@@ -47,7 +47,12 @@ internal sealed partial class PowerForgeReleaseService
             DotNetPublishPipelineRunner.ReadSourceProvenance(
                 repositoryRoot,
                 generatedPaths: request.GeneratedProvenancePaths,
-                explicitInputPaths: request.SourceInputPaths);
+                explicitInputPaths: request.SourceInputPaths,
+                buildInputRootPaths: DotNetPublishPipelineRunner.EnumerateDotNetBuildInputRootsFromProjectPaths(
+                    request.SourceInputPaths?.Where(path =>
+                        path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
+                        path.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ||
+                        path.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase))));
         if (string.IsNullOrWhiteSpace(source.Revision) ||
             !string.Equals(source.Revision, expectedRevision, StringComparison.OrdinalIgnoreCase))
         {

@@ -185,6 +185,25 @@ public sealed class DotNetPublishPipelineRunnerMatrixProjectTests
     }
 
     [Fact]
+    public void ResolvePortableExecutableIdentity_UsesOriginalFilenameBeforeRenamedOutput()
+    {
+        string identity = DotNetPublishPipelineRunner.ResolvePortableExecutableIdentity(
+            productName: null,
+            internalName: null,
+            originalFileName: "Actual.Cli.exe",
+            executablePath: Path.Combine("Artifacts", "friendly.exe"));
+
+        Assert.Equal("Actual.Cli.exe", identity);
+        Assert.Equal(
+            new[] { "Actual.Cli.exe", "friendly" },
+            DotNetPublishPipelineRunner.ResolvePortableExecutableIdentityCandidates(
+                productName: null,
+                internalName: null,
+                originalFileName: "Actual.Cli.exe",
+                executablePath: Path.Combine("Artifacts", "friendly.exe")));
+    }
+
+    [Fact]
     public void Plan_ThrowsWhenProjectIdIsUnknown()
     {
         var root = CreateTempRoot();

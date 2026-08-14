@@ -793,6 +793,77 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
     }
 
+    [Fact]
+    public void WriteManifests_IgnoredDefaultCompileInputMarksSourceDirty()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string projectPath = Path.Combine(root, "Sample.csproj");
+            File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+            File.WriteAllText(Path.Combine(root, "Program.cs"), "internal static class Program { }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nbin/\nobj/\nArtifacts/\n");
+            RunGit(root, "add Sample.csproj Program.cs .gitignore");
+            RunGit(root, "commit -m \"tracked source\"");
+
+            string outputDirectory = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "app")).FullName;
+            string executablePath = Path.Combine(outputDirectory, "app.exe");
+            File.WriteAllText(executablePath, "payload");
+            string manifestPath = Path.Combine(root, "Artifacts", "manifest.json");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Targets =
+                [
+                    new DotNetPublishTargetPlan { Name = "Sample", ProjectPath = projectPath }
+                ],
+                Outputs = new DotNetPublishOutputs { ManifestJsonPath = manifestPath }
+            };
+            var artefacts = new List<DotNetPublishArtefactResult>
+            {
+                new()
+                {
+                    Category = DotNetPublishArtefactCategory.Publish,
+                    Target = "Sample",
+                    Framework = "net10.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.PortableCompat,
+                    PublishDir = outputDirectory,
+                    OutputDir = outputDirectory,
+                    ExePath = executablePath,
+                    Files = 1,
+                    TotalBytes = 7
+                }
+            };
+            File.WriteAllText(Path.Combine(root, "Generated.cs"), "internal static class Injected { }");
+
+            InvokeWriteManifests(plan, artefacts);
+
+            using (JsonDocument dirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+                Assert.True(dirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+
+            File.Delete(Path.Combine(root, "Generated.cs"));
+            Directory.CreateDirectory(Path.Combine(root, "obj"));
+            File.WriteAllText(Path.Combine(root, "obj", "Generated.cs"), "internal static class BuildGenerated { }");
+            InvokeWriteManifests(plan, artefacts);
+            using JsonDocument cleanManifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            Assert.False(cleanManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static void InvokeWriteManifests(
         DotNetPublishPlan plan,
         List<DotNetPublishArtefactResult> artefacts,

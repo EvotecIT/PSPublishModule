@@ -5,7 +5,7 @@ namespace PowerForge;
 internal sealed partial class PowerForgeReleaseService
 {
     private static readonly Regex AuthorizedConfigurationFileName = new(
-        @"^\.release\.authorized\.\d+\.\d+\.\d+\.[0-9a-f]{40}\.json$",
+        @"^\.release\.authorized\.\d+\.\d+\.\d+\.(?:[0-9a-f]{40}|[0-9a-f]{64})\.json$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex StagedDotNetPublishConfigurationFileName = new(
         @"^\.release\.dotnetpublish\.(?<sha256>[0-9a-f]{64})\.json$",

@@ -114,7 +114,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string>? trackedGeneratedPaths = null,
         IReadOnlyDictionary<string, string>? cleanTrackedGeneratedProvenanceState = null,
         string? msiReservationOwner = null,
-        IEnumerable<string>? trustedExternalInputPaths = null)
+        IEnumerable<string>? trustedExternalInputPaths = null,
+        IEnumerable<string>? buildInputRootPaths = null)
     {
         var gitRevision = ReadGitText(projectRoot, "rev-parse HEAD");
         var environmentRevision = Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim();
@@ -162,7 +163,12 @@ public sealed partial class DotNetPublishPipelineRunner
                   projectRoot,
                   gitRoot!,
                   explicitInputPaths,
-                  trustedExternalInputPaths);
+                  trustedExternalInputPaths)
+              || HasIgnoredBuildInputs(
+                  projectRoot,
+                  gitRoot!,
+                  buildInputRootPaths,
+                  generatedPaths);
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
             dirty);
@@ -199,6 +205,73 @@ public sealed partial class DotNetPublishPipelineRunner
                 return true;
         }
         return false;
+    }
+
+    private static bool HasIgnoredBuildInputs(
+        string projectRoot,
+        string gitRoot,
+        IEnumerable<string>? buildInputRootPaths,
+        IEnumerable<string>? generatedPaths)
+    {
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        string[] generatedExclusions = BuildGeneratedPathExclusions(projectRoot, gitRoot, generatedPaths);
+        foreach (string rootPath in buildInputRootPaths ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(rootPath))
+                continue;
+
+            string fullRoot = Path.GetFullPath(rootPath);
+            string fullGitRoot = Path.GetFullPath(gitRoot)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string? relativeRoot = string.Equals(
+                fullRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                fullGitRoot,
+                comparison)
+                ? string.Empty
+                : ToGitRelativeExclusion(projectRoot, gitRoot, fullRoot);
+            if (relativeRoot is null ||
+                !Directory.Exists(fullRoot) ||
+                HasReparsePointBelowRoot(fullRoot, gitRoot))
+            {
+                return true;
+            }
+
+            string pathSpec = relativeRoot.Length == 0
+                ? string.Empty
+                : " -- " + QuoteLiteralGitPath(relativeRoot);
+            string? ignoredOutput = ReadGitRawText(
+                gitRoot,
+                "ls-files --others --ignored --exclude-standard -z" + pathSpec);
+            if (ignoredOutput is null)
+                return true;
+
+            foreach (string ignoredPathValue in ignoredOutput.Split(
+                         new[] { '\0' },
+                         StringSplitOptions.RemoveEmptyEntries))
+            {
+                string ignoredPath = ignoredPathValue.Replace('\\', '/').TrimStart('/');
+                if (IsGeneratedPath(ignoredPath, generatedExclusions, comparison) ||
+                    IsStandardDotNetBuildOutput(ignoredPath, relativeRoot!, comparison))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsStandardDotNetBuildOutput(
+        string path,
+        string projectDirectory,
+        StringComparison comparison)
+    {
+        string normalizedDirectory = projectDirectory.Replace('\\', '/').Trim('/');
+        string prefix = normalizedDirectory.Length == 0 ? string.Empty : normalizedDirectory + "/";
+        return path.StartsWith(prefix + "bin/", comparison) ||
+               path.StartsWith(prefix + "obj/", comparison);
     }
 
     internal static bool HasReparsePointBelowRoot(string path, string root)

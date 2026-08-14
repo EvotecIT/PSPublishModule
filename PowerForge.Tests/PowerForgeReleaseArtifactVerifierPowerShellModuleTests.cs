@@ -63,6 +63,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PowerShellModuleAcceptsArtifactIdWithDifferentCasing()
+    {
+        using var fixture = new ModuleFixture();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactId = "sample";
+
+        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal("sample", result.ArtifactId, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PowerShellModuleRejectsArchiveFromAnotherRevisionEvenWithUpdatedChecksum()
     {
         using var fixture = new ModuleFixture();
