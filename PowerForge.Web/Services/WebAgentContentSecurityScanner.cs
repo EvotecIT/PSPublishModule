@@ -9,6 +9,7 @@ namespace PowerForge.Web;
 /// <summary>Scans final machine-facing artifacts without executing referenced instructions.</summary>
 public sealed partial class WebAgentContentSecurityScanner : IDisposable
 {
+    private const int MaximumFindingCount = 1000;
     private readonly HttpClient _httpClient;
     private readonly bool _disposeClient;
     private readonly bool _pinVerifiedExternalHostAddress;
@@ -126,27 +127,31 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
             }
         }
 
-        packages = packages
+        var uniquePackages = packages
             .GroupBy(PackageIdentityKey, StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.First())
+            .ToList();
+        packages = packages
             .OrderBy(static package => package.Path, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static package => package.Line)
             .ToList();
 
         using var networkBudget = new CancellationTokenSource(TimeSpan.FromSeconds(options.MaxNetworkDurationSeconds));
         var verifiedPackages = 0;
-        if (packages.Count > options.MaxPackageReferences)
+        if (uniquePackages.Count > options.MaxPackageReferences)
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.LIMIT_EXCEEDED", null, null,
-                $"Artifacts contain {packages.Count} unique package references; the configured maximum is {options.MaxPackageReferences}. No registry requests were sent.");
+                $"Artifacts contain {uniquePackages.Count} unique package references; the configured maximum is {options.MaxPackageReferences}. No registry requests were sent.");
         }
         else if (options.VerifyPackages && selectorsValid && !findings.Any(static finding =>
                      finding.Code is "PFAGENT.PACKAGE.UNTRUSTED_SOURCE" or
-                         "PFAGENT.PACKAGE.UNVERIFIABLE_ENVIRONMENT" or
-                         "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND"))
+                          "PFAGENT.PACKAGE.UNVERIFIABLE_ENVIRONMENT" or
+                          "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND" or
+                          "PFAGENT.FINDINGS.LIMIT_EXCEEDED"))
         {
             var catalog = LoadOwnerCatalog(options, findings);
             var verificationCache = new Dictionary<string, PackageVerificationOutcome>(StringComparer.OrdinalIgnoreCase);
+            var verifiedIdentities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var package in packages)
             {
                 if (networkBudget.IsCancellationRequested)
@@ -155,7 +160,8 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                         $"Network verification exceeded the configured {options.MaxNetworkDurationSeconds}-second total time budget.");
                     break;
                 }
-                if (VerifyPackage(package, options, catalog, verificationCache, findings, networkBudget.Token))
+                if (VerifyPackage(package, options, catalog, verificationCache, findings, networkBudget.Token) &&
+                    verifiedIdentities.Add(PackageIdentityKey(package)))
                     verifiedPackages++;
             }
         }
@@ -178,7 +184,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
         {
             Success = findings.All(static finding => !finding.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)),
             ArtifactCount = artifactCount,
-            PackageReferenceCount = packages.Count,
+            PackageReferenceCount = uniquePackages.Count,
             VerifiedPackageCount = verifiedPackages,
             ExternalHostCount = externalHostCount,
             Findings = findings.ToArray()
@@ -294,7 +300,21 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
         string? path,
         int? line,
         string message)
-        => findings.Add(new WebAgentContentSecurityFinding
+    {
+        if (findings.Count > MaximumFindingCount)
+            return;
+        if (findings.Count == MaximumFindingCount)
+        {
+            findings.Add(new WebAgentContentSecurityFinding
+            {
+                Severity = "error",
+                Code = "PFAGENT.FINDINGS.LIMIT_EXCEEDED",
+                Message = $"Agent-content scanning stopped recording detailed findings after {MaximumFindingCount} entries."
+            });
+            return;
+        }
+
+        findings.Add(new WebAgentContentSecurityFinding
         {
             Severity = severity,
             Code = code,
@@ -302,6 +322,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
             Line = line,
             Message = message
         });
+    }
 
     private static string PackageIdentityKey(WebAgentPackageReference package)
         => string.Create(CultureInfo.InvariantCulture, $"{package.Ecosystem}|{package.Id}|{package.Version}");
