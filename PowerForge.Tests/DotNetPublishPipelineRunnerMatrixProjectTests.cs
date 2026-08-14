@@ -129,6 +129,62 @@ public sealed class DotNetPublishPipelineRunnerMatrixProjectTests
     }
 
     [Fact]
+    public void Plan_BindsPortableIdentityToProjectPropertiesInsteadOfTargetAlias()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            string projectPath = CreateProject(root, "src/Actual.Cli.csproj");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <Product>Actual Product</Product>
+                    <AssemblyName>Actual.Cli</AssemblyName>
+                  </PropertyGroup>
+                </Project>
+                """);
+            var spec = new DotNetPublishSpec
+            {
+                DotNet = new DotNetPublishDotNetOptions
+                {
+                    ProjectRoot = root,
+                    Restore = false,
+                    Build = false
+                },
+                Targets = new[]
+                {
+                    new DotNetPublishTarget
+                    {
+                        Name = "FriendlyAlias",
+                        ProjectPath = "src/Actual.Cli.csproj",
+                        Publish = new DotNetPublishPublishOptions
+                        {
+                            Framework = "net10.0",
+                            Runtimes = new[] { "win-x64" },
+                            RenameTo = "friendly.exe"
+                        }
+                    }
+                }
+            };
+
+            DotNetPublishTargetPlan target = Assert.Single(
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null).Targets);
+
+            Assert.Contains("Actual Product", target.ExecutableIdentities);
+            Assert.Contains("Actual.Cli", target.ExecutableIdentities);
+            Assert.DoesNotContain("FriendlyAlias", target.ExecutableIdentities);
+
+            spec.Targets[0].Publish.ExecutableIdentity = "Imported.Identity";
+            target = Assert.Single(new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null).Targets);
+            Assert.Equal("Imported.Identity", Assert.Single(target.ExecutableIdentities));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_ThrowsWhenProjectIdIsUnknown()
     {
         var root = CreateTempRoot();

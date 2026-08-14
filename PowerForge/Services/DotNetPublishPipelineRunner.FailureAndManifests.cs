@@ -359,7 +359,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Concat((plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>()).Select(target => target.ProjectPath)),
             cleanTrackedGeneratedPaths,
             cleanTrackedGeneratedProvenanceState,
-            msiReservationOwner);
+            msiReservationOwner,
+            plan.GeneratedConfigurationInputPaths);
         var manifestEntries = BuildManifestEntries(
             plan.ProjectRoot,
             orderedArtefacts,

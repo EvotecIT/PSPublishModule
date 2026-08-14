@@ -85,6 +85,12 @@ public sealed class NewConfigurationDotNetTargetCommand : PSCmdlet
     public string? RenameTo { get; set; }
 
     /// <summary>
+    /// Optional expected signed product or assembly identity for the primary executable.
+    /// </summary>
+    [Parameter]
+    public string? ExecutableIdentity { get; set; }
+
+    /// <summary>
     /// Use staging directory before final copy.
     /// </summary>
     [Parameter]
@@ -185,6 +191,7 @@ public sealed class NewConfigurationDotNetTargetCommand : PSCmdlet
                 Styles = Styles?.Distinct().ToArray() ?? Array.Empty<DotNetPublishStyle>(),
                 OutputPath = NormalizeNullable(OutputPath),
                 RenameTo = NormalizeNullable(RenameTo),
+                ExecutableIdentity = NormalizeNullable(ExecutableIdentity),
                 UseStaging = UseStaging,
                 ClearOutput = ClearOutput,
                 Slim = Slim,

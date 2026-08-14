@@ -121,6 +121,16 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             TryDeleteDirectory(tempRoot);
         }
 
+        VerifiedSignature payloadSigner = RequireOneSigner(signatures);
+        if (!string.Equals(
+                inventorySignature.Thumbprint,
+                payloadSigner.Thumbprint,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw Invalid(
+                "Portable payload inventory signature does not use the Authenticode publisher certificate.");
+        }
+
         return new PortableArchiveVerification(
             inventory,
             inventorySignature,

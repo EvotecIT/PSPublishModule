@@ -416,6 +416,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             DotNetPublishSpec configuration,
             DotNetPublishTarget target,
             string[] configurationPaths,
+            string[] executableIdentities,
             DotNetPublishSignOptions sign,
             string? signerThumbprint,
             string? signerSubjectName,
@@ -424,6 +425,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             Configuration = configuration;
             Target = target;
             ConfigurationPaths = configurationPaths;
+            ExecutableIdentities = executableIdentities;
             Sign = sign;
             SignerThumbprint = signerThumbprint;
             SignerSubjectName = signerSubjectName;
@@ -433,6 +435,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         internal DotNetPublishSpec Configuration { get; }
         internal DotNetPublishTarget Target { get; }
         internal string[] ConfigurationPaths { get; }
+        internal string[] ExecutableIdentities { get; }
         internal DotNetPublishSignOptions Sign { get; }
         internal string? SignerThumbprint { get; }
         internal string? SignerSubjectName { get; }

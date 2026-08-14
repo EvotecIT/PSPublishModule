@@ -757,6 +757,14 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             using (JsonDocument cleanManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
                 Assert.False(cleanManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
 
+            string externalCallerConfig = Path.Combine(evidenceRoot, "caller.external.json");
+            File.WriteAllText(externalCallerConfig, "{}");
+            plan.ConfigurationInputPaths = new[] { releaseConfig, publishConfig, externalCallerConfig };
+            InvokeWriteManifests(plan, artefacts);
+            using (JsonDocument externalInputManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+                Assert.True(externalInputManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+            plan.ConfigurationInputPaths = new[] { releaseConfig, publishConfig };
+
             string ignoredConfig = Path.Combine(root, "ignored-config.json");
             File.WriteAllText(ignoredConfig, "{}");
             plan.ConfigurationInputPaths = new[] { releaseConfig, publishConfig, ignoredConfig };

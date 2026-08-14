@@ -169,6 +169,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 ZipPath = t.Publish.ZipPath,
                 ZipNameTemplate = t.Publish.ZipNameTemplate,
                 RenameTo = t.Publish.RenameTo,
+                ExecutableIdentity = t.Publish.ExecutableIdentity,
                 ReadyToRun = t.Publish.ReadyToRun,
                 MsBuildProperties = t.Publish.MsBuildProperties is null
                     ? null
@@ -194,6 +195,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 Version = CsprojVersionEditor.TryGetVersion(resolvedProjectPath, out var projectVersion)
                     ? projectVersion
                     : null,
+                ExecutableIdentities = ResolvePortableExecutableIdentities(
+                    resolvedProjectPath,
+                    t.Publish.ExecutableIdentity),
                 Publish = publish,
                 Combinations = combos
             });
@@ -1480,6 +1484,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     ZipPath = t.Publish?.ZipPath,
                     ZipNameTemplate = t.Publish?.ZipNameTemplate,
                     RenameTo = t.Publish?.RenameTo,
+                    ExecutableIdentity = t.Publish?.ExecutableIdentity,
                     ReadyToRun = t.Publish?.ReadyToRun,
                     MsBuildProperties = t.Publish?.MsBuildProperties is null
                         ? null

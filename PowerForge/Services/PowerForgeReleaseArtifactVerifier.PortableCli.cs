@@ -103,8 +103,13 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             executableIdentity = _readPortableIdentity(artifactPath);
         }
 
-        if (!PortableIdentityMatches(executableIdentity, artifactId, target))
-            throw Invalid("Signed executable product or assembly identity does not match the requested artifact target.");
+        if (!DotNetPublishPipelineRunner.PortableExecutableIdentityMatches(
+                executableIdentity,
+                expected.ExecutableIdentities))
+        {
+            throw Invalid(
+                "Signed executable product or assembly identity does not match the configured publish project identity.");
+        }
         VerifiedSignature signer = RequireOneSigner(signatures);
         ValidatePortableSourceBinding(signedProductVersion, expectedRevision);
         string version = NormalizePortableVersion(signedProductVersion);
@@ -146,16 +151,6 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             }).ToArray(),
             EvidenceFiles = evidence
         };
-    }
-
-    private static bool PortableIdentityMatches(string identity, string artifactId, string target)
-    {
-        string normalized = identity.Trim();
-        if (normalized.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
-            normalized.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-            normalized = Path.GetFileNameWithoutExtension(normalized);
-        return string.Equals(normalized, artifactId, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(normalized, target, StringComparison.OrdinalIgnoreCase);
     }
 
     private static ExpectedPortable ReadExpectedPortable(
@@ -217,14 +212,62 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             throw Invalid(
                 "Portable release verification requires a configured or requested publisher thumbprint or exact subject name.");
         }
+        string[] executableIdentities = ResolveConfiguredPortableExecutableIdentities(
+            configuration,
+            target,
+            configured.InputPaths);
         return new ExpectedPortable(
             configuration,
             target,
             configured.InputPaths,
+            executableIdentities,
             sign,
             signerThumbprint,
             signerSubject,
             configuration.DotNet.AllowOutputOutsideProjectRoot);
+    }
+
+    private static string[] ResolveConfiguredPortableExecutableIdentities(
+        DotNetPublishSpec configuration,
+        DotNetPublishTarget target,
+        IReadOnlyList<string> configurationPaths)
+    {
+        string? configuredIdentity = target.Publish?.ExecutableIdentity;
+        string? projectPath = target.ProjectPath;
+        if (string.IsNullOrWhiteSpace(projectPath) && !string.IsNullOrWhiteSpace(target.ProjectId))
+        {
+            projectPath = (configuration.Projects ?? Array.Empty<DotNetPublishProject>())
+                .Where(project => string.Equals(project.Id, target.ProjectId, StringComparison.OrdinalIgnoreCase))
+                .Select(project => project.Path)
+                .SingleOrDefault();
+        }
+
+        if (string.IsNullOrWhiteSpace(projectPath))
+        {
+            if (!string.IsNullOrWhiteSpace(configuredIdentity))
+                return new[] { configuredIdentity!.Trim() };
+            throw Invalid(
+                "Portable release verification requires ProjectPath, ProjectId, or Publish.ExecutableIdentity " +
+                "to bind the signed executable to its configured project identity.");
+        }
+
+        string configurationPath = configurationPaths.Last();
+        string configurationDirectory = Path.GetDirectoryName(Path.GetFullPath(configurationPath))
+            ?? Directory.GetCurrentDirectory();
+        string projectRoot = string.IsNullOrWhiteSpace(configuration.DotNet.ProjectRoot)
+            ? configurationDirectory
+            : Path.GetFullPath(Path.IsPathRooted(configuration.DotNet.ProjectRoot)
+                ? configuration.DotNet.ProjectRoot!
+                : Path.Combine(configurationDirectory, configuration.DotNet.ProjectRoot!));
+        string resolvedProjectPath = Path.GetFullPath(Path.IsPathRooted(projectPath)
+            ? projectPath!
+            : Path.Combine(projectRoot, projectPath!));
+        if (!File.Exists(resolvedProjectPath) && string.IsNullOrWhiteSpace(configuredIdentity))
+            throw Invalid($"Configured portable publish project was not found: {resolvedProjectPath}");
+
+        return DotNetPublishPipelineRunner.ResolvePortableExecutableIdentities(
+            resolvedProjectPath,
+            configuredIdentity);
     }
 
     private static void ValidatePortableDimensions(JsonElement entry, ExpectedPortable expected)

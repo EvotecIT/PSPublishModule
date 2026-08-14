@@ -176,6 +176,23 @@ public sealed partial class AppleReleaseWorkflowTests
             Assert.Contains("ignored-config.json", ignoredInputDirty.StandardOutput, StringComparison.Ordinal);
             File.Delete(ignoredConfigPath);
 
+            string externalInputPath = Path.Combine(
+                Path.GetTempPath(),
+                "powerforge-external-input-" + Guid.NewGuid().ToString("N") + ".json");
+            File.WriteAllText(externalInputPath, "{}");
+            try
+            {
+                string externalInputCommand = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                                              $"Get-PowerForgeReleaseSourceState -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedProvenancePath @('{provenance.Replace("'", "''", StringComparison.Ordinal)}','{signedProvenance.Replace("'", "''", StringComparison.Ordinal)}') -ReceiptPath '{receiptPath.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedConfigurationPath '{generatedConfigurationPath.Replace("'", "''", StringComparison.Ordinal)}' -ExplicitInputPath '{externalInputPath.Replace("'", "''", StringComparison.Ordinal)}' | ConvertTo-Json -Compress";
+                var externalInputDirty = Run(shell, repository.FullName, "-NoProfile", "-Command", externalInputCommand).EnsureSuccess();
+                Assert.Contains("\"SourceDirty\":true", externalInputDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains(Path.GetFileName(externalInputPath), externalInputDirty.StandardOutput, StringComparison.Ordinal);
+            }
+            finally
+            {
+                File.Delete(externalInputPath);
+            }
+
             File.WriteAllText(Path.Combine(repository.FullName, "Module", "untracked-input.ps1"), "'input'");
             var dirty = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
             Assert.Contains("\"SourceDirty\":true", dirty.StandardOutput, StringComparison.OrdinalIgnoreCase);

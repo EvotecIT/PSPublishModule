@@ -107,6 +107,9 @@ public sealed class DotNetPublishTargetPlan
     /// <summary>Project version captured while the publish plan was created.</summary>
     public string? Version { get; set; }
 
+    /// <summary>Expected signed product or assembly identities for the primary executable.</summary>
+    public string[] ExecutableIdentities { get; set; } = Array.Empty<string>();
+
     /// <summary>Resolved publish options.</summary>
     public DotNetPublishPublishOptions Publish { get; set; } = new();
 

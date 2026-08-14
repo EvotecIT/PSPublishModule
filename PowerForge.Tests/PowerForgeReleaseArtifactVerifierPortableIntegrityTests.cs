@@ -98,6 +98,33 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliAcceptsTargetAliasBoundToProjectExecutableIdentity()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureTargetAlias("ProductAlias");
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactId = "ProductAlias";
+        request.Target = "ProductAlias";
+
+        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal("ProductAlias", result.ArtifactId);
+        Assert.Equal("valid", result.SignatureStatus);
+    }
+
+    [Fact]
+    public void Verify_PortableCliRejectsSameSubjectInventorySignedByDifferentCertificate()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureSubjectNameSigning();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier(Thumbprint, VendorThumbprint).Verify(fixture.CreateRequest()));
+
+        Assert.Contains("Authenticode publisher certificate", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsUnrelatedDirectExecutableSubstitution()
     {
         using var fixture = new PortableFixture();

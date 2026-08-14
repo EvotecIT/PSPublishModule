@@ -224,7 +224,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 }
             }));
 
-        internal PowerForgeReleaseArtifactVerifier CreateVerifier(string signerThumbprint = Thumbprint) =>
+        internal PowerForgeReleaseArtifactVerifier CreateVerifier(
+            string signerThumbprint = Thumbprint,
+            string? inventorySignerThumbprint = null) =>
             new(
                 path => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
                     true,
@@ -233,7 +235,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     signerThumbprint),
                 _ => "1.2.3+" + SourceRevision,
                 _ => "Sample.CLI",
-                (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", signerThumbprint));
+                (_, _) => new PowerForgePayloadInventorySignature(
+                    "CN=Publisher",
+                    inventorySignerThumbprint ?? signerThumbprint));
 
         public void Dispose()
         {
@@ -252,6 +256,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             ArchivePath = Path.Combine(Path.GetDirectoryName(OutputDirectory)!, "Sample.CLI.zip");
             ManifestPath = Path.Combine(Root, "manifest.json");
             ConfigurationPath = Path.Combine(Root, "powerforge.dotnetpublish.json");
+            ProjectPath = Path.Combine(Root, "Sample.CLI.csproj");
+            File.WriteAllText(ProjectPath, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
             WriteArchive("signed payload");
             File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
             {
@@ -262,6 +268,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     new
                     {
                         Name = "Sample.CLI",
+                        ProjectPath = Path.GetFileName(ProjectPath),
                         Kind = "Cli",
                         Publish = new
                         {
@@ -301,6 +308,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         internal string ArchivePath { get; }
         internal string ManifestPath { get; }
         internal string ConfigurationPath { get; }
+        internal string ProjectPath { get; }
 
         internal PowerForgeReleaseArtifactVerificationRequest CreateRequest() => new()
         {
@@ -387,6 +395,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     new
                     {
                         Name = "Sample.CLI",
+                        ProjectPath = Path.GetFileName(ProjectPath),
                         Kind = "Cli",
                         Publish = new
                         {
@@ -449,10 +458,91 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     new
                     {
                         Name = "Sample.CLI",
+                        ProjectPath = Path.GetFileName(ProjectPath),
                         Kind = "Cli",
                         Publish = new
                         {
                             Sign = new { Enabled = true, Thumbprint }
+                        }
+                    }
+                }
+            }));
+            WriteChecksums();
+        }
+
+        internal void ConfigureTargetAlias(string alias)
+        {
+            File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
+            {
+                SchemaVersion = 1,
+                DotNet = new { AllowOutputOutsideProjectRoot = false },
+                Targets = new[]
+                {
+                    new
+                    {
+                        Name = alias,
+                        ProjectPath = Path.GetFileName(ProjectPath),
+                        Kind = "Cli",
+                        Publish = new
+                        {
+                            Framework = "net10.0",
+                            Runtimes = new[] { "win-x64" },
+                            Style = "PortableCompat",
+                            RenameTo = alias + ".exe",
+                            Sign = new { Enabled = true, Thumbprint }
+                        }
+                    }
+                }
+            }));
+            File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    Category = "Publish",
+                    Target = alias,
+                    Kind = "Cli",
+                    Runtime = "win-x64",
+                    Framework = "net10.0",
+                    Style = "PortableCompat",
+                    OutputDir = OutputDirectory,
+                    ZipPath = ArchivePath,
+                    ExePath = ExecutablePath,
+                    SignedFiles = 1,
+                    SignedFilePaths = new[] { ExecutablePath },
+                    SourceRevision,
+                    SourceDirty = false
+                }
+            }));
+            string inventoryPath = Path.Combine(OutputDirectory, PowerForgePortablePayloadInventory.InventoryFileName);
+            PowerForgePortablePayloadInventory inventory = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(
+                File.ReadAllBytes(inventoryPath))!;
+            inventory.ArtifactId = alias;
+            inventory.Target = alias;
+            File.WriteAllBytes(inventoryPath, PowerForgePortablePayloadInventoryCms.Serialize(inventory));
+            WriteArchiveFromOutput();
+            WriteBoundCycloneDxSbom(alias, "1.2.3", ComputeDigest(ArchivePath));
+            base.WriteChecksums(ManifestPath, ConfigurationPath, ProjectPath, ExecutablePath, ArchivePath);
+        }
+
+        internal void ConfigureSubjectNameSigning()
+        {
+            File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
+            {
+                SchemaVersion = 1,
+                DotNet = new { AllowOutputOutsideProjectRoot = false },
+                Targets = new[]
+                {
+                    new
+                    {
+                        Name = "Sample.CLI",
+                        ProjectPath = Path.GetFileName(ProjectPath),
+                        Kind = "Cli",
+                        Publish = new
+                        {
+                            Framework = "net10.0",
+                            Runtimes = new[] { "win-x64" },
+                            Style = "PortableCompat",
+                            Sign = new { Enabled = true, SubjectName = "Publisher" }
                         }
                     }
                 }
@@ -487,6 +577,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     new
                     {
                         Name = "Sample.CLI",
+                        ProjectPath = Path.GetFileName(ProjectPath),
                         Kind = kind,
                         Publish = new
                         {

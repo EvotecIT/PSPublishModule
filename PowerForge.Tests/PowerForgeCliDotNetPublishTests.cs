@@ -197,6 +197,7 @@ public sealed class PowerForgeCliDotNetPublishTests
                             Framework = "net10.0",
                             Runtimes = new[] { "win-x64" },
                             Style = "PortableCompat",
+                            ExecutableIdentity = artifactId,
                             Sign = new { Enabled = true, SubjectName = realSignature.Subject }
                         }
                     }

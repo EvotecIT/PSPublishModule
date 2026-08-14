@@ -113,7 +113,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string>? explicitInputPaths = null,
         IEnumerable<string>? trackedGeneratedPaths = null,
         IReadOnlyDictionary<string, string>? cleanTrackedGeneratedProvenanceState = null,
-        string? msiReservationOwner = null)
+        string? msiReservationOwner = null,
+        IEnumerable<string>? trustedExternalInputPaths = null)
     {
         var gitRevision = ReadGitText(projectRoot, "rev-parse HEAD");
         var environmentRevision = Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim();
@@ -157,7 +158,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 gitRoot!,
                 untrackedOutput,
                 generatedPaths)
-              || HasUntrackedOrIgnoredExplicitInputs(projectRoot, gitRoot!, explicitInputPaths);
+              || HasUntrackedOrIgnoredExplicitInputs(
+                  projectRoot,
+                  gitRoot!,
+                  explicitInputPaths,
+                  trustedExternalInputPaths);
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
             dirty);
@@ -166,15 +171,28 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool HasUntrackedOrIgnoredExplicitInputs(
         string projectRoot,
         string gitRoot,
-        IEnumerable<string>? explicitInputPaths)
+        IEnumerable<string>? explicitInputPaths,
+        IEnumerable<string>? trustedExternalInputPaths)
     {
+        var trustedExternalInputs = new HashSet<string>(
+            (trustedExternalInputPaths ?? Array.Empty<string>())
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(Path.GetFullPath),
+            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         foreach (string path in explicitInputPaths ?? Array.Empty<string>())
         {
             if (string.IsNullOrWhiteSpace(path))
                 continue;
             string? relative = ToGitRelativeExclusion(projectRoot, gitRoot, path);
             if (string.IsNullOrWhiteSpace(relative))
-                continue;
+            {
+                string fullPath = Path.GetFullPath(Path.IsPathRooted(path)
+                    ? path
+                    : Path.Combine(projectRoot, path));
+                if (trustedExternalInputs.Contains(fullPath))
+                    continue;
+                return true;
+            }
             if (ReadGitRawText(gitRoot, $"ls-files --error-unmatch -- {QuoteLiteralGitPath(relative!)}") is null)
                 return true;
         }

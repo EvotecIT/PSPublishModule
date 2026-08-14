@@ -95,6 +95,8 @@ function Get-PowerForgeReleaseSourceState {
             if ($LASTEXITCODE -ne 0) {
                 $relativeInput
             }
+        } else {
+            $inputPath
         }
     })
     if (-not [string]::IsNullOrWhiteSpace($relativeGeneratedConfiguration)) {

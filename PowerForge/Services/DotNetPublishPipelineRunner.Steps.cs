@@ -405,6 +405,15 @@ public sealed partial class DotNetPublishPipelineRunner
                     versionInfo.ProductName,
                     versionInfo.InternalName,
                     Path.GetFileNameWithoutExtension(executable));
+                if (!PortableExecutableIdentityMatches(
+                        executableIdentity,
+                        target.ExecutableIdentities))
+                {
+                    throw new InvalidOperationException(
+                        $"Signed executable identity '{executableIdentity}' does not match the configured " +
+                        $"project identity for publish target '{target.Name}'. Set Publish.ExecutableIdentity " +
+                        "when the signed product identity is supplied by imported or generated build properties.");
+                }
                 string portableVersion = FirstText(versionInfo.ProductVersion, versionInfo.FileVersion);
                 PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
                     outputDir,
