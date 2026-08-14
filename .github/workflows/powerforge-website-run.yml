@@ -24,6 +24,12 @@ on:
       engine_asset_sha256:
         description: Exact binary release asset digest, when applicable.
         value: ${{ jobs.website-run.outputs.engine_asset_sha256 }}
+      cloudflare_cache_manifest_artifact_name:
+        description: Run-scoped private Cloudflare manifest artifact name, when generated.
+        value: ${{ jobs.website-run.outputs.cloudflare_cache_manifest_artifact_name }}
+      cloudflare_cache_manifest_scope:
+        description: Stable repository/site scope used by Cloudflare deployment state.
+        value: ${{ jobs.website-run.outputs.cloudflare_cache_manifest_scope }}
     inputs:
       website_root:
         required: true
@@ -158,6 +164,8 @@ jobs:
       engine_ref: ${{ steps.engine_provenance.outputs.ref }}
       engine_asset: ${{ steps.engine_provenance.outputs.asset }}
       engine_asset_sha256: ${{ steps.engine_provenance.outputs.asset_sha256 }}
+      cloudflare_cache_manifest_artifact_name: ${{ steps.cloudflare_incremental.outputs.artifact_name }}
+      cloudflare_cache_manifest_scope: ${{ steps.cloudflare_incremental.outputs.scope }}
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     env:
@@ -392,7 +400,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Cleanup transient tool caches before site artifact
-        if: ${{ inputs.upload_pages_artifact || inputs.validate_pages_artifact || inputs.site_artifact_name != '' }}
+        if: ${{ inputs.upload_pages_artifact || inputs.validate_pages_artifact || inputs.site_artifact_name != '' || inputs.generate_cloudflare_cache_manifest }}
         shell: pwsh
         run: |
           $cacheRoot = [System.IO.Path]::GetFullPath($env:POWERFORGE_RUNNER_CACHE_ROOT)
@@ -403,7 +411,7 @@ jobs:
           }
 
       - name: Archive site artifact
-        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact || inputs.site_artifact_name != '') && runner.os == 'Linux' }}
+        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact || inputs.site_artifact_name != '' || inputs.generate_cloudflare_cache_manifest) && runner.os == 'Linux' }}
         shell: sh
         env:
           SITE_ARTIFACT_PATH: ${{ inputs.site_artifact_path || inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
@@ -419,7 +427,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Archive site artifact
-        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact || inputs.site_artifact_name != '') && runner.os == 'macOS' }}
+        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact || inputs.site_artifact_name != '' || inputs.generate_cloudflare_cache_manifest) && runner.os == 'macOS' }}
         shell: sh
         env:
           SITE_ARTIFACT_PATH: ${{ inputs.site_artifact_path || inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
@@ -435,7 +443,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Archive site artifact
-        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact || inputs.site_artifact_name != '') && runner.os == 'Windows' }}
+        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact || inputs.site_artifact_name != '' || inputs.generate_cloudflare_cache_manifest) && runner.os == 'Windows' }}
         shell: pwsh
         env:
           SITE_ARTIFACT_PATH: ${{ inputs.site_artifact_path || inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
@@ -476,16 +484,27 @@ jobs:
         id: cloudflare_incremental
         shell: pwsh
         env:
+          POWERFORGE_GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
           POWERFORGE_SITE_CONFIG: ${{ format('./{0}/site.json', inputs.website_root) }}
         run: |
           $ErrorActionPreference = 'Stop'
-          if (-not (Test-Path -LiteralPath $env:POWERFORGE_SITE_CONFIG -PathType Leaf)) {
-            throw "Site configuration not found: $($env:POWERFORGE_SITE_CONFIG)"
+          $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([IO.Path]::DirectorySeparatorChar)
+          $workspacePrefix = $workspace + [IO.Path]::DirectorySeparatorChar
+          $siteConfig = [IO.Path]::GetFullPath((Join-Path $workspace $env:POWERFORGE_SITE_CONFIG))
+          if (-not $siteConfig.StartsWith($workspacePrefix, [StringComparison]::Ordinal) -or
+              -not (Test-Path -LiteralPath $siteConfig -PathType Leaf)) {
+            throw 'Site configuration must identify a file inside the caller repository.'
           }
 
-          $site = Get-Content -LiteralPath $env:POWERFORGE_SITE_CONFIG -Raw | ConvertFrom-Json
+          $site = Get-Content -LiteralPath $siteConfig -Raw | ConvertFrom-Json
           $enabled = ([string]$site.Cloudflare.PurgeMode -ceq 'incremental')
+          $relativeConfig = [IO.Path]::GetRelativePath($workspace, $siteConfig).Replace([IO.Path]::DirectorySeparatorChar, '/')
+          $scopeBytes = [Text.Encoding]::UTF8.GetBytes("$($env:POWERFORGE_GITHUB_REPOSITORY_ID)|$relativeConfig")
+          $scope = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($scopeBytes)).ToLowerInvariant()
           "enabled=$($enabled.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $artifactName = "powerforge-cloudflare-cache-manifest-$([Guid]::NewGuid().ToString('N'))"
+          "artifact_name=$artifactName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "scope=$scope" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Create incremental Cloudflare deployment manifest
         if: ${{ steps.cloudflare_incremental.outputs.enabled == 'true' }}
@@ -504,7 +523,7 @@ jobs:
         if: ${{ steps.cloudflare_incremental.outputs.enabled == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: powerforge-cloudflare-cache-manifest
+          name: ${{ steps.cloudflare_incremental.outputs.artifact_name }}
           path: ${{ runner.temp }}/powerforge-cloudflare-cache-manifest/manifest.json
           retention-days: 1
           if-no-files-found: error

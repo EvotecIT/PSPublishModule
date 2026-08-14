@@ -1,4 +1,5 @@
 using System.Formats.Tar;
+using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -67,6 +68,34 @@ public sealed class CloudflareIncrementalCachePurgeTests
                 Path.Combine(root, "manifest.json")));
 
             Assert.Contains("unsupported type", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void CreateManifest_ShouldOnlyMapLowercaseIndexFilesToCleanAliases()
+    {
+        var root = NewTempDirectory();
+        try
+        {
+            var artifactPath = Path.Combine(root, "artifact.tar");
+            WriteTar(artifactPath,
+                ("docs/index.html", Encoding.UTF8.GetBytes("clean")),
+                ("docs/INDEX.HTML", Encoding.UTF8.GetBytes("case-sensitive")));
+
+            var result = CloudflareDeploymentManifestStore.CreateFromTar(
+                artifactPath,
+                "https://example.test/",
+                Path.Combine(root, "manifest.json"));
+            var manifest = CloudflareDeploymentManifestStore.LoadRequired(result.ManifestPath);
+
+            Assert.Equal(3, result.UrlPathCount);
+            Assert.Equal(
+                ["docs/", "docs/INDEX.HTML", "docs/index.html"],
+                manifest.Files.Select(entry => entry.Path).ToArray());
         }
         finally
         {
@@ -379,7 +408,16 @@ public sealed class CloudflareIncrementalCachePurgeTests
 
         Assert.Contains("cloudflare manifest create", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("powerforge-cloudflare-cache-manifest", runWorkflow, StringComparison.Ordinal);
+        Assert.Contains("cloudflare_cache_manifest_artifact_name", runWorkflow, StringComparison.Ordinal);
+        Assert.Contains("inputs.site_artifact_name != '' || inputs.generate_cloudflare_cache_manifest", runWorkflow, StringComparison.Ordinal);
+        foreach (var operatingSystem in new[] { "Linux", "macOS", "Windows" })
+            Assert.Contains($"inputs.generate_cloudflare_cache_manifest) && runner.os == '{operatingSystem}'", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("generate_cloudflare_cache_manifest", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("manifest-artifact-name: ${{ needs.build.outputs.cloudflare_cache_manifest_artifact_name }}", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("deployment-run-id: ${{ needs.deploy.outputs.run_id }}", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("deployment-run-attempt: ${{ needs.deploy.outputs.run_attempt }}", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Cache GitHub Pages deployment receipt", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge-cloudflare-deployment-v1-${{ github.repository_id }}-${{ needs.build.outputs.cloudflare_cache_manifest_scope }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("actions: write", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("manage-incremental-purge: \"true\"", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("deployment-id: ${{ needs.build.outputs.source_sha }}", deployWorkflow, StringComparison.Ordinal);
@@ -388,6 +426,10 @@ public sealed class CloudflareIncrementalCachePurgeTests
         Assert.Contains("${{ github.run_id }}-${{ github.run_attempt }}", action, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_CLOUDFLARE_DRY_RUN: ${{ inputs.dry-run }}", action, StringComparison.Ordinal);
         Assert.Contains("$arguments += '--dry-run'", ReadRepoFile(".github", "actions", "powerforge-cloudflare-site-policy", "Invoke-PowerForgeCloudflareIncrementalPurge.ps1"), StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_CLOUDFLARE_USE_PREVIOUS", action, StringComparison.Ordinal);
+        Assert.Contains("Resolve-PowerForgeCloudflareBaselineOrder.ps1", action, StringComparison.Ordinal);
+        Assert.Contains("Restore latest GitHub Pages deployment receipt", action, StringComparison.Ordinal);
+        Assert.Contains("steps.baseline_order.outputs.stale != 'true'", action, StringComparison.Ordinal);
         Assert.Contains("inputs.dry-run != 'true'", action, StringComparison.Ordinal);
         Assert.Contains("retention-days: 1", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("Purge changed Cloudflare URLs", action, StringComparison.Ordinal);
@@ -400,6 +442,84 @@ public sealed class CloudflareIncrementalCachePurgeTests
         Assert.True(
             action.IndexOf("Purge changed Cloudflare URLs", StringComparison.Ordinal) <
             action.IndexOf("Cache deployed manifest baseline", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BaselineOrder_ShouldRejectOlderJobOnlyRerunsButAllowIntentionalRedeploys()
+    {
+        if (!CommandExists("pwsh"))
+            return;
+
+        var root = NewTempDirectory();
+        try
+        {
+            var previousManifest = Path.Combine(root, "manifest.json");
+            var baselineState = Path.Combine(root, "state.json");
+            var deploymentReceipt = Path.Combine(root, "deployment.json");
+            File.WriteAllText(previousManifest, "{}");
+            File.WriteAllText(baselineState,
+                """
+                { "schemaVersion": 1, "deploymentRunId": "200", "deploymentRunAttempt": 1 }
+                """);
+            File.WriteAllText(deploymentReceipt,
+                """
+                { "schemaVersion": 1, "deploymentRunId": "200", "deploymentRunAttempt": 1 }
+                """);
+
+            var stale = RunBaselineOrder(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 100, deploymentRunAttempt: 1);
+            Assert.Equal("true", stale["stale"]);
+            Assert.Equal("false", stale["use_previous"]);
+
+            File.WriteAllText(deploymentReceipt,
+                """
+                { "schemaVersion": 1, "deploymentRunId": "100", "deploymentRunAttempt": 2 }
+                """);
+            var redeployed = RunBaselineOrder(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 100, deploymentRunAttempt: 2);
+            Assert.Equal("false", redeployed["stale"]);
+            Assert.Equal("true", redeployed["use_previous"]);
+
+            File.Delete(baselineState);
+            File.WriteAllText(deploymentReceipt,
+                """
+                { "schemaVersion": 1, "deploymentRunId": "300", "deploymentRunAttempt": 1 }
+                """);
+            var legacy = RunBaselineOrder(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 300, deploymentRunAttempt: 1);
+            Assert.Equal("false", legacy["stale"]);
+            Assert.Equal("false", legacy["use_previous"]);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(null, "unavailable")]
+    [InlineData("not-json", "invalid")]
+    public void BaselineOrder_ShouldFailClosedWithoutAValidLatestDeploymentReceipt(string? receiptContent, string expectedError)
+    {
+        if (!CommandExists("pwsh"))
+            return;
+
+        var root = NewTempDirectory();
+        try
+        {
+            var previousManifest = Path.Combine(root, "manifest.json");
+            var baselineState = Path.Combine(root, "state.json");
+            var deploymentReceipt = Path.Combine(root, "deployment.json");
+            File.WriteAllText(previousManifest, "{}");
+            File.WriteAllText(baselineState, "{}");
+            if (receiptContent is not null)
+                File.WriteAllText(deploymentReceipt, receiptContent);
+
+            var failure = RunBaselineOrderProcess(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 100, deploymentRunAttempt: 1);
+            Assert.NotEqual(0, failure.ExitCode);
+            Assert.Contains(expectedError, failure.StandardError, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     private static CloudflareDeploymentManifestEntry Entry(string path, char hashCharacter) => new()
@@ -462,8 +582,87 @@ public sealed class CloudflareIncrementalCachePurgeTests
 
     private static string ReadRepoFile(params string[] segments)
     {
+        return File.ReadAllText(RepoPath(segments));
+    }
+
+    private static string RepoPath(params string[] segments)
+    {
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
-        return File.ReadAllText(Path.Combine([root, .. segments]));
+        return Path.Combine([root, .. segments]);
+    }
+
+    private static Dictionary<string, string> RunBaselineOrder(
+        string root,
+        string previousManifest,
+        string baselineState,
+        string deploymentReceipt,
+        long deploymentRunId,
+        int deploymentRunAttempt)
+    {
+        var result = RunBaselineOrderProcess(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId, deploymentRunAttempt);
+        Assert.True(result.ExitCode == 0, $"Baseline-order validation failed ({result.ExitCode}). stdout: {result.StandardOutput} stderr: {result.StandardError}");
+
+        return File.ReadAllLines(result.OutputPath)
+            .Select(line => line.Split('=', 2))
+            .ToDictionary(parts => parts[0], parts => parts[1], StringComparer.Ordinal);
+    }
+
+    private static (int ExitCode, string StandardOutput, string StandardError, string OutputPath) RunBaselineOrderProcess(
+        string root,
+        string previousManifest,
+        string baselineState,
+        string deploymentReceipt,
+        long deploymentRunId,
+        int deploymentRunAttempt)
+    {
+        var outputPath = Path.Combine(root, $"output-{Guid.NewGuid():N}.txt");
+        var startInfo = new ProcessStartInfo("pwsh")
+        {
+            WorkingDirectory = root,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add("-NoLogo");
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-File");
+        startInfo.ArgumentList.Add(RepoPath(".github", "actions", "powerforge-cloudflare-site-policy", "Resolve-PowerForgeCloudflareBaselineOrder.ps1"));
+        startInfo.Environment["GITHUB_OUTPUT"] = outputPath;
+        startInfo.Environment["POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST"] = previousManifest;
+        startInfo.Environment["POWERFORGE_CLOUDFLARE_BASELINE_STATE"] = baselineState;
+        startInfo.Environment["POWERFORGE_CLOUDFLARE_DEPLOYMENT_RECEIPT"] = deploymentReceipt;
+        startInfo.Environment["POWERFORGE_DEPLOYMENT_RUN_ID"] = deploymentRunId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        startInfo.Environment["POWERFORGE_DEPLOYMENT_RUN_ATTEMPT"] = deploymentRunAttempt.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Unable to start PowerShell baseline-order validation.");
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return (process.ExitCode, standardOutput, standardError, outputPath);
+    }
+
+    private static bool CommandExists(string command)
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo(command)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            startInfo.ArgumentList.Add("-NoLogo");
+            startInfo.ArgumentList.Add("-NoProfile");
+            startInfo.ArgumentList.Add("-Command");
+            startInfo.ArgumentList.Add("exit 0");
+            using var process = Process.Start(startInfo);
+            process?.WaitForExit();
+            return process?.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private sealed class RecordingHandler(params HttpResponseMessage[] responses) : HttpMessageHandler

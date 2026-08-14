@@ -167,10 +167,12 @@ sequentially and hashes each deployed file without reopening thousands of files
 from the generated output tree. The manifest is uploaded as a one-day workflow
 artifact, compared with the last successfully purged baseline, and then stored
 in the repository's GitHub Actions cache. It is not published as part of the
-website.
+website. Artifact names are unique to each reusable-workflow invocation so one
+caller run can deploy multiple sites or matrix entries without collisions.
 
-Index files map to both their physical URL and clean directory URL, so changing
-`docs/index.html` invalidates both `docs/index.html` and `docs/`. Added, changed,
+Lowercase `index.html` files map to both their physical URL and clean directory
+URL, so changing `docs/index.html` invalidates both `docs/index.html` and
+`docs/`. Other filename casing remains a distinct deployed path. Added, changed,
 and removed paths are purged. Up to 500 changed URL paths are sent in batches of
 100, matching Cloudflare's per-request URL limit. A missing, unreadable, or
 different-site baseline, or a larger diff, safely falls back to a hostname
@@ -179,6 +181,11 @@ Managed cache-rule expressions match both `GET` and Cloudflare's internal
 `PURGE` evaluation, as required for reliable URL invalidation.
 Action dry-runs calculate and report the same bounded decision but neither send
 the purge request nor advance the last-successful deployment baseline.
+The Pages job records a private, site-scoped deployment-order receipt before
+the policy job starts. Retrying only an older policy job after a newer
+deployment skips the stale policy, purge, and baseline update; deliberately
+rerunning the older Pages deployment writes the newest receipt and remains
+supported, diffing back to that deployed artifact.
 
 Incremental purge targets the canonical URLs emitted by the deployment. It is
 therefore intended for static sites whose query parameters do not select a

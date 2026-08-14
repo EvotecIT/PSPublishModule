@@ -16,6 +16,9 @@ if ($env:POWERFORGE_CLOUDFLARE_ZONE_ID -notmatch '^[a-fA-F0-9]{32}$') {
 if ($env:POWERFORGE_CLOUDFLARE_DRY_RUN -notin @('true', 'false')) {
     throw 'dry-run must be true or false.'
 }
+if ($env:POWERFORGE_CLOUDFLARE_USE_PREVIOUS -notin @('true', 'false')) {
+    throw 'use-previous must be true or false.'
+}
 
 $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([IO.Path]::DirectorySeparatorChar)
 $workspacePrefix = $workspace + [IO.Path]::DirectorySeparatorChar
@@ -47,7 +50,8 @@ $arguments = @(
 )
 
 $previousManifest = [IO.Path]::GetFullPath($env:POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST)
-if (Test-Path -LiteralPath $previousManifest -PathType Leaf) {
+if ($env:POWERFORGE_CLOUDFLARE_USE_PREVIOUS -eq 'true' -and
+    (Test-Path -LiteralPath $previousManifest -PathType Leaf)) {
     $arguments += @('--previous-manifest', $previousManifest)
 }
 if ($env:POWERFORGE_CLOUDFLARE_DRY_RUN -eq 'true') {

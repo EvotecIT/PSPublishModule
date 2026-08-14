@@ -251,8 +251,8 @@ internal static class CloudflareDeploymentManifestStore
         yield return archivePath;
 
         const string indexName = "index.html";
-        if (!archivePath.Equals(indexName, StringComparison.OrdinalIgnoreCase) &&
-            !archivePath.EndsWith("/" + indexName, StringComparison.OrdinalIgnoreCase))
+        if (!archivePath.Equals(indexName, StringComparison.Ordinal) &&
+            !archivePath.EndsWith("/" + indexName, StringComparison.Ordinal))
             yield break;
 
         var lastSlash = archivePath.LastIndexOf('/');
