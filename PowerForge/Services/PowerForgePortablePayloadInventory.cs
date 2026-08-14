@@ -14,6 +14,9 @@ internal sealed class PowerForgePortablePayloadInventory
     public int SchemaVersion { get; set; }
     public string ArtifactId { get; set; } = string.Empty;
     public string Target { get; set; } = string.Empty;
+    public string Runtime { get; set; } = string.Empty;
+    public string Framework { get; set; } = string.Empty;
+    public string Style { get; set; } = string.Empty;
     public string SourceRevision { get; set; } = string.Empty;
     public string Version { get; set; } = string.Empty;
     public string ExecutablePath { get; set; } = string.Empty;
@@ -67,6 +70,9 @@ internal static class PowerForgePortablePayloadInventoryCms
     internal static PowerForgePortablePayloadInventory Create(
         string outputDirectory,
         string artifactId,
+        string runtime,
+        string framework,
+        string style,
         string sourceRevision,
         string executablePath,
         string executableIdentity,
@@ -74,13 +80,8 @@ internal static class PowerForgePortablePayloadInventoryCms
         IEnumerable<string> signedFilePaths)
     {
         string root = Path.GetFullPath(outputDirectory);
-        string[] excluded =
-        {
-            PowerForgePortablePayloadInventory.InventoryFileName,
-            PowerForgePortablePayloadInventory.SignatureFileName
-        };
         PowerForgePortablePayloadEntry[] entries = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
-            .Where(path => !excluded.Contains(Path.GetFileName(path), StringComparer.Ordinal))
+            .Where(path => !IsRootMetadataPath(NormalizeRelative(root, path)))
             .Select(path => new PowerForgePortablePayloadEntry
             {
                 Path = NormalizeRelative(root, path),
@@ -102,9 +103,12 @@ internal static class PowerForgePortablePayloadInventoryCms
         }
         return new PowerForgePortablePayloadInventory
         {
-            SchemaVersion = 1,
+            SchemaVersion = 2,
             ArtifactId = artifactId,
             Target = artifactId,
+            Runtime = runtime,
+            Framework = framework,
+            Style = style,
             SourceRevision = sourceRevision.ToLowerInvariant(),
             Version = version,
             ExecutablePath = normalizedExecutablePath,
@@ -119,6 +123,10 @@ internal static class PowerForgePortablePayloadInventoryCms
 
     private static string NormalizeRelative(string root, string path) =>
         DotNetPublishReleaseArtifactVerifier.GetRelativePath(root, Path.GetFullPath(path)).Replace('\\', '/');
+
+    private static bool IsRootMetadataPath(string relativePath) =>
+        string.Equals(relativePath, PowerForgePortablePayloadInventory.InventoryFileName, StringComparison.Ordinal) ||
+        string.Equals(relativePath, PowerForgePortablePayloadInventory.SignatureFileName, StringComparison.Ordinal);
 
     private static X509Certificate2 FindSigningCertificate(DotNetPublishSignOptions options)
     {

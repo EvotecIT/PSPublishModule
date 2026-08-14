@@ -76,6 +76,40 @@ public sealed partial class ModulePublisherRepositoryVersionTests
     }
 
     [Fact]
+    public void WriteDirectGitHubChecksumCatalog_BindsArchiveAndSigningEvidenceByAssetName()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string archive = Path.Combine(root, "Sample.zip");
+            string evidence = Path.Combine(root, "Sample.zip.signing.json");
+            File.WriteAllText(archive, "archive");
+            File.WriteAllText(evidence, "evidence");
+            var artefact = new ArtefactBuildResult(
+                ArtefactType.Packed,
+                "release",
+                archive,
+                Array.Empty<ArtefactModuleEntry>(),
+                Array.Empty<ArtefactCopyEntry>(),
+                new[] { evidence });
+
+            string catalog = ModulePublisher.WriteDirectGitHubChecksumCatalog(
+                new[] { artefact },
+                new[] { archive, evidence });
+
+            string[] lines = File.ReadAllLines(catalog);
+            Assert.Equal(2, lines.Length);
+            Assert.Contains(lines, line => line.EndsWith("*Sample.zip", StringComparison.Ordinal));
+            Assert.Contains(lines, line => line.EndsWith("*Sample.zip.signing.json", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ResolvePublishApiKey_ResolvesDeferredFilePathAgainstProjectRoot()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N")));

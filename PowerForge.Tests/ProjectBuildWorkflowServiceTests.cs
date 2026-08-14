@@ -454,6 +454,8 @@ public sealed class ProjectBuildWorkflowServiceTests
         Assert.Contains("Detail: ProjectB: signing failed", workflow.Result.ErrorMessage, StringComparison.Ordinal);
         Assert.Contains(logger.ErrorMessages, message =>
             message.Contains("Project build release execution failed after", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(logger.ErrorMessages, message =>
+            message.Contains("ProjectA: package provenance mismatch", StringComparison.Ordinal));
     }
 
     private static DotNetRepositoryReleaseResult CreateMixedVersionRelease()

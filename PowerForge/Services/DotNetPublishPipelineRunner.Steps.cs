@@ -370,7 +370,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var cleanup = ApplyCleanup(publishDir, target.Publish);
 
         if (!string.IsNullOrWhiteSpace(target.Publish.RenameTo))
-            TryRenameMainExecutable(publishDir, rid, target.Publish.RenameTo!.Trim());
+            TryRenameMainExecutable(publishDir, rid, target.Publish.RenameTo!.Trim(), target.ExecutableIdentities);
 
         if (target.Publish.UseStaging)
         {
@@ -397,9 +397,9 @@ public sealed partial class DotNetPublishPipelineRunner
             signedFilePaths = TrySignOutput(outputDir, target.Publish.Sign);
             if (signedFilePaths.Length > 0 && target.Publish.Zip)
             {
-                var signedSummary = SummarizeDirectory(outputDir, rid);
-                string executable = signedSummary.ExePath
-                    ?? throw new InvalidOperationException("Signed portable output does not contain a primary executable.");
+                string executable = ResolvePrimaryExecutable(outputDir, rid, target.ExecutableIdentities)
+                    ?? throw new InvalidOperationException(
+                        "Signed portable output does not contain a primary executable matching the configured project identity.");
                 FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(executable);
                 string executableIdentity = FirstText(
                     versionInfo.ProductName,
@@ -418,6 +418,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
                     outputDir,
                     target.Name,
+                    rid,
+                    tfm,
+                    style.ToString(),
                     plan.SourceRevision,
                     executable,
                     executableIdentity,
@@ -427,7 +430,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 File.WriteAllBytes(Path.Combine(outputDir, PowerForgePortablePayloadInventory.InventoryFileName), inventoryBytes);
                 File.WriteAllBytes(
                     Path.Combine(outputDir, PowerForgePortablePayloadInventory.SignatureFileName),
-                    _signPortableInventory(inventoryBytes, target.Publish.Sign));
+                    _signPortableInventory(inventoryBytes, ResolvePortableInventorySigningOptions(signedFilePaths, target.Publish.Sign)));
             }
         }
 
@@ -444,6 +447,9 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         var summary = SummarizeDirectory(outputDir, rid);
+        string? primaryExecutable = Directory.Exists(outputDir)
+            ? ResolvePrimaryExecutable(outputDir, rid, target.ExecutableIdentities)
+            : null;
         return new DotNetPublishArtefactResult
         {
             Target = target.Name,
@@ -456,8 +462,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ZipPath = zipPath,
             Files = summary.Files,
             TotalBytes = summary.TotalBytes,
-            ExePath = summary.ExePath,
-            ExeBytes = summary.ExeBytes,
+            ExePath = primaryExecutable,
+            ExeBytes = primaryExecutable is null ? null : new FileInfo(primaryExecutable).Length,
             Cleanup = cleanup,
             ServicePackage = servicePackage,
             StateTransfer = stateTransfer,
@@ -469,6 +475,28 @@ public sealed partial class DotNetPublishPipelineRunner
     private static string FirstText(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim()
         ?? throw new InvalidOperationException("Portable executable identity metadata is missing.");
+
+    internal DotNetPublishSignOptions ResolvePortableInventorySigningOptions(
+        IReadOnlyList<string> signedFilePaths,
+        DotNetPublishSignOptions configured)
+    {
+        DotNetPublishReleaseArtifactVerifier.AuthenticodeResult[] signatures = signedFilePaths
+            .Select(_readAuthenticodeSignature)
+            .ToArray();
+        if (signatures.Length == 0 || signatures.Any(signature => !signature.IsValid))
+            throw new InvalidOperationException("Portable inventory signing requires valid Authenticode publisher signatures.");
+        string[] thumbprints = signatures
+            .Select(signature => DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(signature.Thumbprint))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (thumbprints.Length != 1 || string.IsNullOrWhiteSpace(thumbprints[0]))
+            throw new InvalidOperationException("Portable inventory signing requires one common Authenticode publisher certificate.");
+        DotNetPublishSignOptions resolved = DotNetPublishSigningProfileResolver.CloneSignOptions(configured)
+            ?? throw new InvalidOperationException("Portable inventory signing configuration is missing.");
+        resolved.Thumbprint = thumbprints[0];
+        resolved.SubjectName = null;
+        return resolved;
+    }
 
     internal static List<string> BuildPublishArguments(
         DotNetPublishPlan plan,

@@ -740,8 +740,9 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             Assert.Contains(
                 checksumLines,
                 line => line.EndsWith(
-                    "/.release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json",
+                    "*.release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json",
                     StringComparison.Ordinal));
+            Assert.DoesNotContain(checksumLines, line => line.Contains("../", StringComparison.Ordinal));
             Assert.Contains(checksumLines, line => line.EndsWith("*powerforge.dotnetpublish.caller.json", StringComparison.Ordinal));
             using (JsonDocument callerDirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
                 Assert.True(callerDirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());

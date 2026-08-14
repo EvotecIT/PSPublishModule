@@ -431,6 +431,9 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(checksumsPath))
         {
             var filesToHash = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var generatedConfigurationInputs = new HashSet<string>(
+                (plan.GeneratedConfigurationInputPaths ?? Array.Empty<string>()).Select(Path.GetFullPath),
+                StringComparer.OrdinalIgnoreCase);
 
             foreach (var a in orderedArtefacts)
             {
@@ -472,7 +475,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 string full = Path.GetFullPath(configurationInputPath);
                 if (!File.Exists(full))
                     throw new FileNotFoundException("Effective dotnet-publish configuration input was not found.", full);
-                filesToHash[full] = ToManifestRelativePath(plan.ProjectRoot, full);
+                filesToHash[full] = generatedConfigurationInputs.Contains(full)
+                    ? Path.GetFileName(full)
+                    : ToManifestRelativePath(plan.ProjectRoot, full);
             }
 
             if (!string.IsNullOrWhiteSpace(jsonPath) && File.Exists(jsonPath!))
@@ -485,6 +490,16 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 var full = Path.GetFullPath(txtPath!);
                 filesToHash[full] = ToManifestRelativePath(plan.ProjectRoot, full);
+            }
+
+            var duplicateAssetName = filesToHash
+                .GroupBy(entry => entry.Value, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(group => group.Select(entry => entry.Key).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1);
+            if (duplicateAssetName is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Checksum catalog contains multiple release inputs named '{duplicateAssetName.Key}'. " +
+                    "Use unique generated configuration asset names.");
             }
 
             var checksumLines = filesToHash

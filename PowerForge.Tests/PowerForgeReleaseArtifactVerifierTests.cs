@@ -43,6 +43,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsSignedInventoryFromDifferentMatrixCombination()
+    {
+        using var fixture = new PortableFixture();
+        fixture.SetInventoryDimensions(runtime: "linux-x64", framework: "net8.0", style: "Portable");
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("payload dimensions", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliIncludesReferencedConfigurationInEvidence()
     {
         using var fixture = new PortableFixture();
@@ -339,6 +351,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
                 OutputDirectory,
                 "Sample.CLI",
+                "win-x64",
+                "net10.0",
+                "PortableCompat",
                 SourceRevision,
                 ExecutablePath,
                 "Sample.CLI",
@@ -436,6 +451,20 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         {
             WritePortableInventory(new[] { ExecutablePath }, version);
             WriteArchiveFromOutput();
+        }
+
+        internal void SetInventoryDimensions(string runtime, string framework, string style)
+        {
+            string inventoryPath = Path.Combine(OutputDirectory, PowerForgePortablePayloadInventory.InventoryFileName);
+            PowerForgePortablePayloadInventory inventory = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(
+                File.ReadAllBytes(inventoryPath))!;
+            inventory.Runtime = runtime;
+            inventory.Framework = framework;
+            inventory.Style = style;
+            File.WriteAllBytes(inventoryPath, PowerForgePortablePayloadInventoryCms.Serialize(inventory));
+            WriteArchiveFromOutput();
+            WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
+            WriteChecksums();
         }
 
         internal void WriteConfigurationWithMatrixDefaults()

@@ -966,6 +966,8 @@ public sealed partial class ModulePublisher
         var missingAsset = assets.FirstOrDefault(static asset => string.IsNullOrWhiteSpace(asset) || !File.Exists(asset));
         if (missingAsset is not null)
             throw new FileNotFoundException($"GitHub release asset was not found: {missingAsset}", missingAsset);
+        string checksumCatalog = WriteDirectGitHubChecksumCatalog(selected, assets);
+        assets = assets.Concat(new[] { checksumCatalog }).ToArray();
 
         _logger.Info($"Publishing GitHub release {owner}/{repo} tag '{tag}' with {assets.Length} asset(s)");
         remotePublishAttempted?.Invoke();

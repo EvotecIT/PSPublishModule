@@ -143,6 +143,9 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             var dependency = Path.Combine(outputDir, "dependency.dll");
             File.WriteAllText(executable, "dummy");
             File.WriteAllText(dependency, "dummy");
+            string nested = Directory.CreateDirectory(Path.Combine(outputDir, "nested")).FullName;
+            File.WriteAllText(Path.Combine(nested, PowerForgePortablePayloadInventory.InventoryFileName), "payload metadata");
+            File.WriteAllText(Path.Combine(nested, PowerForgePortablePayloadInventory.SignatureFileName), "payload signature");
             var requests = new List<ProcessRunRequest>();
             var processRunner = new StubProcessRunner(request =>
             {
@@ -173,24 +176,86 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
                 outputDir,
                 "Sample",
+                "win-x64",
+                "net10.0",
+                "PortableCompat",
                 new string('a', 40),
                 executable,
                 "Sample",
                 "1.2.3",
                 signedFiles);
             Assert.Equal("app.exe", Assert.Single(inventory.SignedFilePaths));
+            Assert.Equal(2, inventory.SchemaVersion);
+            Assert.Equal("win-x64", inventory.Runtime);
+            Assert.Equal("net10.0", inventory.Framework);
+            Assert.Equal("PortableCompat", inventory.Style);
             Assert.Contains(inventory.Entries, entry => string.Equals(entry.Path, "dependency.dll", StringComparison.Ordinal));
+            Assert.Contains(inventory.Entries, entry => string.Equals(
+                entry.Path,
+                "nested/" + PowerForgePortablePayloadInventory.InventoryFileName,
+                StringComparison.Ordinal));
+            Assert.Contains(inventory.Entries, entry => string.Equals(
+                entry.Path,
+                "nested/" + PowerForgePortablePayloadInventory.SignatureFileName,
+                StringComparison.Ordinal));
 
             InvalidOperationException foreignPrimary = Assert.Throws<InvalidOperationException>(() =>
                 PowerForgePortablePayloadInventoryCms.Create(
                     outputDir,
                     "Sample",
+                    "win-x64",
+                    "net10.0",
+                    "PortableCompat",
                     new string('a', 40),
                     executable,
                     "Sample",
                     "1.2.3",
                     new[] { dependency }));
             Assert.Contains("primary executable", foreignPrimary.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ResolvePortableInventorySigningOptions_UsesActualAutomaticSignerThumbprint()
+    {
+        var runner = new DotNetPublishPipelineRunner(
+            new NullLogger(),
+            new StubProcessRunner(_ => throw new InvalidOperationException("Process execution was not expected.")),
+            readAuthenticodeSignature: _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
+                true,
+                0,
+                "CN=Automatic Publisher",
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"));
+
+        DotNetPublishSignOptions resolved = runner.ResolvePortableInventorySigningOptions(
+            new[] { "app.exe", "library.dll" },
+            new DotNetPublishSignOptions { Enabled = true });
+
+        Assert.Equal("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", resolved.Thumbprint);
+        Assert.Null(resolved.SubjectName);
+    }
+
+    [Fact]
+    public void ResolvePrimaryExecutable_UsesConfiguredIdentityInsteadOfFileSize()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string expected = Path.Combine(root, "Sample.CLI.exe");
+            string largerHelper = Path.Combine(root, "Updater.exe");
+            File.WriteAllText(expected, "small");
+            File.WriteAllText(largerHelper, new string('x', 4096));
+
+            string? selected = DotNetPublishPipelineRunner.ResolvePrimaryExecutable(
+                root,
+                "win-x64",
+                new[] { "Sample.CLI" });
+
+            Assert.Equal(expected, selected);
         }
         finally
         {

@@ -80,6 +80,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             if (!string.Equals(archive.Inventory.ArtifactId, artifactId, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(archive.Inventory.Target, target, StringComparison.OrdinalIgnoreCase))
                 throw Invalid("Publisher-signed portable payload identity does not match the requested artifact target.");
+            if (!string.Equals(archive.Inventory.Runtime, ReadString(entry, "Runtime"), StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(archive.Inventory.Framework, ReadString(entry, "Framework"), StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(archive.Inventory.Style, ReadString(entry, "Style"), StringComparison.OrdinalIgnoreCase))
+                throw Invalid("Publisher-signed portable payload dimensions do not match the selected manifest entry.");
             ValidateRevision(
                 DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(
                     archive.Inventory.SourceRevision,

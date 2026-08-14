@@ -142,19 +142,24 @@ internal sealed class ProjectBuildWorkflowService
         var release = _executeRelease(spec, _signAssemblies, _validateAssemblySigning, progress, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         releaseWatch.Stop();
+        string? releaseFailureReport = release is null
+            ? "Project build failed. Cause: The release pipeline returned no result."
+            : release.Success
+                ? null
+                : new DotNetRepositoryReleaseSummaryService().CreateFailureReport(release);
         if (release is not null && release.Success)
             _logger.Success($"Project build release execution completed in {DotNetRepositoryReleaseService.FormatDuration(releaseWatch.Elapsed)}.");
         else
-            _logger.Error($"Project build release execution failed after {DotNetRepositoryReleaseService.FormatDuration(releaseWatch.Elapsed)}.");
+            _logger.Error(
+                $"Project build release execution failed after {DotNetRepositoryReleaseService.FormatDuration(releaseWatch.Elapsed)}. " +
+                releaseFailureReport);
 
         var result = new ProjectBuildResult { Release = release };
 
         if (release is null || !release.Success)
         {
             result.Success = false;
-            result.ErrorMessage = release is null
-                ? "Project build failed. Cause: The release pipeline returned no result."
-                : new DotNetRepositoryReleaseSummaryService().CreateFailureReport(release);
+            result.ErrorMessage = releaseFailureReport;
             return new ProjectBuildWorkflowResult { Result = result };
         }
 
