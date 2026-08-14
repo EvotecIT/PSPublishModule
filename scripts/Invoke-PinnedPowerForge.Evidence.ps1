@@ -350,7 +350,7 @@ function Assert-ScreenshotPublicationBinding {
     param([Parameter(Mandatory)][string] $SourceCommit)
     if ($ArgumentList[0] -ne 'apple-release' -or $ArgumentList.Count -lt 2) { return }
     $operation = $ArgumentList[1]
-    if ($operation -notin @('Screenshots', 'Advance', 'SubmitAppReview', 'Release')) { return }
+    if ($operation -notin @('Screenshots', 'Advance')) { return }
 
     $releaseConfigPath = Resolve-OptionPath -Value (Get-OptionValue -Option '--config')
     $release = Get-Content -LiteralPath $releaseConfigPath -Raw | ConvertFrom-Json
@@ -364,8 +364,7 @@ function Assert-ScreenshotPublicationBinding {
             Sort-Object -Unique
     )
     $requiresBinding = $operation -eq 'Screenshots' -or
-        ($operation -eq 'Advance' -and $apple.SyncScreenshots -eq $true) -or
-        ($operation -in @('SubmitAppReview', 'Release') -and $configValues.Count -gt 0)
+        ($operation -eq 'Advance' -and $apple.SyncScreenshots -eq $true)
     if (-not $requiresBinding) { return }
     if ($configValues.Count -eq 0) { throw "apple-release $operation requires at least one screenshot configuration." }
     if ($null -eq $script:validatedCaptureProvenance) {

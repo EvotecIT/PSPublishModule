@@ -264,6 +264,55 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     [Fact]
+    public void RemoteScreenshotSubmissionDoesNotRequireLocalCaptureProvenance()
+    {
+        var root = FindRepoRoot();
+        var parent = Path.Combine(root, ".test-temp", $"powerforge-remote-screenshots-{Guid.NewGuid():N}");
+        var sandbox = Path.Combine(parent, "consumer");
+        try
+        {
+            Directory.CreateDirectory(sandbox);
+            File.WriteAllText(Path.Combine(sandbox, "powerforge.release.json"),
+                """{ "AppleApps": { "ProjectRoot": ".", "ScreenshotConfigPaths": [ "screenshots.json" ], "Apps": [ { "Name": "App", "Platform": "IOS", "AppStoreConnectAppId": "123" } ] } }""");
+            File.WriteAllText(Path.Combine(sandbox, "screenshots.json"),
+                """{ "AppId": "123", "Platform": "IOS", "Quality": { "ApprovalManifestPath": "missing.approval.json" } }""");
+
+            var harness = Path.Combine(parent, "remote-screenshot-harness.ps1");
+            File.WriteAllText(harness,
+                """
+                param([string] $Consumer, [string] $Support)
+                $ErrorActionPreference = 'Stop'
+                $consumer = [IO.Path]::GetFullPath($Consumer)
+                $script:allowedConsumerEvidencePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                function Get-OptionValue { param([string]$Option); $i=[Array]::IndexOf($ArgumentList,$Option); if($i -ge 0 -and $i+1 -lt $ArgumentList.Count){return $ArgumentList[$i+1]}; return $null }
+                function Resolve-OptionPath { param([string]$Value); if([IO.Path]::IsPathRooted($Value)){return [IO.Path]::GetFullPath($Value)}; return [IO.Path]::GetFullPath((Join-Path $consumer $Value)) }
+                function Resolve-PathFromBase { param([string]$BasePath,[string]$Value); if([IO.Path]::IsPathRooted($Value)){return [IO.Path]::GetFullPath($Value)}; return [IO.Path]::GetFullPath((Join-Path $BasePath $Value)) }
+                . $Support
+                $ArgumentList = @('apple-release','SubmitAppReview','--config','powerforge.release.json')
+                Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'
+                'SUBMIT_PASS'
+                $ArgumentList = @('apple-release','Screenshots','--config','powerforge.release.json')
+                try { Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'; throw 'Screenshots accepted missing capture provenance.' }
+                catch { if ($_.Exception.Message -notlike '*requires --capture-provenance*') { throw }; 'SCREENSHOTS_BLOCKED' }
+                """);
+
+            var result = Run(
+                "pwsh",
+                parent,
+                "-NoLogo", "-NoProfile", "-File", harness,
+                "-Consumer", sandbox,
+                "-Support", Path.Combine(root, "scripts", "Invoke-PinnedPowerForge.Evidence.ps1"));
+            result.EnsureSuccess();
+            Assert.Contains("SUBMIT_PASS", result.StandardOutput, StringComparison.Ordinal);
+            Assert.Contains("SCREENSHOTS_BLOCKED", result.StandardOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(parent)) Directory.Delete(parent, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ApprovedApplePlanAndBoundAutomationOutputsDoNotRequireASecondCheckout()
     {
         var root = FindRepoRoot();
