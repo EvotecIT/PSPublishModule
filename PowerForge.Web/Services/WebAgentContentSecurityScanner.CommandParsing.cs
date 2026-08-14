@@ -13,37 +13,32 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         if (!ValidatePackageSourceOptions("packagist", tokens, path, line, findings))
             return;
-        var verbIndex = FindKnownVerbIndex(tokens, 1,
-            new[] { "require", "install", "i", "create-project", "config", "repository", "repo", "update", "u", "upgrade", "reinstall", "remove", "rm", "uninstall" },
-            "composer", path, line, findings);
+        var verbIndex = FindNextOperand(tokens, 1, "composer");
         if (verbIndex < 0)
             return;
-        if (tokens[verbIndex].Equals("config", StringComparison.OrdinalIgnoreCase) ||
-            tokens[verbIndex].Equals("repository", StringComparison.OrdinalIgnoreCase) ||
-            tokens[verbIndex].Equals("repo", StringComparison.OrdinalIgnoreCase))
+        var verb = NormalizeComposerVerb(tokens[verbIndex]);
+        if (verb is null)
+        {
+            AddUnverifiableOperand("composer", path, line, findings, tokens[verbIndex]);
+            return;
+        }
+        if (verb is "config" or "repository")
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
                 $"Package-manager configuration command '{string.Join(' ', tokens)}' can change the source used by later installation commands.");
             return;
         }
-        if (tokens[verbIndex].Equals("create-project", StringComparison.OrdinalIgnoreCase))
+        if (verb == "create-project")
         {
             AddUnverifiableOperand("composer create-project", path, line, findings, "project dependency set");
             return;
         }
-        if (tokens[verbIndex].Equals("update", StringComparison.OrdinalIgnoreCase) ||
-            tokens[verbIndex].Equals("u", StringComparison.OrdinalIgnoreCase) ||
-            tokens[verbIndex].Equals("upgrade", StringComparison.OrdinalIgnoreCase) ||
-            tokens[verbIndex].Equals("reinstall", StringComparison.OrdinalIgnoreCase) ||
-            tokens[verbIndex].Equals("remove", StringComparison.OrdinalIgnoreCase) ||
-            tokens[verbIndex].Equals("rm", StringComparison.OrdinalIgnoreCase) ||
-            tokens[verbIndex].Equals("uninstall", StringComparison.OrdinalIgnoreCase))
+        if (verb is "update" or "upgrade" or "reinstall" or "remove" or "uninstall")
         {
-            AddUnverifiableOperand("composer " + tokens[verbIndex], path, line, findings, "project dependency set");
+            AddUnverifiableOperand("composer " + verb, path, line, findings, "project dependency set");
             return;
         }
-        if (tokens[verbIndex].Equals("install", StringComparison.OrdinalIgnoreCase) ||
-            tokens[verbIndex].Equals("i", StringComparison.OrdinalIgnoreCase))
+        if (verb == "install")
         {
             AddUnverifiableOperand("composer install", path, line, findings, "lockfile dependency set");
             return;
@@ -60,26 +55,68 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         if (!ValidatePackageSourceOptions("rubygems", tokens, path, line, findings))
             return;
-        var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "add", "install", "config", "update" }, "bundle", path, line, findings);
+        var verbIndex = FindNextOperand(tokens, 1, "bundle");
         if (verbIndex < 0)
             return;
-        if (tokens[verbIndex].Equals("config", StringComparison.OrdinalIgnoreCase))
+        var verb = NormalizeBundleVerb(tokens[verbIndex]);
+        if (verb is null)
+        {
+            AddUnverifiableOperand("bundle", path, line, findings, tokens[verbIndex]);
+            return;
+        }
+        if (verb == "config")
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
                 $"Package-manager configuration command '{string.Join(' ', tokens)}' can change the source used by later installation commands.");
             return;
         }
-        if (tokens[verbIndex].Equals("install", StringComparison.OrdinalIgnoreCase))
+        if (verb == "install")
         {
             AddUnverifiableOperand("bundle install", path, line, findings, "lockfile dependency set");
             return;
         }
-        if (tokens[verbIndex].Equals("update", StringComparison.OrdinalIgnoreCase))
+        if (verb == "update")
         {
             AddUnverifiableOperand("bundle update", path, line, findings, "project dependency set");
             return;
         }
         AddMultipleOperands("rubygems", "bundle add", tokens, verbIndex + 1, path, line, references, findings);
+    }
+
+    private static string? NormalizeComposerVerb(string value)
+    {
+        value = value.ToLowerInvariant();
+        if (value == "r" || value.StartsWith("req", StringComparison.Ordinal) && "require".StartsWith(value, StringComparison.Ordinal))
+            return "require";
+        if (value is "i" or "install")
+            return "install";
+        if (value == "create-project")
+            return value;
+        if (value == "config")
+            return value;
+        if (value is "repository" or "repo")
+            return "repository";
+        if (value is "u" or "update")
+            return "update";
+        if (value is "upgrade" or "reinstall" or "uninstall")
+            return value;
+        if (value is "rm" or "remove")
+            return "remove";
+        return null;
+    }
+
+    private static string? NormalizeBundleVerb(string value)
+    {
+        value = value.ToLowerInvariant();
+        if (value is "a" or "ad" or "add")
+            return "add";
+        if (value is "i" or "in" or "ins" or "inst" or "insta" or "instal" or "install")
+            return "install";
+        if (value is "u" or "up" or "upd" or "upda" or "updat" or "update")
+            return "update";
+        if (value is "config" or "conf" or "confi")
+            return "config";
+        return null;
     }
 
     private static void ParseRubyGems(

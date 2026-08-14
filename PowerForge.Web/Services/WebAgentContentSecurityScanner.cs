@@ -87,17 +87,22 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                     continue;
                 }
 
-                var length = new FileInfo(fullPath).Length;
-                if (length > options.MaxArtifactBytes)
-                {
-                    AddFinding(findings, "error", "PFAGENT.ARTIFACT.TOO_LARGE", configuredPath, null,
-                        $"Artifact is {length} bytes; the configured maximum is {options.MaxArtifactBytes} bytes.");
-                    continue;
-                }
-
                 try
                 {
-                    content = File.ReadAllText(fullPath, new UTF8Encoding(false, true));
+                    using var stream = new FileStream(
+                        fullPath,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.Read,
+                        16 * 1024,
+                        FileOptions.SequentialScan);
+                    content = ReadArtifactContent(stream, options.MaxArtifactBytes);
+                }
+                catch (ArtifactTooLargeException ex)
+                {
+                    AddFinding(findings, "error", "PFAGENT.ARTIFACT.TOO_LARGE", configuredPath, null,
+                        $"Artifact is at least {ex.ObservedBytes} bytes; the configured maximum is {ex.MaximumBytes} bytes.");
+                    continue;
                 }
                 catch (DecoderFallbackException ex)
                 {
@@ -250,6 +255,32 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
         return false;
     }
 
+    internal static string ReadArtifactContent(Stream stream, long maxArtifactBytes)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        if (maxArtifactBytes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxArtifactBytes));
+        if (stream.CanSeek && stream.Length > maxArtifactBytes)
+            throw new ArtifactTooLargeException(stream.Length, maxArtifactBytes);
+
+        using var output = new MemoryStream();
+        var buffer = new byte[16 * 1024];
+        while (true)
+        {
+            var read = stream.Read(buffer, 0, buffer.Length);
+            if (read == 0)
+                break;
+            if (output.Length + read > maxArtifactBytes)
+                throw new ArtifactTooLargeException(output.Length + read, maxArtifactBytes);
+            output.Write(buffer, 0, read);
+        }
+        var bytes = output.ToArray();
+        var preambleLength = bytes.AsSpan().StartsWith(Encoding.UTF8.Preamble)
+            ? Encoding.UTF8.Preamble.Length
+            : 0;
+        return new UTF8Encoding(false, true).GetString(bytes, preambleLength, bytes.Length - preambleLength);
+    }
+
     private static IReadOnlyList<TextSegment> ExtractTextSegments(
         string content,
         string extension,
@@ -326,6 +357,12 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
         => string.Create(CultureInfo.InvariantCulture, $"{package.Ecosystem}|{package.Id}|{package.Version}");
 
     private sealed record TextSegment(string Text, int LineOffset, bool CountLogicalLines);
+
+    private sealed class ArtifactTooLargeException(long observedBytes, long maximumBytes) : IOException
+    {
+        public long ObservedBytes { get; } = observedBytes;
+        public long MaximumBytes { get; } = maximumBytes;
+    }
 
     private sealed class UriComparer : IEqualityComparer<Uri>
     {

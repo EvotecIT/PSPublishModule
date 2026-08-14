@@ -8,6 +8,10 @@ namespace PowerForge.Web;
 
 public sealed partial class WebAgentContentSecurityScanner
 {
+    private static readonly Regex Pep440VersionRegex = new(
+        @"^v?(?:(?<epoch>[0-9]+)!)?(?<release>[0-9]+(?:\.[0-9]+)*)(?:[-_.]?(?<pre>alpha|a|beta|b|preview|pre|c|rc)(?:[-_.]?(?<preNumber>[0-9]+))?)?(?:(?:-(?<implicitPost>[0-9]+))|(?:[-_.]?(?<post>post|rev|r)(?:[-_.]?(?<postNumber>[0-9]+))?))?(?:[-_.]?dev(?:[-_.]?(?<devNumber>[0-9]+))?)?(?:\+(?<local>[a-z0-9]+(?:[-_.][a-z0-9]+)*))?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     private bool VerifyPackage(
         WebAgentPackageReference package,
         WebAgentContentSecurityOptions options,
@@ -217,7 +221,7 @@ public sealed partial class WebAgentContentSecurityScanner
         if (!HasExactRegistryVersion(ecosystem, expectedVersion))
             return Verified();
 
-        return versions.Any(version => VersionsEqual(version, expectedVersion))
+        return versions.Any(version => VersionsEqual(ecosystem, version, expectedVersion))
             ? Verified()
             : MissingVersion(expectedVersion!);
     }
@@ -355,6 +359,75 @@ public sealed partial class WebAgentContentSecurityScanner
             right?.Trim().TrimStart('v'),
             StringComparison.OrdinalIgnoreCase);
 
+    private static bool VersionsEqual(string ecosystem, string? registryVersion, string? expectedVersion)
+    {
+        if (!ecosystem.Equals("pypi", StringComparison.OrdinalIgnoreCase) ||
+            !TryNormalizePep440Version(registryVersion, out var registry) ||
+            !TryNormalizePep440Version(expectedVersion, out var expected))
+            return VersionsEqual(registryVersion, expectedVersion);
+
+        return registry.Epoch == expected.Epoch &&
+               registry.Release == expected.Release &&
+               registry.PreRelease == expected.PreRelease &&
+               registry.PostRelease == expected.PostRelease &&
+               registry.Development == expected.Development &&
+               (expected.Local is null || registry.Local == expected.Local);
+    }
+
+    private static bool TryNormalizePep440Version(string? value, out Pep440Version version)
+    {
+        version = default;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+        var match = Pep440VersionRegex.Match(value.Trim());
+        if (!match.Success)
+            return false;
+
+        var release = match.Groups["release"].Value.Split('.').Select(NormalizeNumericSegment).ToList();
+        while (release.Count > 1 && release[^1] == "0")
+            release.RemoveAt(release.Count - 1);
+
+        var preLabel = match.Groups["pre"].Value.ToLowerInvariant() switch
+        {
+            "alpha" => "a",
+            "beta" => "b",
+            "c" or "pre" or "preview" => "rc",
+            var label => label
+        };
+        var preRelease = string.IsNullOrEmpty(preLabel)
+            ? null
+            : preLabel + NormalizeNumericSegment(match.Groups["preNumber"].Success ? match.Groups["preNumber"].Value : "0");
+        var postRelease = match.Groups["implicitPost"].Success
+            ? NormalizeNumericSegment(match.Groups["implicitPost"].Value)
+            : match.Groups["post"].Success
+                ? NormalizeNumericSegment(match.Groups["postNumber"].Success ? match.Groups["postNumber"].Value : "0")
+                : null;
+        var development = match.Groups["devNumber"].Success || value.Contains("dev", StringComparison.OrdinalIgnoreCase)
+            ? NormalizeNumericSegment(match.Groups["devNumber"].Success ? match.Groups["devNumber"].Value : "0")
+            : null;
+        var local = match.Groups["local"].Success
+            ? string.Join('.', match.Groups["local"].Value
+                .Split(new[] { '.', '-', '_' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(static segment => segment.All(char.IsAsciiDigit)
+                    ? NormalizeNumericSegment(segment)
+                    : segment.ToLowerInvariant()))
+            : null;
+        version = new Pep440Version(
+            NormalizeNumericSegment(match.Groups["epoch"].Success ? match.Groups["epoch"].Value : "0"),
+            string.Join('.', release),
+            preRelease,
+            postRelease,
+            development,
+            local);
+        return true;
+    }
+
+    private static string NormalizeNumericSegment(string value)
+    {
+        var normalized = value.TrimStart('0');
+        return normalized.Length == 0 ? "0" : normalized;
+    }
+
     private static bool HasExactRegistryVersion(string ecosystem, string? version)
     {
         if (!WebPublicationCatalog.HasExactVersion(version))
@@ -375,6 +448,14 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         return true;
     }
+
+    private readonly record struct Pep440Version(
+        string Epoch,
+        string Release,
+        string? PreRelease,
+        string? PostRelease,
+        string? Development,
+        string? Local);
 
     private static void AddPackageFinding(
         ICollection<WebAgentContentSecurityFinding> findings,

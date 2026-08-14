@@ -4,14 +4,24 @@ namespace PowerForge.Web;
 
 public sealed partial class WebAgentContentSecurityScanner
 {
+    private const string PackageSourceEnvironmentNamePattern =
+        @"(?:NPM_CONFIG_[A-Za-z0-9_]+|YARN_(?:[A-Za-z0-9_]*REGISTRY[A-Za-z0-9_]*|RC_FILENAME)|PIP_INDEX_URL|PIP_EXTRA_INDEX_URL|PIP_FIND_LINKS|PIP_CONFIG_FILE|PIP_REQUIREMENT|PIP_CONSTRAINT|PIP_BUILD_CONSTRAINT|PIP_GROUP|PIP_EDITABLE|UV_INDEX_URL|UV_EXTRA_INDEX_URL|UV_DEFAULT_INDEX|UV_INDEX|UV_FIND_LINKS|UV_CONSTRAINT|UV_OVERRIDE|UV_BUILD_CONSTRAINT|UV_CONFIG_FILE|BUN_INSTALL_REGISTRY|GEM_HOST|BUNDLE_MIRROR__[A-Za-z0-9_]+|CARGO_REGISTRIES_[A-Za-z0-9_]+_INDEX)";
+    private const string RuntimeInjectionEnvironmentNamePattern =
+        @"(?:NODE_OPTIONS|DOTNET_STARTUP_HOOKS|CORECLR_ENABLE_PROFILING|CORECLR_PROFILER_PATH|PYTHONPATH|PYTHONSTARTUP|RUBYOPT|RUBYLIB|BUNDLE_GEMFILE)";
     private static readonly Regex CommandEnvironmentPrefixRegex = new(
         @"(?:^|\s)(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|""[^""]*""|[^\s;&|]+)\s*)+(?:env\s+)?$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex PackageSourceEnvironmentRegex = new(
-        @"(?<![A-Za-z0-9_])(?:\$env:)?(?:NPM_CONFIG_[A-Za-z0-9_]+|YARN_(?:[A-Za-z0-9_]*REGISTRY[A-Za-z0-9_]*|RC_FILENAME)|PIP_INDEX_URL|PIP_EXTRA_INDEX_URL|PIP_FIND_LINKS|PIP_CONFIG_FILE|PIP_REQUIREMENT|PIP_CONSTRAINT|PIP_BUILD_CONSTRAINT|PIP_GROUP|PIP_EDITABLE|UV_INDEX_URL|UV_EXTRA_INDEX_URL|UV_DEFAULT_INDEX|UV_INDEX|UV_FIND_LINKS|UV_CONSTRAINT|UV_OVERRIDE|UV_BUILD_CONSTRAINT|UV_CONFIG_FILE|BUN_INSTALL_REGISTRY|GEM_HOST|BUNDLE_MIRROR__[A-Za-z0-9_]+|CARGO_REGISTRIES_[A-Za-z0-9_]+_INDEX)\s*=",
+        $@"(?<![A-Za-z0-9_])(?:\$env:)?{PackageSourceEnvironmentNamePattern}\s*=",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex RuntimeInjectionEnvironmentRegex = new(
-        @"(?<![A-Za-z0-9_])(?:\$env:)?(?:NODE_OPTIONS|DOTNET_STARTUP_HOOKS|CORECLR_ENABLE_PROFILING|CORECLR_PROFILER_PATH|PYTHONPATH|PYTHONSTARTUP|RUBYOPT|RUBYLIB|BUNDLE_GEMFILE)\s*=",
+        $@"(?<![A-Za-z0-9_])(?:\$env:)?{RuntimeInjectionEnvironmentNamePattern}\s*=",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex PowerShellPackageSourceEnvironmentWriteRegex = new(
+        BuildPowerShellEnvironmentWritePattern(PackageSourceEnvironmentNamePattern),
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex PowerShellRuntimeInjectionEnvironmentWriteRegex = new(
+        BuildPowerShellEnvironmentWritePattern(RuntimeInjectionEnvironmentNamePattern),
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static void ScanPackageSourceEnvironmentOverrides(
@@ -26,6 +36,12 @@ public sealed partial class WebAgentContentSecurityScanner
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path,
                 GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
                 $"Package source environment override '{match.Value.TrimEnd('=')}' is not allowed in machine-facing installation instructions.");
+        }
+        foreach (Match match in PowerShellPackageSourceEnvironmentWriteRegex.Matches(content))
+        {
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path,
+                GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                "PowerShell environment-provider writes cannot change package sources in machine-facing installation instructions.");
         }
     }
 
@@ -42,7 +58,16 @@ public sealed partial class WebAgentContentSecurityScanner
                 GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
                 $"Runtime injection environment variable '{match.Value.TrimEnd('=')}' is not allowed in machine-facing instructions.");
         }
+        foreach (Match match in PowerShellRuntimeInjectionEnvironmentWriteRegex.Matches(content))
+        {
+            AddFinding(findings, "error", "PFAGENT.COMMAND.RUNTIME_INJECTION", path,
+                GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                "PowerShell environment-provider writes cannot configure runtime injection in machine-facing instructions.");
+        }
     }
+
+    private static string BuildPowerShellEnvironmentWritePattern(string namePattern)
+        => $@"(?:\b(?:Set-Item|New-Item|Set-Content|si|ni)\b[^\r\n;|]{{0,160}}?(?:-Path\s+|-LiteralPath\s+)?[""']?Env:[\\/]?{namePattern}\b|\[\s*(?:System\.)?Environment\s*\]::SetEnvironmentVariable\s*\(\s*[""']{namePattern}[""'])";
 
     private static bool HasCommandScopedEnvironmentPrefix(string content, int commandIndex)
     {
