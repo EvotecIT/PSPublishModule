@@ -263,9 +263,13 @@ internal sealed partial class PowerForgeReleaseService
             throw new ArgumentException("ConfigPath is required.", nameof(request));
 
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
+        PowerForgeReleaseConfigurationSecretValidator.Validate(spec);
         request.LoadedConfigurationSha256 = null;
+        string expectedLoadedConfigurationPath = string.IsNullOrWhiteSpace(request.EffectiveConfigurationPath)
+            ? configPath
+            : Path.GetFullPath(request.EffectiveConfigurationPath!.Trim().Trim('"'));
         if (!string.IsNullOrWhiteSpace(spec.LoadedConfigurationPath) &&
-            AppleReleasePathsEqual(Path.GetFullPath(spec.LoadedConfigurationPath!), configPath))
+            AppleReleasePathsEqual(Path.GetFullPath(spec.LoadedConfigurationPath!), expectedLoadedConfigurationPath))
         {
             request.LoadedConfigurationSha256 = spec.LoadedConfigurationSha256;
         }
@@ -363,6 +367,11 @@ internal sealed partial class PowerForgeReleaseService
         {
             runPackages = false;
         }
+        request.GeneratedProvenancePaths = ResolveGeneratedModuleProvenancePaths(
+            spec.Module,
+            configPath,
+            request,
+            runModule);
         var publishUnifiedGitHub = !explicitAppleAction &&
                                    ShouldPublishUnifiedGitHub(spec, request, runModule);
 
@@ -4188,7 +4197,7 @@ internal sealed partial class PowerForgeReleaseService
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        BindGeneratedConfigurationInput(plan, request, releaseConfigPath);
+        BindGeneratedConfigurationInput(plan, request);
         return plan;
     }
 

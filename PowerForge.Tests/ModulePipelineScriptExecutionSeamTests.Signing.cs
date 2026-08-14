@@ -35,6 +35,9 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             string evidencePath = Assert.Single(artefact.EvidencePaths);
             Assert.True(File.Exists(evidencePath));
             Assert.Equal(3, hostedOperations.SignCalls);
+            string reboundAttestation = Assert.Single(hostedOperations.LastPackageFilePaths);
+            Assert.EndsWith("PowerForge.ReleaseProvenance.psd1", reboundAttestation, StringComparison.OrdinalIgnoreCase);
+            Assert.True(hostedOperations.LastSigningOptions?.OverwriteSigned);
             Assert.DoesNotContain("Modules", hostedOperations.LastExcludePatterns, StringComparer.OrdinalIgnoreCase);
             using var archive = System.IO.Compression.ZipFile.OpenRead(artefact.OutputPath);
             Assert.Contains(archive.Entries, entry => entry.FullName == "TestModule/PowerForge.ReleaseProvenance.psd1");

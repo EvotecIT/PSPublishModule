@@ -36,6 +36,33 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliAcceptsExactSimplePublisherCommonName()
+    {
+        using var fixture = new PortableFixture();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = "Publisher";
+
+        PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal("CN=Publisher", evidence.SignerSubject);
+    }
+
+    [Fact]
+    public void Verify_PortableCliRejectsPartialSimplePublisherCommonName()
+    {
+        using var fixture = new PortableFixture();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = "Publish";
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("certificate subject", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliRequiresConfiguredOrRequestedPublisherIdentity()
     {
         using var fixture = new PortableFixture();

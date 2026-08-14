@@ -60,18 +60,28 @@ try {
     if ([IO.Path]::GetFileName($ConfigPath) -match '^\.release\.authorized\.') {
         throw 'ConfigPath must identify a caller-owned source configuration, not a generated authorized configuration.'
     }
-    $effectiveConfigPath = Join-Path `
+    $retainedCheckoutConfigPath = Join-Path `
         (Split-Path -Parent $ConfigPath) `
         ".release.authorized.$Version.$($ExpectedCommit.ToLowerInvariant()).json"
+    $repositoryHashAlgorithm = [Security.Cryptography.SHA256]::Create()
+    try {
+        $repositoryHashBytes = [Text.Encoding]::UTF8.GetBytes($repositoryRoot.ToLowerInvariant())
+        $repositoryHash = ([BitConverter]::ToString(
+            $repositoryHashAlgorithm.ComputeHash($repositoryHashBytes))).Replace('-', '').Substring(0, 16).ToLowerInvariant()
+    } finally {
+        $repositoryHashAlgorithm.Dispose()
+    }
+    $effectiveConfigDirectory = Join-Path ([IO.Path]::GetTempPath()) "PowerForge\ReleaseEvidence\$repositoryHash"
+    $effectiveConfigPath = Join-Path $effectiveConfigDirectory ".release.authorized.$Version.$($ExpectedCommit.ToLowerInvariant()).json"
 
     $moduleProvenancePath = Join-Path $repositoryRoot 'Module\PowerForge.ReleaseProvenance.json'
     $moduleSignedProvenancePath = Join-Path $repositoryRoot 'Module\PowerForge.ReleaseProvenance.psd1'
     . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Get-PowerForgeReleaseSourceState.ps1')
     $sourceState = Get-PowerForgeReleaseSourceState `
         -RepositoryRoot $repositoryRoot `
-        -GeneratedProvenancePath $moduleProvenancePath `
+        -GeneratedProvenancePath @($moduleProvenancePath, $moduleSignedProvenancePath) `
         -ReceiptPath $ReceiptPath `
-        -GeneratedConfigurationPath $effectiveConfigPath
+        -GeneratedConfigurationPath $retainedCheckoutConfigPath
     $sourceDirty = [bool] $sourceState.SourceDirty
     if ($sourceDirty) {
         throw "The release checkout must start clean. Tracked or untracked changes: $(@($sourceState.Changes) -join ', ')"
@@ -99,9 +109,6 @@ try {
         -Version $Version `
         -DisableVersionUpdates:($Operation -eq 'Publish')
     $releaseConfig.GitHub | Add-Member -NotePropertyName Commitish -NotePropertyValue $ExpectedCommit -Force
-    . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Assert-PowerForgeNoInlineReleaseSecrets.ps1')
-    Assert-PowerForgeNoInlineReleaseSecrets -Configuration $releaseConfig
-
     $certificateThumbprint = [string] $releaseConfig.Packages.CertificateThumbprint
     $certificateStore = [string] $releaseConfig.Packages.CertificateStore
     if ([string]::IsNullOrWhiteSpace($certificateThumbprint) -or [string]::IsNullOrWhiteSpace($certificateStore)) {
@@ -188,6 +195,7 @@ try {
         $moduleSignedProvenanceCreated = $true
     }
 
+    New-Item -ItemType Directory -Path $effectiveConfigDirectory -Force | Out-Null
     $releaseConfig | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $effectiveConfigPath -Encoding utf8
     $effectiveConfigSha256 = (Get-FileHash -LiteralPath $effectiveConfigPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
@@ -195,8 +203,8 @@ try {
     $buildScript = Join-Path $PSScriptRoot 'Build-Project.ps1'
     $buildParameters = @{
         ModuleVersion = $Version
-        ConfigPath    = $effectiveConfigPath
-        GeneratedConfigurationInputSha256 = $effectiveConfigSha256
+        ConfigPath    = $ConfigPath
+        EffectiveConfigurationPath = $effectiveConfigPath
         Json          = $true
     }
     switch ($Operation) {

@@ -568,6 +568,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         public string[] LastPackageFilePaths { get; private set; } = Array.Empty<string>();
         public string[] LastIncludePatterns { get; private set; } = Array.Empty<string>();
         public string[] LastExcludePatterns { get; private set; } = Array.Empty<string>();
+        public SigningOptionsConfiguration? LastSigningOptions { get; private set; }
         public ModuleSigningResult NextSigningResult { get; set; } = new();
         public Queue<ModuleSigningResult> SigningResults { get; } = new();
         public bool AutoSuccessfulSigningResult { get; set; }
@@ -687,6 +688,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             LastPackageFilePaths = packageFilePaths ?? Array.Empty<string>();
             LastIncludePatterns = includePatterns ?? Array.Empty<string>();
             LastExcludePatterns = excludeSubstrings ?? Array.Empty<string>();
+            LastSigningOptions = signing;
             if (SigningResults.Count > 0)
                 return SigningResults.Dequeue();
             if (!AutoSuccessfulSigningResult)

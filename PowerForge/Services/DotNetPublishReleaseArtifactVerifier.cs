@@ -166,8 +166,20 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         try
         {
             X500DistinguishedName actualName = new(actual);
-            X500DistinguishedName expectedName = new(expected);
-            return actualName.RawData.SequenceEqual(expectedName.RawData);
+            if (expected.IndexOf('=') >= 0)
+            {
+                X500DistinguishedName expectedName = new(expected);
+                return actualName.RawData.SequenceEqual(expectedName.RawData);
+            }
+
+            string expectedValue = expected.Trim();
+            return actualName
+                .Decode(X500DistinguishedNameFlags.UseNewLines)
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(component => component.Split(new[] { '=' }, 2))
+                .Any(component => component.Length == 2 &&
+                                  string.Equals(component[0].Trim(), "CN", StringComparison.OrdinalIgnoreCase) &&
+                                  string.Equals(component[1].Trim().Trim('"'), expectedValue, StringComparison.OrdinalIgnoreCase));
         }
         catch (CryptographicException)
         {

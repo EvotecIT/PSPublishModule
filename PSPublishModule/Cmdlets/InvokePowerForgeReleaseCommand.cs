@@ -102,13 +102,11 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     public string? Configuration { get; set; }
 
     /// <summary>
-    /// SHA-256 of an effective configuration created by the trusted public-release wrapper after
-    /// its clean-source preflight. This internal handoff keeps arbitrary caller configuration in
-    /// source provenance while identifying the single generated configuration by exact content.
+    /// Effective configuration created outside the checkout by the trusted public-release wrapper.
+    /// The original <see cref="ConfigPath"/> remains the source/provenance anchor.
     /// </summary>
     [Parameter(DontShow = true)]
-    [ValidatePattern("^[0-9a-fA-F]{64}$")]
-    public string? GeneratedConfigurationInputSha256 { get; set; }
+    public string? EffectiveConfigurationPath { get; set; }
 
     /// <summary>
     /// Target framework used by the native module-release lane.
@@ -546,7 +544,10 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             else
             {
                 configFullPath = ResolveConfigPath(ConfigPath);
-                spec = LoadConfig(configFullPath);
+                string configurationToLoad = string.IsNullOrWhiteSpace(EffectiveConfigurationPath)
+                    ? configFullPath
+                    : Path.GetFullPath(EffectiveConfigurationPath!.Trim().Trim('"'));
+                spec = LoadConfig(configurationToLoad);
                 requestDefaults = new PowerForgeReleaseRequest
                 {
                     ConfigPath = configFullPath
@@ -797,7 +798,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             KeepSymbols = ResolveRequestedFlag(boundParameters, nameof(KeepSymbols)),
             EnableSigning = ResolveRequestedFlag(boundParameters, nameof(Sign)),
             Configuration = NormalizeNullable(Configuration),
-            GeneratedConfigurationInputSha256 = NormalizeNullable(GeneratedConfigurationInputSha256),
+            EffectiveConfigurationPath = NormalizeNullable(EffectiveConfigurationPath),
             ReleaseVersion = NormalizeNullable(ReleaseVersion),
             ModuleVersion = NormalizeNullable(ModuleVersion),
             ModulePreReleaseTag = NormalizeNullable(ModulePreReleaseTag),

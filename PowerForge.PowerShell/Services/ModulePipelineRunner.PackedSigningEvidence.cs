@@ -43,13 +43,29 @@ public sealed partial class ModulePipelineRunner
             context.ManifestPath,
             context.RootPath,
             signingResult);
-        signingResult = _hostedOperations.SignModuleOutput(
+        SigningOptionsConfiguration attestationSigning = CloneSigningOptions(signing)
+            ?? throw new InvalidOperationException("Signing options could not be cloned.");
+        attestationSigning.OverwriteSigned = true;
+        ModuleSigningResult attestationSigningResult = _hostedOperations.SignModuleOutput(
             context.ModuleName,
             context.RootPath,
-            packageFiles,
-            includePatterns,
-            excludeSubstrings,
-            signing);
+            new[] { sourceAttestationPath },
+            new[] { "*.psd1" },
+            Array.Empty<string>(),
+            attestationSigning);
+        string normalizedAttestation = Path.GetFullPath(sourceAttestationPath);
+        if (attestationSigningResult.Failed > 0 ||
+            !(attestationSigningResult.VerifiedFilePaths ?? Array.Empty<string>())
+                .Select(Path.GetFullPath)
+                .Contains(normalizedAttestation, StringComparer.OrdinalIgnoreCase) ||
+            !string.Equals(
+                NormalizeOptionalThumbprint(signingResult.CertificateThumbprint),
+                NormalizeOptionalThumbprint(attestationSigningResult.CertificateThumbprint),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "The signed module source attestation could not be rebound to the packed signing inventory.");
+        }
         state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);
 
         string evidencePath = context.OutputPath + ".signing.json";

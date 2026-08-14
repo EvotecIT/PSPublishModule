@@ -56,9 +56,9 @@ internal static class PowerForgeReleaseRequestMapper
         request.SkipReleaseChecksums = request.SkipReleaseChecksums || options.SkipReleaseChecksums;
 
         request.Configuration = ChooseString(request.Configuration, options.Configuration);
-        request.GeneratedConfigurationInputSha256 = ChooseString(
-            request.GeneratedConfigurationInputSha256,
-            options.GeneratedConfigurationInputSha256);
+        request.EffectiveConfigurationPath = ChooseString(
+            request.EffectiveConfigurationPath,
+            options.EffectiveConfigurationPath);
         request.ReleaseVersion = ChooseString(request.ReleaseVersion, options.ReleaseVersion);
         request.ModuleVersion = ChooseString(request.ModuleVersion, options.ModuleVersion);
         request.ModulePreReleaseTag = ChooseString(request.ModulePreReleaseTag, options.ModulePreReleaseTag);
@@ -146,7 +146,8 @@ internal static class PowerForgeReleaseRequestMapper
             PublishProjectGitHub = source.PublishProjectGitHub,
             PublishToolGitHub = source.PublishToolGitHub,
             Configuration = source.Configuration,
-            GeneratedConfigurationInputSha256 = source.GeneratedConfigurationInputSha256,
+            EffectiveConfigurationPath = source.EffectiveConfigurationPath,
+            GeneratedProvenancePaths = source.GeneratedProvenancePaths.ToArray(),
             ReleaseVersion = source.ReleaseVersion,
             ModuleFramework = source.ModuleFramework,
             ModuleRunMode = source.ModuleRunMode,

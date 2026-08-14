@@ -34,7 +34,8 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("commit        = $ExpectedCommit", script, StringComparison.Ordinal);
         Assert.Contains("sourceDirty   = $sourceDirty", script, StringComparison.Ordinal);
         Assert.Contains("Get-PowerForgeReleaseSourceState", script, StringComparison.Ordinal);
-        Assert.Contains("GeneratedConfigurationInputSha256", script, StringComparison.Ordinal);
+        Assert.Contains("EffectiveConfigurationPath", script, StringComparison.Ordinal);
+        Assert.Contains("[IO.Path]::GetTempPath()", script, StringComparison.Ordinal);
         Assert.Contains("EffectiveConfigSha256", script, StringComparison.Ordinal);
         Assert.DoesNotContain("Remove-Item -LiteralPath $effectiveConfigPath", script, StringComparison.Ordinal);
         Assert.Contains("$moduleProvenanceCreated", script, StringComparison.Ordinal);
@@ -90,7 +91,9 @@ public sealed partial class AppleReleaseWorkflowTests
             Run("git", repository.FullName, "commit", "-m", "fixture").EnsureSuccess();
 
             string provenance = Path.Combine(repository.FullName, "Module", "PowerForge.ReleaseProvenance.json");
+            string signedProvenance = Path.Combine(repository.FullName, "Module", "PowerForge.ReleaseProvenance.psd1");
             File.WriteAllText(provenance, "{}");
+            File.WriteAllText(signedProvenance, "@{}");
             Directory.CreateDirectory(Path.Combine(repository.FullName, "release-receipts"));
             string receiptPath = Path.Combine(repository.FullName, "release-receipts", "custom-release.json");
             string generatedConfigurationPath = Path.Combine(
@@ -98,11 +101,19 @@ public sealed partial class AppleReleaseWorkflowTests
                 ".release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
             string helper = Path.Combine(FindRepoRoot(), "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1");
             string command = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
-                             $"Get-PowerForgeReleaseSourceState -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedProvenancePath '{provenance.Replace("'", "''", StringComparison.Ordinal)}' -ReceiptPath '{receiptPath.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedConfigurationPath '{generatedConfigurationPath.Replace("'", "''", StringComparison.Ordinal)}' | ConvertTo-Json -Compress";
+                             $"Get-PowerForgeReleaseSourceState -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedProvenancePath @('{provenance.Replace("'", "''", StringComparison.Ordinal)}','{signedProvenance.Replace("'", "''", StringComparison.Ordinal)}') -ReceiptPath '{receiptPath.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedConfigurationPath '{generatedConfigurationPath.Replace("'", "''", StringComparison.Ordinal)}' | ConvertTo-Json -Compress";
             var clean = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
             Assert.Contains("\"SourceDirty\":false", clean.StandardOutput, StringComparison.OrdinalIgnoreCase);
 
             File.WriteAllText(receiptPath, "{}");
+
+            Run("git", repository.FullName, "add", "Module/PowerForge.ReleaseProvenance.json").EnsureSuccess();
+            Run("git", repository.FullName, "commit", "-m", "tracked provenance fixture").EnsureSuccess();
+            File.WriteAllText(provenance, "{ \"modified\": true }");
+            var trackedProvenanceDirty = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            Assert.Contains("\"SourceDirty\":true", trackedProvenanceDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("PowerForge.ReleaseProvenance.json", trackedProvenanceDirty.StandardOutput, StringComparison.Ordinal);
+            File.WriteAllText(provenance, "{}");
             var receiptDirty = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
             Assert.Contains("\"SourceDirty\":false", receiptDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
 
@@ -169,38 +180,6 @@ public sealed partial class AppleReleaseWorkflowTests
                       "if ($result.Module.ModuleVersion -ne '3.0.81') { throw 'Module version was not pinned.' }; " +
                       "if (@($result.Packages.VersionTracks.PSObject.Properties | Where-Object { $_.Value.ExpectedVersion -ne '3.0.81' }).Count -ne 0) { throw 'A package track was not pinned.' }; " +
                       "if ($result.Packages.UpdateVersions -ne $false) { throw 'Version mutation remained enabled.' }";
-
-        Run("pwsh", root, "-NoProfile", "-Command", command).EnsureSuccess();
-    }
-
-    [Theory]
-    [InlineData("{\"GitHub\":{\"Token\":\"secret\"}}", "GitHub.Token")]
-    [InlineData("{\"Winget\":{\"Submission\":{\"Token\":\"secret\"}}}", "Winget.Submission.Token")]
-    [InlineData("{\"VirusTotal\":{\"ApiKey\":\"secret\"}}", "VirusTotal.ApiKey")]
-    [InlineData("{\"Packages\":{\"PublishApiKey\":\"secret\"}}", "Packages.PublishApiKey")]
-    public void PublicModuleReleaseRejectsInlineSecretsBeforeEvidencePersistence(string json, string expectedPath)
-    {
-        string root = FindRepoRoot();
-        string helper = Path.Combine(root, "Build", "Private", "Assert-PowerForgeNoInlineReleaseSecrets.ps1");
-        string command = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
-                         $"$config = '{json.Replace("'", "''", StringComparison.Ordinal)}' | ConvertFrom-Json; " +
-                         "Assert-PowerForgeNoInlineReleaseSecrets -Configuration $config";
-
-        ProcessResult result = Run("pwsh", root, "-NoProfile", "-Command", command);
-
-        Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains(expectedPath, result.StandardError, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("authorized configuration evidence", result.StandardError, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void PublicModuleReleaseAllowsSecretFileAndEnvironmentReferences()
-    {
-        string root = FindRepoRoot();
-        string helper = Path.Combine(root, "Build", "Private", "Assert-PowerForgeNoInlineReleaseSecrets.ps1");
-        string command = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
-                         "$config = '{\"GitHub\":{\"TokenFilePath\":\"token.txt\"},\"Winget\":{\"Submission\":{\"TokenEnvName\":\"WINGET_TOKEN\"}},\"VirusTotal\":{\"ApiKeyFilePath\":\"vt.txt\"}}' | ConvertFrom-Json; " +
-                         "Assert-PowerForgeNoInlineReleaseSecrets -Configuration $config";
 
         Run("pwsh", root, "-NoProfile", "-Command", command).EnsureSuccess();
     }

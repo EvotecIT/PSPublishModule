@@ -162,19 +162,19 @@ public sealed class PowerForgeReleaseRequestMapperTests
     }
 
     [Fact]
-    public void Build_MapsAuthorizedGeneratedConfigurationDigest()
+    public void Build_MapsEffectiveConfigurationPath()
     {
-        string digest = new('a', 64);
+        const string effectivePath = "/evidence/.release.authorized.3.0.81.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json";
 
         PowerForgeReleaseRequest request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
-            "/repo/.release.authorized.3.0.81.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json",
+            "/repo/powerforge.release.json",
             defaults: null,
             new PSPublishModule.PowerForgeReleaseInvocationOptions
             {
-                GeneratedConfigurationInputSha256 = digest
+                EffectiveConfigurationPath = effectivePath
             });
 
-        Assert.Equal(digest, request.GeneratedConfigurationInputSha256);
+        Assert.Equal(effectivePath, request.EffectiveConfigurationPath);
     }
 
     [Fact]

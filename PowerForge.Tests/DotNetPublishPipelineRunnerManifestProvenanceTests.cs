@@ -668,10 +668,12 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void WriteManifests_OnlyAuthorizedGeneratedConfigurationIsExcludedFromDirtySource()
+    public void WriteManifests_ExcludesOnlyExternalConfigurationAndCanonicalGeneratedProvenance()
     {
         string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        string evidenceRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
+        Directory.CreateDirectory(evidenceRoot);
 
         try
         {
@@ -681,10 +683,21 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(Path.Combine(root, "tracked.txt"), "tracked");
             RunGit(root, "add tracked.txt");
             RunGit(root, "commit -m \"tracked source\"");
-            string releaseConfig = Path.Combine(root, ".release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
+            string releaseConfig = Path.Combine(evidenceRoot, ".release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
             string publishConfig = Path.Combine(root, "powerforge.dotnetpublish.caller.json");
             File.WriteAllText(releaseConfig, "{}");
             File.WriteAllText(publishConfig, "{}");
+            string forgedCheckoutConfig = Path.Combine(root, Path.GetFileName(releaseConfig));
+            File.WriteAllText(forgedCheckoutConfig, "{}");
+            string moduleDirectory = Directory.CreateDirectory(Path.Combine(root, "Module")).FullName;
+            string generatedJsonProvenance = Path.Combine(
+                moduleDirectory,
+                PublishedRegistryProvenanceValidator.ModuleProvenanceFileName);
+            string generatedSignedProvenance = Path.Combine(
+                moduleDirectory,
+                PowerForgeModuleSourceAttestationWriter.FileName);
+            File.WriteAllText(generatedJsonProvenance, "{}");
+            File.WriteAllText(generatedSignedProvenance, "@{}");
 
             string outputDirectory = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "app")).FullName;
             string executablePath = Path.Combine(outputDirectory, "app.exe");
@@ -696,6 +709,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 ProjectRoot = root,
                 ConfigurationInputPaths = new[] { releaseConfig, publishConfig },
                 GeneratedConfigurationInputPaths = new[] { releaseConfig },
+                GeneratedProvenancePaths = new[] { generatedJsonProvenance, generatedSignedProvenance },
                 Outputs = new DotNetPublishOutputs
                 {
                     ManifestJsonPath = manifestPath,
@@ -722,13 +736,22 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             InvokeWriteManifests(plan, artefacts);
 
             string[] checksumLines = File.ReadAllLines(checksumsPath);
-            Assert.Contains(checksumLines, line => line.EndsWith("*.release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json", StringComparison.Ordinal));
+            Assert.Contains(
+                checksumLines,
+                line => line.EndsWith(
+                    "/.release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json",
+                    StringComparison.Ordinal));
             Assert.Contains(checksumLines, line => line.EndsWith("*powerforge.dotnetpublish.caller.json", StringComparison.Ordinal));
             using (JsonDocument callerDirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
                 Assert.True(callerDirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
 
             RunGit(root, "add powerforge.dotnetpublish.caller.json");
             RunGit(root, "commit -m \"tracked caller configuration\"");
+            InvokeWriteManifests(plan, artefacts);
+            using (JsonDocument forgedConfigManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+                Assert.True(forgedConfigManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+
+            File.Delete(forgedCheckoutConfig);
             InvokeWriteManifests(plan, artefacts);
             using (JsonDocument cleanManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
                 Assert.False(cleanManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
@@ -746,6 +769,8 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                     file.Attributes = FileAttributes.Normal;
                 Directory.Delete(root, recursive: true);
             }
+            if (Directory.Exists(evidenceRoot))
+                Directory.Delete(evidenceRoot, recursive: true);
         }
     }
 

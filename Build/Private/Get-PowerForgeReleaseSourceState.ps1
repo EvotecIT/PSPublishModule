@@ -5,7 +5,7 @@ function Get-PowerForgeReleaseSourceState {
     .PARAMETER RepositoryRoot
     Repository checkout to inspect.
     .PARAMETER GeneratedProvenancePath
-    The single generated provenance file excluded from release-source state.
+    Exact generated provenance files excluded from untracked release-source state.
     .PARAMETER ReceiptPath
     Resolved public-release receipt path. An untracked receipt is excluded only when it is under the dedicated release-receipts directory.
     .PARAMETER GeneratedConfigurationPath
@@ -19,7 +19,7 @@ function Get-PowerForgeReleaseSourceState {
         [string] $RepositoryRoot,
 
         [Parameter(Mandatory)]
-        [string] $GeneratedProvenancePath,
+        [string[]] $GeneratedProvenancePath,
 
         [Parameter(Mandatory)]
         [string] $ReceiptPath,
@@ -28,14 +28,16 @@ function Get-PowerForgeReleaseSourceState {
     )
 
     $root = [IO.Path]::GetFullPath($RepositoryRoot)
-    $provenance = [IO.Path]::GetFullPath($GeneratedProvenancePath)
     $rootWithSeparator = $root.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
     $rootUri = [Uri] $rootWithSeparator
-    $provenanceUri = [Uri] $provenance
-    if (-not $rootUri.IsBaseOf($provenanceUri)) {
-        throw 'Generated release provenance must stay under the release checkout.'
-    }
-    $relativeProvenance = [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($provenanceUri).ToString()).Replace('\', '/')
+    $relativeProvenance = @($GeneratedProvenancePath | ForEach-Object {
+        $provenance = [IO.Path]::GetFullPath($_)
+        $provenanceUri = [Uri] $provenance
+        if (-not $rootUri.IsBaseOf($provenanceUri)) {
+            throw 'Generated release provenance must stay under the release checkout.'
+        }
+        [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($provenanceUri).ToString()).Replace('\', '/')
+    })
     $receipt = [IO.Path]::GetFullPath($ReceiptPath)
     $receiptUri = [Uri] $receipt
     $relativeReceipt = $null
@@ -63,13 +65,15 @@ function Get-PowerForgeReleaseSourceState {
         $relativeGeneratedConfigurationDirectory = [IO.Path]::GetDirectoryName($relativeGeneratedConfiguration).Replace('\', '/')
     }
 
-    $trackedChanges = @(& git -C $root status --porcelain=v1 --untracked-files=no -- . ":(exclude,literal)$relativeProvenance")
+    $trackedChanges = @(& git -C $root status --porcelain=v1 --untracked-files=no -- .)
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to inspect tracked release inputs.'
     }
     $untrackedPathspecs = [Collections.Generic.List[string]]::new()
     $untrackedPathspecs.Add('.')
-    $untrackedPathspecs.Add(":(exclude,literal)$relativeProvenance")
+    foreach ($relativePath in $relativeProvenance) {
+        $untrackedPathspecs.Add(":(exclude,literal)$relativePath")
+    }
     if (-not [string]::IsNullOrWhiteSpace($relativeReceipt)) {
         $untrackedPathspecs.Add(":(exclude,top,literal)$relativeReceipt")
     }
