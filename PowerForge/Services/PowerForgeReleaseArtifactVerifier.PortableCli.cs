@@ -176,7 +176,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             throw Invalid(
                 "Signed executable product or assembly identity does not match the configured publish project identity.");
         }
-        VerifiedSignature signer = RequireOneSigner(signatures);
+        VerifiedSignature signer = artifactIsArchive
+            && expected.Sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning
+                ? RequireOnePublisherSubject(signatures)
+                : RequireOneSigner(signatures);
         ValidatePortableSourceBinding(signedProductVersion, expectedRevision);
         string version = NormalizePortableVersion(signedProductVersion);
         ValidateExpectedPortableVersion(request.ExpectedVersion, version);

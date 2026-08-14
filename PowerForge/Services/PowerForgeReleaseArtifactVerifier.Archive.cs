@@ -144,7 +144,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             TryDeleteDirectory(tempRoot);
         }
 
-        VerifiedSignature payloadSigner = RequireOneSigner(signatures);
+        VerifiedSignature payloadSigner = allowSubjectMatchedCertificateRotation
+            ? RequireOnePublisherSubject(signatures)
+            : RequireOneSigner(signatures);
         if (!allowSubjectMatchedCertificateRotation && !string.Equals(
                 inventorySignature.Thumbprint,
                 payloadSigner.Thumbprint,
@@ -265,6 +267,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
         internal PowerForgePortablePayloadInventory Inventory { get; }
         internal PowerForgeReleaseEvidenceFile[] Evidence { get; }
+    }
+
+    private static VerifiedSignature RequireOnePublisherSubject(IReadOnlyList<VerifiedSignature> signatures)
+    {
+        if (signatures.Count == 0)
+            throw Invalid("At least one valid release signature is required.");
+        VerifiedSignature first = signatures[0];
+        if (signatures.Any(signature =>
+                !DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(signature.Subject, first.Subject)))
+        {
+            throw Invalid("All release signature evidence must use one trusted publisher subject.");
+        }
+        return first;
     }
 
     private sealed class PortableArchiveVerification

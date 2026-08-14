@@ -518,7 +518,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             readAuthenticodeSignature: _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
                 true,
                 0,
-                "CN=Azure Publisher",
+                "CN=Evotec Artifact Signing",
                 "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"));
         DotNetPublishSignOptions configured = AzureSign("Azure.CodeSigning.Dlib.dll");
 
@@ -527,6 +527,29 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             configured);
 
         Assert.Equal(DotNetPublishSigningProvider.AzureArtifactSigning, resolved.Provider);
+        Assert.Null(resolved.Thumbprint);
+        Assert.Equal(configured.SubjectName, resolved.SubjectName);
+    }
+
+    [Fact]
+    public void ResolvePortableInventorySigningOptions_AzureAcceptsRotatedPayloadCertificates()
+    {
+        var runner = new DotNetPublishPipelineRunner(
+            new NullLogger(),
+            new StubProcessRunner(_ => throw new InvalidOperationException("Process execution was not expected.")),
+            readAuthenticodeSignature: path => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
+                true,
+                0,
+                "CN=Evotec Artifact Signing",
+                path.EndsWith("app.exe", StringComparison.OrdinalIgnoreCase)
+                    ? "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                    : "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"));
+        DotNetPublishSignOptions configured = AzureSign("Azure.CodeSigning.Dlib.dll");
+
+        DotNetPublishSignOptions resolved = runner.ResolvePortableInventorySigningOptions(
+            new[] { "app.exe", "library.dll" },
+            configured);
+
         Assert.Null(resolved.Thumbprint);
         Assert.Equal(configured.SubjectName, resolved.SubjectName);
     }

@@ -513,20 +513,35 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
         if (signatures.Length == 0 || signatures.Any(signature => !signature.IsValid))
             throw new InvalidOperationException("Portable inventory signing requires valid Authenticode publisher signatures.");
-        string[] thumbprints = signatures
-            .Select(signature => DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(signature.Thumbprint))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (thumbprints.Length != 1 || string.IsNullOrWhiteSpace(thumbprints[0]))
-            throw new InvalidOperationException("Portable inventory signing requires one common Authenticode publisher certificate.");
         DotNetPublishSignOptions resolved = DotNetPublishSigningProfileResolver.CloneSignOptions(configured)
             ?? throw new InvalidOperationException("Portable inventory signing configuration is missing.");
         if (resolved.Provider == DotNetPublishSigningProvider.AzureArtifactSigning)
         {
+            string expectedSubject = string.IsNullOrWhiteSpace(resolved.SubjectName)
+                ? throw new InvalidOperationException(
+                    "Azure portable inventory signing requires a configured publisher subject.")
+                : resolved.SubjectName!;
+            if (signatures.Any(signature =>
+                    !DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(signature.Subject, expectedSubject)))
+            {
+                throw new InvalidOperationException(
+                    "Azure portable inventory signing requires every payload signature to match the configured publisher subject.");
+            }
+            if (signatures.Any(signature => string.IsNullOrWhiteSpace(
+                    DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(signature.Thumbprint))))
+            {
+                throw new InvalidOperationException("Portable inventory signing requires complete Authenticode publisher evidence.");
+            }
             resolved.Thumbprint = null;
         }
         else
         {
+            string[] thumbprints = signatures
+                .Select(signature => DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(signature.Thumbprint))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (thumbprints.Length != 1 || string.IsNullOrWhiteSpace(thumbprints[0]))
+                throw new InvalidOperationException("Portable inventory signing requires one common Authenticode publisher certificate.");
             resolved.Thumbprint = thumbprints[0];
             resolved.SubjectName = null;
         }

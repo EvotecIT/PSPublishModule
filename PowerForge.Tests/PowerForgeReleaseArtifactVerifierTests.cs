@@ -434,13 +434,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             string signerThumbprint = Thumbprint,
             string? inventorySignerThumbprint = null,
             string? sbomSignerThumbprint = null,
-            Func<byte[], byte[], PowerForgePayloadInventorySignature>? verifyInventory = null) =>
+            Func<byte[], byte[], PowerForgePayloadInventorySignature>? verifyInventory = null,
+            Func<string, string>? signerThumbprintSelector = null) =>
             new(
                 path => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
                     true,
                     0,
                     "CN=Publisher",
-                    signerThumbprint),
+                    signerThumbprintSelector?.Invoke(path) ?? signerThumbprint),
                 _ => "1.2.3+" + SourceRevision,
                 _ => "Sample.CLI",
                 verifyPortableInventory: verifyInventory ?? ((_, signature) => new PowerForgePayloadInventorySignature(
@@ -929,7 +930,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath);
         }
 
-        internal void ConfigureSubjectNameSigning(bool azureArtifactSigning = false)
+        internal void ConfigureSubjectNameSigning(bool azureArtifactSigning = false, bool includeDlls = false)
         {
             File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
             {
@@ -951,6 +952,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                             Sign = new
                             {
                                 Enabled = true,
+                                IncludeDlls = includeDlls,
                                 Provider = azureArtifactSigning ? "AzureArtifactSigning" : "CertificateStore",
                                 SubjectName = "Publisher",
                                 AzureArtifactSigning = azureArtifactSigning ? new

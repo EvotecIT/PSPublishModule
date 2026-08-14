@@ -408,6 +408,31 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliAcceptsAzureCertificateRotationAcrossPayloadFiles()
+    {
+        using var fixture = new PortableFixture();
+        string dependency = fixture.AddSignedDependency();
+        fixture.EnableDllSigning(dependency);
+        fixture.ConfigureSubjectNameSigning(azureArtifactSigning: true, includeDlls: true);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = "CN=Publisher";
+        request.SignaturePaths = new[] { fixture.ExecutablePath, dependency };
+
+        PowerForgeReleaseArtifactEvidence result = fixture
+            .CreateVerifier(
+                Thumbprint,
+                VendorThumbprint,
+                path => path.EndsWith("Dependency.dll", StringComparison.OrdinalIgnoreCase)
+                    ? VendorThumbprint
+                    : Thumbprint)
+            .Verify(request);
+
+        Assert.Equal("valid", result.SignatureStatus);
+        Assert.Equal(2, result.Signatures.Length);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsUnrelatedDirectExecutableSubstitution()
     {
         using var fixture = new PortableFixture();
