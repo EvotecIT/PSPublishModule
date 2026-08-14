@@ -10,10 +10,26 @@ namespace PSPublishModule;
 /// <summary>Enable signing by thumbprint</summary>
 /// <code>New-ConfigurationDotNetSign -Enabled -Thumbprint '0123456789ABCDEF' -OnMissingTool Fail -OnSignFailure Fail</code>
 /// </example>
+/// <example>
+/// <summary>Enable Azure Artifact Signing</summary>
+/// <code>New-ConfigurationDotNetSign -Enabled -Provider AzureArtifactSigning -SubjectName 'CN=Publisher' -AzureArtifactSigning $azureSigning</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationDotNetSign")]
 [OutputType(typeof(DotNetPublishSignOptions))]
 public sealed class NewConfigurationDotNetSignCommand : PSCmdlet
 {
+    /// <summary>
+    /// Signing provider. Local certificate-store signing remains the default.
+    /// </summary>
+    [Parameter]
+    public DotNetPublishSigningProvider Provider { get; set; } = DotNetPublishSigningProvider.CertificateStore;
+
+    /// <summary>
+    /// Azure Artifact Signing settings used when <see cref="Provider"/> selects that provider.
+    /// </summary>
+    [Parameter]
+    public DotNetPublishAzureArtifactSigningOptions? AzureArtifactSigning { get; set; }
+
     /// <summary>
     /// Enables Authenticode signing.
     /// </summary>
@@ -96,9 +112,14 @@ public sealed class NewConfigurationDotNetSignCommand : PSCmdlet
     /// Emits a <see cref="DotNetPublishSignOptions"/> object.
     /// </summary>
     protected override void ProcessRecord()
+        => WriteObject(CreateOptions());
+
+    internal DotNetPublishSignOptions CreateOptions()
     {
-        WriteObject(new DotNetPublishSignOptions
+        return new DotNetPublishSignOptions
         {
+            Provider = Provider,
+            AzureArtifactSigning = AzureArtifactSigning,
             Enabled = Enabled.IsPresent,
             IncludeDlls = IncludeDlls.IsPresent,
             OverwriteSigned = OverwriteSigned.IsPresent,
@@ -112,7 +133,7 @@ public sealed class NewConfigurationDotNetSignCommand : PSCmdlet
             Url = NormalizeNullable(Url),
             Csp = NormalizeNullable(Csp),
             KeyContainer = NormalizeNullable(KeyContainer)
-        });
+        };
     }
 
     private static string? NormalizeNullable(string? value)

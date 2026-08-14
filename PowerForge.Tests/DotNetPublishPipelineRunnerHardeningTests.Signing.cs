@@ -29,6 +29,89 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void Plan_PreservesBareAzureDlibNameForPathLookup()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string project = CreateProjectFile(root, "App.csproj");
+            DotNetPublishSpec spec = CreateBaseSpec(root, project);
+            spec.Targets[0].Publish.Sign = AzureSign("Azure.CodeSigning.Dlib.dll");
+
+            DotNetPublishPlan plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+
+            Assert.Equal(
+                "Azure.CodeSigning.Dlib.dll",
+                Assert.Single(plan.Targets).Publish.Sign?.AzureArtifactSigning?.DlibPath);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("Endpoint")]
+    [InlineData("AccountName")]
+    [InlineData("CertificateProfileName")]
+    [InlineData("DlibPath")]
+    [InlineData("SubjectName")]
+    [InlineData("InsecureEndpoint")]
+    public void Plan_RejectsIncompleteEnabledAzureSigningProfile(string missingSetting)
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string project = CreateProjectFile(root, "App.csproj");
+            DotNetPublishSpec spec = CreateBaseSpec(root, project);
+            DotNetPublishSignOptions sign = AzureSign("Azure.CodeSigning.Dlib.dll");
+            switch (missingSetting)
+            {
+                case "Endpoint": sign.AzureArtifactSigning!.Endpoint = null; break;
+                case "AccountName": sign.AzureArtifactSigning!.AccountName = null; break;
+                case "CertificateProfileName": sign.AzureArtifactSigning!.CertificateProfileName = null; break;
+                case "DlibPath": sign.AzureArtifactSigning!.DlibPath = null; break;
+                case "SubjectName": sign.SubjectName = null; break;
+                case "InsecureEndpoint": sign.AzureArtifactSigning!.Endpoint = "http://codesigning.example.invalid/"; break;
+            }
+            spec.Targets[0].Publish.Sign = sign;
+
+            Assert.Throws<ArgumentException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void NewConfigurationDotNetSignCommand_EmitsAzureProviderConfiguration()
+    {
+        var azure = new DotNetPublishAzureArtifactSigningOptions
+        {
+            Endpoint = "https://wus.codesigning.azure.net/",
+            AccountName = "EvotecSigning",
+            CertificateProfileName = "PublicTrust",
+            DlibPath = "Azure.CodeSigning.Dlib.dll"
+        };
+        var command = new PSPublishModule.NewConfigurationDotNetSignCommand
+        {
+            Enabled = true,
+            Provider = DotNetPublishSigningProvider.AzureArtifactSigning,
+            SubjectName = "CN=Evotec Artifact Signing",
+            AzureArtifactSigning = azure
+        };
+
+        DotNetPublishSignOptions result = command.CreateOptions();
+
+        Assert.True(result.Enabled);
+        Assert.Equal(DotNetPublishSigningProvider.AzureArtifactSigning, result.Provider);
+        Assert.Same(azure, result.AzureArtifactSigning);
+        Assert.Equal("CN=Evotec Artifact Signing", result.SubjectName);
+    }
+
+    [Fact]
     public void TrySignOutput_AzureArtifactSigningUsesDlibMetadataWithoutLocalCertificateSelectors()
     {
         if (!DotNetPublishPipelineRunner.IsWindows()) return;

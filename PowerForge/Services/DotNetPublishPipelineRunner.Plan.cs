@@ -3407,11 +3407,19 @@ public sealed partial class DotNetPublishPipelineRunner
             context);
         if (sign?.Provider == DotNetPublishSigningProvider.AzureArtifactSigning
             && sign.AzureArtifactSigning is not null
-            && !string.IsNullOrWhiteSpace(sign.AzureArtifactSigning.DlibPath)
-            && !Path.IsPathRooted(sign.AzureArtifactSigning.DlibPath))
+            && !string.IsNullOrWhiteSpace(sign.AzureArtifactSigning.DlibPath))
         {
-            sign.AzureArtifactSigning.DlibPath = ResolvePath(projectRoot, sign.AzureArtifactSigning.DlibPath!);
+            string dlibPath = sign.AzureArtifactSigning.DlibPath!.Trim().Trim('"');
+            bool hasDirectory = !string.IsNullOrEmpty(Path.GetDirectoryName(dlibPath))
+                                || dlibPath.IndexOf(Path.DirectorySeparatorChar) >= 0
+                                || dlibPath.IndexOf(Path.AltDirectorySeparatorChar) >= 0;
+            sign.AzureArtifactSigning.DlibPath = !Path.IsPathRooted(dlibPath) && hasDirectory
+                ? ResolvePath(projectRoot, dlibPath)
+                : dlibPath;
         }
+
+        if (sign is { Enabled: true, Provider: DotNetPublishSigningProvider.AzureArtifactSigning })
+            ValidateAzureArtifactSigningOptions(sign);
 
         return sign;
     }
