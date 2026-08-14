@@ -2,6 +2,40 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
 {
+    [Fact]
+    public void GetDotNetGitHubConfigurationAssets_StagesPortableOrdinaryConfigurationInputs()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string configDirectory = Directory.CreateDirectory(Path.Combine(root, "Build")).FullName;
+            string releaseConfig = Path.Combine(root, "release.json");
+            string publishConfig = Path.Combine(configDirectory, "dotnetpublish.json");
+            File.WriteAllText(releaseConfig, "{ \"Tools\": { \"DotNetPublishConfigPath\": \"Build/dotnetpublish.json\" } }");
+            File.WriteAllText(publishConfig, "{ \"Targets\": [] }");
+            var plan = new DotNetPublishPlan
+            {
+                ConfigurationInputPaths = new[] { releaseConfig, publishConfig },
+                GeneratedConfigurationInputPaths = Array.Empty<string>()
+            };
+
+            string stagingDirectory = Path.Combine(root, "staged");
+            string[] assets = PowerForgeReleaseService.GetDotNetGitHubConfigurationAssets(plan, stagingDirectory);
+
+            Assert.Equal(2, assets.Length);
+            Assert.All(assets, path => Assert.Equal(stagingDirectory, Path.GetDirectoryName(path)));
+            string stagedRelease = Assert.Single(assets, path => Path.GetFileName(path) == "release.json");
+            string stagedPublish = Assert.Single(assets, path => Path.GetFileName(path).StartsWith(".release.dotnetpublish.", StringComparison.Ordinal));
+            DotNetPublishConfiguredSpec configured = DotNetPublishReleaseArtifactVerifier.ReadConfiguredPublishSpecWithInputs(stagedRelease);
+            Assert.Equal(new[] { stagedRelease, stagedPublish }, configured.InputPaths, StringComparer.OrdinalIgnoreCase);
+            Assert.Equal("{ \"Targets\": [] }", File.ReadAllText(stagedPublish));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

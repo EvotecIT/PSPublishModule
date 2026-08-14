@@ -87,6 +87,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PowerShellModuleAcceptsQuotedManifestKeys()
+    {
+        using var fixture = new ModuleFixture();
+        fixture.PrepareQuotedManifestKeys();
+
+        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier().Verify(fixture.CreateRequest());
+
+        Assert.Equal("2.3.4", result.Version);
+        Assert.Contains(result.SignaturePaths, path =>
+            path.EndsWith("!Sample/Sample.psm1", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Verify_PowerShellModuleRejectsArchiveFromAnotherRevisionEvenWithUpdatedChecksum()
     {
         using var fixture = new ModuleFixture();
@@ -294,7 +307,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             bool includeBoundHelper = false,
             string? vendorThumbprint = null,
             bool includeManifestLoadedFormat = false,
-            string? nestedNonPsDataPrerelease = null)
+            string? nestedNonPsDataPrerelease = null,
+            bool quoteManifestKeys = false)
         {
             if (File.Exists(ArchivePath)) File.Delete(ArchivePath);
             using ZipArchive archive = ZipFile.Open(ArchivePath, ZipArchiveMode.Create);
@@ -305,9 +319,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 prereleaseData = $"; PrivateData = @{{ Unrelated = @{{ Prerelease = '{nestedNonPsDataPrerelease}' }} }}";
             string formatData = includeManifestLoadedFormat ? "; FormatsToProcess = @('Sample.Format.ps1xml')" : string.Empty;
             string entrypointData = string.IsNullOrWhiteSpace(rootModuleValue)
-                ? "NestedModules = @('Sample.psm1');"
-                : $"RootModule = '{rootModuleValue}';";
-            string manifestText = $"@{{ {entrypointData} ModuleVersion = '2.3.4'{formatData}{prereleaseData} }}";
+                ? $"{(quoteManifestKeys ? "'NestedModules'" : "NestedModules")} = @('Sample.psm1');"
+                : $"{(quoteManifestKeys ? "'RootModule'" : "RootModule")} = '{rootModuleValue}';";
+            string versionKey = quoteManifestKeys ? "'ModuleVersion'" : "ModuleVersion";
+            string manifestText = $"@{{ {entrypointData} {versionKey} = '2.3.4'{formatData}{prereleaseData} }}";
             WriteEntry(archive, manifestEntryPath, manifestBytes ?? Encode(manifestText, manifestEncoding));
             if (duplicateManifest)
                 WriteEntry(archive, "Sample/Sample.psd1", "@{ RootModule = 'Sample.psm1'; ModuleVersion = '2.3.4' }");
@@ -386,6 +401,13 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         internal void PrepareManifestLoadedFormatOmission()
         {
             WriteArchive(SourceRevision, includeManifestLoadedFormat: true);
+            WriteSigningEvidence();
+            WriteChecksums();
+        }
+
+        internal void PrepareQuotedManifestKeys()
+        {
+            WriteArchive(SourceRevision, quoteManifestKeys: true);
             WriteSigningEvidence();
             WriteChecksums();
         }

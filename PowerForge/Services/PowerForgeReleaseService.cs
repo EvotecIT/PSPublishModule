@@ -3986,9 +3986,9 @@ internal sealed partial class PowerForgeReleaseService
                 .Select(path => path!));
 
             assets.AddRange(
-                (plan.GeneratedConfigurationInputPaths ?? Array.Empty<string>())
-                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-                .Select(Path.GetFullPath));
+                GetDotNetGitHubConfigurationAssets(
+                    plan,
+                    Path.Combine(checksumDirectory, safeTarget + ".configuration-assets")));
 
             var uniqueAssets = assets
                 .Distinct(StringComparer.OrdinalIgnoreCase)

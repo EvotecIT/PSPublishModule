@@ -1,3 +1,7 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
 namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
@@ -17,7 +21,7 @@ internal sealed partial class PowerForgeReleaseService
     {
         runnableAssets = new List<string>();
         checksumDirectory = string.Empty;
-        safeTarget = ToSafeReleaseAssetComponent(target.Name);
+        safeTarget = DotNetPublishReleaseAssetNaming.ToSafeComponent(target.Name);
         error = null;
         var targetRunnableAssets = new List<(DotNetPublishArtefactResult Artefact, string Path, bool Direct)>();
         DotNetPublishArtefactResult[] targetArtefacts = (result.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
@@ -130,17 +134,14 @@ internal sealed partial class PowerForgeReleaseService
         foreach (var entry in targetAssets.Where(entry =>
                      entry.Direct && duplicateNames.Contains(Path.GetFileName(entry.Path))))
         {
-            string extension = Path.GetExtension(entry.Path);
-            string category = entry.Artefact.Category == DotNetPublishArtefactCategory.Bundle
-                ? "bundle-" + ToSafeReleaseAssetComponent(entry.Artefact.BundleId ?? "unnamed")
-                : "publish";
-            string stagedName = string.Join(
-                "-",
-                safeTarget,
-                ToSafeReleaseAssetComponent(entry.Artefact.Framework),
-                ToSafeReleaseAssetComponent(entry.Artefact.Runtime),
-                ToSafeReleaseAssetComponent(entry.Artefact.Style.ToString()),
-                category) + extension;
+            string stagedName = DotNetPublishReleaseAssetNaming.CreateDirectMatrixAssetName(
+                entry.Artefact.Target,
+                entry.Artefact.Framework,
+                entry.Artefact.Runtime,
+                entry.Artefact.Style.ToString(),
+                entry.Artefact.Category,
+                entry.Artefact.BundleId,
+                entry.Path);
             if (!stagedNames.Add(stagedName))
             {
                 throw new InvalidOperationException(
@@ -157,12 +158,106 @@ internal sealed partial class PowerForgeReleaseService
             .ToList();
     }
 
-    private static string ToSafeReleaseAssetComponent(string value)
+    internal static string[] GetDotNetGitHubConfigurationAssets(
+        DotNetPublishPlan plan,
+        string stagingDirectory)
     {
-        string safe = string.Concat((value ?? string.Empty).Select(character =>
-            Path.GetInvalidFileNameChars().Contains(character) || character is '/' or '\\' or ':'
-                ? '_'
-                : character));
-        return string.IsNullOrWhiteSpace(safe) ? "unknown" : safe;
+        string[] generatedInputs = ResolveExistingConfigurationInputs(plan.GeneratedConfigurationInputPaths);
+        if (generatedInputs.Length > 0)
+            return generatedInputs;
+
+        string[] inputs = ResolveExistingConfigurationInputs(plan.ConfigurationInputPaths);
+        if (inputs.Length < 2)
+            return inputs;
+
+        foreach (string releaseConfigurationPath in inputs)
+        {
+            JsonObject? releaseConfiguration;
+            try
+            {
+                releaseConfiguration = JsonNode.Parse(
+                    File.ReadAllText(releaseConfigurationPath),
+                    nodeOptions: null,
+                    new JsonDocumentOptions
+                    {
+                        AllowTrailingCommas = true,
+                        CommentHandling = JsonCommentHandling.Skip
+                    }) as JsonObject;
+            }
+            catch (JsonException)
+            {
+                continue;
+            }
+
+            if (releaseConfiguration is null ||
+                !TryGetJsonObject(releaseConfiguration, "Tools", out JsonObject? tools) ||
+                tools is null ||
+                !TryGetJsonString(tools, "DotNetPublishConfigPath", out string? configuredPath) ||
+                string.IsNullOrWhiteSpace(configuredPath))
+            {
+                continue;
+            }
+
+            string releaseDirectory = Path.GetDirectoryName(releaseConfigurationPath) ?? Directory.GetCurrentDirectory();
+            string referencedPath = Path.GetFullPath(Path.IsPathRooted(configuredPath)
+                ? configuredPath
+                : Path.Combine(releaseDirectory, configuredPath));
+            if (!inputs.Contains(referencedPath, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            byte[] referencedBytes = File.ReadAllBytes(referencedPath);
+            string referencedName = $".release.dotnetpublish.{ComputeSha256(referencedBytes)}.json";
+            Directory.CreateDirectory(stagingDirectory);
+            string stagedReferencedPath = Path.Combine(stagingDirectory, referencedName);
+            File.WriteAllBytes(stagedReferencedPath, referencedBytes);
+            SetJsonProperty(tools, "DotNetPublishConfigPath", referencedName);
+
+            string stagedReleasePath = Path.Combine(stagingDirectory, Path.GetFileName(releaseConfigurationPath));
+            File.WriteAllText(
+                stagedReleasePath,
+                releaseConfiguration.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            return new[] { stagedReleasePath, stagedReferencedPath };
+        }
+
+        return inputs;
+    }
+
+    private static string[] ResolveExistingConfigurationInputs(IEnumerable<string>? paths) =>
+        (paths ?? Array.Empty<string>())
+        .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+        .Select(Path.GetFullPath)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    private static bool TryGetJsonObject(JsonObject parent, string propertyName, out JsonObject? value)
+    {
+        KeyValuePair<string, JsonNode?> property = parent.FirstOrDefault(entry =>
+            string.Equals(entry.Key, propertyName, StringComparison.OrdinalIgnoreCase));
+        value = property.Value as JsonObject;
+        return value is not null;
+    }
+
+    private static bool TryGetJsonString(JsonObject parent, string propertyName, out string? value)
+    {
+        KeyValuePair<string, JsonNode?> property = parent.FirstOrDefault(entry =>
+            string.Equals(entry.Key, propertyName, StringComparison.OrdinalIgnoreCase));
+        value = property.Value is JsonValue jsonValue && jsonValue.TryGetValue(out string? text)
+            ? text
+            : null;
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static void SetJsonProperty(JsonObject parent, string propertyName, string value)
+    {
+        string key = parent
+            .Select(entry => entry.Key)
+            .First(entry => string.Equals(entry, propertyName, StringComparison.OrdinalIgnoreCase));
+        parent[key] = value;
+    }
+
+    private static string ComputeSha256(byte[] bytes)
+    {
+        using SHA256 sha256 = SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
     }
 }

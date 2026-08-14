@@ -1,31 +1,9 @@
-using System.Text.RegularExpressions;
-
 namespace PowerForge;
 
 internal static class ModuleManifestTextParser
 {
-    private const RegexOptions ManifestRegexOptions =
-        RegexOptions.IgnoreCase |
-        RegexOptions.Multiline |
-        RegexOptions.CultureInvariant |
-        RegexOptions.Compiled;
-
     internal static bool TryGetQuotedStringValue(string manifestText, string key, out string? value)
-    {
-        value = null;
-        if (string.IsNullOrWhiteSpace(manifestText) || string.IsNullOrWhiteSpace(key))
-            return false;
-
-        var match = Regex.Match(
-            manifestText,
-            $@"(?:^|[\r\n{{;])\s*{Regex.Escape(key)}\s*=\s*(?<value>'(?:[^']|'')*'|""(?:[^""]|"""")*"")",
-            ManifestRegexOptions);
-        if (!match.Success)
-            return false;
-
-        value = Unquote(match.Groups["value"].Value);
-        return !string.IsNullOrWhiteSpace(value);
-    }
+        => TryGetTopLevelQuotedStringValue(manifestText, key, out value);
 
     internal static bool TryGetTopLevelQuotedStringValue(string manifestText, string key, out string? value)
     {
@@ -62,7 +40,7 @@ internal static class ModuleManifestTextParser
     internal static bool TryGetRequiredModules(string manifestText, out RequiredModuleReference[]? modules)
     {
         modules = null;
-        if (!TryReadAssignedExpressionByKey(manifestText, "RequiredModules", out var expression) ||
+        if (!TryReadTopLevelAssignedExpressionByKey(manifestText, "RequiredModules", out var expression) ||
             string.IsNullOrWhiteSpace(expression))
             return false;
 
@@ -94,7 +72,7 @@ internal static class ModuleManifestTextParser
     internal static bool TryGetStringArrayValue(string manifestText, string key, out string[]? values)
     {
         values = null;
-        if (!TryReadAssignedExpressionByKey(manifestText, key, out var expression) ||
+        if (!TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression) ||
             string.IsNullOrWhiteSpace(expression))
             return false;
 
@@ -109,7 +87,7 @@ internal static class ModuleManifestTextParser
     internal static bool TryGetStrictStringArrayValue(string manifestText, string key, out string[]? values)
     {
         values = null;
-        if (!TryReadAssignedExpressionByKey(manifestText, key, out var expression) ||
+        if (!TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression) ||
             string.IsNullOrWhiteSpace(expression))
             return false;
 
@@ -312,24 +290,6 @@ internal static class ModuleManifestTextParser
         return TryGetStringArrayValue(body, key, out values);
     }
 
-    private static bool TryReadAssignedExpressionByKey(string text, string key, out string? expression)
-    {
-        expression = null;
-        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(key))
-            return false;
-
-        var match = Regex.Match(
-            text,
-            $@"(?:^|[\r\n{{;])\s*{Regex.Escape(key)}\s*=",
-            ManifestRegexOptions);
-        if (!match.Success)
-            return false;
-
-        var index = match.Index + match.Length;
-        expression = ReadAssignedValueExpression(text, ref index);
-        return !string.IsNullOrWhiteSpace(expression);
-    }
-
     internal static bool TryReadTopLevelAssignedExpressionByKey(string text, string key, out string? expression)
     {
         expression = null;
@@ -344,16 +304,30 @@ internal static class ModuleManifestTextParser
             if (index >= body.Length)
                 break;
 
-            var keyStart = index;
-            while (index < body.Length && IsManifestKeyCharacter(body[index]))
-                index++;
-            if (keyStart == index)
+            string candidateKey;
+            if (body[index] is '\'' or '"')
             {
-                index++;
-                continue;
+                if (!TryReadQuotedString(body, index, out int quotedKeyEnd) ||
+                    !TryUnquote(body.Substring(index, quotedKeyEnd - index), out candidateKey))
+                {
+                    index++;
+                    continue;
+                }
+                index = quotedKeyEnd;
+            }
+            else
+            {
+                var keyStart = index;
+                while (index < body.Length && IsManifestKeyCharacter(body[index]))
+                    index++;
+                if (keyStart == index)
+                {
+                    index++;
+                    continue;
+                }
+                candidateKey = body.Substring(keyStart, index - keyStart);
             }
 
-            var candidateKey = body.Substring(keyStart, index - keyStart);
             index = SkipTrivia(body, index, treatCommasAsTrivia: false);
             if (index >= body.Length || body[index] != '=')
             {

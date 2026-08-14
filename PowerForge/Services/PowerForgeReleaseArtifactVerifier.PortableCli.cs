@@ -60,10 +60,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             if (!string.Equals(Path.GetFileName(manifestArchive), Path.GetFileName(artifactPath), StringComparison.OrdinalIgnoreCase))
                 throw Invalid("Requested portable archive does not match the selected manifest entry.");
         }
-        else if (!string.Equals(
-                     Path.GetFileName(manifestExecutable.Replace('/', Path.DirectorySeparatorChar)),
-                     Path.GetFileName(artifactPath),
-                     StringComparison.OrdinalIgnoreCase))
+        else if (!DirectArtifactNameMatchesManifestEntry(entry, manifestExecutable, artifactPath))
         {
             throw Invalid("A direct portable artifact must have the release-asset identity of the manifest executable.");
         }
@@ -166,6 +163,28 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             }).ToArray(),
             EvidenceFiles = evidence
         };
+    }
+
+    private static bool DirectArtifactNameMatchesManifestEntry(
+        JsonElement entry,
+        string manifestExecutable,
+        string artifactPath)
+    {
+        string requestedName = Path.GetFileName(artifactPath);
+        string originalName = Path.GetFileName(
+            manifestExecutable.Replace('/', Path.DirectorySeparatorChar));
+        if (string.Equals(originalName, requestedName, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        string matrixName = DotNetPublishReleaseAssetNaming.CreateDirectMatrixAssetName(
+            ReadString(entry, "Target"),
+            ReadString(entry, "Framework"),
+            ReadString(entry, "Runtime"),
+            ReadString(entry, "Style"),
+            DotNetPublishArtefactCategory.Publish,
+            bundleId: null,
+            manifestExecutable);
+        return string.Equals(matrixName, requestedName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static ExpectedPortable ReadExpectedPortable(

@@ -118,4 +118,26 @@ public sealed class ModuleManifestValueReaderTests
         Assert.Contains("literal ModuleName", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ReadManifestValues_AcceptsQuotedLiteralKeysAtEveryLevel()
+    {
+        const string manifest = """
+            @{
+                'ModuleVersion' = '1.2.3'
+                "RootModule" = 'Sample.psm1'
+                'NestedModules' = @(@{ ModuleName = 'Nested.psm1'; ModuleVersion = '1.0' })
+                'PrivateData' = @{ 'PSData' = @{ 'Prerelease' = 'preview.1' } }
+            }
+            """;
+
+        Assert.Equal("1.2.3", ModuleManifestValueReader.ReadTopLevelStringFromText(manifest, "ModuleVersion"));
+        Assert.Equal("Sample.psm1", ModuleManifestValueReader.ReadTopLevelStringFromText(manifest, "RootModule"));
+        Assert.Equal(
+            new[] { "Nested.psm1" },
+            ModuleManifestValueReader.ReadTopLevelModuleReferencePathsFromText(manifest, "NestedModules"));
+        Assert.Equal(
+            new[] { "preview.1" },
+            ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifest, "Prerelease"));
+    }
+
 }

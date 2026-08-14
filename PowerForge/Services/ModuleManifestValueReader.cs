@@ -6,8 +6,19 @@ internal static class ModuleManifestValueReader
 {
     internal static string? ReadTopLevelString(string manifestPath, string key)
     {
-        if (!TryGetTopLevelString(manifestPath, key, out var value) || string.IsNullOrWhiteSpace(value))
+        if (!TryReadManifestText(manifestPath, out var manifestText))
             return null;
+
+        return ReadTopLevelStringFromText(manifestText, key);
+    }
+
+    internal static string? ReadTopLevelStringFromText(string manifestText, string key)
+    {
+        if (!ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, key, out var value) ||
+            string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
 
         return value!.Trim();
     }

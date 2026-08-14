@@ -137,6 +137,59 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliAcceptsDimensionQualifiedDirectReleaseAsset()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureExplicitExecutableIdentity();
+        string aliasName = DotNetPublishReleaseAssetNaming.CreateDirectMatrixAssetName(
+            "Sample.CLI",
+            "net10.0",
+            "win-x64",
+            DotNetPublishStyle.PortableCompat.ToString(),
+            DotNetPublishArtefactCategory.Publish,
+            bundleId: null,
+            fixture.ExecutablePath);
+        string aliasPath = Path.Combine(fixture.Root, aliasName);
+        File.Copy(fixture.ExecutablePath, aliasPath);
+        File.AppendAllLines(
+            fixture.ChecksumsPath,
+            new[] { $"{fixture.ComputeDigest(aliasPath)} *{aliasName}" });
+        string downloadRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(downloadRoot);
+            foreach (string source in new[]
+                     {
+                         aliasPath,
+                         fixture.ChecksumsPath,
+                         fixture.ManifestPath,
+                         fixture.ConfigurationPath
+                     })
+            {
+                File.Copy(source, Path.Combine(downloadRoot, Path.GetFileName(source)));
+            }
+
+            PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+            request.ProjectRoot = downloadRoot;
+            request.ArtifactPath = Path.Combine(downloadRoot, aliasName);
+            request.ChecksumsPath = Path.Combine(downloadRoot, Path.GetFileName(fixture.ChecksumsPath));
+            request.ManifestPath = Path.Combine(downloadRoot, Path.GetFileName(fixture.ManifestPath));
+            request.ConfigurationPath = Path.Combine(downloadRoot, Path.GetFileName(fixture.ConfigurationPath));
+            request.SignaturePaths = Array.Empty<string>();
+            request.SbomPaths = Array.Empty<string>();
+
+            PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(request);
+
+            Assert.Equal("valid", evidence.SignatureStatus);
+            Assert.Equal(aliasName, evidence.FileName);
+        }
+        finally
+        {
+            if (Directory.Exists(downloadRoot)) Directory.Delete(downloadRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsPublisherSignedInventoryForDifferentTarget()
     {
         using var fixture = new PortableFixture();
