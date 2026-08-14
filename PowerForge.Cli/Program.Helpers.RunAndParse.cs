@@ -475,6 +475,8 @@ internal static partial class Program
                         string.IsNullOrWhiteSpace(item.PrepareFromTarget) ||
                         selectedTargets.Contains(item.PrepareFromTarget.Trim()))
                     .ToArray();
+                foreach (var installer in spec.Installers)
+                    DotNetPublishPipelineRunner.RetainSelectedAdditionalPublishTargets(installer.Versioning, selectedTargets);
                 spec.StorePackages = (spec.StorePackages ?? Array.Empty<DotNetPublishStorePackage>())
                     .Where(item =>
                         string.IsNullOrWhiteSpace(item.PrepareFromTarget) ||
@@ -595,6 +597,8 @@ internal static partial class Program
                         && (string.IsNullOrWhiteSpace(i.PrepareFromTarget)
                             || selected.Contains(i.PrepareFromTarget)))
                     .ToArray();
+                foreach (var installer in plan.Installers)
+                    DotNetPublishPipelineRunner.RetainSelectedAdditionalPublishTargets(installer.Versioning, selected);
             }
             changed = true;
         }

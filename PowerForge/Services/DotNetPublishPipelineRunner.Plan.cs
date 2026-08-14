@@ -721,16 +721,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 || selectedTargetNames.Contains(i.PrepareFromTarget.Trim()))
             .ToArray();
         foreach (var installer in selectedInstallers)
-        {
-            if (installer.Versioning is null)
-                continue;
-
-            installer.Versioning.AdditionalPublishTargets = (installer.Versioning.AdditionalPublishTargets ?? Array.Empty<string>())
-                .Where(name => !string.IsNullOrWhiteSpace(name) && selectedTargetNames.Contains(name.Trim()))
-                .Select(name => name.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-        }
+            RetainSelectedAdditionalPublishTargets(installer.Versioning, selectedTargetNames);
 
         var runtimes = (profile.Runtimes ?? Array.Empty<string>())
             .Where(r => !string.IsNullOrWhiteSpace(r))
@@ -798,6 +789,22 @@ public sealed partial class DotNetPublishPipelineRunner
             Targets = selectedTargets,
             Outputs = CloneOutputs(spec.Outputs)
         };
+    }
+
+    internal static void RetainSelectedAdditionalPublishTargets(
+        DotNetPublishMsiVersionOptions? versioning,
+        ISet<string> selectedTargetNames)
+    {
+        if (versioning is null)
+            return;
+        if (selectedTargetNames is null)
+            throw new ArgumentNullException(nameof(selectedTargetNames));
+
+        versioning.AdditionalPublishTargets = (versioning.AdditionalPublishTargets ?? Array.Empty<string>())
+            .Where(name => !string.IsNullOrWhiteSpace(name) && selectedTargetNames.Contains(name.Trim()))
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static DotNetPublishDotNetOptions CloneDotNet(DotNetPublishDotNetOptions dotNet)
@@ -3425,6 +3432,14 @@ public sealed partial class DotNetPublishPipelineRunner
             inline,
             overrides,
             context);
+        if (sign is not null
+            && !Enum.IsDefined(typeof(DotNetPublishSigningProvider), sign.Provider))
+        {
+            throw new ArgumentException(
+                $"Signing provider value '{(int)sign.Provider}' is not supported for {context}.",
+                nameof(inline));
+        }
+
         if (sign?.Provider == DotNetPublishSigningProvider.AzureArtifactSigning
             && sign.AzureArtifactSigning is not null
             && !string.IsNullOrWhiteSpace(sign.AzureArtifactSigning.DlibPath))

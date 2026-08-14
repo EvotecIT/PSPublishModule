@@ -172,6 +172,8 @@ internal sealed class DotNetPublishPreparationService
                         && (string.IsNullOrWhiteSpace(i.PrepareFromTarget)
                             || selected.Contains(i.PrepareFromTarget.Trim())))
                     .ToArray();
+                foreach (var installer in spec.Installers)
+                    DotNetPublishPipelineRunner.RetainSelectedAdditionalPublishTargets(installer.Versioning, selected);
             }
 
             if (spec.Bundles is { Length: > 0 })

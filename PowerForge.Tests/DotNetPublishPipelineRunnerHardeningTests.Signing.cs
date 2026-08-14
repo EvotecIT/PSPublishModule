@@ -86,6 +86,31 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void Plan_RejectsUndefinedSigningProvider()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string project = CreateProjectFile(root, "App.csproj");
+            DotNetPublishSpec spec = CreateBaseSpec(root, project);
+            spec.Targets[0].Publish.Sign = new DotNetPublishSignOptions
+            {
+                Enabled = true,
+                Provider = (DotNetPublishSigningProvider)999
+            };
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+
+            Assert.Contains("not supported", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void NewConfigurationDotNetSignCommand_EmitsAzureProviderConfiguration()
     {
         var azure = new DotNetPublishAzureArtifactSigningOptions

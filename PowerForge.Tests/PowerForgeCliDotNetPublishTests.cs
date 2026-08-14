@@ -61,21 +61,36 @@ namespace PowerForge.Tests;
                     new DotNetPublishTarget { Name = "agent", ProjectPath = "PowerForge.Cli/PowerForge.Cli.csproj", Publish = publish }
                 ],
                 Bundles = [new DotNetPublishBundle { Id = "agent-bundle", PrepareFromTarget = "agent" }],
-                Installers = [new DotNetPublishInstaller { Id = "agent-msi", PrepareFromTarget = "agent" }],
+                Installers =
+                [
+                    new DotNetPublishInstaller
+                    {
+                        Id = "monitoring-msi",
+                        PrepareFromTarget = "monitoring",
+                        Versioning = new DotNetPublishMsiVersionOptions
+                        {
+                            Enabled = false,
+                            AdditionalPublishTargets = ["portable"]
+                        }
+                    },
+                    new DotNetPublishInstaller { Id = "agent-msi", PrepareFromTarget = "agent" }
+                ],
                 StorePackages = [new DotNetPublishStorePackage { Id = "agent-store", PrepareFromTarget = "agent" }]
             };
             File.WriteAllText(configPath, JsonSerializer.Serialize(spec));
 
             var (exitCode, stdout, stderr) = await RunCliAsync(
                 repoRoot,
-                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet publish --config \"{configPath}\" --target monitoring,portable --plan --output json");
+                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet publish --config \"{configPath}\" --target monitoring --plan --output json");
 
             Assert.True(exitCode == 0, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
             using JsonDocument document = JsonDocument.Parse(stdout);
             JsonElement effectiveSpec = document.RootElement.GetProperty("spec");
-            Assert.Equal(2, effectiveSpec.GetProperty("targets").GetArrayLength());
+            Assert.Single(effectiveSpec.GetProperty("targets").EnumerateArray());
             Assert.Empty(effectiveSpec.GetProperty("bundles").EnumerateArray());
-            Assert.Empty(effectiveSpec.GetProperty("installers").EnumerateArray());
+            JsonElement installer = Assert.Single(effectiveSpec.GetProperty("installers").EnumerateArray());
+            Assert.Equal("monitoring-msi", installer.GetProperty("id").GetString());
+            Assert.Empty(installer.GetProperty("versioning").GetProperty("additionalPublishTargets").EnumerateArray());
             Assert.Empty(effectiveSpec.GetProperty("storePackages").EnumerateArray());
         }
         finally
