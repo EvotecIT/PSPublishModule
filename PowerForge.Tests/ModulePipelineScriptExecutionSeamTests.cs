@@ -574,6 +574,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         public bool AutoSuccessfulSigningResult { get; set; }
         public bool AutoSuccessfulPublishResult { get; set; }
         public Action<int>? SigningCallStarted { get; set; }
+        public Action<ModulePipelineActionConfiguration, ModulePipelineActionContext>? ActionStarted { get; set; }
         public List<string> SigningRootPaths { get; } = new();
         public List<string> OperationOrder { get; } = new();
         public string[] LastDocumentationCommands { get; private set; } = Array.Empty<string>();
@@ -696,7 +697,20 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             ModulePipelineActionContext context,
             string contextPath,
             string projectRoot)
-            => throw new InvalidOperationException("Not used in this test.");
+        {
+            if (ActionStarted is null)
+                throw new InvalidOperationException("Not used in this test.");
+            ActionStarted(action, context);
+            return new ModulePipelineActionResult
+            {
+                Name = context.ActionName,
+                Stage = context.Stage,
+                Succeeded = true,
+                ExitCode = 0,
+                ContextPath = contextPath,
+                WorkingDirectory = projectRoot
+            };
+        }
 
         public ModuleSigningResult SignModuleOutput(
             string moduleName,

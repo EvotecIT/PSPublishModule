@@ -56,12 +56,23 @@ public sealed partial class DotNetPublishPipelineRunner
 
             foreach (string input in evaluation.BuildInputs)
                 buildInputs.Add(input);
-            foreach (string projectReference in evaluation.ProjectReferences)
-                pending.Enqueue(request.ForProject(projectReference, targetFramework: null));
             if (request.TargetFramework is null)
             {
-                foreach (string targetFramework in evaluation.TargetFrameworks)
-                    pending.Enqueue(request.ForProject(request.ProjectPath, targetFramework));
+                if (evaluation.TargetFrameworks.Length > 0)
+                {
+                    foreach (string targetFramework in evaluation.TargetFrameworks)
+                        pending.Enqueue(request.ForProject(request.ProjectPath, targetFramework));
+                }
+                else
+                {
+                    foreach (EvaluatedProjectReference projectReference in evaluation.ProjectReferences)
+                        pending.Enqueue(request.ForProject(projectReference.ProjectPath, targetFramework: null));
+                }
+            }
+            else
+            {
+                foreach (EvaluatedProjectReference projectReference in evaluation.ProjectReferences)
+                    pending.Enqueue(request.ForProject(projectReference.ProjectPath, projectReference.TargetFramework));
             }
         }
 
@@ -210,7 +221,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
             JsonElement root = document.RootElement;
             var inputs = new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-            var references = new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            var references = new Dictionary<string, EvaluatedProjectReference>(
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            var rawReferences = new HashSet<string>(
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var targetFrameworks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
@@ -240,8 +254,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         string fullPath = Path.GetFullPath(fullPathElement.GetString()!);
                         if (itemName.Equals("ProjectReference", StringComparison.Ordinal))
                         {
-                            references.Add(fullPath);
                             inputs.Add(fullPath);
+                            rawReferences.Add(fullPath);
                         }
                         else if (!itemName.Equals("None", StringComparison.Ordinal) || IsOutputRelevantNoneItem(item))
                         {
@@ -249,11 +263,28 @@ public sealed partial class DotNetPublishPipelineRunner
                         }
                     }
                 }
+
+            }
+
+            if (string.IsNullOrWhiteSpace(request.TargetFramework))
+            {
+                foreach (string projectReference in rawReferences)
+                    references[projectReference] = new EvaluatedProjectReference(projectReference, targetFramework: null);
+            }
+            else if (rawReferences.Count > 0)
+            {
+                if (!TryReadResolvedProjectReferences(request, out EvaluatedProjectReference[] resolvedReferences))
+                    return false;
+                foreach (EvaluatedProjectReference reference in resolvedReferences)
+                {
+                    references[reference.ProjectPath] = reference;
+                    inputs.Add(reference.ProjectPath);
+                }
             }
 
             evaluation = new EvaluatedProjectInputs(
                 inputs.ToArray(),
-                references.ToArray(),
+                references.Values.ToArray(),
                 targetFrameworks.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
             return true;
         }
@@ -288,6 +319,107 @@ public sealed partial class DotNetPublishPipelineRunner
            && value.ValueKind == JsonValueKind.String
            && !string.IsNullOrWhiteSpace(value.GetString())
            && !value.GetString()!.Equals("Never", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryReadEvaluatedProjectReference(
+        JsonElement item,
+        out EvaluatedProjectReference? reference)
+    {
+        reference = null;
+        if (!item.TryGetProperty("FullPath", out JsonElement fullPathElement) ||
+            fullPathElement.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(fullPathElement.GetString()))
+        {
+            return false;
+        }
+
+        string? targetFramework = ReadItemText(item, "NearestTargetFramework");
+        if (string.IsNullOrWhiteSpace(targetFramework))
+        {
+            string? setTargetFramework = ReadItemText(item, "SetTargetFramework");
+            const string prefix = "TargetFramework=";
+            if (!string.IsNullOrWhiteSpace(setTargetFramework) &&
+                setTargetFramework!.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                targetFramework = setTargetFramework.Substring(prefix.Length).Trim();
+            }
+        }
+
+        reference = new EvaluatedProjectReference(
+            Path.GetFullPath(fullPathElement.GetString()!),
+            string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework);
+        return true;
+    }
+
+    private static bool TryReadResolvedProjectReferences(
+        ProjectEvaluationRequest request,
+        out EvaluatedProjectReference[] references)
+    {
+        references = Array.Empty<EvaluatedProjectReference>();
+        var arguments = new List<string>
+        {
+            "msbuild",
+            request.ProjectPath,
+            "-nologo",
+            "-verbosity:quiet",
+            "-target:PrepareProjectReferences",
+            "-getItem:_MSBuildProjectReferenceExistent",
+            "-p:Configuration=" + request.Configuration,
+            "-p:TargetFramework=" + request.TargetFramework
+        };
+        foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
+                property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            arguments.Add("-p:" + property.Key + "=" + property.Value);
+        }
+
+        try
+        {
+            var process = RunBuildInputEvaluationProcess(
+                "dotnet",
+                Path.GetDirectoryName(request.ProjectPath)!,
+                arguments,
+                request.EnvironmentVariables,
+                TimeSpan.FromMinutes(2));
+            if (process.ExitCode != 0 || process.TimedOut)
+                return false;
+            int jsonStart = process.StdOut.IndexOf('{');
+            int jsonEnd = process.StdOut.LastIndexOf('}');
+            if (jsonStart < 0 || jsonEnd < jsonStart)
+                return false;
+            using JsonDocument document = JsonDocument.Parse(
+                process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
+            if (!document.RootElement.TryGetProperty("Items", out JsonElement items) ||
+                !items.TryGetProperty("_MSBuildProjectReferenceExistent", out JsonElement resolvedReferences) ||
+                resolvedReferences.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            references = resolvedReferences.EnumerateArray()
+                .Select(item => TryReadEvaluatedProjectReference(item, out EvaluatedProjectReference? reference)
+                    ? reference
+                    : null)
+                .Where(static reference => reference is not null)
+                .Cast<EvaluatedProjectReference>()
+                .ToArray();
+            // An empty resolved item list is a valid result for a conditional
+            // ProjectReference that does not participate in this target framework.
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string? ReadItemText(JsonElement item, string name)
+        => item.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
 
     private static void AddSemicolonSeparatedPaths(
         JsonElement properties,
@@ -369,7 +501,7 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         internal EvaluatedProjectInputs(
             string[] buildInputs,
-            string[] projectReferences,
+            EvaluatedProjectReference[] projectReferences,
             string[] targetFrameworks)
         {
             BuildInputs = buildInputs;
@@ -378,7 +510,19 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         internal string[] BuildInputs { get; }
-        internal string[] ProjectReferences { get; }
+        internal EvaluatedProjectReference[] ProjectReferences { get; }
         internal string[] TargetFrameworks { get; }
+    }
+
+    private sealed class EvaluatedProjectReference
+    {
+        internal EvaluatedProjectReference(string projectPath, string? targetFramework)
+        {
+            ProjectPath = projectPath;
+            TargetFramework = targetFramework;
+        }
+
+        internal string ProjectPath { get; }
+        internal string? TargetFramework { get; }
     }
 }

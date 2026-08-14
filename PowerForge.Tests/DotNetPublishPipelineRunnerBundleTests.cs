@@ -468,6 +468,108 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
     }
 
     [Fact]
+    public void BuildBundle_SignedZipEmitsPublisherBoundCompletePayloadInventory()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            string publishDir = Directory.CreateDirectory(Path.Combine(root, "publish", "app")).FullName;
+            string executable = Path.Combine(publishDir, "PowerForge.Tests.dll");
+            File.Copy(typeof(DotNetPublishPipelineRunnerBundleTests).Assembly.Location, executable);
+            File.WriteAllText(Path.Combine(publishDir, "runtime-data.json"), "{\"data\":true}");
+            string outputDir = Path.Combine(root, "Artifacts", "Bundles", "package");
+            string zipPath = Path.Combine(root, "Artifacts", "Bundles", "package.zip");
+            var sign = new DotNetPublishSignOptions
+            {
+                Enabled = true,
+                IncludeDlls = true,
+                SubjectName = "CN=Publisher"
+            };
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                SourceRevision = new string('a', 40),
+                Targets =
+                [
+                    new DotNetPublishTargetPlan
+                    {
+                        Name = "app",
+                        Kind = DotNetPublishTargetKind.Cli,
+                        ExecutableIdentities = new[] { "PowerForge.Tests" },
+                        Publish = new DotNetPublishPublishOptions { Sign = sign }
+                    }
+                ],
+                Bundles =
+                [
+                    new DotNetPublishBundlePlan
+                    {
+                        Id = "package",
+                        PrepareFromTarget = "app",
+                        Zip = true
+                    }
+                ]
+            };
+            var artefacts = new[]
+            {
+                new DotNetPublishArtefactResult
+                {
+                    Category = DotNetPublishArtefactCategory.Publish,
+                    Target = "app",
+                    Kind = DotNetPublishTargetKind.Cli,
+                    Framework = "net10.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.PortableCompat,
+                    OutputDir = publishDir,
+                    PublishDir = publishDir
+                }
+            };
+            var step = new DotNetPublishStep
+            {
+                Key = "bundle:package:app:net10.0:win-x64:PortableCompat",
+                Kind = DotNetPublishStepKind.Bundle,
+                BundleId = "package",
+                TargetName = "app",
+                Framework = "net10.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.PortableCompat,
+                BundleOutputPath = outputDir,
+                BundleZipPath = zipPath
+            };
+            var runner = new DotNetPublishPipelineRunner(
+                new NullLogger(),
+                new BundleProcessRunner(_ => throw new InvalidOperationException("Process execution was not expected.")),
+                _ => true,
+                signPortableInventory: (_, _) => new byte[] { 1 },
+                signatureMatchesPublisher: (_, _) => true,
+                readAuthenticodeSignature: _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
+                    true,
+                    0,
+                    "CN=Publisher",
+                    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"));
+
+            DotNetPublishArtefactResult result = runner.BuildBundle(plan, artefacts, step);
+
+            Assert.Equal(1, result.SignedFiles);
+            Assert.True(File.Exists(result.ZipPath));
+            using var archive = ZipFile.OpenRead(result.ZipPath!);
+            ZipArchiveEntry inventoryEntry = Assert.Single(
+                archive.Entries,
+                entry => entry.FullName == PowerForgePortablePayloadInventory.InventoryFileName);
+            using Stream inventoryStream = inventoryEntry.Open();
+            PowerForgePortablePayloadInventory inventory = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(inventoryStream)!;
+            Assert.Equal(3, inventory.SchemaVersion);
+            Assert.Equal("app", inventory.Target);
+            Assert.Equal("package", inventory.BundleId);
+            Assert.Contains(inventory.Entries, entry => entry.Path == "runtime-data.json");
+            Assert.Contains(inventory.SignedFilePaths, path => path == "PowerForge.Tests.dll");
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_PublishesBundleIncludesBeforeBundleStep()
     {
         var root = CreateTempRoot();
@@ -741,6 +843,19 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
+    }
+
+    private sealed class BundleProcessRunner : IProcessRunner
+    {
+        private readonly Func<ProcessRunRequest, ProcessRunResult> _execute;
+
+        internal BundleProcessRunner(Func<ProcessRunRequest, ProcessRunResult> execute)
+            => _execute = execute;
+
+        public Task<ProcessRunResult> RunAsync(
+            ProcessRunRequest request,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(_execute(request));
     }
 
     private static void TryDelete(string path)

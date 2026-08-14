@@ -10,6 +10,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string projectRoot = RequireDirectory(request.ProjectRoot, nameof(request.ProjectRoot));
         string artifactId = DotNetPublishReleaseArtifactVerifier.RequireText(request.ArtifactId, nameof(request.ArtifactId));
         string target = string.IsNullOrWhiteSpace(request.Target) ? artifactId : request.Target!.Trim();
+        string? bundleId = string.IsNullOrWhiteSpace(request.BundleId) ? null : request.BundleId!.Trim();
         if (!string.Equals(target, artifactId, StringComparison.OrdinalIgnoreCase))
             throw Invalid("Portable release artifact ID must match the selected publish target.");
         string checksumsPath = ResolveRequestFile(projectRoot, request.ChecksumsPath, nameof(request.ChecksumsPath));
@@ -24,14 +25,17 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             throw Invalid("PowerForge manifest must contain a JSON array.");
 
         JsonElement[] entries = manifest.RootElement.EnumerateArray()
-            .Where(entry => Is(entry, "Category", "Publish") && Is(entry, "Target", target))
+            .Where(entry => Is(entry, "Category", bundleId is null ? "Publish" : "Bundle") &&
+                            Is(entry, "Target", target) &&
+                            (bundleId is null || Is(entry, "BundleId", bundleId)))
             .ToArray();
         entries = FilterEntries(entries, "Runtime", request.Runtime);
         entries = FilterEntries(entries, "Framework", request.Framework);
         entries = FilterEntries(entries, "Style", request.Style);
         if (entries.Length != 1)
             throw Invalid(
-                $"PowerForge manifest selectors must identify exactly one '{target}' portable publish entry; " +
+                $"PowerForge manifest selectors must identify exactly one '{target}' portable " +
+                $"{(bundleId is null ? "publish entry" : $"bundle '{bundleId}' entry")}; " +
                 "specify RID, framework, and style for matrix builds.");
 
         JsonElement entry = entries[0];
@@ -60,7 +64,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             if (!string.Equals(Path.GetFileName(manifestArchive), Path.GetFileName(artifactPath), StringComparison.OrdinalIgnoreCase))
                 throw Invalid("Requested portable archive does not match the selected manifest entry.");
         }
-        else if (!DirectArtifactNameMatchesManifestEntry(entry, manifestExecutable, artifactPath))
+        else if (!DirectArtifactNameMatchesManifestEntry(entry, manifestExecutable, artifactPath, bundleId))
         {
             throw Invalid("A direct portable artifact must have the release-asset identity of the manifest executable.");
         }
@@ -76,7 +80,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 expected.SignerThumbprint,
                 expected.SignerSubjectName);
             if (!string.Equals(archive.Inventory.ArtifactId, artifactId, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(archive.Inventory.Target, target, StringComparison.OrdinalIgnoreCase))
+                !string.Equals(archive.Inventory.Target, target, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(archive.Inventory.BundleId, bundleId, StringComparison.OrdinalIgnoreCase) ||
+                (bundleId is not null && archive.Inventory.SchemaVersion < 3))
                 throw Invalid("Publisher-signed portable payload identity does not match the requested artifact target.");
             if (!string.Equals(archive.Inventory.Runtime, ReadString(entry, "Runtime"), StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(archive.Inventory.Framework, ReadString(entry, "Framework"), StringComparison.OrdinalIgnoreCase) ||
@@ -168,7 +174,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     private static bool DirectArtifactNameMatchesManifestEntry(
         JsonElement entry,
         string manifestExecutable,
-        string artifactPath)
+        string artifactPath,
+        string? bundleId)
     {
         string requestedName = Path.GetFileName(artifactPath);
         string originalName = Path.GetFileName(
@@ -181,8 +188,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             ReadString(entry, "Framework"),
             ReadString(entry, "Runtime"),
             ReadString(entry, "Style"),
-            DotNetPublishArtefactCategory.Publish,
-            bundleId: null,
+            bundleId is null ? DotNetPublishArtefactCategory.Publish : DotNetPublishArtefactCategory.Bundle,
+            bundleId,
             manifestExecutable);
         return string.Equals(matrixName, requestedName, StringComparison.OrdinalIgnoreCase);
     }

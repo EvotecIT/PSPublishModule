@@ -68,7 +68,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         {
             throw Invalid($"Portable payload inventory is not valid JSON: {exception.Message}");
         }
-        if (inventory.SchemaVersion != 2)
+        if (inventory.SchemaVersion is not (2 or 3))
             throw Invalid("Portable payload inventory schema version is not supported.");
         var represented = new Dictionary<string, PowerForgePortablePayloadEntry>(StringComparer.Ordinal);
         foreach (PowerForgePortablePayloadEntry representedEntry in inventory.Entries ?? Array.Empty<PowerForgePortablePayloadEntry>())

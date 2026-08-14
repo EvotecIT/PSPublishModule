@@ -1035,6 +1035,99 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void WriteManifests_ProjectReferenceUsesNearestSelectedTargetFrameworkInputs()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        string intermediateRoot = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string childDirectory = Directory.CreateDirectory(Path.Combine(root, "Child")).FullName;
+            string parentProject = Path.Combine(root, "Parent.csproj");
+            string childProject = Path.Combine(childDirectory, "Child.csproj");
+            File.WriteAllText(
+                Path.Combine(root, "Directory.Build.props"),
+                "<Project><PropertyGroup>" +
+                $"<BaseIntermediateOutputPath>{intermediateRoot}\\$(MSBuildProjectName)\\</BaseIntermediateOutputPath>" +
+                $"<MSBuildProjectExtensionsPath>{intermediateRoot}\\$(MSBuildProjectName)\\</MSBuildProjectExtensionsPath>" +
+                "</PropertyGroup></Project>");
+            File.WriteAllText(parentProject,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFrameworks>net8.0;net10.0</TargetFrameworks><RuntimeIdentifiers>win-x64</RuntimeIdentifiers></PropertyGroup>" +
+                "<ItemGroup><ProjectReference Include=\"Child/Child.csproj\" /></ItemGroup></Project>");
+            File.WriteAllText(childProject,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFrameworks>net8.0;net10.0</TargetFrameworks><RuntimeIdentifiers>win-x64</RuntimeIdentifiers></PropertyGroup>" +
+                "<ItemGroup Condition=\"'$(TargetFramework)' == 'net10.0'\">" +
+                "<Content Include=\"net10-only.json\" CopyToOutputDirectory=\"Always\" /></ItemGroup></Project>");
+            File.WriteAllText(Path.Combine(root, ".gitignore"),
+                "Child/net10-only.json\nArtifacts/\n");
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"tracked project graph\"");
+            File.WriteAllText(Path.Combine(childDirectory, "net10-only.json"), "ignored selected-framework input");
+            RunDotNet(root, $"restore \"{parentProject}\" -r win-x64");
+
+            string outputDirectory = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "app")).FullName;
+            string executablePath = Path.Combine(outputDirectory, "app.exe");
+            File.WriteAllText(executablePath, "payload");
+            string manifestPath = Path.Combine(root, "Artifacts", "manifest.json");
+            var combination = new DotNetPublishTargetCombination
+            {
+                Framework = "net8.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.PortableCompat
+            };
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Targets =
+                [
+                    new DotNetPublishTargetPlan
+                    {
+                        Name = "Sample",
+                        ProjectPath = parentProject,
+                        Combinations = new[] { combination }
+                    }
+                ],
+                Outputs = new DotNetPublishOutputs { ManifestJsonPath = manifestPath }
+            };
+            var artifact = new DotNetPublishArtefactResult
+            {
+                Category = DotNetPublishArtefactCategory.Publish,
+                Target = "Sample",
+                Framework = "net8.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.PortableCompat,
+                PublishDir = outputDirectory,
+                OutputDir = outputDirectory,
+                ExePath = executablePath,
+                Files = 1,
+                TotalBytes = 7
+            };
+            var artifacts = new List<DotNetPublishArtefactResult> { artifact };
+
+            Assert.True(
+                string.IsNullOrWhiteSpace(RunGit(root, "status --porcelain=v1")),
+                RunGit(root, "status --porcelain=v1"));
+
+            InvokeWriteManifests(plan, artifacts);
+            using (JsonDocument net8Manifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+                Assert.False(net8Manifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+
+            combination.Framework = "net10.0";
+            artifact.Framework = "net10.0";
+            InvokeWriteManifests(plan, artifacts);
+            using JsonDocument net10Manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            Assert.True(net10Manifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(intermediateRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void HasReparsePointBelowRoot_DirectoryJunction_IsRejected()
     {
         if (!OperatingSystem.IsWindows())
@@ -1100,5 +1193,24 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
         Assert.True(process.WaitForExit(10000), $"git {arguments} timed out");
         Assert.True(process.ExitCode == 0, $"git {arguments} failed: {error}");
         return output;
+    }
+
+    private static void RunDotNet(string root, string arguments)
+    {
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = arguments,
+            WorkingDirectory = root,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+        Assert.NotNull(process);
+        string output = process!.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(120000), $"dotnet {arguments} timed out");
+        Assert.True(process.ExitCode == 0, $"dotnet {arguments} failed: {output}{error}");
     }
 }

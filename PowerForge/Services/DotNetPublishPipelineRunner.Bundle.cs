@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Text;
 
@@ -117,7 +118,7 @@ public sealed partial class DotNetPublishPipelineRunner
         };
 
         var sourceTargetPlan = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
-            .FirstOrDefault(entry => string.Equals(entry.Name, target, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(entry => string.Equals(entry.Name, sourceArtefact.Target, StringComparison.OrdinalIgnoreCase));
         tokens["keepSymbols"] = (sourceTargetPlan?.Publish?.KeepSymbols ?? false).ToString();
         tokens["keepDocs"] = (sourceTargetPlan?.Publish?.KeepDocs ?? false).ToString();
         tokens["signEnabled"] = (sourceTargetPlan?.Publish?.Sign?.Enabled ?? false).ToString();
@@ -147,11 +148,65 @@ public sealed partial class DotNetPublishPipelineRunner
             SignBundlePostProcessFiles(plan, bundle, outputDir);
         }
 
+        string[] signedFilePaths = Array.Empty<string>();
+        string? primaryExecutable = null;
+        DotNetPublishSignOptions? sign = sourceTargetPlan?.Publish?.Sign;
+        if (sign?.Enabled == true)
+        {
+            signedFilePaths = TrySignOutput(outputDir, sign);
+            primaryExecutable = ResolvePrimaryExecutable(outputDir, runtime, sourceTargetPlan!.ExecutableIdentities, recursive: true)
+                ?? throw new InvalidOperationException(
+                    $"Signed bundle '{bundleId}' does not contain a primary executable matching the configured project identity.");
+            FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(primaryExecutable);
+            string executableIdentity = ResolvePortableExecutableIdentity(
+                versionInfo.ProductName,
+                versionInfo.InternalName,
+                versionInfo.OriginalFilename,
+                primaryExecutable);
+            if (!PortableExecutableIdentityMatches(executableIdentity, sourceTargetPlan.ExecutableIdentities))
+            {
+                throw new InvalidOperationException(
+                    $"Signed bundle executable identity '{executableIdentity}' does not match the configured " +
+                    $"project identity for publish target '{sourceTargetPlan.Name}'.");
+            }
+
+            if (bundle.Zip)
+            {
+                string portableVersion = FirstText(versionInfo.ProductVersion, versionInfo.FileVersion);
+                PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
+                    outputDir,
+                    sourceTargetPlan.Name,
+                    runtime,
+                    framework,
+                    style.Value.ToString(),
+                    plan.SourceRevision,
+                    primaryExecutable,
+                    executableIdentity,
+                    portableVersion,
+                    signedFilePaths,
+                    bundleId);
+                byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
+                File.WriteAllBytes(
+                    Path.Combine(outputDir, PowerForgePortablePayloadInventory.InventoryFileName),
+                    inventoryBytes);
+                File.WriteAllBytes(
+                    Path.Combine(outputDir, PowerForgePortablePayloadInventory.SignatureFileName),
+                    _signPortableInventory(
+                        inventoryBytes,
+                        ResolvePortableInventorySigningOptions(signedFilePaths, sign)));
+            }
+        }
+
         string? zipPath = null;
         if (bundle.Zip)
             zipPath = CreateBundleZip(plan, bundle, outputDir, step.BundleZipPath);
 
         var summary = SummarizeDirectory(outputDir, runtime);
+        primaryExecutable ??= ResolvePrimaryExecutable(
+            outputDir,
+            runtime,
+            sourceTargetPlan?.ExecutableIdentities ?? Array.Empty<string>(),
+            recursive: true);
         return new DotNetPublishArtefactResult
         {
             Category = DotNetPublishArtefactCategory.Bundle,
@@ -166,8 +221,10 @@ public sealed partial class DotNetPublishPipelineRunner
             ZipPath = zipPath,
             Files = summary.Files,
             TotalBytes = summary.TotalBytes,
-            ExePath = summary.ExePath,
-            ExeBytes = summary.ExeBytes
+            ExePath = primaryExecutable,
+            ExeBytes = primaryExecutable is null ? null : new FileInfo(primaryExecutable).Length,
+            SignedFiles = signedFilePaths.Length,
+            SignedFilePaths = signedFilePaths
         };
     }
 

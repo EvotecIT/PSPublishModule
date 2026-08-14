@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 
 namespace PowerForge;
 
@@ -42,12 +43,15 @@ public sealed partial class ModulePipelineRunner
             }
 
             string projectManifestPath = Path.Combine(plan.ProjectRoot, plan.ModuleName + ".psd1");
-            if (!File.Exists(projectManifestPath) ||
+            string? authorizedManifestSha256 = state.AuthorizedProjectManifestSha256;
+            if (string.IsNullOrWhiteSpace(authorizedManifestSha256) ||
+                !File.Exists(projectManifestPath) ||
                 (File.GetAttributes(projectManifestPath) & FileAttributes.ReparsePoint) != 0 ||
-                !File.ReadAllBytes(projectManifestPath).SequenceEqual(File.ReadAllBytes(context.ManifestPath)))
+                !string.Equals(ComputeFileSha256(projectManifestPath), authorizedManifestSha256, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(ComputeFileSha256(context.ManifestPath), authorizedManifestSha256, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    "The generated project manifest does not match the final packed module manifest.");
+                    "The generated project manifest changed after its pipeline-owned synchronization or does not match the final packed module manifest.");
             }
 
             string[] generatedOutputs = state.ArtefactResults
@@ -150,6 +154,31 @@ public sealed partial class ModulePipelineRunner
                 context.ManifestPath,
                 signingResult)
         };
+    }
+
+    private static void CaptureAuthorizedProjectManifest(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
+    {
+        if (!plan.GenerateReleaseProvenance)
+            return;
+
+        string projectManifestPath = Path.Combine(plan.ProjectRoot, plan.ModuleName + ".psd1");
+        if (!File.Exists(projectManifestPath) ||
+            (File.GetAttributes(projectManifestPath) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                "The pipeline-owned project manifest synchronization did not produce a regular manifest file.");
+        }
+
+        state.AuthorizedProjectManifestSha256 = ComputeFileSha256(projectManifestPath);
+    }
+
+    private static string ComputeFileSha256(string path)
+    {
+        using FileStream input = File.OpenRead(path);
+        using SHA256 hash = SHA256.Create();
+        return BitConverter.ToString(hash.ComputeHash(input)).Replace("-", string.Empty);
     }
 
     private static ModuleSigningResult AggregateSigningResults(

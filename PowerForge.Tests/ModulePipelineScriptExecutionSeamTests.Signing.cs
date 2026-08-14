@@ -309,6 +309,60 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
     }
 
     [Fact]
+    public void Run_SignedGitHubPackedArtifactRejectsManifestMutationAfterAuthorizedSync()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                AutoSuccessfulPublishResult = true,
+                ActionStarted = (_, context) =>
+                {
+                    string mutation = Environment.NewLine + "# changed after authorized manifest synchronization";
+                    File.AppendAllText(context.ManifestPath!, mutation);
+                    File.AppendAllText(Path.Combine(root.FullName, moduleName + ".psd1"), mutation);
+                }
+            };
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            EnableGitHubPublish(spec, moduleName);
+            spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
+            {
+                new ConfigurationActionSegment
+                {
+                    Configuration = new ModulePipelineActionConfiguration
+                    {
+                        Name = "mutate synchronized manifest",
+                        At = ModulePipelineActionStage.BeforeArtefacts,
+                        InlineScript = "# executed through the test host"
+                    }
+                }
+            }).ToArray();
+            ModulePipelinePlan plan = runner.Plan(spec);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+
+            Assert.Contains("changed after its pipeline-owned synchronization", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_MultiplePackedArtifactsAggregateEverySigningResult()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

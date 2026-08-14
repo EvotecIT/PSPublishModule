@@ -265,7 +265,8 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static string? ResolvePrimaryExecutable(
         string root,
         string rid,
-        IEnumerable<string> expectedIdentities)
+        IEnumerable<string> expectedIdentities,
+        bool recursive = false)
     {
         bool isWindowsRid = rid.StartsWith("win-", StringComparison.OrdinalIgnoreCase);
         string[] expected = (expectedIdentities ?? Array.Empty<string>())
@@ -277,13 +278,15 @@ public sealed partial class DotNetPublishPipelineRunner
             root,
             isWindowsRid ? "*.exe" : "*",
             requireNoExtension: !isWindowsRid,
-            expected: expected);
+            expected: expected,
+            recursive);
         if (candidates.Length == 0 && isWindowsRid)
             candidates = FindIdentityMatchingPrimaryCandidates(
                 root,
                 "*.dll",
                 requireNoExtension: false,
-                expected: expected);
+                expected: expected,
+                recursive);
         if (candidates.Length > 1)
         {
             throw new InvalidOperationException(
@@ -296,9 +299,10 @@ public sealed partial class DotNetPublishPipelineRunner
         string root,
         string pattern,
         bool requireNoExtension,
-        IReadOnlyCollection<string> expected)
+        IReadOnlyCollection<string> expected,
+        bool recursive)
     {
-        return Directory.EnumerateFiles(root, pattern, SearchOption.TopDirectoryOnly)
+        return Directory.EnumerateFiles(root, pattern, recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)
             .Where(path => !requireNoExtension || string.IsNullOrWhiteSpace(Path.GetExtension(path)))
             .Where(path =>
             {

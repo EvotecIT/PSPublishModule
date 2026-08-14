@@ -51,6 +51,7 @@ public sealed partial class ModulePipelineRunner
         public List<AppleAppReleasePreparationResult> AppleAppResults { get; } = new();
         public ModuleInstallerResult? InstallResult { get; set; }
         public string? ProjectManifestSyncMessage { get; set; }
+        public string? AuthorizedProjectManifestSha256 { get; set; }
         public bool PackageWithoutScriptFolders =>
             MergeExecution.MergedModule ||
             (MergeExecution.UsedExistingPsm1 && !MergeExecution.HasScriptSources);

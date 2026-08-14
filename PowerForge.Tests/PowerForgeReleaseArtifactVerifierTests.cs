@@ -32,6 +32,24 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliSelectsAndVerifiesSignedBundlePayload()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureBundle("package");
+        Directory.Delete(fixture.OutputDirectory, recursive: true);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.BundleId = "package";
+
+        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal("Sample.CLI", result.ArtifactId);
+        request.BundleId = null;
+        InvalidDataException missingSelector = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+        Assert.Contains("publish entry", missingSelector.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliAcceptsGlobalMatrixDimensionDefaults()
     {
         using var fixture = new PortableFixture();
@@ -347,7 +365,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             WriteArchiveFromOutput();
         }
 
-        private void WritePortableInventory(IEnumerable<string> signedPaths, string version = "1.2.3+" + SourceRevision)
+        private void WritePortableInventory(
+            IEnumerable<string> signedPaths,
+            string version = "1.2.3+" + SourceRevision,
+            string? bundleId = null)
         {
             PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
                 OutputDirectory,
@@ -359,7 +380,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 ExecutablePath,
                 "Sample.CLI",
                 version,
-                signedPaths);
+                signedPaths,
+                bundleId);
             File.WriteAllBytes(
                 Path.Combine(OutputDirectory, PowerForgePortablePayloadInventory.InventoryFileName),
                 PowerForgePortablePayloadInventoryCms.Serialize(inventory));
@@ -552,6 +574,34 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             WriteArchiveFromOutput();
             WriteBoundCycloneDxSbom(alias, "1.2.3", ComputeDigest(ArchivePath));
             base.WriteChecksums(ManifestPath, ConfigurationPath, ProjectPath, ExecutablePath, ArchivePath);
+        }
+
+        internal void ConfigureBundle(string bundleId)
+        {
+            WritePortableInventory(new[] { ExecutablePath }, bundleId: bundleId);
+            WriteArchiveFromOutput();
+            File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    Category = "Bundle",
+                    BundleId = bundleId,
+                    Target = "Sample.CLI",
+                    Kind = "Cli",
+                    Runtime = "win-x64",
+                    Framework = "net10.0",
+                    Style = "PortableCompat",
+                    OutputDir = OutputDirectory,
+                    ZipPath = ArchivePath,
+                    ExePath = ExecutablePath,
+                    SignedFiles = 1,
+                    SignedFilePaths = new[] { ExecutablePath },
+                    SourceRevision,
+                    SourceDirty = false
+                }
+            }));
+            WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
+            base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath);
         }
 
         internal void ConfigureSubjectNameSigning()

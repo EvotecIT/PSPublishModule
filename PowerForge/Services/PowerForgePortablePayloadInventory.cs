@@ -14,6 +14,7 @@ internal sealed class PowerForgePortablePayloadInventory
     public int SchemaVersion { get; set; }
     public string ArtifactId { get; set; } = string.Empty;
     public string Target { get; set; } = string.Empty;
+    public string? BundleId { get; set; }
     public string Runtime { get; set; } = string.Empty;
     public string Framework { get; set; } = string.Empty;
     public string Style { get; set; } = string.Empty;
@@ -77,7 +78,8 @@ internal static class PowerForgePortablePayloadInventoryCms
         string executablePath,
         string executableIdentity,
         string version,
-        IEnumerable<string> signedFilePaths)
+        IEnumerable<string> signedFilePaths,
+        string? bundleId = null)
     {
         string root = Path.GetFullPath(outputDirectory);
         PowerForgePortablePayloadEntry[] entries = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
@@ -103,9 +105,10 @@ internal static class PowerForgePortablePayloadInventoryCms
         }
         return new PowerForgePortablePayloadInventory
         {
-            SchemaVersion = 2,
+            SchemaVersion = 3,
             ArtifactId = artifactId,
             Target = artifactId,
+            BundleId = string.IsNullOrWhiteSpace(bundleId) ? null : bundleId!.Trim(),
             Runtime = runtime,
             Framework = framework,
             Style = style,

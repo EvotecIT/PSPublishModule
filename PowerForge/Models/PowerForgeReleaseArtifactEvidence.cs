@@ -50,6 +50,9 @@ public sealed class PowerForgeReleaseArtifactVerificationRequest
     /// <summary>Optional publish target selector. Defaults to <see cref="ArtifactId"/>.</summary>
     public string? Target { get; set; }
 
+    /// <summary>Optional bundle selector. When set, verifies the matching composed bundle instead of a publish output.</summary>
+    public string? BundleId { get; set; }
+
     /// <summary>Optional runtime identifier selector.</summary>
     public string? Runtime { get; set; }
 

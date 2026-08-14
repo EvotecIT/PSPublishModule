@@ -221,6 +221,7 @@ internal static partial class Program
                     ConfigurationPath = configurationPath,
                     SigningEvidencePath = signingEvidencePath,
                     Target = TryGetOptionValue(commandArgs, "--target"),
+                    BundleId = TryGetOptionValue(commandArgs, "--bundle"),
                     Runtime = TryGetOptionValue(commandArgs, "--rid"),
                     Framework = TryGetOptionValue(commandArgs, "--framework"),
                     Style = TryGetOptionValue(commandArgs, "--style"),
