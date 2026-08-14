@@ -302,7 +302,7 @@
         "checkMedia": { "type": "boolean" },
         "requireExplicitChecks": {
           "type": "boolean",
-          "description": "When true, require explicit values for compatibility-sensitive checks (checkSeoMeta, checkNetworkHints, checkRenderBlockingResources, checkHeadingOrder, checkLinkPurposeConsistency, checkMediaEmbeds)."
+          "description": "When true, require explicit values for compatibility-sensitive checks (checkSeoMeta, checkNetworkHints, checkRenderBlockingResources, checkHeadingOrder, checkLinkPurposeConsistency, checkMediaEmbeds, checkAgentContentSecurity)."
         },
         "require-explicit-checks": {
           "type": "boolean",
@@ -4067,7 +4067,7 @@
         "max-head-blocking": { "type": "integer", "minimum": 0 },
         "requireExplicitChecks": {
           "type": "boolean",
-          "description": "When true, require explicit values for compatibility-sensitive checks (checkSeoMeta, checkNetworkHints, checkRenderBlockingResources, checkHeadingOrder, checkLinkPurposeConsistency, checkMediaEmbeds)."
+          "description": "When true, require explicit values for compatibility-sensitive checks (checkSeoMeta, checkNetworkHints, checkRenderBlockingResources, checkHeadingOrder, checkLinkPurposeConsistency, checkMediaEmbeds, checkAgentContentSecurity)."
         },
         "require-explicit-checks": {
           "type": "boolean",

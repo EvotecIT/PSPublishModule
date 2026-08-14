@@ -161,6 +161,7 @@ public class WebSiteScaffolderTests
             Assert.True(auditStep.GetProperty("checkHeadingOrder").GetBoolean());
             Assert.True(auditStep.GetProperty("checkLinkPurposeConsistency").GetBoolean());
             Assert.True(auditStep.GetProperty("checkMediaEmbeds").GetBoolean());
+            Assert.False(auditStep.GetProperty("checkAgentContentSecurity").GetBoolean());
 
             using var engineLockDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".powerforge", "engine-lock.json")));
             var engineLock = engineLockDoc.RootElement;

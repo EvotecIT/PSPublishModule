@@ -13,9 +13,14 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         if (!ValidatePackageSourceOptions("packagist", tokens, path, line, findings))
             return;
-        var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "require", "install", "i" }, "composer", path, line, findings);
+        var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "require", "install", "i", "create-project" }, "composer", path, line, findings);
         if (verbIndex < 0)
             return;
+        if (tokens[verbIndex].Equals("create-project", StringComparison.OrdinalIgnoreCase))
+        {
+            AddUnverifiableOperand("composer create-project", path, line, findings, "project dependency set");
+            return;
+        }
         if (tokens[verbIndex].Equals("install", StringComparison.OrdinalIgnoreCase) ||
             tokens[verbIndex].Equals("i", StringComparison.OrdinalIgnoreCase))
         {

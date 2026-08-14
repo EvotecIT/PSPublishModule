@@ -25,6 +25,10 @@ public sealed partial class WebAgentContentSecurityScannerTests
     [InlineData("gem install safe-gem -g")]
     [InlineData("gem install safe-gem --file Gemfile")]
     [InlineData("gem -g install safe-gem")]
+    [InlineData("n\\pm install attacker-package")]
+    [InlineData("composer create-project attacker/project")]
+    [InlineData("yarn --immutable")]
+    [InlineData("yarn")]
     public void Scan_RejectsIndirectOrAlternateDependencySources(string command)
     {
         using var handler = new RegistryHandler(_ => throw new InvalidOperationException("Registry must not be called."));
@@ -38,7 +42,8 @@ public sealed partial class WebAgentContentSecurityScannerTests
 
             Assert.False(result.Success);
             Assert.Contains(result.Findings, issue =>
-                issue.Code is "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND" or "PFAGENT.PACKAGE.UNTRUSTED_SOURCE");
+                issue.Code is "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND" or "PFAGENT.PACKAGE.UNTRUSTED_SOURCE" or
+                    "PFAGENT.PACKAGE.OBFUSCATED_COMMAND");
             Assert.Equal(0, handler.RequestCount);
         }
         finally

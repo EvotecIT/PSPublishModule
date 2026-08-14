@@ -475,7 +475,7 @@ public static partial class WebLlmsGenerator
         => isPowerShellModule
             ? string.IsNullOrWhiteSpace(exactVersion)
                 ? $"Install-Module {packageId}"
-                : $"Install-Module {packageId} -RequiredVersion {exactVersion}"
+                : $"Install-Module {packageId} -RequiredVersion {exactVersion}{(IsPrereleaseVersion(exactVersion) ? " -AllowPrerelease" : string.Empty)}"
             : isDotNetTool
                 ? string.IsNullOrWhiteSpace(exactVersion)
                     ? $"dotnet tool install --global {packageId}"
@@ -483,6 +483,9 @@ public static partial class WebLlmsGenerator
                 : string.IsNullOrWhiteSpace(exactVersion)
                     ? $"dotnet add package {packageId}"
                     : $"dotnet add package {packageId} --version {exactVersion}";
+
+    private static bool IsPrereleaseVersion(string version)
+        => version.Contains('-', StringComparison.Ordinal);
 
     private static void AppendApiDetails(List<string> lines, WebLlmsOptions options, IReadOnlyList<ApiCatalogInfo> apiCatalogs)
     {

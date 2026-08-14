@@ -751,6 +751,7 @@ body.pf-api-body { background:
                   "checkHeadingOrder": true,
                   "checkLinkPurposeConsistency": true,
                   "checkMediaEmbeds": true,
+                  "checkAgentContentSecurity": false,
                   "rendered": true,
                   "renderedMaxPages": 2,
                   "renderedEnsureInstalled": true,

@@ -19,6 +19,7 @@ internal static partial class WebPipelineRunner
         RequireExplicitCheck(step, missing, "checkHeadingOrder");
         RequireExplicitCheck(step, missing, "checkLinkPurposeConsistency", "checkLinkPurpose");
         RequireExplicitCheck(step, missing, "checkMediaEmbeds", "checkMedia");
+        RequireExplicitCheck(step, missing, "checkAgentContentSecurity", "check-agent-content-security");
 
         if (missing.Count == 0)
             return;

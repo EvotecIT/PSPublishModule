@@ -232,6 +232,35 @@ public sealed class WebLlmsPublicationCatalogTests
     }
 
     [Fact]
+    public void VerifiedCatalog_AddsAllowPrereleaseForPowerShellModulePrerelease()
+    {
+        using var fixture = new PublicationFixture();
+        var module = fixture.WriteFile(
+            "PreviewModule.psd1",
+            "@{ RootModule = 'PreviewModule.psm1'; ModuleVersion = '1.2.3'; PrivateData = @{ PSData = @{ Prerelease = 'beta1' } } }");
+        var catalog = fixture.WriteCatalog(
+            "Evotec",
+            [],
+            powerShellGalleryOwner: "Przemyslaw.Klys",
+            powerShellModules: ["PreviewModule"],
+            packageVersion: "1.2.3-beta1");
+
+        var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            ProjectFile = module,
+            InstallCommandPolicy = WebLlmsInstallCommandPolicy.VerifiedCatalog,
+            PublicationCatalogPath = catalog,
+            PowerShellGalleryOwner = "Przemyslaw.Klys"
+        });
+
+        Assert.Equal(1, result.InstallCommandCount);
+        var expected = "Install-Module PreviewModule -RequiredVersion 1.2.3-beta1 -AllowPrerelease";
+        Assert.Contains(expected, File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        Assert.Contains(expected, File.ReadAllText(result.LlmsJsonPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void VerifiedCatalog_PreservesNuGetAndPowerShellPackagesWithTheSameIdentifier()
     {
         using var fixture = new PublicationFixture();

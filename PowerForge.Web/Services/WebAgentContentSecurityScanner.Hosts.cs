@@ -119,45 +119,61 @@ public sealed partial class WebAgentContentSecurityScanner
         if ((int)response.StatusCode < 400)
             return;
 
-        using var bodyCancellation = CancellationTokenSource.CreateLinkedTokenSource(networkBudget);
-        bodyCancellation.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
-        using var stream = response.Content.ReadAsStream(bodyCancellation.Token);
-        using var reader = new StreamReader(stream);
-        var buffer = new char[16 * 1024];
-        var count = 0;
-        while (count < buffer.Length)
+        try
         {
-            var read = reader.ReadAsync(buffer.AsMemory(count, buffer.Length - count), bodyCancellation.Token)
-                .AsTask().GetAwaiter().GetResult();
-            if (read == 0)
-                break;
-            count += read;
+            using var bodyCancellation = CancellationTokenSource.CreateLinkedTokenSource(networkBudget);
+            bodyCancellation.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+            using var stream = response.Content.ReadAsStream(bodyCancellation.Token);
+            using var reader = new StreamReader(stream);
+            var buffer = new char[16 * 1024];
+            var count = 0;
+            while (count < buffer.Length)
+            {
+                var read = reader.ReadAsync(buffer.AsMemory(count, buffer.Length - count), bodyCancellation.Token)
+                    .AsTask().GetAwaiter().GetResult();
+                if (read == 0)
+                    break;
+                count += read;
+            }
+            var body = new string(buffer, 0, count);
+            var fingerprints = new[]
+            {
+                "There isn't a GitHub Pages site here",
+                "No such app",
+                "DEPLOYMENT_NOT_FOUND",
+                "404 Web Site not found",
+                "The specified bucket does not exist",
+                "Fastly error: unknown domain"
+            };
+            var fingerprint = fingerprints.FirstOrDefault(value => body.Contains(value, StringComparison.OrdinalIgnoreCase));
+            if (fingerprint is not null)
+            {
+                AddFinding(findings, "error", "PFAGENT.HOST.DANGLING_SERVICE", null, null,
+                    $"External endpoint '{endpoint}' returned a known unclaimed-service fingerprint: {fingerprint}.");
+            }
         }
-        var body = new string(buffer, 0, count);
-        var fingerprints = new[]
+        catch (IOException ex)
         {
-            "There isn't a GitHub Pages site here",
-            "No such app",
-            "DEPLOYMENT_NOT_FOUND",
-            "404 Web Site not found",
-            "The specified bucket does not exist",
-            "Fastly error: unknown domain"
-        };
-        var fingerprint = fingerprints.FirstOrDefault(value => body.Contains(value, StringComparison.OrdinalIgnoreCase));
-        if (fingerprint is not null)
-        {
-            AddFinding(findings, "error", "PFAGENT.HOST.DANGLING_SERVICE", null, null,
-                $"External endpoint '{endpoint}' returned a known unclaimed-service fingerprint: {fingerprint}.");
+            AddFinding(findings, "error", "PFAGENT.HOST.RESPONSE_READ_FAILED", null, null,
+                $"External endpoint '{endpoint}' response could not be read safely: {ex.Message}");
         }
     }
 
     private static HttpClient CreatePinnedHttpClient(IPAddress address, int timeoutSeconds)
     {
-        var handler = new SocketsHttpHandler
+        var handler = CreatePinnedHttpHandler(address, timeoutSeconds);
+        var client = new HttpClient(handler, disposeHandler: true);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForge.Web-AgentContentSecurity/1.0");
+        return client;
+    }
+
+    private static SocketsHttpHandler CreatePinnedHttpHandler(IPAddress address, int timeoutSeconds)
+        => new()
         {
             AllowAutoRedirect = false,
             AutomaticDecompression = DecompressionMethods.All,
             ConnectTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+            UseProxy = false,
             ConnectCallback = async (context, cancellationToken) =>
             {
                 var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
@@ -175,10 +191,6 @@ public sealed partial class WebAgentContentSecurityScanner
                 }
             }
         };
-        var client = new HttpClient(handler, disposeHandler: true);
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForge.Web-AgentContentSecurity/1.0");
-        return client;
-    }
 
     private static bool IsTrustedDomain(string host, IEnumerable<string>? trustedDomains)
     {

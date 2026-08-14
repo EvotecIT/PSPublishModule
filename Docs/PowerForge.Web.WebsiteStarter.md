@@ -68,6 +68,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
        - `checkHeadingOrder`
        - `checkLinkPurposeConsistency`
        - `checkMediaEmbeds`
+       - `checkAgentContentSecurity`
    - if your site depends on content/projects sourced from other repos, declare them under `Sources` in `site.json`
      and run `sources-sync` before `build` (or use `powerforge-web build --sync-sources` locally)
    - run `build` + `verify` in all modes

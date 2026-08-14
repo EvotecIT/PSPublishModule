@@ -267,6 +267,35 @@ public sealed partial class WebAgentContentSecurityScannerTests
     }
 
     [Fact]
+    public void HostFingerprintProbe_ReportsResponseReadFailure()
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StreamContent(new FailingReadStream())
+        };
+        var method = typeof(WebAgentContentSecurityScanner).GetMethod(
+            "InspectTakeoverResponse", BindingFlags.NonPublic | BindingFlags.Static);
+        var findings = new List<WebAgentContentSecurityFinding>();
+
+        Assert.NotNull(method);
+        method!.Invoke(null, new object[] { new Uri("https://example.test/"), response, 5, findings, CancellationToken.None });
+
+        Assert.Contains(findings, issue => issue.Code == "PFAGENT.HOST.RESPONSE_READ_FAILED");
+    }
+
+    [Fact]
+    public void PinnedHostHandler_DisablesAmbientProxyRouting()
+    {
+        var method = typeof(WebAgentContentSecurityScanner).GetMethod(
+            "CreatePinnedHttpHandler", BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+        using var handler = (SocketsHttpHandler)method!.Invoke(null, new object[] { IPAddress.Parse("203.0.113.10"), 5 })!;
+
+        Assert.False(handler.UseProxy);
+    }
+
+    [Fact]
     public void HostAddressPolicy_RejectsLocalUseNat64Prefix()
     {
         var method = typeof(WebAgentContentSecurityScanner).GetMethod(

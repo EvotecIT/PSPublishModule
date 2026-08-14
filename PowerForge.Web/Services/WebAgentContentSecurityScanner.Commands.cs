@@ -7,6 +7,9 @@ public sealed partial class WebAgentContentSecurityScanner
     private static readonly Regex CommandSegmentRegex = new(
         @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|Install-Module|Install-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|npm|npx|pnpx|pnpm|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|\^(?!\r?\n)|[\x5C`\^]\r?\n)*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex EscapedExecutableRegex = new(
+        @"(?<![A-Za-z0-9_.-])(?<command>[A-Za-z0-9_.-]+[\x5C`\^][A-Za-z0-9_.\x5C`\^-]+)(?=\s|$)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline);
     private static readonly Regex ShellContinuationRegex = new(
         @"[\x5C\`\^]\r?\n",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -28,6 +31,7 @@ public sealed partial class WebAgentContentSecurityScanner
         List<WebAgentContentSecurityFinding> findings)
     {
         var references = new List<WebAgentPackageReference>();
+        ScanEscapedPackageExecutables(content, path, lineOffset, countLogicalLines, findings);
         foreach (Match match in CommandSegmentRegex.Matches(content))
         {
             if (HasCommandScopedEnvironmentPrefix(content, match.Index))
@@ -38,12 +42,18 @@ public sealed partial class WebAgentContentSecurityScanner
                 continue;
             }
             var tokens = Tokenize(match.Groups["command"].Value);
-            if (tokens.Length < 2)
+            if (tokens.Length == 0)
                 continue;
 
             tokens[0] = NormalizeExecutable(tokens[0]);
             var executable = tokens[0];
             var line = GetReportedLine(content, match.Index, lineOffset, countLogicalLines);
+            if (tokens.Length < 2)
+            {
+                if (executable == "yarn")
+                    AddUnverifiableOperand("yarn", path, line, findings, "lockfile dependency set");
+                continue;
+            }
             if (RejectPersistentPackageConfiguration(executable, tokens, path, line, findings))
                 continue;
             switch (executable)
@@ -100,6 +110,35 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         return references;
     }
+
+    private static void ScanEscapedPackageExecutables(
+        string content,
+        string path,
+        int lineOffset,
+        bool countLogicalLines,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        foreach (Match match in EscapedExecutableRegex.Matches(content))
+        {
+            var escaped = match.Groups["command"].Value;
+            var normalized = NormalizeExecutable(escaped.Replace("\\", string.Empty, StringComparison.Ordinal)
+                .Replace("`", string.Empty, StringComparison.Ordinal)
+                .Replace("^", string.Empty, StringComparison.Ordinal));
+            if (!IsSupportedPackageExecutable(normalized))
+                continue;
+
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND", path,
+                GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                $"Package-manager executable '{escaped}' uses shell escaping that obscures the command from static verification.");
+        }
+    }
+
+    private static bool IsSupportedPackageExecutable(string executable)
+        => executable is "dotnet" or "dnx" or "install-module" or "install-psresource" or
+            "register-psrepository" or "set-psrepository" or "register-psresourcerepository" or
+            "set-psresourcerepository" or "npm" or "npx" or "pnpx" or "pnpm" or "yarn" or
+            "bun" or "bunx" or "python" or "py" or "pip" or "uv" or "uvx" or "pipx" or
+            "cargo" or "gem" or "composer" or "bundle";
 
     private static void ScanPackageSourceEnvironmentOverrides(
         string content,
@@ -200,7 +239,14 @@ public sealed partial class WebAgentContentSecurityScanner
             tokens, 1, NodeVerbs,
             tokens[0], path, line, findings);
         if (verbIndex < 0)
+        {
+            if (tokens[0].Equals("yarn", StringComparison.OrdinalIgnoreCase) &&
+                !IsYarnInformationalInvocation(tokens))
+            {
+                AddUnverifiableOperand("yarn", path, line, findings, "lockfile dependency set");
+            }
             return;
+        }
         var verb = NormalizeNodeVerb(tokens[verbIndex]);
         if (verb == "config")
         {
@@ -248,6 +294,13 @@ public sealed partial class WebAgentContentSecurityScanner
             return;
         AddMultipleOperands("npm", $"{tokens[0]} {tokens[verbIndex]}", tokens, verbIndex + 1, path, line, references, findings);
     }
+
+    private static bool IsYarnInformationalInvocation(string[] tokens)
+        => tokens.Length > 1 && tokens.Skip(1).All(static token =>
+            token.Equals("--version", StringComparison.OrdinalIgnoreCase) ||
+            token.Equals("-v", StringComparison.OrdinalIgnoreCase) ||
+            token.Equals("--help", StringComparison.OrdinalIgnoreCase) ||
+            token.Equals("-h", StringComparison.OrdinalIgnoreCase));
 
     private static void ParsePython(
         string[] tokens,

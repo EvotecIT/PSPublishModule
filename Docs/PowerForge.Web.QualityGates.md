@@ -170,6 +170,7 @@ When enabled, the step fails fast unless these checks are explicitly set in the 
 - `checkHeadingOrder`
 - `checkLinkPurposeConsistency`
 - `checkMediaEmbeds`
+- `checkAgentContentSecurity`
 
 Example:
 ```json
@@ -182,6 +183,7 @@ Example:
   "checkRenderBlockingResources": true,
   "checkHeadingOrder": true,
   "checkLinkPurposeConsistency": true,
-  "checkMediaEmbeds": true
+  "checkMediaEmbeds": true,
+  "checkAgentContentSecurity": true
 }
 ```
