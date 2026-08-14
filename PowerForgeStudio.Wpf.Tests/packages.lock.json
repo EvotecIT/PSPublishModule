@@ -48,11 +48,6 @@
           "AngleSharp": "[1.0.0, 2.0.0)"
         }
       },
-      "BouncyCastle.Cryptography": {
-        "type": "Transitive",
-        "resolved": "2.6.2",
-        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
-      },
       "Microsoft.CodeCoverage": {
         "type": "Transitive",
         "resolved": "17.14.1",
@@ -122,82 +117,73 @@
         "resolved": "7.6.0",
         "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
       },
-      "OfficeIMO.Drawing": {
+      "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.0.3",
-        "contentHash": "xpFbtcKgYZ27uWjQD8GAxWERdvOnpEG7VfOY5qk7TTk4AeyIIsqdqIt/PPlE+Ht4STpdSUvaH37PuyyuNpHgIg=="
+        "resolved": "3.1.0",
+        "contentHash": "emx6dngAz5tgLHkJZTgG5LjHBavuOKTNYjORw1Egep8C9VvhfrCA3THBcb9yAg1YyF0KABBEtOT736ecQCXSBQ=="
       },
       "OfficeIMO.Email": {
         "type": "Transitive",
-        "resolved": "3.0.3",
-        "contentHash": "n0qh2gNf5v15Jm/KUvewwZHyk1jX4rJ5A1yJcHlQnK9udGohq3zV3cMxCAs/Z3ZKRpqnqwbrOb2bzJehZVaoaQ==",
+        "resolved": "3.1.0",
+        "contentHash": "lAocObJkKR0mjaMS5vUbXdnypYGks5x7OksV7UgMHqWCLti1EAalTXPMTSbT0FKkIAjqyYP+hNumvZpo78EIjw==",
         "dependencies": {
-          "OfficeIMO.Drawing": "3.0.3",
-          "OfficeIMO.Rtf": "3.0.3",
-          "OfficeIMO.Security": "3.0.3"
+          "OfficeIMO.Core": "3.1.0",
+          "OfficeIMO.Rtf": "3.1.0"
         }
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
-        "resolved": "3.0.3",
-        "contentHash": "925VRH7poeovDwp5hIghWIFQKjJOSPCqWVy466erxqxHSAQnmGmQSM9wMhNOLTndZnLpR51C62BGIN2OluYYpg==",
+        "resolved": "3.1.0",
+        "contentHash": "OANXLODRAKrj9x0aYcYOcSelQTPigRJ0R+pOdZrihkv20GXq5CD9WB4Ehfx/moMv/j181TvKZ/Ddz2igG5005A==",
         "dependencies": {
           "AngleSharp": "1.5.2",
           "AngleSharp.Css": "1.0.0-beta.216",
-          "OfficeIMO.Drawing": "3.0.3",
-          "OfficeIMO.Email": "3.0.3",
-          "OfficeIMO.Rtf": "3.0.3"
+          "OfficeIMO.Core": "3.1.0",
+          "OfficeIMO.Email": "3.1.0",
+          "OfficeIMO.Rtf": "3.1.0"
         }
       },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
-        "resolved": "3.0.3",
-        "contentHash": "4VAWWPaUFiuzyVx2ZQ2b6/h97ZN5j8nltCmUtv1OWIdmGUfazZRQd/CEYM2e468zkOswGAZDHIU+QV31rQ2A0A==",
+        "resolved": "3.1.0",
+        "contentHash": "XhFoqTq1aSmSzYJBq8sdLxi5mnXqm+Cgbwwc0moLHrjeymPb7E4ujfTF8TB69EMhhwKZQTTm8mn124zPC4hs1A==",
         "dependencies": {
-          "OfficeIMO.Drawing": "3.0.3"
+          "OfficeIMO.Core": "3.1.0"
         }
       },
       "OfficeIMO.Markdown.Html": {
         "type": "Transitive",
-        "resolved": "3.0.3",
-        "contentHash": "Ku6bJhBg6n5Xq4ESHsu7ggC0AUMLAe9PiwKUzThZk0IonU9uioRWvNdcDOZTPHHHSFoP0LUWvjNANYwTECsFjw==",
+        "resolved": "3.1.0",
+        "contentHash": "FUF/7xaKPzNDkH/7TRyl15xOvOVnUzA4WxUo8TAGpgI03ABwj76IQVA7HDZWf0MNf1XoKOlevXWVjCx5mswdSA==",
         "dependencies": {
-          "OfficeIMO.Html": "3.0.3",
-          "OfficeIMO.Markdown": "3.0.3"
+          "OfficeIMO.Html": "3.1.0",
+          "OfficeIMO.Markdown": "3.1.0"
         }
       },
       "OfficeIMO.MarkdownRenderer": {
         "type": "Transitive",
-        "resolved": "3.0.3",
-        "contentHash": "fl9vzHGae4LYzCjNWW8/YMxk1p1g82H/FUM+LLFnWR2WxB9/ly//mB0+A3nkIpCcoUWlz0x7gJSDjhxn+eIdxw==",
+        "resolved": "3.1.0",
+        "contentHash": "Q5PZZE9CdiNp6cPeECOVArot2qH9gsBg44yrWEa3dfzwtB1ynmZdz+5NRlFfzqZOipBqXbsag+NXmjEEMNlVjQ==",
         "dependencies": {
-          "OfficeIMO.Markdown": "3.0.3",
-          "OfficeIMO.Markdown.Html": "3.0.3"
+          "OfficeIMO.Markdown": "3.1.0",
+          "OfficeIMO.Markdown.Html": "3.1.0"
         }
       },
       "OfficeIMO.MarkdownRenderer.Wpf": {
         "type": "Transitive",
-        "resolved": "3.0.3",
-        "contentHash": "tFtywYtsEWzjjwDTDw7ZpJQPmfDnBn6kxdbZ3+0n37OMX3HBa6QU2Q8Pct+YQCPTmO5NFJdcykBq9l93QMWjXQ==",
+        "resolved": "3.1.0",
+        "contentHash": "Of6ppLCXADqaRdVDsMC3B/2PybSMtCOI1DzZ1dpnvsSGyrPVcHSH+iaTnAl9y8dWFmjNxcZmfzYNFareCI2Taw==",
         "dependencies": {
           "Microsoft.Web.WebView2": "1.0.3912.50",
-          "OfficeIMO.MarkdownRenderer": "3.0.3"
+          "OfficeIMO.MarkdownRenderer": "3.1.0"
         }
       },
       "OfficeIMO.Rtf": {
         "type": "Transitive",
-        "resolved": "3.0.3",
-        "contentHash": "6eFbUN+GR8iyK78UtQOOyf+auBU3v/ekfW1qt+cQXhNhzuUW99HFiyNbd+eBji4EUW1cP47jiRi4ojQtnVdnsg==",
+        "resolved": "3.1.0",
+        "contentHash": "EHnOkfxzFCgL0M/hCnpCZIFm9oIexRO56WBYwqErXTl6n7q6tp5RKaV8UTZko5yIyD0xEiqP9dy+ILJLCJsE6g==",
         "dependencies": {
-          "OfficeIMO.Drawing": "3.0.3"
-        }
-      },
-      "OfficeIMO.Security": {
-        "type": "Transitive",
-        "resolved": "3.0.3",
-        "contentHash": "Pn5aJKB9dgPVOT/j4l6mUZpffw+nYlI+MI8MPGkkKkyw4EA+io82NOBlFyinaxg92S0fqzz1Xs2V9XTql//JMw==",
-        "dependencies": {
-          "BouncyCastle.Cryptography": "[2.6.2, 3.0.0)"
+          "OfficeIMO.Core": "3.1.0"
         }
       },
       "SQLite": {
@@ -242,13 +228,18 @@
       },
       "System.Reflection.MetadataLoadContext": {
         "type": "Transitive",
-        "resolved": "8.0.1",
-        "contentHash": "c/hiLzoMeYWnoTsdeRY2o0Vbadfedt0b4ZawQ+qDr1BIoYBQo3ASei0Pyiz00n9pHBlfWXiUVy90tOWBEgJ8/Q=="
+        "resolved": "10.0.10",
+        "contentHash": "7f8JfUA85nD2yOrTX9fhuHPp8P01qqnbGTtRiMK6rwNhS1jNLqoCJfdzLMOIZY8b9sBoAX3eOH04k1fWeCgOYQ=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
         "resolved": "10.0.10",
         "contentHash": "BKt0SQgq2lq3ESE68jkeLwv95ypANrPDtkTOIFGcnhg2aRUeUUBDrQlkVDZctrg1WenVcvn5P5XZnuYI7q6rFQ=="
+      },
+      "VirusTotalAnalyzer": {
+        "type": "Transitive",
+        "resolved": "1.0.0",
+        "contentHash": "sg2uLSJS37PyZenldT55a+B93ct2bvz3653uU0FwFtv1v3bcrG453O7/n1hcSp9DO4burBNIyEu00O8ZWHptNQ=="
       },
       "xunit.abstractions": {
         "type": "Transitive",
@@ -307,8 +298,9 @@
         "dependencies": {
           "NuGet.Configuration": "[7.6.0, )",
           "System.IO.Packaging": "[10.0.10, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.1, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.10, )"
+          "System.Reflection.MetadataLoadContext": "[10.0.10, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
+          "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
       "powerforgestudio.domain": {
@@ -320,7 +312,7 @@
           "DBAClientX.Core": "[0.15.0, )",
           "DBAClientX.SQLite": "[0.13.0, )",
           "Microsoft.Data.Sqlite": "[10.0.10, )",
-          "PowerForge": "[3.0.99, )",
+          "PowerForge": "[3.0.108, )",
           "PowerForgeStudio.Domain": "[1.0.0, )"
         }
       },
@@ -328,7 +320,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Web.WebView2": "[1.0.*, )",
-          "OfficeIMO.MarkdownRenderer.Wpf": "[3.0.3, )",
+          "OfficeIMO.MarkdownRenderer.Wpf": "[3.1.0, )",
           "PowerForgeStudio.Domain": "[1.0.0, )",
           "PowerForgeStudio.Orchestrator": "[1.0.0, )"
         }
