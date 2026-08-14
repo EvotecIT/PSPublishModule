@@ -51,11 +51,11 @@ public sealed partial class BenchmarkServicesTests
         var root = CreateTempRoot();
         var escapedRoot = root.Replace("'", "''");
         var script = System.Management.Automation.ScriptBlock.Create($$"""
-benchmark 'metadata' -out '{{escapedRoot}}' {
-    policy -Warmup 0 -Iterations 1
-    metadata ToolVersion '1.2.3-beta1'
-    axis Operation Run
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'metadata' -OutputRoot '{{escapedRoot}}' {
+    Set-BenchmarkPolicy -Warmup 0 -Iterations 1
+    Add-BenchmarkMetadata ToolVersion '1.2.3-beta1'
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 """);
 

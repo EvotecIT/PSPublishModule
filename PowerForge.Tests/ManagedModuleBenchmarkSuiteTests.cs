@@ -22,18 +22,18 @@ public sealed class ManagedModuleBenchmarkSuiteTests
     }
 
     [Fact]
-    public void ManagedModuleSuiteSpec_UsesGenericBenchmarkDsl()
+    public void ManagedModuleSuiteSpec_UsesCanonicalBenchmarkCommands()
     {
         var path = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "managed-modules.benchmark.ps1");
         var text = File.ReadAllText(path);
         var lines = File.ReadLines(path).Where(static line => !string.IsNullOrWhiteSpace(line)).Count();
 
         Assert.True(lines <= 245, "Managed module benchmark spec should stay readable and data-driven.");
-        Assert.Contains("benchmark 'managed-modules'", text, StringComparison.Ordinal);
-        Assert.Contains("caseSource", text, StringComparison.Ordinal);
-        Assert.Contains("engine Managed", text, StringComparison.Ordinal);
-        Assert.Contains("operation Install", text, StringComparison.Ordinal);
-        Assert.Contains("metadata ComparisonMode", text, StringComparison.Ordinal);
+        Assert.Contains("New-BenchmarkSuite 'managed-modules'", text, StringComparison.Ordinal);
+        Assert.Contains("Add-BenchmarkCaseSource", text, StringComparison.Ordinal);
+        Assert.Contains("Add-BenchmarkEngine Managed", text, StringComparison.Ordinal);
+        Assert.Contains("Add-BenchmarkOperation Install", text, StringComparison.Ordinal);
+        Assert.Contains("Add-BenchmarkMetadata ComparisonMode", text, StringComparison.Ordinal);
         Assert.Contains("ManagedModuleSha256", text, StringComparison.Ordinal);
         Assert.Contains("ModuleFastSha256", text, StringComparison.Ordinal);
         Assert.DoesNotContain("ModuleFastCSharp", text, StringComparison.Ordinal);
@@ -85,14 +85,14 @@ public sealed class ManagedModuleBenchmarkSuiteTests
     {
         var path = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "managed-modules.benchmark.ps1");
         var text = File.ReadAllText(path);
-        var setupStart = text.IndexOf("    setup {", StringComparison.Ordinal);
-        var setupEnd = text.IndexOf("    skip {", StringComparison.Ordinal);
+        var setupStart = text.IndexOf("    Set-BenchmarkSetup {", StringComparison.Ordinal);
+        var setupEnd = text.IndexOf("    Add-BenchmarkSkipRule {", StringComparison.Ordinal);
         var setup = text.Substring(setupStart, setupEnd - setupStart);
-        var managedStart = text.IndexOf("    engine Managed {", StringComparison.Ordinal);
-        var managedEnd = text.IndexOf("        operation Save {", managedStart, StringComparison.Ordinal);
+        var managedStart = text.IndexOf("    Add-BenchmarkEngine Managed {", StringComparison.Ordinal);
+        var managedEnd = text.IndexOf("        Add-BenchmarkOperation Save {", managedStart, StringComparison.Ordinal);
         var managedInstall = text.Substring(managedStart, managedEnd - managedStart);
-        var moduleFastStart = text.IndexOf("    engine ModuleFast {", StringComparison.Ordinal);
-        var moduleFastEnd = text.IndexOf("    engine PSResourceGet {", moduleFastStart, StringComparison.Ordinal);
+        var moduleFastStart = text.IndexOf("    Add-BenchmarkEngine ModuleFast {", StringComparison.Ordinal);
+        var moduleFastEnd = text.IndexOf("    Add-BenchmarkEngine PSResourceGet {", moduleFastStart, StringComparison.Ordinal);
         var moduleFastInstall = text.Substring(moduleFastStart, moduleFastEnd - moduleFastStart);
 
         Assert.Contains("Import-Module", setup, StringComparison.Ordinal);
@@ -139,20 +139,32 @@ public sealed class ManagedModuleBenchmarkSuiteTests
     }
 
     [Fact]
-    public void ManagedModuleSuite_CanPlanThroughRealBenchmarkCommandsAndAliases()
+    public void ManagedModuleSuite_CanPlanThroughCanonicalCommandsWithoutGenericExports()
     {
         var path = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "managed-modules.benchmark.ps1");
         var initialSessionState = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault2();
         using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialSessionState);
         runspace.Open();
         using var ps = System.Management.Automation.PowerShell.Create(runspace);
-        ps.AddCommand("Import-Module").AddArgument(typeof(PSPublishModule.InvokeBenchmarkSuiteCommand).Assembly.Location);
-        ps.Invoke();
+        ps.AddCommand("Import-Module")
+            .AddArgument(typeof(PSPublishModule.InvokeBenchmarkSuiteCommand).Assembly.Location)
+            .AddParameter("PassThru");
+        var imported = ps.Invoke();
         Assert.Empty(ps.Streams.Error);
-        ps.Commands.Clear();
-        ps.AddCommand("Get-Command").AddArgument("benchmark");
-        var alias = Assert.Single(ps.Invoke());
-        Assert.Equal("Alias", alias.Properties["CommandType"].Value?.ToString());
+        var module = Assert.IsType<System.Management.Automation.PSModuleInfo>(Assert.Single(imported).BaseObject);
+        var genericNames = new[]
+        {
+            "benchmark", "cases", "case", "caseSource", "from", "axis", "setup", "data", "policy", "profile",
+            "cleanup", "engine", "operation", "skip", "validate", "metric", "metadata", "comparison", "readme",
+            "artifacts", "input", "inputInt", "inputBool", "assertPath", "assertValue"
+        };
+        foreach (var name in genericNames)
+        {
+            Assert.False(
+                module.ExportedAliases.Keys.Contains(name, StringComparer.OrdinalIgnoreCase),
+                $"PSPublishModule must not export the generic alias '{name}'.");
+        }
+
         ps.Commands.Clear();
         ps.AddCommand("Invoke-BenchmarkSuite")
             .AddParameter("Path", path)

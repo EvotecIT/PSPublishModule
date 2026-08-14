@@ -20366,6 +20366,30 @@ the release output and returns a typed result object for each input project path
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OverwriteSignedAssemblies</maml:name>
+          <maml:description>
+            <maml:para>Explicitly replaces existing Authenticode assembly signatures.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OverwriteSignedPackages</maml:name>
+          <maml:description>
+            <maml:para>Explicitly replaces existing NuGet package signatures.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>PackDependencies</maml:name>
           <maml:description>
             <maml:para>When enabled, also packs all project dependencies that have their own .csproj files.</maml:para>
@@ -20428,6 +20452,30 @@ the release output and returns a typed result object for each input project path
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>CertificateStoreLocation</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OverwriteSignedAssemblies</maml:name>
+        <maml:description>
+          <maml:para>Explicitly replaces existing Authenticode assembly signatures.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OverwriteSignedPackages</maml:name>
+        <maml:description>
+          <maml:para>Explicitly replaces existing NuGet package signatures.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -20768,6 +20816,30 @@ updates csproj versions, packs, and optionally publishes packages.</maml:para>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OverwriteSignedAssemblies</maml:name>
+          <maml:description>
+            <maml:para>Explicitly replaces existing Authenticode assembly signatures.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OverwriteSignedPackages</maml:name>
+          <maml:description>
+            <maml:para>Explicitly replaces existing NuGet package signatures.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -21163,6 +21235,30 @@ updates csproj versions, packs, and optionally publishes packages.</maml:para>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OverwriteSignedAssemblies</maml:name>
+        <maml:description>
+          <maml:para>Explicitly replaces existing Authenticode assembly signatures.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OverwriteSignedPackages</maml:name>
+        <maml:description>
+          <maml:para>Explicitly replaces existing NuGet package signatures.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -24541,6 +24637,20 @@ tool/app artefacts from one configuration file.</maml:para>
       <command:syntaxItem parameterSetName="Config">
         <maml:name>Invoke-PowerForgeRelease</maml:name>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AdoptExistingAppleBuild</maml:name>
+          <maml:description>
+            <maml:para>Explicitly adopts a verified remote Apple build or accepted notarization operation.&#xD;
+Local receipts provide continuity evidence but never authorize cross-process recovery by themselves;&#xD;
+this switch requires ConfirmAppleAction and is intended only for deliberate recovery.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>AllowManifestOutsideProjectRoot</maml:name>
           <maml:description>
             <maml:para>Allows DotNetPublish-backed manifest/report paths to resolve outside the configured project root.</maml:para>
@@ -24594,6 +24704,18 @@ tool/app artefacts from one configuration file.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AppleExpectedPlanSha256</maml:name>
+          <maml:description>
+            <maml:para>Requires the persisted Apple plan receipt to match this exact SHA-256.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApplePollIntervalSeconds</maml:name>
           <maml:description>
             <maml:para>App Store Connect processing poll interval in seconds.</maml:para>
@@ -24620,11 +24742,23 @@ tool/app artefacts from one configuration file.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>AppleResume</maml:name>
           <maml:description>
-            <maml:para>Forces exact remote-build reuse on this run.</maml:para>
+            <maml:para>Enables recovery discovery; deliberate cross-process reuse also requires AdoptExistingAppleBuild and ConfirmAppleAction.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AppleSourceCommit</maml:name>
+          <maml:description>
+            <maml:para>Binds Apple release evidence to a full 40-character SHA-1 or 64-character SHA-256 source commit.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -24637,6 +24771,18 @@ tool/app artefacts from one configuration file.</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AppleVersion</maml:name>
+          <maml:description>
+            <maml:para>Overrides the Apple marketing version selected for this operation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -25701,6 +25847,20 @@ and parent directories for standard release config file names.</maml:para>
       <command:syntaxItem parameterSetName="Project">
         <maml:name>Invoke-PowerForgeRelease</maml:name>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AdoptExistingAppleBuild</maml:name>
+          <maml:description>
+            <maml:para>Explicitly adopts a verified remote Apple build or accepted notarization operation.&#xD;
+Local receipts provide continuity evidence but never authorize cross-process recovery by themselves;&#xD;
+this switch requires ConfirmAppleAction and is intended only for deliberate recovery.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>AllowManifestOutsideProjectRoot</maml:name>
           <maml:description>
             <maml:para>Allows DotNetPublish-backed manifest/report paths to resolve outside the configured project root.</maml:para>
@@ -25754,6 +25914,18 @@ and parent directories for standard release config file names.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AppleExpectedPlanSha256</maml:name>
+          <maml:description>
+            <maml:para>Requires the persisted Apple plan receipt to match this exact SHA-256.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApplePollIntervalSeconds</maml:name>
           <maml:description>
             <maml:para>App Store Connect processing poll interval in seconds.</maml:para>
@@ -25780,11 +25952,23 @@ and parent directories for standard release config file names.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>AppleResume</maml:name>
           <maml:description>
-            <maml:para>Forces exact remote-build reuse on this run.</maml:para>
+            <maml:para>Enables recovery discovery; deliberate cross-process reuse also requires AdoptExistingAppleBuild and ConfirmAppleAction.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AppleSourceCommit</maml:name>
+          <maml:description>
+            <maml:para>Binds Apple release evidence to a full 40-character SHA-1 or 64-character SHA-256 source commit.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -25797,6 +25981,18 @@ and parent directories for standard release config file names.</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AppleVersion</maml:name>
+          <maml:description>
+            <maml:para>Overrides the Apple marketing version selected for this operation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -26860,6 +27056,20 @@ and parent directories for standard release config file names.</maml:para>
     </command:syntax>
     <command:parameters>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AdoptExistingAppleBuild</maml:name>
+        <maml:description>
+          <maml:para>Explicitly adopts a verified remote Apple build or accepted notarization operation.&#xD;
+Local receipts provide continuity evidence but never authorize cross-process recovery by themselves;&#xD;
+this switch requires ConfirmAppleAction and is intended only for deliberate recovery.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>AllowManifestOutsideProjectRoot</maml:name>
         <maml:description>
           <maml:para>Allows DotNetPublish-backed manifest/report paths to resolve outside the configured project root.</maml:para>
@@ -26913,6 +27123,18 @@ and parent directories for standard release config file names.</maml:para>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AppleExpectedPlanSha256</maml:name>
+        <maml:description>
+          <maml:para>Requires the persisted Apple plan receipt to match this exact SHA-256.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>ApplePollIntervalSeconds</maml:name>
         <maml:description>
           <maml:para>App Store Connect processing poll interval in seconds.</maml:para>
@@ -26939,11 +27161,23 @@ and parent directories for standard release config file names.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>AppleResume</maml:name>
         <maml:description>
-          <maml:para>Forces exact remote-build reuse on this run.</maml:para>
+          <maml:para>Enables recovery discovery; deliberate cross-process reuse also requires AdoptExistingAppleBuild and ConfirmAppleAction.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AppleSourceCommit</maml:name>
+        <maml:description>
+          <maml:para>Binds Apple release evidence to a full 40-character SHA-1 or 64-character SHA-256 source commit.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -26956,6 +27190,18 @@ and parent directories for standard release config file names.</maml:para>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AppleVersion</maml:name>
+        <maml:description>
+          <maml:para>Overrides the Apple marketing version selected for this operation.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -31878,7 +32124,7 @@ because App Store Connect price points are territory-specific.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="out">
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>OutputRoot</maml:name>
           <maml:description>
             <maml:para>Output root for benchmark artifacts.</maml:para>
@@ -31917,7 +32163,7 @@ because App Store Connect price points are territory-specific.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="out">
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>OutputRoot</maml:name>
         <maml:description>
           <maml:para>Output root for benchmark artifacts.</maml:para>
@@ -32121,6 +32367,18 @@ Relative paths resolve from the pipeline project root.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredPrivacyUsageDescriptionKeys</maml:name>
+          <maml:description>
+            <maml:para>Privacy purpose-string keys that must contain non-empty values in the final archived app before upload.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Scheme</maml:name>
           <maml:description>
@@ -32258,6 +32516,18 @@ Relative paths resolve from the pipeline project root.</maml:para>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredPrivacyUsageDescriptionKeys</maml:name>
+          <maml:description>
+            <maml:para>Privacy purpose-string keys that must contain non-empty values in the final archived app before upload.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -32423,6 +32693,18 @@ Relative paths resolve from the pipeline project root.</maml:para>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequiredPrivacyUsageDescriptionKeys</maml:name>
+        <maml:description>
+          <maml:para>Privacy purpose-string keys that must contain non-empty values in the final archived app before upload.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -39965,6 +40247,18 @@ Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {execu
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludeDlls</maml:name>
+          <maml:description>
+            <maml:para>Includes DLL files when signing publish or bundle outputs.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>KeyContainer</maml:name>
           <maml:description>
             <maml:para>Optional key container name.</maml:para>
@@ -40006,6 +40300,18 @@ Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {execu
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>DotNetPublishPolicyMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OverwriteSigned</maml:name>
+          <maml:description>
+            <maml:para>Explicitly replaces existing signatures instead of preserving already signed files.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -40110,6 +40416,18 @@ Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {execu
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IncludeDlls</maml:name>
+        <maml:description>
+          <maml:para>Includes DLL files when signing publish or bundle outputs.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>KeyContainer</maml:name>
         <maml:description>
           <maml:para>Optional key container name.</maml:para>
@@ -40151,6 +40469,18 @@ Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {execu
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>DotNetPublishPolicyMode</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OverwriteSigned</maml:name>
+        <maml:description>
+          <maml:para>Explicitly replaces existing signatures instead of preserving already signed files.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -47088,6 +47418,30 @@ Build-Module { } to remain the primary authoring surface for combined module and
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OverwriteSignedAssemblies</maml:name>
+          <maml:description>
+            <maml:para>Whether existing Authenticode assembly signatures may be replaced.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OverwriteSignedPackages</maml:name>
+          <maml:description>
+            <maml:para>Whether existing NuGet package signatures may be replaced.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>PackStrategy</maml:name>
           <maml:description>
             <maml:para>Pack strategy, for example PerProject or MSBuild.</maml:para>
@@ -47347,6 +47701,18 @@ Build-Module { } to remain the primary authoring surface for combined module and
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>VersionBindings</maml:name>
+          <maml:description>
+            <maml:para>Repository files whose embedded versions follow a resolved project version.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ProjectVersionBinding[]</command:parameterValue>
+          <dev:type>
+            <maml:name>ProjectVersionBinding[]</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -47859,6 +48225,30 @@ Build-Module { } to remain the primary authoring surface for combined module and
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OverwriteSignedAssemblies</maml:name>
+        <maml:description>
+          <maml:para>Whether existing Authenticode assembly signatures may be replaced.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OverwriteSignedPackages</maml:name>
+        <maml:description>
+          <maml:para>Whether existing NuGet package signatures may be replaced.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>PackStrategy</maml:name>
         <maml:description>
           <maml:para>Pack strategy, for example PerProject or MSBuild.</maml:para>
@@ -48118,6 +48508,18 @@ Build-Module { } to remain the primary authoring surface for combined module and
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>VersionBindings</maml:name>
+        <maml:description>
+          <maml:para>Repository files whose embedded versions follow a resolved project version.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ProjectVersionBinding[]</command:parameterValue>
+        <dev:type>
+          <maml:name>ProjectVersionBinding[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -48651,6 +49053,30 @@ module build should coordinate with that package lane.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OverwriteSignedAssemblies</maml:name>
+          <maml:description>
+            <maml:para>Whether existing Authenticode assembly signatures may be replaced.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OverwriteSignedPackages</maml:name>
+          <maml:description>
+            <maml:para>Whether existing NuGet package signatures may be replaced.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>ProvideLocalNuGetFeed</maml:name>
           <maml:description>
             <maml:para>Whether package outputs should be exposed as a temporary local NuGet feed for the module lane.</maml:para>
@@ -48841,6 +49267,30 @@ module build should coordinate with that package lane.</maml:para>
         <command:parameterValue required="false" variableLength="false">IDictionary</command:parameterValue>
         <dev:type>
           <maml:name>IDictionary</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OverwriteSignedAssemblies</maml:name>
+        <maml:description>
+          <maml:para>Whether existing Authenticode assembly signatures may be replaced.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OverwriteSignedPackages</maml:name>
+        <maml:description>
+          <maml:para>Whether existing NuGet package signatures may be replaced.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -49774,6 +50224,18 @@ module build should coordinate with that package lane.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OverwriteSigned</maml:name>
+          <maml:description>
+            <maml:para>Explicitly replaces existing signatures instead of preserving already signed files.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>SubjectName</maml:name>
           <maml:description>
             <maml:para>Optional certificate subject name.</maml:para>
@@ -49919,6 +50381,18 @@ module build should coordinate with that package lane.</maml:para>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>DotNetPublishPolicyMode</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OverwriteSigned</maml:name>
+        <maml:description>
+          <maml:para>Explicitly replaces existing signatures instead of preserving already signed files.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

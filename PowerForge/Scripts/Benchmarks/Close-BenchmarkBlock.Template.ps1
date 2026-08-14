@@ -6,18 +6,17 @@ $capturedFunctions = @{}
 $skipNames = @(
     'args', 'input', 'this', 'PSItem', '_', 'Error',
     'PWD', 'captured', 'capturedFunctions', 'scriptText', 'scriptRoot',
-    'BenchmarkCallerFunctions', 'PowerForgeBenchmarkDslRuntimeType',
+    'BenchmarkCallerFunctions', 'PowerForgeBenchmarkDslCommandAliases', 'PowerForgeBenchmarkDslRuntimeType',
     'ConfirmPreference', 'DebugPreference', 'ErrorActionPreference', 'ErrorView',
     'InformationPreference', 'ProgressPreference', 'PSNativeCommandUseErrorActionPreference',
     'PSDefaultParameterValues', 'VerbosePreference', 'WarningPreference', 'WhatIfPreference'
 )
 $skipFunctions = @(
     '__PowerForgeCloseBenchmarkBlock', '__PowerForgeBenchmarkDslInvoke',
-    'benchmark', 'cases', 'case', 'caseSource', 'from', 'axis', 'setup', 'data', 'skip', 'validate', 'policy', 'profile', 'cleanup', 'engine', 'operation', 'metric', 'compare', 'comparison', 'readme', 'artifacts',
     'New-BenchmarkSuite', 'Add-BenchmarkCases', 'Add-BenchmarkCase', 'Add-BenchmarkCaseSource', 'Add-BenchmarkAxis',
     'Set-BenchmarkSetup', 'Set-BenchmarkDataFactory', 'Set-BenchmarkPolicy', 'Set-BenchmarkProfile', 'Set-BenchmarkCleanup', 'Add-BenchmarkEngine', 'Add-BenchmarkOperation',
-    'Add-BenchmarkSkipRule', 'Add-BenchmarkValidation', 'Add-BenchmarkMetric', 'Add-BenchmarkComparison',
-    'Add-BenchmarkReadmeBlock', 'Set-BenchmarkArtifacts'
+    'Add-BenchmarkSkipRule', 'Add-BenchmarkValidation', 'Add-BenchmarkMetric', 'Add-BenchmarkMetadata', 'Add-BenchmarkComparison',
+    'Add-BenchmarkReadmeBlock', 'Set-BenchmarkArtifacts', 'Get-BenchmarkInput'
 )
 
 function __PowerForgeBenchmarkDslInvoke {
@@ -45,6 +44,16 @@ if ($null -ne $BenchmarkCallerFunctions) {
     }
 }
 
+if ($null -ne $PowerForgeBenchmarkDslCommandAliases) {
+    foreach ($entry in $PowerForgeBenchmarkDslCommandAliases.GetEnumerator()) {
+        if ($skipFunctions -contains $entry.Key) { continue }
+        $dslFunction = Get-Item -LiteralPath "Function:\$($entry.Value)" -ErrorAction SilentlyContinue
+        if ($null -ne $dslFunction -and -not [string]::IsNullOrWhiteSpace($dslFunction.Definition)) {
+            $capturedFunctions[[string] $entry.Key] = [string] $dslFunction.Definition
+        }
+    }
+}
+
 for ($scope = 2; $scope -lt 20; $scope++) {
     try {
         $variables = Get-Variable -Scope $scope -ErrorAction Stop
@@ -63,6 +72,7 @@ for ($scope = 2; $scope -lt 20; $scope++) {
 
 foreach ($function in Get-ChildItem -Path Function: -ErrorAction SilentlyContinue) {
     if ($skipFunctions -contains $function.Name) { continue }
+    if ($function.Name -like '__PowerForgeBenchmarkDslCommand_*') { continue }
     if ($function.Name -like '*:*') { continue }
     if (-not [string]::IsNullOrWhiteSpace($function.Source)) { continue }
     if (-not [string]::IsNullOrWhiteSpace($function.ModuleName)) { continue }

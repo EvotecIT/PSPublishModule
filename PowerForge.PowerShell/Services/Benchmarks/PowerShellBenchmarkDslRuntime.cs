@@ -8,11 +8,12 @@ using System.Threading;
 namespace PowerForge;
 
 /// <summary>
-/// Runtime used by locally scoped benchmark DSL helper functions.
+/// Runtime used by locally scoped benchmark commands.
 /// </summary>
 public static partial class PowerShellBenchmarkDslRuntime
 {
     private static readonly AsyncLocal<PowerShellBenchmarkDslContext?> Current = new();
+    private const string CommandFunctionPrefix = "__PowerForgeBenchmarkDslCommand_";
 
     /// <summary>
     /// Evaluates a script block with benchmark DSL helper functions.
@@ -42,8 +43,6 @@ public static partial class PowerShellBenchmarkDslRuntime
         Current.Value = context;
         Runspace? createdRunspace = null;
         var previousRunspace = Runspace.DefaultRunspace;
-        List<AliasSnapshot?> aliasSnapshots = new();
-        FunctionSnapshot? compareFunction = null;
         try
         {
             if (Runspace.DefaultRunspace is null)
@@ -53,17 +52,11 @@ public static partial class PowerShellBenchmarkDslRuntime
                 Runspace.DefaultRunspace = createdRunspace;
             }
 
-            foreach (var aliasName in CreateFunctionBodies().Keys)
-                aliasSnapshots.Add(RemoveAlias(aliasName));
-            compareFunction = SetLegacyCompareFunction();
             InvokeRootBlock(scriptBlock);
             return context.Suites.ToArray();
         }
         finally
         {
-            RestoreFunction(compareFunction);
-            for (var i = aliasSnapshots.Count - 1; i >= 0; i--)
-                RestoreAlias(aliasSnapshots[i]);
             Runspace.DefaultRunspace = previousRunspace;
             createdRunspace?.Dispose();
             Current.Value = previous;
@@ -488,8 +481,6 @@ public static partial class PowerShellBenchmarkDslRuntime
         const string AssertPathBody = "param([Parameter(Position=0, Mandatory=$true)] [string] $Path, [switch] $Not, [string] $Message, [switch] $PassThru) $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path); $exists = [System.IO.File]::Exists($resolved) -or [System.IO.Directory]::Exists($resolved); if ($exists -eq (-not $Not.IsPresent)) { if ($PassThru) { $resolved }; return }; if ([string]::IsNullOrWhiteSpace($Message)) { if ($Not.IsPresent) { $Message = \"Expected path '$resolved' not to exist.\" } else { $Message = \"Expected path '$resolved' to exist.\" } }; throw $Message";
         const string AssertValueBody = "param([Parameter(Position=0, Mandatory=$true)] [object] $Actual, [Parameter(Position=1)] [object] $Expected, [switch] $NotNull, [string] $Message, [switch] $PassThru) $passed = if ($NotNull.IsPresent) { $null -ne $Actual } else { [object]::Equals($Actual, $Expected) }; if ($passed) { if ($PassThru) { $Actual }; return }; if ([string]::IsNullOrWhiteSpace($Message)) { if ($NotNull.IsPresent) { $Message = 'Expected benchmark value not to be null.' } else { $Message = \"Expected benchmark value '$Actual' to equal '$Expected'.\" } }; throw $Message";
         const string InputBody = "param([Parameter(Position=0, Mandatory=$true)] [string] $Name, [Parameter(Position=1)] [object] $Default, [switch] $Required, [switch] $Int, [switch] $Bool) if ($Int.IsPresent) { $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; if ($null -eq $Default) { return @() }; if ($Default -is [array]) { return @($Default | ForEach-Object { [int] $_ }) }; return @([string] $Default -split ',' | Where-Object { $_.Trim() } | ForEach-Object { [int] $_.Trim() }) }; $items = @(); foreach ($entry in ([string] $value -split ',')) { $trimmed = $entry.Trim(); if ($trimmed) { $items += [int] $trimmed } }; if ($items.Count -eq 0) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' did not contain any integer values.\" }; return $Default }; return $items } if ($Bool.IsPresent) { $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; if ($null -eq $Default) { return $false }; switch -Regex ([string] $Default) { '^(?i:true|1|yes|on)$' { return $true } '^(?i:false|0|no|off)$' { return $false } default { throw \"Benchmark variable '$Name' default '$Default' is not a boolean value.\" } } }; switch -Regex ([string] $value) { '^(?i:true|1|yes|on)$' { return $true } '^(?i:false|0|no|off)$' { return $false } default { throw \"Benchmark variable '$Name' value '$value' is not a boolean value.\" } } } $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; return $Default }; [string] $value";
-        const string InputIntBody = "param([Parameter(Position=0, Mandatory=$true)] [string] $Name, [Parameter(Position=1)] [int[]] $Default, [switch] $Required) $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; return $Default }; $items = @(); foreach ($entry in ([string] $value -split ',')) { $trimmed = $entry.Trim(); if ($trimmed) { $items += [int] $trimmed } }; if ($items.Count -eq 0) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' did not contain any integer values.\" }; return $Default }; $items";
-        const string InputBoolBody = "param([Parameter(Position=0, Mandatory=$true)] [string] $Name, [Parameter(Position=1)] [object] $Default = $false, [switch] $Required) $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; switch -Regex ([string] $Default) { '^(?i:true|1|yes|on)$' { return $true } '^(?i:false|0|no|off)$' { return $false } default { throw \"Benchmark variable '$Name' default '$Default' is not a boolean value.\" } } }; switch -Regex ([string] $value) { '^(?i:true|1|yes|on)$' { return $true } '^(?i:false|0|no|off)$' { return $false } default { throw \"Benchmark variable '$Name' value '$value' is not a boolean value.\" } }";
         const string PolicyBody = """
 param(
     [Parameter(Position=0)] [int] $Warmup,
@@ -533,33 +524,7 @@ try {
     throw
 }
 """,
-            ["benchmark"] = Call("Benchmark", "param([Parameter(Position=0)] [string] $Name, [Alias('out')] [string] $OutputRoot, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $OutputRoot, $ScriptBlock)"),
-            ["cases"] = Call("Cases", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
-            ["case"] = Call("Case", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [hashtable] $Values)", "[object[]] @($Name, $Values)"),
-            ["caseSource"] = "param([Parameter(Position=0, ValueFromRemainingArguments=$true)] [object[]] $InputObject) if ($InputObject.Count -eq 1 -and $InputObject[0] -is [scriptblock]) { __PowerForgeBenchmarkDslInvoke -Name 'From' -Arguments ([object[]] @($InputObject[0])) } else { $arguments = [object[]]::new(1); $arguments[0] = $InputObject; __PowerForgeBenchmarkDslInvoke -Name 'FromValues' -Arguments $arguments }",
-            ["from"] = "param([Parameter(Position=0, ValueFromRemainingArguments=$true)] [object[]] $InputObject) if ($InputObject.Count -eq 1 -and $InputObject[0] -is [scriptblock]) { __PowerForgeBenchmarkDslInvoke -Name 'From' -Arguments ([object[]] @($InputObject[0])) } else { $arguments = [object[]]::new(1); $arguments[0] = $InputObject; __PowerForgeBenchmarkDslInvoke -Name 'FromValues' -Arguments $arguments }",
-            ["axis"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(2); $arguments[0] = $Name; $arguments[1] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Axis' -Arguments $arguments",
-            ["setup"] = Call("Setup", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
-            ["data"] = Call("Data", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
-            ["skip"] = Call("Skip", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
-            ["validate"] = Call("Validate", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
-            ["policy"] = PolicyBody,
-            ["profile"] = Call("Profile", "param([Parameter(Position=0)] [string] $Name, [string] $Cleanup)", "[object[]] @($Name, $Cleanup)"),
-            ["cleanup"] = Call("Cleanup", "param([Parameter(Position=0)] [string] $Name)", "[object[]] @($Name)"),
-            ["engine"] = Call("Engine", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
-            ["operation"] = Call("Operation", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
-            ["metric"] = Call("Metric", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
-            ["metadata"] = Call("Metadata", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [string] $Value)", "[object[]] @($Name, $Value)"),
-            ["compare"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance, [switch] $RequireBaselineFastest) $arguments = [object[]]::new(5); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; $arguments[4] = $RequireBaselineFastest.IsPresent; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
-            ["comparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance, [switch] $RequireBaselineFastest) $arguments = [object[]]::new(5); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; $arguments[4] = $RequireBaselineFastest.IsPresent; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
-            ["readme"] = Call("Readme", "param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer)", "[object[]] @($Path, $Block, $Renderer)"),
-            ["artifacts"] = "param([Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(1); $arguments[0] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Artifacts' -Arguments $arguments",
-            ["input"] = InputBody,
-            ["inputInt"] = InputIntBody,
-            ["inputBool"] = InputBoolBody,
-            ["assertPath"] = AssertPathBody,
-            ["assertValue"] = AssertValueBody,
-            ["New-BenchmarkSuite"] = Call("Benchmark", "param([Parameter(Position=0)] [string] $Name, [Alias('out')] [string] $OutputRoot, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $OutputRoot, $ScriptBlock)"),
+            ["New-BenchmarkSuite"] = Call("Benchmark", "param([Parameter(Position=0)] [string] $Name, [string] $OutputRoot, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $OutputRoot, $ScriptBlock)"),
             ["Add-BenchmarkCases"] = Call("Cases", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["Add-BenchmarkCase"] = Call("Case", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [hashtable] $Values)", "[object[]] @($Name, $Values)"),
             ["Add-BenchmarkCaseSource"] = "param([Parameter(Position=0, ValueFromRemainingArguments=$true)] [object[]] $InputObject) if ($InputObject.Count -eq 1 -and $InputObject[0] -is [scriptblock]) { __PowerForgeBenchmarkDslInvoke -Name 'From' -Arguments ([object[]] @($InputObject[0])) } else { $arguments = [object[]]::new(1); $arguments[0] = $InputObject; __PowerForgeBenchmarkDslInvoke -Name 'FromValues' -Arguments $arguments }",
@@ -588,8 +553,24 @@ try {
     {
         var functions = new Hashtable(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in CreateFunctionBodies())
-            functions[entry.Key] = ScriptBlock.Create(entry.Value);
+        {
+            var functionName = string.Equals(entry.Key, "__PowerForgeBenchmarkDslInvoke", StringComparison.OrdinalIgnoreCase)
+                ? entry.Key
+                : CommandFunctionPrefix + entry.Key;
+            functions[functionName] = ScriptBlock.Create(entry.Value);
+        }
         return functions;
+    }
+
+    private static Hashtable CreateCommandAliases()
+    {
+        var aliases = new Hashtable(StringComparer.OrdinalIgnoreCase);
+        foreach (var commandName in CreateFunctionBodies().Keys)
+        {
+            if (!string.Equals(commandName, "__PowerForgeBenchmarkDslInvoke", StringComparison.OrdinalIgnoreCase))
+                aliases[commandName] = CommandFunctionPrefix + commandName;
+        }
+        return aliases;
     }
 
     private static PowerShellBenchmarkCase ConvertToCase(PSObject value)
@@ -759,6 +740,7 @@ try {
             new("BenchmarkVariables", RequireContext().BenchmarkVariables),
             new("BenchmarkVariable", RequireContext().BenchmarkVariables),
             new("BenchmarkCallerFunctions", RequireContext().CallerFunctions),
+            new("PowerForgeBenchmarkDslCommandAliases", CreateCommandAliases()),
             new("PowerForgeBenchmarkDslRuntimeType", typeof(PowerShellBenchmarkDslRuntime))
         };
         return variables;
@@ -777,106 +759,11 @@ try {
         return variables;
     }
 
-    private static AliasSnapshot? RemoveAlias(string name)
-    {
-        using var getter = PowerShell.Create(RunspaceMode.CurrentRunspace);
-        var alias = getter.AddCommand("Get-Alias")
-            .AddArgument(name)
-            .AddParameter("ErrorAction", "SilentlyContinue")
-            .Invoke<AliasInfo>()
-            .FirstOrDefault();
-        if (alias is null) return null;
-
-        using var remover = PowerShell.Create(RunspaceMode.CurrentRunspace);
-        remover.AddCommand("Remove-Item")
-            .AddArgument("Alias:" + name)
-            .AddParameter("Force")
-            .AddParameter("ErrorAction", "SilentlyContinue")
-            .Invoke();
-        return new AliasSnapshot(alias.Name, alias.Definition, alias.Options);
-    }
-
-    private static void RestoreAlias(AliasSnapshot? snapshot)
-    {
-        if (snapshot is null) return;
-        using var setter = PowerShell.Create(RunspaceMode.CurrentRunspace);
-        setter.AddCommand("Set-Alias")
-            .AddParameter("Name", snapshot.Name)
-            .AddParameter("Value", snapshot.Definition)
-            .AddParameter("Option", snapshot.Options)
-            .AddParameter("Force")
-            .AddParameter("ErrorAction", "SilentlyContinue")
-            .Invoke();
-    }
-
-    private static FunctionSnapshot? SetLegacyCompareFunction()
-    {
-        using var commandProbe = PowerShell.Create(RunspaceMode.CurrentRunspace);
-        var comparisonCommand = commandProbe.AddCommand("Get-Command")
-            .AddArgument("Add-BenchmarkComparison")
-            .AddParameter("CommandType", CommandTypes.Cmdlet)
-            .AddParameter("ErrorAction", "SilentlyContinue")
-            .Invoke<CommandInfo>()
-            .FirstOrDefault();
-        if (comparisonCommand is null) return null;
-
-        ScriptBlock? previous = null;
-        var wasMissing = true;
-        using (var getter = PowerShell.Create(RunspaceMode.CurrentRunspace))
-        {
-            previous = getter.AddCommand("Get-Item")
-                .AddArgument("Function:compare")
-                .AddParameter("ErrorAction", "SilentlyContinue")
-                .Invoke<FunctionInfo>()
-                .FirstOrDefault()
-                ?.ScriptBlock;
-            wasMissing = previous is null;
-        }
-
-        using var setter = PowerShell.Create(RunspaceMode.CurrentRunspace);
-        setter.AddCommand("Set-Item")
-            .AddArgument("Function:compare")
-            .AddParameter("Value", ScriptBlock.Create("""
-param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance, [switch] $RequireBaselineFastest)
-$parameters = @{ Dimension = $Dimension; Baseline = $Baseline }
-if ($PSBoundParameters.ContainsKey('Metric')) { $parameters['Metric'] = $Metric }
-if ($PSBoundParameters.ContainsKey('TieTolerance')) { $parameters['TieTolerance'] = $TieTolerance }
-if ($RequireBaselineFastest.IsPresent) { $parameters['RequireBaselineFastest'] = $true }
-Add-BenchmarkComparison @parameters
-"""))
-            .AddParameter("Force")
-            .AddParameter("ErrorAction", "Stop")
-            .Invoke();
-        return new FunctionSnapshot("compare", previous, wasMissing);
-    }
-
-    private static void RestoreFunction(FunctionSnapshot? snapshot)
-    {
-        if (snapshot is null) return;
-        using var setter = PowerShell.Create(RunspaceMode.CurrentRunspace);
-        if (snapshot.WasMissing)
-        {
-            setter.AddCommand("Remove-Item")
-                .AddArgument("Function:" + snapshot.Name)
-                .AddParameter("Force")
-                .AddParameter("ErrorAction", "SilentlyContinue")
-                .Invoke();
-            return;
-        }
-
-        setter.AddCommand("Set-Item")
-            .AddArgument("Function:" + snapshot.Name)
-            .AddParameter("Value", snapshot.ScriptBlock)
-            .AddParameter("Force")
-            .AddParameter("ErrorAction", "SilentlyContinue")
-            .Invoke();
-    }
-
     private static PowerShellBenchmarkSuite RequireSuite()
     {
         var context = RequireContext();
         if (context.SuiteStack.Count == 0)
-            throw new InvalidOperationException("This benchmark DSL command can only be used inside benchmark.");
+            throw new InvalidOperationException("This benchmark command can only be used inside New-BenchmarkSuite.");
         return context.SuiteStack.Peek();
     }
 
@@ -896,31 +783,4 @@ Add-BenchmarkComparison @parameters
         internal Dictionary<string, string> CallerFunctions { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
-    private sealed class AliasSnapshot
-    {
-        internal AliasSnapshot(string name, string definition, ScopedItemOptions options)
-        {
-            Name = name;
-            Definition = definition;
-            Options = options;
-        }
-
-        internal string Name { get; }
-        internal string Definition { get; }
-        internal ScopedItemOptions Options { get; }
-    }
-
-    private sealed class FunctionSnapshot
-    {
-        internal FunctionSnapshot(string name, ScriptBlock? scriptBlock, bool wasMissing)
-        {
-            Name = name;
-            ScriptBlock = scriptBlock;
-            WasMissing = wasMissing;
-        }
-
-        internal string Name { get; }
-        internal ScriptBlock? ScriptBlock { get; }
-        internal bool WasMissing { get; }
-    }
 }

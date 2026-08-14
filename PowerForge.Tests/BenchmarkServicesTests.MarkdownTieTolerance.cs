@@ -10,13 +10,13 @@ public sealed partial class BenchmarkServicesTests
         var root = CreateTempRoot();
         var escapedRoot = root.Replace("'", "''");
         var script = System.Management.Automation.ScriptBlock.Create($$"""
-benchmark 'ties' -out '{{escapedRoot}}' {
-    policy -Warmup 0 -Iterations 1
-    axis Operation Run
-    axis Engine Managed, Other
-    engine Managed { operation Run { param($case, $run) } }
-    engine Other { operation Run { param($case, $run) } }
-    comparison Engine -Baseline Managed -Metric MedianMs -TieTolerance 0.05
+New-BenchmarkSuite 'ties' -OutputRoot '{{escapedRoot}}' {
+    Set-BenchmarkPolicy -Warmup 0 -Iterations 1
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed, Other
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
+    Add-BenchmarkEngine Other { Add-BenchmarkOperation Run { param($case, $run) } }
+    Add-BenchmarkComparison Engine -Baseline Managed -Metric MedianMs -TieTolerance 0.05
 }
 """);
 

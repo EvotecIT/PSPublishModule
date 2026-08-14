@@ -49,7 +49,7 @@ Output root for benchmark artifacts.
 ```yaml
 Type: String
 Parameter Sets: __AllParameterSets
-Aliases: out
+Aliases: None
 Possible values:
 
 Required: False
