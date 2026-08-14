@@ -470,6 +470,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
     [Fact]
     public void BuildBundle_SignedZipEmitsPublisherBoundCompletePayloadInventory()
     {
+        if (!DotNetPublishPipelineRunner.IsWindows()) return;
         var root = CreateTempRoot();
         try
         {
