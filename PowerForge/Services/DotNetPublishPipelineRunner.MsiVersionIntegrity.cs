@@ -110,6 +110,7 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static SourceProvenance ReadSourceProvenance(
         string projectRoot,
         IEnumerable<string>? generatedPaths = null,
+        IEnumerable<string>? explicitInputPaths = null,
         IEnumerable<string>? trackedGeneratedPaths = null,
         IReadOnlyDictionary<string, string>? cleanTrackedGeneratedProvenanceState = null,
         string? msiReservationOwner = null)
@@ -155,10 +156,29 @@ public sealed partial class DotNetPublishPipelineRunner
                 projectRoot,
                 gitRoot!,
                 untrackedOutput,
-                generatedPaths);
+                generatedPaths)
+              || HasUntrackedOrIgnoredExplicitInputs(projectRoot, gitRoot!, explicitInputPaths);
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
             dirty);
+    }
+
+    private static bool HasUntrackedOrIgnoredExplicitInputs(
+        string projectRoot,
+        string gitRoot,
+        IEnumerable<string>? explicitInputPaths)
+    {
+        foreach (string path in explicitInputPaths ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+            string? relative = ToGitRelativeExclusion(projectRoot, gitRoot, path);
+            if (string.IsNullOrWhiteSpace(relative))
+                continue;
+            if (ReadGitRawText(gitRoot, $"ls-files --error-unmatch -- {QuoteLiteralGitPath(relative!)}") is null)
+                return true;
+        }
+        return false;
     }
 
     private static IEnumerable<string> EnumerateGeneratedProvenancePaths(

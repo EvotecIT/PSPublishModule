@@ -146,8 +146,14 @@ public sealed class PowerForgeCliDotNetPublishTests
         {
             string outputDirectory = Path.Combine(tempRoot, "Artifacts", "Sample.CLI", "win-x64", "net10.0", "PortableCompat");
             Directory.CreateDirectory(outputDirectory);
-            string executablePath = Path.Combine(outputDirectory, "Sample.CLI.exe");
             var signedWindowsExecutable = FindSignedWindowsExecutable();
+            FileVersionInfo signedIdentity = FileVersionInfo.GetVersionInfo(signedWindowsExecutable);
+            string artifactId = new[] { signedIdentity.ProductName, signedIdentity.InternalName, signedIdentity.OriginalFilename }
+                .First(value => !string.IsNullOrWhiteSpace(value))!;
+            if (artifactId.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                artifactId.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                artifactId = Path.GetFileNameWithoutExtension(artifactId);
+            string executablePath = Path.Combine(outputDirectory, artifactId + ".exe");
             string sourceRevision = ReadPortableSourceRevision(signedWindowsExecutable);
             File.Copy(signedWindowsExecutable, executablePath);
             DotNetPublishReleaseArtifactVerifier.AuthenticodeResult realSignature =
@@ -155,23 +161,19 @@ public sealed class PowerForgeCliDotNetPublishTests
             Assert.True(realSignature.IsValid);
             string realVersion = ReadNormalizedPortableVersion(executablePath);
 
-            string archivePath = Path.Combine(Path.GetDirectoryName(outputDirectory)!, "Sample.CLI.zip");
-            using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
-                archive.CreateEntryFromFile(executablePath, "Sample.CLI.exe", CompressionLevel.NoCompression);
-
             string manifestPath = Path.Combine(tempRoot, "manifest.json");
             File.WriteAllText(manifestPath, JsonSerializer.Serialize(new[]
             {
                 new
                 {
                     Category = "Publish",
-                    Target = "Sample.CLI",
+                    Target = artifactId,
                     Kind = "Cli",
                     Runtime = "win-x64",
                     Framework = "net10.0",
                     Style = "PortableCompat",
                     OutputDir = outputDirectory,
-                    ZipPath = archivePath,
+                    ZipPath = string.Empty,
                     ExePath = executablePath,
                     SignedFiles = 1,
                     SignedFilePaths = new[] { executablePath },
@@ -188,7 +190,7 @@ public sealed class PowerForgeCliDotNetPublishTests
                 {
                     new
                     {
-                        Name = "Sample.CLI",
+                        Name = artifactId,
                         Kind = "Cli",
                         Publish = new
                         {
@@ -210,19 +212,19 @@ public sealed class PowerForgeCliDotNetPublishTests
                 {
                     component = new
                     {
-                        name = "Sample.CLI",
+                        name = artifactId,
                         version = realVersion,
-                        hashes = new[] { new { alg = "SHA-256", content = ComputeSha256(archivePath) } }
+                        hashes = new[] { new { alg = "SHA-256", content = ComputeSha256(executablePath) } }
                     }
                 }
             }));
             string checksumsPath = Path.Combine(tempRoot, "SHA256SUMS.txt");
-            File.WriteAllLines(checksumsPath, new[] { manifestPath, configurationPath, executablePath, archivePath, sbomPath }.Select(path =>
+            File.WriteAllLines(checksumsPath, new[] { manifestPath, configurationPath, executablePath, sbomPath }.Select(path =>
                 $"{ComputeSha256(path)} *{Path.GetRelativePath(tempRoot, path).Replace('\\', '/')}"));
 
             var (exitCode, stdout, stderr) = await RunCliAsync(
                 repoRoot,
-                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --artifact-id Sample.CLI --project-root \"{tempRoot}\" --artifact \"{archivePath}\" --checksums \"{checksumsPath}\" --source-revision {sourceRevision} --manifest \"{manifestPath}\" --config \"{configurationPath}\" --rid win-x64 --framework net10.0 --style PortableCompat --sbom \"{sbomPath}\" --output json");
+                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --artifact-id \"{artifactId}\" --project-root \"{tempRoot}\" --artifact \"{executablePath}\" --checksums \"{checksumsPath}\" --source-revision {sourceRevision} --manifest \"{manifestPath}\" --config \"{configurationPath}\" --rid win-x64 --framework net10.0 --style PortableCompat --sbom \"{sbomPath}\" --output json");
 
             Assert.True(exitCode == 0, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
             using JsonDocument document = JsonDocument.Parse(stdout);
@@ -231,7 +233,7 @@ public sealed class PowerForgeCliDotNetPublishTests
             Assert.Equal("dotnet.release-artifact.verify", root.GetProperty("command").GetString());
             JsonElement result = root.GetProperty("result");
             Assert.Equal("PortableCli", result.GetProperty("artifactKind").GetString());
-            Assert.Equal("Sample.CLI", result.GetProperty("artifactId").GetString());
+            Assert.Equal(artifactId, result.GetProperty("artifactId").GetString());
             Assert.Equal("valid", result.GetProperty("signatureStatus").GetString());
             Assert.Equal(realSignature.Subject, result.GetProperty("signerSubject").GetString());
             Assert.Contains(result.GetProperty("evidenceFiles").EnumerateArray(), evidence =>

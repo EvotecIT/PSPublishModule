@@ -282,6 +282,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             }
             if (includeDependencyProvenance)
                 WriteEntry(archive, "Sample/Internals/Modules/Dependency/PowerForge.ReleaseProvenance.json", "{}");
+            archive.Dispose();
+            if (!duplicateManifest)
+                BindPayloadInventory();
         }
 
         internal void WriteChecksums()
@@ -310,6 +313,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             WriteArchive(SourceRevision, includeManifestLoadedFormat: true);
             WriteSigningEvidence();
             WriteChecksums();
+        }
+
+        internal void TamperDataPayload()
+        {
+            using ZipArchive archive = ZipFile.Open(ArchivePath, ZipArchiveMode.Update);
+            ZipArchiveEntry entry = archive.CreateEntry("Sample/config/settings.json");
+            using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false));
+            writer.Write("{\"tampered\":true}");
         }
 
         internal void PrepareRootModuleAsVendor(string evidenceThumbprint)
@@ -467,5 +478,29 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                         Thumbprint = vendorThumbprint
                     }
                 };
+
+        private void BindPayloadInventory()
+        {
+            const string provenancePath = "Sample/PowerForge.ReleaseProvenance.psd1";
+            string payloadInventory;
+            string provenance;
+            using (ZipArchive archive = ZipFile.OpenRead(ArchivePath))
+            {
+                Dictionary<string, ZipArchiveEntry> entries = archive.Entries
+                    .Where(entry => !entry.FullName.EndsWith("/", StringComparison.Ordinal) &&
+                                    !entry.FullName.EndsWith("\\", StringComparison.Ordinal))
+                    .ToDictionary(entry => entry.FullName.Replace('\\', '/'), StringComparer.Ordinal);
+                payloadInventory = PowerForgePayloadInventoryHash.ComputeArchive(entries, new[] { provenancePath });
+                using StreamReader reader = new(entries[provenancePath].Open(), new UTF8Encoding(false, true));
+                provenance = reader.ReadToEnd();
+            }
+
+            provenance = provenance
+                .Replace("SchemaVersion = '2'", "SchemaVersion = '3'", StringComparison.Ordinal)
+                .Replace("}", $"    PayloadInventorySha256 = '{payloadInventory}'{Environment.NewLine}}}", StringComparison.Ordinal);
+            using ZipArchive update = ZipFile.Open(ArchivePath, ZipArchiveMode.Update);
+            update.GetEntry(provenancePath)!.Delete();
+            WriteEntry(update, provenancePath, provenance);
+        }
     }
 }

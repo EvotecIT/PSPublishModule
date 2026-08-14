@@ -71,7 +71,16 @@ public static class PowerForgeModuleSourceAttestationWriter
         string inventorySha256 = PowerForgeModuleSigningEvidenceWriter.ComputeSigningInventorySha256(
             moduleRoot,
             signingResult);
-        WriteContent(destination, existing.ModuleName, existing.Version, existing.SourceRevision, inventorySha256);
+        string payloadInventorySha256 = PowerForgePayloadInventoryHash.ComputeDirectory(
+            moduleRoot,
+            new[] { destination });
+        WriteContent(
+            destination,
+            existing.ModuleName,
+            existing.Version,
+            existing.SourceRevision,
+            inventorySha256,
+            payloadInventorySha256);
         return destination;
     }
 
@@ -89,13 +98,17 @@ public static class PowerForgeModuleSourceAttestationWriter
 
         string schema = ReadRequired(text, "SchemaVersion");
         if (!string.Equals(schema, "1", StringComparison.Ordinal) &&
-            !string.Equals(schema, "2", StringComparison.Ordinal))
+            !string.Equals(schema, "2", StringComparison.Ordinal) &&
+            !string.Equals(schema, "3", StringComparison.Ordinal))
             throw new InvalidDataException("Signed module source attestation schema version is not supported.");
         string dirty = ReadRequired(text, "SourceDirty");
         if (!string.Equals(dirty, "false", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Signed module source attestation must bind a clean source checkout.");
-        string? signingInventorySha256 = string.Equals(schema, "2", StringComparison.Ordinal)
+        string? signingInventorySha256 = !string.Equals(schema, "1", StringComparison.Ordinal)
             ? RequireSha256(ReadRequired(text, "SigningInventorySha256"))
+            : null;
+        string? payloadInventorySha256 = string.Equals(schema, "3", StringComparison.Ordinal)
+            ? RequireSha256(ReadRequired(text, "PayloadInventorySha256"))
             : null;
         return new PowerForgeModuleSourceAttestation(
             ReadRequired(text, "ModuleName"),
@@ -103,7 +116,8 @@ public static class PowerForgeModuleSourceAttestationWriter
             DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(
                 ReadRequired(text, "SourceRevision"),
                 "signed module source revision"),
-            signingInventorySha256);
+            signingInventorySha256,
+            payloadInventorySha256);
     }
 
     private static void WriteContent(
@@ -111,17 +125,19 @@ public static class PowerForgeModuleSourceAttestationWriter
         string moduleName,
         string version,
         string sourceRevision,
-        string signingInventorySha256)
+        string signingInventorySha256,
+        string payloadInventorySha256)
     {
         string content = string.Join(Environment.NewLine, new[]
         {
             "@{",
-            "    SchemaVersion = '2'",
+            "    SchemaVersion = '3'",
             $"    ModuleName = '{RequireSafeValue(moduleName, nameof(moduleName))}'",
             $"    Version = '{RequireSafeValue(version, nameof(version))}'",
             $"    SourceRevision = '{DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(sourceRevision, nameof(sourceRevision)).ToLowerInvariant()}'",
             "    SourceDirty = 'false'",
             $"    SigningInventorySha256 = '{RequireSha256(signingInventorySha256)}'",
+            $"    PayloadInventorySha256 = '{RequireSha256(payloadInventorySha256)}'",
             "}",
             string.Empty
         });
@@ -168,16 +184,19 @@ internal sealed class PowerForgeModuleSourceAttestation
         string moduleName,
         string version,
         string sourceRevision,
-        string? signingInventorySha256)
+        string? signingInventorySha256,
+        string? payloadInventorySha256)
     {
         ModuleName = moduleName;
         Version = version;
         SourceRevision = sourceRevision;
         SigningInventorySha256 = signingInventorySha256;
+        PayloadInventorySha256 = payloadInventorySha256;
     }
 
     internal string ModuleName { get; }
     internal string Version { get; }
     internal string SourceRevision { get; }
     internal string? SigningInventorySha256 { get; }
+    internal string? PayloadInventorySha256 { get; }
 }

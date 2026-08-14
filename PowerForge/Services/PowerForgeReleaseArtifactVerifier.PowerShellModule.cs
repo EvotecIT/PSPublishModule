@@ -159,6 +159,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 computedSigningInventorySha256,
                 StringComparison.OrdinalIgnoreCase))
             throw Invalid("Signed module source attestation does not bind the complete signing inventory.");
+        string payloadInventorySha256 = PowerForgePayloadInventoryHash.ComputeArchive(
+            entries,
+            new[] { signedProvenancePath });
+        if (!string.Equals(
+                signedProvenance.PayloadInventorySha256,
+                payloadInventorySha256,
+                StringComparison.OrdinalIgnoreCase))
+            throw Invalid("Signed module source attestation does not bind the complete archive payload inventory.");
 
         var signatures = new List<VerifiedSignature>();
         var signatureEvidence = new List<PowerForgeReleaseSignatureEvidence>();

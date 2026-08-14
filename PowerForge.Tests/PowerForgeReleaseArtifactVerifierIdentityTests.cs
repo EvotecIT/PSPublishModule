@@ -15,7 +15,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 0,
                 "CN=Publisher Malware LLC",
                 new string('D', 40)),
-            _ => "1.2.3+" + SourceRevision);
+            _ => "1.2.3+" + SourceRevision,
+            _ => "Sample.CLI",
+            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher Malware LLC", new string('D', 40)));
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() => verifier.Verify(request));
 
@@ -113,11 +115,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         using var fixture = new PortableFixture();
         PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
         request.ExpectedVersion = "1.2.3-preview.1+expected";
+        fixture.SetPortableVersion("1.2.3-preview.1+inventory");
         fixture.WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3-preview.1", fixture.ComputeDigest(fixture.ArchivePath));
         fixture.WriteChecksums();
         PowerForgeReleaseArtifactVerifier verifier = new(
             _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
-            _ => "1.2.3-preview.1+actual." + SourceRevision);
+            _ => "1.2.3-preview.1+actual." + SourceRevision,
+            _ => "Sample.CLI",
+            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint));
 
         PowerForgeReleaseArtifactEvidence evidence = verifier.Verify(request);
 
@@ -132,7 +137,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         request.ExpectedVersion = "1.2.3";
         PowerForgeReleaseArtifactVerifier verifier = new(
             _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
-            _ => "1.2.3-preview.1+sha." + SourceRevision);
+            _ => "1.2.3-preview.1+sha." + SourceRevision,
+            _ => "Sample.CLI",
+            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint));
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() => verifier.Verify(request));
 
@@ -158,7 +165,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         using var fixture = new PortableFixture();
         PowerForgeReleaseArtifactVerifier verifier = new(
             _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
-            _ => "1.2.3+" + new string('c', 40));
+            _ => "1.2.3+" + new string('c', 40),
+            _ => "Sample.CLI",
+            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint));
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
             verifier.Verify(fixture.CreateRequest()));

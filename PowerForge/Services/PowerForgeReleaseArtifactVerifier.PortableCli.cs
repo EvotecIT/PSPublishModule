@@ -51,57 +51,69 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         ValidateRevision(sourceRevision, expectedRevision);
         ValidatePortableDimensions(entry, expected);
 
-        string outputDirectory = ResolveManifestPath(projectRoot, ReadString(entry, "OutputDir"), expected.AllowOutsideProjectRoot);
         string manifestArchive = ReadString(entry, "ZipPath");
         string manifestExecutable = ReadString(entry, "ExePath");
         string artifactPath = ResolveRequestFile(projectRoot, request.ArtifactPath, nameof(request.ArtifactPath));
-        RequireManifestPathMatch(projectRoot, artifactPath, manifestArchive, manifestExecutable, expected.AllowOutsideProjectRoot);
-        string artifactDigest = VerifyChecksummedFile(projectRoot, checksumsPath, artifactPath, "portable artifact");
-        string executablePath = ResolveManifestPath(projectRoot, manifestExecutable, expected.AllowOutsideProjectRoot);
-
-        string[] expectedSignaturePaths = EnumeratePortableSigningFiles(outputDirectory, expected.Sign);
-        if (expectedSignaturePaths.Length != signedFileCount)
-            throw Invalid("PowerForge manifest signed-file count does not match the configured portable signing selection.");
-        string[] manifestSignaturePaths = ResolvePortableSignaturePaths(
-            projectRoot,
-            ReadStringArray(entry, "SignedFilePaths"),
-            expected.AllowOutsideProjectRoot,
-            "manifest signed-file path");
-        if (manifestSignaturePaths.Length > 0 && !SamePhysicalPathSet(manifestSignaturePaths, expectedSignaturePaths))
-            throw Invalid("PowerForge manifest signed-file paths do not match the configured portable signing selection.");
-        string[] requestedSignaturePaths = ResolvePortableSignaturePaths(
-            projectRoot,
-            request.SignaturePaths,
-            expected.AllowOutsideProjectRoot,
-            "requested signature path");
-        string[] signaturePaths = manifestSignaturePaths.Length > 0
-            ? manifestSignaturePaths
-            : expectedSignaturePaths;
-        if (requestedSignaturePaths.Length > 0 && !SamePhysicalPathSet(requestedSignaturePaths, signaturePaths))
-            throw Invalid("Requested portable signature paths do not match the complete trusted signing selection.");
-
         bool artifactIsArchive = IsZipArchive(artifactPath);
-        if (!artifactIsArchive &&
-            (signaturePaths.Length != 1 || !PathsEqual(signaturePaths[0], executablePath)))
-            throw Invalid("A direct portable executable artifact must be the only file in the trusted signing selection; use the ZIP artifact for multi-file outputs.");
         if (artifactIsArchive)
-            VerifyPortableArchiveInventory(projectRoot, checksumsPath, artifactPath, outputDirectory);
-
-        var signatures = new List<VerifiedSignature>();
-        foreach (string signaturePath in signaturePaths)
         {
-            EnsurePathWithinDirectory(outputDirectory, signaturePath, "Portable signature path");
-            VerifyChecksummedFile(projectRoot, checksumsPath, signaturePath, "portable signed file");
-            signatures.Add(VerifySignature(signaturePath, expected.SignerThumbprint, expected.SignerSubjectName));
+            if (!string.Equals(Path.GetFileName(manifestArchive), Path.GetFileName(artifactPath), StringComparison.OrdinalIgnoreCase))
+                throw Invalid("Requested portable archive does not match the selected manifest entry.");
         }
-        if (!signatures.Any(signature => PathsEqual(signature.PhysicalPath, executablePath)))
-            throw Invalid("Portable release evidence must include the manifest executable signature.");
+        else if (!PathsEqual(
+                     ResolveManifestPath(projectRoot, manifestExecutable, expected.AllowOutsideProjectRoot),
+                     artifactPath))
+        {
+            throw Invalid("A direct portable artifact must be the manifest executable itself.");
+        }
+        string artifactDigest = VerifyChecksummedFile(projectRoot, checksumsPath, artifactPath, "portable artifact");
+        VerifiedSignature[] signatures;
+        string signedProductVersion;
+        string executableIdentity;
+        string? inventoryVersion = null;
+        if (artifactIsArchive)
+        {
+            PortableArchiveVerification archive = VerifyPortableArchiveInventory(
+                artifactPath,
+                expected.SignerThumbprint,
+                expected.SignerSubjectName);
+            if (!string.Equals(archive.Inventory.ArtifactId, artifactId, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(archive.Inventory.Target, target, StringComparison.OrdinalIgnoreCase))
+                throw Invalid("Publisher-signed portable payload identity does not match the requested artifact target.");
+            ValidateRevision(
+                DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(
+                    archive.Inventory.SourceRevision,
+                    "portable payload inventory source revision"),
+                expectedRevision);
+            if (archive.Inventory.SignedFilePaths.Length != signedFileCount)
+                throw Invalid("PowerForge manifest signed-file count does not match the publisher-signed payload inventory.");
+            signatures = archive.Signatures;
+            signedProductVersion = archive.SignedProductVersion;
+            executableIdentity = archive.ExecutableIdentity;
+            inventoryVersion = archive.Inventory.Version;
+            if (!string.Equals(archive.Inventory.ExecutableIdentity, executableIdentity, StringComparison.OrdinalIgnoreCase))
+                throw Invalid("Signed executable identity does not match the publisher-signed payload inventory.");
+        }
+        else
+        {
+            if (signedFileCount != 1)
+                throw Invalid("A direct portable executable artifact must be the only signed file; use the ZIP artifact for multi-file outputs.");
+            signatures = new[] { VerifySignature(artifactPath, expected.SignerThumbprint, expected.SignerSubjectName) };
+            signedProductVersion = _readPortableVersion(artifactPath);
+            executableIdentity = _readPortableIdentity(artifactPath);
+        }
 
+        if (!PortableIdentityMatches(executableIdentity, artifactId, target))
+            throw Invalid("Signed executable product or assembly identity does not match the requested artifact target.");
         VerifiedSignature signer = RequireOneSigner(signatures);
-        string signedProductVersion = _readPortableVersion(executablePath);
         ValidatePortableSourceBinding(signedProductVersion, expectedRevision);
         string version = NormalizePortableVersion(signedProductVersion);
         ValidateExpectedPortableVersion(request.ExpectedVersion, version);
+        if (inventoryVersion is not null)
+        {
+            if (!string.Equals(NormalizePortableVersion(inventoryVersion), version, StringComparison.OrdinalIgnoreCase))
+                throw Invalid("Publisher-signed payload inventory version does not match the signed executable.");
+        }
         PowerForgeReleaseEvidenceFile[] evidence = BuildExternalEvidence(
             projectRoot,
             checksumsPath,
@@ -134,6 +146,16 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             }).ToArray(),
             EvidenceFiles = evidence
         };
+    }
+
+    private static bool PortableIdentityMatches(string identity, string artifactId, string target)
+    {
+        string normalized = identity.Trim();
+        if (normalized.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+            normalized.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            normalized = Path.GetFileNameWithoutExtension(normalized);
+        return string.Equals(normalized, artifactId, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(normalized, target, StringComparison.OrdinalIgnoreCase);
     }
 
     private static ExpectedPortable ReadExpectedPortable(

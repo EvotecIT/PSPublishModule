@@ -393,7 +393,34 @@ public sealed partial class DotNetPublishPipelineRunner
 
         string[] signedFilePaths = Array.Empty<string>();
         if (target.Publish.Sign?.Enabled == true)
+        {
             signedFilePaths = TrySignOutput(outputDir, target.Publish.Sign);
+            if (signedFilePaths.Length > 0 && target.Publish.Zip)
+            {
+                var signedSummary = SummarizeDirectory(outputDir, rid);
+                string executable = signedSummary.ExePath
+                    ?? throw new InvalidOperationException("Signed portable output does not contain a primary executable.");
+                FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(executable);
+                string executableIdentity = FirstText(
+                    versionInfo.ProductName,
+                    versionInfo.InternalName,
+                    Path.GetFileNameWithoutExtension(executable));
+                string portableVersion = FirstText(versionInfo.ProductVersion, versionInfo.FileVersion);
+                PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
+                    outputDir,
+                    target.Name,
+                    plan.SourceRevision,
+                    executable,
+                    executableIdentity,
+                    portableVersion,
+                    signedFilePaths);
+                byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
+                File.WriteAllBytes(Path.Combine(outputDir, PowerForgePortablePayloadInventory.InventoryFileName), inventoryBytes);
+                File.WriteAllBytes(
+                    Path.Combine(outputDir, PowerForgePortablePayloadInventory.SignatureFileName),
+                    _signPortableInventory(inventoryBytes, target.Publish.Sign));
+            }
+        }
 
         string? zipPath = null;
         if (target.Publish.Zip)
@@ -429,6 +456,10 @@ public sealed partial class DotNetPublishPipelineRunner
             SignedFilePaths = signedFilePaths
         };
     }
+
+    private static string FirstText(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim()
+        ?? throw new InvalidOperationException("Portable executable identity metadata is missing.");
 
     internal static List<string> BuildPublishArguments(
         DotNetPublishPlan plan,

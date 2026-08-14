@@ -89,7 +89,8 @@ public sealed partial class AppleReleaseWorkflowTests
             Run("git", repository.FullName, "config", "user.name", "PowerForge Tests").EnsureSuccess();
             Directory.CreateDirectory(Path.Combine(repository.FullName, "Module"));
             File.WriteAllText(Path.Combine(repository.FullName, "tracked.txt"), "tracked");
-            Run("git", repository.FullName, "add", "tracked.txt").EnsureSuccess();
+            File.WriteAllText(Path.Combine(repository.FullName, ".gitignore"), "ignored-config.json\n");
+            Run("git", repository.FullName, "add", "tracked.txt", ".gitignore").EnsureSuccess();
             Run("git", repository.FullName, "commit", "-m", "fixture").EnsureSuccess();
 
             string provenance = Path.Combine(repository.FullName, "Module", "PowerForge.ReleaseProvenance.json");
@@ -165,6 +166,15 @@ public sealed partial class AppleReleaseWorkflowTests
             Assert.Contains("\"SourceDirty\":true", callerConfigDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("caller-config.json", callerConfigDirty.StandardOutput, StringComparison.Ordinal);
             File.Delete(callerConfigPath);
+
+            string ignoredConfigPath = Path.Combine(repository.FullName, "ignored-config.json");
+            File.WriteAllText(ignoredConfigPath, "{}");
+            string ignoredInputCommand = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                                         $"Get-PowerForgeReleaseSourceState -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedProvenancePath @('{provenance.Replace("'", "''", StringComparison.Ordinal)}','{signedProvenance.Replace("'", "''", StringComparison.Ordinal)}') -ReceiptPath '{receiptPath.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedConfigurationPath '{generatedConfigurationPath.Replace("'", "''", StringComparison.Ordinal)}' -ExplicitInputPath '{ignoredConfigPath.Replace("'", "''", StringComparison.Ordinal)}' | ConvertTo-Json -Compress";
+            var ignoredInputDirty = Run(shell, repository.FullName, "-NoProfile", "-Command", ignoredInputCommand).EnsureSuccess();
+            Assert.Contains("\"SourceDirty\":true", ignoredInputDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ignored-config.json", ignoredInputDirty.StandardOutput, StringComparison.Ordinal);
+            File.Delete(ignoredConfigPath);
 
             File.WriteAllText(Path.Combine(repository.FullName, "Module", "untracked-input.ps1"), "'input'");
             var dirty = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();

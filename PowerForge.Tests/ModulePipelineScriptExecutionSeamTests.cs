@@ -696,6 +696,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
 
             string[] verified = LastPackageFilePaths
                 .Where(path => LastIncludePatterns.Any(pattern =>
+                    string.Equals("*", pattern, StringComparison.Ordinal) ||
                     string.Equals("*" + Path.GetExtension(path), pattern, StringComparison.OrdinalIgnoreCase)))
                 .Where(path => !LastExcludePatterns.Any(excluded =>
                     path.IndexOf(excluded, StringComparison.OrdinalIgnoreCase) >= 0))

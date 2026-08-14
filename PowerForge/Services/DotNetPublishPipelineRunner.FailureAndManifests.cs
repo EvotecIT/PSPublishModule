@@ -355,6 +355,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 orderedArtefacts,
                 orderedStorePackages,
                 orderedMsiBuilds),
+            (plan.ConfigurationInputPaths ?? Array.Empty<string>())
+                .Concat((plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>()).Select(target => target.ProjectPath)),
             cleanTrackedGeneratedPaths,
             cleanTrackedGeneratedProvenanceState,
             msiReservationOwner);

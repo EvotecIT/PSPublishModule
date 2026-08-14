@@ -3,17 +3,17 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseArtifactVerifierTests
 {
     [Fact]
-    public void Verify_PortableCliRequiresManifestExecutableSignature()
+    public void Verify_PortableCliUsesPublisherSignedSelectionInsteadOfRequestOverrides()
     {
         using var fixture = new PortableFixture();
         string dependencyPath = fixture.AddSignedDependency();
         PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
         request.SignaturePaths = new[] { dependencyPath };
 
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(request));
+        PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(request);
 
-        Assert.Contains("complete trusted signing selection", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(evidence.Signatures);
+        Assert.Contains(evidence.SignaturePaths, path => path.EndsWith("Sample.CLI.exe", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
             fixture.CreateVerifier().Verify(fixture.CreateRequest()));
 
-        Assert.Contains("signed-file paths", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("signed-file count", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -69,7 +69,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             path => path.EndsWith("Dependency.dll", StringComparison.OrdinalIgnoreCase)
                 ? new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(false, unchecked((int)0x800B0100), string.Empty, string.Empty)
                 : new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
-            _ => "1.2.3+" + SourceRevision);
+            _ => "1.2.3+" + SourceRevision,
+            _ => "Sample.CLI",
+            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint));
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
             verifier.Verify(request));

@@ -12,19 +12,29 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 {
     private readonly Func<string, DotNetPublishReleaseArtifactVerifier.AuthenticodeResult> _verifyAuthenticode;
     private readonly Func<string, string> _readPortableVersion;
+    private readonly Func<string, string> _readPortableIdentity;
+    private readonly Func<byte[], byte[], PowerForgePayloadInventorySignature> _verifyPortableInventory;
 
     /// <summary>Creates a verifier backed by WinTrust and signed-file version metadata.</summary>
     public PowerForgeReleaseArtifactVerifier()
-        : this(CreateDefaultAuthenticodeVerifier(), ReadPortableVersion)
+        : this(
+            CreateDefaultAuthenticodeVerifier(),
+            ReadPortableVersion,
+            ReadPortableIdentity,
+            PowerForgePortablePayloadInventoryCms.Verify)
     {
     }
 
     internal PowerForgeReleaseArtifactVerifier(
         Func<string, DotNetPublishReleaseArtifactVerifier.AuthenticodeResult> verifyAuthenticode,
-        Func<string, string> readPortableVersion)
+        Func<string, string> readPortableVersion,
+        Func<string, string>? readPortableIdentity = null,
+        Func<byte[], byte[], PowerForgePayloadInventorySignature>? verifyPortableInventory = null)
     {
         _verifyAuthenticode = verifyAuthenticode ?? throw new ArgumentNullException(nameof(verifyAuthenticode));
         _readPortableVersion = readPortableVersion ?? throw new ArgumentNullException(nameof(readPortableVersion));
+        _readPortableIdentity = readPortableIdentity ?? ReadPortableIdentity;
+        _verifyPortableInventory = verifyPortableInventory ?? PowerForgePortablePayloadInventoryCms.Verify;
     }
 
     /// <summary>Verifies one non-installer release artifact and returns hash-bound evidence.</summary>
@@ -254,6 +264,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             }
         }
         return version.FileVersion ?? string.Empty;
+    }
+
+    private static string ReadPortableIdentity(string path)
+    {
+        FileVersionInfo version = FileVersionInfo.GetVersionInfo(path);
+        return new[] { version.ProductName, version.InternalName, version.OriginalFilename, Path.GetFileNameWithoutExtension(path) }
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim()
+            ?? throw Invalid("Signed portable executable identity metadata is missing.");
     }
 
     private static string NormalizeModuleVersion(string version, string? prerelease = null)

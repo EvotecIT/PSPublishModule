@@ -5,6 +5,19 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseArtifactVerifierTests
 {
     [Fact]
+    public void Verify_PowerShellModuleRejectsUnsignedDataPayloadTamperedAfterSignedInventoryWasBound()
+    {
+        using var fixture = new ModuleFixture();
+        fixture.TamperDataPayload();
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("complete archive payload inventory", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PowerShellModuleRejectsPrimaryManifestOutsideNamedModuleDirectory()
     {
         using var fixture = new ModuleFixture();

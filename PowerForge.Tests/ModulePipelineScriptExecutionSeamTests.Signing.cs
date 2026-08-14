@@ -34,7 +34,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             ArtefactBuildResult artefact = Assert.Single(result.ArtefactResults);
             string evidencePath = Assert.Single(artefact.EvidencePaths);
             Assert.True(File.Exists(evidencePath));
-            Assert.Equal(3, hostedOperations.SignCalls);
+            Assert.Equal(4, hostedOperations.SignCalls);
             string reboundAttestation = Assert.Single(hostedOperations.LastPackageFilePaths);
             Assert.EndsWith("PowerForge.ReleaseProvenance.psd1", reboundAttestation, StringComparison.OrdinalIgnoreCase);
             Assert.True(hostedOperations.LastSigningOptions?.OverwriteSigned);
@@ -65,8 +65,8 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
 
             ArtefactBuildResult artefact = Assert.Single(result.ArtefactResults);
             Assert.Empty(artefact.EvidencePaths);
-            Assert.Equal(2, hostedOperations.SignCalls);
-            Assert.Equal(2, hostedOperations.SigningRootPaths.Count);
+            Assert.Equal(3, hostedOperations.SignCalls);
+            Assert.Equal(3, hostedOperations.SigningRootPaths.Count);
             Assert.NotEqual(hostedOperations.SigningRootPaths[0], hostedOperations.SigningRootPaths[1]);
             Assert.DoesNotContain("Modules", hostedOperations.LastExcludePatterns, StringComparer.OrdinalIgnoreCase);
             Assert.True(File.Exists(artefact.OutputPath));
@@ -87,12 +87,14 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
             var hostedOperations = new FakeHostedOperations();
             hostedOperations.SigningResults.Enqueue(CreateSigningResult("stage.psd1", signedNew: 1));
-            hostedOperations.SigningResults.Enqueue(CreateSigningResult("packed-one.psd1", signedNew: 2));
+            hostedOperations.SigningResults.Enqueue(CreateSigningResult("packed-one.psd1", signedNew: 1));
+            hostedOperations.SigningResults.Enqueue(CreateSigningResult("packed-one.psm1", signedNew: 1));
             hostedOperations.SigningResults.Enqueue(CreateSigningResult(
                 "packed-two.psd1",
                 signedNew: 0,
                 alreadySignedOther: 1,
                 vendorPath: "vendor.dll"));
+            hostedOperations.SigningResults.Enqueue(CreateSigningResult("packed-two.psm1", signedNew: 0));
             var runner = CreateRunner(hostedOperations);
             ModulePipelineSpec spec = CreateSignedPackedSpec(
                 root.FullName,
@@ -115,11 +117,13 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             ModulePipelineResult result = runner.Run(spec, runner.Plan(spec));
 
             ModuleSigningResult aggregate = Assert.IsType<ModuleSigningResult>(result.SigningResult);
-            Assert.Equal(3, hostedOperations.SignCalls);
-            Assert.Equal(3, aggregate.TotalAfterExclude);
+            Assert.Equal(5, hostedOperations.SignCalls);
+            Assert.Equal(5, aggregate.TotalAfterExclude);
             Assert.Equal(3, aggregate.SignedNew);
             Assert.Equal(1, aggregate.AlreadySignedOther);
-            Assert.Equal(new[] { "stage.psd1", "packed-one.psd1", "packed-two.psd1" }, aggregate.VerifiedFilePaths);
+            Assert.Equal(
+                new[] { "stage.psd1", "packed-one.psd1", "packed-one.psm1", "packed-two.psd1", "packed-two.psm1" },
+                aggregate.VerifiedFilePaths);
             ModuleSigningPreservedSignature vendor = Assert.Single(aggregate.PreservedThirdPartySignatures);
             Assert.Equal("vendor.dll", vendor.FilePath);
         }

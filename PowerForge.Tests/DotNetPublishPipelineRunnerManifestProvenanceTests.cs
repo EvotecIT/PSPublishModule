@@ -681,7 +681,8 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunGit(root, "config user.name \"PowerForge Tests\"");
             RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
             File.WriteAllText(Path.Combine(root, "tracked.txt"), "tracked");
-            RunGit(root, "add tracked.txt");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "ignored-config.json\n");
+            RunGit(root, "add tracked.txt .gitignore");
             RunGit(root, "commit -m \"tracked source\"");
             string releaseConfig = Path.Combine(evidenceRoot, ".release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
             string publishConfig = Path.Combine(root, "powerforge.dotnetpublish.caller.json");
@@ -755,6 +756,15 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             InvokeWriteManifests(plan, artefacts);
             using (JsonDocument cleanManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
                 Assert.False(cleanManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+
+            string ignoredConfig = Path.Combine(root, "ignored-config.json");
+            File.WriteAllText(ignoredConfig, "{}");
+            plan.ConfigurationInputPaths = new[] { releaseConfig, publishConfig, ignoredConfig };
+            InvokeWriteManifests(plan, artefacts);
+            using (JsonDocument ignoredInputManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+                Assert.True(ignoredInputManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+            File.Delete(ignoredConfig);
+            plan.ConfigurationInputPaths = new[] { releaseConfig, publishConfig };
 
             File.WriteAllText(Path.Combine(root, "untracked-input.txt"), "input");
             InvokeWriteManifests(plan, artefacts);

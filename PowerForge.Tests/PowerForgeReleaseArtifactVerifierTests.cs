@@ -231,7 +231,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     0,
                     "CN=Publisher",
                     signerThumbprint),
-                _ => "1.2.3+" + SourceRevision);
+                _ => "1.2.3+" + SourceRevision,
+                _ => "Sample.CLI",
+                (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", signerThumbprint));
 
         public void Dispose()
         {
@@ -319,11 +321,38 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 
         internal void WriteArchive(string payload)
         {
+            File.WriteAllText(ExecutablePath, payload);
+            WritePortableInventory(new[] { ExecutablePath });
+            WriteArchiveFromOutput();
+        }
+
+        private void WritePortableInventory(IEnumerable<string> signedPaths, string version = "1.2.3+" + SourceRevision)
+        {
+            PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
+                OutputDirectory,
+                "Sample.CLI",
+                SourceRevision,
+                ExecutablePath,
+                "Sample.CLI",
+                version,
+                signedPaths);
+            File.WriteAllBytes(
+                Path.Combine(OutputDirectory, PowerForgePortablePayloadInventory.InventoryFileName),
+                PowerForgePortablePayloadInventoryCms.Serialize(inventory));
+            File.WriteAllBytes(
+                Path.Combine(OutputDirectory, PowerForgePortablePayloadInventory.SignatureFileName),
+                new byte[] { 1 });
+        }
+
+        private void WriteArchiveFromOutput()
+        {
             if (File.Exists(ArchivePath)) File.Delete(ArchivePath);
             using ZipArchive archive = ZipFile.Open(ArchivePath, ZipArchiveMode.Create);
-            ZipArchiveEntry entry = archive.CreateEntry("Sample.CLI.exe");
-            using StreamWriter writer = new(entry.Open(), new UTF8Encoding(false));
-            writer.Write(payload);
+            foreach (string path in Directory.EnumerateFiles(OutputDirectory, "*", SearchOption.AllDirectories))
+            {
+                string relative = Path.GetRelativePath(OutputDirectory, path).Replace('\\', '/');
+                archive.CreateEntryFromFile(path, relative);
+            }
         }
 
         internal void WriteChecksums() =>
@@ -333,12 +362,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         {
             string dependencyPath = Path.Combine(OutputDirectory, "Dependency.dll");
             File.WriteAllText(dependencyPath, "signed dependency");
-            using (ZipArchive archive = ZipFile.Open(ArchivePath, ZipArchiveMode.Update))
-            {
-                ZipArchiveEntry entry = archive.CreateEntry("Dependency.dll");
-                using StreamWriter writer = new(entry.Open(), new UTF8Encoding(false));
-                writer.Write("signed dependency");
-            }
+            WritePortableInventory(new[] { ExecutablePath });
+            WriteArchiveFromOutput();
             WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
             base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath, dependencyPath);
             return dependencyPath;
@@ -349,6 +374,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             int signedFileCount = 2,
             bool omitDependencyFromManifest = false)
         {
+            WritePortableInventory(omitDependencyFromManifest
+                ? new[] { ExecutablePath }
+                : new[] { ExecutablePath, dependencyPath });
+            WriteArchiveFromOutput();
             File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
             {
                 SchemaVersion = 1,
@@ -390,7 +419,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     SourceDirty = false
                 }
             }));
+            WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
             base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath, dependencyPath);
+        }
+
+        internal void SetPortableVersion(string version)
+        {
+            WritePortableInventory(new[] { ExecutablePath }, version);
+            WriteArchiveFromOutput();
         }
 
         internal void WriteConfigurationWithMatrixDefaults()

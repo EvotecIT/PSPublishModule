@@ -1125,6 +1125,7 @@
           "NuGet.Configuration": "[7.6.0, )",
           "System.IO.Packaging": "[10.0.10, )",
           "System.Reflection.MetadataLoadContext": "[10.0.10, )",
+          "System.Security.Cryptography.Pkcs": "[10.0.10, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
@@ -1133,7 +1134,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.6.4, )",
-          "PowerForge": "[3.0.104, )",
+          "PowerForge": "[3.0.107, )",
           "System.Security.Cryptography.Xml": "[10.0.10, )"
         }
       },
@@ -1144,7 +1145,7 @@
           "HtmlTinkerX": "[2.2.2, )",
           "Magick.NET-Q8-AnyCPU": "[14.16.0, )",
           "OfficeIMO.Markdown": "[3.0.3, )",
-          "PowerForge": "[3.0.104, )",
+          "PowerForge": "[3.0.107, )",
           "Scriban": "[7.2.6, )",
           "YamlDotNet": "[18.1.0, )"
         }
@@ -1153,7 +1154,7 @@
         "type": "Project",
         "dependencies": {
           "DBAClientX.SQLite": "[0.13.0, )",
-          "PowerForge.Web": "[3.0.104, )"
+          "PowerForge.Web": "[3.0.107, )"
         }
       },
       "powerforgestudio.domain": {
@@ -1165,8 +1166,8 @@
           "HtmlForgeX": "[0.54.0, )",
           "HtmlForgeX.Markdown": "[0.54.0, )",
           "OfficeIMO.Markdown": "[3.0.3, )",
-          "PowerForge": "[3.0.104, )",
-          "PowerForge.PowerShell": "[3.0.104, )",
+          "PowerForge": "[3.0.107, )",
+          "PowerForge.PowerShell": "[3.0.107, )",
           "Spectre.Console": "[0.57.2, )",
           "Spectre.Console.Json": "[0.57.2, )",
           "System.IO.Packaging": "[10.0.10, )",

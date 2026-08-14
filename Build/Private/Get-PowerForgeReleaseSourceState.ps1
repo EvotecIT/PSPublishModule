@@ -10,6 +10,8 @@ function Get-PowerForgeReleaseSourceState {
     Resolved public-release receipt path. An untracked receipt is excluded only when it is under the dedicated release-receipts directory.
     .PARAMETER GeneratedConfigurationPath
     Deterministic effective-configuration output created by the public-release wrapper after this preflight. Prior untracked outputs in the same reserved namespace are also excluded.
+    .PARAMETER ExplicitInputPath
+    Release/build inputs that must be tracked even when a Git ignore rule would otherwise hide them.
     .NOTES
     The exact untracked public-release receipt and deterministic authorized wrapper configurations are excluded. Tracked changes remain release inputs.
     #>
@@ -25,7 +27,9 @@ function Get-PowerForgeReleaseSourceState {
         [Parameter(Mandatory)]
         [string] $ReceiptPath,
 
-        [string] $GeneratedConfigurationPath
+        [string] $GeneratedConfigurationPath,
+
+        [string[]] $ExplicitInputPath = @()
     )
 
     $root = [IO.Path]::GetFullPath($RepositoryRoot)
@@ -82,6 +86,17 @@ function Get-PowerForgeReleaseSourceState {
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to inspect untracked release inputs.'
     }
+    $untrackedOrIgnoredExplicitInputs = @($ExplicitInputPath | ForEach-Object {
+        $inputPath = [IO.Path]::GetFullPath($_)
+        $inputUri = [Uri] $inputPath
+        if ($rootUri.IsBaseOf($inputUri)) {
+            $relativeInput = [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($inputUri).ToString()).Replace('\', '/')
+            & git -C $root ls-files --error-unmatch -- ":(literal)$relativeInput" *> $null
+            if ($LASTEXITCODE -ne 0) {
+                $relativeInput
+            }
+        }
+    })
     if (-not [string]::IsNullOrWhiteSpace($relativeGeneratedConfiguration)) {
         $untrackedInputs = @($untrackedInputs | Where-Object {
             $candidate = ([string] $_).Replace('\', '/')
@@ -94,6 +109,7 @@ function Get-PowerForgeReleaseSourceState {
     $changes = @(
         $trackedChanges
         $untrackedInputs | ForEach-Object { "?? $_" }
+        $untrackedOrIgnoredExplicitInputs | ForEach-Object { "?? $_" }
     )
 
     [pscustomobject]@{

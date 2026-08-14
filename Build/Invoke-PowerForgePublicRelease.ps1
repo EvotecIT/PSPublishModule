@@ -80,12 +80,27 @@ try {
         $moduleProvenancePath
         $moduleSignedProvenancePath
     })
+    $sourceReleaseConfig = Get-Content -Raw -LiteralPath $ConfigPath | ConvertFrom-Json -Depth 100
+    $explicitInputPaths = @($ConfigPath)
+    $sourceTools = $sourceReleaseConfig.PSObject.Properties['Tools']
+    if ($null -ne $sourceTools -and $null -ne $sourceTools.Value) {
+        $sourcePublishConfig = $sourceTools.Value.PSObject.Properties['DotNetPublishConfigPath']
+        if ($null -ne $sourcePublishConfig -and
+            -not [string]::IsNullOrWhiteSpace([string] $sourcePublishConfig.Value)) {
+            $sourcePublishConfigPath = [string] $sourcePublishConfig.Value
+            if (-not [IO.Path]::IsPathRooted($sourcePublishConfigPath)) {
+                $sourcePublishConfigPath = Join-Path (Split-Path -Parent $ConfigPath) $sourcePublishConfigPath
+            }
+            $explicitInputPaths += [IO.Path]::GetFullPath($sourcePublishConfigPath)
+        }
+    }
     . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Get-PowerForgeReleaseSourceState.ps1')
     $sourceState = Get-PowerForgeReleaseSourceState `
         -RepositoryRoot $repositoryRoot `
         -GeneratedProvenancePath $generatedProvenancePaths `
         -ReceiptPath $ReceiptPath `
-        -GeneratedConfigurationPath $retainedCheckoutConfigPath
+        -GeneratedConfigurationPath $retainedCheckoutConfigPath `
+        -ExplicitInputPath $explicitInputPaths
     $sourceDirty = [bool] $sourceState.SourceDirty
     if ($sourceDirty) {
         throw "The release checkout must start clean. Tracked or untracked changes: $(@($sourceState.Changes) -join ', ')"
@@ -104,7 +119,7 @@ try {
         throw "Expected release commit '$ExpectedCommit', received '$actualCommit'."
     }
 
-    $releaseConfig = Get-Content -Raw -LiteralPath $ConfigPath | ConvertFrom-Json -Depth 100
+    $releaseConfig = $sourceReleaseConfig
     $moduleConfigPath = Join-Path $repositoryRoot 'powerforge.json'
     $moduleConfig = Get-Content -Raw -LiteralPath $moduleConfigPath | ConvertFrom-Json -Depth 100
     . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Set-PowerForgeAuthorizedReleaseVersion.ps1')
