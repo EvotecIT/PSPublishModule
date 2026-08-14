@@ -450,6 +450,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRebasesMissingRelativeManifestArtifactPathsFromChecksums()
+    {
+        using var fixture = new PortableFixture();
+        fixture.WriteMissingRelativeManifestPaths();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = string.Empty;
+
+        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal(Path.GetFullPath(fixture.ArchivePath), result.ArtifactPath);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsUnrelatedDirectExecutableSubstitution()
     {
         using var fixture = new PortableFixture();
@@ -486,6 +499,31 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     ExePath = Path.Combine(retiredRoot, Path.GetRelativePath(Root, ExecutablePath)),
                     SignedFiles = 1,
                     SignedFilePaths = new[] { Path.Combine(retiredRoot, Path.GetRelativePath(Root, ExecutablePath)) },
+                    SourceRevision,
+                    SourceDirty = false
+                }
+            }));
+            WriteChecksums();
+        }
+
+        internal void WriteMissingRelativeManifestPaths()
+        {
+            string missingDirectory = Path.Combine("retired-runner", Guid.NewGuid().ToString("N"));
+            File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    Category = "Publish",
+                    Target = "Sample.CLI",
+                    Kind = "Cli",
+                    Runtime = "win-x64",
+                    Framework = "net10.0",
+                    Style = "PortableCompat",
+                    OutputDir = Path.Combine(missingDirectory, "Artifacts", "Sample.CLI"),
+                    ZipPath = Path.Combine(missingDirectory, Path.GetFileName(ArchivePath)),
+                    ExePath = Path.Combine(missingDirectory, Path.GetFileName(ExecutablePath)),
+                    SignedFiles = 1,
+                    SignedFilePaths = new[] { Path.Combine(missingDirectory, Path.GetFileName(ExecutablePath)) },
                     SourceRevision,
                     SourceDirty = false
                 }

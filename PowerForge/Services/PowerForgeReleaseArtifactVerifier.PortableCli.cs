@@ -286,20 +286,26 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 "manifest artifact path")
             .Replace('/', Path.DirectorySeparatorChar);
         if (!Path.IsPathRooted(normalized))
-            return ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot);
-
-        if (allowOutsideProjectRoot && File.Exists(normalized))
-            return ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot: true);
-
-        try
         {
-            string currentPath = ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot: false);
+            string currentPath = ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot);
             if (File.Exists(currentPath))
                 return currentPath;
         }
-        catch (InvalidDataException)
+        else
         {
-            // An absolute path from a different build checkout is recovered from the checksum catalog below.
+            if (allowOutsideProjectRoot && File.Exists(normalized))
+                return ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot: true);
+
+            try
+            {
+                string currentPath = ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot: false);
+                if (File.Exists(currentPath))
+                    return currentPath;
+            }
+            catch (InvalidDataException)
+            {
+                // A rooted path from a different build checkout is recovered from the checksum catalog below.
+            }
         }
 
         string fileName = Path.GetFileName(normalized);
