@@ -1,3 +1,4 @@
+using System.Formats.Asn1;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
@@ -82,6 +83,56 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         {
             TryDelete(root);
         }
+    }
+
+    [Fact]
+    public void PortableInventoryTimestampDecoderAcceptsBoundRfc3161Token()
+    {
+        byte[] content = [1, 2, 3];
+        using X509Certificate2 publisher = CreateCmsCertificate("CN=Publisher");
+        using X509Certificate2 timestampAuthority = CreateCmsCertificate("CN=Timestamp Authority");
+        var cms = new SignedCms(new ContentInfo(content), detached: true);
+        cms.ComputeSignature(new CmsSigner(publisher) { IncludeOption = X509IncludeOption.EndCertOnly });
+        DateTimeOffset expectedTimestamp = DateTimeOffset.UtcNow.AddMinutes(-1);
+        expectedTimestamp = expectedTimestamp.AddTicks(-(expectedTimestamp.Ticks % TimeSpan.TicksPerSecond));
+        byte[] timestampToken = CreateTimestampToken(
+            cms.SignerInfos[0].GetSignature(),
+            timestampAuthority,
+            expectedTimestamp);
+
+        bool decoded = PowerForgePortablePayloadInventoryCms.TryDecodeTimestampForSignerInfo(
+            timestampToken,
+            cms.SignerInfos[0],
+            out DateTime timestamp,
+            out X509Certificate2? signer,
+            out X509Certificate2Collection certificates);
+
+        Assert.True(decoded);
+        Assert.Equal(expectedTimestamp.UtcDateTime, timestamp);
+        Assert.Equal(timestampAuthority.Thumbprint, signer?.Thumbprint);
+        Assert.Contains(certificates.Cast<X509Certificate2>(), certificate =>
+            string.Equals(certificate.Thumbprint, timestampAuthority.Thumbprint, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void PortableInventoryTimestampDecoderRejectsTokenForDifferentSignature()
+    {
+        byte[] content = [1, 2, 3];
+        using X509Certificate2 publisher = CreateCmsCertificate("CN=Publisher");
+        using X509Certificate2 timestampAuthority = CreateCmsCertificate("CN=Timestamp Authority");
+        var cms = new SignedCms(new ContentInfo(content), detached: true);
+        cms.ComputeSignature(new CmsSigner(publisher) { IncludeOption = X509IncludeOption.EndCertOnly });
+        byte[] timestampToken = CreateTimestampToken(
+            [9, 8, 7],
+            timestampAuthority,
+            DateTimeOffset.UtcNow.AddMinutes(-1));
+
+        Assert.False(PowerForgePortablePayloadInventoryCms.TryDecodeTimestampForSignerInfo(
+            timestampToken,
+            cms.SignerInfos[0],
+            out _,
+            out _,
+            out _));
     }
 
     [Theory]
@@ -849,5 +900,35 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         var cms = new SignedCms(new ContentInfo(content), detached: true);
         cms.ComputeSignature(new CmsSigner(certificate) { IncludeOption = X509IncludeOption.EndCertOnly });
         return cms.Encode();
+    }
+
+    private static byte[] CreateTimestampToken(
+        byte[] signature,
+        X509Certificate2 timestampAuthority,
+        DateTimeOffset timestamp)
+    {
+        var writer = new AsnWriter(AsnEncodingRules.DER);
+        writer.PushSequence();
+        writer.WriteInteger(1);
+        writer.WriteObjectIdentifier("1.3.6.1.4.1.311.3.2.1");
+        writer.PushSequence();
+        writer.PushSequence();
+        writer.WriteObjectIdentifier("2.16.840.1.101.3.4.2.1");
+        writer.WriteNull();
+        writer.PopSequence();
+        writer.WriteOctetString(SHA256.HashData(signature));
+        writer.PopSequence();
+        writer.WriteInteger(1);
+        writer.WriteGeneralizedTime(timestamp, omitFractionalSeconds: true);
+        writer.PopSequence();
+
+        var timestampCms = new SignedCms(
+            new ContentInfo(new Oid("1.2.840.113549.1.9.16.1.4"), writer.Encode()),
+            detached: false);
+        timestampCms.ComputeSignature(new CmsSigner(timestampAuthority)
+        {
+            IncludeOption = X509IncludeOption.EndCertOnly
+        });
+        return timestampCms.Encode();
     }
 }
