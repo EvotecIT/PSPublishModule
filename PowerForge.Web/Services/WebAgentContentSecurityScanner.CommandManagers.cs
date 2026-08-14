@@ -132,7 +132,8 @@ public sealed partial class WebAgentContentSecurityScanner
             return;
         }
         if ((tokens[0].Equals("npm", StringComparison.OrdinalIgnoreCase) ||
-             tokens[0].Equals("pnpm", StringComparison.OrdinalIgnoreCase)) &&
+             tokens[0].Equals("pnpm", StringComparison.OrdinalIgnoreCase) ||
+             tokens[0].Equals("bun", StringComparison.OrdinalIgnoreCase)) &&
             verb is "exec" or "x")
         {
             if (RejectNestedPackageManagerPayload(tokens[0] + " " + tokens[verbIndex], tokens, verbIndex + 1, path, line, findings))

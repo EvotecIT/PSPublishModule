@@ -14,11 +14,13 @@ public sealed partial class WebAgentContentSecurityScanner
         if (!ValidatePackageSourceOptions("packagist", tokens, path, line, findings))
             return;
         var verbIndex = FindKnownVerbIndex(tokens, 1,
-            new[] { "require", "install", "i", "create-project", "config", "update", "u", "upgrade", "reinstall", "remove", "rm", "uninstall" },
+            new[] { "require", "install", "i", "create-project", "config", "repository", "repo", "update", "u", "upgrade", "reinstall", "remove", "rm", "uninstall" },
             "composer", path, line, findings);
         if (verbIndex < 0)
             return;
-        if (tokens[verbIndex].Equals("config", StringComparison.OrdinalIgnoreCase))
+        if (tokens[verbIndex].Equals("config", StringComparison.OrdinalIgnoreCase) ||
+            tokens[verbIndex].Equals("repository", StringComparison.OrdinalIgnoreCase) ||
+            tokens[verbIndex].Equals("repo", StringComparison.OrdinalIgnoreCase))
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
                 $"Package-manager configuration command '{string.Join(' ', tokens)}' can change the source used by later installation commands.");
@@ -262,6 +264,17 @@ public sealed partial class WebAgentContentSecurityScanner
         if (normalized.EndsWith(".exe", StringComparison.Ordinal) ||
             normalized.EndsWith(".cmd", StringComparison.Ordinal))
             normalized = Path.GetFileNameWithoutExtension(normalized);
+        var launcherName = Path.GetFileName(normalized.Replace('\\', '/'));
+        normalized = launcherName switch
+        {
+            "npm-cli.js" => "npm",
+            "npx-cli.js" => "npx",
+            "pnpm.cjs" => "pnpm",
+            "pnpx.cjs" => "pnpx",
+            "yarn.js" => "yarn",
+            "composer.phar" => "composer",
+            _ => normalized
+        };
         if (Regex.IsMatch(normalized, @"^python\d+(?:\.\d+)*$", RegexOptions.CultureInvariant))
             return "python";
         if (Regex.IsMatch(normalized, @"^pip\d+(?:\.\d+)*$", RegexOptions.CultureInvariant))

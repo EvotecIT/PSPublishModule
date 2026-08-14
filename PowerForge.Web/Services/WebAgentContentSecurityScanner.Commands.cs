@@ -94,7 +94,9 @@ public sealed partial class WebAgentContentSecurityScanner
                     ParsePositionalInstall("crates", "cargo", tokens, new[] { "add", "install" }, path, line, references, findings);
                     break;
                 case "gem":
-                    ParsePositionalInstall("rubygems", "gem", tokens, new[] { "install", "i", "update" }, path, line, references, findings);
+                    ParsePositionalInstall("rubygems", "gem", tokens,
+                        new[] { "install", "i", "in", "ins", "inst", "insta", "instal", "update", "upd", "upda", "updat" },
+                        path, line, references, findings);
                     break;
                 case "composer":
                     ParseComposer(tokens, path, line, references, findings);
@@ -181,7 +183,16 @@ public sealed partial class WebAgentContentSecurityScanner
             {
                 var installIndex = FindVerbIndex(tokens, verbIndex + 1, "install", "uv tool", path, line, findings);
                 if (installIndex >= 0)
+                {
+                    var auxiliaryInput = FindOptionValue(tokens, installIndex + 1,
+                        "--with", "--with-requirements", "--with-editable");
+                    if (auxiliaryInput is not null)
+                    {
+                        AddUnverifiableOperand("uv tool install", path, line, findings, "auxiliary dependency input");
+                        return;
+                    }
                     AddRunnerOperand("pypi", "uv tool install", tokens, installIndex + 1, path, line, references, findings);
+                }
                 return;
             }
             else if (verbIndex >= 0)
@@ -215,9 +226,9 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         if (command == "pipx")
         {
-            if (FindOptionValue(tokens, 1, "--pip-args") is not null)
+            if (FindOptionValue(tokens, 1, "--pip-args", "--preinstall") is not null)
             {
-                AddUnverifiableOperand("pipx", path, line, findings, "--pip-args");
+                AddUnverifiableOperand("pipx", path, line, findings, "auxiliary dependency or pip argument input");
                 return;
             }
             var verbIndex = FindKnownVerbIndex(tokens, 1,
@@ -569,7 +580,9 @@ public sealed partial class WebAgentContentSecurityScanner
             {
                 var id = TrimPythonExtras(token[..separator]);
                 var suffix = token[separator..];
-                return suffix.StartsWith("==", StringComparison.Ordinal)
+                return suffix.StartsWith("===", StringComparison.Ordinal)
+                    ? (id, NormalizeVersion(suffix[3..]))
+                    : suffix.StartsWith("==", StringComparison.Ordinal)
                     ? (id, NormalizeVersion(suffix[2..]))
                     : (id, NormalizeVersion(suffix));
             }
