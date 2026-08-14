@@ -118,7 +118,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     if (_logger.IsVerbose)
                         _logger.Verbose($"Preserving existing signature: {file}");
-                    if (_signatureMatchesPublisher(file, sign))
+                    if (_signatureMatchesPublisher(file, GetPublisherMatchOptions(sign)))
                     {
                         signed.Add(file);
                     }
@@ -148,7 +148,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
 
                 if (sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning
-                    && !_signatureMatchesPublisher(file, sign))
+                    && !_signatureMatchesPublisher(file, GetPublisherMatchOptions(sign)))
                 {
                     HandlePolicy(
                         sign.OnSignFailure,
@@ -365,6 +365,19 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return false;
         }
+    }
+
+    private static DotNetPublishSignOptions GetPublisherMatchOptions(DotNetPublishSignOptions sign)
+    {
+        if (sign.Provider != DotNetPublishSigningProvider.AzureArtifactSigning ||
+            string.IsNullOrWhiteSpace(sign.Thumbprint))
+        {
+            return sign;
+        }
+
+        DotNetPublishSignOptions match = DotNetPublishSigningProfileResolver.CloneSignOptions(sign)!;
+        match.Thumbprint = null;
+        return match;
     }
 
     private ProcessRunResult RunSigningTool(

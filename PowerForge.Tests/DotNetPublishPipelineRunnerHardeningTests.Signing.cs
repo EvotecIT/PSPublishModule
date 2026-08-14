@@ -158,13 +158,19 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                 return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
             });
             DotNetPublishSignOptions sign = AzureSign(dlib);
+            sign.Thumbprint = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+            DotNetPublishSignOptions? publisherMatch = null;
 
             string[] signed = Assert.IsType<string[]>(GetTrySignOutputMethod().Invoke(
                 new DotNetPublishPipelineRunner(
                     new NullLogger(),
                     processRunner,
                     _ => false,
-                    signatureMatchesPublisher: (_, _) => true),
+                    signatureMatchesPublisher: (_, options) =>
+                    {
+                        publisherMatch = options;
+                        return true;
+                    }),
                 new object[] { output, sign }));
 
             Assert.Equal(executable, Assert.Single(signed));
@@ -174,6 +180,9 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             Assert.DoesNotContain("/sha1", captured.Arguments);
             Assert.DoesNotContain("/n", captured.Arguments);
             Assert.DoesNotContain("/a", captured.Arguments);
+            Assert.NotNull(publisherMatch);
+            Assert.Null(publisherMatch!.Thumbprint);
+            Assert.Equal(sign.SubjectName, publisherMatch.SubjectName);
             using JsonDocument metadata = JsonDocument.Parse(metadataJson!);
             Assert.Equal("https://wus.codesigning.azure.net/", metadata.RootElement.GetProperty("Endpoint").GetString());
             Assert.Equal("EvotecSigning", metadata.RootElement.GetProperty("CodeSigningAccountName").GetString());
