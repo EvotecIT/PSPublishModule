@@ -5,7 +5,7 @@ namespace PowerForge.Web;
 public sealed partial class WebAgentContentSecurityScanner
 {
     private static readonly Regex CommandSegmentRegex = new(
-        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|Install-Package|Update-Package|Install-Module|Install-PSResource|Update-Module|Update-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
+        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|Install-Package|Update-Package|Install-Module|Install-PSResource|Update-Module|Update-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|poetry(?=\s+(?:add|install|sync|update|remove|lock|run|build|self|plugin|source|config|python)\b)|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ShellTokenConstructionRegex = new(
         @"[\x5C`\^](?!\r?\n)[^\r\n]",
@@ -35,8 +35,11 @@ public sealed partial class WebAgentContentSecurityScanner
         foreach (Match match in CommandSegmentRegex.Matches(content))
         {
             var matchedCommand = match.Groups["command"].Value;
-            if (ShellTokenConstructionRegex.IsMatch(matchedCommand) ||
-                ShellContinuationTokenConstructionRegex.IsMatch(matchedCommand))
+            var commandForValidation = StripShellComment(matchedCommand);
+            if (IsPathQualifiedExecutable(content, match.Index) ||
+                HasShellQuoteConcatenation(commandForValidation) ||
+                ShellTokenConstructionRegex.IsMatch(commandForValidation) ||
+                ShellContinuationTokenConstructionRegex.IsMatch(commandForValidation))
             {
                 AddFinding(findings, "error", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND", path,
                     GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
@@ -50,7 +53,7 @@ public sealed partial class WebAgentContentSecurityScanner
                     "Package commands with command-scoped environment assignments cannot be proven to use the canonical public registry.");
                 continue;
             }
-            var tokens = Tokenize(matchedCommand);
+            var tokens = Tokenize(commandForValidation);
             if (tokens.Length == 0)
                 continue;
 
@@ -114,6 +117,9 @@ public sealed partial class WebAgentContentSecurityScanner
                     if (ValidatePackageSourceOptions("pypi", tokens, path, line, findings))
                         AddRunnerOperand("pypi", "uvx", tokens, 1, path, line, commandReferences, findings);
                     break;
+                case "poetry":
+                    ParsePoetry(tokens, path, line, findings);
+                    break;
                 case "cargo":
                     ParseCargo(tokens, path, line, commandReferences, findings);
                     break;
@@ -162,7 +168,7 @@ public sealed partial class WebAgentContentSecurityScanner
             "update-module" or "update-psresource" or
             "register-psrepository" or "set-psrepository" or "register-psresourcerepository" or
             "set-psresourcerepository" or "corepack" or "npm" or "npx" or "pnpx" or "pnpm" or "yarn" or
-            "bun" or "bunx" or "python" or "py" or "pip" or "uv" or "uvx" or "pipx" or
+            "bun" or "bunx" or "python" or "py" or "pip" or "uv" or "uvx" or "pipx" or "poetry" or
             "cargo" or "gem" or "composer" or "bundle";
 
     private static void ParsePython(

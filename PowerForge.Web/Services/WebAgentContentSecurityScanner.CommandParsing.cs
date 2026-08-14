@@ -302,6 +302,33 @@ public sealed partial class WebAgentContentSecurityScanner
             .Where(static token => !string.IsNullOrWhiteSpace(token))
             .ToArray();
 
+    private static bool IsPathQualifiedExecutable(string content, int matchIndex)
+        => matchIndex > 0 && content[matchIndex - 1] is '/' or '\\' or ':';
+
+    private static bool HasShellQuoteConcatenation(string command)
+    {
+        char quote = '\0';
+        for (var index = 0; index < command.Length; index++)
+        {
+            var current = command[index];
+            if (quote == '\0')
+            {
+                if (current is not ('\'' or '"'))
+                    continue;
+                if (index > 0 && !char.IsWhiteSpace(command[index - 1]))
+                    return true;
+                quote = current;
+                continue;
+            }
+            if (current != quote)
+                continue;
+            quote = '\0';
+            if (index + 1 < command.Length && !char.IsWhiteSpace(command[index + 1]))
+                return true;
+        }
+        return quote != '\0';
+    }
+
     private static string NormalizeNodeVerb(string verb)
     {
         verb = verb.ToLowerInvariant();

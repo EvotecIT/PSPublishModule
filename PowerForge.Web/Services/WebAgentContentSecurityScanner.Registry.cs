@@ -290,30 +290,48 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         var escapedId = package.Id.Replace("'", "''", StringComparison.Ordinal);
         var url = $"https://www.powershellgallery.com/api/v2/FindPackagesById()?id='{Uri.EscapeDataString(escapedId)}'";
-        using var response = _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-            .GetAwaiter().GetResult();
-        if (response.StatusCode == HttpStatusCode.NotFound)
-            return MissingPackage(url);
-        response.EnsureSuccessStatusCode();
-        using var stream = new MemoryStream(ReadBoundedContent(response, maxResponseBytes, cancellationToken), writable: false);
-        using var reader = XmlReader.Create(stream, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
-        var document = XDocument.Load(reader, LoadOptions.None);
         var atom = XNamespace.Get("http://www.w3.org/2005/Atom");
         var data = XNamespace.Get("http://schemas.microsoft.com/ado/2007/08/dataservices");
-        if (document.Root?.Name != atom + "feed")
-            return InvalidRegistryResponse("PowerShell Gallery response was not an Atom feed.");
-        var versions = document.Root.Elements(atom + "entry")
-            .SelectMany(entry => entry.Descendants(data + "Version"))
-            .Select(static element => element.Value.Trim())
-            .Where(static version => !string.IsNullOrWhiteSpace(version))
-            .ToArray();
-        if (!HasExactRegistryVersion("powershellgallery", package.Version))
-            return versions.Length > 0
-                ? Verified()
-                : InvalidRegistryResponse("PowerShell Gallery response did not contain non-empty package version metadata.");
-        return versions.Any(version => VersionsEqual(version, package.Version))
-            ? Verified()
-            : MissingVersion(package.Version!);
+        var exactVersion = HasExactRegistryVersion("powershellgallery", package.Version);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var page = 0; page < 20; page++)
+        {
+            if (!visited.Add(url))
+                return InvalidRegistryResponse("PowerShell Gallery pagination repeated a page URL.");
+            using var response = _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .GetAwaiter().GetResult();
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return MissingPackage(url);
+            response.EnsureSuccessStatusCode();
+            using var stream = new MemoryStream(ReadBoundedContent(response, maxResponseBytes, cancellationToken), writable: false);
+            using var reader = XmlReader.Create(stream, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
+            var document = XDocument.Load(reader, LoadOptions.None);
+            if (document.Root?.Name != atom + "feed")
+                return InvalidRegistryResponse("PowerShell Gallery response was not an Atom feed.");
+            var versions = document.Root.Elements(atom + "entry")
+                .SelectMany(entry => entry.Descendants(data + "Version"))
+                .Select(static element => element.Value.Trim())
+                .Where(static version => !string.IsNullOrWhiteSpace(version))
+                .ToArray();
+            if (!exactVersion && versions.Length > 0)
+                return Verified();
+            if (exactVersion && versions.Any(version => VersionsEqual(version, package.Version)))
+                return Verified();
+
+            var nextHref = document.Root.Elements(atom + "link")
+                .FirstOrDefault(link => string.Equals((string?)link.Attribute("rel"), "next", StringComparison.OrdinalIgnoreCase))?
+                .Attribute("href")?.Value;
+            if (string.IsNullOrWhiteSpace(nextHref))
+                return exactVersion
+                    ? MissingVersion(package.Version!)
+                    : InvalidRegistryResponse("PowerShell Gallery response did not contain non-empty package version metadata.");
+            if (!Uri.TryCreate(new Uri(url), nextHref, out var next) ||
+                next.Scheme != Uri.UriSchemeHttps ||
+                !next.Host.Equals("www.powershellgallery.com", StringComparison.OrdinalIgnoreCase))
+                return InvalidRegistryResponse("PowerShell Gallery pagination returned an untrusted page URL.");
+            url = next.AbsoluteUri;
+        }
+        return InvalidRegistryResponse("PowerShell Gallery pagination exceeded the 20-page verification limit.");
     }
 
     private static PackageVerificationOutcome Verified()

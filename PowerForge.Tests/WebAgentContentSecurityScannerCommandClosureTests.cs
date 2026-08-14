@@ -177,11 +177,6 @@ public sealed partial class WebAgentContentSecurityScannerTests
     }
 
     [Theory]
-    [InlineData("node /usr/lib/node_modules/npm/bin/npm-cli.js install safe-package@1.0.0", "npm")]
-    [InlineData("node /usr/lib/node_modules/npm/bin/npx-cli.js safe-package@1.0.0", "npm")]
-    [InlineData("node /opt/pnpm/pnpm.cjs install safe-package@1.0.0", "npm")]
-    [InlineData("node /opt/yarn/yarn.js add safe-package@1.0.0", "npm")]
-    [InlineData("php /usr/local/bin/composer.phar require safe/package:1.0.0", "packagist")]
     [InlineData("bun x safe-package@1.0.0", "npm")]
     [InlineData("gem ins safe-gem --version 1.0.0", "rubygems")]
     [InlineData("gem updat safe-gem --version 1.0.0", "rubygems")]

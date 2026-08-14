@@ -18,6 +18,27 @@ public sealed partial class WebAgentContentSecurityScanner
             "package-manager release or project dependency set");
     }
 
+    private static void ParsePoetry(
+        string[] tokens,
+        string path,
+        int line,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        if (tokens.Length < 2)
+            return;
+        var verb = tokens[1].ToLowerInvariant();
+        if (verb is "source" or "config")
+        {
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                "Poetry configuration commands can change package sources used by later installation commands; argument values are redacted.");
+            return;
+        }
+        AddUnverifiableOperand("poetry " + tokens[1], path, line, findings,
+            verb is "self" or "plugin" or "python"
+                ? "Poetry-managed executable or plugin dependency set"
+                : "Poetry project dependency set");
+    }
+
     private static void ParseDotNet(
         string[] tokens,
         string path,
