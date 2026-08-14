@@ -51,6 +51,7 @@ internal sealed partial class PowerForgeReleaseService
                 artifact.Category == PowerForgeReleaseAssetCategory.Tool &&
                 !string.IsNullOrWhiteSpace(artifact.Path) &&
                 !string.IsNullOrWhiteSpace(artifact.Runtime) &&
+                IsStandalonePowerForgeArtifactStyle(artifact.Style) &&
                 artifact.Path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
                 File.Exists(artifact.Path))
             .ToArray();
@@ -120,6 +121,14 @@ internal sealed partial class PowerForgeReleaseService
                 File.Delete(temporaryPath);
         }
     }
+
+    internal static bool IsStandalonePowerForgeArtifactStyle(string? style)
+        => string.Equals(style, nameof(PowerForgeToolReleaseFlavor.SingleContained), StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(style, nameof(PowerForgeToolReleaseFlavor.Portable), StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(style, nameof(DotNetPublishStyle.PortableCompat), StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(style, nameof(DotNetPublishStyle.PortableSize), StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(style, nameof(DotNetPublishStyle.AotSpeed), StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(style, nameof(DotNetPublishStyle.AotSize), StringComparison.OrdinalIgnoreCase);
 
     private static string ComputePowerForgeExecutableSha256(string archivePath, string runtime)
     {

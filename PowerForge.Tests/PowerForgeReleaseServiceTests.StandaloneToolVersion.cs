@@ -431,6 +431,20 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("SingleContained", true)]
+    [InlineData("Portable", true)]
+    [InlineData("PortableCompat", true)]
+    [InlineData("PortableSize", true)]
+    [InlineData("AotSpeed", true)]
+    [InlineData("AotSize", true)]
+    [InlineData("SingleFx", false)]
+    [InlineData("Fx", false)]
+    [InlineData("FrameworkDependent", false)]
+    [InlineData(null, false)]
+    public void ToolManifest_accepts_only_self_contained_styles(string? style, bool expected)
+        => Assert.Equal(expected, PowerForgeReleaseService.IsStandalonePowerForgeArtifactStyle(style));
+
     private static PowerForgeReleaseService CreateService(
         Func<PowerForgeReleaseRequest, PowerForgeToolReleasePlan> planTools)
         => new(
