@@ -114,6 +114,25 @@ public sealed partial class WebAgentContentSecurityScanner
             AddSingleOperand("nuget", "dotnet add package", tokens, packageIndex + 1, path, line, references, findings);
     }
 
+    private static void ParseNuGetCli(
+        string[] tokens,
+        string path,
+        int line,
+        ICollection<WebAgentPackageReference> references,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        if (tokens.Length < 2 || !ValidatePackageSourceOptions("nuget", tokens, path, line, findings))
+            return;
+        var verb = tokens[1].ToLowerInvariant();
+        if (verb == "install")
+        {
+            AddSingleOperand("nuget", "nuget install", tokens, 2, path, line, references, findings);
+            return;
+        }
+        AddUnverifiableOperand("nuget " + tokens[1], path, line, findings,
+            "project, packages.config, or installed dependency set");
+    }
+
     private static void ParsePowerShell(
         string[] tokens,
         string path,
@@ -164,6 +183,12 @@ public sealed partial class WebAgentContentSecurityScanner
             return;
         }
         var verb = NormalizeNodeVerb(tokens[verbIndex]);
+        if (verb == "run")
+        {
+            AddUnverifiableOperand(tokens[0] + " " + tokens[verbIndex], path, line, findings,
+                "project package script");
+            return;
+        }
         if (verb is "config" or "set")
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,

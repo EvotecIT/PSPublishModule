@@ -22,11 +22,14 @@ public sealed partial class WebAgentContentSecurityScanner
         @"\b(?:iex|Invoke-Expression)\b\s*(?:(?:\$\s*)?\(+|[""']\s*\$\()\s*(?:(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b|[^\r\n]{0,200}\bDownloadString\s*\()",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex RemoteExecutionShellExpressionRegex = new(
-        @"\b(?:eval\b\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:sh|bash|zsh|python(?:\d+(?:\.\d+)*)?|py)\b[^\r\n]{0,80}?-c\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:pwsh|powershell)\b[^\r\n]{0,80}?(?:-c|-Command)\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:node)\b[^\r\n]{0,80}?(?:-e|--eval|-p|--print)\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:ruby|perl)\b[^\r\n]{0,80}?(?:-e|--eval)\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|php\b[^\r\n]{0,80}?-r\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:sh|bash|zsh)\b\s*<\(\s*(?:curl(?:\.exe)?|wget)\b)",
+        @"\b(?:eval\b\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:sh|bash|zsh|python(?:\d+(?:\.\d+)*)?|py)\b[^\r\n]{0,80}?-c\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:pwsh|powershell)\b[^\r\n]{0,80}?(?:-c|-Command)\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:node)\b[^\r\n]{0,80}?(?:-e|--eval|-p|--print)\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:ruby|perl)\b[^\r\n]{0,80}?(?:-e|--eval)\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|php\b[^\r\n]{0,80}?-r\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:sh|bash|zsh)\b\s*<\(\s*(?:curl(?:\.exe)?|wget)\b|(?:source\b|\.)\s*<\(\s*(?:curl(?:\.exe)?|wget)\b)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex RemoteExecutionScriptBlockRegex = new(
         @"(?:&|Invoke-Command\b[^\r\n]{0,80})\s*\(\s*\[scriptblock\]::Create\s*\(\s*\(*\s*(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex RemoteExecutionDotSourceProcessSubstitutionRegex = new(
+        @"(?:^|[;&]\s*|\s)\.\s*<\(\s*(?:curl(?:\.exe)?|wget)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline);
     private static readonly ConditionalWeakTable<string, int[]> LineStartsByContent = new();
 
     private static void ScanInvisibleUnicode(
@@ -94,7 +97,8 @@ public sealed partial class WebAgentContentSecurityScanner
                      RemoteExecutionRegex,
                      RemoteExecutionPowerShellExpressionRegex,
                      RemoteExecutionShellExpressionRegex,
-                     RemoteExecutionScriptBlockRegex
+                     RemoteExecutionScriptBlockRegex,
+                     RemoteExecutionDotSourceProcessSubstitutionRegex
                  })
         {
             foreach (Match match in pattern.Matches(normalized))

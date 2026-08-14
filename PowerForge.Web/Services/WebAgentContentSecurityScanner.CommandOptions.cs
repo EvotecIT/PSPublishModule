@@ -55,6 +55,7 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("--runtime", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--project", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--configfile", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("-ConfigFile", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--tool-manifest", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--tool-path", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--add-source", StringComparison.OrdinalIgnoreCase) ||

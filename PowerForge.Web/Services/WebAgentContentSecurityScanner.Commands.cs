@@ -5,7 +5,7 @@ namespace PowerForge.Web;
 public sealed partial class WebAgentContentSecurityScanner
 {
     private static readonly Regex CommandSegmentRegex = new(
-        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|Install-Package|Update-Package|Install-Module|Install-PSResource|Update-Module|Update-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|poetry(?=\s+(?:add|install|sync|update|remove|lock|run|build|self|plugin|source|config|python)\b)|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
+        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|nuget(?=\s+(?:install|restore|update)\b)|Install-Package|Update-Package|Install-Module|Save-Module|Install-Script|Update-Script|Save-Script|Install-PSResource|Save-PSResource|Update-Module|Update-PSResource|Install-PackageProvider|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|poetry(?=\s+(?:add|install|sync|update|remove|lock|run|build|self|plugin|source|config|python)\b)|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ShellTokenConstructionRegex = new(
         @"[\x5C`\^](?!\r?\n)[^\r\n]",
@@ -79,11 +79,23 @@ public sealed partial class WebAgentContentSecurityScanner
                     if (ValidatePackageSourceOptions("nuget", tokens, path, line, findings))
                         AddRunnerOperand("nuget", "dnx", tokens, 1, path, line, commandReferences, findings);
                     break;
+                case "nuget":
+                    ParseNuGetCli(tokens, path, line, commandReferences, findings);
+                    break;
                 case "install-module":
+                case "save-module":
+                case "install-script":
+                case "update-script":
+                case "save-script":
                 case "install-psresource":
+                case "save-psresource":
                 case "update-module":
                 case "update-psresource":
                     ParsePowerShell(tokens, path, line, commandReferences, findings);
+                    break;
+                case "install-packageprovider":
+                    AddUnverifiableOperand("Install-PackageProvider", path, line, findings,
+                        "package-provider executable dependency");
                     break;
                 case "install-package":
                 case "update-package":
@@ -165,7 +177,8 @@ public sealed partial class WebAgentContentSecurityScanner
 
     private static bool IsSupportedPackageExecutable(string executable)
         => executable is "dotnet" or "dnx" or "install-package" or "update-package" or "install-module" or "install-psresource" or
-            "update-module" or "update-psresource" or
+            "update-module" or "update-psresource" or "save-module" or "install-script" or "update-script" or "save-script" or
+            "save-psresource" or "install-packageprovider" or "nuget" or
             "register-psrepository" or "set-psrepository" or "register-psresourcerepository" or
             "set-psresourcerepository" or "corepack" or "npm" or "npx" or "pnpx" or "pnpm" or "yarn" or
             "bun" or "bunx" or "python" or "py" or "pip" or "uv" or "uvx" or "pipx" or "poetry" or
@@ -187,6 +200,8 @@ public sealed partial class WebAgentContentSecurityScanner
             if (moduleIndex < 0 || moduleIndex + 1 >= tokens.Length ||
                 !IsPythonPipModule(tokens[moduleIndex + 1]))
                 return;
+            if (IsPipInformationalInvocation(tokens, moduleIndex + 2))
+                return;
             var installIndex = FindVerbIndex(tokens, moduleIndex + 2, "install", $"{tokens[0]} -m pip", path, line, findings);
             if (installIndex >= 0)
                 AddMultipleOperands("pypi", $"{tokens[0]} -m pip install", tokens, installIndex + 1, path, line, references, findings);
@@ -194,6 +209,8 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         if (command is "pip" or "pip3")
         {
+            if (IsPipInformationalInvocation(tokens, 1))
+                return;
             var installIndex = FindVerbIndex(tokens, 1, "install", tokens[0], path, line, findings);
             if (installIndex >= 0)
                 AddMultipleOperands("pypi", tokens[0] + " install", tokens, installIndex + 1, path, line, references, findings);
@@ -579,6 +596,8 @@ public sealed partial class WebAgentContentSecurityScanner
                     return index + 1 < tokens.Length ? tokens[index + 1] : string.Empty;
                 if (tokens[index].StartsWith(name + "=", StringComparison.OrdinalIgnoreCase))
                     return tokens[index][(name.Length + 1)..];
+                if (tokens[index].StartsWith(name + ":", StringComparison.OrdinalIgnoreCase))
+                    return tokens[index][(name.Length + 1)..];
             }
         }
         return null;
@@ -679,6 +698,10 @@ public sealed partial class WebAgentContentSecurityScanner
     private static string? FindVersionOption(string[] tokens, int start)
         => FindOptionValue(tokens, start, "--version", "-v", "-Version", "-RequiredVersion");
 
+    private static bool IsPipInformationalInvocation(string[] tokens, int start)
+        => start < tokens.Length && tokens[start].ToLowerInvariant() is
+            "--version" or "-v" or "--help" or "-h" or "help";
+
     private static void AddUnverifiableOperand(
         string command,
         string path,
@@ -742,6 +765,9 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         if (ecosystem == "packagist")
         {
+            var whitespace = token.IndexOfAny(new[] { ' ', '\t' });
+            if (whitespace > 0)
+                return (token[..whitespace], NormalizeVersion(token[(whitespace + 1)..].Trim()));
             var colon = token.IndexOf(':');
             var equals = token.IndexOf('=');
             var separator = colon < 0 ? equals : equals < 0 ? colon : Math.Min(colon, equals);

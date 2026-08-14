@@ -57,7 +57,8 @@ public sealed partial class WebAgentContentSecurityScanner
                        option.Equals("-Source", StringComparison.OrdinalIgnoreCase) ||
                        option.Equals("-s", StringComparison.OrdinalIgnoreCase) ||
                        option.Equals("--add-source", StringComparison.OrdinalIgnoreCase) ||
-                       option.Equals("--configfile", StringComparison.OrdinalIgnoreCase),
+                       option.Equals("--configfile", StringComparison.OrdinalIgnoreCase) ||
+                       option.Equals("-ConfigFile", StringComparison.OrdinalIgnoreCase),
             "powershellgallery" => IsPowerShellRepositoryOption(option),
             "npm" => option.Equals("--registry", StringComparison.OrdinalIgnoreCase) ||
                      option.Equals("--userconfig", StringComparison.OrdinalIgnoreCase) ||

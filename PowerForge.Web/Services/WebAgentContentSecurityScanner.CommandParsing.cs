@@ -129,7 +129,7 @@ public sealed partial class WebAgentContentSecurityScanner
         if (tokens.Length < 2 || !ValidatePackageSourceOptions("rubygems", tokens, path, line, findings))
             return;
         var verbIndex = FindKnownVerbIndex(tokens, 1,
-            new[] { "install", "i", "in", "ins", "inst", "insta", "instal", "update", "upd", "upda", "updat", "exec", "ex", "exe" },
+            new[] { "install", "i", "in", "ins", "inst", "insta", "instal", "update", "up", "upd", "upda", "updat", "exec", "ex", "exe" },
             "gem", path, line, findings);
         if (verbIndex < 0)
             return;
@@ -292,6 +292,7 @@ public sealed partial class WebAgentContentSecurityScanner
         "install-test", "it", "ci-test", "cit", "install-ci-test", "install-clean-test", "clean-install-test", "sit",
         "update", "up", "upgrade", "udpate",
         "audit", "link", "ln", "dedupe", "ddp", "rebuild",
+        "run", "run-script", "rum", "urn", "start", "stop", "restart", "test", "tst", "t",
         "config", "c", "conf", "set", "init", "create", "innit"
     };
 
@@ -343,6 +344,7 @@ public sealed partial class WebAgentContentSecurityScanner
             "up" or "upgrade" or "udpate" => "update",
             "ln" => "link",
             "ddp" => "dedupe",
+            "run-script" or "rum" or "urn" or "start" or "stop" or "restart" or "test" or "tst" or "t" => "run",
             "create" or "innit" => "init",
             _ => verb
         };
