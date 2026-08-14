@@ -4489,7 +4489,8 @@ public sealed partial class PowerForgeReleaseServiceTests
     {
         var root = CreateSandbox();
         var zip = Path.Combine(root, "PowerForge.zip");
-        var secondZip = Path.Combine(root, "PowerForge.Agent.exe");
+        var directOutput = Directory.CreateDirectory(Path.Combine(root, "PowerForge.Agent")).FullName;
+        var secondZip = Path.Combine(directOutput, "PowerForge.Agent.exe");
         var msi = Path.Combine(root, "PowerForge.msi");
         var storeUpload = Path.Combine(root, "PowerForge.msixupload");
         var manifest = Path.Combine(root, "manifest.json");
@@ -4610,7 +4611,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Framework = "net10.0",
                             Runtime = "win-x64",
                             Style = DotNetPublishStyle.PortableCompat,
-                            OutputDir = Path.GetTempPath(),
+                            OutputDir = directOutput,
                             ExePath = secondZip
                         }
                     },
@@ -5033,7 +5034,8 @@ public sealed partial class PowerForgeReleaseServiceTests
     public void Execute_PublishesDotNetPublishAssetsToGitHub_PrefersResolvedPackageVersionOverProjectVersion()
     {
         var root = CreateSandbox();
-        var executable = Path.Combine(root, "IntelligenceX.Tray.exe");
+        var directOutput = Directory.CreateDirectory(Path.Combine(root, "publish")).FullName;
+        var executable = Path.Combine(directOutput, "IntelligenceX.Tray.exe");
         var projectPath = Path.Combine(root, "IntelligenceX.Tray.csproj");
         File.WriteAllText(executable, "exe", new UTF8Encoding(false));
         File.WriteAllText(projectPath, """
@@ -5112,7 +5114,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Framework = "net10.0-windows10.0.19041.0",
                             Runtime = "win-x64",
                             Style = DotNetPublishStyle.PortableCompat,
-                            OutputDir = root,
+                            OutputDir = directOutput,
                             ExePath = executable
                         }
                     }

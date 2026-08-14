@@ -193,4 +193,135 @@ public sealed partial class PowerForgeReleaseServiceTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    [Theory]
+    [InlineData(DotNetPublishArtefactCategory.Publish, DotNetPublishStyle.FrameworkDependent, "Sample.dll")]
+    [InlineData(DotNetPublishArtefactCategory.Publish, DotNetPublishStyle.PortableCompat, "appsettings.json")]
+    [InlineData(DotNetPublishArtefactCategory.Bundle, DotNetPublishStyle.PortableCompat, "runtime-data.json")]
+    public void TryBuildDotNetGitHubRunnableAssets_DirectMultiFileOutputRequiresArchive(
+        DotNetPublishArtefactCategory category,
+        DotNetPublishStyle style,
+        string companionName)
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string outputDirectory = Directory.CreateDirectory(Path.Combine(root, "output")).FullName;
+            string executable = Path.Combine(outputDirectory, "Sample.exe");
+            File.WriteAllText(executable, "executable");
+            File.WriteAllText(Path.Combine(outputDirectory, companionName), "runtime payload");
+            var target = new DotNetPublishTargetPlan
+            {
+                Name = "Sample",
+                Publish = new DotNetPublishPublishOptions { Zip = false }
+            };
+            var plan = new DotNetPublishPlan
+            {
+                Targets = new[] { target },
+                Bundles = category == DotNetPublishArtefactCategory.Bundle
+                    ? new[]
+                    {
+                        new DotNetPublishBundlePlan
+                        {
+                            Id = "Desktop",
+                            PrepareFromTarget = "Sample",
+                            Zip = false
+                        }
+                    }
+                    : Array.Empty<DotNetPublishBundlePlan>()
+            };
+            var result = new DotNetPublishResult
+            {
+                ChecksumsPath = Path.Combine(root, "SHA256SUMS.txt"),
+                Artefacts = new[]
+                {
+                    new DotNetPublishArtefactResult
+                    {
+                        Category = category,
+                        Target = "Sample",
+                        BundleId = category == DotNetPublishArtefactCategory.Bundle ? "Desktop" : null,
+                        Framework = "net10.0",
+                        Runtime = "win-x64",
+                        Style = style,
+                        OutputDir = outputDirectory,
+                        PublishDir = outputDirectory,
+                        ExePath = executable,
+                        Files = 2
+                    }
+                }
+            };
+
+            bool success = PowerForgeReleaseService.TryBuildDotNetGitHubRunnableAssets(
+                plan,
+                target,
+                result,
+                out List<string> assets,
+                out _,
+                out _,
+                out string? error);
+
+            Assert.False(success);
+            Assert.Empty(assets);
+            Assert.Contains("ZIP packaging", error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TryBuildDotNetGitHubRunnableAssets_DirectSingleFileAllowsSymbolAndDocumentationFiles()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string outputDirectory = Directory.CreateDirectory(Path.Combine(root, "output")).FullName;
+            string executable = Path.Combine(outputDirectory, "Sample.exe");
+            File.WriteAllText(executable, "executable");
+            File.WriteAllText(Path.Combine(outputDirectory, "Sample.pdb"), "symbols");
+            File.WriteAllText(Path.Combine(outputDirectory, "Sample.xml"), "documentation");
+            var target = new DotNetPublishTargetPlan
+            {
+                Name = "Sample",
+                Publish = new DotNetPublishPublishOptions { Zip = false }
+            };
+            var plan = new DotNetPublishPlan { Targets = new[] { target } };
+            var result = new DotNetPublishResult
+            {
+                ChecksumsPath = Path.Combine(root, "SHA256SUMS.txt"),
+                Artefacts = new[]
+                {
+                    new DotNetPublishArtefactResult
+                    {
+                        Category = DotNetPublishArtefactCategory.Publish,
+                        Target = "Sample",
+                        Framework = "net10.0",
+                        Runtime = "win-x64",
+                        Style = DotNetPublishStyle.PortableCompat,
+                        OutputDir = outputDirectory,
+                        PublishDir = outputDirectory,
+                        ExePath = executable,
+                        Files = 3
+                    }
+                }
+            };
+
+            bool success = PowerForgeReleaseService.TryBuildDotNetGitHubRunnableAssets(
+                plan,
+                target,
+                result,
+                out List<string> assets,
+                out _,
+                out _,
+                out string? error);
+
+            Assert.True(success, error);
+            Assert.Equal(executable, Assert.Single(assets));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }

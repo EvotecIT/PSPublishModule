@@ -36,6 +36,11 @@ internal sealed partial class PowerForgeReleaseService
                 error ??= $"A runnable release artifact is missing for DotNet publish target '{target.Name}'.";
                 return false;
             }
+            if (direct && !IsStandaloneDotNetGitHubArtefact(artefact, path!, out string? directError))
+            {
+                error = directError;
+                return false;
+            }
             targetRunnableAssets.Add((artefact, Path.GetFullPath(path!), direct));
         }
 
@@ -111,6 +116,55 @@ internal sealed partial class PowerForgeReleaseService
         direct = !zip;
         path = zip ? artefact.ZipPath : artefact.ExePath;
         return true;
+    }
+
+    private static bool IsStandaloneDotNetGitHubArtefact(
+        DotNetPublishArtefactResult artefact,
+        string executablePath,
+        out string? error)
+    {
+        error = null;
+        string identity = artefact.Category == DotNetPublishArtefactCategory.Bundle
+            ? $"bundle '{artefact.BundleId}'"
+            : $"publish target '{artefact.Target}'";
+        if (artefact.Style == DotNetPublishStyle.FrameworkDependent)
+        {
+            error = $"DotNet {identity} uses FrameworkDependent output and cannot be published as one direct asset. " +
+                    "Enable ZIP packaging so the executable, runtime configuration, and dependencies stay together.";
+            return false;
+        }
+
+        string? outputDirectory = Directory.Exists(artefact.OutputDir)
+            ? artefact.OutputDir
+            : Directory.Exists(artefact.PublishDir)
+                ? artefact.PublishDir
+                : null;
+        if (outputDirectory is null)
+            return true;
+
+        string primaryPath = Path.GetFullPath(executablePath);
+        StringComparison pathComparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        string[] requiredCompanions = Directory.EnumerateFiles(outputDirectory, "*", SearchOption.AllDirectories)
+            .Select(Path.GetFullPath)
+            .Where(path => !string.Equals(path, primaryPath, pathComparison))
+            .Where(path => !IsOptionalDirectAssetDiagnostic(path))
+            .ToArray();
+        if (requiredCompanions.Length == 0)
+            return true;
+
+        error = $"DotNet {identity} contains {requiredCompanions.Length} additional runtime payload " +
+                $"{(requiredCompanions.Length == 1 ? "file" : "files")} and cannot be published as one direct asset. " +
+                "Enable ZIP packaging so the complete output stays together.";
+        return false;
+    }
+
+    private static bool IsOptionalDirectAssetDiagnostic(string path)
+    {
+        string extension = Path.GetExtension(path);
+        return extension.Equals(".pdb", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".xml", StringComparison.OrdinalIgnoreCase);
     }
 
     private static List<string> StageCollidingDotNetGitHubAssets(
