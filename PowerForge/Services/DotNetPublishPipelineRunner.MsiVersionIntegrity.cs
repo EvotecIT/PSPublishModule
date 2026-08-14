@@ -183,19 +183,54 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             if (string.IsNullOrWhiteSpace(path))
                 continue;
+            string fullPath = Path.GetFullPath(Path.IsPathRooted(path)
+                ? path
+                : Path.Combine(projectRoot, path));
             string? relative = ToGitRelativeExclusion(projectRoot, gitRoot, path);
             if (string.IsNullOrWhiteSpace(relative))
             {
-                string fullPath = Path.GetFullPath(Path.IsPathRooted(path)
-                    ? path
-                    : Path.Combine(projectRoot, path));
                 if (trustedExternalInputs.Contains(fullPath))
                     continue;
                 return true;
             }
+            if (HasReparsePointBelowRoot(fullPath, gitRoot))
+                return true;
             if (ReadGitRawText(gitRoot, $"ls-files --error-unmatch -- {QuoteLiteralGitPath(relative!)}") is null)
                 return true;
         }
+        return false;
+    }
+
+    internal static bool HasReparsePointBelowRoot(string path, string root)
+    {
+        string current = Path.GetFullPath(path);
+        string boundary = Path.GetFullPath(root)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        while (!string.Equals(
+                   current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                   boundary,
+                   comparison))
+        {
+            try
+            {
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                    return true;
+            }
+            catch
+            {
+                return true;
+            }
+
+            string? parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, comparison))
+                return true;
+            current = parent;
+        }
+
         return false;
     }
 

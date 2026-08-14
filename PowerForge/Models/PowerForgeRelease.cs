@@ -51,6 +51,12 @@ internal sealed class PowerForgeReleaseRequest
 
     internal string[] GeneratedProvenancePaths { get; set; } = Array.Empty<string>();
 
+    internal string? SourceRepositoryRoot { get; set; }
+
+    internal string? ExpectedSourceRevision { get; set; }
+
+    internal string[] SourceInputPaths { get; set; } = Array.Empty<string>();
+
     public string ConfigPath { get; set; } = string.Empty;
 
     public bool PlanOnly { get; set; }

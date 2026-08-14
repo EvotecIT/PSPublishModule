@@ -242,6 +242,9 @@ try {
         'Publish' {
             $buildParameters.Publish = $true
             $buildParameters.Confirm = $false
+            $buildParameters.SourceRepositoryRoot = $repositoryRoot
+            $buildParameters.ExpectedSourceRevision = $ExpectedCommit
+            $buildParameters.SourceInputPath = [string[]] $explicitInputPaths
         }
     }
 

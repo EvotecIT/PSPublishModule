@@ -583,6 +583,8 @@ internal sealed partial class PowerForgeReleaseService
                     : $"Version {result.ModulePlan!.ModuleVersion}");
         }
 
+        ValidatePostBuildSourceState(request);
+
         var earlyAppleReleaseVersion = ResolveAppleSharedReleaseVersion(spec, request, result);
         if (willRunAppleApps)
         {

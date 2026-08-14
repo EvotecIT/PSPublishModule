@@ -807,6 +807,108 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             cleanTrackedGeneratedPaths);
     }
 
+    [Fact]
+    public void ReadSourceProvenance_TrackedReparseInput_IsDirty()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        string externalRoot = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            RunGit(root, "config core.symlinks true");
+            string linkedFile = Path.Combine(root, "release-link.json");
+            string linkedDirectory = Path.Combine(root, "linked-config");
+            string externalFile = Path.Combine(externalRoot, "release.json");
+            string ignoredDirectory = Path.Combine(root, "ignored-config");
+            Directory.CreateDirectory(ignoredDirectory);
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "ignored-config/\n");
+            File.WriteAllText(externalFile, "approved");
+            File.WriteAllText(Path.Combine(ignoredDirectory, "publish.json"), "approved");
+            try
+            {
+                File.CreateSymbolicLink(linkedFile, externalFile);
+                Directory.CreateSymbolicLink(linkedDirectory, ignoredDirectory);
+            }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or PlatformNotSupportedException or IOException)
+            {
+                return;
+            }
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"tracked linked inputs\"");
+            if (!RunGit(root, "ls-files -s").Contains("120000", StringComparison.Ordinal))
+                return;
+            File.WriteAllText(externalFile, "mutated outside checkout");
+            File.WriteAllText(Path.Combine(ignoredDirectory, "publish.json"), "mutated under an ignored target");
+            Assert.True(string.IsNullOrWhiteSpace(RunGit(root, "status --porcelain=v1")));
+
+            DotNetPublishPipelineRunner.SourceProvenance source =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    explicitInputPaths:
+                    [
+                        linkedFile,
+                        Path.Combine(linkedDirectory, "publish.json")
+                    ]);
+
+            Assert.True(source.Dirty);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(externalRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void HasReparsePointBelowRoot_DirectoryJunction_IsRejected()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        string root = Directory.CreateTempSubdirectory().FullName;
+        string externalRoot = Directory.CreateTempSubdirectory().FullName;
+        string junction = Path.Combine(root, "junction-config");
+        try
+        {
+            File.WriteAllText(Path.Combine(externalRoot, "publish.json"), "{}");
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    WorkingDirectory = root,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            process.StartInfo.ArgumentList.Add("/d");
+            process.StartInfo.ArgumentList.Add("/c");
+            process.StartInfo.ArgumentList.Add("mklink");
+            process.StartInfo.ArgumentList.Add("/J");
+            process.StartInfo.ArgumentList.Add(junction);
+            process.StartInfo.ArgumentList.Add(externalRoot);
+            process.Start();
+            string output = process.StandardOutput.ReadToEnd();
+            string error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            Assert.True(process.ExitCode == 0, $"mklink /J failed: {output}{error}");
+
+            Assert.True(DotNetPublishPipelineRunner.HasReparsePointBelowRoot(
+                Path.Combine(junction, "publish.json"),
+                root));
+        }
+        finally
+        {
+            try { Directory.Delete(junction); } catch { }
+            try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(externalRoot, recursive: true); } catch { }
+        }
+    }
+
     private static string RunGit(string root, string arguments)
     {
         using var process = Process.Start(new ProcessStartInfo

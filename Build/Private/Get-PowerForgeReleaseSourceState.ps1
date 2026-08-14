@@ -91,8 +91,32 @@ function Get-PowerForgeReleaseSourceState {
         $inputUri = [Uri] $inputPath
         if ($rootUri.IsBaseOf($inputUri)) {
             $relativeInput = [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($inputUri).ToString()).Replace('\', '/')
+            $candidatePath = $inputPath
+            $hasReparsePoint = $false
+            while (-not [string]::Equals(
+                    $candidatePath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar),
+                    $root.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                try {
+                    $attributes = [IO.File]::GetAttributes($candidatePath)
+                    if (($attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                        $hasReparsePoint = $true
+                        break
+                    }
+                } catch {
+                    $hasReparsePoint = $true
+                    break
+                }
+                $parentPath = [IO.Path]::GetDirectoryName($candidatePath)
+                if ([string]::IsNullOrWhiteSpace($parentPath) -or
+                    [string]::Equals($parentPath, $candidatePath, [StringComparison]::OrdinalIgnoreCase)) {
+                    $hasReparsePoint = $true
+                    break
+                }
+                $candidatePath = $parentPath
+            }
             & git -C $root ls-files --error-unmatch -- ":(literal)$relativeInput" *> $null
-            if ($LASTEXITCODE -ne 0) {
+            if ($hasReparsePoint -or $LASTEXITCODE -ne 0) {
                 $relativeInput
             }
         } else {

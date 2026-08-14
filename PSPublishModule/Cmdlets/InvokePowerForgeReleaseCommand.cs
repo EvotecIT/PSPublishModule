@@ -109,6 +109,25 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     public string? EffectiveConfigurationPath { get; set; }
 
     /// <summary>
+    /// Git checkout whose source state must still match immediately after the module build and before publication.
+    /// </summary>
+    [Parameter(DontShow = true)]
+    public string? SourceRepositoryRoot { get; set; }
+
+    /// <summary>
+    /// Exact Git object id required by the post-build source-state guard.
+    /// </summary>
+    [Parameter(DontShow = true)]
+    [ValidatePattern("^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$")]
+    public string? ExpectedSourceRevision { get; set; }
+
+    /// <summary>
+    /// Caller-owned configuration and build inputs that must remain regular tracked files.
+    /// </summary>
+    [Parameter(DontShow = true)]
+    public string[]? SourceInputPath { get; set; }
+
+    /// <summary>
     /// Target framework used by the native module-release lane.
     /// </summary>
     [Parameter]
@@ -799,6 +818,9 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             EnableSigning = ResolveRequestedFlag(boundParameters, nameof(Sign)),
             Configuration = NormalizeNullable(Configuration),
             EffectiveConfigurationPath = NormalizeNullable(EffectiveConfigurationPath),
+            SourceRepositoryRoot = NormalizeNullable(SourceRepositoryRoot),
+            ExpectedSourceRevision = NormalizeNullable(ExpectedSourceRevision),
+            SourceInputPaths = SourceInputPath ?? Array.Empty<string>(),
             ReleaseVersion = NormalizeNullable(ReleaseVersion),
             ModuleVersion = NormalizeNullable(ModuleVersion),
             ModulePreReleaseTag = NormalizeNullable(ModulePreReleaseTag),

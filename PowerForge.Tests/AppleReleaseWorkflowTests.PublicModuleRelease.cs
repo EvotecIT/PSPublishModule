@@ -37,6 +37,9 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("$generatedProvenancePaths = @(if ($Operation -eq 'Publish')", script, StringComparison.Ordinal);
         Assert.Contains("Resolve-PowerForgeEffectiveConfigurationReferences", script, StringComparison.Ordinal);
         Assert.Contains("EffectiveConfigurationPath", script, StringComparison.Ordinal);
+        Assert.Contains("$buildParameters.SourceRepositoryRoot = $repositoryRoot", script, StringComparison.Ordinal);
+        Assert.Contains("$buildParameters.ExpectedSourceRevision = $ExpectedCommit", script, StringComparison.Ordinal);
+        Assert.Contains("$buildParameters.SourceInputPath = [string[]] $explicitInputPaths", script, StringComparison.Ordinal);
         Assert.Contains("[IO.Path]::GetTempPath()", script, StringComparison.Ordinal);
         Assert.Contains("EffectiveConfigSha256", script, StringComparison.Ordinal);
         Assert.DoesNotContain("Remove-Item -LiteralPath $effectiveConfigPath", script, StringComparison.Ordinal);
@@ -74,6 +77,64 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.DoesNotContain("pull_request:", workflow, StringComparison.Ordinal);
         Assert.Contains("\"PlanOutputPath\": \"../Artefacts/ProjectBuild/project.build.plan.json\"", releaseConfig, StringComparison.Ordinal);
         Assert.Contains("\"Commitish\"", releaseSchema, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("powershell")]
+    [InlineData("pwsh")]
+    public void PublicModuleReleaseSourceStateRejectsTrackedReparseInputs(string shell)
+    {
+        var repository = Directory.CreateTempSubdirectory();
+        var external = Directory.CreateTempSubdirectory();
+        try
+        {
+            Run("git", repository.FullName, "init").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.name", "PowerForge Tests").EnsureSuccess();
+            Run("git", repository.FullName, "config", "core.symlinks", "true").EnsureSuccess();
+            string linkedFile = Path.Combine(repository.FullName, "release-link.json");
+            string linkedDirectory = Path.Combine(repository.FullName, "linked-config");
+            string externalFile = Path.Combine(external.FullName, "release.json");
+            string ignoredDirectory = Path.Combine(repository.FullName, "ignored-config");
+            Directory.CreateDirectory(ignoredDirectory);
+            File.WriteAllText(Path.Combine(repository.FullName, ".gitignore"), "ignored-config/\n");
+            File.WriteAllText(externalFile, "approved");
+            File.WriteAllText(Path.Combine(ignoredDirectory, "publish.json"), "approved");
+            try
+            {
+                File.CreateSymbolicLink(linkedFile, externalFile);
+                Directory.CreateSymbolicLink(linkedDirectory, ignoredDirectory);
+            }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or PlatformNotSupportedException or IOException)
+            {
+                return;
+            }
+            Run("git", repository.FullName, "add", ".").EnsureSuccess();
+            Run("git", repository.FullName, "commit", "-m", "tracked linked inputs").EnsureSuccess();
+            string index = Run("git", repository.FullName, "ls-files", "-s").EnsureSuccess().StandardOutput;
+            if (!index.Contains("120000", StringComparison.Ordinal))
+                return;
+            File.WriteAllText(externalFile, "mutated outside checkout");
+            File.WriteAllText(Path.Combine(ignoredDirectory, "publish.json"), "mutated under an ignored target");
+            Assert.True(string.IsNullOrWhiteSpace(
+                Run("git", repository.FullName, "status", "--porcelain=v1").EnsureSuccess().StandardOutput));
+
+            string helper = Path.Combine(FindRepoRoot(), "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1");
+            string receipt = Path.Combine(repository.FullName, "release-receipts", "release.json");
+            string command = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                             $"Get-PowerForgeReleaseSourceState -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedProvenancePath @() -ReceiptPath '{receipt.Replace("'", "''", StringComparison.Ordinal)}' -ExplicitInputPath @('{linkedFile.Replace("'", "''", StringComparison.Ordinal)}','{Path.Combine(linkedDirectory, "publish.json").Replace("'", "''", StringComparison.Ordinal)}') | ConvertTo-Json -Compress";
+
+            var result = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+
+            Assert.Contains("\"SourceDirty\":true", result.StandardOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("release-link.json", result.StandardOutput, StringComparison.Ordinal);
+            Assert.Contains("linked-config/publish.json", result.StandardOutput.Replace('\\', '/'), StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { repository.Delete(recursive: true); } catch { }
+            try { external.Delete(recursive: true); } catch { }
+        }
     }
 
     [Theory]

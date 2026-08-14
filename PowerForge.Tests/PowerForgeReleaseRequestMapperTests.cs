@@ -178,6 +178,28 @@ public sealed class PowerForgeReleaseRequestMapperTests
     }
 
     [Fact]
+    public void Build_MapsPostBuildSourceGuard()
+    {
+        const string repositoryRoot = "/repo";
+        const string revision = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        string[] sourceInputs = ["/repo/Build/release.json", "/repo/Build/dotnet-publish.json"];
+
+        PowerForgeReleaseRequest request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+            "/repo/powerforge.release.json",
+            defaults: null,
+            new PSPublishModule.PowerForgeReleaseInvocationOptions
+            {
+                SourceRepositoryRoot = repositoryRoot,
+                ExpectedSourceRevision = revision,
+                SourceInputPaths = sourceInputs
+            });
+
+        Assert.Equal(repositoryRoot, request.SourceRepositoryRoot);
+        Assert.Equal(revision, request.ExpectedSourceRevision);
+        Assert.Equal(sourceInputs, request.SourceInputPaths);
+    }
+
+    [Fact]
     public void Build_MapsModuleReleaseOverrides()
     {
         var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(

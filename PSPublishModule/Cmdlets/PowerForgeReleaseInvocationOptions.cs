@@ -26,6 +26,12 @@ internal sealed class PowerForgeReleaseInvocationOptions
 
     public string? EffectiveConfigurationPath { get; set; }
 
+    public string? SourceRepositoryRoot { get; set; }
+
+    public string? ExpectedSourceRevision { get; set; }
+
+    public string[] SourceInputPaths { get; set; } = System.Array.Empty<string>();
+
     public string? ReleaseVersion { get; set; }
 
     public string? ModuleFramework { get; set; }
