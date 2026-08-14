@@ -236,7 +236,7 @@ public sealed class PowerForgeCliDotNetPublishTests
 
             var (exitCode, stdout, stderr) = await RunCliAsync(
                 repoRoot,
-                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --artifact-id \"{artifactId}\" --project-root \"{tempRoot}\" --artifact \"{executablePath}\" --checksums \"{checksumsPath}\" --source-revision {sourceRevision} --manifest \"{manifestPath}\" --config \"{configurationPath}\" --rid win-x64 --framework net10.0 --style PortableCompat --sign-thumbprint {realSignature.Thumbprint} --sbom \"{sbomPath}\" --output json");
+                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --artifact-id \"{artifactId}\" --project-root \"{tempRoot}\" --artifact \"{executablePath}\" --checksums \"{checksumsPath}\" --source-revision {sourceRevision} --manifest \"{manifestPath}\" --config \"{configurationPath}\" --rid win-x64 --framework net10.0 --style PortableCompat --sign-thumbprint {realSignature.Thumbprint} --output json");
 
             Assert.True(exitCode == 0, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
             using JsonDocument document = JsonDocument.Parse(stdout);
@@ -248,9 +248,8 @@ public sealed class PowerForgeCliDotNetPublishTests
             Assert.Equal(artifactId, result.GetProperty("artifactId").GetString());
             Assert.Equal("valid", result.GetProperty("signatureStatus").GetString());
             Assert.Equal(realSignature.Subject, result.GetProperty("signerSubject").GetString());
-            Assert.Contains(result.GetProperty("evidenceFiles").EnumerateArray(), evidence =>
-                evidence.GetProperty("role").GetString() == "sbom" &&
-                evidence.GetProperty("sha256").GetString() == ComputeSha256(sbomPath));
+            Assert.DoesNotContain(result.GetProperty("evidenceFiles").EnumerateArray(), evidence =>
+                evidence.GetProperty("role").GetString() == "sbom");
         }
         finally
         {

@@ -58,7 +58,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         IEnumerable<string>? sbomPaths,
         string artifactId,
         string artifactVersion,
-        string artifactDigest)
+        string artifactDigest,
+        string? checksumsSignaturePath,
+        VerifiedSignature publisher)
     {
         var evidence = new List<PowerForgeReleaseEvidenceFile>
         {
@@ -69,6 +71,35 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 Sha256 = DotNetPublishReleaseArtifactVerifier.ComputeSha256(checksumsPath)
             }
         };
+        string[] normalizedSbomPaths = (sbomPaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
+        if (normalizedSbomPaths.Length > 0)
+        {
+            string signaturePath = ResolveRequestFile(projectRoot, checksumsSignaturePath,
+                nameof(PowerForgeReleaseArtifactVerificationRequest.ChecksumsSignaturePath));
+            PowerForgePayloadInventorySignature catalogSignature;
+            try
+            {
+                catalogSignature = _verifyPortableInventory(
+                    ReadBoundedFileBytes(checksumsPath, "PowerForge checksum catalog"),
+                    ReadBoundedFileBytes(signaturePath, "PowerForge checksum catalog signature"));
+            }
+            catch (Exception exception) when (exception is CryptographicException or InvalidDataException)
+            {
+                throw Invalid($"PowerForge checksum catalog signature is invalid: {exception.Message}");
+            }
+            string catalogThumbprint = DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(catalogSignature.Thumbprint);
+            if (!string.Equals(catalogThumbprint, publisher.Thumbprint, StringComparison.OrdinalIgnoreCase)
+                || !DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(catalogSignature.Subject, publisher.Subject))
+                throw Invalid("PowerForge checksum catalog signature does not match the verified artifact publisher.");
+            evidence.Add(new PowerForgeReleaseEvidenceFile
+            {
+                Role = "checksums-signature",
+                Path = signaturePath,
+                Sha256 = DotNetPublishReleaseArtifactVerifier.ComputeSha256(signaturePath)
+            });
+        }
         if (!string.IsNullOrWhiteSpace(manifestPath))
         {
             evidence.Add(new PowerForgeReleaseEvidenceFile
@@ -93,7 +124,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             });
         }
 
-        foreach (string configuredPath in sbomPaths ?? Array.Empty<string>())
+        foreach (string configuredPath in normalizedSbomPaths)
         {
             string path = ResolveRequestFile(projectRoot, configuredPath, "SBOM path");
             string digest = VerifyChecksummedFile(projectRoot, checksumsPath, path, "SBOM");

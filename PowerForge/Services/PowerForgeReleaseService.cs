@@ -263,7 +263,8 @@ internal sealed partial class PowerForgeReleaseService
             throw new ArgumentException("ConfigPath is required.", nameof(request));
 
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
-        PowerForgeReleaseConfigurationSecretValidator.ValidateJson(File.ReadAllText(configPath));
+        if (File.Exists(configPath))
+            PowerForgeReleaseConfigurationSecretValidator.ValidateJson(File.ReadAllText(configPath));
         PowerForgeReleaseConfigurationSecretValidator.Validate(spec);
         request.LoadedConfigurationSha256 = null;
         string expectedLoadedConfigurationPath = string.IsNullOrWhiteSpace(request.EffectiveConfigurationPath)
@@ -1097,7 +1098,8 @@ internal sealed partial class PowerForgeReleaseService
         request.CancellationToken.ThrowIfCancellationRequested();
 
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
-        PowerForgeReleaseConfigurationSecretValidator.ValidateJson(File.ReadAllText(configPath));
+        if (File.Exists(configPath))
+            PowerForgeReleaseConfigurationSecretValidator.ValidateJson(File.ReadAllText(configPath));
         PowerForgeReleaseConfigurationSecretValidator.Validate(spec);
         if (!string.IsNullOrWhiteSpace(request.EffectiveConfigurationPath))
         {

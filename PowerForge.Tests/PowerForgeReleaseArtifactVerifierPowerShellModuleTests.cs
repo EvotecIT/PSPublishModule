@@ -229,6 +229,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             ProjectRoot = Root,
             ArtifactPath = ArchivePath,
             ChecksumsPath = ChecksumsPath,
+            ChecksumsSignaturePath = ChecksumsSignaturePath,
             ExpectedSourceRevision = SourceRevision,
             ExpectedVersion = _version,
             SignThumbprint = Thumbprint,
@@ -411,14 +412,16 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                         "CN=Vendor",
                         actualVendorThumbprint)
                     : new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
-                _ => "1.2.3.0");
+                _ => "1.2.3.0",
+                verifyPortableInventory: (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint));
 
         internal PowerForgeReleaseArtifactVerifier CreateRootVendorAwareVerifier(string actualVendorThumbprint) =>
             new(
                 path => Path.GetFileName(path).EndsWith("Sample.psm1", StringComparison.OrdinalIgnoreCase)
                     ? new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Vendor", actualVendorThumbprint)
                     : new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
-                _ => "1.2.3.0");
+                _ => "1.2.3.0",
+                verifyPortableInventory: (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint));
 
         internal void WriteSigningEvidence(
             string? vendorThumbprint = null,
