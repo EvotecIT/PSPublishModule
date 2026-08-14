@@ -128,7 +128,7 @@ public sealed partial class WebAgentContentSecurityScanner
         if (verb is "config" or "set")
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
-                $"Package-manager configuration command '{string.Join(' ', tokens)}' can change the registry used by later installation commands.");
+                $"Package-manager configuration command for '{tokens[0]}' can change the registry used by later installation commands; argument values are redacted.");
             return;
         }
         if (verb == "ci")
@@ -199,6 +199,64 @@ public sealed partial class WebAgentContentSecurityScanner
         if (verb is not ("install" or "add"))
             return;
         AddMultipleOperands("npm", $"{tokens[0]} {tokens[verbIndex]}", tokens, verbIndex + 1, path, line, references, findings);
+    }
+
+    private static void ParseCargo(
+        string[] tokens,
+        string path,
+        int line,
+        ICollection<WebAgentPackageReference> references,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        if (tokens.Length < 2 || !ValidatePackageSourceOptions("crates", tokens, path, line, findings))
+            return;
+
+        var verbIndex = FindCargoVerbIndex(tokens, path, line, findings);
+        if (verbIndex < 0)
+            return;
+        var verb = tokens[verbIndex].ToLowerInvariant();
+        if (verb is "add" or "install")
+        {
+            AddMultipleOperands("crates", "cargo " + verb, tokens, verbIndex + 1, path, line, references, findings);
+            return;
+        }
+        if (verb is "help" or "new" or "init" or "clean" or "search")
+            return;
+
+        AddUnverifiableOperand("cargo " + verb, path, line, findings,
+            "project, lockfile, or external subcommand dependency set");
+    }
+
+    private static int FindCargoVerbIndex(
+        string[] tokens,
+        string path,
+        int line,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        for (var index = 1; index < tokens.Length; index++)
+        {
+            var token = tokens[index];
+            if (token is "--version" or "-V" or "--help" or "-h")
+                continue;
+            if (token is "--verbose" or "-v" or "--quiet" or "-q" or "--locked" or "--offline" or "--frozen")
+                continue;
+            if (token.StartsWith("--color=", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (token is "--color" or "--target-dir")
+            {
+                if (++index < tokens.Length)
+                    continue;
+                AddUnverifiableOperand("cargo", path, line, findings, token);
+                return -1;
+            }
+            if (token.StartsWith("-", StringComparison.Ordinal))
+            {
+                AddUnverifiableOperand("cargo", path, line, findings, token);
+                return -1;
+            }
+            return index;
+        }
+        return -1;
     }
 
     private static bool IsYarnInformationalInvocation(string[] tokens)

@@ -25,7 +25,7 @@ public sealed partial class WebAgentContentSecurityScanner
         if (verb is "config" or "repository")
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
-                $"Package-manager configuration command '{string.Join(' ', tokens)}' can change the source used by later installation commands.");
+                $"Package-manager configuration command for '{tokens[0]}' can change the source used by later installation commands; argument values are redacted.");
             return;
         }
         if (verb == "create-project")
@@ -67,7 +67,7 @@ public sealed partial class WebAgentContentSecurityScanner
         if (verb == "config")
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
-                $"Package-manager configuration command '{string.Join(' ', tokens)}' can change the source used by later installation commands.");
+                $"Package-manager configuration command for '{tokens[0]}' can change the source used by later installation commands; argument values are redacted.");
             return;
         }
         if (verb == "install")
@@ -236,7 +236,7 @@ public sealed partial class WebAgentContentSecurityScanner
             return false;
 
         AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
-            $"Package-manager configuration command '{string.Join(' ', tokens)}' can change the source used by later installation commands.");
+            $"Package-manager configuration command for '{tokens[0]}' can change the source used by later installation commands; argument values are redacted.");
         return true;
     }
 

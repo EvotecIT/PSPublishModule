@@ -44,7 +44,7 @@ public sealed partial class WebAgentContentSecurityScanner
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
                 string.IsNullOrWhiteSpace(value)
                     ? $"Package source option '{option}' does not have a statically verifiable public-registry value."
-                    : $"Package source option '{option}' redirects installation to untrusted source '{value}'.");
+                    : $"Package source option '{option}' redirects installation away from the canonical public registry; the configured value is redacted.");
             return false;
         }
         return true;
@@ -71,7 +71,8 @@ public sealed partial class WebAgentContentSecurityScanner
                       option.Equals("-f", StringComparison.OrdinalIgnoreCase) ||
                       option.Equals("--config-file", StringComparison.OrdinalIgnoreCase),
             "crates" => option.Equals("--registry", StringComparison.OrdinalIgnoreCase) ||
-                        option.Equals("--index", StringComparison.OrdinalIgnoreCase),
+                        option.Equals("--index", StringComparison.OrdinalIgnoreCase) ||
+                        option.Equals("--config", StringComparison.OrdinalIgnoreCase),
             "rubygems" => option.Equals("--source", StringComparison.OrdinalIgnoreCase) ||
                           option.Equals("-s", StringComparison.OrdinalIgnoreCase) ||
                           option.Equals("--local", StringComparison.OrdinalIgnoreCase) ||

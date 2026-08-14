@@ -6,7 +6,7 @@ using PowerForge.Web;
 
 namespace PowerForge.Tests;
 
-public sealed class WebEcosystemStatsGeneratorTests
+public sealed partial class WebEcosystemStatsGeneratorTests
 {
     [Fact]
     public void Generate_CollectsGitHubNuGetAndPowerShellGalleryStats()

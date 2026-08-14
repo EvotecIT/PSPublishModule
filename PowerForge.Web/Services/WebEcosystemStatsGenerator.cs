@@ -358,9 +358,10 @@ public static partial class WebEcosystemStatsGenerator
             if (document is null)
                 break;
 
-            var entries = ParsePowerShellGalleryModules(document, requiredOwner);
-            if (entries.Count == 0)
+            var rawEntryCount = CountPowerShellGalleryEntries(document);
+            if (rawEntryCount == 0)
                 break;
+            var entries = ParsePowerShellGalleryModules(document, requiredOwner);
 
             foreach (var module in entries)
             {
@@ -377,7 +378,7 @@ public static partial class WebEcosystemStatsGenerator
             }
 
             skip += take;
-            if (entries.Count < take)
+            if (rawEntryCount < take)
                 break;
         }
     }
@@ -443,6 +444,12 @@ public static partial class WebEcosystemStatsGenerator
         }
 
         return modules;
+    }
+
+    private static int CountPowerShellGalleryEntries(XDocument document)
+    {
+        var atomNs = XNamespace.Get("http://www.w3.org/2005/Atom");
+        return document.Root?.Elements(atomNs + "entry").Count() ?? 0;
     }
 
     private static bool MatchesPowerShellGalleryOwner(string? requiredOwner, string? owners)

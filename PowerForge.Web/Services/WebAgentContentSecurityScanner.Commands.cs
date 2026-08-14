@@ -100,7 +100,7 @@ public sealed partial class WebAgentContentSecurityScanner
                         AddRunnerOperand("pypi", "uvx", tokens, 1, path, line, commandReferences, findings);
                     break;
                 case "cargo":
-                    ParsePositionalInstall("crates", "cargo", tokens, new[] { "add", "install" }, path, line, commandReferences, findings);
+                    ParseCargo(tokens, path, line, commandReferences, findings);
                     break;
                 case "gem":
                     ParseRubyGems(tokens, path, line, commandReferences, findings);
@@ -499,13 +499,13 @@ public sealed partial class WebAgentContentSecurityScanner
         if (ecosystem == "npm" && IsNpmNonRegistryOperand(token))
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
-                $"npm package operand '{token}' uses a local archive, path, URL, or other non-registry source.");
+                $"npm package operand '{RedactDiagnosticValue(token)}' uses a local archive, path, URL, or other non-registry source.");
             return;
         }
         if (ecosystem == "npm" && TryGetNpmSelector(token, out var npmSelector) && !IsNpmRegistrySelector(npmSelector))
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
-                $"npm package operand '{token}' uses a non-registry or unsupported package selector.");
+                $"npm package operand '{RedactDiagnosticValue(token)}' uses a non-registry or unsupported package selector.");
             return;
         }
         var (id, embeddedVersion) = SplitPackageVersion(ecosystem, token);
@@ -517,7 +517,7 @@ public sealed partial class WebAgentContentSecurityScanner
         if (ecosystem == "npm" && embeddedVersion is not null && !IsNpmRegistrySelector(embeddedVersion))
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
-                $"npm package operand '{token}' uses a non-registry or unsupported package selector.");
+                $"npm package operand '{RedactDiagnosticValue(token)}' uses a non-registry or unsupported package selector.");
             return;
         }
         references.Add(new WebAgentPackageReference
@@ -665,7 +665,25 @@ public sealed partial class WebAgentContentSecurityScanner
         => AddFinding(findings, "error", "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND", path, line,
             string.IsNullOrWhiteSpace(operand)
                 ? $"Package command '{command}' does not contain a statically verifiable package identifier."
-                : $"Package command '{command}' uses dynamic or unsupported operand '{operand}'.");
+                : $"Package command '{command}' uses dynamic or unsupported operand '{RedactDiagnosticValue(operand)}'.");
+
+    private static string RedactDiagnosticValue(string value)
+    {
+        value = NormalizeToken(value);
+        var separator = value.IndexOf('=');
+        if (separator >= 0)
+            return value[..separator] + "=<redacted>";
+        if (Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+            (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+             uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            var authority = uri.IsDefaultPort
+                ? $"{uri.Scheme}://{uri.IdnHost}"
+                : $"{uri.Scheme}://{uri.IdnHost}:{uri.Port}";
+            return authority + "/<redacted>";
+        }
+        return value.Length <= 128 ? value : value[..128] + "...";
+    }
 
     private static (string Id, string? Version) SplitPackageVersion(string ecosystem, string token)
     {
