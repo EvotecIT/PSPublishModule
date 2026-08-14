@@ -148,33 +148,15 @@ if ($null -ne $AddExportedCmdlet) {{
 
     private static string BuildDevelopmentRuntimeHandlerBlock()
     {
-        var lines = new List<string>
-        {
-            "# Ensure native runtime libraries are discoverable for the selected development binary.",
-            "$PowerForgeDevelopmentIsWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)",
-            "if ($PowerForgeDevelopmentIsWindowsPlatform) {"
-        };
-        lines.AddRange(BuildWindowsRuntimeArchitectureResolverLines("$PowerForgeDevelopmentArch", "$PowerForgeDevelopmentArchFolder"));
-        lines.AddRange(
-            new[]
+        return RenderModuleBootstrapperTemplate(
+            "DevelopmentRuntimeHandler",
+            "Scripts/ModuleBootstrapper/DevelopmentRuntimeHandler.Template.ps1",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                "    $PowerForgeDevelopmentLibFolder = [IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)",
-                "    if ($PowerForgeDevelopmentLibFolder) {",
-                "        $PowerForgeDevelopmentNativePath = Join-Path -Path $PowerForgeDevelopmentLibFolder -ChildPath (\"runtimes\\{0}\\native\" -f $PowerForgeDevelopmentArchFolder)",
-                "        $PowerForgeDevelopmentPathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }",
-                "        if ((Test-Path -LiteralPath $PowerForgeDevelopmentNativePath) -and ($PowerForgeDevelopmentPathEntries -notcontains $PowerForgeDevelopmentNativePath)) {",
-                "            if ([string]::IsNullOrWhiteSpace($env:PATH)) {",
-                "                $env:PATH = $PowerForgeDevelopmentNativePath",
-                "            } else {",
-                "                $env:PATH = \"$PowerForgeDevelopmentNativePath$([IO.Path]::PathSeparator)$env:PATH\"",
-                "            }",
-                "        }",
-                "    }",
-                "}",
-                string.Empty
+                ["ArchitectureResolverBlock"] = IndentPowerShell(
+                    RenderWindowsRuntimeArchitectureResolver("$PowerForgeDevelopmentArch", "$PowerForgeDevelopmentArchFolder").TrimEnd(),
+                    4)
             });
-
-        return string.Join("\r\n", lines);
     }
 
     private static string BuildPowerShellPathExpression(string moduleRoot, string targetPath)

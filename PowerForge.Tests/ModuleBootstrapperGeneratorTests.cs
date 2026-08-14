@@ -11,9 +11,7 @@ public class ModuleBootstrapperGeneratorTests
         string environmentArchitecture,
         string expectedRuntimeFolder)
     {
-        var resolver = string.Join(
-                "\r\n",
-                ModuleBootstrapperGenerator.BuildWindowsRuntimeArchitectureResolverLines("$Arch", "$ArchFolder"))
+        var resolver = ModuleBootstrapperGenerator.RenderWindowsRuntimeArchitectureResolver("$Arch", "$ArchFolder")
             .Replace(
                 "[string][System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture",
                 "[string]$null",
@@ -36,9 +34,7 @@ public class ModuleBootstrapperGeneratorTests
     [Fact]
     public void WindowsRuntimeArchitectureResolver_UsesProcessBitnessForMissingSignalsWithoutWarning()
     {
-        var resolver = string.Join(
-                "\r\n",
-                ModuleBootstrapperGenerator.BuildWindowsRuntimeArchitectureResolverLines("$Arch", "$ArchFolder"))
+        var resolver = ModuleBootstrapperGenerator.RenderWindowsRuntimeArchitectureResolver("$Arch", "$ArchFolder")
             .Replace(
                 "[string][System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture",
                 "[string]$null",
@@ -61,9 +57,7 @@ public class ModuleBootstrapperGeneratorTests
     [Fact]
     public void WindowsRuntimeArchitectureResolver_WarnsForUnrecognizedNonEmptyArchitecture()
     {
-        var resolver = string.Join(
-                "\r\n",
-                ModuleBootstrapperGenerator.BuildWindowsRuntimeArchitectureResolverLines("$Arch", "$ArchFolder"))
+        var resolver = ModuleBootstrapperGenerator.RenderWindowsRuntimeArchitectureResolver("$Arch", "$ArchFolder")
             .Replace(
                 "[string][System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture",
                 "[string]'RISCV64'",

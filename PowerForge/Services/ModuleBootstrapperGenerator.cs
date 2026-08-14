@@ -1116,33 +1116,15 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 
     private static string BuildRuntimeHandlerBlock()
     {
-        var lines = new List<string>
-        {
-            "# Ensure native runtime libraries are discoverable on Windows",
-            "$IsWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)",
-            "# Skip probing when the current host cannot resolve a Windows-facing Lib folder (for example Desktop + Core-only payloads).",
-            "if ($IsWindowsPlatform -and $LibFolder) {"
-        };
-        lines.AddRange(BuildWindowsRuntimeArchitectureResolverLines("$Arch", "$ArchFolder"));
-        lines.AddRange(
-            new[]
+        return RenderModuleBootstrapperTemplate(
+            "RuntimeHandler",
+            "Scripts/ModuleBootstrapper/RuntimeHandler.Template.ps1",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                string.Empty,
-                "    $NativePath = Join-Path -Path $PSScriptRoot -ChildPath (\"Lib\\{0}\\runtimes\\{1}\\native\" -f $LibFolder, $ArchFolder)",
-                "    $PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }",
-                "    if ((Test-Path -LiteralPath $NativePath) -and ($PathEntries -notcontains $NativePath)) {",
-                "        # Prepend the module-native runtime path so the packaged payload wins over unrelated machine-wide copies.",
-                "        if ([string]::IsNullOrWhiteSpace($env:PATH)) {",
-                "            $env:PATH = $NativePath",
-                "        } else {",
-                "            $env:PATH = \"$NativePath$([IO.Path]::PathSeparator)$env:PATH\"",
-                "        }",
-                "    }",
-                "}",
-                string.Empty
+                ["ArchitectureResolverBlock"] = IndentPowerShell(
+                    RenderWindowsRuntimeArchitectureResolver("$Arch", "$ArchFolder").TrimEnd(),
+                    4)
             });
-
-        return string.Join("\r\n", lines);
     }
 
     private static string BuildDesktopAssemblyResolverBlock()
