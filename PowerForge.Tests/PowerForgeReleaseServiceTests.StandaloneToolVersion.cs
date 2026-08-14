@@ -189,7 +189,17 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Name = "PowerForge",
                             Version = request.ResolvedReleaseVersion!,
                             OutputName = "PowerForge",
-                            ArtifactRootPath = root
+                            ArtifactRootPath = root,
+                            Combinations =
+                            [
+                                new PowerForgeToolReleaseCombinationPlan
+                                {
+                                    Runtime = "osx-arm64",
+                                    Framework = "net10.0",
+                                    Flavor = PowerForgeToolReleaseFlavor.SingleContained,
+                                    ZipPath = zip
+                                }
+                            ]
                         }
                     ]
                 },
@@ -356,13 +366,18 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
-    [Fact]
-    public void Execute_NonPowerForgeToolSelectionSkipsConsumerToolManifest()
+    [Theory]
+    [InlineData("PowerForgeWeb", "SingleContained")]
+    [InlineData("PowerForge", "SingleFx")]
+    public void Execute_NonStandaloneToolSelectionSkipsConsumerToolManifest(
+        string targetName,
+        string flavorName)
     {
         var root = CreateSandbox();
         try
         {
-            var zip = Path.Combine(root, "PowerForgeWeb-3.0.110.zip");
+            var flavor = Enum.Parse<PowerForgeToolReleaseFlavor>(flavorName);
+            var zip = Path.Combine(root, $"{targetName}-3.0.110.zip");
             var lockManifest = Path.Combine(root, "PowerForge-tool-manifest.json");
             File.WriteAllText(zip, "web tool");
             var service = new PowerForgeReleaseService(
@@ -375,7 +390,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     [
                         new PowerForgeToolReleaseTargetPlan
                         {
-                            Name = "PowerForgeWeb",
+                            Name = targetName,
                             Version = "3.0.110",
                             Combinations =
                             [
@@ -383,7 +398,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                                 {
                                     Runtime = "osx-arm64",
                                     Framework = "net10.0",
-                                    Flavor = PowerForgeToolReleaseFlavor.SingleContained,
+                                    Flavor = flavor,
                                     ZipPath = zip
                                 }
                             ]
@@ -397,12 +412,12 @@ public sealed partial class PowerForgeReleaseServiceTests
                     [
                         new PowerForgeToolReleaseArtifactResult
                         {
-                            Target = "PowerForgeWeb",
+                            Target = targetName,
                             Version = "3.0.110",
                             Runtime = "osx-arm64",
                             Framework = "net10.0",
-                            Flavor = PowerForgeToolReleaseFlavor.SingleContained,
-                            ExecutablePath = Path.Combine(root, "PowerForgeWeb"),
+                            Flavor = flavor,
+                            ExecutablePath = Path.Combine(root, targetName),
                             ZipPath = zip
                         }
                     ]

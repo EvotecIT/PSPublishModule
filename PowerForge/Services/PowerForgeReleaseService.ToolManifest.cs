@@ -24,7 +24,7 @@ internal sealed partial class PowerForgeReleaseService
             throw new FileNotFoundException($"Additional release asset was not found: {path}", path);
 
         var toolManifestPath = spec.Outputs?.PowerForgeToolManifestPath;
-        if (!string.IsNullOrWhiteSpace(toolManifestPath) && IsPowerForgeToolSelected(result))
+        if (!string.IsNullOrWhiteSpace(toolManifestPath) && IsStandalonePowerForgeToolSelected(result))
         {
             var manifestPath = ResolveOutputPath(configDirectory, toolManifestPath!);
             WritePowerForgeToolLockManifest(spec, producedAssets, sharedReleaseVersion, manifestPath);
@@ -33,11 +33,20 @@ internal sealed partial class PowerForgeReleaseService
         return paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    private static bool IsPowerForgeToolSelected(PowerForgeReleaseResult result)
+    private static bool IsStandalonePowerForgeToolSelected(PowerForgeReleaseResult result)
         => (result.ToolPlan?.Targets ?? Array.Empty<PowerForgeToolReleaseTargetPlan>())
-               .Any(static target => target.Name.Equals("PowerForge", StringComparison.OrdinalIgnoreCase)) ||
+               .Any(static target =>
+                   target.Name.Equals("PowerForge", StringComparison.OrdinalIgnoreCase) &&
+                   (target.Combinations ?? Array.Empty<PowerForgeToolReleaseCombinationPlan>())
+                       .Any(static combination =>
+                           combination.Flavor is PowerForgeToolReleaseFlavor.SingleContained or
+                               PowerForgeToolReleaseFlavor.Portable)) ||
            (result.DotNetToolPlan?.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
-               .Any(static target => target.Name.Equals("PowerForge", StringComparison.OrdinalIgnoreCase));
+               .Any(static target =>
+                   target.Name.Equals("PowerForge", StringComparison.OrdinalIgnoreCase) &&
+                   (target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+                       .Any(static combination =>
+                           IsStandalonePowerForgeArtifactStyle(combination.Style.ToString())));
 
     private static void WritePowerForgeToolLockManifest(
         PowerForgeReleaseSpec spec,
