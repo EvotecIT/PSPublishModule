@@ -263,11 +263,17 @@ internal sealed partial class PowerForgeReleaseService
             throw new ArgumentException("ConfigPath is required.", nameof(request));
 
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
+        PowerForgeReleaseConfigurationSecretValidator.ValidateJson(File.ReadAllText(configPath));
         PowerForgeReleaseConfigurationSecretValidator.Validate(spec);
         request.LoadedConfigurationSha256 = null;
         string expectedLoadedConfigurationPath = string.IsNullOrWhiteSpace(request.EffectiveConfigurationPath)
             ? configPath
             : Path.GetFullPath(request.EffectiveConfigurationPath!.Trim().Trim('"'));
+        if (!AppleReleasePathsEqual(expectedLoadedConfigurationPath, configPath))
+        {
+            PowerForgeReleaseConfigurationSecretValidator.ValidateJson(
+                File.ReadAllText(expectedLoadedConfigurationPath));
+        }
         if (!string.IsNullOrWhiteSpace(request.EffectiveConfigurationPath) &&
             (string.IsNullOrWhiteSpace(spec.LoadedConfigurationPath) ||
              !AppleReleasePathsEqual(Path.GetFullPath(spec.LoadedConfigurationPath!), expectedLoadedConfigurationPath)))
@@ -695,6 +701,7 @@ internal sealed partial class PowerForgeReleaseService
                         var publishToolGitHub = request.PublishToolGitHub ?? spec.Tools!.GitHub.Publish;
                         if (publishToolGitHub)
                         {
+                            ValidatePostBuildSourceState(request);
                             var releases = PublishDotNetToolGitHubReleases(
                                 spec,
                                 configDirectory,
@@ -752,6 +759,7 @@ internal sealed partial class PowerForgeReleaseService
                         var publishToolGitHub = request.PublishToolGitHub ?? spec.Tools!.GitHub.Publish;
                         if (publishToolGitHub)
                         {
+                            ValidatePostBuildSourceState(request);
                             var releases = PublishLegacyToolGitHubReleases(
                                 spec,
                                 configDirectory,
@@ -925,6 +933,7 @@ internal sealed partial class PowerForgeReleaseService
             !request.PlanOnly &&
             !request.ValidateOnly)
         {
+            ValidatePostBuildSourceState(request);
             request.Progress?.PhaseStarted(
                 PowerForgeReleaseProgressPhase.Module,
                 1,
@@ -975,6 +984,7 @@ internal sealed partial class PowerForgeReleaseService
             RewriteReleaseSummaryFiles(result);
             if (publishUnifiedGitHub)
             {
+                ValidatePostBuildSourceState(request);
                 request.Progress?.PhaseStarted(
                     PowerForgeReleaseProgressPhase.GitHub,
                     result.ReleaseAssets.Length,
@@ -998,12 +1008,13 @@ internal sealed partial class PowerForgeReleaseService
                     PowerForgeReleaseProgressPhase.GitHub,
                     unifiedGitHubRelease.ReleaseUrl ?? "GitHub release published");
             }
+            ValidatePostBuildSourceState(request);
             SubmitWingetOutputs(spec, request, configDirectory, result);
-            if (result.Success &&
-                publishVirusTotalMonitor &&
-                !TryPublishVirusTotalMonitor(spec, request, configDirectory, result, sharedReleaseVersion, virusTotalApiKey))
+            if (result.Success && publishVirusTotalMonitor)
             {
-                return result;
+                ValidatePostBuildSourceState(request);
+                if (!TryPublishVirusTotalMonitor(spec, request, configDirectory, result, sharedReleaseVersion, virusTotalApiKey))
+                    return result;
             }
         }
 
@@ -1058,6 +1069,7 @@ internal sealed partial class PowerForgeReleaseService
     {
         if (content is null)
             throw new ArgumentNullException(nameof(content));
+        PowerForgeReleaseConfigurationSecretValidator.ValidateJson(content);
         var spec = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(content, CreateJsonOptions());
         return spec ?? throw new InvalidOperationException($"Unable to deserialize unified release config: {sourcePath}");
     }
@@ -1085,6 +1097,18 @@ internal sealed partial class PowerForgeReleaseService
         request.CancellationToken.ThrowIfCancellationRequested();
 
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
+        PowerForgeReleaseConfigurationSecretValidator.ValidateJson(File.ReadAllText(configPath));
+        PowerForgeReleaseConfigurationSecretValidator.Validate(spec);
+        if (!string.IsNullOrWhiteSpace(request.EffectiveConfigurationPath))
+        {
+            string effectiveConfigurationPath = Path.GetFullPath(
+                request.EffectiveConfigurationPath!.Trim().Trim('"'));
+            if (!AppleReleasePathsEqual(effectiveConfigurationPath, configPath))
+            {
+                PowerForgeReleaseConfigurationSecretValidator.ValidateJson(
+                    File.ReadAllText(effectiveConfigurationPath));
+            }
+        }
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
         var publishVirusTotalMonitor = ShouldPublishVirusTotalMonitorFromCheckpoint(
             spec,
@@ -1142,6 +1166,7 @@ internal sealed partial class PowerForgeReleaseService
 
         if (spec.Tools is not null && (request.PublishToolGitHub ?? spec.Tools.GitHub.Publish))
         {
+            ValidatePostBuildSourceState(request);
             request.CancellationToken.ThrowIfCancellationRequested();
             if (builtResult.DotNetToolPlan is not null && builtResult.DotNetTools is not null)
             {
@@ -1174,6 +1199,7 @@ internal sealed partial class PowerForgeReleaseService
         var moduleSelected = spec.Module is not null && !request.PackagesOnly && !request.ToolsOnly;
         if (ShouldPublishUnifiedGitHub(spec, request, moduleSelected))
         {
+            ValidatePostBuildSourceState(request);
             request.CancellationToken.ThrowIfCancellationRequested();
             var unified = PublishUnifiedGitHubRelease(
                 spec,
@@ -1191,22 +1217,26 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
+        ValidatePostBuildSourceState(request);
         request.CancellationToken.ThrowIfCancellationRequested();
         SubmitWingetOutputs(spec, request, configDirectory, builtResult);
         request.CancellationToken.ThrowIfCancellationRequested();
         if (!builtResult.Success)
             return builtResult;
 
-        if (publishVirusTotalMonitor &&
-            !TryPublishVirusTotalMonitor(
-                spec,
-                request,
-                configDirectory,
-                builtResult,
-                sharedReleaseVersion,
-                virusTotalApiKey))
+        if (publishVirusTotalMonitor)
         {
-            return builtResult;
+            ValidatePostBuildSourceState(request);
+            if (!TryPublishVirusTotalMonitor(
+                    spec,
+                    request,
+                    configDirectory,
+                    builtResult,
+                    sharedReleaseVersion,
+                    virusTotalApiKey))
+            {
+                return builtResult;
+            }
         }
 
         builtResult.Success = true;
@@ -4180,6 +4210,7 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         var json = File.ReadAllText(configPath);
+        PowerForgeReleaseConfigurationSecretValidator.ValidateJson(json);
         var spec = JsonSerializer.Deserialize<DotNetPublishSpec>(json, DotNetToolsJsonOptions)
             ?? throw new InvalidOperationException($"DotNet publish config could not be deserialized: {configPath}");
 

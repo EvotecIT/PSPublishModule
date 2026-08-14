@@ -118,6 +118,7 @@ internal sealed partial class PowerForgeReleaseService
             PublishGitHub = suppressPublishing || publishUnifiedGitHub ? false : request.PublishProjectGitHub,
             ReleaseVersionFloor = releaseVersionFloor,
             ReleaseVersionFloorProject = releaseVersionFloorProject,
+            RemotePublishAttempted = () => ValidatePostBuildSourceState(request),
             CancellationToken = request.CancellationToken
         };
         if (request.Progress is IPowerForgeReleaseProgressReporterV2 detailedProgress)

@@ -4,6 +4,70 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
 {
+    [Fact]
+    public void LoadConfiguration_UnknownInlineSecret_RejectsRawJsonBeforeTypedPropertiesAreDiscarded()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string path = Path.Combine(root, "release.json");
+            File.WriteAllText(
+                path,
+                "{\"Deployment\":{\"Token\":\"secret\"}}",
+                new UTF8Encoding(false));
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.LoadConfiguration(path));
+
+            Assert.Contains("$.Deployment.Token", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Inline release secrets are not allowed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_EffectiveConfigurationUnknownInlineSecret_RejectsBeforeEvidencePublication()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string sourcePath = Path.Combine(root, "release.json");
+            string effectivePath = Path.Combine(
+                root,
+                ".release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
+            File.WriteAllText(sourcePath, "{}", new UTF8Encoding(false));
+            File.WriteAllText(
+                effectivePath,
+                "{\"Deployment\":{\"Token\":\"secret\"}}",
+                new UTF8Encoding(false));
+            var spec = new PowerForgeReleaseSpec
+            {
+                LoadedConfigurationPath = effectivePath,
+                LoadedConfigurationSha256 = new string('0', 64)
+            };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new PowerForgeReleaseService(new NullLogger()).Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = sourcePath,
+                        EffectiveConfigurationPath = effectivePath,
+                        PlanOnly = true
+                    }));
+
+            Assert.Contains("$.Deployment.Token", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Inline release secrets are not allowed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData("{\"GitHub\":{\"Token\":\"secret\"}}", "$.GitHub.Token")]
     [InlineData("{\"Winget\":{\"Submission\":{\"Token\":\"secret\"}}}", "$.Winget.Submission.Token")]
@@ -17,12 +81,14 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             string path = Path.Combine(root, "release.json");
             File.WriteAllText(path, json, new UTF8Encoding(false));
-            PowerForgeReleaseSpec spec = PowerForgeReleaseService.LoadConfiguration(path);
 
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            {
+                PowerForgeReleaseSpec spec = PowerForgeReleaseService.LoadConfiguration(path);
                 new PowerForgeReleaseService(new NullLogger()).Execute(
                     spec,
-                    new PowerForgeReleaseRequest { ConfigPath = path, PlanOnly = true }));
+                    new PowerForgeReleaseRequest { ConfigPath = path, PlanOnly = true });
+            });
 
             Assert.Contains(expectedPath, exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Inline release secrets are not allowed", exception.Message, StringComparison.OrdinalIgnoreCase);

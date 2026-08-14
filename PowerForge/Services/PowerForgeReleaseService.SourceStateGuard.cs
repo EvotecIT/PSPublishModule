@@ -52,13 +52,13 @@ internal sealed partial class PowerForgeReleaseService
             !string.Equals(source.Revision, expectedRevision, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"Release source revision changed after the module build; expected '{expectedRevision}', " +
+                $"Release source revision changed after the release build; expected '{expectedRevision}', " +
                 $"received '{source.Revision ?? "unknown"}'.");
         }
         if (source.Dirty is not false)
         {
             throw new InvalidOperationException(
-                "Release source changed after the module build. Publication is blocked before package, module, tool, or GitHub mutation.");
+                "Release source changed after the release build. Publication is blocked before package, module, tool, or GitHub mutation.");
         }
     }
 }

@@ -63,15 +63,8 @@ try {
     $retainedCheckoutConfigPath = Join-Path `
         (Split-Path -Parent $ConfigPath) `
         ".release.authorized.$Version.$($ExpectedCommit.ToLowerInvariant()).json"
-    $repositoryHashAlgorithm = [Security.Cryptography.SHA256]::Create()
-    try {
-        $repositoryHashBytes = [Text.Encoding]::UTF8.GetBytes($repositoryRoot.ToLowerInvariant())
-        $repositoryHash = ([BitConverter]::ToString(
-            $repositoryHashAlgorithm.ComputeHash($repositoryHashBytes))).Replace('-', '').Substring(0, 16).ToLowerInvariant()
-    } finally {
-        $repositoryHashAlgorithm.Dispose()
-    }
-    $effectiveConfigDirectory = Join-Path ([IO.Path]::GetTempPath()) "PowerForge\ReleaseEvidence\$repositoryHash"
+    . (Join-Path (Join-Path $PSScriptRoot 'Private') 'New-PowerForgeReleaseEvidenceWorkspace.ps1')
+    $effectiveConfigDirectory = New-PowerForgeReleaseEvidenceWorkspace -RepositoryRoot $repositoryRoot
     $effectiveConfigPath = Join-Path $effectiveConfigDirectory ".release.authorized.$Version.$($ExpectedCommit.ToLowerInvariant()).json"
 
     $moduleProvenancePath = Join-Path $repositoryRoot 'Module\PowerForge.ReleaseProvenance.json'

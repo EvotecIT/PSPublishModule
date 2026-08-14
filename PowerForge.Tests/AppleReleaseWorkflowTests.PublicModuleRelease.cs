@@ -8,6 +8,7 @@ public sealed partial class AppleReleaseWorkflowTests
         var root = FindRepoRoot();
         var workflow = Read(root, ".github", "workflows", "pspublishmodule-public-release.yml");
         var script = Read(root, "Build", "Invoke-PowerForgePublicRelease.ps1");
+        var evidenceWorkspace = Read(root, "Build", "Private", "New-PowerForgeReleaseEvidenceWorkspace.ps1");
         var releaseConfig = Read(root, "Build", "release.json");
         var moduleConfig = Read(root, "powerforge.json");
         var releaseSchema = Read(root, "Schemas", "powerforge.release.schema.json");
@@ -40,7 +41,9 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("$buildParameters.SourceRepositoryRoot = $repositoryRoot", script, StringComparison.Ordinal);
         Assert.Contains("$buildParameters.ExpectedSourceRevision = $ExpectedCommit", script, StringComparison.Ordinal);
         Assert.Contains("$buildParameters.SourceInputPath = [string[]] $explicitInputPaths", script, StringComparison.Ordinal);
-        Assert.Contains("[IO.Path]::GetTempPath()", script, StringComparison.Ordinal);
+        Assert.Contains("New-PowerForgeReleaseEvidenceWorkspace", script, StringComparison.Ordinal);
+        Assert.Contains("[IO.Path]::GetTempPath()", evidenceWorkspace, StringComparison.Ordinal);
+        Assert.Contains("[Guid]::NewGuid().ToString('N')", evidenceWorkspace, StringComparison.Ordinal);
         Assert.Contains("EffectiveConfigSha256", script, StringComparison.Ordinal);
         Assert.DoesNotContain("Remove-Item -LiteralPath $effectiveConfigPath", script, StringComparison.Ordinal);
         Assert.Contains("$moduleProvenanceCreated", script, StringComparison.Ordinal);
@@ -440,6 +443,9 @@ public sealed partial class AppleReleaseWorkflowTests
             File.Copy(
                 Path.Combine(root, "Build", "Private", "Test-PowerForgeTrackedReleaseReceipt.ps1"),
                 Path.Combine(privateDirectory, "Test-PowerForgeTrackedReleaseReceipt.ps1"));
+            File.Copy(
+                Path.Combine(root, "Build", "Private", "New-PowerForgeReleaseEvidenceWorkspace.ps1"),
+                Path.Combine(privateDirectory, "New-PowerForgeReleaseEvidenceWorkspace.ps1"));
             Run("git", repository.FullName, "init").EnsureSuccess();
             Run("git", repository.FullName, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
             Run("git", repository.FullName, "config", "user.name", "PowerForge Tests").EnsureSuccess();
@@ -556,6 +562,82 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     [Theory]
+    [InlineData("powershell")]
+    [InlineData("pwsh")]
+    public void TrackedReleaseReceiptProbeRejectsReparsePointAncestor(string shell)
+    {
+        var repository = Directory.CreateTempSubdirectory();
+        var external = Directory.CreateTempSubdirectory();
+        string? linkedDirectory = null;
+        try
+        {
+            string receiptRoot = Path.Combine(repository.FullName, "release-receipts");
+            Directory.CreateDirectory(receiptRoot);
+            linkedDirectory = Path.Combine(receiptRoot, "linked");
+            string receiptPath = Path.Combine(external.FullName, "release.json");
+            File.WriteAllText(receiptPath, "preserved-receipt");
+            Run("cmd.exe", repository.FullName, "/c", "mklink", "/J", linkedDirectory, external.FullName).EnsureSuccess();
+
+            string helperPath = Path.Combine(
+                FindRepoRoot(),
+                "Build",
+                "Private",
+                "Test-PowerForgeTrackedReleaseReceipt.ps1");
+            string linkedReceiptPath = Path.Combine(linkedDirectory, "release.json");
+            string command = $". '{helperPath.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                             $"Test-PowerForgeTrackedReleaseReceipt -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -ReceiptPath '{linkedReceiptPath.Replace("'", "''", StringComparison.Ordinal)}'";
+
+            var result = Run(shell, repository.FullName, "-NoProfile", "-Command", command);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("symbolic link or junction", result.StandardError, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("preserved-receipt", File.ReadAllText(receiptPath));
+        }
+        finally
+        {
+            try
+            {
+                if (linkedDirectory is not null && Directory.Exists(linkedDirectory))
+                    Directory.Delete(linkedDirectory);
+            }
+            catch { }
+            try { repository.Delete(recursive: true); } catch { }
+            try { external.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData("powershell")]
+    [InlineData("pwsh")]
+    public void ReleaseEvidenceWorkspaceIsUniquePerInvocation(string shell)
+    {
+        var repository = Directory.CreateTempSubdirectory();
+        try
+        {
+            string helperPath = Path.Combine(
+                FindRepoRoot(),
+                "Build",
+                "Private",
+                "New-PowerForgeReleaseEvidenceWorkspace.ps1");
+            string command = $". '{helperPath.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                             $"$first = New-PowerForgeReleaseEvidenceWorkspace -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                             $"$second = New-PowerForgeReleaseEvidenceWorkspace -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                             "@($first, $second) | ConvertTo-Json -Compress";
+
+            var result = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            string[] paths = System.Text.Json.JsonSerializer.Deserialize<string[]>(result.StandardOutput.Trim())!;
+
+            Assert.Equal(2, paths.Length);
+            Assert.NotEqual(paths[0], paths[1]);
+            Assert.Equal(Path.GetDirectoryName(paths[0]), Path.GetDirectoryName(paths[1]));
+        }
+        finally
+        {
+            try { repository.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
     [InlineData("Plan")]
     [InlineData("Prepare")]
     [InlineData("Publish")]
@@ -580,6 +662,9 @@ public sealed partial class AppleReleaseWorkflowTests
             File.Copy(
                 Path.Combine(sourceRoot, "Build", "Private", "Test-PowerForgeTrackedReleaseReceipt.ps1"),
                 Path.Combine(privateDirectory, "Test-PowerForgeTrackedReleaseReceipt.ps1"));
+            File.Copy(
+                Path.Combine(sourceRoot, "Build", "Private", "New-PowerForgeReleaseEvidenceWorkspace.ps1"),
+                Path.Combine(privateDirectory, "New-PowerForgeReleaseEvidenceWorkspace.ps1"));
             File.WriteAllText(configPath, "{}");
             File.WriteAllText(receiptPath, "tracked-receipt");
             Run("git", repository.FullName, "init").EnsureSuccess();
