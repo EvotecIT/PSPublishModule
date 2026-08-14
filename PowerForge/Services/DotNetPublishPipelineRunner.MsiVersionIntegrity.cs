@@ -116,7 +116,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string? msiReservationOwner = null,
         IEnumerable<string>? trustedExternalInputPaths = null,
         IEnumerable<string>? buildProjectPaths = null,
-        string? buildConfiguration = null)
+        string? buildConfiguration = null,
+        DotNetPublishPlan? buildPlan = null)
     {
         var gitRevision = ReadGitText(projectRoot, "rev-parse HEAD");
         var environmentRevision = Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim();
@@ -170,6 +171,7 @@ public sealed partial class DotNetPublishPipelineRunner
                   gitRoot!,
                   buildProjectPaths,
                   buildConfiguration,
+                  buildPlan,
                   generatedPaths);
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
@@ -214,6 +216,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string gitRoot,
         IEnumerable<string>? buildProjectPaths,
         string? buildConfiguration,
+        DotNetPublishPlan? buildPlan,
         IEnumerable<string>? generatedPaths)
     {
         var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -235,6 +238,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!TryEvaluateDotNetBuildInputs(
                 buildProjectPaths,
                 buildConfiguration,
+                buildPlan,
                 out string[] projectDirectories,
                 out HashSet<string> buildInputs))
             return true;

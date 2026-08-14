@@ -4320,6 +4320,7 @@ internal sealed partial class PowerForgeReleaseService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         BindGeneratedConfigurationInput(plan, request);
+        request.DotNetPublishPlan = plan;
         return plan;
     }
 

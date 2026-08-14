@@ -52,7 +52,8 @@ internal sealed partial class PowerForgeReleaseService
                     path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
                     path.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ||
                     path.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase)),
-                buildConfiguration: request.Configuration);
+                buildConfiguration: request.Configuration,
+                buildPlan: request.DotNetPublishPlan);
         if (string.IsNullOrWhiteSpace(source.Revision) ||
             !string.Equals(source.Revision, expectedRevision, StringComparison.OrdinalIgnoreCase))
         {

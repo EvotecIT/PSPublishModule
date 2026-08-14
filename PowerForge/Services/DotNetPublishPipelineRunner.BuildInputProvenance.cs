@@ -25,16 +25,15 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryEvaluateDotNetBuildInputs(
         IEnumerable<string>? projectPaths,
         string? configuration,
+        DotNetPublishPlan? buildPlan,
         out string[] projectDirectories,
         out HashSet<string> buildInputs)
     {
         var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var pending = new Queue<ProjectEvaluationRequest>((projectPaths ?? Array.Empty<string>())
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Select(path => new ProjectEvaluationRequest(
-                Path.GetFullPath(path),
-                null,
-                string.IsNullOrWhiteSpace(configuration) ? "Release" : configuration!.Trim())));
+        var pending = new Queue<ProjectEvaluationRequest>(BuildProjectEvaluationRequests(
+            projectPaths,
+            configuration,
+            buildPlan));
         var visited = new HashSet<string>(comparison);
         var directories = new HashSet<string>(comparison);
         buildInputs = new HashSet<string>(comparison);
@@ -42,7 +41,7 @@ public sealed partial class DotNetPublishPipelineRunner
         while (pending.Count > 0)
         {
             ProjectEvaluationRequest request = pending.Dequeue();
-            string visitKey = request.ProjectPath + "|" + (request.TargetFramework ?? string.Empty);
+            string visitKey = request.BuildVisitKey();
             if (!visited.Add(visitKey) || !File.Exists(request.ProjectPath))
                 continue;
 
@@ -58,16 +57,108 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach (string input in evaluation.BuildInputs)
                 buildInputs.Add(input);
             foreach (string projectReference in evaluation.ProjectReferences)
-                pending.Enqueue(new ProjectEvaluationRequest(projectReference, null, request.Configuration));
+                pending.Enqueue(request.ForProject(projectReference, targetFramework: null));
             if (request.TargetFramework is null)
             {
                 foreach (string targetFramework in evaluation.TargetFrameworks)
-                    pending.Enqueue(new ProjectEvaluationRequest(request.ProjectPath, targetFramework, request.Configuration));
+                    pending.Enqueue(request.ForProject(request.ProjectPath, targetFramework));
             }
         }
 
         projectDirectories = directories.ToArray();
         return true;
+    }
+
+    private static IEnumerable<ProjectEvaluationRequest> BuildProjectEvaluationRequests(
+        IEnumerable<string>? projectPaths,
+        string? configuration,
+        DotNetPublishPlan? buildPlan)
+    {
+        string effectiveConfiguration = string.IsNullOrWhiteSpace(buildPlan?.Configuration)
+            ? string.IsNullOrWhiteSpace(configuration) ? "Release" : configuration!.Trim()
+            : buildPlan!.Configuration.Trim();
+        DotNetPublishTargetPlan[] targets = buildPlan?.Targets ?? Array.Empty<DotNetPublishTargetPlan>();
+        if (targets.Length > 0)
+        {
+            foreach (DotNetPublishTargetPlan target in targets)
+            {
+                DotNetPublishTargetCombination[] combinations = target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>();
+                if (combinations.Length == 0)
+                {
+                    yield return new ProjectEvaluationRequest(
+                        Path.GetFullPath(target.ProjectPath),
+                        targetFramework: null,
+                        effectiveConfiguration,
+                        globalProperties: null,
+                        buildPlan!.EnvironmentVariables);
+                    continue;
+                }
+
+                foreach (DotNetPublishTargetCombination combination in combinations)
+                {
+                    Dictionary<string, string> properties = BuildPublishEvaluationProperties(
+                        buildPlan!,
+                        target,
+                        combination);
+                    yield return new ProjectEvaluationRequest(
+                        Path.GetFullPath(target.ProjectPath),
+                        combination.Framework,
+                        effectiveConfiguration,
+                        properties,
+                        buildPlan!.EnvironmentVariables);
+                }
+            }
+
+            yield break;
+        }
+
+        foreach (string path in projectPaths ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+            yield return new ProjectEvaluationRequest(
+                Path.GetFullPath(path),
+                targetFramework: null,
+                effectiveConfiguration,
+                globalProperties: null,
+                environmentVariables: null);
+        }
+    }
+
+    private static Dictionary<string, string> BuildPublishEvaluationProperties(
+        DotNetPublishPlan plan,
+        DotNetPublishTargetPlan target,
+        DotNetPublishTargetCombination combination)
+    {
+        Dictionary<string, string> properties = BuildPublishMsBuildProperties(
+            plan,
+            target,
+            combination.Framework,
+            combination.Runtime,
+            combination.Style);
+        if (!string.IsNullOrWhiteSpace(combination.Runtime))
+            properties["RuntimeIdentifier"] = combination.Runtime;
+
+        if (IsPortableStyle(combination.Style))
+        {
+            properties["SelfContained"] = "true";
+            properties["PublishSingleFile"] = "true";
+            properties["IncludeNativeLibrariesForSelfExtract"] = "true";
+            properties["PortableTrim"] = (combination.Style == DotNetPublishStyle.PortableSize).ToString().ToLowerInvariant();
+            properties["PortableTrimMode"] = combination.Style == DotNetPublishStyle.PortableSize ? "full" : "partial";
+            if (target.Publish.ReadyToRun.HasValue)
+                properties["PublishReadyToRun"] = target.Publish.ReadyToRun.Value.ToString().ToLowerInvariant();
+        }
+        else if (combination.Style == DotNetPublishStyle.AotSpeed || combination.Style == DotNetPublishStyle.AotSize)
+        {
+            properties["SelfContained"] = "true";
+            properties["PublishAot"] = "true";
+            properties["StripSymbols"] = "true";
+            properties["IlcOptimizationPreference"] = combination.Style == DotNetPublishStyle.AotSize ? "Size" : "Speed";
+            properties["InvariantGlobalization"] = "false";
+        }
+
+        return properties;
     }
 
     private static bool TryReadEvaluatedProjectInputs(
@@ -90,6 +181,15 @@ public sealed partial class DotNetPublishPipelineRunner
             arguments.Add("-getItem:" + itemName);
         if (!string.IsNullOrWhiteSpace(request.TargetFramework))
             arguments.Add("-p:TargetFramework=" + request.TargetFramework);
+        foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
+                property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            arguments.Add("-p:" + property.Key + "=" + property.Value);
+        }
 
         var startInfo = new ProcessStartInfo
         {
@@ -101,6 +201,8 @@ public sealed partial class DotNetPublishPipelineRunner
             CreateNoWindow = true
         };
         ProcessStartInfoEncoding.TryApplyUtf8(startInfo);
+        foreach (KeyValuePair<string, string?> variable in request.EnvironmentVariables)
+            startInfo.EnvironmentVariables[variable.Key] = variable.Value ?? string.Empty;
 #if NET472
         startInfo.Arguments = BuildWindowsArgumentString(arguments);
 #else
@@ -229,16 +331,44 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private sealed class ProjectEvaluationRequest
     {
-        internal ProjectEvaluationRequest(string projectPath, string? targetFramework, string configuration)
+        internal ProjectEvaluationRequest(
+            string projectPath,
+            string? targetFramework,
+            string configuration,
+            IReadOnlyDictionary<string, string>? globalProperties,
+            IReadOnlyDictionary<string, string?>? environmentVariables)
         {
             ProjectPath = projectPath;
             TargetFramework = targetFramework;
             Configuration = configuration;
+            GlobalProperties = globalProperties ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            EnvironmentVariables = environmentVariables ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         }
 
         internal string ProjectPath { get; }
         internal string? TargetFramework { get; }
         internal string Configuration { get; }
+        internal IReadOnlyDictionary<string, string> GlobalProperties { get; }
+        internal IReadOnlyDictionary<string, string?> EnvironmentVariables { get; }
+
+        internal ProjectEvaluationRequest ForProject(string projectPath, string? targetFramework)
+            => new(
+                Path.GetFullPath(projectPath),
+                targetFramework,
+                Configuration,
+                GlobalProperties,
+                EnvironmentVariables);
+
+        internal string BuildVisitKey()
+            => string.Join(
+                "|",
+                new[] { ProjectPath, TargetFramework ?? string.Empty, Configuration }
+                    .Concat(GlobalProperties
+                        .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+                        .Select(entry => entry.Key + "=" + entry.Value))
+                    .Concat(EnvironmentVariables
+                        .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+                        .Select(entry => entry.Key + "=" + entry.Value)));
     }
 
     private sealed class EvaluatedProjectInputs

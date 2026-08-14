@@ -57,6 +57,8 @@ internal sealed class PowerForgeReleaseRequest
 
     internal string[] SourceInputPaths { get; set; } = Array.Empty<string>();
 
+    internal DotNetPublishPlan? DotNetPublishPlan { get; set; }
+
     public string ConfigPath { get; set; } = string.Empty;
 
     public bool PlanOnly { get; set; }

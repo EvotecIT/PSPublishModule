@@ -1120,8 +1120,10 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }
     }
 
-    [Fact]
-    public void Run_HonorsGitHubPublishIdWhenSelectingUnifiedModuleAssets()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Run_HonorsGitHubPublishIdAndEmitsMetadataWithOrWithoutStageRoot(bool configureStageRoot)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -1186,7 +1188,9 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                     {
                         Configuration = new ReleaseConfiguration
                         {
-                            StageRoot = Path.Combine(root.FullName, "Artifacts", "Unified", "<ModuleName>", "<ModuleVersion>")
+                            StageRoot = configureStageRoot
+                                ? Path.Combine(root.FullName, "Artifacts", "Unified", "<ModuleName>", "<ModuleVersion>")
+                                : null
                         }
                     },
                     new ConfigurationPublishSegment
@@ -1210,9 +1214,21 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.NotNull(result.ReleaseCoordinationResult);
             Assert.Single(result.ReleaseCoordinationResult!.ModuleAssetPaths);
             Assert.Equal(3, gitHubRequest!.AssetFilePaths.Count);
-            Assert.Contains(gitHubRequest.AssetFilePaths, path => path.StartsWith(Path.Combine(root.FullName, "Artifacts", "Unified", moduleName, "1.0.0", "modules"), StringComparison.OrdinalIgnoreCase));
-            Assert.Contains(gitHubRequest.AssetFilePaths, path => path.EndsWith(Path.Combine("metadata", "release-manifest.json"), StringComparison.OrdinalIgnoreCase));
-            Assert.Contains(gitHubRequest.AssetFilePaths, path => path.EndsWith(Path.Combine("metadata", "SHA256SUMS.txt"), StringComparison.OrdinalIgnoreCase));
+            string expectedStageRoot = configureStageRoot
+                ? Path.Combine(root.FullName, "Artifacts", "Unified", moduleName, "1.0.0")
+                : string.Empty;
+            Assert.Equal(expectedStageRoot, result.ReleaseCoordinationResult.StageRoot);
+
+            string metadataRoot = configureStageRoot
+                ? Path.Combine(expectedStageRoot, "metadata")
+                : Path.Combine(root.FullName, "Artefacts", "ReleaseMetadata", moduleName, "1.0.0", "metadata");
+            string releaseManifestPath = Path.Combine(metadataRoot, "release-manifest.json");
+            string checksumsPath = Path.Combine(metadataRoot, "SHA256SUMS.txt");
+            Assert.Contains(releaseManifestPath, gitHubRequest.AssetFilePaths, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(checksumsPath, gitHubRequest.AssetFilePaths, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(
+                File.ReadAllLines(checksumsPath),
+                line => line.EndsWith("*" + Path.GetFileName(result.ReleaseCoordinationResult.ModuleAssetPaths[0]), StringComparison.Ordinal));
         }
         finally
         {

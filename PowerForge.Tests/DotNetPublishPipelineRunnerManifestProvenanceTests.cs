@@ -810,11 +810,15 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                     <Compile Remove="Excluded.cs" />
                     <Content Include="payload.custom" />
                     <Content Include="debug.custom" Condition="'$(Configuration)' == 'Debug'" />
+                    <Content Include="rid.custom" Condition="'$(RuntimeIdentifier)' == 'win-x64'" />
+                    <Content Include="single.custom" Condition="'$(PublishSingleFile)' == 'true'" />
+                    <Content Include="property.custom" Condition="'$(CustomFlavor)' == 'Secure'" />
+                    <Content Include="environment.custom" Condition="'$(POWERFORGE_TEST_INPUT)' == 'enabled'" />
                   </ItemGroup>
                 </Project>
                 """);
             File.WriteAllText(Path.Combine(root, "Program.cs"), "internal static class Program { }");
-            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\nrid.custom\nsingle.custom\nproperty.custom\nenvironment.custom\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
             RunGit(root, "add Sample.csproj Program.cs .gitignore");
             RunGit(root, "commit -m \"tracked source\"");
 
@@ -827,10 +831,25 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 ProjectRoot = root,
                 Targets =
                 [
-                    new DotNetPublishTargetPlan { Name = "Sample", ProjectPath = projectPath }
+                    new DotNetPublishTargetPlan
+                    {
+                        Name = "Sample",
+                        ProjectPath = projectPath,
+                        Combinations =
+                        [
+                            new DotNetPublishTargetCombination
+                            {
+                                Framework = "net10.0",
+                                Runtime = "win-x64",
+                                Style = DotNetPublishStyle.PortableCompat
+                            }
+                        ]
+                    }
                 ],
                 Outputs = new DotNetPublishOutputs { ManifestJsonPath = manifestPath }
             };
+            plan.MsBuildProperties["CustomFlavor"] = "Secure";
+            plan.EnvironmentVariables["POWERFORGE_TEST_INPUT"] = "enabled";
             var artefacts = new List<DotNetPublishArtefactResult>
             {
                 new()
@@ -876,6 +895,17 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             InvokeWriteManifests(plan, artefacts);
             using JsonDocument debugDirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
             Assert.True(debugDirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+
+            File.Delete(Path.Combine(root, "debug.custom"));
+            plan.Configuration = "Release";
+            foreach (string contextInput in new[] { "rid.custom", "single.custom", "property.custom", "environment.custom" })
+            {
+                File.WriteAllText(Path.Combine(root, contextInput), "publish-context input");
+                InvokeWriteManifests(plan, artefacts);
+                using JsonDocument contextDirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+                Assert.True(contextDirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+                File.Delete(Path.Combine(root, contextInput));
+            }
         }
         finally
         {
