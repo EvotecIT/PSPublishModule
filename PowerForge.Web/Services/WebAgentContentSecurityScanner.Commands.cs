@@ -121,7 +121,7 @@ public sealed partial class WebAgentContentSecurityScanner
                 case "pnpx":
                 case "bunx":
                     if (ValidatePackageSourceOptions("npm", tokens, path, line, findings))
-                        AddRunnerOperand("npm", tokens[0], tokens, 1, path, line, commandReferences, findings);
+                        AddNodeRunnerOperands(tokens[0], tokens, 1, path, line, commandReferences, findings);
                     break;
                 case "python":
                 case "python3":
@@ -231,6 +231,33 @@ public sealed partial class WebAgentContentSecurityScanner
         if (RejectNestedPackageManagerPayload(command, tokens, start, path, line, findings))
             return;
         AddSingleOperand(ecosystem, command, tokens, start, path, line, references, findings);
+    }
+
+    private static void AddNodeRunnerOperands(
+        string command,
+        string[] tokens,
+        int start,
+        string path,
+        int line,
+        ICollection<WebAgentPackageReference> references,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        var packageOptions = FindOptionValues(tokens, start, "--package", "-p");
+        if (packageOptions.Count == 0)
+        {
+            AddRunnerOperand("npm", command, tokens, start, path, line, references, findings);
+            return;
+        }
+
+        foreach (var packageOption in packageOptions)
+        {
+            if (string.IsNullOrWhiteSpace(packageOption))
+                AddUnverifiableOperand(command, path, line, findings, "--package");
+            else
+                AddToken("npm", command, packageOption, null, path, line, references, findings);
+        }
+
+        RejectNestedPackageManagerPayload(command, tokens, start, path, line, findings);
     }
 
     private static bool RejectNestedPackageManagerPayload(
@@ -463,6 +490,8 @@ public sealed partial class WebAgentContentSecurityScanner
         var values = new List<string>();
         for (var index = start; index < tokens.Length; index++)
         {
+            if (tokens[index] == "--")
+                break;
             foreach (var name in names)
             {
                 if (tokens[index].Equals(name, StringComparison.OrdinalIgnoreCase))

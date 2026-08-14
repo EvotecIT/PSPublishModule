@@ -9,6 +9,9 @@ public sealed partial class WebAgentContentSecurityScanner
     private static readonly Regex UrlRegex = new(
         "https?://[^\\s<>\\\"'(){}]+",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex SchemeRelativeUrlRegex = new(
+        @"(?<![:/])//(?:\[[^\]\s<>\""'(){}]+\]|(?:localhost|(?:[A-Za-z0-9\u0080-\uFFFF-]+\.)+[A-Za-z0-9\u0080-\uFFFF-]+))(?::\d{1,5})?(?:/[^\s<>\""'(){}]*)?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static readonly (Regex Pattern, string Label)[] PromptInjectionPatterns =
     {
@@ -19,7 +22,7 @@ public sealed partial class WebAgentContentSecurityScanner
         @"\b(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b[^\r\n|;&]*(?:\|[^\r\n|;&]*)*\|\s*(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:busybox|toybox)(?:\.exe)?\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|dash|ash|ksh|fish|csh|tcsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php)(?:\.exe)?\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SavedDownloadCommandRegex = new(
-        @"\b(?<downloader>curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b(?<arguments>[^\r\n]*?)(?<separator>&&|;)(?<tail>[^\r\n]*)",
+        @"\b(?<downloader>curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b(?<arguments>(?:(?!&&|;|\r?\n).)*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex CurlOutputPathRegex = new(
         @"(?:^|\s)(?:-o(?:=|\s+)?|--output(?:=|\s+))(?<path>""[^""]+""|'[^']+'|[^\s;&|]+)",
@@ -43,10 +46,10 @@ public sealed partial class WebAgentContentSecurityScanner
         @"(?:^|[|;&]\s*|\s)(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:busybox|toybox)(?:\.exe)?\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|dash|ash|ksh|fish|csh|tcsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php|source)(?:\.exe)?\b(?<arguments>[^\r\n;&|]*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SavedArtifactInvocationRegex = new(
-        @"(?:^|&&|;|(?<!&)&(?!&))\s*(?:sudo\s+)?(?:(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?<command>""[^""]+""|'[^']+'|[^\s;&|]+)",
+        @"(?:^|&&|;|(?<!&)&(?!&)|\r?\n)\s*(?:sudo\s+)?(?:(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?<command>""[^""]+""|'[^']+'|[^\s;&|]+)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SavedArtifactDotSourceRegex = new(
-        @"(?:^|&&|;)\s*\.\s+(?<path>""[^""]+""|'[^']+'|[^\s;&|]+)",
+        @"(?:^|&&|;|\r?\n)\s*\.\s+(?<path>""[^""]+""|'[^']+'|[^\s;&|]+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex RemoteExecutionPowerShellExpressionRegex = new(
         @"\b(?:iex|Invoke-Expression)\b\s*(?:(?:\$\s*)?\(+|[""']\s*\$\()\s*(?:(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b|[^\r\n]{0,200}\bDownloadString\s*\()",
@@ -149,6 +152,7 @@ public sealed partial class WebAgentContentSecurityScanner
         int lineOffset,
         bool countLogicalLines)
     {
+        var downloadedPaths = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (Match download in SavedDownloadCommandRegex.Matches(normalized))
         {
             var outputPath = FindDownloadedOutputPath(
@@ -156,36 +160,50 @@ public sealed partial class WebAgentContentSecurityScanner
                 download.Groups["arguments"].Value);
             if (outputPath is null)
                 continue;
+            downloadedPaths.TryAdd(NormalizeComparedPath(outputPath), download.Index);
+        }
 
-            foreach (Match interpreter in InterpreterCommandRegex.Matches(download.Groups["tail"].Value))
+        if (downloadedPaths.Count == 0)
+            return;
+
+        var reportedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match interpreter in InterpreterCommandRegex.Matches(normalized))
+        {
+            foreach (var token in Tokenize(interpreter.Groups["arguments"].Value))
             {
-                if (!Tokenize(interpreter.Groups["arguments"].Value)
-                        .Any(token => token.Equals(outputPath, StringComparison.OrdinalIgnoreCase)))
+                var candidate = NormalizeComparedPath(token);
+                if (!downloadedPaths.TryGetValue(candidate, out var downloadIndex) ||
+                    downloadIndex >= interpreter.Index ||
+                    !reportedPaths.Add(candidate))
                     continue;
 
                 AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path,
-                    GetReportedLine(original, download.Index, lineOffset, countLogicalLines),
+                    GetReportedLine(original, downloadIndex, lineOffset, countLogicalLines),
                     "Downloaded content is saved and then passed to an interpreter. Prefer a pinned, integrity-checked artifact and a separate execution step.");
                 break;
             }
+        }
 
-            if (TailExecutesSavedPath(download.Groups["tail"].Value, outputPath))
-            {
-                AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path,
-                    GetReportedLine(original, download.Index, lineOffset, countLogicalLines),
-                    "A downloaded artifact is executed directly. Prefer a pinned, integrity-checked artifact and a separate execution step.");
-            }
+        foreach (var candidate in EnumerateDirectlyExecutedPaths(normalized))
+        {
+            var normalizedPath = NormalizeComparedPath(candidate.Path);
+            if (!downloadedPaths.TryGetValue(normalizedPath, out var downloadIndex) ||
+                downloadIndex >= candidate.Index ||
+                !reportedPaths.Add(normalizedPath))
+                continue;
+
+            AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path,
+                GetReportedLine(original, downloadIndex, lineOffset, countLogicalLines),
+                "A downloaded artifact is executed directly. Prefer a pinned, integrity-checked artifact and a separate execution step.");
         }
     }
 
-    private static bool TailExecutesSavedPath(string tail, string outputPath)
+    private static IEnumerable<(string Path, int Index)> EnumerateDirectlyExecutedPaths(string content)
     {
-        var expected = NormalizeComparedPath(outputPath);
-        if (SavedArtifactInvocationRegex.Matches(tail)
-            .Any(match => NormalizeComparedPath(match.Groups["command"].Value).Equals(expected, StringComparison.OrdinalIgnoreCase)))
-            return true;
-        return SavedArtifactDotSourceRegex.Matches(tail)
-            .Any(match => NormalizeComparedPath(match.Groups["path"].Value).Equals(expected, StringComparison.OrdinalIgnoreCase));
+        foreach (Match match in SavedArtifactInvocationRegex.Matches(content))
+            yield return (match.Groups["command"].Value, match.Index);
+        foreach (Match match in SavedArtifactDotSourceRegex.Matches(content))
+            yield return (match.Groups["path"].Value, match.Index);
     }
 
     private static string NormalizeComparedPath(string value)
@@ -226,6 +244,13 @@ public sealed partial class WebAgentContentSecurityScanner
             if (Uri.TryCreate(candidate, UriKind.Absolute, out var uri) &&
                 (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
                  uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+                urls.Add(uri);
+        }
+
+        foreach (Match match in SchemeRelativeUrlRegex.Matches(content))
+        {
+            var candidate = ("https:" + match.Value).TrimEnd('.', ',', ';', ':', '!', '?');
+            if (Uri.TryCreate(candidate, UriKind.Absolute, out var uri))
                 urls.Add(uri);
         }
     }
