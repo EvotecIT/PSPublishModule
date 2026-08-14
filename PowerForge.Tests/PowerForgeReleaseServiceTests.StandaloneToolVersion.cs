@@ -261,6 +261,176 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_DotNetPublishWritesConsumerToolManifest()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var zip = Path.Combine(root, "PowerForge-3.0.110-net10.0-osx-arm64-SingleContained.zip");
+            var lockManifest = Path.Combine(root, "PowerForge-tool-manifest.json");
+            var executableBytes = System.Text.Encoding.UTF8.GetBytes("verified dotnet-publish executable");
+            using (var archive = System.IO.Compression.ZipFile.Open(zip, System.IO.Compression.ZipArchiveMode.Create))
+            {
+                var entry = archive.CreateEntry("PowerForge");
+                using var stream = entry.Open();
+                stream.Write(executableBytes, 0, executableBytes.Length);
+            }
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools must not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools must not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = root,
+                    Targets =
+                    [
+                        new DotNetPublishTargetPlan
+                        {
+                            Name = "PowerForge",
+                            Version = "3.0.110",
+                            Combinations =
+                            [
+                                new DotNetPublishTargetCombination
+                                {
+                                    Framework = "net10.0",
+                                    Runtime = "osx-arm64",
+                                    Style = DotNetPublishStyle.PortableCompat
+                                }
+                            ]
+                        }
+                    ]
+                },
+                runDotNetTools: _ => new DotNetPublishResult
+                {
+                    Succeeded = true,
+                    Artefacts =
+                    [
+                        new DotNetPublishArtefactResult
+                        {
+                            Target = "PowerForge",
+                            Runtime = "osx-arm64",
+                            Framework = "net10.0",
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputDir = root,
+                            ZipPath = zip
+                        }
+                    ]
+                },
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub must not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Outputs = new PowerForgeReleaseOutputsOptions { PowerForgeToolManifestPath = lockManifest },
+                    Tools = new PowerForgeToolReleaseSpec { DotNetPublish = new DotNetPublishSpec() },
+                    GitHub = new PowerForgeReleaseGitHubOptions
+                    {
+                        Owner = "EvotecIT",
+                        Repository = "PSPublishModule",
+                        Commitish = "0123456789abcdef0123456789abcdef01234567",
+                        TagTemplate = "v{Version}"
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ToolsOnly = true,
+                    ReleaseVersion = "3.0.110"
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockManifest));
+            var asset = document.RootElement.GetProperty("assets").GetProperty("osx-arm64");
+            Assert.Equal(Path.GetFileName(zip), asset.GetProperty("name").GetString());
+            Assert.Equal(
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(executableBytes)).ToLowerInvariant(),
+                asset.GetProperty("executableSha256").GetString());
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_NonPowerForgeToolSelectionSkipsConsumerToolManifest()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var zip = Path.Combine(root, "PowerForgeWeb-3.0.110.zip");
+            var lockManifest = Path.Combine(root, "PowerForge-tool-manifest.json");
+            File.WriteAllText(zip, "web tool");
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not run."),
+                planTools: (_, _, _) => new PowerForgeToolReleasePlan
+                {
+                    ProjectRoot = root,
+                    Targets =
+                    [
+                        new PowerForgeToolReleaseTargetPlan
+                        {
+                            Name = "PowerForgeWeb",
+                            Version = "3.0.110",
+                            Combinations =
+                            [
+                                new PowerForgeToolReleaseCombinationPlan
+                                {
+                                    Runtime = "osx-arm64",
+                                    Framework = "net10.0",
+                                    Flavor = PowerForgeToolReleaseFlavor.SingleContained,
+                                    ZipPath = zip
+                                }
+                            ]
+                        }
+                    ]
+                },
+                runTools: _ => new PowerForgeToolReleaseResult
+                {
+                    Success = true,
+                    Artefacts =
+                    [
+                        new PowerForgeToolReleaseArtifactResult
+                        {
+                            Target = "PowerForgeWeb",
+                            Version = "3.0.110",
+                            Runtime = "osx-arm64",
+                            Framework = "net10.0",
+                            Flavor = PowerForgeToolReleaseFlavor.SingleContained,
+                            ExecutablePath = Path.Combine(root, "PowerForgeWeb"),
+                            ZipPath = zip
+                        }
+                    ]
+                },
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub must not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Outputs = new PowerForgeReleaseOutputsOptions { PowerForgeToolManifestPath = lockManifest },
+                    Tools = new PowerForgeToolReleaseSpec()
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ToolsOnly = true,
+                    ReleaseVersion = "3.0.110"
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.False(File.Exists(lockManifest));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static PowerForgeReleaseService CreateService(
         Func<PowerForgeReleaseRequest, PowerForgeToolReleasePlan> planTools)
         => new(

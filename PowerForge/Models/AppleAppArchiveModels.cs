@@ -180,9 +180,28 @@ public sealed class AppleAppArchiveUploadResult
     /// <summary>SHA-256 of the exact Developer ID artifact observed immediately when xcodebuild export completed.</summary>
     public string? ExportArtifactSha256 { get; set; }
 
+    /// <summary>Receipt-facing digest of the published local export, bound before publication returns.</summary>
+    public string? RehearsalArtifactSha256 { get; set; }
+
+    /// <summary>Algorithm identity for <see cref="RehearsalArtifactSha256"/>.</summary>
+    public string? RehearsalArtifactSha256Kind { get; set; }
+
     /// <summary>xcodebuild process result.</summary>
     public ProcessRunResult ProcessResult { get; set; } = new(0, string.Empty, string.Empty, "xcodebuild", TimeSpan.Zero, false);
 
     /// <summary>True when xcodebuild completed successfully.</summary>
     public bool Succeeded => ProcessResult.Succeeded;
+}
+
+internal sealed class AppleRehearsalArtifactEvidence
+{
+    internal AppleRehearsalArtifactEvidence(string sha256, string kind)
+    {
+        Sha256 = sha256;
+        Kind = kind;
+    }
+
+    internal string Sha256 { get; }
+
+    internal string Kind { get; }
 }

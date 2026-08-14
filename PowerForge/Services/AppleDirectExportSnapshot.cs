@@ -129,13 +129,24 @@ internal sealed class AppleDirectExportSnapshot : IDisposable
                 throw new InvalidOperationException(
                     $"The published Developer ID export tree changed before notarization. Expected '{sourceExportSha256}', received '{observedPublishedExportSha256}'.");
             }
+            var rehearsalArtifactSha256 = File.Exists(publishedArtifact)
+                ? AppleNotarizationService.ComputeFileSha256(publishedArtifact)
+                : publishedSha256;
+            var rehearsalArtifactSha256Kind = File.Exists(publishedArtifact)
+                ? "file-content"
+                : "filesystem-identity-v2";
             if (movedExisting)
             {
                 _publishedBackup = backup;
                 _publishedBackupDeletionCandidate = backupDeletionCandidate;
                 _publishedDestinationIdentity = existingDestination;
             }
-            return new ApplePublishedDirectExport(destination, publishedArtifact, publishedSha256);
+            return new ApplePublishedDirectExport(
+                destination,
+                publishedArtifact,
+                publishedSha256,
+                rehearsalArtifactSha256,
+                rehearsalArtifactSha256Kind);
         }
         catch (Exception publicationException)
         {
@@ -243,11 +254,18 @@ internal sealed class AppleDirectExportSnapshot : IDisposable
 
 internal sealed class ApplePublishedDirectExport
 {
-    internal ApplePublishedDirectExport(string exportPath, string artifactPath, string artifactSha256)
+    internal ApplePublishedDirectExport(
+        string exportPath,
+        string artifactPath,
+        string artifactSha256,
+        string rehearsalArtifactSha256,
+        string rehearsalArtifactSha256Kind)
     {
         ExportPath = exportPath;
         ArtifactPath = artifactPath;
         ArtifactSha256 = artifactSha256;
+        RehearsalArtifactSha256 = rehearsalArtifactSha256;
+        RehearsalArtifactSha256Kind = rehearsalArtifactSha256Kind;
     }
 
     internal string ExportPath { get; }
@@ -255,4 +273,8 @@ internal sealed class ApplePublishedDirectExport
     internal string ArtifactPath { get; }
 
     internal string ArtifactSha256 { get; }
+
+    internal string RehearsalArtifactSha256 { get; }
+
+    internal string RehearsalArtifactSha256Kind { get; }
 }

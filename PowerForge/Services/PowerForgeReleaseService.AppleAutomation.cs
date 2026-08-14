@@ -566,6 +566,9 @@ internal sealed partial class PowerForgeReleaseService
                 .Concat(diagnostics.Select(static diagnostic => diagnostic.Action))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+            var rehearsalArtifact = plan.Rehearse && result?.Upload?.Succeeded == true
+                ? ValidateAppleRehearsalArtifactEvidence(result.Upload)
+                : null;
             return new PowerForgeAppleReleaseTargetReceipt
             {
                 Name = app.Name,
@@ -616,12 +619,8 @@ internal sealed partial class PowerForgeReleaseService
                 RehearsalArtifactPath = !plan.Rehearse || string.IsNullOrWhiteSpace(result?.Upload?.ExportArtifactPath)
                     ? null
                     : FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, result!.Upload!.ExportArtifactPath!).Replace('\\', '/'),
-                RehearsalArtifactSha256 = plan.Rehearse
-                    ? ComputeAppleRehearsalArtifactSha256(result?.Upload?.ExportArtifactPath)
-                    : null,
-                RehearsalArtifactSha256Kind = plan.Rehearse
-                    ? GetAppleRehearsalArtifactSha256Kind(result?.Upload?.ExportArtifactPath)
-                    : null,
+                RehearsalArtifactSha256 = rehearsalArtifact?.Sha256,
+                RehearsalArtifactSha256Kind = rehearsalArtifact?.Kind,
                 ArchivePath = !string.IsNullOrWhiteSpace(result?.ArchiveSha256) ||
                               !string.IsNullOrWhiteSpace(result?.ResumedUploadAttestation?.ArchiveSha256)
                     ? FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/')
@@ -714,6 +713,33 @@ internal sealed partial class PowerForgeReleaseService
         if (File.Exists(artifactPath))
             return "file-content";
         return Directory.Exists(artifactPath) ? "filesystem-identity-v2" : null;
+    }
+
+    internal static AppleRehearsalArtifactEvidence ValidateAppleRehearsalArtifactEvidence(
+        AppleAppArchiveUploadResult upload)
+    {
+        if (string.IsNullOrWhiteSpace(upload.ExportArtifactPath) ||
+            string.IsNullOrWhiteSpace(upload.RehearsalArtifactSha256) ||
+            string.IsNullOrWhiteSpace(upload.RehearsalArtifactSha256Kind))
+        {
+            throw new InvalidOperationException(
+                "A successful Apple rehearsal export must retain producer-bound artifact hash evidence.");
+        }
+
+        var actualKind = GetAppleRehearsalArtifactSha256Kind(upload.ExportArtifactPath);
+        var actualSha256 = ComputeAppleRehearsalArtifactSha256(upload.ExportArtifactPath);
+        if (!string.Equals(actualKind, upload.RehearsalArtifactSha256Kind, StringComparison.Ordinal) ||
+            !string.Equals(actualSha256, upload.RehearsalArtifactSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The published Apple rehearsal export changed before its receipt was written. " +
+                $"Expected '{upload.RehearsalArtifactSha256}' ({upload.RehearsalArtifactSha256Kind}), " +
+                $"received '{actualSha256 ?? "<missing>"}' ({actualKind ?? "<missing>"}).");
+        }
+
+        return new AppleRehearsalArtifactEvidence(
+            upload.RehearsalArtifactSha256!,
+            upload.RehearsalArtifactSha256Kind!);
     }
 
     private static bool HasAppleRemoteMutation(PowerForgeAppleReleasePlan plan)

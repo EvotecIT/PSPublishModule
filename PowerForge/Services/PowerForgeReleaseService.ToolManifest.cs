@@ -13,7 +13,8 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeReleaseSpec spec,
         string configDirectory,
         PowerForgeReleaseResult result,
-        string? sharedReleaseVersion)
+        string? sharedReleaseVersion,
+        IReadOnlyCollection<PowerForgeReleaseAssetEntry> producedAssets)
     {
         var paths = (spec.Outputs?.AdditionalAssetPaths ?? Array.Empty<string>())
             .Where(static path => !string.IsNullOrWhiteSpace(path))
@@ -23,27 +24,35 @@ internal sealed partial class PowerForgeReleaseService
             throw new FileNotFoundException($"Additional release asset was not found: {path}", path);
 
         var toolManifestPath = spec.Outputs?.PowerForgeToolManifestPath;
-        if (!string.IsNullOrWhiteSpace(toolManifestPath))
+        if (!string.IsNullOrWhiteSpace(toolManifestPath) && IsPowerForgeToolSelected(result))
         {
             var manifestPath = ResolveOutputPath(configDirectory, toolManifestPath!);
-            WritePowerForgeToolLockManifest(spec, result, sharedReleaseVersion, manifestPath);
+            WritePowerForgeToolLockManifest(spec, producedAssets, sharedReleaseVersion, manifestPath);
             paths.Add(manifestPath);
         }
         return paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    private static bool IsPowerForgeToolSelected(PowerForgeReleaseResult result)
+        => (result.ToolPlan?.Targets ?? Array.Empty<PowerForgeToolReleaseTargetPlan>())
+               .Any(static target => target.Name.Equals("PowerForge", StringComparison.OrdinalIgnoreCase)) ||
+           (result.DotNetToolPlan?.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+               .Any(static target => target.Name.Equals("PowerForge", StringComparison.OrdinalIgnoreCase));
+
     private static void WritePowerForgeToolLockManifest(
         PowerForgeReleaseSpec spec,
-        PowerForgeReleaseResult result,
+        IReadOnlyCollection<PowerForgeReleaseAssetEntry> producedAssets,
         string? sharedReleaseVersion,
         string manifestPath)
     {
-        var artifacts = (result.Tools?.Artefacts ?? Array.Empty<PowerForgeToolReleaseArtifactResult>())
+        var artifacts = producedAssets
             .Where(static artifact =>
-                artifact.Target.Equals("PowerForge", StringComparison.OrdinalIgnoreCase) &&
-                artifact.Flavor == PowerForgeToolReleaseFlavor.SingleContained &&
-                !string.IsNullOrWhiteSpace(artifact.ZipPath) &&
-                File.Exists(artifact.ZipPath))
+                string.Equals(artifact.Target, "PowerForge", StringComparison.OrdinalIgnoreCase) &&
+                artifact.Category == PowerForgeReleaseAssetCategory.Tool &&
+                !string.IsNullOrWhiteSpace(artifact.Path) &&
+                !string.IsNullOrWhiteSpace(artifact.Runtime) &&
+                artifact.Path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                File.Exists(artifact.Path))
             .ToArray();
         if (artifacts.Length == 0)
             throw new InvalidOperationException("PowerForgeToolManifestPath requires zipped PowerForge SingleContained tool artifacts.");
@@ -68,12 +77,12 @@ internal sealed partial class PowerForgeReleaseService
         var tagTemplate = string.IsNullOrWhiteSpace(spec.GitHub?.TagTemplate) ? "v{Version}" : spec.GitHub!.TagTemplate!;
         var releaseTag = ApplyUnifiedGitHubTemplate(tagTemplate, repository!, version!);
         var assets = artifacts.ToDictionary(
-            static artifact => artifact.Runtime,
+            static artifact => artifact.Runtime!,
             artifact => new
             {
-                name = Path.GetFileName(artifact.ZipPath!),
-                sha256 = ComputeSha256(artifact.ZipPath!),
-                executableSha256 = ComputePowerForgeExecutableSha256(artifact.ZipPath!, artifact.Runtime)
+                name = Path.GetFileName(artifact.Path),
+                sha256 = ComputeSha256(artifact.Path),
+                executableSha256 = ComputePowerForgeExecutableSha256(artifact.Path, artifact.Runtime!)
             },
             StringComparer.OrdinalIgnoreCase);
         var document = new

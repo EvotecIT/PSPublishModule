@@ -2485,6 +2485,8 @@ internal sealed partial class PowerForgeReleaseService
                     upload.ExportPath = published.ExportPath;
                     upload.ExportArtifactPath = published.ArtifactPath;
                     upload.ExportArtifactSha256 = published.ArtifactSha256;
+                    upload.RehearsalArtifactSha256 = published.RehearsalArtifactSha256;
+                    upload.RehearsalArtifactSha256Kind = published.RehearsalArtifactSha256Kind;
                     upload.ExportOptionsPlistPath = MapDirectExportOutputPath(
                         directExportSnapshot.ExportPath,
                         published.ExportPath,
@@ -3330,7 +3332,16 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeReleaseResult result,
         string? sharedReleaseVersion)
     {
-        var additionalAssetPaths = ResolveAdditionalReleaseAssetPaths(spec, configDirectory, result, sharedReleaseVersion);
+        var producedAssetEntries = CollectReleaseAssetEntries(result, result.DotNetToolPlan, sharedReleaseVersion)
+            .GroupBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToArray();
+        var additionalAssetPaths = ResolveAdditionalReleaseAssetPaths(
+            spec,
+            configDirectory,
+            result,
+            sharedReleaseVersion,
+            producedAssetEntries);
         var assetEntries = CollectReleaseAssetEntries(result, result.DotNetToolPlan, sharedReleaseVersion, additionalAssetPaths)
             .GroupBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())

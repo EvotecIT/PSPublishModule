@@ -110,6 +110,33 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void ValidateAppleRehearsalArtifactEvidence_rejects_post_publication_mutation()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var artifactPath = Path.Combine(root, "CasaRay.ipa");
+            File.WriteAllText(artifactPath, "producer-bound bytes");
+            var upload = new AppleAppArchiveUploadResult
+            {
+                ExportArtifactPath = artifactPath,
+                RehearsalArtifactSha256 = AppleNotarizationService.ComputeFileSha256(artifactPath),
+                RehearsalArtifactSha256Kind = "file-content"
+            };
+            File.WriteAllText(artifactPath, "mutated after publication");
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.ValidateAppleRehearsalArtifactEvidence(upload));
+
+            Assert.Contains("changed before its receipt", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private sealed class AppleRehearsalProgress : IPowerForgeReleaseProgressReporterV2
     {
         internal List<string> Events { get; } = new();
