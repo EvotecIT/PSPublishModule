@@ -46,6 +46,8 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("$moduleProvenanceCreated", script, StringComparison.Ordinal);
         Assert.Contains("$moduleSignedProvenanceCreated", script, StringComparison.Ordinal);
         Assert.Contains("ReceiptPath must stay outside the release checkout", script, StringComparison.Ordinal);
+        Assert.Contains("GetRelativePath($repositoryRoot, $ReceiptPath)", script, StringComparison.Ordinal);
+        Assert.Contains("ReceiptPath must not identify a tracked repository file", script, StringComparison.Ordinal);
         Assert.True(
             script.IndexOf("Get-PowerForgeReleaseSourceState", StringComparison.Ordinal) <
             script.IndexOf("New-Item -ItemType Directory -Path $receiptDirectory", StringComparison.Ordinal),

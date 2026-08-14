@@ -28,6 +28,18 @@ public sealed partial class ModulePipelineRunner
             throw new InvalidOperationException(
                 "Every manifest-loaded module file must exist inside the final packed module layout before signing.");
         }
+        string sourceAttestationPath = Path.Combine(
+            context.MainModulePath,
+            PowerForgeModuleSourceAttestationWriter.FileName);
+        if (!File.Exists(sourceAttestationPath) && !string.IsNullOrWhiteSpace(plan.SourceRevision))
+        {
+            PowerForgeModuleSourceAttestationWriter.Write(
+                context.ManifestPath,
+                context.ModuleName,
+                context.Version,
+                plan.SourceRevision!,
+                plan.SourceDirty);
+        }
         string[] packageFiles = Directory.EnumerateFiles(context.RootPath, "*", SearchOption.AllDirectories)
             .Select(Path.GetFullPath)
             .Except(loadedContentFiles, StringComparer.OrdinalIgnoreCase)
@@ -59,9 +71,6 @@ public sealed partial class ModulePipelineRunner
             signingResult = AggregateSigningResults(signingResult, loadedContentResult);
         }
 
-        string sourceAttestationPath = Path.Combine(
-            context.MainModulePath,
-            PowerForgeModuleSourceAttestationWriter.FileName);
         if (!File.Exists(sourceAttestationPath))
         {
             state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);

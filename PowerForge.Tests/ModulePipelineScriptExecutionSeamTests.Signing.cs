@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Diagnostics;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -70,6 +71,40 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             Assert.NotEqual(hostedOperations.SigningRootPaths[0], hostedOperations.SigningRootPaths[1]);
             Assert.DoesNotContain("Modules", hostedOperations.LastExcludePatterns, StringComparer.OrdinalIgnoreCase);
             Assert.True(File.Exists(artefact.OutputPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_SignedPackedArtifactGeneratesEvidenceFromCleanGitSource()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            string revision = RunGit(root.FullName, "rev-parse", "HEAD");
+            var hostedOperations = new FakeHostedOperations { AutoSuccessfulSigningResult = true };
+            var runner = CreateRunner(hostedOperations);
+            string outputRoot = Path.Combine(root.FullName, "Artefacts", "Packed");
+            ModulePipelineSpec spec = CreateSignedPackedSpec(root.FullName, moduleName, outputRoot);
+
+            ModulePipelineResult result = runner.Run(spec, runner.Plan(spec));
+
+            ArtefactBuildResult artefact = Assert.Single(result.ArtefactResults);
+            string evidencePath = Assert.Single(artefact.EvidencePaths);
+            Assert.True(File.Exists(evidencePath));
+            Assert.Contains(revision, File.ReadAllText(evidencePath), StringComparison.OrdinalIgnoreCase);
+            using var archive = System.IO.Compression.ZipFile.OpenRead(artefact.OutputPath);
+            Assert.Contains(archive.Entries, entry => entry.FullName == "TestModule/PowerForge.ReleaseProvenance.psd1");
         }
         finally
         {
@@ -158,6 +193,28 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
                     }
                 }
         };
+
+    private static string RunGit(string workingDirectory, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        foreach (string argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+        using Process process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Could not start git.");
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"git {string.Join(" ", arguments)} failed: {error}");
+        return output.Trim();
+    }
 
     private static ModulePipelineSpec CreateSignedPackedSpec(string sourcePath, string moduleName, string outputRoot)
     {

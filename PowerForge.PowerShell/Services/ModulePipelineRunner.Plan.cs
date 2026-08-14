@@ -1057,6 +1057,10 @@ public sealed partial class ModulePipelineRunner
             deleteGeneratedStagingAfterRun: deleteAfter,
             embeddedModules: embeddedModules);
         plan.UseLocalVersioning = localVersioning;
+        if (plan.SignModule && plan.Artefacts.Length > 0)
+        {
+            (plan.SourceRevision, plan.SourceDirty) = ReadModuleSourceProvenance(plan.ProjectRoot);
+        }
         return plan;
     }
 

@@ -8,6 +8,8 @@ namespace PowerForge;
 public sealed class ModulePipelinePlan
 {
     internal bool UseLocalVersioning { get; set; }
+    internal string? SourceRevision { get; set; }
+    internal bool SourceDirty { get; set; }
 
     /// <summary>
     /// Module name resolved for the pipeline.

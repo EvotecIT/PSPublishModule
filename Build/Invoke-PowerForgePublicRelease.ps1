@@ -106,9 +106,13 @@ try {
         throw "The release checkout must start clean. Tracked or untracked changes: $(@($sourceState.Changes) -join ', ')"
     }
 
-    & git -C $repositoryRoot ls-files --error-unmatch -- $ReceiptPath *> $null
+    $receiptGitPath = [IO.Path]::GetRelativePath($repositoryRoot, $ReceiptPath).Replace([IO.Path]::DirectorySeparatorChar, '/')
+    & git -C $repositoryRoot ls-files --error-unmatch -- $receiptGitPath *> $null
     $receiptIsTracked = $LASTEXITCODE -eq 0
-    if (-not $receiptIsTracked -and (Test-Path -LiteralPath $ReceiptPath)) {
+    if ($receiptIsTracked) {
+        throw 'ReceiptPath must not identify a tracked repository file.'
+    }
+    if (Test-Path -LiteralPath $ReceiptPath) {
         Remove-Item -LiteralPath $ReceiptPath -Force
     }
     New-Item -ItemType Directory -Path $receiptDirectory -Force | Out-Null
