@@ -2264,6 +2264,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>(versions, StringComparer.OrdinalIgnoreCase)
         };
+        var companionVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>(StringComparer.OrdinalIgnoreCase);
         foreach (DotNetPublishInstallerPlan installer in installers ?? Array.Empty<DotNetPublishInstallerPlan>())
         {
             DotNetPublishMsiVersionOptions? versioning = installer.Versioning;
@@ -2314,6 +2315,25 @@ public sealed partial class DotNetPublishPipelineRunner
 
                 foreach (DotNetPublishTargetCombination combination in additionalTarget.Combinations)
                 {
+                    string companionKey = string.Join("|", new[]
+                    {
+                        additionalTarget.Name,
+                        combination.Framework,
+                        combination.Runtime,
+                        combination.Style.ToString()
+                    });
+                    if (companionVersions.TryGetValue(companionKey, out DotNetPublishMsiVersionPlan? companion) &&
+                        (!string.Equals(companion.Version, source.Version, StringComparison.OrdinalIgnoreCase) ||
+                         !string.Equals(companion.AssemblyVersion, source.AssemblyVersion, StringComparison.OrdinalIgnoreCase) ||
+                         !MsiVersionCoordinationKeyComparer.Instance.Equals(
+                             BuildMsiVersionCoordinationKey(companion),
+                             sourceCoordinationKey)))
+                    {
+                        throw new InvalidOperationException(
+                            $"Additional publish target '{additionalTarget.Name}' resolved conflicting release versions or authorities across installers.");
+                    }
+                    companionVersions[companionKey] = source;
+
                     string key = BuildMsiVersionKey(
                         installer.Id,
                         additionalTarget.Name,

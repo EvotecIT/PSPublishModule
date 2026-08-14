@@ -392,6 +392,22 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliAcceptsAzureCertificateRotationWithSameTrustedSubject()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureSubjectNameSigning(azureArtifactSigning: true);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = "CN=Publisher";
+
+        PowerForgeReleaseArtifactEvidence result = fixture
+            .CreateVerifier(Thumbprint, VendorThumbprint)
+            .Verify(request);
+
+        Assert.Equal("valid", result.SignatureStatus);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsUnrelatedDirectExecutableSubstitution()
     {
         using var fixture = new PortableFixture();

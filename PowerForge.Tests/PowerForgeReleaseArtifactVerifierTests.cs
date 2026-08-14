@@ -929,7 +929,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath);
         }
 
-        internal void ConfigureSubjectNameSigning()
+        internal void ConfigureSubjectNameSigning(bool azureArtifactSigning = false)
         {
             File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
             {
@@ -948,7 +948,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                             Runtimes = new[] { "win-x64" },
                             Style = "PortableCompat",
                             Zip = true,
-                            Sign = new { Enabled = true, SubjectName = "Publisher" }
+                            Sign = new
+                            {
+                                Enabled = true,
+                                Provider = azureArtifactSigning ? "AzureArtifactSigning" : "CertificateStore",
+                                SubjectName = "Publisher",
+                                AzureArtifactSigning = azureArtifactSigning ? new
+                                {
+                                    Endpoint = "https://weu.codesigning.azure.net/",
+                                    AccountName = "Signing",
+                                    CertificateProfileName = "Publisher",
+                                    DlibPath = "Azure.CodeSigning.Dlib.dll"
+                                } : null
+                            }
                         }
                     }
                 }

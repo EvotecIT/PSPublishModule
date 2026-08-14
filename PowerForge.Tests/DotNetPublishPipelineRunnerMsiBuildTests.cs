@@ -685,6 +685,53 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void Plan_RejectsConflictingCompanionVersionsAcrossInstallers()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string app = CreateProject(root, "App/App.csproj");
+            string portable = CreateProject(root, "Portable/Portable.csproj");
+            DotNetPublishSpec spec = CreateBaseSpec(root, app);
+            spec.Targets = spec.Targets.Concat(new[]
+            {
+                new DotNetPublishTarget
+                {
+                    Name = "portable",
+                    ProjectPath = portable,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net8.0",
+                        Runtimes = new[] { "win-x64" },
+                        Style = DotNetPublishStyle.PortableCompat,
+                        UseStaging = false
+                    }
+                }
+            }).ToArray();
+            DotNetPublishInstaller first = CreateReleaseGroupInstaller("first.msi", "FirstFiles");
+            DotNetPublishInstaller second = CreateReleaseGroupInstaller("second.msi", "SecondFiles");
+            foreach (DotNetPublishInstaller installer in new[] { first, second })
+            {
+                installer.Versioning!.ReleaseGroup = null;
+                installer.Versioning.Monotonic = false;
+                installer.Versioning.AdditionalPublishTargets = new[] { "portable" };
+            }
+            first.Versioning!.Major = 1;
+            second.Versioning!.Major = 2;
+            spec.Installers = new[] { first, second };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+
+            Assert.Contains("conflicting release versions", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_ReleaseGroupRejectsDifferentVersionAuthorities()
     {
         var root = CreateTempRoot();

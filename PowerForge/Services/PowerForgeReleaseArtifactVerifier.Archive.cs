@@ -33,7 +33,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     private PortableArchiveVerification VerifyPortableArchiveInventory(
         string archivePath,
         string? expectedThumbprint,
-        string? expectedSubject)
+        string? expectedSubject,
+        bool allowSubjectMatchedCertificateRotation)
     {
         using ZipArchive archive = ZipFile.OpenRead(archivePath);
         Dictionary<string, ZipArchiveEntry> entries = ValidateArchiveEntries(archive);
@@ -144,7 +145,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         }
 
         VerifiedSignature payloadSigner = RequireOneSigner(signatures);
-        if (!string.Equals(
+        if (!allowSubjectMatchedCertificateRotation && !string.Equals(
                 inventorySignature.Thumbprint,
                 payloadSigner.Thumbprint,
                 StringComparison.OrdinalIgnoreCase))
