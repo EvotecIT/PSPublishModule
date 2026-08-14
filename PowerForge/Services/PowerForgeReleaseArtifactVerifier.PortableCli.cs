@@ -178,7 +178,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             : DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(request.SignThumbprint);
         string? trustedSignerSubject = trustedSignerThumbprint is not null || string.IsNullOrWhiteSpace(request.SignSubjectName)
             ? null
-            : request.SignSubjectName!.Trim();
+            : DotNetPublishReleaseArtifactVerifier.RequireCompleteCertificateSubject(
+                request.SignSubjectName!,
+                nameof(request.SignSubjectName));
         if (trustedSignerThumbprint is null && trustedSignerSubject is null)
         {
             throw Invalid(

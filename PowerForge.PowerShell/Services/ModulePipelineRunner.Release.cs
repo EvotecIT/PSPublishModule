@@ -365,7 +365,16 @@ public sealed partial class ModulePipelineRunner
         string[] finalAssets;
         if (string.IsNullOrWhiteSpace(stageRoot))
         {
-            finalAssets = allAssets;
+            string metadataRoot = Path.Combine(
+                plan.ProjectRoot,
+                "Artefacts",
+                "ReleaseMetadata",
+                plan.ModuleName,
+                moduleVersion);
+            finalAssets = allAssets
+                .Concat(WriteReleaseMetadata(plan, metadataRoot, allAssets, releaseVersion))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
         else
         {

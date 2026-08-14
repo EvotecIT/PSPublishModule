@@ -24,13 +24,17 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool TryEvaluateDotNetBuildInputs(
         IEnumerable<string>? projectPaths,
+        string? configuration,
         out string[] projectDirectories,
         out HashSet<string> buildInputs)
     {
         var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var pending = new Queue<ProjectEvaluationRequest>((projectPaths ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Select(path => new ProjectEvaluationRequest(Path.GetFullPath(path), null)));
+            .Select(path => new ProjectEvaluationRequest(
+                Path.GetFullPath(path),
+                null,
+                string.IsNullOrWhiteSpace(configuration) ? "Release" : configuration!.Trim())));
         var visited = new HashSet<string>(comparison);
         var directories = new HashSet<string>(comparison);
         buildInputs = new HashSet<string>(comparison);
@@ -54,11 +58,11 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach (string input in evaluation.BuildInputs)
                 buildInputs.Add(input);
             foreach (string projectReference in evaluation.ProjectReferences)
-                pending.Enqueue(new ProjectEvaluationRequest(projectReference, null));
+                pending.Enqueue(new ProjectEvaluationRequest(projectReference, null, request.Configuration));
             if (request.TargetFramework is null)
             {
                 foreach (string targetFramework in evaluation.TargetFrameworks)
-                    pending.Enqueue(new ProjectEvaluationRequest(request.ProjectPath, targetFramework));
+                    pending.Enqueue(new ProjectEvaluationRequest(request.ProjectPath, targetFramework, request.Configuration));
             }
         }
 
@@ -80,7 +84,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:TargetFramework",
             "-getProperty:TargetFrameworks",
             "-getProperty:MSBuildAllProjects",
-            "-p:Configuration=Release"
+            "-p:Configuration=" + request.Configuration
         };
         foreach (string itemName in EvaluatedBuildItemNames)
             arguments.Add("-getItem:" + itemName);
@@ -225,14 +229,16 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private sealed class ProjectEvaluationRequest
     {
-        internal ProjectEvaluationRequest(string projectPath, string? targetFramework)
+        internal ProjectEvaluationRequest(string projectPath, string? targetFramework, string configuration)
         {
             ProjectPath = projectPath;
             TargetFramework = targetFramework;
+            Configuration = configuration;
         }
 
         internal string ProjectPath { get; }
         internal string? TargetFramework { get; }
+        internal string Configuration { get; }
     }
 
     private sealed class EvaluatedProjectInputs

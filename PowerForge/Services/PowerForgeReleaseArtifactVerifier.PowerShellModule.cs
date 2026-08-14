@@ -30,7 +30,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             : DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(request.SignThumbprint);
         string? expectedSubject = expectedThumbprint is not null || string.IsNullOrWhiteSpace(request.SignSubjectName)
             ? null
-            : request.SignSubjectName!.Trim();
+            : DotNetPublishReleaseArtifactVerifier.RequireCompleteCertificateSubject(
+                request.SignSubjectName!,
+                nameof(request.SignSubjectName));
         if (expectedThumbprint is null && expectedSubject is null)
             throw Invalid("Packed module verification requires an expected signer thumbprint or subject name.");
 

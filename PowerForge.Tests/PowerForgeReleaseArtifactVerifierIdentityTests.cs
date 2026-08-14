@@ -38,16 +38,17 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
-    public void Verify_PortableCliAcceptsExactSimplePublisherCommonName()
+    public void Verify_PortableCliRejectsBarePublisherCommonName()
     {
         using var fixture = new PortableFixture();
         PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
         request.SignThumbprint = null;
         request.SignSubjectName = "Publisher";
 
-        PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(request);
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
 
-        Assert.Equal("CN=Publisher", evidence.SignerSubject);
+        Assert.Contains("complete X.500", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -61,7 +62,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
             fixture.CreateVerifier().Verify(request));
 
-        Assert.Contains("certificate subject", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("complete X.500", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

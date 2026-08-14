@@ -26,6 +26,20 @@ public sealed partial class DotNetPublishReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_RejectsBareCommonNameAsOutOfBandPublisherTrust()
+    {
+        using var fixture = new ReleaseFixture();
+        DotNetPublishReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = "Publisher";
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("complete X.500", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_RejectsManifestFromAnotherWorkflowCommit()
     {
         using var fixture = new ReleaseFixture();

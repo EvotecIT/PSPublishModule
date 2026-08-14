@@ -115,7 +115,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string>? cleanTrackedGeneratedProvenanceState = null,
         string? msiReservationOwner = null,
         IEnumerable<string>? trustedExternalInputPaths = null,
-        IEnumerable<string>? buildProjectPaths = null)
+        IEnumerable<string>? buildProjectPaths = null,
+        string? buildConfiguration = null)
     {
         var gitRevision = ReadGitText(projectRoot, "rev-parse HEAD");
         var environmentRevision = Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim();
@@ -168,6 +169,7 @@ public sealed partial class DotNetPublishPipelineRunner
                   projectRoot,
                   gitRoot!,
                   buildProjectPaths,
+                  buildConfiguration,
                   generatedPaths);
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
@@ -211,6 +213,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string projectRoot,
         string gitRoot,
         IEnumerable<string>? buildProjectPaths,
+        string? buildConfiguration,
         IEnumerable<string>? generatedPaths)
     {
         var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -229,7 +232,11 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
         if (ignoredCandidates.Length == 0)
             return false;
-        if (!TryEvaluateDotNetBuildInputs(buildProjectPaths, out string[] projectDirectories, out HashSet<string> buildInputs))
+        if (!TryEvaluateDotNetBuildInputs(
+                buildProjectPaths,
+                buildConfiguration,
+                out string[] projectDirectories,
+                out HashSet<string> buildInputs))
             return true;
         if (projectDirectories.Any(directory =>
                 !IsBuildProjectDirectoryAdmitted(directory, projectRoot, gitRoot)))

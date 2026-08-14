@@ -809,11 +809,12 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                   <ItemGroup>
                     <Compile Remove="Excluded.cs" />
                     <Content Include="payload.custom" />
+                    <Content Include="debug.custom" Condition="'$(Configuration)' == 'Debug'" />
                   </ItemGroup>
                 </Project>
                 """);
             File.WriteAllText(Path.Combine(root, "Program.cs"), "internal static class Program { }");
-            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
             RunGit(root, "add Sample.csproj Program.cs .gitignore");
             RunGit(root, "commit -m \"tracked source\"");
 
@@ -868,6 +869,13 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             InvokeWriteManifests(plan, artefacts);
             using JsonDocument contentDirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
             Assert.True(contentDirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+
+            File.Delete(Path.Combine(root, "payload.custom"));
+            plan.Configuration = "Debug";
+            File.WriteAllText(Path.Combine(root, "debug.custom"), "debug-only published payload");
+            InvokeWriteManifests(plan, artefacts);
+            using JsonDocument debugDirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            Assert.True(debugDirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
         }
         finally
         {

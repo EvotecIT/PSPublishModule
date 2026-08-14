@@ -187,6 +187,22 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         }
     }
 
+    internal static string RequireCompleteCertificateSubject(string value, string parameterName)
+    {
+        string subject = RequireText(value, parameterName);
+        if (subject.IndexOf('=') < 1)
+            throw Invalid($"{parameterName} must be a complete X.500 distinguished name such as 'CN=Publisher, O=Organization'.");
+        try
+        {
+            _ = new X500DistinguishedName(subject);
+            return subject;
+        }
+        catch (CryptographicException exception)
+        {
+            throw new InvalidDataException($"{parameterName} must be a valid complete X.500 distinguished name.", exception);
+        }
+    }
+
     private static ExpectedInstaller ReadExpectedInstaller(
         string configurationPath,
         string installerId,
@@ -197,7 +213,7 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
             : NormalizeThumbprint(request.SignThumbprint);
         var trustedSignerSubjectName = trustedSignerThumbprint is not null || string.IsNullOrWhiteSpace(request.SignSubjectName)
             ? null
-            : request.SignSubjectName!.Trim();
+            : RequireCompleteCertificateSubject(request.SignSubjectName!, nameof(request.SignSubjectName));
         if (trustedSignerThumbprint is null && trustedSignerSubjectName is null)
         {
             throw Invalid(
