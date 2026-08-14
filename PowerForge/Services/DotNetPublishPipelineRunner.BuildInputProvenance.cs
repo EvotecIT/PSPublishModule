@@ -127,7 +127,11 @@ public sealed partial class DotNetPublishPipelineRunner
             var targetFrameworks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
-                AddSemicolonSeparatedPaths(properties, "MSBuildAllProjects", inputs);
+                AddSemicolonSeparatedPaths(
+                    properties,
+                    "MSBuildAllProjects",
+                    Path.GetDirectoryName(request.ProjectPath)!,
+                    inputs);
                 AddSemicolonSeparatedValues(properties, "TargetFrameworks", targetFrameworks);
                 if (targetFrameworks.Count == 0)
                     AddSemicolonSeparatedValues(properties, "TargetFramework", targetFrameworks);
@@ -188,6 +192,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static void AddSemicolonSeparatedPaths(
         JsonElement properties,
         string name,
+        string baseDirectory,
         HashSet<string> values)
     {
         if (!properties.TryGetProperty(name, out JsonElement property) || property.ValueKind != JsonValueKind.String)
@@ -196,8 +201,10 @@ public sealed partial class DotNetPublishPipelineRunner
                      new[] { ';' },
                      StringSplitOptions.RemoveEmptyEntries))
         {
-            if (File.Exists(value))
-                values.Add(Path.GetFullPath(value));
+            string fullPath = Path.GetFullPath(
+                Path.IsPathRooted(value) ? value : Path.Combine(baseDirectory, value));
+            if (File.Exists(fullPath))
+                values.Add(fullPath);
         }
     }
 

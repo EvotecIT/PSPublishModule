@@ -215,61 +215,52 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         string[] generatedExclusions = BuildGeneratedPathExclusions(projectRoot, gitRoot, generatedPaths);
+        string? ignoredOutput = ReadGitRawText(
+            gitRoot,
+            "ls-files --others --ignored --exclude-standard -z");
+        if (ignoredOutput is null)
+            return true;
+        string[] ignoredCandidates = ignoredOutput.Split(
+                new[] { '\0' },
+                StringSplitOptions.RemoveEmptyEntries)
+            .Select(path => path.Replace('\\', '/').TrimStart('/'))
+            .Where(path => !IsGeneratedPath(path, generatedExclusions, comparison) &&
+                           !IsStandardDotNetBuildOutput(path, string.Empty, comparison))
+            .ToArray();
+        if (ignoredCandidates.Length == 0)
+            return false;
         if (!TryEvaluateDotNetBuildInputs(buildProjectPaths, out string[] projectDirectories, out HashSet<string> buildInputs))
             return true;
+        if (projectDirectories.Any(directory =>
+                !IsBuildProjectDirectoryAdmitted(directory, projectRoot, gitRoot)))
+        {
+            return true;
+        }
         var gitRelativeBuildInputs = new HashSet<string>(
             buildInputs
                 .Select(path => ToGitRelativeExclusion(projectRoot, gitRoot, path))
                 .Where(path => !string.IsNullOrWhiteSpace(path))
                 .Select(path => path!.Replace('\\', '/').TrimStart('/')),
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-        foreach (string rootPath in projectDirectories)
+        return ignoredCandidates.Any(gitRelativeBuildInputs.Contains);
+    }
+
+    private static bool IsBuildProjectDirectoryAdmitted(
+        string directory,
+        string projectRoot,
+        string gitRoot)
+    {
+        string fullDirectory = Path.GetFullPath(directory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string fullGitRoot = Path.GetFullPath(gitRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!string.Equals(fullDirectory, fullGitRoot, comparison) &&
+            ToGitRelativeExclusion(projectRoot, gitRoot, fullDirectory) is null)
         {
-            if (string.IsNullOrWhiteSpace(rootPath))
-                continue;
-
-            string fullRoot = Path.GetFullPath(rootPath);
-            string fullGitRoot = Path.GetFullPath(gitRoot)
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            string? relativeRoot = string.Equals(
-                fullRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                fullGitRoot,
-                comparison)
-                ? string.Empty
-                : ToGitRelativeExclusion(projectRoot, gitRoot, fullRoot);
-            if (relativeRoot is null ||
-                !Directory.Exists(fullRoot) ||
-                HasReparsePointBelowRoot(fullRoot, gitRoot))
-            {
-                return true;
-            }
-
-            string pathSpec = relativeRoot.Length == 0
-                ? string.Empty
-                : " -- " + QuoteLiteralGitPath(relativeRoot);
-            string? ignoredOutput = ReadGitRawText(
-                gitRoot,
-                "ls-files --others --ignored --exclude-standard -z" + pathSpec);
-            if (ignoredOutput is null)
-                return true;
-
-            foreach (string ignoredPathValue in ignoredOutput.Split(
-                         new[] { '\0' },
-                         StringSplitOptions.RemoveEmptyEntries))
-            {
-                string ignoredPath = ignoredPathValue.Replace('\\', '/').TrimStart('/');
-                if (IsGeneratedPath(ignoredPath, generatedExclusions, comparison) ||
-                    IsStandardDotNetBuildOutput(ignoredPath, relativeRoot!, comparison) ||
-                    !gitRelativeBuildInputs.Contains(ignoredPath))
-                {
-                    continue;
-                }
-
-                return true;
-            }
+            return false;
         }
-
-        return false;
+        return !HasReparsePointBelowRoot(fullDirectory, fullGitRoot);
     }
 
     private static bool IsStandardDotNetBuildOutput(
@@ -279,8 +270,14 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         string normalizedDirectory = projectDirectory.Replace('\\', '/').Trim('/');
         string prefix = normalizedDirectory.Length == 0 ? string.Empty : normalizedDirectory + "/";
-        return path.StartsWith(prefix + "bin/", comparison) ||
-               path.StartsWith(prefix + "obj/", comparison);
+        if (path.StartsWith(prefix + "bin/", comparison) ||
+            path.StartsWith(prefix + "obj/", comparison))
+        {
+            return true;
+        }
+        return normalizedDirectory.Length == 0 &&
+               (path.IndexOf("/bin/", comparison) >= 0 ||
+                path.IndexOf("/obj/", comparison) >= 0);
     }
 
     internal static bool HasReparsePointBelowRoot(string path, string root)
