@@ -3,17 +3,17 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseArtifactVerifierTests
 {
     [Fact]
-    public void Verify_PortableCliUsesPublisherSignedSelectionInsteadOfRequestOverrides()
+    public void Verify_PortableCliRejectsRequestedSignatureSetThatDiffersFromPublisherInventory()
     {
         using var fixture = new PortableFixture();
         string dependencyPath = fixture.AddSignedDependency();
         PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
         request.SignaturePaths = new[] { dependencyPath };
 
-        PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(request);
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
 
-        Assert.Single(evidence.Signatures);
-        Assert.Contains(evidence.SignaturePaths, path => path.EndsWith("Sample.CLI.exe", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("requested portable signature paths", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -29,6 +29,20 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 
         Assert.Equal(2, evidence.Signatures.Length);
         Assert.Contains(evidence.SignaturePaths, path => path.EndsWith("Dependency.dll", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Verify_PortableCliAcceptsRequestedSignatureSetMatchingPublisherInventory()
+    {
+        using var fixture = new PortableFixture();
+        string dependencyPath = fixture.AddSignedDependency();
+        fixture.EnableDllSigning(dependencyPath);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignaturePaths = new[] { dependencyPath, fixture.ExecutablePath };
+
+        PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal(2, evidence.Signatures.Length);
     }
 
     [Fact]
@@ -80,7 +94,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
-    public void Verify_PortableCliRejectsMultiFileSelectionForDirectExecutableArtifact()
+    public void Verify_PortableCliAcceptsDirectExecutableFromMultiFileSigningOutput()
     {
         using var fixture = new PortableFixture();
         string dependencyPath = fixture.AddSignedDependency();
@@ -88,11 +102,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
         request.ArtifactPath = fixture.ExecutablePath;
         request.SignaturePaths = Array.Empty<string>();
+        request.SbomPaths = Array.Empty<string>();
 
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(request));
+        PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(request);
 
-        Assert.Contains("direct portable executable", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ZIP", exception.Message, StringComparison.Ordinal);
+        Assert.Equal("valid", evidence.SignatureStatus);
+        Assert.Single(evidence.Signatures);
     }
 }

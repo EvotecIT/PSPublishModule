@@ -95,6 +95,48 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliDirectExecutableRemainsVerifiableAfterFreshDownload()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureExplicitExecutableIdentity();
+        string downloadRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            string[] releaseAssets =
+            {
+                fixture.ExecutablePath,
+                fixture.ChecksumsPath,
+                fixture.ManifestPath,
+                fixture.ConfigurationPath
+            };
+            foreach (string source in releaseAssets)
+            {
+                string destination = Path.Combine(downloadRoot, Path.GetRelativePath(fixture.Root, source));
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.Copy(source, destination);
+            }
+
+            PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+            request.ProjectRoot = downloadRoot;
+            request.ArtifactPath = Path.Combine(downloadRoot, Path.GetRelativePath(fixture.Root, fixture.ExecutablePath));
+            request.ChecksumsPath = Path.Combine(downloadRoot, Path.GetRelativePath(fixture.Root, fixture.ChecksumsPath));
+            request.ManifestPath = Path.Combine(downloadRoot, Path.GetRelativePath(fixture.Root, fixture.ManifestPath));
+            request.ConfigurationPath = Path.Combine(downloadRoot, Path.GetRelativePath(fixture.Root, fixture.ConfigurationPath));
+            request.SignaturePaths = Array.Empty<string>();
+            request.SbomPaths = Array.Empty<string>();
+
+            PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(request);
+
+            Assert.Equal("valid", evidence.SignatureStatus);
+            Assert.Equal(Path.GetFileName(fixture.ExecutablePath), evidence.FileName);
+        }
+        finally
+        {
+            if (Directory.Exists(downloadRoot)) Directory.Delete(downloadRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsPublisherSignedInventoryForDifferentTarget()
     {
         using var fixture = new PortableFixture();
@@ -149,7 +191,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
             fixture.CreateVerifier().Verify(request));
 
-        Assert.Contains("manifest executable", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SHA-256", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed partial class PortableFixture
@@ -204,6 +246,33 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             File.WriteAllBytes(inventoryPath, PowerForgePortablePayloadInventoryCms.Serialize(inventory));
             WriteArchiveFromOutput();
             WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
+            WriteChecksums();
+        }
+
+        internal void ConfigureExplicitExecutableIdentity()
+        {
+            File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
+            {
+                SchemaVersion = 1,
+                DotNet = new { AllowOutputOutsideProjectRoot = false },
+                Targets = new[]
+                {
+                    new
+                    {
+                        Name = "Sample.CLI",
+                        ProjectPath = Path.GetFileName(ProjectPath),
+                        Kind = "Cli",
+                        Publish = new
+                        {
+                            Framework = "net10.0",
+                            Runtimes = new[] { "win-x64" },
+                            Style = "PortableCompat",
+                            ExecutableIdentity = "Sample.CLI",
+                            Sign = new { Enabled = true, Thumbprint }
+                        }
+                    }
+                }
+            }));
             WriteChecksums();
         }
     }

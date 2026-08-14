@@ -25,7 +25,11 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             File.WriteAllText(
                 Path.Combine(root.FullName, PublishedRegistryProvenanceValidator.ModuleProvenanceFileName),
                 "{\"moduleName\":\"TestModule\",\"version\":\"1.0.0\",\"commit\":\"" + sourceRevision + "\",\"sourceDirty\":false}");
-            var hostedOperations = new FakeHostedOperations { AutoSuccessfulSigningResult = true };
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                AutoSuccessfulPublishResult = true
+            };
             var runner = CreateRunner(hostedOperations);
             string outputRoot = Path.Combine(root.FullName, "Artefacts", "Packed");
             ModulePipelineSpec spec = CreateSignedPackedSpec(root.FullName, moduleName, outputRoot);
@@ -57,7 +61,11 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         {
             const string moduleName = "TestModule";
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
-            var hostedOperations = new FakeHostedOperations { AutoSuccessfulSigningResult = true };
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                AutoSuccessfulPublishResult = true
+            };
             var runner = CreateRunner(hostedOperations);
             string outputRoot = Path.Combine(root.FullName, "Artefacts", "Packed");
             ModulePipelineSpec spec = CreateSignedPackedSpec(root.FullName, moduleName, outputRoot);
@@ -349,6 +357,55 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
                 aggregate.VerifiedFilePaths);
             ModuleSigningPreservedSignature vendor = Assert.Single(aggregate.PreservedThirdPartySignatures);
             Assert.Equal("vendor.dll", vendor.FilePath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_SignedGitHubMultiplePackedArtifactsExcludeEarlierReleaseOutputsFromSourceGuard()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                AutoSuccessfulPublishResult = true
+            };
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "PackedOne"));
+            spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
+            {
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = ArtefactType.Packed,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = Path.Combine(root.FullName, "Artefacts", "PackedTwo"),
+                        ArtefactName = moduleName + "-second.zip"
+                    }
+                }
+            }).ToArray();
+            EnableGitHubPublish(spec, moduleName);
+
+            ModulePipelineResult result = runner.Run(spec, runner.Plan(spec));
+
+            Assert.Equal(2, result.ArtefactResults.Length);
+            Assert.All(result.ArtefactResults, artifact => Assert.Single(artifact.EvidencePaths));
         }
         finally
         {

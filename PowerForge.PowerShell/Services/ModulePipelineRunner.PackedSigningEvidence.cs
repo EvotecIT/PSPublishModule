@@ -50,14 +50,19 @@ public sealed partial class ModulePipelineRunner
                     "The generated project manifest does not match the final packed module manifest.");
             }
 
-            ValidateReleaseSourceUnchanged(
-                plan,
-                new[]
+            string[] generatedOutputs = state.ArtefactResults
+                .SelectMany(static result =>
+                    new[] { result.OutputPath }.Concat(result.EvidencePaths ?? Array.Empty<string>()))
+                .Concat(new[]
                 {
                     context.RootPath,
                     context.OutputPath,
                     plan.BuildSpec.StagingPath ?? string.Empty
-                },
+                })
+                .ToArray();
+            ValidateReleaseSourceUnchanged(
+                plan,
+                generatedOutputs,
                 new[] { projectManifestPath });
 
             PowerForgeModuleSourceAttestationWriter.WriteReleaseProvenance(

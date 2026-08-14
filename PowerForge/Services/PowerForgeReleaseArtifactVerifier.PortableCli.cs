@@ -60,11 +60,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             if (!string.Equals(Path.GetFileName(manifestArchive), Path.GetFileName(artifactPath), StringComparison.OrdinalIgnoreCase))
                 throw Invalid("Requested portable archive does not match the selected manifest entry.");
         }
-        else if (!PathsEqual(
-                     ResolveManifestPath(projectRoot, manifestExecutable, expected.AllowOutsideProjectRoot),
-                     artifactPath))
+        else if (!string.Equals(
+                     Path.GetFileName(manifestExecutable.Replace('/', Path.DirectorySeparatorChar)),
+                     Path.GetFileName(artifactPath),
+                     StringComparison.OrdinalIgnoreCase))
         {
-            throw Invalid("A direct portable artifact must be the manifest executable itself.");
+            throw Invalid("A direct portable artifact must have the release-asset identity of the manifest executable.");
         }
         string artifactDigest = VerifyChecksummedFile(projectRoot, checksumsPath, artifactPath, "portable artifact");
         VerifiedSignature[] signatures;
@@ -91,6 +92,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 expectedRevision);
             if (archive.Inventory.SignedFilePaths.Length != signedFileCount)
                 throw Invalid("PowerForge manifest signed-file count does not match the publisher-signed payload inventory.");
+            ValidateRequestedPortableSignaturePaths(
+                request.SignaturePaths,
+                projectRoot,
+                manifestExecutable,
+                expected.AllowOutsideProjectRoot,
+                archive.Inventory.SignedFilePaths);
             signatures = archive.Signatures;
             signedProductVersion = archive.SignedProductVersion;
             executableIdentity = archive.ExecutableIdentity;
@@ -100,8 +107,6 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         }
         else
         {
-            if (signedFileCount != 1)
-                throw Invalid("A direct portable executable artifact must be the only signed file; use the ZIP artifact for multi-file outputs.");
             signatures = new[] { VerifySignature(artifactPath, expected.SignerThumbprint, expected.SignerSubjectName) };
             signedProductVersion = _readPortableVersion(artifactPath);
             executableIdentity = _readPortableIdentity(artifactPath);
@@ -352,6 +357,44 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
     private static bool SamePhysicalPathSet(IReadOnlyCollection<string> left, IReadOnlyCollection<string> right) =>
         left.Count == right.Count && left.All(path => right.Any(candidate => PathsEqual(path, candidate)));
+
+    private static void ValidateRequestedPortableSignaturePaths(
+        IEnumerable<string>? requestedValues,
+        string projectRoot,
+        string manifestExecutable,
+        bool allowOutsideProjectRoot,
+        IReadOnlyCollection<string> inventoryValues)
+    {
+        string[] requested = (requestedValues ?? Array.Empty<string>()).ToArray();
+        if (requested.Length == 0)
+            return;
+
+        string executablePath = ResolveManifestPath(projectRoot, manifestExecutable, allowOutsideProjectRoot);
+        string outputDirectory = Path.GetDirectoryName(executablePath)
+            ?? throw Invalid("PowerForge manifest executable directory could not be resolved.");
+        string[] requestedRelative = ResolvePortableSignaturePaths(
+                projectRoot,
+                requested,
+                allowOutsideProjectRoot,
+                "signature path")
+            .Select(path =>
+            {
+                EnsurePathWithinDirectory(outputDirectory, path, "Portable signature path");
+                return DotNetPublishReleaseArtifactVerifier.GetRelativePath(outputDirectory, path).Replace('\\', '/');
+            })
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        string[] inventoryRelative = inventoryValues
+            .Select(NormalizeArchivePath)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (requestedRelative.Length != inventoryRelative.Length ||
+            !requestedRelative.SequenceEqual(inventoryRelative, StringComparer.OrdinalIgnoreCase))
+        {
+            throw Invalid(
+                "Requested portable signature paths do not match the publisher-signed payload inventory.");
+        }
+    }
 
     private static string[] NormalizeConfiguredStrings(IEnumerable<string>? values) =>
         (values ?? Array.Empty<string>())
