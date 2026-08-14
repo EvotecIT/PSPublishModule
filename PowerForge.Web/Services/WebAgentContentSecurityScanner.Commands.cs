@@ -5,7 +5,7 @@ namespace PowerForge.Web;
 public sealed partial class WebAgentContentSecurityScanner
 {
     private static readonly Regex CommandSegmentRegex = new(
-        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|Install-Module|Install-PSResource|Update-Module|Update-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|npm|npx|pnpx|pnpm|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|\^(?!\r?\n)|[\x5C`\^]\r?\n)*)",
+        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|Install-Package|Update-Package|Install-Module|Install-PSResource|Update-Module|Update-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|\^(?!\r?\n)|[\x5C`\^]\r?\n)*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ObfuscatedExecutableRegex = new(
         @"(?<![A-Za-z0-9_.-])(?<command>(?:[A-Za-z0-9_.-]+[\x5C`\^][A-Za-z0-9_.\x5C`\^-]+|[A-Za-z0-9_.-]+(?:['""][A-Za-z0-9_.-]*['""][A-Za-z0-9_.-]*)+))(?=\s|$)",
@@ -66,6 +66,10 @@ public sealed partial class WebAgentContentSecurityScanner
                 case "update-module":
                 case "update-psresource":
                     ParsePowerShell(tokens, path, line, commandReferences, findings);
+                    break;
+                case "install-package":
+                case "update-package":
+                    ParsePowerShellNuGet(tokens, path, line, commandReferences, findings);
                     break;
                 case "npm":
                 case "pnpm":
@@ -136,7 +140,7 @@ public sealed partial class WebAgentContentSecurityScanner
     }
 
     private static bool IsSupportedPackageExecutable(string executable)
-        => executable is "dotnet" or "dnx" or "install-module" or "install-psresource" or
+        => executable is "dotnet" or "dnx" or "install-package" or "update-package" or "install-module" or "install-psresource" or
             "update-module" or "update-psresource" or
             "register-psrepository" or "set-psrepository" or "register-psresourcerepository" or
             "set-psresourcerepository" or "npm" or "npx" or "pnpx" or "pnpm" or "yarn" or
@@ -157,7 +161,7 @@ public sealed partial class WebAgentContentSecurityScanner
         {
             var moduleIndex = FindPythonModuleIndex(tokens, path, line, findings);
             if (moduleIndex < 0 || moduleIndex + 1 >= tokens.Length ||
-                !tokens[moduleIndex + 1].Equals("pip", StringComparison.OrdinalIgnoreCase))
+                !IsPythonPipModule(tokens[moduleIndex + 1]))
                 return;
             var installIndex = FindVerbIndex(tokens, moduleIndex + 2, "install", $"{tokens[0]} -m pip", path, line, findings);
             if (installIndex >= 0)
@@ -206,6 +210,8 @@ public sealed partial class WebAgentContentSecurityScanner
                 }
                 if (tokens[verbIndex].Equals("run", StringComparison.OrdinalIgnoreCase))
                 {
+                    if (RejectUvRunPackageManagerPayload(tokens, verbIndex + 1, path, line, findings))
+                        return;
                     var requirementInput = FindOptionValue(tokens, verbIndex + 1, "--with-requirements", "--with-editable");
                     if (requirementInput is not null)
                     {
@@ -254,6 +260,50 @@ public sealed partial class WebAgentContentSecurityScanner
             AddMultipleOperands("pypi", "pipx inject", tokens, environmentIndex < 0 ? tokens.Length : environmentIndex + 1,
                 path, line, references, findings);
         }
+    }
+
+    private static bool IsPythonPipModule(string module)
+        => module.Equals("pip", StringComparison.OrdinalIgnoreCase) ||
+           module.Equals("pip.__main__", StringComparison.OrdinalIgnoreCase);
+
+    private static bool RejectUvRunPackageManagerPayload(
+        string[] tokens,
+        int start,
+        string path,
+        int line,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        for (var index = start; index < tokens.Length; index++)
+        {
+            var token = tokens[index];
+            if (token == "--")
+            {
+                index++;
+                return RejectPackageManagerInvocationAt("uv run", tokens, index, path, line, findings);
+            }
+            if (token.Equals("--with", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("--with-requirements", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("--with-editable", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("--python", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("--directory", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("--project", StringComparison.OrdinalIgnoreCase))
+            {
+                index++;
+                continue;
+            }
+            if (token.StartsWith("--with=", StringComparison.OrdinalIgnoreCase) ||
+                token.StartsWith("--with-requirements=", StringComparison.OrdinalIgnoreCase) ||
+                token.StartsWith("--with-editable=", StringComparison.OrdinalIgnoreCase) ||
+                token.StartsWith("--python=", StringComparison.OrdinalIgnoreCase) ||
+                token.StartsWith("--directory=", StringComparison.OrdinalIgnoreCase) ||
+                token.StartsWith("--project=", StringComparison.OrdinalIgnoreCase) ||
+                token is "--isolated" or "--no-project")
+                continue;
+            if (token.StartsWith("-", StringComparison.Ordinal))
+                continue;
+            return RejectPackageManagerInvocationAt("uv run", tokens, index, path, line, findings);
+        }
+        return false;
     }
 
     private static void ParsePositionalInstall(
@@ -310,14 +360,52 @@ public sealed partial class WebAgentContentSecurityScanner
         var payloadStart = delimiterIndex >= 0
             ? delimiterIndex + 1
             : FindNextOperand(tokens, start);
+        return RejectPackageManagerInvocationAt(command, tokens, payloadStart, path, line, findings);
+    }
+
+    private static bool RejectPackageManagerInvocationAt(
+        string command,
+        string[] tokens,
+        int payloadStart,
+        string path,
+        int line,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
         if (payloadStart < 0 || payloadStart >= tokens.Length)
             return false;
         var payload = string.Join(' ', tokens[payloadStart..]);
-        if (!CommandSegmentRegex.IsMatch(payload) && !ObfuscatedExecutableRegex.IsMatch(payload))
+        if (!IsNestedPackageManagerInvocation(tokens, payloadStart) && !ObfuscatedExecutableRegex.IsMatch(payload))
             return false;
 
         AddUnverifiableOperand(command, path, line, findings, "nested package-manager runner payload");
         return true;
+    }
+
+    private static bool IsNestedPackageManagerInvocation(string[] tokens, int start)
+    {
+        if (start < 0 || start >= tokens.Length)
+            return false;
+        var executable = NormalizeExecutable(tokens[start]);
+        if (executable is "python" or "py")
+        {
+            var module = Array.FindIndex(tokens, start + 1,
+                static token => token.Equals("-m", StringComparison.OrdinalIgnoreCase));
+            return module >= 0 && module + 1 < tokens.Length && IsPythonPipModule(tokens[module + 1]);
+        }
+        if (executable == "dotnet")
+        {
+            var arguments = tokens[(start + 1)..];
+            return arguments.Length > 0 &&
+                   (arguments[0].Equals("restore", StringComparison.OrdinalIgnoreCase) ||
+                    arguments[0].Equals("add", StringComparison.OrdinalIgnoreCase) ||
+                    arguments[0].Equals("package", StringComparison.OrdinalIgnoreCase) ||
+                    arguments[0].Equals("tool", StringComparison.OrdinalIgnoreCase) ||
+                    arguments[0].Equals("new", StringComparison.OrdinalIgnoreCase));
+        }
+        return executable is "dnx" or "install-package" or "update-package" or
+            "install-module" or "install-psresource" or "update-module" or "update-psresource" or
+            "npm" or "npx" or "pnpx" or "pnpm" or "yarn" or "bun" or "bunx" or
+            "pip" or "uv" or "uvx" or "pipx" or "cargo" or "gem" or "composer" or "bundle";
     }
 
     private static void AddSingleOperand(

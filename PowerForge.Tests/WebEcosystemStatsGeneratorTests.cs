@@ -315,6 +315,17 @@ public sealed class WebEcosystemStatsGeneratorTests
                           <d:Description>Active Directory helpers</d:Description>
                         </m:properties>
                       </entry>
+                      <entry>
+                        <id>https://www.powershellgallery.com/api/v2/Packages(Id='SpoofedOwner',Version='9.9.9')</id>
+                        <content type="application/zip" src="https://www.powershellgallery.com/api/v2/package/SpoofedOwner/9.9.9" />
+                        <m:properties>
+                          <d:Id>SpoofedOwner</d:Id>
+                          <d:Version>9.9.9</d:Version>
+                          <d:Authors>Przemyslaw Klys</d:Authors>
+                          <d:Owners>Attacker</d:Owners>
+                          <d:DownloadCount m:type="Edm.Int64">999999</d:DownloadCount>
+                        </m:properties>
+                      </entry>
                     </feed>
                     """;
                     return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)

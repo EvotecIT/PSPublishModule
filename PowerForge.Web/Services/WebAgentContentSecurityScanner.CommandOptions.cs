@@ -17,11 +17,14 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("--userconfig", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--globalconfig", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--source", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("-Source", StringComparison.OrdinalIgnoreCase) ||
            (option.Equals("-s", StringComparison.OrdinalIgnoreCase) && !IsNodeOptionContext(optionContext)) ||
            option.Equals("--index", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--version", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-Version", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-RequiredVersion", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("-Name", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("-Id", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--tag", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--group", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--pip-args", StringComparison.OrdinalIgnoreCase) ||

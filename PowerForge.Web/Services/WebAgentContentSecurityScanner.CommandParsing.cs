@@ -149,6 +149,7 @@ public sealed partial class WebAgentContentSecurityScanner
     }
 
     private static void AddPowerShellNames(
+        string ecosystem,
         string command,
         string[] tokens,
         int start,
@@ -165,7 +166,7 @@ public sealed partial class WebAgentContentSecurityScanner
                 break;
             foreach (var name in tokens[index].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
-                AddToken("powershellgallery", command, name, version, path, line, references, findings);
+                AddToken(ecosystem, command, name, version, path, line, references, findings);
                 added = true;
             }
         }
@@ -331,9 +332,12 @@ public sealed partial class WebAgentContentSecurityScanner
             "pnpm.cjs" => "pnpm",
             "pnpx.cjs" => "pnpx",
             "yarn.js" => "yarn",
+            "yarnpkg.js" => "yarn",
             "composer.phar" => "composer",
             _ => normalized
         };
+        if (normalized == "yarnpkg")
+            return "yarn";
         if (Regex.IsMatch(normalized, @"^python\d+(?:\.\d+)*$", RegexOptions.CultureInvariant))
             return "python";
         if (Regex.IsMatch(normalized, @"^pip\d+(?:\.\d+)*$", RegexOptions.CultureInvariant))

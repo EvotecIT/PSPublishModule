@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
@@ -46,8 +47,8 @@ internal sealed class WebPublicationCatalog
                 throw new InvalidDataException($"Configured {contextLabel} publication catalog must be a JSON object: {path}");
             ValidateAge(root, path, maxAgeHours, contextLabel);
             return new WebPublicationCatalog(
-                ReadSection(root, "nuget", "packages", contextLabel),
-                ReadSection(root, "powerShellGallery", "modules", contextLabel),
+                ReadSection(root, "nuget", "packages", contextLabel, includeItemOwners: false),
+                ReadSection(root, "powerShellGallery", "modules", contextLabel, includeItemOwners: true),
                 ReadWarnings(root, contextLabel),
                 contextLabel);
         }
@@ -85,9 +86,10 @@ internal sealed class WebPublicationCatalog
                 $"{_contextLabel} publication catalog contains preserved stale {sourceName} data and cannot verify installation commands.");
         }
 
-        return section.Packages.TryGetValue(packageId, out var publishedVersion) &&
-               HasExactVersion(expectedVersion) &&
-               VersionsEqual(publishedVersion, expectedVersion);
+        return section.Packages.TryGetValue(packageId, out var package) &&
+               HasExactOwnedRegistryVersion(ecosystem, expectedVersion) &&
+               VersionsEqual(package.Version, expectedVersion) &&
+               (!isPowerShellGallery || PackageHasOwner(package.Owners, expectedOwner.Trim()));
     }
 
     public static bool HasExactVersion(string? version)
@@ -98,6 +100,14 @@ internal sealed class WebPublicationCatalog
            !string.Equals(version, "latest", StringComparison.OrdinalIgnoreCase) &&
            !string.Equals(version, "next", StringComparison.OrdinalIgnoreCase) &&
            version.IndexOfAny(new[] { '*', '^', '~', '<', '>', '=', '[', ']', '(', ')', ',', '|' }) < 0;
+
+    private static bool HasExactOwnedRegistryVersion(string ecosystem, string? version)
+        => ecosystem is "nuget" or "powershellgallery" &&
+           HasExactVersion(version) &&
+           Regex.IsMatch(
+               version!,
+               @"^v?\d+\.\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$",
+               RegexOptions.CultureInvariant);
 
     private static bool VersionsEqual(string? left, string? right)
         => string.Equals(left?.Trim().TrimStart('v'), right?.Trim().TrimStart('v'), StringComparison.OrdinalIgnoreCase);
@@ -129,7 +139,8 @@ internal sealed class WebPublicationCatalog
         JsonElement root,
         string sectionName,
         string itemsName,
-        string contextLabel)
+        string contextLabel,
+        bool includeItemOwners)
     {
         if (!root.TryGetProperty(sectionName, out var section) || section.ValueKind is JsonValueKind.Null)
             return null;
@@ -142,7 +153,7 @@ internal sealed class WebPublicationCatalog
         var owner = section.TryGetProperty("owner", out var ownerElement) && ownerElement.ValueKind == JsonValueKind.String
             ? ownerElement.GetString()?.Trim()
             : null;
-        var packages = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var packages = new Dictionary<string, CatalogPackage>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in items.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object ||
@@ -152,10 +163,15 @@ internal sealed class WebPublicationCatalog
             var id = idElement.GetString()?.Trim();
             if (string.IsNullOrWhiteSpace(id))
                 continue;
-            packages[id] = item.TryGetProperty("version", out var versionElement) &&
-                           versionElement.ValueKind == JsonValueKind.String
+            var version = item.TryGetProperty("version", out var versionElement) &&
+                          versionElement.ValueKind == JsonValueKind.String
                 ? versionElement.GetString()?.Trim()
                 : null;
+            var owners = includeItemOwners && item.TryGetProperty("owners", out var ownersElement) &&
+                         ownersElement.ValueKind == JsonValueKind.String
+                ? ownersElement.GetString()?.Trim()
+                : null;
+            packages[id] = new CatalogPackage(version, owners);
         }
         return new CatalogSection(owner, packages);
     }
@@ -174,5 +190,11 @@ internal sealed class WebPublicationCatalog
             .ToArray();
     }
 
-    private sealed record CatalogSection(string? Owner, IReadOnlyDictionary<string, string?> Packages);
+    private static bool PackageHasOwner(string? owners, string expectedOwner)
+        => (owners ?? string.Empty)
+            .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(owner => owner.Equals(expectedOwner, StringComparison.OrdinalIgnoreCase));
+
+    private sealed record CatalogSection(string? Owner, IReadOnlyDictionary<string, CatalogPackage> Packages);
+    private sealed record CatalogPackage(string? Version, string? Owners);
 }

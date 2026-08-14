@@ -351,7 +351,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
             {
               "powerShellGallery": {
                 "owner": "Przemyslaw.Klys",
-                "modules": [{ "id": "SafeModule", "version": "1.2.3" }]
+                "modules": [{ "id": "SafeModule", "version": "1.2.3", "owners": "Przemyslaw.Klys" }]
               },
               "warnings": []
             }

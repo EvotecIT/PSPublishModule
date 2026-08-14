@@ -34,9 +34,10 @@ public sealed partial class WebAgentContentSecurityScanner
             return;
         }
         if (tokens[1].Equals("package", StringComparison.OrdinalIgnoreCase) &&
-            tokens[2].Equals("add", StringComparison.OrdinalIgnoreCase))
+            (tokens[2].Equals("add", StringComparison.OrdinalIgnoreCase) ||
+             tokens[2].Equals("update", StringComparison.OrdinalIgnoreCase)))
         {
-            AddSingleOperand("nuget", "dotnet package add", tokens, 3, path, line, references, findings);
+            AddSingleOperand("nuget", "dotnet package " + tokens[2], tokens, 3, path, line, references, findings);
             return;
         }
         if (tokens[1].Equals("new", StringComparison.OrdinalIgnoreCase) &&
@@ -68,7 +69,22 @@ public sealed partial class WebAgentContentSecurityScanner
         if (!ValidatePackageSourceOptions("powershellgallery", tokens, path, line, findings))
             return;
         var nameIndex = Array.FindIndex(tokens, 1, token => token.Equals("-Name", StringComparison.OrdinalIgnoreCase));
-        AddPowerShellNames(tokens[0], tokens, nameIndex >= 0 ? nameIndex + 1 : 1, path, line, references, findings);
+        AddPowerShellNames("powershellgallery", tokens[0], tokens, nameIndex >= 0 ? nameIndex + 1 : 1, path, line, references, findings);
+    }
+
+    private static void ParsePowerShellNuGet(
+        string[] tokens,
+        string path,
+        int line,
+        ICollection<WebAgentPackageReference> references,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        if (!ValidatePackageSourceOptions("nuget", tokens, path, line, findings))
+            return;
+        var nameIndex = Array.FindIndex(tokens, 1, token =>
+            token.Equals("-Name", StringComparison.OrdinalIgnoreCase) ||
+            token.Equals("-Id", StringComparison.OrdinalIgnoreCase));
+        AddPowerShellNames("nuget", tokens[0], tokens, nameIndex >= 0 ? nameIndex + 1 : 1, path, line, references, findings);
     }
 
     private static void ParseNode(

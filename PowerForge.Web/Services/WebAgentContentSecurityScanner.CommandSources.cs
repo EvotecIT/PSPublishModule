@@ -48,6 +48,7 @@ public sealed partial class WebAgentContentSecurityScanner
         => ecosystem switch
         {
             "nuget" => option.Equals("--source", StringComparison.OrdinalIgnoreCase) ||
+                       option.Equals("-Source", StringComparison.OrdinalIgnoreCase) ||
                        option.Equals("-s", StringComparison.OrdinalIgnoreCase) ||
                        option.Equals("--add-source", StringComparison.OrdinalIgnoreCase) ||
                        option.Equals("--configfile", StringComparison.OrdinalIgnoreCase),
@@ -86,6 +87,7 @@ public sealed partial class WebAgentContentSecurityScanner
         return ecosystem switch
         {
             "nuget" when option.Equals("--source", StringComparison.OrdinalIgnoreCase) ||
+                          option.Equals("-Source", StringComparison.OrdinalIgnoreCase) ||
                           option.Equals("-s", StringComparison.OrdinalIgnoreCase) =>
                 value.Equals("nuget.org", StringComparison.OrdinalIgnoreCase) ||
                 value.Equals("https://api.nuget.org/v3/index.json", StringComparison.OrdinalIgnoreCase),

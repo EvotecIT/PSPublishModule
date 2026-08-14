@@ -422,7 +422,7 @@ public static partial class WebEcosystemStatsGenerator
 
             var authors = properties.Element(dataNs + "Authors")?.Value?.Trim();
             var owners = properties.Element(dataNs + "Owners")?.Value?.Trim();
-            if (!MatchesPowerShellGalleryOwner(requiredOwner, owners, authors))
+            if (!MatchesPowerShellGalleryOwner(requiredOwner, owners))
                 continue;
 
             var version = properties.Element(dataNs + "Version")?.Value?.Trim();
@@ -445,27 +445,14 @@ public static partial class WebEcosystemStatsGenerator
         return modules;
     }
 
-    private static bool MatchesPowerShellGalleryOwner(string? requiredOwner, string? owners, string? authors)
+    private static bool MatchesPowerShellGalleryOwner(string? requiredOwner, string? owners)
     {
         if (string.IsNullOrWhiteSpace(requiredOwner))
             return true;
 
-        var required = NormalizeIdentity(requiredOwner);
-        if (string.IsNullOrWhiteSpace(required))
-            return true;
-
-        var candidates = SplitOwnerOrAuthorValues(owners)
-            .Concat(SplitOwnerOrAuthorValues(authors));
-        foreach (var candidate in candidates)
-        {
-            var normalized = NormalizeIdentity(candidate);
-            if (string.IsNullOrWhiteSpace(normalized))
-                continue;
-            if (string.Equals(normalized, required, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        return false;
+        var required = requiredOwner.Trim();
+        return SplitOwnerOrAuthorValues(owners)
+            .Any(candidate => candidate.Equals(required, StringComparison.OrdinalIgnoreCase));
     }
 
     private static List<string> BuildPowerShellGalleryAuthorCandidates(string? owner, string? author)

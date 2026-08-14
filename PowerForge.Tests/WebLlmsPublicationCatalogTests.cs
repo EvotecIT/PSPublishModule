@@ -229,6 +229,52 @@ public sealed class WebLlmsPublicationCatalogTests
 
         Assert.Equal(1, result.InstallCommandCount);
         Assert.Contains("Install-Module PublishedModule -RequiredVersion 1.2.3", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+
+        using var scanner = new WebAgentContentSecurityScanner();
+        var scan = scanner.Scan(new WebAgentContentSecurityOptions
+        {
+            SiteRoot = fixture.Root,
+            Files = ["llms.txt", "llms-full.txt", "llms.json"],
+            PublicationCatalogPath = catalog,
+            PowerShellGalleryOwner = "Przemyslaw.Klys",
+            RequireOwnerVerification = ["powershellgallery:*"]
+        });
+        Assert.True(scan.Success, string.Join(" | ", scan.Findings.Select(static finding => finding.Message)));
+    }
+
+    [Theory]
+    [InlineData("Published.Package", false)]
+    [InlineData("PublishedModule", true)]
+    public void VerifiedCatalog_OmitsCommandsWhoseVersionsCannotPassTheFinalArtifactAudit(
+        string packageId,
+        bool isPowerShellModule)
+    {
+        using var fixture = new PublicationFixture();
+        var projectFile = isPowerShellModule
+            ? fixture.WriteFile(packageId + ".psd1", $"@{{ RootModule = '{packageId}.psm1'; ModuleVersion = '1.2' }}")
+            : fixture.WriteFile(packageId + ".csproj",
+                $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>{packageId}</PackageId><Version>1.2</Version></PropertyGroup></Project>");
+        var catalog = fixture.WriteCatalog(
+            "Evotec",
+            isPowerShellModule ? [] : [packageId],
+            powerShellGalleryOwner: isPowerShellModule ? "Przemyslaw.Klys" : null,
+            powerShellModules: isPowerShellModule ? [packageId] : null,
+            packageVersion: "1.2");
+
+        var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            ProjectFile = projectFile,
+            InstallCommandPolicy = WebLlmsInstallCommandPolicy.VerifiedCatalog,
+            PublicationCatalogPath = catalog,
+            NuGetOwner = "Evotec",
+            PowerShellGalleryOwner = "Przemyslaw.Klys"
+        });
+
+        Assert.Equal(0, result.InstallCommandCount);
+        Assert.DoesNotContain("## Install", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        Assert.DoesNotContain("## Installation", File.ReadAllText(result.LlmsFullPath), StringComparison.Ordinal);
+        Assert.DoesNotContain("\"install\"", File.ReadAllText(result.LlmsJsonPath), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -529,7 +575,12 @@ public sealed class WebLlmsPublicationCatalogTests
                     : new
                     {
                         owner = powerShellGalleryOwner,
-                        modules = (powerShellModules ?? []).Select(id => new { id, version = packageVersion }).ToArray()
+                        modules = (powerShellModules ?? []).Select(id => new
+                        {
+                            id,
+                            version = packageVersion,
+                            owners = powerShellGalleryOwner
+                        }).ToArray()
                     }
             };
             File.WriteAllText(path, JsonSerializer.Serialize(payload));
