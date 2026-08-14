@@ -5,6 +5,96 @@ public sealed class ModuleBootstrapperGeneratorWindowsPowerShellTests
 {
     [Fact]
     [Trait("Category", "Integration")]
+    public void GeneratedAssemblyLoadContextBootstrapperParsesInPowerShell7AndWindowsPowerShell()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var windowsPowerShell = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "WindowsPowerShell",
+            "v1.0",
+            "powershell.exe");
+        var powerShell7 = FindExecutableOnPath("pwsh.exe");
+        if (!File.Exists(windowsPowerShell) || powerShell7 is null)
+        {
+            return;
+        }
+
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "pf-bootstrapper-template-parse-" + Guid.NewGuid().ToString("N"));
+        var moduleRoot = Path.Combine(root, "Module");
+        Directory.CreateDirectory(moduleRoot);
+
+        try
+        {
+            var developmentOptions = new ModuleDevelopmentBinaryBootstrapperOptions(
+                ModuleDevelopmentBinaryMode.Environment,
+                Path.Combine(root, "Sources", "DemoModule", "bin"),
+                "DEMO_USE_DEVELOPMENT_BINARIES",
+                "DEMO_DEVELOPMENT_CONFIGURATION",
+                new[] { "net10.0", "net8.0" },
+                new[] { "net472" });
+
+            ModuleBootstrapperGenerator.Generate(
+                moduleRoot,
+                "DemoModule",
+                new ExportSet(
+                    Array.Empty<string>(),
+                    new[] { "Get-Demo" },
+                    new[] { "demo" }),
+                new[] { "DemoModule.dll" },
+                handleRuntimes: true,
+                useAssemblyLoadContext: true,
+                assemblyTypeAcceleratorMode: AssemblyTypeAcceleratorExportMode.AllowList,
+                assemblyTypeAccelerators: new[] { "Demo.Dependency" },
+                ignoreLibrariesOnLoad: new[] { "Ignored.Dependency.dll" },
+                developmentBinaries: developmentOptions);
+
+            var bootstrapperPath = Path.Combine(moduleRoot, "DemoModule.psm1");
+            var parserScript = Path.Combine(root, "Test-BootstrapperSyntax.ps1");
+            File.WriteAllText(
+                parserScript,
+                """
+param([Parameter(Mandatory = $true)][string] $Path)
+$tokens = $null
+$errors = $null
+[System.Management.Automation.Language.Parser]::ParseFile($Path, [ref] $tokens, [ref] $errors) | Out-Null
+if ($errors.Count -gt 0) {
+    $errors | ForEach-Object { Write-Error -Message $_.Message }
+    exit 1
+}
+'BOOTSTRAPPER_PARSE_OK'
+""");
+
+            foreach (var host in new[] { powerShell7, windowsPowerShell })
+            {
+                var result = RunProcess(
+                    host,
+                    $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{parserScript}\" -Path \"{bootstrapperPath}\"",
+                    root,
+                    timeoutMilliseconds: 20000);
+
+                Assert.True(
+                    result.ExitCode == 0,
+                    $"{host} parser proof failed.{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}{result.StandardError}");
+                Assert.Contains("BOOTSTRAPPER_PARSE_OK", result.StandardOutput);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public void GeneratedDesktopResolverStopsAfterBootstrapAndDoesNotReenterForMissingPowerShellResources()
     {
         if (!OperatingSystem.IsWindows())
@@ -163,6 +253,28 @@ namespace DemoModule
             process.ExitCode,
             standardOutput.Result,
             standardError.Result);
+    }
+
+    private static string? FindExecutableOnPath(string fileName)
+    {
+        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+                     .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            try
+            {
+                var candidate = Path.Combine(directory.Trim(), fileName);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+            catch
+            {
+                // Ignore malformed PATH entries and continue looking for an executable host.
+            }
+        }
+
+        return null;
     }
 
     private sealed record ProcessResult(

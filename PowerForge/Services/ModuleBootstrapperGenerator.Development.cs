@@ -67,83 +67,56 @@ internal static partial class ModuleBootstrapperGenerator
         if (!useAssemblyLoadContext || loaderIdentity is null)
             return "                & $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop";
 
-        var loaderTypeName = loaderIdentity.TypeName;
-        var loaderSource = BuildDevelopmentAssemblyLoadContextSource(loaderIdentity);
-        var lines = new List<string>
-        {
-            "                if (-not ('" + loaderTypeName + "' -as [type])) {",
-            "                    Add-Type -TypeDefinition @'",
-            loaderSource.TrimEnd(),
-            "'@ -Language CSharp -ErrorAction Stop",
-            "                }",
-            "                $PowerForgeDevelopmentModuleAssembly = [" + loaderTypeName + "]::LoadModule($PowerForgeDevelopmentBinaryPath, '" + EscapePsSingleQuoted(moduleName) + ".Development')",
-            "                $PowerForgeDevelopmentInnerModule = & $ImportModule -Assembly $PowerForgeDevelopmentModuleAssembly -Force -PassThru -ErrorAction Stop"
-        };
-
         var typeAcceleratorBlock = BuildTypeAcceleratorBlock(
             assemblyTypeAcceleratorMode,
             assemblyTypeAccelerators,
             assemblyTypeAcceleratorAssemblies);
-        if (!string.IsNullOrWhiteSpace(typeAcceleratorBlock))
-        {
-            lines.Add("                $ModuleAssembly = $PowerForgeDevelopmentModuleAssembly");
-            lines.Add("                $LibFolder = [IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)");
-            lines.Add(IndentPowerShell(typeAcceleratorBlock.TrimEnd(), 16));
-        }
+        var typeAcceleratorSetupBlock = string.IsNullOrWhiteSpace(typeAcceleratorBlock)
+            ? string.Empty
+            : "                $ModuleAssembly = $PowerForgeDevelopmentModuleAssembly\r\n" +
+              "                $LibFolder = [IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)\r\n" +
+              IndentPowerShell(typeAcceleratorBlock.TrimEnd(), 16);
 
-        lines.Add("                if ($PowerForgeDevelopmentInnerModule) {");
-        lines.Add(IndentPowerShell(BuildPowerShellModuleExportBridge("$PowerForgeDevelopmentInnerModule", libraryName, "$PowerForgeDevelopmentBinaryPath").TrimEnd(), 20));
-        lines.Add("                }");
-
-        return string.Join("\r\n", lines);
+        return RenderModuleBootstrapperTemplate(
+            "DevelopmentAssemblyLoadContextImport",
+            "Scripts/ModuleBootstrapper/DevelopmentAssemblyLoadContextImport.Template.ps1",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["LoaderTypeName"] = loaderIdentity.TypeName,
+                ["LoaderSource"] = BuildDevelopmentAssemblyLoadContextSource(loaderIdentity).TrimEnd(),
+                ["DevelopmentContextName"] = EscapePsSingleQuoted(moduleName + ".Development"),
+                ["TypeAcceleratorSetupBlock"] = typeAcceleratorSetupBlock,
+                ["ExportBridgeBlock"] = IndentPowerShell(
+                    BuildPowerShellModuleExportBridge(
+                        "$PowerForgeDevelopmentInnerModule",
+                        libraryName,
+                        "$PowerForgeDevelopmentBinaryPath").TrimEnd(),
+                    20)
+            });
     }
 
-    private static string BuildPowerShellModuleExportBridge(string innerModuleExpression, string libraryName, string? fallbackImportPathExpression = null)
+    private static string BuildPowerShellModuleExportBridge(
+        string innerModuleExpression,
+        string libraryName,
+        string? fallbackImportPathExpression = null)
     {
-        var fallbackImport = string.IsNullOrWhiteSpace(fallbackImportPathExpression)
+        var fallbackImportBlock = string.IsNullOrWhiteSpace(fallbackImportPathExpression)
             ? string.Empty
             : "\r\n    & $ImportModule " + fallbackImportPathExpression + " -ErrorAction Stop";
-
         var unavailableMessage = string.IsNullOrWhiteSpace(fallbackImportPathExpression)
             ? $"AddExportedCmdlet is not available on this PowerShell version. Cmdlets from {EscapePsSingleQuoted(libraryName)} may not be re-exported to the module scope."
             : $"AddExportedCmdlet is not available on this PowerShell version. Falling back to direct Import-Module; cmdlets from {EscapePsSingleQuoted(libraryName)} will load from the default context.";
 
-        return $@"# Import-Module -Assembly loads the inner binary module into its own module object. PowerShell has no
-# public API to copy those exported cmdlets back to the script-module wrapper, so this uses the same
-# private PSModuleInfo hook used by community ALC loaders.
-$AddExportedCmdlet = [System.Management.Automation.PSModuleInfo].GetMethod(
-    'AddExportedCmdlet',
-    [System.Reflection.BindingFlags]'Instance, NonPublic'
-)
-if ($null -ne $AddExportedCmdlet) {{
-    foreach ($Cmd in {innerModuleExpression}.ExportedCmdlets.Values) {{
-        $AddExportedCmdlet.Invoke($ExecutionContext.SessionState.Module, @(, $Cmd)) | Out-Null
-    }}
-    $AddExportedAlias = [System.Management.Automation.PSModuleInfo].GetMethod(
-        'AddExportedAlias',
-        [System.Reflection.BindingFlags]'Instance, NonPublic'
-    )
-    if ($null -ne $AddExportedAlias) {{
-        foreach ($Alias in {innerModuleExpression}.ExportedAliases.Values) {{
-            $AliasTarget = if ([string]::IsNullOrWhiteSpace($Alias.Definition)) {{ $Alias.ResolvedCommandName }} else {{ $Alias.Definition }}
-            try {{
-                Set-Alias -Name $Alias.Name -Value $AliasTarget -Scope Local -Force -ErrorAction Stop
-                $ExportedAlias = $ExecutionContext.SessionState.InvokeCommand.GetCommand($Alias.Name, [System.Management.Automation.CommandTypes]::Alias)
-                if ($null -ne $ExportedAlias) {{
-                    $AddExportedAlias.Invoke($ExecutionContext.SessionState.Module, @(, $ExportedAlias)) | Out-Null
-                }} else {{
-                    Write-Warning -Message ""Alias '$($Alias.Name)' from {EscapePsSingleQuoted(libraryName)} was created but could not be resolved for export.""
-                }}
-            }} catch {{
-                Write-Warning -Message ""Alias '$($Alias.Name)' from {EscapePsSingleQuoted(libraryName)} could not be re-exported: $($_.Exception.Message)""
-            }}
-        }}
-    }} else {{
-        Write-Warning -Message ""AddExportedAlias is not available on this PowerShell version. Aliases from {EscapePsSingleQuoted(libraryName)} will not be re-exported to the module scope.""
-    }}
-}} else {{
-    Write-Warning -Message ""{unavailableMessage}""{fallbackImport}
-}}";
+        return RenderModuleBootstrapperTemplate(
+            "PowerShellModuleExportBridge",
+            "Scripts/ModuleBootstrapper/PowerShellModuleExportBridge.Template.ps1",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["InnerModuleExpression"] = innerModuleExpression,
+                ["LibraryName"] = EscapePsSingleQuoted(libraryName),
+                ["UnavailableMessage"] = unavailableMessage,
+                ["FallbackImportBlock"] = fallbackImportBlock
+            });
     }
 
     private static string BuildDevelopmentRuntimeHandlerBlock()
