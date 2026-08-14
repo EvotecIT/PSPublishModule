@@ -58,6 +58,112 @@ public sealed partial class AppleAppArchiveServiceTests
     }
 
     [Fact]
+    public async Task CreateArchiveAsync_exact_source_accepts_xcode_private_repository_mirror_origins()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            RunGit(root.FullName, "init", "--quiet");
+            var runner = new ExactPackageProcessRunner(root.FullName, materializeXcodeMirrorOrigin: true);
+            WritePackageLock(root.FullName, runner.RemoteUrl, runner.ApprovedRevision);
+            CommitApprovedInputs(root.FullName);
+
+            var result = await new AppleAppArchiveService(runner).CreateArchiveAsync(new AppleAppArchiveRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "App",
+                ArchivePath = Path.Combine(root.FullName, "App.xcarchive"),
+                RequireExactPackageSnapshot = true
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(2, runner.Requests.Count);
+            Assert.False(Directory.Exists(runner.SourcePackagesRoot));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task CreateArchiveAsync_exact_source_rejects_linked_xcode_repository_mirror_config()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            RunGit(root.FullName, "init", "--quiet");
+            var runner = new ExactPackageProcessRunner(
+                root.FullName,
+                materializeXcodeMirrorOrigin: true,
+                linkXcodeMirrorConfig: true);
+            WritePackageLock(root.FullName, runner.RemoteUrl, runner.ApprovedRevision);
+            CommitApprovedInputs(root.FullName);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleAppArchiveService(runner).CreateArchiveAsync(new AppleAppArchiveRequest
+                {
+                    ProjectPath = project.FullName,
+                    Scheme = "App",
+                    ArchivePath = Path.Combine(root.FullName, "App.xcarchive"),
+                    RequireExactPackageSnapshot = true
+                }));
+
+            Assert.Contains("symbolic link", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(true, false, "include external Git configuration")]
+    [InlineData(false, true, "symbolic link")]
+    public async Task CreateArchiveAsync_exact_source_rejects_xcode_repository_mirror_indirections(
+        bool includeExternalConfig,
+        bool linkObjectsInfo,
+        string expectedMessage)
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            RunGit(root.FullName, "init", "--quiet");
+            var runner = new ExactPackageProcessRunner(
+                root.FullName,
+                materializeXcodeMirrorOrigin: true,
+                includeExternalXcodeMirrorConfig: includeExternalConfig,
+                linkXcodeMirrorObjectsInfo: linkObjectsInfo);
+            WritePackageLock(root.FullName, runner.RemoteUrl, runner.ApprovedRevision);
+            CommitApprovedInputs(root.FullName);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleAppArchiveService(runner).CreateArchiveAsync(new AppleAppArchiveRequest
+                {
+                    ProjectPath = project.FullName,
+                    Scheme = "App",
+                    ArchivePath = Path.Combine(root.FullName, "App.xcarchive"),
+                    RequireExactPackageSnapshot = true
+                }));
+
+            Assert.Contains(expectedMessage, exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task CreateArchiveAsync_exact_source_rejects_transient_package_checkout_mutation()
     {
         if (!OperatingSystem.IsMacOS()) return;
@@ -228,6 +334,10 @@ public sealed partial class AppleAppArchiveServiceTests
         private readonly bool _mutateBinaryArtifactDuringArchive;
         private readonly bool _replaceBinaryArtifactAfterResolveCompletion;
         private readonly bool _mutatePackageViaHardLinkDuringArchive;
+        private readonly bool _materializeXcodeMirrorOrigin;
+        private readonly bool _linkXcodeMirrorConfig;
+        private readonly bool _includeExternalXcodeMirrorConfig;
+        private readonly bool _linkXcodeMirrorObjectsInfo;
         private readonly string _fixtureRoot;
         private readonly string _remoteSourceRoot;
 
@@ -238,7 +348,11 @@ public sealed partial class AppleAppArchiveServiceTests
             bool materializeBinaryArtifact = false,
             bool mutateBinaryArtifactDuringArchive = false,
             bool replaceBinaryArtifactAfterResolveCompletion = false,
-            bool mutatePackageViaHardLinkDuringArchive = false)
+            bool mutatePackageViaHardLinkDuringArchive = false,
+            bool materializeXcodeMirrorOrigin = false,
+            bool linkXcodeMirrorConfig = false,
+            bool includeExternalXcodeMirrorConfig = false,
+            bool linkXcodeMirrorObjectsInfo = false)
         {
             _fixtureRoot = fixtureRoot;
             _mutateDuringArchive = mutateDuringArchive;
@@ -247,6 +361,10 @@ public sealed partial class AppleAppArchiveServiceTests
             _mutateBinaryArtifactDuringArchive = mutateBinaryArtifactDuringArchive;
             _replaceBinaryArtifactAfterResolveCompletion = replaceBinaryArtifactAfterResolveCompletion;
             _mutatePackageViaHardLinkDuringArchive = mutatePackageViaHardLinkDuringArchive;
+            _materializeXcodeMirrorOrigin = materializeXcodeMirrorOrigin;
+            _linkXcodeMirrorConfig = linkXcodeMirrorConfig;
+            _includeExternalXcodeMirrorConfig = includeExternalXcodeMirrorConfig;
+            _linkXcodeMirrorObjectsInfo = linkXcodeMirrorObjectsInfo;
             _remoteSourceRoot = Directory.CreateDirectory(Path.Combine(fixtureRoot, "RemoteShared")).FullName;
             RunGit(_remoteSourceRoot, "init", "--quiet");
             RunGit(_remoteSourceRoot, "config", "user.name", "PowerForge Tests");
@@ -281,7 +399,42 @@ public sealed partial class AppleAppArchiveServiceTests
                 var checkouts = Directory.CreateDirectory(Path.Combine(SourcePackagesRoot, "checkouts")).FullName;
                 var checkout = Path.Combine(checkouts, "Shared");
                 RunGit(checkouts, "clone", "--quiet", "--no-hardlinks", _remoteSourceRoot, checkout);
-                RunGit(checkout, "remote", "set-url", "origin", RemoteUrl);
+                if (_materializeXcodeMirrorOrigin)
+                {
+                    var repositories = Directory.CreateDirectory(Path.Combine(SourcePackagesRoot, "repositories")).FullName;
+                    var mirror = Path.Combine(repositories, "Shared-12345678");
+                    RunGit(repositories, "clone", "--quiet", "--mirror", "--no-hardlinks", _remoteSourceRoot, mirror);
+                    RunGit(mirror, "remote", "set-url", "origin", RemoteUrl);
+                    if (_linkXcodeMirrorConfig)
+                    {
+                        var config = Path.Combine(mirror, "config");
+                        var externalConfig = Path.Combine(_fixtureRoot, "linked-mirror-config");
+                        File.Copy(config, externalConfig);
+                        File.Delete(config);
+                        File.CreateSymbolicLink(config, externalConfig);
+                    }
+                    if (_includeExternalXcodeMirrorConfig)
+                    {
+                        var externalConfig = Path.Combine(_fixtureRoot, "included-mirror-config");
+                        File.WriteAllText(externalConfig, "[core]\n\tbare = true\n");
+                        File.AppendAllText(
+                            Path.Combine(mirror, "config"),
+                            $"\n[include]\n\tpath = {externalConfig}\n");
+                    }
+                    if (_linkXcodeMirrorObjectsInfo)
+                    {
+                        var objectsInfo = Path.Combine(mirror, "objects", "info");
+                        var externalObjectsInfo = Directory.CreateDirectory(
+                            Path.Combine(_fixtureRoot, "linked-objects-info")).FullName;
+                        Directory.Delete(objectsInfo, recursive: true);
+                        Directory.CreateSymbolicLink(objectsInfo, externalObjectsInfo);
+                    }
+                    RunGit(checkout, "remote", "set-url", "origin", mirror);
+                }
+                else
+                {
+                    RunGit(checkout, "remote", "set-url", "origin", RemoteUrl);
+                }
                 if (_materializeWrongRevision)
                 {
                     RunGit(checkout, "config", "user.name", "PowerForge Tests");

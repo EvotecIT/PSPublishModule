@@ -17,6 +17,7 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
         new Dictionary<string, string>(StringComparer.Ordinal);
     private string? _snapshotConfigPath;
     private string? _expectedConfigSha256;
+    private readonly List<string> _preparedSwiftPackageMetadataRoots = new();
     private bool _disposed;
 
     private AppleReleaseSourceSnapshot(
@@ -80,6 +81,7 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
                 snapshotRoot,
                 snapshotProjectRoot,
                 sourceCommit);
+            snapshot.PrepareSwiftPackageWorkingDirectories();
             snapshot._trackedFileMutationIdentities = snapshot.CaptureTrackedFileMutationIdentities();
             snapshot.ValidateUnchanged();
             if (!string.IsNullOrWhiteSpace(plan.ExactSourceConfigPath))
@@ -148,7 +150,104 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
 
     /// <summary>Begins monitoring the detached source tree for transient changes during xcodebuild.</summary>
     internal AppleReleaseSourceMutationMonitor MonitorChanges()
-        => new(RootPath);
+    {
+        var monitor = new AppleReleaseSourceMutationMonitor(RootPath);
+        try
+        {
+            ValidatePreparedSwiftPackageWorkingDirectories();
+            return monitor;
+        }
+        catch
+        {
+            monitor.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Prepares the empty package-local directories that Xcode creates while resolving a tracked
+    /// local Swift package. Files and later mutations remain observable by the snapshot monitor.
+    /// </summary>
+    private void PrepareSwiftPackageWorkingDirectories()
+    {
+        var trackedPaths = Run(
+                _git,
+                RootPath,
+                new[] { "ls-files", "-z" },
+                "enumerate local Swift package roots")
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var relativePath in trackedPaths.Where(path =>
+                     Path.GetFileName(path).Equals("Package.swift", StringComparison.Ordinal)))
+        {
+            var packageManifest = Path.GetFullPath(Path.Combine(
+                RootPath,
+                relativePath.Replace('/', Path.DirectorySeparatorChar)));
+            EnsureContained(RootPath, packageManifest, "Apple snapshot Swift package manifest");
+            var metadataRoot = Path.Combine(Path.GetDirectoryName(packageManifest)!, ".swiftpm");
+            EnsureEmptyRealDirectory(metadataRoot, "Apple snapshot Swift package metadata root");
+            _preparedSwiftPackageMetadataRoots.Add(metadataRoot);
+            foreach (var name in new[] { "configuration", "xcode" })
+            {
+                var directory = Path.Combine(metadataRoot, name);
+                EnsureEmptyRealDirectory(directory, $"Apple snapshot Swift package {name} directory");
+            }
+        }
+    }
+
+    private void ValidatePreparedSwiftPackageWorkingDirectories()
+    {
+        foreach (var metadataRoot in _preparedSwiftPackageMetadataRoots)
+        {
+            EnsureRealDirectory(metadataRoot, "Apple snapshot Swift package metadata root");
+            var expectedChildren = new HashSet<string>(new[] { "configuration", "xcode" }, StringComparer.Ordinal);
+            foreach (var entry in Directory.EnumerateFileSystemEntries(metadataRoot))
+            {
+                if (!expectedChildren.Remove(Path.GetFileName(entry)))
+                {
+                    throw new InvalidOperationException(
+                        $"Apple snapshot Swift package metadata root contains unbound state before the Apple build starts: {entry}");
+                }
+            }
+            if (expectedChildren.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Apple snapshot Swift package metadata root is incomplete before the Apple build starts: {metadataRoot}");
+            }
+            EnsureEmptyRealDirectory(
+                Path.Combine(metadataRoot, "configuration"),
+                "Apple snapshot Swift package configuration directory");
+            EnsureEmptyRealDirectory(
+                Path.Combine(metadataRoot, "xcode"),
+                "Apple snapshot Swift package xcode directory");
+        }
+    }
+
+    private void EnsureEmptyRealDirectory(string directory, string name)
+    {
+        EnsureContained(RootPath, directory, name);
+        if (!Directory.Exists(directory))
+        {
+            if (File.Exists(directory))
+                throw new InvalidOperationException($"{name} must be an ordinary empty directory: {directory}");
+            Directory.CreateDirectory(directory);
+            return;
+        }
+        EnsureRealDirectory(directory, name);
+        if (Directory.EnumerateFileSystemEntries(directory).Any())
+            throw new InvalidOperationException($"{name} must be empty before the Apple build starts: {directory}");
+    }
+
+    private void EnsureRealDirectory(string directory, string name)
+    {
+        EnsureContained(RootPath, directory, name);
+        if (!Directory.Exists(directory))
+            throw new InvalidOperationException($"{name} must be an ordinary directory: {directory}");
+        if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"{name} must not be a symbolic link or reparse point: {directory}");
+        }
+    }
 
     private string MapRepositoryPath(string sourcePath)
     {
