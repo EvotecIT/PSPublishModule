@@ -19,7 +19,14 @@ if ($null -eq $installNativeExitTracker) {
     throw "PowerShell native exit-code tracker type '$NativeExitCodeTrackerType' does not expose Install(SessionState)."
 }
 $nativeExitTracker = $installNativeExitTracker.Invoke($null, @($ExecutionContext.SessionState))
+$benchmarkDslCommandAliasNames = [System.Collections.Generic.List[string]]::new()
 try {
+    if ($null -ne $PowerForgeBenchmarkDslCommandAliases) {
+        foreach ($entry in @($PowerForgeBenchmarkDslCommandAliases.GetEnumerator())) {
+            Set-Alias -Name $entry.Key -Value $entry.Value -Scope Local -Force
+            $benchmarkDslCommandAliasNames.Add([string] $entry.Key)
+        }
+    }
     if ($StrictMode) {
         Set-StrictMode -Version Latest
     }
@@ -33,6 +40,9 @@ try {
     }
 }
 finally {
+    foreach ($aliasName in $benchmarkDslCommandAliasNames) {
+        Remove-Item -LiteralPath "Alias:$aliasName" -Force -ErrorAction SilentlyContinue
+    }
     $nativeExitTracker.Dispose()
     if ($null -eq $previousGlobalLastExitCodeVariable) {
         Remove-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue

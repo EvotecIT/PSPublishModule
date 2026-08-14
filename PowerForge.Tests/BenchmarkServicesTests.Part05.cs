@@ -711,13 +711,16 @@ $module = New-Module -Name BenchmarkAliasOwner -ScriptBlock {
 function New-BenchmarkSuite { throw 'benchmark alias was used' }
 function Add-BenchmarkAxis { throw 'axis alias was used' }
 function Add-BenchmarkEngine { throw 'engine alias was used' }
+function Invoke-CanonicalBenchmarkTrap { throw 'canonical benchmark alias was used' }
 Set-Alias -Name benchmark -Value New-BenchmarkSuite -Description 'owned benchmark alias'
 Set-Alias -Name axis -Value Add-BenchmarkAxis -Description 'owned axis alias'
 Set-Alias -Name engine -Value Add-BenchmarkEngine -Description 'owned engine alias'
-Export-ModuleMember -Alias benchmark, axis, engine
+Set-Alias -Name New-BenchmarkSuite -Value Invoke-CanonicalBenchmarkTrap -Description 'owned canonical benchmark alias'
+Export-ModuleMember -Alias benchmark, axis, engine, New-BenchmarkSuite
 }
 Import-Module $module
 Set-Alias -Name policy -Value Get-Date -Description 'described policy alias'
+Set-Alias -Name Set-BenchmarkPolicy -Value Get-Date -Description 'described canonical policy alias'
 """);
                 setup.Invoke();
                 Assert.Empty(setup.Streams.Error);
@@ -750,6 +753,18 @@ Set-Alias -Name policy -Value Get-Date -Description 'described policy alias'
             var engineAlias = Assert.IsType<AliasInfo>(Assert.Single(verify.Invoke()).BaseObject);
             Assert.Equal("Add-BenchmarkEngine", engineAlias.Definition);
             Assert.Equal("BenchmarkAliasOwner", engineAlias.ModuleName);
+
+            verify.Commands.Clear();
+            verify.AddCommand("Get-Alias").AddArgument("New-BenchmarkSuite");
+            var canonicalAlias = Assert.IsType<AliasInfo>(Assert.Single(verify.Invoke()).BaseObject);
+            Assert.Equal("Invoke-CanonicalBenchmarkTrap", canonicalAlias.Definition);
+            Assert.Equal("BenchmarkAliasOwner", canonicalAlias.ModuleName);
+
+            verify.Commands.Clear();
+            verify.AddCommand("Get-Alias").AddArgument("Set-BenchmarkPolicy");
+            var canonicalPolicyAlias = Assert.IsType<AliasInfo>(Assert.Single(verify.Invoke()).BaseObject);
+            Assert.Equal("Get-Date", canonicalPolicyAlias.Definition);
+            Assert.Equal("described canonical policy alias", canonicalPolicyAlias.Description);
 
             verify.Commands.Clear();
             verify.AddCommand("Get-Alias").AddArgument("policy");

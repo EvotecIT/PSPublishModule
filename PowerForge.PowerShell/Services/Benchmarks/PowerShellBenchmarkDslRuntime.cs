@@ -13,6 +13,7 @@ namespace PowerForge;
 public static partial class PowerShellBenchmarkDslRuntime
 {
     private static readonly AsyncLocal<PowerShellBenchmarkDslContext?> Current = new();
+    private const string CommandFunctionPrefix = "__PowerForgeBenchmarkDslCommand_";
 
     /// <summary>
     /// Evaluates a script block with benchmark DSL helper functions.
@@ -552,8 +553,24 @@ try {
     {
         var functions = new Hashtable(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in CreateFunctionBodies())
-            functions[entry.Key] = ScriptBlock.Create(entry.Value);
+        {
+            var functionName = string.Equals(entry.Key, "__PowerForgeBenchmarkDslInvoke", StringComparison.OrdinalIgnoreCase)
+                ? entry.Key
+                : CommandFunctionPrefix + entry.Key;
+            functions[functionName] = ScriptBlock.Create(entry.Value);
+        }
         return functions;
+    }
+
+    private static Hashtable CreateCommandAliases()
+    {
+        var aliases = new Hashtable(StringComparer.OrdinalIgnoreCase);
+        foreach (var commandName in CreateFunctionBodies().Keys)
+        {
+            if (!string.Equals(commandName, "__PowerForgeBenchmarkDslInvoke", StringComparison.OrdinalIgnoreCase))
+                aliases[commandName] = CommandFunctionPrefix + commandName;
+        }
+        return aliases;
     }
 
     private static PowerShellBenchmarkCase ConvertToCase(PSObject value)
@@ -723,6 +740,7 @@ try {
             new("BenchmarkVariables", RequireContext().BenchmarkVariables),
             new("BenchmarkVariable", RequireContext().BenchmarkVariables),
             new("BenchmarkCallerFunctions", RequireContext().CallerFunctions),
+            new("PowerForgeBenchmarkDslCommandAliases", CreateCommandAliases()),
             new("PowerForgeBenchmarkDslRuntimeType", typeof(PowerShellBenchmarkDslRuntime))
         };
         return variables;
