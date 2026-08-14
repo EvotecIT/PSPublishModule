@@ -332,6 +332,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             ManifestPath = ManifestPath,
             ConfigurationPath = ConfigurationPath,
             ExpectedSourceRevision = SourceRevision,
+            SignThumbprint = Thumbprint,
             Runtime = "win-x64",
             Framework = "net10.0",
             Style = "PortableCompat",

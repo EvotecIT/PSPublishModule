@@ -136,12 +136,12 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
             throw Invalid($"Installer Authenticode signature is not valid (0x{signature.StatusCode:X8}).");
         if (expected.SignerThumbprint is not null &&
             !string.Equals(signature.Thumbprint, expected.SignerThumbprint, StringComparison.OrdinalIgnoreCase))
-            throw Invalid("Installer signature does not use the configured release certificate.");
+            throw Invalid("Installer signature does not use the trusted publisher certificate.");
         if (expected.SignerThumbprint is null &&
             expected.SignerSubjectName is not null &&
             !CertificateSubjectsEqual(signature.Subject, expected.SignerSubjectName))
         {
-            throw Invalid("Installer signature does not match the configured release certificate subject.");
+            throw Invalid("Installer signature does not match the trusted publisher certificate subject.");
         }
 
         return new DotNetPublishReleaseArtifact
@@ -192,6 +192,19 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         string installerId,
         DotNetPublishReleaseArtifactVerificationRequest request)
     {
+        var trustedSignerThumbprint = string.IsNullOrWhiteSpace(request.SignThumbprint)
+            ? null
+            : NormalizeThumbprint(request.SignThumbprint);
+        var trustedSignerSubjectName = trustedSignerThumbprint is not null || string.IsNullOrWhiteSpace(request.SignSubjectName)
+            ? null
+            : request.SignSubjectName!.Trim();
+        if (trustedSignerThumbprint is null && trustedSignerSubjectName is null)
+        {
+            throw Invalid(
+                "Installer release verification requires an out-of-band publisher thumbprint or exact subject name; " +
+                "release configuration cannot establish publisher trust.");
+        }
+
         var configuration = ReadConfiguredPublishSpec(configurationPath);
         if (!string.IsNullOrWhiteSpace(request.Profile))
             configuration.Profile = request.Profile!.Trim();
@@ -242,21 +255,14 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
 
         var product = installer.Authoring?.Product;
         var expectedCombinations = ResolveExpectedCombinations(configuration, installer);
-        var signerThumbprint = string.IsNullOrWhiteSpace(sign.Thumbprint)
-            ? null
-            : NormalizeThumbprint(sign.Thumbprint);
-        var signerSubjectName = signerThumbprint is not null || string.IsNullOrWhiteSpace(sign.SubjectName)
-            ? null
-            : sign.SubjectName!.Trim();
-
         return new ExpectedInstaller(
             product is null ? null : RequireText(product.Name, "Product.Name"),
             product is null ? null : RequireText(product.Manufacturer, "Product.Manufacturer"),
             product is null ? null : NormalizeGuid(product.UpgradeCode, "Product.UpgradeCode"),
             product is null || installer.Versioning?.Enabled == true ? null : NormalizeVersion(product.Version),
             expectedCombinations,
-            signerThumbprint,
-            signerSubjectName,
+            trustedSignerThumbprint,
+            trustedSignerSubjectName,
             configuration.DotNet.AllowOutputOutsideProjectRoot);
     }
 

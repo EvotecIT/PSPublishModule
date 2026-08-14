@@ -68,10 +68,16 @@ public sealed class PowerForgeReleaseArtifactVerificationRequest
     /// <summary>Optional signing profile override used by the portable build.</summary>
     public string? SignProfile { get; set; }
 
-    /// <summary>Optional expected signer thumbprint.</summary>
+    /// <summary>
+    /// Publisher thumbprint supplied through an out-of-band trust channel. Verification requires this value
+    /// or <see cref="SignSubjectName"/> and never establishes publisher trust from release metadata.
+    /// </summary>
     public string? SignThumbprint { get; set; }
 
-    /// <summary>Optional expected signer subject name.</summary>
+    /// <summary>
+    /// Exact publisher subject supplied through an out-of-band trust channel. Verification requires this value
+    /// or <see cref="SignThumbprint"/> and never establishes publisher trust from release metadata.
+    /// </summary>
     public string? SignSubjectName { get; set; }
 
     /// <summary>

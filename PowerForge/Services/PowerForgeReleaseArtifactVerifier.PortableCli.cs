@@ -168,6 +168,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string artifactId,
         PowerForgeReleaseArtifactVerificationRequest request)
     {
+        string? trustedSignerThumbprint = string.IsNullOrWhiteSpace(request.SignThumbprint)
+            ? null
+            : DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(request.SignThumbprint);
+        string? trustedSignerSubject = trustedSignerThumbprint is not null || string.IsNullOrWhiteSpace(request.SignSubjectName)
+            ? null
+            : request.SignSubjectName!.Trim();
+        if (trustedSignerThumbprint is null && trustedSignerSubject is null)
+        {
+            throw Invalid(
+                "Portable release verification requires an out-of-band publisher thumbprint or exact subject name; " +
+                "release configuration cannot establish publisher trust.");
+        }
+
         DotNetPublishConfiguredSpec configured =
             DotNetPublishReleaseArtifactVerifier.ReadConfiguredPublishSpecWithInputs(configurationPath);
         DotNetPublishSpec configuration = configured.Configuration;
@@ -211,17 +224,6 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (sign is null || !sign.Enabled)
             throw Invalid("PowerForge portable signing must be enabled for a release artifact.");
 
-        string? signerThumbprint = string.IsNullOrWhiteSpace(sign.Thumbprint)
-            ? null
-            : DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(sign.Thumbprint);
-        string? signerSubject = signerThumbprint is not null || string.IsNullOrWhiteSpace(sign.SubjectName)
-            ? null
-            : sign.SubjectName!.Trim();
-        if (signerThumbprint is null && signerSubject is null)
-        {
-            throw Invalid(
-                "Portable release verification requires a configured or requested publisher thumbprint or exact subject name.");
-        }
         string[] executableIdentities = ResolveConfiguredPortableExecutableIdentities(
             configuration,
             target,
@@ -232,8 +234,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             configured.InputPaths,
             executableIdentities,
             sign,
-            signerThumbprint,
-            signerSubject,
+            trustedSignerThumbprint,
+            trustedSignerSubject,
             configuration.DotNet.AllowOutputOutsideProjectRoot);
     }
 

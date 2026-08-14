@@ -53,10 +53,16 @@ public sealed class DotNetPublishReleaseArtifactVerificationRequest
     /// <summary>Optional signing profile override used by the build.</summary>
     public string? SignProfile { get; set; }
 
-    /// <summary>Optional signing thumbprint override used by the build.</summary>
+    /// <summary>
+    /// Publisher thumbprint supplied through an out-of-band trust channel. Verification requires this value
+    /// or <see cref="SignSubjectName"/> and never establishes publisher trust from release metadata.
+    /// </summary>
     public string? SignThumbprint { get; set; }
 
-    /// <summary>Optional signing subject-name override used by the build.</summary>
+    /// <summary>
+    /// Exact publisher subject supplied through an out-of-band trust channel. Verification requires this value
+    /// or <see cref="SignThumbprint"/> and never establishes publisher trust from release metadata.
+    /// </summary>
     public string? SignSubjectName { get; set; }
 
     /// <summary>Optional signing enable override used by the build.</summary>

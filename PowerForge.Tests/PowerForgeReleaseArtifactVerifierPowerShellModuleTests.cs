@@ -83,7 +83,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() => verifier.Verify(fixture.CreateRequest()));
 
-        Assert.Contains("configured release certificate", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("trusted publisher certificate", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

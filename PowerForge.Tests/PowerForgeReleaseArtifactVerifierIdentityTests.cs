@@ -65,35 +65,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
-    public void Verify_PortableCliRequiresConfiguredOrRequestedPublisherIdentity()
+    public void Verify_PortableCliRejectsReplaceableConfigurationAsPublisherTrust()
     {
         using var fixture = new PortableFixture();
-        File.WriteAllText(fixture.ConfigurationPath, System.Text.Json.JsonSerializer.Serialize(new
-        {
-            SchemaVersion = 1,
-            DotNet = new { AllowOutputOutsideProjectRoot = false },
-            Targets = new[]
-            {
-                new
-                {
-                    Name = "Sample.CLI",
-                    Kind = "Cli",
-                    Publish = new
-                    {
-                        Framework = "net10.0",
-                        Runtimes = new[] { "win-x64" },
-                        Style = "PortableCompat",
-                        Sign = new { Enabled = true }
-                    }
-                }
-            }
-        }));
-        fixture.WriteChecksums();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = null;
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+            fixture.CreateVerifier().Verify(request));
 
-        Assert.Contains("publisher thumbprint or exact subject", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("out-of-band publisher", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("configuration cannot establish", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -239,7 +222,22 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 public sealed partial class DotNetPublishReleaseArtifactVerifierTests
 {
     [Fact]
-    public void Verify_RequiresExactConfiguredReleaseCertificateSubject()
+    public void Verify_RejectsReplaceableConfigurationAsPublisherTrust()
+    {
+        using var fixture = new ReleaseFixture();
+        DotNetPublishReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = null;
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("out-of-band publisher", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("configuration cannot establish", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_RequiresExactTrustedPublisherSubject()
     {
         using var fixture = new ReleaseFixture();
         DotNetPublishReleaseArtifactVerificationRequest request = fixture.CreateRequest();

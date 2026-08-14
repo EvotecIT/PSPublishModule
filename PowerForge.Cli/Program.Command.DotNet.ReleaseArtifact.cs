@@ -34,13 +34,15 @@ internal static partial class Program
         var signSubjectName = TryGetOptionValue(commandArgs, "--sign-subject-name");
         var enableSigning = commandArgs.Any(value => value.Equals("--sign", StringComparison.OrdinalIgnoreCase));
         var disableSigning = commandArgs.Any(value => value.Equals("--no-sign", StringComparison.OrdinalIgnoreCase));
-        if (string.IsNullOrWhiteSpace(projectRoot) ||
+        bool missingInstallerEvidence = string.IsNullOrWhiteSpace(projectRoot) ||
             string.IsNullOrWhiteSpace(manifestPath) ||
             string.IsNullOrWhiteSpace(checksumsPath) ||
             string.IsNullOrWhiteSpace(configurationPath) ||
             string.IsNullOrWhiteSpace(installerId) ||
-            string.IsNullOrWhiteSpace(sourceRevision) ||
-            !IsFullGitObjectId(sourceRevision) ||
+            string.IsNullOrWhiteSpace(sourceRevision);
+        if (missingInstallerEvidence ||
+            (!string.IsNullOrWhiteSpace(sourceRevision) && !IsFullGitObjectId(sourceRevision)) ||
+            (string.IsNullOrWhiteSpace(signThumbprint) && string.IsNullOrWhiteSpace(signSubjectName)) ||
             (enableSigning && disableSigning))
         {
             if (outputJson)
@@ -55,6 +57,10 @@ internal static partial class Program
                         ? "Source revision must be a full 40- or 64-character hexadecimal Git object ID."
                         : enableSigning && disableSigning
                         ? "Use either --sign or --no-sign, not both."
+                        : missingInstallerEvidence
+                        ? "Project root, manifest, checksums, config, installer, and source revision are required."
+                        : string.IsNullOrWhiteSpace(signThumbprint) && string.IsNullOrWhiteSpace(signSubjectName)
+                        ? "Installer verification requires --sign-thumbprint or --sign-subject-name from a trusted channel."
                         : "Project root, manifest, checksums, config, installer, and source revision are required."
                 });
             }
@@ -71,12 +77,12 @@ internal static partial class Program
             DotNetPublishReleaseArtifact result = new DotNetPublishReleaseArtifactVerifier().Verify(
                 new DotNetPublishReleaseArtifactVerificationRequest
                 {
-                    ProjectRoot = projectRoot,
-                    ManifestPath = manifestPath,
-                    ChecksumsPath = checksumsPath,
-                    ConfigurationPath = configurationPath,
-                    InstallerId = installerId,
-                    ExpectedSourceRevision = sourceRevision,
+                    ProjectRoot = projectRoot!,
+                    ManifestPath = manifestPath!,
+                    ChecksumsPath = checksumsPath!,
+                    ConfigurationPath = configurationPath!,
+                    InstallerId = installerId!,
+                    ExpectedSourceRevision = sourceRevision!,
                     Target = target,
                     Runtime = runtime,
                     Framework = framework,
@@ -157,17 +163,19 @@ internal static partial class Program
         var signSubjectName = TryGetOptionValue(commandArgs, "--sign-subject-name");
         var enableSigning = commandArgs.Any(value => value.Equals("--sign", StringComparison.OrdinalIgnoreCase));
         var disableSigning = commandArgs.Any(value => value.Equals("--no-sign", StringComparison.OrdinalIgnoreCase));
-        if (string.IsNullOrWhiteSpace(projectRoot) ||
+        bool missingGeneralEvidence = string.IsNullOrWhiteSpace(projectRoot) ||
             string.IsNullOrWhiteSpace(artifactId) ||
             string.IsNullOrWhiteSpace(artifactPath) ||
             string.IsNullOrWhiteSpace(checksumsPath) ||
             string.IsNullOrWhiteSpace(sourceRevision) ||
-            !IsFullGitObjectId(sourceRevision) ||
             (kind == PowerForgeReleaseArtifactKind.PortableCli &&
-             (string.IsNullOrWhiteSpace(manifestPath) || string.IsNullOrWhiteSpace(configurationPath))) ||
+             (string.IsNullOrWhiteSpace(manifestPath) ||
+              string.IsNullOrWhiteSpace(configurationPath))) ||
             (kind == PowerForgeReleaseArtifactKind.PowerShellModule &&
-             (string.IsNullOrWhiteSpace(signingEvidencePath) ||
-              (string.IsNullOrWhiteSpace(signThumbprint) && string.IsNullOrWhiteSpace(signSubjectName)))) ||
+             string.IsNullOrWhiteSpace(signingEvidencePath));
+        if (missingGeneralEvidence ||
+            (!string.IsNullOrWhiteSpace(sourceRevision) && !IsFullGitObjectId(sourceRevision)) ||
+            (string.IsNullOrWhiteSpace(signThumbprint) && string.IsNullOrWhiteSpace(signSubjectName)) ||
             (enableSigning && disableSigning))
         {
             return WriteGeneralReleaseArtifactError(
@@ -178,9 +186,14 @@ internal static partial class Program
                     ? "Source revision must be a full 40- or 64-character hexadecimal Git object ID."
                     : enableSigning && disableSigning
                     ? "Use either --sign or --no-sign, not both."
+                    : missingGeneralEvidence
+                    ? "Kind, artifact ID, project root, artifact, checksums, source revision, portable manifest/config, and module signing evidence are required for their respective artifact kinds."
                     : kind == PowerForgeReleaseArtifactKind.PowerShellModule &&
                       string.IsNullOrWhiteSpace(signThumbprint) && string.IsNullOrWhiteSpace(signSubjectName)
                         ? "PowerShell module verification requires --sign-thumbprint or --sign-subject-name."
+                        : kind == PowerForgeReleaseArtifactKind.PortableCli &&
+                          string.IsNullOrWhiteSpace(signThumbprint) && string.IsNullOrWhiteSpace(signSubjectName)
+                            ? "Portable verification requires --sign-thumbprint or --sign-subject-name from a trusted channel."
                         : "Kind, artifact ID, project root, artifact, checksums, source revision, portable manifest/config, and module signing evidence are required for their respective artifact kinds.");
         }
         if (!OperatingSystem.IsWindows())

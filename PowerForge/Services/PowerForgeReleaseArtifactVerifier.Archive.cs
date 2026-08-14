@@ -54,10 +54,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 inventorySignature.Thumbprint,
                 expectedThumbprint,
                 StringComparison.OrdinalIgnoreCase))
-            throw Invalid("Portable payload inventory does not use the configured release certificate.");
+            throw Invalid("Portable payload inventory does not use the trusted publisher certificate.");
         if (expectedThumbprint is null && expectedSubject is not null &&
             !DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(inventorySignature.Subject, expectedSubject))
-            throw Invalid("Portable payload inventory does not match the configured release certificate subject.");
+            throw Invalid("Portable payload inventory does not match the trusted publisher certificate subject.");
         PowerForgePortablePayloadInventory inventory;
         try
         {

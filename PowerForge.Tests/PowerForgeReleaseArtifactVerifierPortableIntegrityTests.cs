@@ -126,9 +126,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     {
         using var fixture = new PortableFixture();
         fixture.ConfigureSubjectNameSigning();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = "CN=Publisher";
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            fixture.CreateVerifier(Thumbprint, VendorThumbprint).Verify(fixture.CreateRequest()));
+            fixture.CreateVerifier(Thumbprint, VendorThumbprint).Verify(request));
 
         Assert.Contains("Authenticode publisher certificate", exception.Message, StringComparison.OrdinalIgnoreCase);
     }

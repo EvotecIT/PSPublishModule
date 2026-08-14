@@ -111,10 +111,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string thumbprint = DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(signature.Thumbprint);
         if (expectedThumbprint is not null &&
             !string.Equals(thumbprint, expectedThumbprint, StringComparison.OrdinalIgnoreCase))
-            throw Invalid($"'{Path.GetFileName(path)}' does not use the configured release certificate.");
+            throw Invalid($"'{Path.GetFileName(path)}' does not use the trusted publisher certificate.");
         if (expectedThumbprint is null && expectedSubject is not null &&
             !DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(signature.Subject, expectedSubject))
-            throw Invalid($"'{Path.GetFileName(path)}' does not match the configured release certificate subject.");
+            throw Invalid($"'{Path.GetFileName(path)}' does not match the trusted publisher certificate subject.");
         return new VerifiedSignature(path, path, signature.Subject, thumbprint);
     }
 

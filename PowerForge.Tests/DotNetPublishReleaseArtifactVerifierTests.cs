@@ -243,7 +243,7 @@ public sealed partial class DotNetPublishReleaseArtifactVerifierTests
         InvalidDataException exception = Assert.Throws<InvalidDataException>(
             () => verifier.Verify(fixture.CreateRequest()));
 
-        Assert.Contains("configured release certificate", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("trusted publisher certificate", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -317,8 +317,10 @@ public sealed partial class DotNetPublishReleaseArtifactVerifierTests
             }
         });
 
+        DotNetPublishReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = overrideThumbprint;
         DotNetPublishReleaseArtifact result = fixture.CreateVerifier(overrideThumbprint)
-            .Verify(fixture.CreateRequest());
+            .Verify(request);
 
         Assert.Equal(overrideThumbprint, result.SignerThumbprint);
     }
@@ -483,8 +485,11 @@ public sealed partial class DotNetPublishReleaseArtifactVerifierTests
             }
         });
 
+        DotNetPublishReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = "CN=Test Publisher";
         DotNetPublishReleaseArtifact result = fixture.CreateVerifier(new string('B', 40))
-            .Verify(fixture.CreateRequest());
+            .Verify(request);
 
         Assert.Equal("CN=Test Publisher", result.SignerSubject);
     }
@@ -501,8 +506,10 @@ public sealed partial class DotNetPublishReleaseArtifactVerifierTests
             }
         });
 
+        DotNetPublishReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = new string('B', 40);
         DotNetPublishReleaseArtifact result = fixture.CreateVerifier(new string('B', 40))
-            .Verify(fixture.CreateRequest());
+            .Verify(request);
 
         Assert.Equal(new string('B', 40), result.SignerThumbprint);
     }
@@ -567,6 +574,7 @@ public sealed partial class DotNetPublishReleaseArtifactVerifierTests
         });
         var request = fixture.CreateRequest();
         request.SignProfile = "release";
+        request.SignThumbprint = null;
         request.SignSubjectName = "CN=Test Publisher";
 
         DotNetPublishReleaseArtifact result = fixture.CreateVerifier(new string('B', 40)).Verify(request);
@@ -906,7 +914,8 @@ public sealed partial class DotNetPublishReleaseArtifactVerifierTests
             ChecksumsPath = ChecksumsPath,
             ConfigurationPath = ConfigurationPath,
             InstallerId = "Test.MSI",
-            ExpectedSourceRevision = SourceRevision
+            ExpectedSourceRevision = SourceRevision,
+            SignThumbprint = Thumbprint
         };
 
         internal DotNetPublishReleaseArtifactVerifier CreateVerifier(string thumbprint = Thumbprint) =>

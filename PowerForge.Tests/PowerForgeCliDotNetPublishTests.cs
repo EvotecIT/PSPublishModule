@@ -74,6 +74,20 @@ public sealed class PowerForgeCliDotNetPublishTests
     }
 
     [Fact]
+    public async Task ReleaseArtifactVerify_InstallerRequiresPublisherIdentityAtCliBoundary()
+    {
+        var repoRoot = FindRepositoryRoot();
+        const string revision = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        var (exitCode, stdout, stderr) = await RunCliAsync(
+            repoRoot,
+            $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --project-root . --manifest manifest.json --checksums SHA256SUMS.txt --config config.json --installer Sample.MSI --source-revision {revision} --output json");
+
+        Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+        using JsonDocument document = JsonDocument.Parse(stdout);
+        Assert.Contains("--sign-thumbprint or --sign-subject-name", document.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ReleaseArtifactVerify_RequiresFullSourceRevisionAtCliBoundary()
     {
         var repoRoot = FindRepositoryRoot();
@@ -87,11 +101,8 @@ public sealed class PowerForgeCliDotNetPublishTests
     }
 
     [Fact]
-    public async Task ReleaseArtifactVerify_PortableCliRequiresPublisherIdentityFromConfigOrOverride()
+    public async Task ReleaseArtifactVerify_PortableCliRequiresPublisherIdentityAtCliBoundary()
     {
-        if (!OperatingSystem.IsWindows())
-            return;
-
         string repoRoot = FindRepositoryRoot();
         string tempRoot = CreateTempDirectory();
         try
@@ -119,10 +130,10 @@ public sealed class PowerForgeCliDotNetPublishTests
                 repoRoot,
                 $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --artifact-id Sample.CLI --project-root \"{tempRoot}\" --artifact missing.zip --checksums \"{checksumsPath}\" --source-revision {new string('b', 40)} --manifest \"{manifestPath}\" --config \"{configurationPath}\" --output json");
 
-            Assert.True(exitCode == 1, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+            Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
             using JsonDocument document = JsonDocument.Parse(stdout);
             Assert.Contains(
-                "publisher thumbprint or exact subject",
+                "--sign-thumbprint or --sign-subject-name",
                 document.RootElement.GetProperty("error").GetString(),
                 StringComparison.OrdinalIgnoreCase);
         }
@@ -225,7 +236,7 @@ public sealed class PowerForgeCliDotNetPublishTests
 
             var (exitCode, stdout, stderr) = await RunCliAsync(
                 repoRoot,
-                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --artifact-id \"{artifactId}\" --project-root \"{tempRoot}\" --artifact \"{executablePath}\" --checksums \"{checksumsPath}\" --source-revision {sourceRevision} --manifest \"{manifestPath}\" --config \"{configurationPath}\" --rid win-x64 --framework net10.0 --style PortableCompat --sbom \"{sbomPath}\" --output json");
+                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --artifact-id \"{artifactId}\" --project-root \"{tempRoot}\" --artifact \"{executablePath}\" --checksums \"{checksumsPath}\" --source-revision {sourceRevision} --manifest \"{manifestPath}\" --config \"{configurationPath}\" --rid win-x64 --framework net10.0 --style PortableCompat --sign-thumbprint {realSignature.Thumbprint} --sbom \"{sbomPath}\" --output json");
 
             Assert.True(exitCode == 0, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
             using JsonDocument document = JsonDocument.Parse(stdout);
