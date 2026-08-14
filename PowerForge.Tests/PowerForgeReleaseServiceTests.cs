@@ -5169,7 +5169,8 @@ public sealed partial class PowerForgeReleaseServiceTests
     public void Execute_PublishesDotNetPublishPreviewAssetsToStablePreviewTag()
     {
         var root = CreateSandbox();
-        var zip = Path.GetTempFileName();
+        var zip = Path.Combine(root, "PowerForgeWeb.zip");
+        File.WriteAllText(zip, "zip", new UTF8Encoding(false));
         try
         {
             var projectPath = Path.Combine(root, "PowerForge.Web.Cli.csproj");
@@ -5249,7 +5250,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Framework = "net10.0",
                             Runtime = "win-x64",
                             Style = DotNetPublishStyle.PortableCompat,
-                            OutputDir = Path.GetTempPath(),
+                            OutputDir = root,
                             ZipPath = zip
                         }
                     }
@@ -5284,7 +5285,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 new PowerForgeReleaseRequest
                 {
-                    ConfigPath = Path.Combine(Path.GetTempPath(), "release.json"),
+                    ConfigPath = Path.Combine(root, "release.json"),
                     ToolsOnly = true
                 });
 
@@ -5293,7 +5294,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             var publish = Assert.Single(publishCalls);
             Assert.Equal("PowerForgeWeb-v1.2.3-preview", publish.TagName);
             Assert.Equal("PowerForgeWeb 1.2.3 Preview", publish.ReleaseName);
-            Assert.Single(publish.AssetFilePaths);
+            Assert.Equal(2, publish.AssetFilePaths.Count);
+            Assert.Contains(zip, publish.AssetFilePaths);
+            Assert.Contains(
+                publish.AssetFilePaths,
+                path => path.EndsWith("PowerForgeWeb.SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase));
 
             var release = Assert.Single(result.ToolGitHubReleases);
             Assert.Equal("PowerForgeWeb-v1.2.3-preview", release.TagName);
@@ -5303,7 +5308,6 @@ public sealed partial class PowerForgeReleaseServiceTests
         finally
         {
             TryDelete(root);
-            TryDelete(zip);
         }
     }
 
