@@ -430,6 +430,23 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 
         Assert.Equal("valid", result.SignatureStatus);
         Assert.Equal(2, result.Signatures.Length);
+        Assert.Empty(result.SignerThumbprint);
+        Assert.Equal(
+            new[] { Thumbprint, VendorThumbprint },
+            result.Signatures.Select(signature => signature.Thumbprint).OrderBy(value => value, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Verify_PortableCliRebasesRelocatedManifestArtifactPathsFromChecksums()
+    {
+        using var fixture = new PortableFixture();
+        fixture.WriteRelocatedManifestPaths();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = string.Empty;
+
+        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal(Path.GetFullPath(fixture.ArchivePath), result.ArtifactPath);
     }
 
     [Fact]
@@ -451,6 +468,31 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 
     private sealed partial class PortableFixture
     {
+        internal void WriteRelocatedManifestPaths()
+        {
+            string retiredRoot = Path.Combine(Path.GetPathRoot(Root)!, "retired-runner", Guid.NewGuid().ToString("N"));
+            File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    Category = "Publish",
+                    Target = "Sample.CLI",
+                    Kind = "Cli",
+                    Runtime = "win-x64",
+                    Framework = "net10.0",
+                    Style = "PortableCompat",
+                    OutputDir = Path.Combine(retiredRoot, "Artifacts", "Sample.CLI"),
+                    ZipPath = Path.Combine(retiredRoot, Path.GetRelativePath(Root, ArchivePath)),
+                    ExePath = Path.Combine(retiredRoot, Path.GetRelativePath(Root, ExecutablePath)),
+                    SignedFiles = 1,
+                    SignedFilePaths = new[] { Path.Combine(retiredRoot, Path.GetRelativePath(Root, ExecutablePath)) },
+                    SourceRevision,
+                    SourceDirty = false
+                }
+            }));
+            WriteChecksums();
+        }
+
         internal void AddUnexpectedArchiveEntry(string name, string content)
         {
             using (System.IO.Compression.ZipArchive archive = System.IO.Compression.ZipFile.Open(

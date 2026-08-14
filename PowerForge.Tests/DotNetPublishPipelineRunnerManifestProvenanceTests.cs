@@ -992,6 +992,9 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             InvokeWriteManifests(plan, artefacts);
             using JsonDocument cleanManifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
             Assert.False(cleanManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+            Assert.Equal(
+                "Artifacts/app/app.exe",
+                cleanManifest.RootElement[0].GetProperty("ExePath").GetString());
 
             string nestedBinDirectory = Directory.CreateDirectory(Path.Combine(root, "assets", "bin")).FullName;
             string nestedBinInput = Path.Combine(nestedBinDirectory, "payload.dat");

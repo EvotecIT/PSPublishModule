@@ -20,6 +20,25 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         return found;
     }
 
+    internal static string[] FindChecksumPathsByFileName(string path, string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+            return Array.Empty<string>();
+
+        StringComparer comparer = FrameworkCompatibility.GetPathStringComparisonForPath(path) == StringComparison.Ordinal
+            ? StringComparer.Ordinal
+            : StringComparer.OrdinalIgnoreCase;
+        return File.ReadLines(path)
+            .Select(line => TryParseChecksumLine(line, out _, out string listedPath) ? listedPath : null)
+            .Where(listedPath => !string.IsNullOrWhiteSpace(listedPath) &&
+                                 comparer.Equals(
+                                     Path.GetFileName(listedPath!.Replace('/', Path.DirectorySeparatorChar)),
+                                     fileName))
+            .Select(listedPath => listedPath!.Replace('\\', '/'))
+            .Distinct(comparer)
+            .ToArray();
+    }
+
     private static bool TryParseChecksumLine(string line, out string digest, out string relativePath)
     {
         digest = string.Empty;

@@ -160,7 +160,11 @@ public sealed class PowerForgeReleaseArtifactEvidence
     /// <summary>Subject shared by the verified Authenticode signatures.</summary>
     public string SignerSubject { get; set; } = string.Empty;
 
-    /// <summary>Normalized thumbprint shared by the verified Authenticode signatures.</summary>
+    /// <summary>
+    /// Normalized thumbprint shared by the verified Authenticode signatures, or empty when
+    /// subject-trusted signatures use multiple rotated leaf certificates. See <see cref="Signatures"/>
+    /// for the per-file signer set.
+    /// </summary>
     public string SignerThumbprint { get; set; } = string.Empty;
 
     /// <summary>Authenticode verification status. Successful evidence always reports <c>valid</c>.</summary>

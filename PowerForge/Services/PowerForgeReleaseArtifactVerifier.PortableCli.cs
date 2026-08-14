@@ -57,9 +57,22 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
         string manifestArchive = ReadString(entry, "ZipPath");
         string manifestExecutable = ReadString(entry, "ExePath");
-        string artifactSelection = string.IsNullOrWhiteSpace(request.ArtifactPath)
-            ? (!string.IsNullOrWhiteSpace(manifestArchive) ? manifestArchive : manifestExecutable)
-            : request.ArtifactPath!;
+        string artifactSelection;
+        if (string.IsNullOrWhiteSpace(request.ArtifactPath))
+        {
+            string selectedManifestPath = !string.IsNullOrWhiteSpace(manifestArchive)
+                ? manifestArchive
+                : manifestExecutable;
+            artifactSelection = ResolvePortableManifestArtifactPath(
+                projectRoot,
+                checksumsPath,
+                selectedManifestPath,
+                expected.AllowOutsideProjectRoot);
+        }
+        else
+        {
+            artifactSelection = request.ArtifactPath!;
+        }
         string artifactPath = string.IsNullOrWhiteSpace(request.ArtifactPath)
             ? ResolveManifestPath(projectRoot, artifactSelection, expected.AllowOutsideProjectRoot)
             : ResolveRequestFile(projectRoot, artifactSelection, nameof(request.ArtifactPath));
@@ -110,10 +123,17 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 throw Invalid("PowerForge manifest signed-file count does not match the publisher-signed payload inventory.");
             ValidatePortableConfigurationPolicy(archive.Inventory, expected);
             ValidateConfiguredPortableSignatureCoverage(archive.Inventory, expected.Sign);
+            string manifestExecutableForValidation = (request.SignaturePaths ?? Array.Empty<string>()).Any()
+                ? ResolvePortableManifestArtifactPath(
+                    projectRoot,
+                    checksumsPath,
+                    manifestExecutable,
+                    expected.AllowOutsideProjectRoot)
+                : manifestExecutable;
             ValidateRequestedPortableSignaturePaths(
                 request.SignaturePaths,
                 projectRoot,
-                manifestExecutable,
+                manifestExecutableForValidation,
                 expected.AllowOutsideProjectRoot,
                 archive.Inventory.SignedFilePaths);
             signatures = archive.Signatures;
@@ -180,6 +200,13 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             && expected.Sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning
                 ? RequireOnePublisherSubject(signatures)
                 : RequireOneSigner(signatures);
+        string aggregateSignerThumbprint = signatures
+            .Select(signature => signature.Thumbprint)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(2)
+            .Count() == 1
+                ? signer.Thumbprint
+                : string.Empty;
         ValidatePortableSourceBinding(signedProductVersion, expectedRevision);
         string version = NormalizePortableVersion(signedProductVersion);
         ValidateExpectedPortableVersion(request.ExpectedVersion, version);
@@ -211,7 +238,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             Version = version,
             SourceRevision = sourceRevision.ToLowerInvariant(),
             SignerSubject = signer.Subject,
-            SignerThumbprint = signer.Thumbprint,
+            SignerThumbprint = aggregateSignerThumbprint,
             SignatureStatus = "valid",
             SignaturePaths = signatures.Select(signature => signature.DisplayPath).ToArray(),
             Signatures = signatures.Select(signature => new PowerForgeReleaseSignatureEvidence
@@ -246,6 +273,49 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             bundleId,
             manifestExecutable);
         return string.Equals(matrixName, requestedName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ResolvePortableManifestArtifactPath(
+        string projectRoot,
+        string checksumsPath,
+        string manifestValue,
+        bool allowOutsideProjectRoot)
+    {
+        string normalized = DotNetPublishReleaseArtifactVerifier.RequireText(
+                manifestValue,
+                "manifest artifact path")
+            .Replace('/', Path.DirectorySeparatorChar);
+        if (!Path.IsPathRooted(normalized))
+            return ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot);
+
+        if (allowOutsideProjectRoot && File.Exists(normalized))
+            return ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot: true);
+
+        try
+        {
+            string currentPath = ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot: false);
+            if (File.Exists(currentPath))
+                return currentPath;
+        }
+        catch (InvalidDataException)
+        {
+            // An absolute path from a different build checkout is recovered from the checksum catalog below.
+        }
+
+        string fileName = Path.GetFileName(normalized);
+        string[] candidates = DotNetPublishReleaseArtifactVerifier
+            .FindChecksumPathsByFileName(checksumsPath, fileName)
+            .Select(path => ResolveManifestPath(projectRoot, path, allowOutsideProjectRoot))
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (candidates.Length != 1)
+        {
+            throw Invalid(
+                $"Relocated PowerForge manifest artifact '{fileName}' must resolve to exactly one checksummed file in the current repository.");
+        }
+
+        return candidates[0];
     }
 
     private static ExpectedPortable ReadExpectedPortable(

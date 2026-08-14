@@ -4334,6 +4334,14 @@ internal sealed partial class PowerForgeReleaseService
                 .Where(target => target is not null)
                 .ToArray();
 
+            var allTargetNames = new HashSet<string>(
+                targets.Where(target => !string.IsNullOrWhiteSpace(target.Name)).Select(target => target.Name.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            DotNetPublishPipelineRunner.ValidateAdditionalPublishTargetNames(
+                spec.Installers,
+                allTargetNames,
+                nameof(request));
+
             var missing = selected
                 .Where(name => targets.All(target => !string.Equals(target.Name, name, StringComparison.OrdinalIgnoreCase)))
                 .ToArray();
@@ -4366,6 +4374,10 @@ internal sealed partial class PowerForgeReleaseService
                             ? selected.Contains(installer.PrepareFromTarget)
                             : true))
                     .ToArray();
+                foreach (DotNetPublishInstaller installer in spec.Installers)
+                    DotNetPublishPipelineRunner.RetainSelectedAdditionalPublishTargets(
+                        installer.Versioning,
+                        effectiveTargets);
             }
 
             if (spec.StorePackages is { Length: > 0 })
