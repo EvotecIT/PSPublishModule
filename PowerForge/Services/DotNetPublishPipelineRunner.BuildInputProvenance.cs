@@ -191,42 +191,23 @@ public sealed partial class DotNetPublishPipelineRunner
             arguments.Add("-p:" + property.Key + "=" + property.Value);
         }
 
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            WorkingDirectory = Path.GetDirectoryName(request.ProjectPath)!,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        ProcessStartInfoEncoding.TryApplyUtf8(startInfo);
-        foreach (KeyValuePair<string, string?> variable in request.EnvironmentVariables)
-            startInfo.EnvironmentVariables[variable.Key] = variable.Value ?? string.Empty;
-#if NET472
-        startInfo.Arguments = BuildWindowsArgumentString(arguments);
-#else
-        foreach (string argument in arguments)
-            startInfo.ArgumentList.Add(argument);
-#endif
-
         try
         {
-            using Process? process = Process.Start(startInfo);
-            if (process is null)
-                return false;
-            string standardOutput = process.StandardOutput.ReadToEnd();
-            _ = process.StandardError.ReadToEnd();
-            process.WaitForExit();
-            if (process.ExitCode != 0)
+            var process = RunBuildInputEvaluationProcess(
+                "dotnet",
+                Path.GetDirectoryName(request.ProjectPath)!,
+                arguments,
+                request.EnvironmentVariables,
+                TimeSpan.FromMinutes(2));
+            if (process.ExitCode != 0 || process.TimedOut)
                 return false;
 
-            int jsonStart = standardOutput.IndexOf('{');
-            int jsonEnd = standardOutput.LastIndexOf('}');
+            int jsonStart = process.StdOut.IndexOf('{');
+            int jsonEnd = process.StdOut.LastIndexOf('}');
             if (jsonStart < 0 || jsonEnd < jsonStart)
                 return false;
             using JsonDocument document = JsonDocument.Parse(
-                standardOutput.Substring(jsonStart, jsonEnd - jsonStart + 1));
+                process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
             JsonElement root = document.RootElement;
             var inputs = new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var references = new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -281,6 +262,19 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
     }
+
+    internal static (int ExitCode, string StdOut, string StdErr, bool TimedOut) RunBuildInputEvaluationProcess(
+        string fileName,
+        string workingDirectory,
+        IReadOnlyList<string> arguments,
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        TimeSpan timeout)
+        => RunProcessCore(
+            fileName,
+            workingDirectory,
+            arguments,
+            timeout,
+            environmentVariables);
 
     private static bool IsOutputRelevantNoneItem(JsonElement item)
         => HasRelevantMetadata(item, "CopyToOutputDirectory")

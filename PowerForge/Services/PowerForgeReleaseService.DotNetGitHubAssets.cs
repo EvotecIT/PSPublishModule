@@ -1,0 +1,168 @@
+namespace PowerForge;
+
+internal sealed partial class PowerForgeReleaseService
+{
+    /// <summary>
+    /// Resolves runnable artifacts for one target and stages dimension-qualified aliases when
+    /// direct matrix outputs would otherwise collide by GitHub asset file name.
+    /// </summary>
+    internal static bool TryBuildDotNetGitHubRunnableAssets(
+        DotNetPublishPlan plan,
+        DotNetPublishTargetPlan target,
+        DotNetPublishResult result,
+        out List<string> runnableAssets,
+        out string checksumDirectory,
+        out string safeTarget,
+        out string? error)
+    {
+        runnableAssets = new List<string>();
+        checksumDirectory = string.Empty;
+        safeTarget = ToSafeReleaseAssetComponent(target.Name);
+        error = null;
+        var targetRunnableAssets = new List<(DotNetPublishArtefactResult Artefact, string Path, bool Direct)>();
+        DotNetPublishArtefactResult[] targetArtefacts = (result.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
+            .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        foreach (DotNetPublishArtefactResult artefact in targetArtefacts)
+        {
+            if (!TryResolveDotNetGitHubArtefactPath(plan, target, artefact, out string? path, out bool direct, out error) ||
+                string.IsNullOrWhiteSpace(path) ||
+                !File.Exists(path))
+            {
+                error ??= $"A runnable release artifact is missing for DotNet publish target '{target.Name}'.";
+                return false;
+            }
+            targetRunnableAssets.Add((artefact, Path.GetFullPath(path!), direct));
+        }
+
+        runnableAssets.AddRange(targetRunnableAssets.Select(entry => entry.Path));
+        runnableAssets.AddRange(
+            (result.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
+            .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(entry => entry.OutputFiles ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Select(Path.GetFullPath));
+        runnableAssets.AddRange(
+            (result.StorePackages ?? Array.Empty<DotNetPublishStorePackageResult>())
+            .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(entry => (entry.OutputFiles ?? Array.Empty<string>())
+                .Concat(entry.UploadFiles ?? Array.Empty<string>())
+                .Concat(entry.SymbolFiles ?? Array.Empty<string>()))
+            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Select(Path.GetFullPath));
+        if (runnableAssets.Count == 0)
+        {
+            error = $"No runnable release artifact was produced for DotNet publish target '{target.Name}'.";
+            return false;
+        }
+
+        checksumDirectory = !string.IsNullOrWhiteSpace(result.ChecksumsPath)
+            ? Path.GetDirectoryName(Path.GetFullPath(result.ChecksumsPath!))!
+            : Path.GetDirectoryName(Path.GetFullPath(runnableAssets[0]))!;
+        runnableAssets = StageCollidingDotNetGitHubAssets(
+            targetRunnableAssets,
+            runnableAssets,
+            checksumDirectory,
+            safeTarget);
+        return true;
+    }
+
+    /// <summary>
+    /// Selects an archive or direct executable from the producing artifact's own packaging policy.
+    /// </summary>
+    internal static bool TryResolveDotNetGitHubArtefactPath(
+        DotNetPublishPlan plan,
+        DotNetPublishTargetPlan target,
+        DotNetPublishArtefactResult artefact,
+        out string? path,
+        out bool direct,
+        out string? error)
+    {
+        path = null;
+        direct = false;
+        error = null;
+        bool zip;
+        switch (artefact.Category)
+        {
+            case DotNetPublishArtefactCategory.Publish:
+                zip = target.Publish.Zip;
+                break;
+            case DotNetPublishArtefactCategory.Bundle:
+                DotNetPublishBundlePlan? bundle = (plan.Bundles ?? Array.Empty<DotNetPublishBundlePlan>())
+                    .FirstOrDefault(entry =>
+                        string.Equals(entry.Id, artefact.BundleId, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(entry.PrepareFromTarget, target.Name, StringComparison.OrdinalIgnoreCase));
+                if (bundle is null)
+                {
+                    error = $"Bundle '{artefact.BundleId}' is not present in the DotNet publish plan for target '{target.Name}'.";
+                    return false;
+                }
+                zip = bundle.Zip;
+                break;
+            default:
+                error = $"Artifact category '{artefact.Category}' is not a runnable DotNet publish artifact for target '{target.Name}'.";
+                return false;
+        }
+
+        direct = !zip;
+        path = zip ? artefact.ZipPath : artefact.ExePath;
+        return true;
+    }
+
+    private static List<string> StageCollidingDotNetGitHubAssets(
+        IReadOnlyList<(DotNetPublishArtefactResult Artefact, string Path, bool Direct)> targetAssets,
+        IReadOnlyList<string> runnableAssets,
+        string checksumDirectory,
+        string safeTarget)
+    {
+        var duplicateNames = new HashSet<string>(
+            runnableAssets
+                .GroupBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1)
+                .Select(group => group.Key!),
+            StringComparer.OrdinalIgnoreCase);
+        if (duplicateNames.Count == 0)
+            return runnableAssets.ToList();
+
+        var replacements = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var stagedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string stagingDirectory = Path.Combine(checksumDirectory, safeTarget + ".release-assets");
+        foreach (var entry in targetAssets.Where(entry =>
+                     entry.Direct && duplicateNames.Contains(Path.GetFileName(entry.Path))))
+        {
+            string extension = Path.GetExtension(entry.Path);
+            string category = entry.Artefact.Category == DotNetPublishArtefactCategory.Bundle
+                ? "bundle-" + ToSafeReleaseAssetComponent(entry.Artefact.BundleId ?? "unnamed")
+                : "publish";
+            string stagedName = string.Join(
+                "-",
+                safeTarget,
+                ToSafeReleaseAssetComponent(entry.Artefact.Framework),
+                ToSafeReleaseAssetComponent(entry.Artefact.Runtime),
+                ToSafeReleaseAssetComponent(entry.Artefact.Style.ToString()),
+                category) + extension;
+            if (!stagedNames.Add(stagedName))
+            {
+                throw new InvalidOperationException(
+                    $"DotNet publish artifacts for target '{safeTarget}' do not have unique release matrix identities.");
+            }
+            Directory.CreateDirectory(stagingDirectory);
+            string stagedPath = Path.Combine(stagingDirectory, stagedName);
+            File.Copy(entry.Path, stagedPath, overwrite: true);
+            replacements[entry.Path] = stagedPath;
+        }
+
+        return runnableAssets
+            .Select(path => replacements.TryGetValue(path, out string? stagedPath) ? stagedPath : path)
+            .ToList();
+    }
+
+    private static string ToSafeReleaseAssetComponent(string value)
+    {
+        string safe = string.Concat((value ?? string.Empty).Select(character =>
+            Path.GetInvalidFileNameChars().Contains(character) || character is '/' or '\\' or ':'
+                ? '_'
+                : character));
+        return string.IsNullOrWhiteSpace(safe) ? "unknown" : safe;
+    }
+}

@@ -814,11 +814,12 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                     <Content Include="single.custom" Condition="'$(PublishSingleFile)' == 'true'" />
                     <Content Include="property.custom" Condition="'$(CustomFlavor)' == 'Secure'" />
                     <Content Include="environment.custom" Condition="'$(POWERFORGE_TEST_INPUT)' == 'enabled'" />
+                    <Content Include="assets/bin/payload.dat" />
                   </ItemGroup>
                 </Project>
                 """);
             File.WriteAllText(Path.Combine(root, "Program.cs"), "internal static class Program { }");
-            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\nrid.custom\nsingle.custom\nproperty.custom\nenvironment.custom\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\nrid.custom\nsingle.custom\nproperty.custom\nenvironment.custom\nassets/bin/\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
             RunGit(root, "add Sample.csproj Program.cs .gitignore");
             RunGit(root, "commit -m \"tracked source\"");
 
@@ -884,6 +885,14 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             using JsonDocument cleanManifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
             Assert.False(cleanManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
 
+            string nestedBinDirectory = Directory.CreateDirectory(Path.Combine(root, "assets", "bin")).FullName;
+            string nestedBinInput = Path.Combine(nestedBinDirectory, "payload.dat");
+            File.WriteAllText(nestedBinInput, "explicit build input");
+            InvokeWriteManifests(plan, artefacts);
+            using (JsonDocument nestedBinDirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+                Assert.True(nestedBinDirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+            File.Delete(nestedBinInput);
+
             File.WriteAllText(Path.Combine(root, "payload.custom"), "published payload");
             InvokeWriteManifests(plan, artefacts);
             using JsonDocument contentDirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
@@ -916,6 +925,45 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 Directory.Delete(root, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public void RunBuildInputEvaluationProcess_DrainsBothStreamsAndEnforcesTimeout()
+    {
+        string fileName;
+        IReadOnlyList<string> floodArguments;
+        IReadOnlyList<string> timeoutArguments;
+        if (OperatingSystem.IsWindows())
+        {
+            fileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
+            floodArguments = new[] { "/d", "/s", "/c", "(for /L %i in (1,1,5000) do @echo 012345678901234567890123456789 1>&2) & @echo complete" };
+            timeoutArguments = new[] { "/d", "/s", "/c", "ping 127.0.0.1 -n 6 >nul" };
+        }
+        else
+        {
+            fileName = "/bin/sh";
+            floodArguments = new[] { "-c", "i=0; while [ $i -lt 5000 ]; do echo 012345678901234567890123456789 1>&2; i=$((i+1)); done; echo complete" };
+            timeoutArguments = new[] { "-c", "sleep 5" };
+        }
+
+        var flood = DotNetPublishPipelineRunner.RunBuildInputEvaluationProcess(
+            fileName,
+            Path.GetTempPath(),
+            floodArguments,
+            environmentVariables: null,
+            TimeSpan.FromSeconds(20));
+        Assert.Equal(0, flood.ExitCode);
+        Assert.False(flood.TimedOut);
+        Assert.Contains("complete", flood.StdOut, StringComparison.Ordinal);
+        Assert.True(flood.StdErr.Length > 65_536);
+
+        var timeout = DotNetPublishPipelineRunner.RunBuildInputEvaluationProcess(
+            fileName,
+            Path.GetTempPath(),
+            timeoutArguments,
+            environmentVariables: null,
+            TimeSpan.FromMilliseconds(200));
+        Assert.True(timeout.TimedOut);
     }
 
     private static void InvokeWriteManifests(

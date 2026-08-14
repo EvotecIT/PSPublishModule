@@ -3960,49 +3960,21 @@ internal sealed partial class PowerForgeReleaseService
             }
 
             var assets = new List<string>();
-            var runnableAssets = new List<string>();
-            DotNetPublishArtefactResult[] targetArtefacts = (result.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
-                .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-            string?[] targetArtefactPaths = targetArtefacts
-                .Select(entry => target.Publish.Zip ? entry.ZipPath : entry.ExePath)
-                .ToArray();
-            if (targetArtefactPaths.Length == 0 ||
-                targetArtefactPaths.Any(path => string.IsNullOrWhiteSpace(path) || !File.Exists(path)))
+            if (!TryBuildDotNetGitHubRunnableAssets(
+                    plan,
+                    target,
+                    result,
+                    out List<string> runnableAssets,
+                    out string checksumDirectory,
+                    out string safeTarget,
+                    out string? artefactError))
             {
                 releases.Add(new PowerForgeToolGitHubReleaseResult
                 {
                     Target = target.Name,
                     Version = version ?? string.Empty,
                     Success = false,
-                    ErrorMessage = $"A runnable release artifact is missing for DotNet publish target '{target.Name}'."
-                });
-                continue;
-            }
-            runnableAssets.AddRange(targetArtefactPaths.Select(path => path!));
-
-            runnableAssets.AddRange(
-                (result.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
-                .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))
-                .SelectMany(entry => entry.OutputFiles ?? Array.Empty<string>())
-                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)));
-
-            runnableAssets.AddRange(
-                (result.StorePackages ?? Array.Empty<DotNetPublishStorePackageResult>())
-                .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))
-                .SelectMany(entry => (entry.OutputFiles ?? Array.Empty<string>())
-                    .Concat(entry.UploadFiles ?? Array.Empty<string>())
-                    .Concat(entry.SymbolFiles ?? Array.Empty<string>()))
-                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)));
-
-            if (runnableAssets.Count == 0)
-            {
-                releases.Add(new PowerForgeToolGitHubReleaseResult
-                {
-                    Target = target.Name,
-                    Version = version ?? string.Empty,
-                    Success = false,
-                    ErrorMessage = $"No runnable release artifact was produced for DotNet publish target '{target.Name}'."
+                    ErrorMessage = artefactError ?? $"No runnable release artifact was produced for DotNet publish target '{target.Name}'."
                 });
                 continue;
             }
@@ -4034,13 +4006,6 @@ internal sealed partial class PowerForgeReleaseService
                 continue;
             }
 
-            string checksumDirectory = !string.IsNullOrWhiteSpace(result.ChecksumsPath)
-                ? Path.GetDirectoryName(Path.GetFullPath(result.ChecksumsPath!))!
-                : Path.GetDirectoryName(Path.GetFullPath(uniqueAssets[0]))!;
-            string safeTarget = string.Concat(target.Name.Select(character =>
-                Path.GetInvalidFileNameChars().Contains(character) || character is '/' or '\\' or ':'
-                    ? '_'
-                    : character));
             string releaseChecksumsPath = ModulePublisher.WriteGitHubChecksumCatalog(
                 Path.Combine(checksumDirectory, safeTarget + ".SHA256SUMS.txt"),
                 uniqueAssets);

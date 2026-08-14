@@ -319,7 +319,7 @@ internal static class ModuleValidationCoreChecks
         if (!string.IsNullOrWhiteSpace(rootModule))
             list.Add(rootModule!);
 
-        list.AddRange(ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, "NestedModules"));
+        list.AddRange(ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifestPath, "NestedModules"));
         list.AddRange(ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, "RequiredAssemblies"));
 
         return list

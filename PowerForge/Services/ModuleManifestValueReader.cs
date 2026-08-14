@@ -42,6 +42,29 @@ internal static class ModuleManifestValueReader
         return Array.Empty<string>();
     }
 
+    internal static string[] ReadTopLevelModuleReferencePaths(string manifestPath, string key)
+    {
+        if (!TryReadManifestText(manifestPath, out var manifestText))
+            return Array.Empty<string>();
+
+        return ReadTopLevelModuleReferencePathsFromText(manifestText, key);
+    }
+
+    internal static string[] ReadTopLevelModuleReferencePathsFromText(string manifestText, string key)
+    {
+        if (!ModuleManifestTextParser.TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression) ||
+            string.IsNullOrWhiteSpace(expression))
+        {
+            return Array.Empty<string>();
+        }
+
+        if (ModuleManifestTextParser.TryParseModuleReferencePathExpression(expression!, out var paths) && paths is not null)
+            return paths;
+
+        throw new InvalidDataException(
+            $"PowerShell manifest property '{key}' must contain string paths or module specifications with a literal ModuleName.");
+    }
+
     internal static string[]? ReadTopLevelLiteralStringOrArray(string manifestPath, string key)
     {
         if (!TryReadManifestText(manifestPath, out var manifestText))

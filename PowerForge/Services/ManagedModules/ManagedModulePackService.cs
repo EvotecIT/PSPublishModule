@@ -281,7 +281,7 @@ public sealed class ManagedModulePackService
     {
         var references = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         AddReference(references, ModuleManifestValueReader.ReadTopLevelString(manifestPath, "RootModule"));
-        AddReferences(references, ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, "NestedModules"));
+        AddReferences(references, ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifestPath, "NestedModules"));
         AddReferences(references, ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, "RequiredAssemblies"));
         AddReferences(references, ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, "FileList"));
         return references;

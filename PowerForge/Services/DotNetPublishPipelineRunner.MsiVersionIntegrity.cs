@@ -230,8 +230,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 new[] { '\0' },
                 StringSplitOptions.RemoveEmptyEntries)
             .Select(path => path.Replace('\\', '/').TrimStart('/'))
-            .Where(path => !IsGeneratedPath(path, generatedExclusions, comparison) &&
-                           !IsStandardDotNetBuildOutput(path, string.Empty, comparison))
+            .Where(path => !IsGeneratedPath(path, generatedExclusions, comparison))
             .ToArray();
         if (ignoredCandidates.Length == 0)
             return false;
@@ -272,23 +271,6 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
         return !HasReparsePointBelowRoot(fullDirectory, fullGitRoot);
-    }
-
-    private static bool IsStandardDotNetBuildOutput(
-        string path,
-        string projectDirectory,
-        StringComparison comparison)
-    {
-        string normalizedDirectory = projectDirectory.Replace('\\', '/').Trim('/');
-        string prefix = normalizedDirectory.Length == 0 ? string.Empty : normalizedDirectory + "/";
-        if (path.StartsWith(prefix + "bin/", comparison) ||
-            path.StartsWith(prefix + "obj/", comparison))
-        {
-            return true;
-        }
-        return normalizedDirectory.Length == 0 &&
-               (path.IndexOf("/bin/", comparison) >= 0 ||
-                path.IndexOf("/obj/", comparison) >= 0);
     }
 
     internal static bool HasReparsePointBelowRoot(string path, string root)

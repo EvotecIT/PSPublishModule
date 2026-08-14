@@ -89,4 +89,33 @@ public sealed class ModuleManifestValueReaderTests
 
         Assert.Empty(ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifest, "Prerelease"));
     }
+
+    [Fact]
+    public void ReadTopLevelModuleReferencePathsFromText_ParsesStringsAndModuleSpecifications()
+    {
+        const string manifest = """
+            @{
+                NestedModules = @(
+                    'First.psm1'
+                    @{ ModuleName = 'Second.psm1'; ModuleVersion = '1.0' }
+                )
+            }
+            """;
+
+        Assert.Equal(
+            new[] { "First.psm1", "Second.psm1" },
+            ModuleManifestValueReader.ReadTopLevelModuleReferencePathsFromText(manifest, "NestedModules"));
+    }
+
+    [Fact]
+    public void ReadTopLevelModuleReferencePathsFromText_RejectsDynamicModuleSpecifications()
+    {
+        const string manifest = "@{ NestedModules = @(@{ ModuleName = (Join-Path 'lib' 'Dynamic.psm1') }) }";
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            ModuleManifestValueReader.ReadTopLevelModuleReferencePathsFromText(manifest, "NestedModules"));
+
+        Assert.Contains("literal ModuleName", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
 }

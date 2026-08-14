@@ -253,6 +253,30 @@ internal static class ModuleManifestTextParser
         return new RequiredModuleReference(name!, moduleVersion, requiredVersion, maximumVersion, guid);
     }
 
+    internal static bool TryParseModuleReferencePathExpression(string expression, out string[]? paths)
+    {
+        paths = null;
+        var trimmed = expression?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return false;
+
+        var body = IsArrayExpression(trimmed!)
+            ? TrimCompositeWrapper(trimmed!)
+            : trimmed!;
+        var values = new List<string>();
+        var index = 0;
+        while (TryReadValueExpression(body, ref index, out var itemExpression))
+        {
+            RequiredModuleReference? module = ParseRequiredModuleItem(itemExpression);
+            if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
+                return false;
+            values.Add(module.ModuleName.Trim());
+        }
+
+        paths = values.ToArray();
+        return true;
+    }
+
     private static IEnumerable<string> ParseStringArray(string expression)
     {
         var trimmed = expression.Trim();

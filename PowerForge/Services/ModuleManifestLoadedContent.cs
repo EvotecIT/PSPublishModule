@@ -6,7 +6,6 @@ internal static class ModuleManifestLoadedContent
     {
         "RootModule",
         "ModuleToProcess",
-        "NestedModules",
         "RequiredAssemblies",
         "ScriptsToProcess",
         "TypesToProcess",
@@ -18,6 +17,7 @@ internal static class ModuleManifestLoadedContent
         var paths = new List<string>();
         foreach (string key in Keys)
             paths.AddRange(ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, key));
+        paths.AddRange(ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifestPath, "NestedModules"));
         return Normalize(paths);
     }
 
@@ -26,6 +26,7 @@ internal static class ModuleManifestLoadedContent
         var paths = new List<string>();
         foreach (string key in Keys)
             paths.AddRange(ModuleManifestValueReader.ReadTopLevelStringOrArrayFromText(manifestText, key));
+        paths.AddRange(ModuleManifestValueReader.ReadTopLevelModuleReferencePathsFromText(manifestText, "NestedModules"));
         return Normalize(paths);
     }
 
