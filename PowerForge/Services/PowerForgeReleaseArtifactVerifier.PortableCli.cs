@@ -130,7 +130,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 throw Invalid("PowerForge manifest signed-file count does not match the publisher-signed payload inventory.");
             ValidatePortableConfigurationPolicy(archive.Inventory, expected);
             ValidateConfiguredPortableSignatureCoverage(archive.Inventory, expected.Sign);
-            string manifestExecutableForValidation = (request.SignaturePaths ?? Array.Empty<string>()).Any()
+            string manifestExecutableForValidation = (request.SignaturePaths ?? Array.Empty<string>()).Any() && bundleId is null
                 ? ResolvePortableManifestArtifactPath(
                     projectRoot,
                     checksumsPath,

@@ -73,6 +73,24 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliSelectsAndVerifiesSignedBundlePayload()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureBundle("package");
+        Directory.Delete(fixture.OutputDirectory, recursive: true);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.BundleId = "package";
+
+        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal("Sample.CLI", result.ArtifactId);
+        request.BundleId = null;
+        InvalidDataException missingSelector = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+        Assert.Contains("publish entry", missingSelector.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliDefaultsArtifactToSelectedManifestArchive()
     {
         using var fixture = new PortableFixture();
@@ -572,7 +590,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 ExecutablePath,
                 "Sample.CLI",
                 version,
-                signedPaths);
+                signedPaths,
+                bundleId);
             File.WriteAllBytes(
                 Path.Combine(OutputDirectory, PowerForgePortablePayloadInventory.InventoryFileName),
                 PowerForgePortablePayloadInventoryCms.Serialize(inventory));
