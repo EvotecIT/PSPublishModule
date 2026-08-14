@@ -115,7 +115,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string>? cleanTrackedGeneratedProvenanceState = null,
         string? msiReservationOwner = null,
         IEnumerable<string>? trustedExternalInputPaths = null,
-        IEnumerable<string>? buildInputRootPaths = null)
+        IEnumerable<string>? buildProjectPaths = null)
     {
         var gitRevision = ReadGitText(projectRoot, "rev-parse HEAD");
         var environmentRevision = Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim();
@@ -167,7 +167,7 @@ public sealed partial class DotNetPublishPipelineRunner
               || HasIgnoredBuildInputs(
                   projectRoot,
                   gitRoot!,
-                  buildInputRootPaths,
+                  buildProjectPaths,
                   generatedPaths);
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
@@ -210,12 +210,20 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool HasIgnoredBuildInputs(
         string projectRoot,
         string gitRoot,
-        IEnumerable<string>? buildInputRootPaths,
+        IEnumerable<string>? buildProjectPaths,
         IEnumerable<string>? generatedPaths)
     {
         var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         string[] generatedExclusions = BuildGeneratedPathExclusions(projectRoot, gitRoot, generatedPaths);
-        foreach (string rootPath in buildInputRootPaths ?? Array.Empty<string>())
+        if (!TryEvaluateDotNetBuildInputs(buildProjectPaths, out string[] projectDirectories, out HashSet<string> buildInputs))
+            return true;
+        var gitRelativeBuildInputs = new HashSet<string>(
+            buildInputs
+                .Select(path => ToGitRelativeExclusion(projectRoot, gitRoot, path))
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => path!.Replace('\\', '/').TrimStart('/')),
+            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        foreach (string rootPath in projectDirectories)
         {
             if (string.IsNullOrWhiteSpace(rootPath))
                 continue;
@@ -251,7 +259,8 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 string ignoredPath = ignoredPathValue.Replace('\\', '/').TrimStart('/');
                 if (IsGeneratedPath(ignoredPath, generatedExclusions, comparison) ||
-                    IsStandardDotNetBuildOutput(ignoredPath, relativeRoot!, comparison))
+                    IsStandardDotNetBuildOutput(ignoredPath, relativeRoot!, comparison) ||
+                    !gitRelativeBuildInputs.Contains(ignoredPath))
                 {
                     continue;
                 }

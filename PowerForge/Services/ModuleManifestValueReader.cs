@@ -73,18 +73,6 @@ internal static class ModuleManifestValueReader
                 return new[] { value! };
         }
 
-        if (ModuleManifestTextParser.TryGetPsDataStringArrayValue(manifestText, key, out var legacyValues) && legacyValues is not null)
-            return legacyValues;
-
-        if (ModuleManifestTextParser.TryGetPsDataStringValue(manifestText, key, out var legacyValue) && !string.IsNullOrWhiteSpace(legacyValue))
-            return new[] { legacyValue! };
-
-        if (ModuleManifestTextParser.TryGetStringArrayValue(manifestText, key, out var fallbackValues) && fallbackValues is not null)
-            return fallbackValues;
-
-        if (ModuleManifestTextParser.TryGetQuotedStringValue(manifestText, key, out var fallbackValue) && !string.IsNullOrWhiteSpace(fallbackValue))
-            return new[] { fallbackValue! };
-
         return Array.Empty<string>();
     }
 

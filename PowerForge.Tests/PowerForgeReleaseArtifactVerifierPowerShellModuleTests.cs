@@ -216,6 +216,17 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_StablePowerShellModuleIgnoresNestedNonPsDataPrerelease()
+    {
+        using var fixture = new ModuleFixture();
+        fixture.PrepareNestedNonPsDataPrerelease("nested-preview");
+
+        PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(fixture.CreateRequest());
+
+        Assert.Equal("2.3.4", evidence.Version);
+    }
+
+    [Fact]
     public void Verify_PowerShellModuleRejectsPrereleaseChannelMismatch()
     {
         using var fixture = new ModuleFixture();
@@ -282,13 +293,16 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             bool directoryCollision = false,
             bool includeBoundHelper = false,
             string? vendorThumbprint = null,
-            bool includeManifestLoadedFormat = false)
+            bool includeManifestLoadedFormat = false,
+            string? nestedNonPsDataPrerelease = null)
         {
             if (File.Exists(ArchivePath)) File.Delete(ArchivePath);
             using ZipArchive archive = ZipFile.Open(ArchivePath, ZipArchiveMode.Create);
             string prereleaseData = string.IsNullOrWhiteSpace(prerelease)
                 ? string.Empty
                 : $"; PrivateData = @{{ PSData = @{{ Prerelease = '{prerelease}' }} }}";
+            if (string.IsNullOrWhiteSpace(prerelease) && !string.IsNullOrWhiteSpace(nestedNonPsDataPrerelease))
+                prereleaseData = $"; PrivateData = @{{ Unrelated = @{{ Prerelease = '{nestedNonPsDataPrerelease}' }} }}";
             string formatData = includeManifestLoadedFormat ? "; FormatsToProcess = @('Sample.Format.ps1xml')" : string.Empty;
             string entrypointData = string.IsNullOrWhiteSpace(rootModuleValue)
                 ? "NestedModules = @('Sample.psm1');"
@@ -431,6 +445,13 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             _version = "2.3.4-" + label;
             WriteArchive(SourceRevision, prerelease: label);
             WriteSigningEvidence(version: _version);
+            WriteChecksums();
+        }
+
+        internal void PrepareNestedNonPsDataPrerelease(string label)
+        {
+            WriteArchive(SourceRevision, nestedNonPsDataPrerelease: label);
+            WriteSigningEvidence();
             WriteChecksums();
         }
 

@@ -26,13 +26,37 @@ public sealed class ArtefactBuildResult
     /// <summary>
     /// Creates a new result instance.
     /// </summary>
+    /// <param name="type">Artefact type that was created.</param>
+    /// <param name="id">Optional artefact ID used for publish selection.</param>
+    /// <param name="outputPath">Full path to the artefact output.</param>
+    /// <param name="modules">Modules included in the artefact.</param>
+    /// <param name="copiedItems">Extra files or directories copied into the artefact.</param>
+    public ArtefactBuildResult(
+        ArtefactType type,
+        string? id,
+        string outputPath,
+        ArtefactModuleEntry[] modules,
+        ArtefactCopyEntry[] copiedItems)
+        : this(type, id, outputPath, modules, copiedItems, Array.Empty<string>())
+    {
+    }
+
+    /// <summary>
+    /// Creates a new result instance with producer-owned release evidence.
+    /// </summary>
+    /// <param name="type">Artefact type that was created.</param>
+    /// <param name="id">Optional artefact ID used for publish selection.</param>
+    /// <param name="outputPath">Full path to the artefact output.</param>
+    /// <param name="modules">Modules included in the artefact.</param>
+    /// <param name="copiedItems">Extra files or directories copied into the artefact.</param>
+    /// <param name="evidencePaths">Evidence files emitted from the final assembled artefact.</param>
     public ArtefactBuildResult(
         ArtefactType type,
         string? id,
         string outputPath,
         ArtefactModuleEntry[] modules,
         ArtefactCopyEntry[] copiedItems,
-        string[]? evidencePaths = null)
+        string[]? evidencePaths)
     {
         Type = type;
         Id = id;

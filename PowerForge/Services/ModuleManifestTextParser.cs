@@ -78,17 +78,17 @@ internal static class ModuleManifestTextParser
     internal static bool TryReadPsDataAssignedExpression(string manifestText, string key, out string? expression)
     {
         expression = null;
-        if (!TryReadAssignedExpressionByKey(manifestText, "PrivateData", out var privateData) ||
+        if (!TryReadTopLevelAssignedExpressionByKey(manifestText, "PrivateData", out var privateData) ||
             string.IsNullOrWhiteSpace(privateData))
             return false;
 
         var privateDataText = TrimCompositeWrapper(privateData!);
-        if (!TryReadAssignedExpressionByKey(privateDataText, "PSData", out var psData) ||
+        if (!TryReadTopLevelAssignedExpressionByKey(privateDataText, "PSData", out var psData) ||
             string.IsNullOrWhiteSpace(psData))
             return false;
 
         var psDataText = TrimCompositeWrapper(psData!);
-        return TryReadAssignedExpressionByKey(psDataText, key, out expression);
+        return TryReadTopLevelAssignedExpressionByKey(psDataText, key, out expression);
     }
 
     internal static bool TryGetStringArrayValue(string manifestText, string key, out string[]? values)

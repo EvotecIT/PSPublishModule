@@ -72,4 +72,21 @@ public sealed class ModuleManifestValueReaderTests
             try { Directory.Delete(projectRoot, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void ReadPsDataStringOrArrayFromText_IgnoresNestedNonPsDataValue()
+    {
+        const string manifest = """
+            @{
+                ModuleVersion = '1.2.3'
+                PrivateData = @{
+                    Unrelated = @{
+                        Prerelease = 'nested-preview'
+                    }
+                }
+            }
+            """;
+
+        Assert.Empty(ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifest, "Prerelease"));
+    }
 }

@@ -8,6 +8,19 @@ namespace PowerForge.Tests;
 public sealed class ArtefactBuilderLayoutTests
 {
     [Fact]
+    public void ArtefactBuildResult_PreservesOriginalBinaryCompatibleConstructor()
+    {
+        Assert.NotNull(typeof(ArtefactBuildResult).GetConstructor(
+        [
+            typeof(ArtefactType),
+            typeof(string),
+            typeof(string),
+            typeof(ArtefactModuleEntry[]),
+            typeof(ArtefactCopyEntry[])
+        ]));
+    }
+
+    [Fact]
     public void Build_PreservesOriginalBinaryCompatibleOverload()
     {
         Type[] parameterTypes =
