@@ -125,6 +125,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                 ScanPackageSourceEnvironmentOverrides(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings);
                 ScanRuntimeInjectionEnvironmentOverrides(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings);
                 ScanPackageConfigurationWrites(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
+                ScanPackageExecutableShadowing(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
                 ScanInvisibleUnicode(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
                 if (options.CheckPromptInjection)
                     ScanPromptInjection(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);

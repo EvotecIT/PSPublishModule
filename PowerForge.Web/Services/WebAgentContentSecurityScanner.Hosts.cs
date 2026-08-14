@@ -253,15 +253,17 @@ public sealed partial class WebAgentContentSecurityScanner
             return IsPublicAddress(address.MapToIPv4());
         if (TryExtractEmbeddedIPv4(bytes, out var embeddedAddress))
             return IsPublicAddress(embeddedAddress);
-        return !(address.IsIPv6LinkLocal ||
-                 address.IsIPv6SiteLocal ||
-                 address.IsIPv6Multicast ||
-                 bytes.Length >= 4 && bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x00 && bytes[3] == 0x00 ||
-                 bytes.Length >= 6 && bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x00 && bytes[3] == 0x02 && bytes[4] == 0x00 && bytes[5] == 0x00 ||
-                 bytes.Length >= 4 && bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0D && bytes[3] == 0xB8 ||
-                 bytes.Length >= 6 && bytes[0] == 0x00 && bytes[1] == 0x64 && bytes[2] == 0xFF && bytes[3] == 0x9B && bytes[4] == 0x00 && bytes[5] == 0x01 ||
-                 bytes[0] == 0xFC ||
-                 bytes[0] == 0xFD);
+        if (address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6Multicast)
+            return false;
+
+        // Native public IPv6 addresses are global unicast (2000::/3). Exclude the
+        // special-purpose ranges that sit inside that allocation.
+        if ((bytes[0] & 0xE0) != 0x20)
+            return false;
+        return !(bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] <= 0x01 || // 2001::/23
+                 bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0D && bytes[3] == 0xB8 || // 2001:db8::/32
+                 bytes[0] == 0x20 && bytes[1] == 0x02 || // deprecated 6to4 2002::/16
+                 bytes[0] == 0x3F && (bytes[1] & 0xF0) == 0xF0); // documentation 3fff::/20
     }
 
     private sealed record HostTargets(string Host, Uri[] Endpoints);
@@ -272,23 +274,13 @@ public sealed partial class WebAgentContentSecurityScanner
         if (bytes.Length != 16)
             return false;
 
-        var offset = -1;
-        // IPv4-compatible ::/96 and NAT64 64:ff9b::/96.
-        if (bytes.Take(12).All(static value => value == 0) ||
-            bytes[0] == 0x00 && bytes[1] == 0x64 && bytes[2] == 0xFF && bytes[3] == 0x9B &&
-            bytes.Skip(4).Take(8).All(static value => value == 0))
-        {
-            offset = 12;
-        }
-        // 6to4 2002::/16 stores the IPv4 address immediately after the prefix.
-        else if (bytes[0] == 0x20 && bytes[1] == 0x02)
-        {
-            offset = 2;
-        }
-
-        if (offset < 0)
+        // Only the well-known NAT64 prefix is a supported public IPv4 embedding.
+        // IPv4-compatible and 6to4 addresses are special-purpose and fail the
+        // native global-unicast policy above.
+        if (!(bytes[0] == 0x00 && bytes[1] == 0x64 && bytes[2] == 0xFF && bytes[3] == 0x9B &&
+              bytes.Skip(4).Take(8).All(static value => value == 0)))
             return false;
-        address = new IPAddress(bytes.AsSpan(offset, 4));
+        address = new IPAddress(bytes.AsSpan(12, 4));
         return true;
     }
 }

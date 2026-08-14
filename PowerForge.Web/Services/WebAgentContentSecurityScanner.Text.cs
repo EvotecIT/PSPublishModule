@@ -15,8 +15,23 @@ public sealed partial class WebAgentContentSecurityScanner
         (new Regex(@"\bignore\s+(?:all\s+)?(?:previous|prior|earlier)\s+(?:instructions?|prompts?)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant), "ignore-prior-instructions"),
         (new Regex(@"\b(?:reveal|print|exfiltrate|send)\s+(?:the\s+)?(?:system\s+prompt|secrets?|credentials?|tokens?)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant), "secret-exfiltration-directive")
     };
-    private static readonly Regex RemoteExecutionRegex = new(
-        @"\b(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b[^\r\n|;&]*(?:(?:\|[^\r\n|;&]*)*\||;|&&)\s*(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php)(?:\.exe)?\b",
+    private static readonly Regex RemoteExecutionPipelineRegex = new(
+        @"\b(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b[^\r\n|;&]*(?:\|[^\r\n|;&]*)*\|\s*(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php)(?:\.exe)?\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex SavedDownloadCommandRegex = new(
+        @"\b(?<downloader>curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b(?<arguments>[^\r\n;&|]*)(?<separator>&&|;)(?<tail>[^\r\n]*)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex CurlOutputPathRegex = new(
+        @"(?:^|\s)(?:-o(?:=|\s+)?|--output(?:=|\s+))(?<path>""[^""]+""|'[^']+'|[^\s;&|]+)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex WgetOutputPathRegex = new(
+        @"(?:^|\s)(?:-O(?:=|\s+)?|--output-document(?:=|\s+))(?<path>""[^""]+""|'[^']+'|[^\s;&|]+)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex PowerShellOutputPathRegex = new(
+        @"(?:^|\s)-OutFile(?::|=|\s+)(?<path>""[^""]+""|'[^']+'|[^\s;&|]+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex InterpreterCommandRegex = new(
+        @"(?:^|[|;&]\s*|\s)(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php)(?:\.exe)?\b(?<arguments>[^\r\n;&|]*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex RemoteExecutionPowerShellExpressionRegex = new(
         @"\b(?:iex|Invoke-Expression)\b\s*(?:(?:\$\s*)?\(+|[""']\s*\$\()\s*(?:(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b|[^\r\n]{0,200}\bDownloadString\s*\()",
@@ -94,7 +109,7 @@ public sealed partial class WebAgentContentSecurityScanner
         var normalized = ShellContinuationRegex.Replace(content, static match => new string(' ', match.Length));
         foreach (var pattern in new[]
                  {
-                     RemoteExecutionRegex,
+                     RemoteExecutionPipelineRegex,
                      RemoteExecutionPowerShellExpressionRegex,
                      RemoteExecutionShellExpressionRegex,
                      RemoteExecutionScriptBlockRegex,
@@ -107,6 +122,50 @@ public sealed partial class WebAgentContentSecurityScanner
                     "Downloaded content is passed directly to an interpreter. Prefer a pinned, integrity-checked artifact and a separate execution step.");
             }
         }
+
+        ScanSavedDownloadExecution(normalized, content, path, findings, lineOffset, countLogicalLines);
+    }
+
+    private static void ScanSavedDownloadExecution(
+        string normalized,
+        string original,
+        string path,
+        List<WebAgentContentSecurityFinding> findings,
+        int lineOffset,
+        bool countLogicalLines)
+    {
+        foreach (Match download in SavedDownloadCommandRegex.Matches(normalized))
+        {
+            var outputPath = FindDownloadedOutputPath(
+                download.Groups["downloader"].Value,
+                download.Groups["arguments"].Value);
+            if (outputPath is null)
+                continue;
+
+            foreach (Match interpreter in InterpreterCommandRegex.Matches(download.Groups["tail"].Value))
+            {
+                if (!Tokenize(interpreter.Groups["arguments"].Value)
+                        .Any(token => token.Equals(outputPath, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path,
+                    GetReportedLine(original, download.Index, lineOffset, countLogicalLines),
+                    "Downloaded content is saved and then passed to an interpreter. Prefer a pinned, integrity-checked artifact and a separate execution step.");
+                break;
+            }
+        }
+    }
+
+    private static string? FindDownloadedOutputPath(string downloader, string arguments)
+    {
+        var pattern = NormalizeExecutable(downloader) switch
+        {
+            "curl" => CurlOutputPathRegex,
+            "wget" => WgetOutputPathRegex,
+            _ => PowerShellOutputPathRegex
+        };
+        var match = pattern.Match(arguments);
+        return match.Success ? match.Groups["path"].Value.Trim('"', '\'') : null;
     }
 
     private static void ExtractUrls(string content, ISet<Uri> urls)
