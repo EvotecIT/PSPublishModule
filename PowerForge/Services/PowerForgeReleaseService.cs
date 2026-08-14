@@ -3288,6 +3288,8 @@ internal sealed partial class PowerForgeReleaseService
                 ? sharedReleaseVersion
                 : sharedReleaseVersion + "+" + exactSourceCommit
         };
+        if (exactSourceCommit is not null)
+            properties["IncludeSourceRevisionInInformationalVersion"] = "false";
 
         var numericVersion = NormalizeSharedReleaseAssemblyVersion(sharedReleaseVersion);
         if (!string.IsNullOrWhiteSpace(numericVersion))

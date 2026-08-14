@@ -21,6 +21,9 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("checksum mismatch", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("executableSha256", schema, StringComparison.Ordinal);
         Assert.Contains("executableSha256", script, StringComparison.Ordinal);
+        Assert.Contains("$schemaVersion -notin @(1, 2)", script, StringComparison.Ordinal);
+        Assert.Contains("$legacyArchiveOnlyManifest", script, StringComparison.Ordinal);
+        Assert.Contains("$trustedExecutableSha256", script, StringComparison.Ordinal);
         Assert.DoesNotContain("ConvertFrom-Json -Depth", script, StringComparison.Ordinal);
         Assert.DoesNotContain("$IsWindows", script, StringComparison.Ordinal);
         Assert.DoesNotContain("$IsMacOS", script, StringComparison.Ordinal);

@@ -35,7 +35,7 @@ function Get-ManifestPropertyValue {
 $resolvedManifest = (Resolve-Path -LiteralPath $ManifestPath -ErrorAction Stop).Path
 $manifest = Get-Content -LiteralPath $resolvedManifest -Raw | ConvertFrom-Json
 $schemaVersion = Get-ManifestPropertyValue -Object $manifest -Name 'schemaVersion'
-if ($schemaVersion -ne 1) {
+if ($schemaVersion -notin @(1, 2)) {
     throw "Unsupported PowerForge tool manifest schema '$schemaVersion'."
 }
 
@@ -89,9 +89,11 @@ if ($expectedSha256 -notmatch '^[a-f0-9]{64}$') {
     throw "PowerForge asset '$rid' requires a 64-character SHA-256 digest."
 }
 $expectedExecutableSha256 = ([string] (Get-ManifestPropertyValue -Object $asset -Name 'executableSha256')).ToLowerInvariant()
-if ($expectedExecutableSha256 -notmatch '^[a-f0-9]{64}$') {
+$legacyArchiveOnlyManifest = $schemaVersion -eq 1 -and [string]::IsNullOrWhiteSpace($expectedExecutableSha256)
+if (-not $legacyArchiveOnlyManifest -and $expectedExecutableSha256 -notmatch '^[a-f0-9]{64}$') {
     throw "PowerForge asset '$rid' requires a 64-character executable SHA-256 digest."
 }
+$trustedExecutableSha256 = $expectedExecutableSha256
 
 $assetName = [string] (Get-ManifestPropertyValue -Object $asset -Name 'name')
 if ([string]::IsNullOrWhiteSpace($assetName)) {
@@ -117,18 +119,21 @@ $toolPath = Join-Path $installRoot $executableName
 $markerPath = Join-Path $installRoot '.powerforge-install.json'
 
 function Test-InstalledTool {
+    if ([string]::IsNullOrWhiteSpace($trustedExecutableSha256)) {
+        return $false
+    }
     if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf) -or
         -not (Test-Path -LiteralPath $markerPath -PathType Leaf)) {
         return $false
     }
     try {
         $actualExecutableSha256 = (Get-FileHash -LiteralPath $toolPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        if ($actualExecutableSha256 -cne $expectedExecutableSha256) {
+        if ($actualExecutableSha256 -cne $trustedExecutableSha256) {
             return $false
         }
         $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
         if ([string] $marker.sha256 -cne $expectedSha256 -or
-            [string] $marker.executableSha256 -cne $expectedExecutableSha256 -or
+            [string] $marker.executableSha256 -cne $trustedExecutableSha256 -or
             [string] $marker.version -cne $version) {
             return $false
         }
@@ -188,8 +193,12 @@ if (-not $reused) {
             throw "Verified PowerForge archive did not contain '$executableName'."
         }
         $stagedExecutableSha256 = (Get-FileHash -LiteralPath $stagedTool -Algorithm SHA256).Hash.ToLowerInvariant()
-        if ($stagedExecutableSha256 -cne $expectedExecutableSha256) {
+        if (-not [string]::IsNullOrWhiteSpace($expectedExecutableSha256) -and
+            $stagedExecutableSha256 -cne $expectedExecutableSha256) {
             throw "PowerForge executable checksum mismatch. Expected '$expectedExecutableSha256', received '$stagedExecutableSha256'."
+        }
+        if ($legacyArchiveOnlyManifest) {
+            $trustedExecutableSha256 = $stagedExecutableSha256
         }
         if (-not $isWindowsHost) {
             & chmod +x $stagedTool
@@ -209,11 +218,11 @@ if (-not $reused) {
             throw 'The verified PowerForge executable does not expose the Apple release command.'
         }
         [ordered]@{
-            schemaVersion = 1
+            schemaVersion = 2
             version = $version
             rid = $rid
             sha256 = $expectedSha256
-            executableSha256 = $expectedExecutableSha256
+            executableSha256 = $trustedExecutableSha256
             sourceManifest = $resolvedManifest
             installedAtUtc = [DateTime]::UtcNow.ToString('O')
         } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stageRoot '.powerforge-install.json') -Encoding utf8
@@ -256,6 +265,6 @@ if ($env:GITHUB_OUTPUT) {
     Version = $version
     Rid = $rid
     Sha256 = $expectedSha256
-    ExecutableSha256 = $expectedExecutableSha256
+    ExecutableSha256 = $trustedExecutableSha256
     Reused = $reused
 }

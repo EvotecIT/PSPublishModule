@@ -624,7 +624,7 @@ tool lock when a repository prefers downloading a published standalone asset:
 ```json
 {
   "$schema": "https://schemas.evotec.xyz/powerforge.tool.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "repository": "EvotecIT/PSPublishModule",
   "version": "3.0.110",
   "releaseTag": "v3.0.110",
@@ -642,8 +642,14 @@ tool lock when a repository prefers downloading a published standalone asset:
 `releaseTag` and each asset `name` are optional when they follow the standard
 `v<version>` and PowerForge archive names. `commit` binds the installed binary's
 informational version to the exact public release source. The public PowerForge release
-generates this manifest from the archives it actually built; consumers should copy that
-generated manifest instead of calculating checksums by hand.
+generates this schema-version-2 manifest from the archives it actually built; consumers
+should copy that generated manifest instead of calculating checksums by hand. Existing
+schema-version-1 locks remain installable. When an older lock does not contain
+`executableSha256`, the installer verifies and extracts the release archive on every
+invocation before executing it; verified cache reuse requires schema version 2.
+Standalone locks support `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`,
+`osx-x64`, and `osx-arm64`. Their release tag must be deterministic; clock-based tag
+placeholders are rejected because the manifest and GitHub publication are separate steps.
 
 The reusable workflow boundary mirrors the human approval boundary:
 

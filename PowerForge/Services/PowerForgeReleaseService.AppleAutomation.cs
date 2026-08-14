@@ -566,9 +566,10 @@ internal sealed partial class PowerForgeReleaseService
                 .Concat(diagnostics.Select(static diagnostic => diagnostic.Action))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            var rehearsalArtifact = plan.Rehearse && result?.Upload?.Succeeded == true
-                ? ValidateAppleRehearsalArtifactEvidence(result.Upload)
-                : null;
+            var rehearsalArtifact = ResolveAppleRehearsalArtifactEvidence(
+                plan.Rehearse,
+                result?.Success == true,
+                result?.Upload);
             return new PowerForgeAppleReleaseTargetReceipt
             {
                 Name = app.Name,
@@ -741,6 +742,14 @@ internal sealed partial class PowerForgeReleaseService
             upload.RehearsalArtifactSha256!,
             upload.RehearsalArtifactSha256Kind!);
     }
+
+    internal static AppleRehearsalArtifactEvidence? ResolveAppleRehearsalArtifactEvidence(
+        bool rehearse,
+        bool targetSucceeded,
+        AppleAppArchiveUploadResult? upload)
+        => rehearse && targetSucceeded && upload?.Succeeded == true
+            ? ValidateAppleRehearsalArtifactEvidence(upload)
+            : null;
 
     private static bool HasAppleRemoteMutation(PowerForgeAppleReleasePlan plan)
         => plan.PrepareDistribution ||

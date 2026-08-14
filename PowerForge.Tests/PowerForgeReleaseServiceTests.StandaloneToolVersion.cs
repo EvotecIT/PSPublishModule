@@ -253,6 +253,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Contains(installer, result.ReleaseAssets);
             using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockManifest));
             var json = document.RootElement;
+            Assert.Equal(2, json.GetProperty("schemaVersion").GetInt32());
             Assert.Equal("3.0.110", json.GetProperty("version").GetString());
             Assert.Equal("v3.0.110", json.GetProperty("releaseTag").GetString());
             Assert.Equal("0123456789abcdef0123456789abcdef01234567", json.GetProperty("commit").GetString());
@@ -354,6 +355,7 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(result.Success, result.ErrorMessage);
             using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockManifest));
+            Assert.Equal(2, document.RootElement.GetProperty("schemaVersion").GetInt32());
             var asset = document.RootElement.GetProperty("assets").GetProperty("osx-arm64");
             Assert.Equal(Path.GetFileName(zip), asset.GetProperty("name").GetString());
             Assert.Equal(
@@ -459,6 +461,29 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData(null, false)]
     public void ToolManifest_accepts_only_self_contained_styles(string? style, bool expected)
         => Assert.Equal(expected, PowerForgeReleaseService.IsStandalonePowerForgeArtifactStyle(style));
+
+    [Theory]
+    [InlineData("win-x64", true)]
+    [InlineData("win-arm64", true)]
+    [InlineData("linux-x64", true)]
+    [InlineData("linux-arm64", true)]
+    [InlineData("osx-x64", true)]
+    [InlineData("osx-arm64", true)]
+    [InlineData("linux-musl-x64", false)]
+    [InlineData("win-x86", false)]
+    [InlineData(null, false)]
+    public void ToolManifest_accepts_only_installer_supported_runtimes(string? runtime, bool expected)
+        => Assert.Equal(expected, PowerForgeReleaseService.IsSupportedPowerForgeToolManifestRuntime(runtime));
+
+    [Theory]
+    [InlineData("v{Version}", true)]
+    [InlineData("release-{Repository}-{Version}", true)]
+    [InlineData("v{Version}-{Date}", false)]
+    [InlineData("v{Version}-{UtcDateTime}", false)]
+    [InlineData("v{Version}-{Timestamp}", false)]
+    [InlineData("v{Version}-{UtcTimestamp}", false)]
+    public void ToolManifest_requires_a_deterministic_release_tag(string template, bool expected)
+        => Assert.Equal(expected, PowerForgeReleaseService.IsDeterministicPowerForgeToolManifestTagTemplate(template));
 
     private static PowerForgeReleaseService CreateService(
         Func<PowerForgeReleaseRequest, PowerForgeToolReleasePlan> planTools)

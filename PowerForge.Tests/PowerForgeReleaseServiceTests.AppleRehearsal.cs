@@ -137,6 +137,28 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void ResolveAppleRehearsalArtifactEvidence_preserves_an_earlier_export_failure()
+    {
+        var upload = new AppleAppArchiveUploadResult
+        {
+            ProcessResult = new ProcessRunResult(
+                0,
+                "export-ok",
+                string.Empty,
+                "xcodebuild",
+                TimeSpan.FromSeconds(1),
+                false)
+        };
+
+        var evidence = PowerForgeReleaseService.ResolveAppleRehearsalArtifactEvidence(
+            rehearse: true,
+            targetSucceeded: false,
+            upload);
+
+        Assert.Null(evidence);
+    }
+
     private sealed class AppleRehearsalProgress : IPowerForgeReleaseProgressReporterV2
     {
         internal List<string> Events { get; } = new();

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "version", "assets"],
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "enum": [1, 2] },
     "repository": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
@@ -32,7 +32,7 @@
         "^(osx|linux|win)-(arm64|x64)$": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["sha256", "executableSha256"],
+          "required": ["sha256"],
           "properties": {
             "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.zip$" },
             "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
@@ -41,5 +41,24 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "schemaVersion": { "const": 2 } },
+        "required": ["schemaVersion"]
+      },
+      "then": {
+        "properties": {
+          "assets": {
+            "patternProperties": {
+              "^(osx|linux|win)-(arm64|x64)$": {
+                "required": ["sha256", "executableSha256"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

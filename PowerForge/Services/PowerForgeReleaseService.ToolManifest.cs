@@ -54,16 +54,24 @@ internal sealed partial class PowerForgeReleaseService
         string? sharedReleaseVersion,
         string manifestPath)
     {
-        var artifacts = producedAssets
+        var standaloneArtifacts = producedAssets
             .Where(static artifact =>
                 string.Equals(artifact.Target, "PowerForge", StringComparison.OrdinalIgnoreCase) &&
                 artifact.Category == PowerForgeReleaseAssetCategory.Tool &&
                 !string.IsNullOrWhiteSpace(artifact.Path) &&
-                !string.IsNullOrWhiteSpace(artifact.Runtime) &&
                 IsStandalonePowerForgeArtifactStyle(artifact.Style) &&
                 artifact.Path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
                 File.Exists(artifact.Path))
             .ToArray();
+        var unsupportedRuntime = standaloneArtifacts.FirstOrDefault(static artifact =>
+            !IsSupportedPowerForgeToolManifestRuntime(artifact.Runtime));
+        if (unsupportedRuntime is not null)
+        {
+            throw new InvalidOperationException(
+                $"PowerForge tool lock manifest does not support runtime '{unsupportedRuntime.Runtime ?? "<missing>"}'. " +
+                "Supported runtimes are win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, and osx-arm64.");
+        }
+        var artifacts = standaloneArtifacts;
         if (artifacts.Length == 0)
             throw new InvalidOperationException("PowerForgeToolManifestPath requires zipped PowerForge SingleContained tool artifacts.");
 
@@ -85,6 +93,12 @@ internal sealed partial class PowerForgeReleaseService
         if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repository))
             throw new InvalidOperationException("PowerForge tool lock manifest requires unified GitHub owner and repository.");
         var tagTemplate = string.IsNullOrWhiteSpace(spec.GitHub?.TagTemplate) ? "v{Version}" : spec.GitHub!.TagTemplate!;
+        if (!IsDeterministicPowerForgeToolManifestTagTemplate(tagTemplate))
+        {
+            throw new InvalidOperationException(
+                "PowerForge tool lock manifest requires a deterministic GitHub tag template; " +
+                "clock-based placeholders are not supported.");
+        }
         var releaseTag = ApplyUnifiedGitHubTemplate(tagTemplate, repository!, version!);
         var assets = artifacts.ToDictionary(
             static artifact => artifact.Runtime!,
@@ -97,7 +111,7 @@ internal sealed partial class PowerForgeReleaseService
             StringComparer.OrdinalIgnoreCase);
         var document = new
         {
-            schemaVersion = 1,
+            schemaVersion = 2,
             repository = owner + "/" + repository,
             version,
             releaseTag,
@@ -138,6 +152,16 @@ internal sealed partial class PowerForgeReleaseService
            string.Equals(style, nameof(DotNetPublishStyle.PortableSize), StringComparison.OrdinalIgnoreCase) ||
            string.Equals(style, nameof(DotNetPublishStyle.AotSpeed), StringComparison.OrdinalIgnoreCase) ||
            string.Equals(style, nameof(DotNetPublishStyle.AotSize), StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsSupportedPowerForgeToolManifestRuntime(string? runtime)
+        => runtime is not null && runtime.ToLowerInvariant() is
+            "win-x64" or "win-arm64" or
+            "linux-x64" or "linux-arm64" or
+            "osx-x64" or "osx-arm64";
+
+    internal static bool IsDeterministicPowerForgeToolManifestTagTemplate(string tagTemplate)
+        => new[] { "{Date}", "{UtcDate}", "{DateTime}", "{UtcDateTime}", "{Timestamp}", "{UtcTimestamp}" }
+            .All(token => !tagTemplate.Contains(token, StringComparison.OrdinalIgnoreCase));
 
     private static string ComputePowerForgeExecutableSha256(string archivePath, string runtime)
     {

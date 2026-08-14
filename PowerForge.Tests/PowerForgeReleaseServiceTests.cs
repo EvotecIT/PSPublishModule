@@ -4760,6 +4760,7 @@ public sealed partial class PowerForgeReleaseServiceTests
 
         Assert.True(result.Success);
         Assert.Equal("3.0.110+" + commit, result.DotNetToolPlan!.MsBuildProperties["InformationalVersion"]);
+        Assert.Equal("false", result.DotNetToolPlan.MsBuildProperties["IncludeSourceRevisionInInformationalVersion"]);
     }
 
     [Fact]
