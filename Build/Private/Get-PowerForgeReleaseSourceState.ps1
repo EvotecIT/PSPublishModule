@@ -19,6 +19,7 @@ function Get-PowerForgeReleaseSourceState {
         [string] $RepositoryRoot,
 
         [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
         [string[]] $GeneratedProvenancePath,
 
         [Parameter(Mandatory)]

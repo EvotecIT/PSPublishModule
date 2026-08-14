@@ -36,6 +36,9 @@ internal static class PowerForgeReleaseConfigurationSecretValidator
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
+                if (ContainsSecretLiteral(element))
+                    violations.Add(path + ".Value");
+
                 foreach (JsonProperty property in element.EnumerateObject())
                 {
                     string propertyPath = path + "." + property.Name;
@@ -62,5 +65,18 @@ internal static class PowerForgeReleaseConfigurationSecretValidator
                 "Inline release secrets are not allowed. Use an environment-variable or file-path setting for: " +
                 string.Join(", ", violations.OrderBy(value => value, StringComparer.OrdinalIgnoreCase)));
         }
+    }
+
+    private static bool ContainsSecretLiteral(JsonElement element)
+    {
+        if (!element.TryGetProperty("Secret", out JsonElement secret) ||
+            secret.ValueKind != JsonValueKind.True ||
+            !element.TryGetProperty("Value", out JsonElement value) ||
+            value.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(value.GetString());
     }
 }

@@ -3893,17 +3893,14 @@ internal sealed partial class PowerForgeReleaseService
         if (resolved.Error is not null)
             return new[] { resolved.Error };
 
-        var includeGlobalAssets = (plan.Targets?.Length ?? 0) == 1;
-        var globalAssets = includeGlobalAssets
-            ? new[]
-            {
-                result.ManifestJsonPath,
-                result.ManifestTextPath,
-                result.ChecksumsPath,
-                result.RunReportPath,
-                result.RunReportMarkdownPath
-            }
-            : Array.Empty<string?>();
+        var globalAssets = new[]
+        {
+            result.ManifestJsonPath,
+            result.ManifestTextPath,
+            result.ChecksumsPath,
+            result.RunReportPath,
+            result.RunReportMarkdownPath
+        };
 
         var releases = new List<PowerForgeToolGitHubReleaseResult>();
         foreach (var target in plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())

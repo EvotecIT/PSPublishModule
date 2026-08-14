@@ -188,7 +188,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Publish = true,
                             Owner = "EvotecIT",
                             Repository = "PSPublishModule",
-                            Token = "token",
+                            TokenEnvName = "PATH",
                             TagTemplate = "{Target}-v{Version}",
                             ReleaseNameTemplate = "{Target} {Version}",
                             ReplaceExistingAssets = true
@@ -4488,6 +4488,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     public void Execute_PublishesDotNetPublishAssetsToGitHub()
     {
         var zip = Path.GetTempFileName();
+        var secondZip = Path.GetTempFileName();
         var msi = Path.GetTempFileName();
         var storeUpload = Path.GetTempFileName();
         var manifest = Path.GetTempFileName();
@@ -4516,6 +4517,18 @@ public sealed partial class PowerForgeReleaseServiceTests
                                     Style = DotNetPublishStyle.PortableCompat,
                                     Zip = true
                                 }
+                            },
+                            new DotNetPublishTarget
+                            {
+                                Name = "PowerForge.Agent",
+                                ProjectPath = "PowerForge.Agent.csproj",
+                                Publish = new DotNetPublishPublishOptions
+                                {
+                                    Framework = "net10.0",
+                                    Runtimes = new[] { "win-x64" },
+                                    Style = DotNetPublishStyle.PortableCompat,
+                                    Zip = true
+                                }
                             }
                         }
                     },
@@ -4530,6 +4543,29 @@ public sealed partial class PowerForgeReleaseServiceTests
                         {
                             Name = "PowerForge",
                             ProjectPath = "PowerForge.Cli.csproj",
+                            Version = "1.2.3",
+                            Publish = new DotNetPublishPublishOptions
+                            {
+                                Framework = "net10.0",
+                                Runtimes = new[] { "win-x64" },
+                                Style = DotNetPublishStyle.PortableCompat,
+                                Zip = true
+                            },
+                            Combinations = new[]
+                            {
+                                new DotNetPublishTargetCombination
+                                {
+                                    Framework = "net10.0",
+                                    Runtime = "win-x64",
+                                    Style = DotNetPublishStyle.PortableCompat
+                                }
+                            }
+                        },
+                        new DotNetPublishTargetPlan
+                        {
+                            Name = "PowerForge.Agent",
+                            ProjectPath = "PowerForge.Agent.csproj",
+                            Version = "1.2.3",
                             Publish = new DotNetPublishPublishOptions
                             {
                                 Framework = "net10.0",
@@ -4564,6 +4600,15 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Style = DotNetPublishStyle.PortableCompat,
                             OutputDir = Path.GetTempPath(),
                             ZipPath = zip
+                        },
+                        new DotNetPublishArtefactResult
+                        {
+                            Target = "PowerForge.Agent",
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputDir = Path.GetTempPath(),
+                            ZipPath = secondZip
                         }
                     },
                     MsiBuilds = new[]
@@ -4615,7 +4660,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Publish = true,
                             Owner = "EvotecIT",
                             Repository = "PSPublishModule",
-                            Token = "token",
+                            TokenEnvName = "PATH",
                             TagTemplate = "{Target}-v{Version}",
                             ReleaseNameTemplate = "{Target} {Version}"
                         }
@@ -4629,7 +4674,8 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(result.Success);
 
-            var publish = Assert.Single(publishCalls);
+            Assert.Equal(2, publishCalls.Count);
+            var publish = Assert.Single(publishCalls, entry => entry.TagName == "PowerForge-v1.2.3");
             Assert.Equal("PowerForge-v1.2.3", publish.TagName);
             Assert.Equal("PowerForge 1.2.3", publish.ReleaseName);
             Assert.Contains(zip, publish.AssetFilePaths);
@@ -4637,14 +4683,18 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Contains(storeUpload, publish.AssetFilePaths);
             Assert.Contains(manifest, publish.AssetFilePaths);
             Assert.Contains(checksums, publish.AssetFilePaths);
+            var secondPublish = Assert.Single(publishCalls, entry => entry.TagName == "PowerForge.Agent-v1.2.3");
+            Assert.Contains(secondZip, secondPublish.AssetFilePaths);
+            Assert.Contains(manifest, secondPublish.AssetFilePaths);
+            Assert.Contains(checksums, secondPublish.AssetFilePaths);
 
-            var release = Assert.Single(result.ToolGitHubReleases);
-            Assert.True(release.Success);
-            Assert.Equal(5, release.AssetPaths.Length);
+            Assert.Equal(2, result.ToolGitHubReleases.Length);
+            Assert.All(result.ToolGitHubReleases, release => Assert.True(release.Success));
         }
         finally
         {
             TryDelete(zip);
+            TryDelete(secondZip);
             TryDelete(msi);
             TryDelete(storeUpload);
             TryDelete(manifest);
@@ -5078,7 +5128,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Publish = true,
                             Owner = "EvotecIT",
                             Repository = "IntelligenceX",
-                            Token = "token",
+                            TokenEnvName = "PATH",
                             TagTemplate = "{Target}-v{Version}",
                             ReleaseNameTemplate = "{Target} {Version}"
                         }
@@ -5211,7 +5261,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Publish = true,
                             Owner = "EvotecIT",
                             Repository = "PSPublishModule",
-                            Token = "token",
+                            TokenEnvName = "PATH",
                             TagTemplate = "{Target}-v{Version}-preview",
                             ReleaseNameTemplate = "{Target} {Version} Preview"
                         }
@@ -5715,6 +5765,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         var trayX64 = Path.Combine(root, "tray-x64.zip");
         var trayArm64 = Path.Combine(root, "tray-arm64.zip");
         var trayProject = Path.Combine(root, "IntelligenceX.Tray.csproj");
+        var wingetToken = Path.Combine(root, "winget-token.txt");
         File.WriteAllText(trayX64, "zip", new UTF8Encoding(false));
         File.WriteAllText(trayArm64, "zip", new UTF8Encoding(false));
         File.WriteAllText(trayProject, """
@@ -5725,6 +5776,7 @@ public sealed partial class PowerForgeReleaseServiceTests
   </PropertyGroup>
 </Project>
 """, new UTF8Encoding(false));
+        File.WriteAllText(wingetToken, "secret-token", new UTF8Encoding(false));
 
         try
         {
@@ -5832,7 +5884,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         InstallerUrlTemplate = "https://github.com/EvotecIT/IntelligenceX/releases/download/v{PackageVersion}/{FileName}",
                         Submission = new PowerForgeReleaseWingetSubmissionOptions
                         {
-                            Token = "secret-token",
+                            TokenFilePath = wingetToken,
                             PullRequestTitle = "Submit {PackageIdentifier} {PackageVersion}"
                         },
                         Packages = new[]
@@ -6199,7 +6251,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Publish = true,
                             Owner = "EvotecIT",
                             Repository = "IntelligenceX",
-                            Token = "token",
+                            TokenEnvName = "PATH",
                             TagTemplate = "{Target}+v{Version}"
                         }
                     },
@@ -6549,7 +6601,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     GitHub = new PowerForgeReleaseGitHubOptions
                     {
                         Publish = true,
-                        Token = "token"
+                        TokenEnvName = "PATH"
                     },
                     Winget = new PowerForgeReleaseWingetOptions
                     {

@@ -34,6 +34,8 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("commit        = $ExpectedCommit", script, StringComparison.Ordinal);
         Assert.Contains("sourceDirty   = $sourceDirty", script, StringComparison.Ordinal);
         Assert.Contains("Get-PowerForgeReleaseSourceState", script, StringComparison.Ordinal);
+        Assert.Contains("$generatedProvenancePaths = @(if ($Operation -eq 'Publish')", script, StringComparison.Ordinal);
+        Assert.Contains("Resolve-PowerForgeEffectiveConfigurationReferences", script, StringComparison.Ordinal);
         Assert.Contains("EffectiveConfigurationPath", script, StringComparison.Ordinal);
         Assert.Contains("[IO.Path]::GetTempPath()", script, StringComparison.Ordinal);
         Assert.Contains("EffectiveConfigSha256", script, StringComparison.Ordinal);
@@ -105,6 +107,13 @@ public sealed partial class AppleReleaseWorkflowTests
             var clean = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
             Assert.Contains("\"SourceDirty\":false", clean.StandardOutput, StringComparison.OrdinalIgnoreCase);
 
+            string prepareCommand = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                                    $"Get-PowerForgeReleaseSourceState -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedProvenancePath @() -ReceiptPath '{receiptPath.Replace("'", "''", StringComparison.Ordinal)}' -GeneratedConfigurationPath '{generatedConfigurationPath.Replace("'", "''", StringComparison.Ordinal)}' | ConvertTo-Json -Compress";
+            var prepareDirty = Run(shell, repository.FullName, "-NoProfile", "-Command", prepareCommand).EnsureSuccess();
+            Assert.Contains("\"SourceDirty\":true", prepareDirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("PowerForge.ReleaseProvenance.json", prepareDirty.StandardOutput, StringComparison.Ordinal);
+            Assert.Contains("PowerForge.ReleaseProvenance.psd1", prepareDirty.StandardOutput, StringComparison.Ordinal);
+
             File.WriteAllText(receiptPath, "{}");
 
             Run("git", repository.FullName, "add", "Module/PowerForge.ReleaseProvenance.json").EnsureSuccess();
@@ -161,6 +170,37 @@ public sealed partial class AppleReleaseWorkflowTests
             var dirty = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
             Assert.Contains("\"SourceDirty\":true", dirty.StandardOutput, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("untracked-input.ps1", dirty.StandardOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { repository.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData("powershell")]
+    [InlineData("pwsh")]
+    public void PublicModuleReleaseAnchorsRelativeExternalConfigurationBeforeRelocation(string shell)
+    {
+        var repository = Directory.CreateTempSubdirectory();
+        try
+        {
+            string sourceConfigurationPath = Path.Combine(repository.FullName, "Build", "release.json");
+            string expected = Path.Combine(repository.FullName, "Build", "dotnet", "publish.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(sourceConfigurationPath)!);
+            string helper = Path.Combine(
+                FindRepoRoot(),
+                "Build",
+                "Private",
+                "Resolve-PowerForgeEffectiveConfigurationReferences.ps1");
+            string command = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                             "$config = '{\"Tools\":{\"DotNetPublishConfigPath\":\"dotnet/publish.json\"}}' | ConvertFrom-Json; " +
+                             $"$result = Resolve-PowerForgeEffectiveConfigurationReferences -ReleaseConfig $config -SourceConfigurationPath '{sourceConfigurationPath.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                             "$result.Tools.DotNetPublishConfigPath";
+
+            var result = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+
+            Assert.Equal(Path.GetFullPath(expected), result.StandardOutput.Trim(), ignoreCase: true);
         }
         finally
         {

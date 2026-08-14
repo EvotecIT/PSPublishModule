@@ -9,6 +9,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("{\"Winget\":{\"Submission\":{\"Token\":\"secret\"}}}", "$.Winget.Submission.Token")]
     [InlineData("{\"VirusTotal\":{\"ApiKey\":\"secret\"}}", "$.VirusTotal.ApiKey")]
     [InlineData("{\"Packages\":{\"PublishApiKey\":\"secret\"}}", "$.Packages.PublishApiKey")]
+    [InlineData("{\"Tools\":{\"DotNetPublish\":{\"DotNet\":{\"EnvironmentVariables\":{\"PRIVATE_TOKEN\":{\"Value\":\"secret\",\"Secret\":true}}}}}}", "$.Tools.DotNetPublish.DotNet.EnvironmentVariables.PRIVATE_TOKEN.Value")]
     public void Execute_InlineSecret_RejectsAtSharedServiceBoundary(string json, string expectedPath)
     {
         string root = CreateSandbox();
@@ -41,16 +42,17 @@ public sealed partial class PowerForgeReleaseServiceTests
             string path = Path.Combine(root, "release.json");
             File.WriteAllText(
                 path,
-                "{\"GitHub\":{\"TokenFilePath\":\"token.txt\"},\"Winget\":{\"Submission\":{\"TokenEnvName\":\"WINGET_TOKEN\"}},\"VirusTotal\":{\"ApiKeyFilePath\":\"vt.txt\"}}",
+                "{\"GitHub\":{\"TokenFilePath\":\"token.txt\"},\"Winget\":{\"Submission\":{\"TokenEnvName\":\"WINGET_TOKEN\"}},\"VirusTotal\":{\"ApiKeyFilePath\":\"vt.txt\"},\"Tools\":{\"DotNetPublish\":{\"DotNet\":{\"EnvironmentVariables\":{\"PRIVATE_TOKEN\":{\"FromEnvironmentVariable\":\"PRIVATE_TOKEN\",\"Secret\":true}}}}}}",
                 new UTF8Encoding(false));
             PowerForgeReleaseSpec spec = PowerForgeReleaseService.LoadConfiguration(path);
 
-            PowerForgeReleaseResult result = new PowerForgeReleaseService(new NullLogger()).Execute(
-                spec,
-                new PowerForgeReleaseRequest { ConfigPath = path, PlanOnly = true });
+            Exception? exception = Record.Exception(() =>
+                new PowerForgeReleaseService(new NullLogger()).Execute(
+                    spec,
+                    new PowerForgeReleaseRequest { ConfigPath = path, PlanOnly = true }));
 
-            Assert.False(result.Success);
-            Assert.Contains("does not enable", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(exception);
+            Assert.DoesNotContain("Inline release secrets are not allowed", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

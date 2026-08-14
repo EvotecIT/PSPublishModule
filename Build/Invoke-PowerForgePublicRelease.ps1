@@ -76,10 +76,14 @@ try {
 
     $moduleProvenancePath = Join-Path $repositoryRoot 'Module\PowerForge.ReleaseProvenance.json'
     $moduleSignedProvenancePath = Join-Path $repositoryRoot 'Module\PowerForge.ReleaseProvenance.psd1'
+    $generatedProvenancePaths = @(if ($Operation -eq 'Publish') {
+        $moduleProvenancePath
+        $moduleSignedProvenancePath
+    })
     . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Get-PowerForgeReleaseSourceState.ps1')
     $sourceState = Get-PowerForgeReleaseSourceState `
         -RepositoryRoot $repositoryRoot `
-        -GeneratedProvenancePath @($moduleProvenancePath, $moduleSignedProvenancePath) `
+        -GeneratedProvenancePath $generatedProvenancePaths `
         -ReceiptPath $ReceiptPath `
         -GeneratedConfigurationPath $retainedCheckoutConfigPath
     $sourceDirty = [bool] $sourceState.SourceDirty
@@ -108,6 +112,10 @@ try {
         -ReleaseConfig $releaseConfig `
         -Version $Version `
         -DisableVersionUpdates:($Operation -eq 'Publish')
+    . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Resolve-PowerForgeEffectiveConfigurationReferences.ps1')
+    $releaseConfig = Resolve-PowerForgeEffectiveConfigurationReferences `
+        -ReleaseConfig $releaseConfig `
+        -SourceConfigurationPath $ConfigPath
     $releaseConfig.GitHub | Add-Member -NotePropertyName Commitish -NotePropertyValue $ExpectedCommit -Force
     $certificateThumbprint = [string] $releaseConfig.Packages.CertificateThumbprint
     $certificateStore = [string] $releaseConfig.Packages.CertificateStore

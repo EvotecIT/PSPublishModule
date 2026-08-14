@@ -34,7 +34,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         Publish = true,
                         Owner = "EvotecIT",
                         Repository = "PSPublishModule",
-                        Token = "token",
+                        TokenEnvName = "PATH",
                         TagTemplate = "{Target}-v{Version}",
                         ReleaseNameTemplate = "{Target} {Version}"
                     }
