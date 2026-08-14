@@ -17,7 +17,8 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
         new Dictionary<string, string>(StringComparer.Ordinal);
     private string? _snapshotConfigPath;
     private string? _expectedConfigSha256;
-    private readonly List<string> _preparedSwiftPackageMetadataRoots = new();
+    private readonly Dictionary<string, AppleArchiveUploadSnapshot.SnapshotIdentity> _preparedSwiftPackageMetadata =
+        new(GetPathComparer());
     private bool _disposed;
 
     private AppleReleaseSourceSnapshot(
@@ -184,64 +185,113 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
                 relativePath.Replace('/', Path.DirectorySeparatorChar)));
             EnsureContained(RootPath, packageManifest, "Apple snapshot Swift package manifest");
             var metadataRoot = Path.Combine(Path.GetDirectoryName(packageManifest)!, ".swiftpm");
-            EnsureEmptyRealDirectory(metadataRoot, "Apple snapshot Swift package metadata root");
-            _preparedSwiftPackageMetadataRoots.Add(metadataRoot);
+            EnsureRealDirectory(metadataRoot, "Apple snapshot Swift package metadata root", createIfMissing: true);
             foreach (var name in new[] { "configuration", "xcode" })
             {
                 var directory = Path.Combine(metadataRoot, name);
-                EnsureEmptyRealDirectory(directory, $"Apple snapshot Swift package {name} directory");
+                EnsureRealDirectory(directory, $"Apple snapshot Swift package {name} directory", createIfMissing: true);
             }
+            ValidateSwiftPackageMetadataTree(metadataRoot);
+            _preparedSwiftPackageMetadata[metadataRoot] = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+                metadataRoot,
+                "prepared Apple snapshot Swift package metadata");
         }
     }
 
     private void ValidatePreparedSwiftPackageWorkingDirectories()
     {
-        foreach (var metadataRoot in _preparedSwiftPackageMetadataRoots)
+        foreach (var pair in _preparedSwiftPackageMetadata)
         {
+            var metadataRoot = pair.Key;
             EnsureRealDirectory(metadataRoot, "Apple snapshot Swift package metadata root");
-            var expectedChildren = new HashSet<string>(new[] { "configuration", "xcode" }, StringComparer.Ordinal);
-            foreach (var entry in Directory.EnumerateFileSystemEntries(metadataRoot))
+            foreach (var name in new[] { "configuration", "xcode" })
             {
-                if (!expectedChildren.Remove(Path.GetFileName(entry)))
-                {
-                    throw new InvalidOperationException(
-                        $"Apple snapshot Swift package metadata root contains unbound state before the Apple build starts: {entry}");
-                }
+                EnsureRealDirectory(
+                    Path.Combine(metadataRoot, name),
+                    $"Apple snapshot Swift package {name} directory");
             }
-            if (expectedChildren.Count > 0)
+            ValidateSwiftPackageMetadataTree(metadataRoot);
+            var current = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+                metadataRoot,
+                "prepared Apple snapshot Swift package metadata");
+            if (!pair.Value.Equals(current))
             {
                 throw new InvalidOperationException(
-                    $"Apple snapshot Swift package metadata root is incomplete before the Apple build starts: {metadataRoot}");
+                    $"Apple snapshot Swift package metadata changed before the Apple build started: {metadataRoot}");
             }
-            EnsureEmptyRealDirectory(
-                Path.Combine(metadataRoot, "configuration"),
-                "Apple snapshot Swift package configuration directory");
-            EnsureEmptyRealDirectory(
-                Path.Combine(metadataRoot, "xcode"),
-                "Apple snapshot Swift package xcode directory");
         }
     }
 
-    private void EnsureEmptyRealDirectory(string directory, string name)
+    private void ValidateSwiftPackageMetadataTree(string metadataRoot)
+    {
+        var relativeRoot = FrameworkCompatibility.GetRelativePath(RootPath, metadataRoot).Replace('\\', '/');
+        var trackedFiles = Run(
+                _git,
+                RootPath,
+                new[] { "ls-files", "-z", "--", relativeRoot + "/" },
+                "enumerate tracked Swift package metadata")
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(path => Path.GetFullPath(Path.Combine(RootPath, path.Replace('/', Path.DirectorySeparatorChar))))
+            .ToHashSet(GetPathComparer());
+        var allowedDirectories = new HashSet<string>(GetPathComparer())
+        {
+            metadataRoot,
+            Path.Combine(metadataRoot, "configuration"),
+            Path.Combine(metadataRoot, "xcode")
+        };
+        foreach (var trackedFile in trackedFiles)
+        {
+            EnsureContained(metadataRoot, trackedFile, "tracked Apple snapshot Swift package metadata");
+            for (var directory = Path.GetDirectoryName(trackedFile);
+                 directory is not null && !directory.Equals(metadataRoot, GetPathComparison());
+                 directory = Path.GetDirectoryName(directory))
+            {
+                allowedDirectories.Add(directory);
+            }
+        }
+        var pending = new Stack<string>();
+        pending.Push(metadataRoot);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
+            {
+                var attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Apple snapshot Swift package metadata must not contain a symbolic link or reparse point: {entry}");
+                }
+                if ((attributes & FileAttributes.Directory) != 0)
+                {
+                    if (!allowedDirectories.Contains(Path.GetFullPath(entry)))
+                    {
+                        throw new InvalidOperationException(
+                            $"Apple snapshot Swift package metadata contains an untracked directory: {entry}");
+                    }
+                    pending.Push(entry);
+                    continue;
+                }
+                var fullPath = Path.GetFullPath(entry);
+                if (!trackedFiles.Contains(fullPath))
+                {
+                    throw new InvalidOperationException(
+                        $"Apple snapshot Swift package metadata contains untracked state: {entry}");
+                }
+            }
+        }
+    }
+
+    private void EnsureRealDirectory(string directory, string name, bool createIfMissing = false)
     {
         EnsureContained(RootPath, directory, name);
         if (!Directory.Exists(directory))
         {
-            if (File.Exists(directory))
-                throw new InvalidOperationException($"{name} must be an ordinary empty directory: {directory}");
+            if (!createIfMissing || File.Exists(directory))
+                throw new InvalidOperationException($"{name} must be an ordinary directory: {directory}");
             Directory.CreateDirectory(directory);
             return;
         }
-        EnsureRealDirectory(directory, name);
-        if (Directory.EnumerateFileSystemEntries(directory).Any())
-            throw new InvalidOperationException($"{name} must be empty before the Apple build starts: {directory}");
-    }
-
-    private void EnsureRealDirectory(string directory, string name)
-    {
-        EnsureContained(RootPath, directory, name);
-        if (!Directory.Exists(directory))
-            throw new InvalidOperationException($"{name} must be an ordinary directory: {directory}");
         if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
         {
             throw new InvalidOperationException(
@@ -452,6 +502,9 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
 
     private static StringComparer GetPathComparer()
         => Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private static StringComparison GetPathComparison()
+        => Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     public void Dispose()
     {

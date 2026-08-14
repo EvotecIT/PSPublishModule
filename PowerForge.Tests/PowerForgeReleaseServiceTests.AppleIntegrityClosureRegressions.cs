@@ -70,7 +70,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
 
             var exception = Assert.Throws<InvalidOperationException>(() => snapshot.MonitorChanges());
 
-            Assert.Contains("must be empty", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("untracked state", exception.Message, StringComparison.OrdinalIgnoreCase);
         } finally {
             TryDelete(root);
         }
