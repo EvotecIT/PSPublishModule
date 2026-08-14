@@ -154,7 +154,9 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         for (var index = separator + 1; index < fileName.Length; index++)
         {
             var character = fileName[index];
-            if (!((character >= '0' && character <= '9') || (character >= 'a' && character <= 'z')))
+            if (!((character >= '0' && character <= '9') ||
+                  (character >= 'a' && character <= 'z') ||
+                  (character >= 'A' && character <= 'Z')))
                 return false;
         }
 
