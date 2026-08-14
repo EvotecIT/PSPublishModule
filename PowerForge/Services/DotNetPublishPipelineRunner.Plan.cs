@@ -2280,12 +2280,13 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<DotNetPublishTargetPlan>? targets)
     {
         DotNetPublishTargetPlan[] targetPlans = (targets ?? Array.Empty<DotNetPublishTargetPlan>()).ToArray();
+        DotNetPublishInstallerPlan[] installerPlans = (installers ?? Array.Empty<DotNetPublishInstallerPlan>()).ToArray();
         var lookupPlan = new DotNetPublishPlan
         {
             MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>(versions, StringComparer.OrdinalIgnoreCase)
         };
         var companionVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>(StringComparer.OrdinalIgnoreCase);
-        foreach (DotNetPublishInstallerPlan installer in installers ?? Array.Empty<DotNetPublishInstallerPlan>())
+        foreach (DotNetPublishInstallerPlan installer in installerPlans)
         {
             DotNetPublishMsiVersionOptions? versioning = installer.Versioning;
             if (versioning is not { Enabled: true, ApplyToPublish: true } ||
@@ -2335,6 +2336,25 @@ public sealed partial class DotNetPublishPipelineRunner
 
                 foreach (DotNetPublishTargetCombination combination in additionalTarget.Combinations)
                 {
+                    DotNetPublishMsiVersionPlan[] primaryVersions = installerPlans
+                        .Where(owner => owner.Versioning is { Enabled: true, ApplyToPublish: true } &&
+                                        string.Equals(owner.PrepareFromTarget, additionalTarget.Name, StringComparison.OrdinalIgnoreCase))
+                        .Select(owner => FindResolvedMsiVersion(
+                            lookupPlan,
+                            owner.Id,
+                            additionalTarget.Name,
+                            combination.Framework,
+                            combination.Runtime,
+                            combination.Style))
+                        .Where(primary => primary is not null)
+                        .Select(primary => primary!)
+                        .ToArray();
+                    if (primaryVersions.Any(primary => !AreCompatibleMsiVersionPlans(primary, source)))
+                    {
+                        throw new InvalidOperationException(
+                            $"Additional publish target '{additionalTarget.Name}' resolved conflicting release versions or authorities between its primary installer and a companion installer.");
+                    }
+
                     string companionKey = string.Join("|", new[]
                     {
                         additionalTarget.Name,
@@ -2343,11 +2363,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         combination.Style.ToString()
                     });
                     if (companionVersions.TryGetValue(companionKey, out DotNetPublishMsiVersionPlan? companion) &&
-                        (!string.Equals(companion.Version, source.Version, StringComparison.OrdinalIgnoreCase) ||
-                         !string.Equals(companion.AssemblyVersion, source.AssemblyVersion, StringComparison.OrdinalIgnoreCase) ||
-                         !MsiVersionCoordinationKeyComparer.Instance.Equals(
-                             BuildMsiVersionCoordinationKey(companion),
-                             sourceCoordinationKey)))
+                        !AreCompatibleMsiVersionPlans(companion, source))
                     {
                         throw new InvalidOperationException(
                             $"Additional publish target '{additionalTarget.Name}' resolved conflicting release versions or authorities across installers.");
@@ -2372,6 +2388,15 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
     }
+
+    private static bool AreCompatibleMsiVersionPlans(
+        DotNetPublishMsiVersionPlan first,
+        DotNetPublishMsiVersionPlan second)
+        => string.Equals(first.Version, second.Version, StringComparison.OrdinalIgnoreCase)
+           && string.Equals(first.AssemblyVersion, second.AssemblyVersion, StringComparison.OrdinalIgnoreCase)
+           && MsiVersionCoordinationKeyComparer.Instance.Equals(
+               BuildMsiVersionCoordinationKey(first),
+               BuildMsiVersionCoordinationKey(second));
 
     private static DotNetPublishMsiVersionPlan CloneMsiVersionPlan(DotNetPublishMsiVersionPlan source) => new()
     {

@@ -732,6 +732,57 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void Plan_RejectsConflictingCompanionAndPrimaryInstallerVersions()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string app = CreateProject(root, "App/App.csproj");
+            string portable = CreateProject(root, "Portable/Portable.csproj");
+            DotNetPublishSpec spec = CreateBaseSpec(root, app);
+            spec.Targets = spec.Targets.Concat(new[]
+            {
+                new DotNetPublishTarget
+                {
+                    Name = "portable",
+                    ProjectPath = portable,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net8.0",
+                        Runtimes = new[] { "win-x64" },
+                        Style = DotNetPublishStyle.PortableCompat,
+                        UseStaging = false
+                    }
+                }
+            }).ToArray();
+
+            DotNetPublishInstaller companionOwner = CreateReleaseGroupInstaller("app.msi", "AppFiles");
+            companionOwner.Versioning!.ReleaseGroup = null;
+            companionOwner.Versioning.Monotonic = false;
+            companionOwner.Versioning.Major = 1;
+            companionOwner.Versioning.AdditionalPublishTargets = new[] { "portable" };
+
+            DotNetPublishInstaller primaryOwner = CreateReleaseGroupInstaller("portable.msi", "PortableFiles");
+            primaryOwner.PrepareFromTarget = "portable";
+            primaryOwner.Versioning!.ReleaseGroup = null;
+            primaryOwner.Versioning.Monotonic = false;
+            primaryOwner.Versioning.Major = 2;
+            primaryOwner.Versioning.StatePath = "Build/versioning/portable.state.json";
+            spec.Installers = new[] { companionOwner, primaryOwner };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+
+            Assert.Contains("conflicting release versions", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("primary installer", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_ReleaseGroupRejectsDifferentVersionAuthorities()
     {
         var root = CreateTempRoot();
