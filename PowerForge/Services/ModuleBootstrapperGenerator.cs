@@ -1116,40 +1116,15 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 
     private static string BuildRuntimeHandlerBlock()
     {
-        return string.Join(
-                   "\r\n",
-                   new[]
-                   {
-                       "# Ensure native runtime libraries are discoverable on Windows",
-                       "$IsWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)",
-                       "# Skip probing when the current host cannot resolve a Windows-facing Lib folder (for example Desktop + Core-only payloads).",
-                       "if ($IsWindowsPlatform -and $LibFolder) {",
-                       "    $Arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture",
-                       "    # PowerShell switch matches the Architecture enum by its string representation here.",
-                       "    $ArchFolder = switch ($Arch) {",
-                       "        'X64'   { 'win-x64' }",
-                       "        'X86'   { 'win-x86' }",
-                       "        'Arm64' { 'win-arm64' }",
-                       "        'Arm'   { 'win-arm' }",
-                       "        Default {",
-                       "            Write-Warning -Message (\"Unknown Windows architecture '{0}'. Falling back to win-x64 native runtime probing.\" -f $Arch)",
-                       "            'win-x64'",
-                       "        }",
-                       "    }",
-                       string.Empty,
-                       "    $NativePath = Join-Path -Path $PSScriptRoot -ChildPath (\"Lib\\{0}\\runtimes\\{1}\\native\" -f $LibFolder, $ArchFolder)",
-                       "    $PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }",
-                       "    if ((Test-Path -LiteralPath $NativePath) -and ($PathEntries -notcontains $NativePath)) {",
-                       "        # Prepend the module-native runtime path so the packaged payload wins over unrelated machine-wide copies.",
-                       "        if ([string]::IsNullOrWhiteSpace($env:PATH)) {",
-                       "            $env:PATH = $NativePath",
-                       "        } else {",
-                       "            $env:PATH = \"$NativePath$([IO.Path]::PathSeparator)$env:PATH\"",
-                       "        }",
-                       "    }",
-                       "}",
-                       string.Empty
-                   });
+        return RenderModuleBootstrapperTemplate(
+            "RuntimeHandler",
+            "Scripts/ModuleBootstrapper/RuntimeHandler.Template.ps1",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ArchitectureResolverBlock"] = IndentPowerShell(
+                    RenderWindowsRuntimeArchitectureResolver("$Arch", "$ArchFolder").TrimEnd(),
+                    4)
+            });
     }
 
     private static string BuildDesktopAssemblyResolverBlock()

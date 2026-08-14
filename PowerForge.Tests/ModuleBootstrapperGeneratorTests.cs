@@ -2,6 +2,79 @@ using PowerForge;
 
 public class ModuleBootstrapperGeneratorTests
 {
+    [Theory]
+    [InlineData("AMD64", "win-x64")]
+    [InlineData("X86", "win-x86")]
+    [InlineData("ARM64", "win-arm64")]
+    [InlineData("ARM", "win-arm")]
+    public void WindowsRuntimeArchitectureResolver_UsesEnvironmentFallbackWithoutWarning(
+        string environmentArchitecture,
+        string expectedRuntimeFolder)
+    {
+        var resolver = ModuleBootstrapperGenerator.RenderWindowsRuntimeArchitectureResolver("$Arch", "$ArchFolder")
+            .Replace(
+                "[string][System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture",
+                "[string]$null",
+                StringComparison.Ordinal)
+            .Replace(
+                "[string]$env:PROCESSOR_ARCHITECTURE",
+                $"[string]'{environmentArchitecture}'",
+                StringComparison.Ordinal);
+
+        using var powerShell = System.Management.Automation.PowerShell.Create();
+        powerShell.AddScript(resolver + "\r\n$ArchFolder");
+
+        var output = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors);
+        Assert.Empty(powerShell.Streams.Warning);
+        Assert.Equal(expectedRuntimeFolder, Assert.Single(output).BaseObject);
+    }
+
+    [Fact]
+    public void WindowsRuntimeArchitectureResolver_UsesProcessBitnessForMissingSignalsWithoutWarning()
+    {
+        var resolver = ModuleBootstrapperGenerator.RenderWindowsRuntimeArchitectureResolver("$Arch", "$ArchFolder")
+            .Replace(
+                "[string][System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture",
+                "[string]$null",
+                StringComparison.Ordinal)
+            .Replace(
+                "[string]$env:PROCESSOR_ARCHITECTURE",
+                "[string]$null",
+                StringComparison.Ordinal);
+
+        using var powerShell = System.Management.Automation.PowerShell.Create();
+        powerShell.AddScript(resolver + "\r\n$ArchFolder");
+
+        var output = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors);
+        Assert.Empty(powerShell.Streams.Warning);
+        Assert.Equal(IntPtr.Size == 4 ? "win-x86" : "win-x64", Assert.Single(output).BaseObject);
+    }
+
+    [Fact]
+    public void WindowsRuntimeArchitectureResolver_WarnsForUnrecognizedNonEmptyArchitecture()
+    {
+        var resolver = ModuleBootstrapperGenerator.RenderWindowsRuntimeArchitectureResolver("$Arch", "$ArchFolder")
+            .Replace(
+                "[string][System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture",
+                "[string]'RISCV64'",
+                StringComparison.Ordinal);
+
+        using var powerShell = System.Management.Automation.PowerShell.Create();
+        powerShell.AddScript(resolver + "\r\n$ArchFolder");
+
+        var output = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors);
+        Assert.Contains(
+            powerShell.Streams.Warning,
+            warning => warning.Message.Contains("Unknown Windows architecture 'RISCV64'", StringComparison.Ordinal));
+        Assert.Equal(IntPtr.Size == 4 ? "win-x86" : "win-x64", Assert.Single(output).BaseObject);
+    }
+
     [Fact]
     public void Generate_WithLibLayout_WritesLibrariesAndBootstrapperFromTemplates()
     {
@@ -120,6 +193,10 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("Lib\\{0}\\runtimes\\{1}\\native", bootstrapper);
             Assert.Contains("$PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }", bootstrapper);
             Assert.Contains("($PathEntries -notcontains $NativePath)", bootstrapper);
+            Assert.Contains("$Arch = [string][System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture", bootstrapper);
+            Assert.Contains("$Arch = [string]$env:PROCESSOR_ARCHITECTURE", bootstrapper);
+            Assert.Contains("'AMD64' { 'win-x64' }", bootstrapper);
+            Assert.Contains("if ([IntPtr]::Size -eq 4) { 'win-x86' } else { 'win-x64' }", bootstrapper);
             Assert.Contains("Unknown Windows architecture", bootstrapper);
             Assert.DoesNotContain("\r\n\r\ntry {", bootstrapper);
         }
@@ -878,6 +955,10 @@ public class ModuleBootstrapperGeneratorTests
                 developmentBinaries: developmentOptions);
 
             var bootstrapper = File.ReadAllText(Path.Combine(moduleRoot, "DemoModule.psm1"));
+            Assert.Contains("$PowerForgeDevelopmentArch = [string][System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture", bootstrapper);
+            Assert.Contains("$PowerForgeDevelopmentArch = [string]$env:PROCESSOR_ARCHITECTURE", bootstrapper);
+            Assert.Contains("'AMD64' { 'win-x64' }", bootstrapper);
+            Assert.Contains("if ([IntPtr]::Size -eq 4) { 'win-x86' } else { 'win-x64' }", bootstrapper);
             Assert.Contains("$PowerForgeDevelopmentLibFolder = [IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)", bootstrapper);
             Assert.Contains("Join-Path -Path $PowerForgeDevelopmentLibFolder -ChildPath (\"runtimes\\{0}\\native\" -f $PowerForgeDevelopmentArchFolder)", bootstrapper);
             Assert.Contains("$PowerForgeDevelopmentPathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH))", bootstrapper);
