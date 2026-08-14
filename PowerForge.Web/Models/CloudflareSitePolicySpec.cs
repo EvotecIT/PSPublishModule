@@ -6,7 +6,7 @@ public sealed class CloudflareSitePolicySpec
     /// <summary>Optional cache TTL overrides for successful static-site responses.</summary>
     public CloudflareCacheSpec? Cache { get; set; }
 
-    /// <summary>Cache purge mode used by deployment pipelines: files, hostname, or everything.</summary>
+    /// <summary>Cache purge mode used by deployment pipelines: files, incremental, hostname, or everything.</summary>
     public string PurgeMode { get; set; } = "files";
 
     /// <summary>

@@ -70,7 +70,7 @@ internal static class CloudflareRouteProfileResolver
             return;
 
         if (!CloudflareCachePurger.TryParseCanonicalMode(policy.PurgeMode, out var purgeMode))
-            throw new InvalidOperationException("Cloudflare.PurgeMode must be files, hostname, or everything.");
+            throw new InvalidOperationException("Cloudflare.PurgeMode must be files, incremental, hostname, or everything.");
         policy.PurgeMode = CloudflareCachePurger.FormatMode(purgeMode);
 
         if (policy.Cache is null)

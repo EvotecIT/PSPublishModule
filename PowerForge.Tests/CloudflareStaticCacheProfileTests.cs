@@ -27,6 +27,7 @@ public sealed class CloudflareStaticCacheProfileTests
         Assert.Equal(3, rules.Count);
         foreach (var rule in rules)
         {
+            Assert.Contains("http.request.method eq \"GET\" or http.request.method eq \"PURGE\"", rule!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
             var parameters = rule!["action_parameters"]!;
             Assert.Equal("override_origin", parameters["edge_ttl"]!["mode"]!.GetValue<string>());
             Assert.Equal(604800, parameters["edge_ttl"]!["default"]!.GetValue<int>());
@@ -42,7 +43,7 @@ public sealed class CloudflareStaticCacheProfileTests
         var fallback = rules[2]!;
         Assert.EndsWith("static assets", fallback["description"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Equal(
-            "(http.host eq \"officeimo.com\" and http.request.method eq \"GET\")",
+            "(http.host eq \"officeimo.com\" and (http.request.method eq \"GET\" or http.request.method eq \"PURGE\"))",
             fallback["expression"]!.GetValue<string>());
     }
 
@@ -103,7 +104,7 @@ public sealed class CloudflareStaticCacheProfileTests
 
             var exception = Assert.Throws<InvalidOperationException>(() => CloudflareRouteProfileResolver.Load(configPath));
 
-            Assert.Contains("files, hostname, or everything", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("files, incremental, hostname, or everything", exception.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -124,6 +125,7 @@ public sealed class CloudflareStaticCacheProfileTests
 
     [Theory]
     [InlineData("files")]
+    [InlineData("incremental")]
     [InlineData("hostname")]
     [InlineData("everything")]
     public void PipelinePurgeMode_ShouldAcceptEverySchemaValue(string value)
@@ -139,7 +141,7 @@ public sealed class CloudflareStaticCacheProfileTests
         var cloudflare = siteSchema.RootElement.GetProperty("$defs").GetProperty("CloudflareSitePolicySpec");
         Assert.True(cloudflare.GetProperty("properties").TryGetProperty("Cache", out _));
         Assert.Equal(
-            ["files", "hostname", "everything"],
+            ["files", "incremental", "hostname", "everything"],
             cloudflare.GetProperty("properties").GetProperty("PurgeMode").GetProperty("enum")
                 .EnumerateArray().Select(value => value.GetString()!).ToArray());
 
@@ -150,11 +152,11 @@ public sealed class CloudflareStaticCacheProfileTests
         Assert.Contains("hostnames", pipelineText, StringComparison.Ordinal);
         var cloudflareStep = pipelineSchema.RootElement.GetProperty("$defs").GetProperty("CloudflareStep");
         Assert.Equal(
-            ["files", "hostname", "everything"],
+            ["files", "incremental", "hostname", "everything"],
             cloudflareStep.GetProperty("properties").GetProperty("purgeMode").GetProperty("enum")
                 .EnumerateArray().Select(value => value.GetString()!).ToArray());
         Assert.Equal(
-            ["files", "hostname", "everything"],
+            ["files", "incremental", "hostname", "everything"],
             cloudflareStep.GetProperty("properties").GetProperty("purge-mode").GetProperty("enum")
                 .EnumerateArray().Select(value => value.GetString()!).ToArray());
     }

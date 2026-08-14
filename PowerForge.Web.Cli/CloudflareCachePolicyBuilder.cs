@@ -37,9 +37,10 @@ internal static class CloudflareCachePolicyBuilder
         hostname = NormalizeHostname(hostname);
         policyName = NormalizePolicyName(policyName, hostname);
         basePath = NormalizeBasePath(basePath);
-        var hostFilter = $"http.host eq \"{hostname}\" and http.request.method eq \"GET\" and ";
+        const string cacheableMethodFilter = "(http.request.method eq \"GET\" or http.request.method eq \"PURGE\")";
+        var hostFilter = $"http.host eq \"{hostname}\" and {cacheableMethodFilter} and ";
         var allGetExpression = basePath == "/"
-            ? $"(http.host eq \"{hostname}\" and http.request.method eq \"GET\")"
+            ? $"(http.host eq \"{hostname}\" and {cacheableMethodFilter})"
             : $"({hostFilter}({BuildPathClause("eq", basePath.TrimEnd('/'))} or {BuildPathClause("wildcard", basePath + "*")}))";
 
         var staticExpression = $"({hostFilter}(" + string.Join(" or ", new[]

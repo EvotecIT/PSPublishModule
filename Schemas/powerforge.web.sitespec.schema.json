@@ -115,8 +115,8 @@
       "properties": {
         "Cache": { "$ref": "#/$defs/CloudflareCacheSpec" },
         "cache": { "$ref": "#/$defs/CloudflareCacheSpec" },
-        "PurgeMode": { "type": "string", "enum": ["files", "hostname", "everything"] },
-        "purgeMode": { "type": "string", "enum": ["files", "hostname", "everything"] },
+        "PurgeMode": { "type": "string", "enum": ["files", "incremental", "hostname", "everything"] },
+        "purgeMode": { "type": "string", "enum": ["files", "incremental", "hostname", "everything"] },
         "SmartTieredCache": { "type": ["boolean", "null"] },
         "smartTieredCache": { "type": ["boolean", "null"] }
       }

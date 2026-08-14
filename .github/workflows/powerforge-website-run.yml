@@ -130,6 +130,11 @@ on:
         required: false
         type: number
         default: 7
+      generate_cloudflare_cache_manifest:
+        description: Generate a private deployment manifest when site.json selects incremental Cloudflare purge.
+        required: false
+        type: boolean
+        default: false
     secrets:
       indexnow_key:
         required: false
@@ -465,6 +470,44 @@ jobs:
             exit $LASTEXITCODE
           }
           Write-Host "::endgroup::"
+
+      - name: Detect incremental Cloudflare purge
+        if: ${{ inputs.generate_cloudflare_cache_manifest }}
+        id: cloudflare_incremental
+        shell: pwsh
+        env:
+          POWERFORGE_SITE_CONFIG: ${{ format('./{0}/site.json', inputs.website_root) }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path -LiteralPath $env:POWERFORGE_SITE_CONFIG -PathType Leaf)) {
+            throw "Site configuration not found: $($env:POWERFORGE_SITE_CONFIG)"
+          }
+
+          $site = Get-Content -LiteralPath $env:POWERFORGE_SITE_CONFIG -Raw | ConvertFrom-Json
+          $enabled = ([string]$site.Cloudflare.PurgeMode -ceq 'incremental')
+          "enabled=$($enabled.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Create incremental Cloudflare deployment manifest
+        if: ${{ steps.cloudflare_incremental.outputs.enabled == 'true' }}
+        shell: pwsh
+        env:
+          POWERFORGE_SITE_CONFIG: ${{ format('./{0}/site.json', inputs.website_root) }}
+          POWERFORGE_CACHE_ARTIFACT: ${{ runner.temp }}/artifact.tar
+          POWERFORGE_CACHE_MANIFEST: ${{ runner.temp }}/powerforge-cloudflare-cache-manifest/manifest.json
+        run: |
+          dotnet run --no-restore --framework net10.0 --project ./.powerforge-runner/PowerForge.Web.Cli/PowerForge.Web.Cli.csproj -- cloudflare manifest create --site-config $env:POWERFORGE_SITE_CONFIG --artifact $env:POWERFORGE_CACHE_ARTIFACT --out $env:POWERFORGE_CACHE_MANIFEST
+          if ($LASTEXITCODE -ne 0) {
+            throw "Creating the incremental Cloudflare deployment manifest failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Upload incremental Cloudflare deployment manifest
+        if: ${{ steps.cloudflare_incremental.outputs.enabled == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: powerforge-cloudflare-cache-manifest
+          path: ${{ runner.temp }}/powerforge-cloudflare-cache-manifest/manifest.json
+          retention-days: 1
+          if-no-files-found: error
 
       - name: Upload Pages artifact
         if: ${{ inputs.upload_pages_artifact }}

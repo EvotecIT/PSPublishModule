@@ -252,6 +252,7 @@ jobs:
       site_artifact_name: ${{ inputs.deployment_target == 'linux' && format('powerforge-site-{0}', inputs.deployment_site) || '' }}
       site_artifact_path: ${{ inputs.site_output_path }}
       site_artifact_retention_days: ${{ inputs.deployment_artifact_retention_days }}
+      generate_cloudflare_cache_manifest: ${{ inputs.deployment_target == 'github-pages' && inputs.manage_cloudflare_site_policy }}
     secrets:
       indexnow_key: ${{ secrets.indexnow_key }}
       repository_read_token: ${{ secrets.repository_read_token }}
@@ -290,6 +291,7 @@ jobs:
     environment:
       name: github-pages
     permissions:
+      actions: write
       contents: read
     steps:
       - name: Checkout exact caller source
@@ -313,6 +315,8 @@ jobs:
           zone-id: ${{ secrets.cloudflare_zone_id }}
           api-token: ${{ secrets.cloudflare_api_token }}
           checkout-caller: "false"
+          manage-incremental-purge: "true"
+          deployment-id: ${{ needs.build.outputs.source_sha }}
 
   deploy-linux:
     if: ${{ inputs.deployment_target == 'linux' }}

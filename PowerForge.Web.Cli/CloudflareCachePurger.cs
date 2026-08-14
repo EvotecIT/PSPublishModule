@@ -8,6 +8,7 @@ namespace PowerForge.Web.Cli;
 internal enum CloudflareCachePurgeMode
 {
     Files,
+    Incremental,
     Hostname,
     Everything
 }
@@ -31,6 +32,8 @@ internal static class CloudflareCachePurger
             return (false, "Cloudflare zoneId must be a 32-character hexadecimal identifier.");
         if (string.IsNullOrWhiteSpace(apiToken))
             return (false, "Missing apiToken.");
+        if (mode == CloudflareCachePurgeMode.Incremental)
+            return (false, "Incremental purge requires current and previous deployment manifests.");
 
         var normalizedTargets = (targets ?? Array.Empty<string>())
             .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -124,6 +127,10 @@ internal static class CloudflareCachePurger
             case "files":
                 mode = CloudflareCachePurgeMode.Files;
                 return true;
+            case "incremental":
+            case "manifest":
+                mode = CloudflareCachePurgeMode.Incremental;
+                return true;
             case "hostname":
             case "host":
             case "hosts":
@@ -146,6 +153,9 @@ internal static class CloudflareCachePurger
             case "files":
                 mode = CloudflareCachePurgeMode.Files;
                 return true;
+            case "incremental":
+                mode = CloudflareCachePurgeMode.Incremental;
+                return true;
             case "hostname":
                 mode = CloudflareCachePurgeMode.Hostname;
                 return true;
@@ -160,6 +170,7 @@ internal static class CloudflareCachePurger
 
     internal static string FormatMode(CloudflareCachePurgeMode mode) => mode switch
     {
+        CloudflareCachePurgeMode.Incremental => "incremental",
         CloudflareCachePurgeMode.Hostname => "hostname",
         CloudflareCachePurgeMode.Everything => "everything",
         _ => "files"

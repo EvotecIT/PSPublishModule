@@ -27,6 +27,9 @@ internal static partial class WebCliCommandHandlers
         if (verb.Equals("verify", StringComparison.OrdinalIgnoreCase))
             return HandleCloudflareVerify(subArgs, outputJson, logger, outputSchemaVersion);
 
+        if (verb.Equals("manifest", StringComparison.OrdinalIgnoreCase))
+            return HandleCloudflareManifest(subArgs, outputJson, logger, outputSchemaVersion);
+
         if (verb.Equals("dns-record", StringComparison.OrdinalIgnoreCase) ||
             verb.Equals("dns", StringComparison.OrdinalIgnoreCase))
         {
@@ -66,7 +69,7 @@ internal static partial class WebCliCommandHandlers
             return HandleCloudflareCachePolicy(subArgs, outputJson, logger, outputSchemaVersion);
         }
 
-        return Fail($"Unknown cloudflare verb '{verb}'. Supported: purge, verify, site-policy, cache-policy, dns-record.", outputJson, logger, "web.cloudflare");
+        return Fail($"Unknown cloudflare verb '{verb}'. Supported: purge, verify, manifest, site-policy, cache-policy, dns-record.", outputJson, logger, "web.cloudflare");
     }
 
     private static int HandleCloudflareDnsRecord(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
@@ -415,13 +418,16 @@ internal static partial class WebCliCommandHandlers
         if (HasOption(subArgs, "--purge-hostname") || HasOption(subArgs, "--purgeHostname"))
             purgeModeValue = "hostname";
         if (!CloudflareCachePurger.TryParseMode(purgeModeValue, out var purgeMode))
-            return Fail($"Unsupported purge mode '{purgeModeValue}'. Use files, hostname, or everything.", outputJson, logger, "web.cloudflare.purge");
+            return Fail($"Unsupported purge mode '{purgeModeValue}'. Use files, incremental, hostname, or everything.", outputJson, logger, "web.cloudflare.purge");
         var dryRun = HasOption(subArgs, "--dry-run") || HasOption(subArgs, "--dryRun");
 
         var baseUrl = TryGetOptionValue(subArgs, "--base-url") ??
                       TryGetOptionValue(subArgs, "--baseUrl") ??
                       siteProfile?.BaseUrl ??
                       Environment.GetEnvironmentVariable("POWERFORGE_BASE_URL");
+
+        if (purgeMode == CloudflareCachePurgeMode.Incremental)
+            return HandleCloudflareIncrementalPurge(subArgs, outputJson, logger, outputSchemaVersion, siteProfile, zoneId, token, baseUrl, dryRun);
 
         var urls = ReadOptionList(subArgs, "--url", "--urls");
         var paths = ReadOptionList(subArgs, "--path", "--paths");
@@ -499,8 +505,13 @@ internal static partial class WebCliCommandHandlers
         int urlCount,
         int targetCount,
         bool dryRun,
-        string message) => JsonSerializer.SerializeToElement(
-        new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        string message,
+        CloudflareCachePurgeMode? actualMode = null,
+        int? requestCount = null,
+        bool? usedFallback = null,
+        string? fallbackReason = null)
+    {
+        var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
             ["siteConfig"] = siteConfig,
             ["zoneId"] = zoneId,
@@ -511,8 +522,17 @@ internal static partial class WebCliCommandHandlers
             ["targetCount"] = targetCount,
             ["dryRun"] = dryRun,
             ["message"] = message
-        },
-        WebCliJson.Options);
+        };
+        if (actualMode is not null)
+            result["actualMode"] = CloudflareCachePurger.FormatMode(actualMode.Value);
+        if (requestCount is not null)
+            result["requestCount"] = requestCount.Value;
+        if (usedFallback is not null)
+            result["usedFallback"] = usedFallback.Value;
+        if (fallbackReason is not null)
+            result["fallbackReason"] = fallbackReason;
+        return JsonSerializer.SerializeToElement(result, WebCliJson.Options);
+    }
 
     private static int HandleCloudflareVerify(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
