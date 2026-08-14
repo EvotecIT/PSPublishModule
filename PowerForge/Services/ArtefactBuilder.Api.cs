@@ -11,6 +11,43 @@ namespace PowerForge;
 public sealed partial class ArtefactBuilder
 {
     /// <summary>
+    /// Builds a single artefact while preserving the original binary-compatible API contract.
+    /// </summary>
+    /// <param name="segment">Artefact configuration segment.</param>
+    /// <param name="projectRoot">Project root used for resolving relative paths.</param>
+    /// <param name="stagingPath">Path to the built module staging folder.</param>
+    /// <param name="moduleName">Module name.</param>
+    /// <param name="moduleVersion">Resolved module version (without prerelease).</param>
+    /// <param name="preRelease">Optional prerelease tag.</param>
+    /// <param name="requiredModules">Required modules from configuration.</param>
+    /// <param name="information">Optional include/exclude configuration for packaging.</param>
+    /// <param name="delivery">Optional delivery configuration.</param>
+    /// <param name="includeScriptFolders">When false, skips packaging script-only folders.</param>
+    public ArtefactBuildResult Build(
+        ConfigurationArtefactSegment segment,
+        string projectRoot,
+        string stagingPath,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease,
+        IReadOnlyList<RequiredModuleReference> requiredModules,
+        InformationConfiguration? information = null,
+        DeliveryOptionsConfiguration? delivery = null,
+        bool includeScriptFolders = true)
+        => Build(
+            segment,
+            projectRoot,
+            stagingPath,
+            moduleName,
+            moduleVersion,
+            preRelease,
+            requiredModules,
+            finalizePackedArtefact: null,
+            information: information,
+            delivery: delivery,
+            includeScriptFolders: includeScriptFolders);
+
+    /// <summary>
     /// Builds a single artefact described by <paramref name="segment"/> using the built module from <paramref name="stagingPath"/>.
     /// </summary>
     /// <param name="segment">Artefact configuration segment.</param>
@@ -32,10 +69,10 @@ public sealed partial class ArtefactBuilder
         string moduleVersion,
         string? preRelease,
         IReadOnlyList<RequiredModuleReference> requiredModules,
+        Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizePackedArtefact,
         InformationConfiguration? information = null,
         DeliveryOptionsConfiguration? delivery = null,
-        bool includeScriptFolders = true,
-        Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizePackedArtefact = null)
+        bool includeScriptFolders = true)
     {
         if (segment is null) throw new ArgumentNullException(nameof(segment));
         if (string.IsNullOrWhiteSpace(projectRoot)) throw new ArgumentException("ProjectRoot is required.", nameof(projectRoot));

@@ -8,6 +8,26 @@ namespace PowerForge.Tests;
 public sealed class ArtefactBuilderLayoutTests
 {
     [Fact]
+    public void Build_PreservesOriginalBinaryCompatibleOverload()
+    {
+        Type[] parameterTypes =
+        {
+            typeof(ConfigurationArtefactSegment),
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(IReadOnlyList<RequiredModuleReference>),
+            typeof(InformationConfiguration),
+            typeof(DeliveryOptionsConfiguration),
+            typeof(bool)
+        };
+
+        Assert.NotNull(typeof(ArtefactBuilder).GetMethod("Build", parameterTypes));
+    }
+
+    [Fact]
     public void Build_PackedArchiveFailurePreservesCallerOwnedEvidence()
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))

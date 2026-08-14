@@ -74,6 +74,8 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("{\"VirusTotal\":{\"ApiKey\":\"secret\"}}", "$.VirusTotal.ApiKey")]
     [InlineData("{\"Packages\":{\"PublishApiKey\":\"secret\"}}", "$.Packages.PublishApiKey")]
     [InlineData("{\"Tools\":{\"DotNetPublish\":{\"DotNet\":{\"EnvironmentVariables\":{\"PRIVATE_TOKEN\":{\"Value\":\"secret\",\"Secret\":true}}}}}}", "$.Tools.DotNetPublish.DotNet.EnvironmentVariables.PRIVATE_TOKEN.Value")]
+    [InlineData("{\"Deployment\":{\"secret\":true,\"value\":\"credential\"}}", "$.Deployment.Value")]
+    [InlineData("{\"Deployment\":{\"Secret\":false,\"secret\":true,\"Value\":\"credential\"}}", "$.Deployment.Value")]
     public void Execute_InlineSecret_RejectsAtSharedServiceBoundary(string json, string expectedPath)
     {
         string root = CreateSandbox();

@@ -88,14 +88,13 @@ internal static class PowerForgeReleaseConfigurationSecretValidator
 
     private static bool ContainsSecretLiteral(JsonElement element)
     {
-        if (!element.TryGetProperty("Secret", out JsonElement secret) ||
-            secret.ValueKind != JsonValueKind.True ||
-            !element.TryGetProperty("Value", out JsonElement value) ||
-            value.ValueKind != JsonValueKind.String)
-        {
-            return false;
-        }
-
-        return !string.IsNullOrWhiteSpace(value.GetString());
+        bool secret = element.EnumerateObject().Any(property =>
+            property.Name.Equals("Secret", StringComparison.OrdinalIgnoreCase) &&
+            property.Value.ValueKind == JsonValueKind.True);
+        bool literalValue = element.EnumerateObject().Any(property =>
+            property.Name.Equals("Value", StringComparison.OrdinalIgnoreCase) &&
+            property.Value.ValueKind == JsonValueKind.String &&
+            !string.IsNullOrWhiteSpace(property.Value.GetString()));
+        return secret && literalValue;
     }
 }

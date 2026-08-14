@@ -4489,7 +4489,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     {
         var root = CreateSandbox();
         var zip = Path.Combine(root, "PowerForge.zip");
-        var secondZip = Path.Combine(root, "PowerForge.Agent.zip");
+        var secondZip = Path.Combine(root, "PowerForge.Agent.exe");
         var msi = Path.Combine(root, "PowerForge.msi");
         var storeUpload = Path.Combine(root, "PowerForge.msixupload");
         var manifest = Path.Combine(root, "manifest.json");
@@ -4530,7 +4530,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                                     Framework = "net10.0",
                                     Runtimes = new[] { "win-x64" },
                                     Style = DotNetPublishStyle.PortableCompat,
-                                    Zip = true
+                                    Zip = false
                                 }
                             }
                         }
@@ -4574,7 +4574,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                                 Framework = "net10.0",
                                 Runtimes = new[] { "win-x64" },
                                 Style = DotNetPublishStyle.PortableCompat,
-                                Zip = true
+                                Zip = false
                             },
                             Combinations = new[]
                             {
@@ -4611,7 +4611,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Runtime = "win-x64",
                             Style = DotNetPublishStyle.PortableCompat,
                             OutputDir = Path.GetTempPath(),
-                            ZipPath = secondZip
+                            ExePath = secondZip
                         }
                     },
                     MsiBuilds = new[]
@@ -5033,9 +5033,9 @@ public sealed partial class PowerForgeReleaseServiceTests
     public void Execute_PublishesDotNetPublishAssetsToGitHub_PrefersResolvedPackageVersionOverProjectVersion()
     {
         var root = CreateSandbox();
-        var zip = Path.Combine(root, "tray-portable.zip");
+        var executable = Path.Combine(root, "IntelligenceX.Tray.exe");
         var projectPath = Path.Combine(root, "IntelligenceX.Tray.csproj");
-        File.WriteAllText(zip, "zip", new UTF8Encoding(false));
+        File.WriteAllText(executable, "exe", new UTF8Encoding(false));
         File.WriteAllText(projectPath, """
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -5087,7 +5087,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                                 Framework = "net10.0-windows10.0.19041.0",
                                 Runtimes = new[] { "win-x64" },
                                 Style = DotNetPublishStyle.PortableCompat,
-                                Zip = true
+                                Zip = false
                             },
                             Combinations = new[]
                             {
@@ -5113,7 +5113,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Runtime = "win-x64",
                             Style = DotNetPublishStyle.PortableCompat,
                             OutputDir = root,
-                            ZipPath = zip
+                            ExePath = executable
                         }
                     }
                 },
