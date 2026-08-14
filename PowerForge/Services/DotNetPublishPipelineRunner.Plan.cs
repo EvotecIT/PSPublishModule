@@ -2236,23 +2236,47 @@ public sealed partial class DotNetPublishPipelineRunner
 
             foreach (string additionalTargetName in versioning.AdditionalPublishTargets)
             {
-                DotNetPublishTargetPlan? additionalTarget = targetPlans.SingleOrDefault(target =>
-                    string.Equals(target.Name, additionalTargetName, StringComparison.OrdinalIgnoreCase));
-                if (additionalTarget is null)
-                    continue;
-
-                foreach (DotNetPublishTargetCombination combination in additionalTarget.Combinations)
-                {
-                    DotNetPublishMsiVersionPlan? source = FindResolvedMsiVersion(
+                DotNetPublishTargetPlan? sourceTarget = targetPlans.SingleOrDefault(target =>
+                    string.Equals(target.Name, installer.PrepareFromTarget, StringComparison.OrdinalIgnoreCase));
+                if (sourceTarget is null)
+                    throw new InvalidOperationException(
+                        $"Installer '{installer.Id}' cannot share its release version because source publish target '{installer.PrepareFromTarget}' was not found.");
+                DotNetPublishMsiVersionPlan[] sourcePlans = sourceTarget.Combinations
+                    .Select(combination => FindResolvedMsiVersion(
                         lookupPlan,
                         installer.Id,
                         installer.PrepareFromTarget,
                         combination.Framework,
                         combination.Runtime,
-                        combination.Style);
-                    if (source is null)
-                        continue;
+                        combination.Style))
+                    .Where(source => source is not null)
+                    .Select(source => source!)
+                    .ToArray();
+                if (sourcePlans.Length == 0)
+                    throw new InvalidOperationException(
+                        $"Installer '{installer.Id}' cannot share its release version because its source publish target did not resolve a version plan.");
+                DotNetPublishMsiVersionPlan source = sourcePlans[0];
+                string? sourceCoordinationKey = BuildMsiVersionCoordinationKey(source);
+                if (sourcePlans.Skip(1).Any(candidate =>
+                    !string.Equals(candidate.Version, source.Version, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(candidate.AssemblyVersion, source.AssemblyVersion, StringComparison.OrdinalIgnoreCase) ||
+                    !MsiVersionCoordinationKeyComparer.Instance.Equals(
+                        BuildMsiVersionCoordinationKey(candidate),
+                        sourceCoordinationKey)))
+                {
+                    throw new InvalidOperationException(
+                        $"Installer '{installer.Id}' source publish target resolves more than one release version or authority. " +
+                        "Use one canonical version authority before sharing the version with additional publish targets.");
+                }
 
+                DotNetPublishTargetPlan? additionalTarget = targetPlans.SingleOrDefault(target =>
+                    string.Equals(target.Name, additionalTargetName, StringComparison.OrdinalIgnoreCase));
+                if (additionalTarget is null)
+                    throw new InvalidOperationException(
+                        $"Installer '{installer.Id}' references unknown additional publish target '{additionalTargetName}'.");
+
+                foreach (DotNetPublishTargetCombination combination in additionalTarget.Combinations)
+                {
                     string key = BuildMsiVersionKey(
                         installer.Id,
                         additionalTarget.Name,

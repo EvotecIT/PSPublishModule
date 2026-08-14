@@ -596,8 +596,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                     Kind = DotNetPublishTargetKind.Cli,
                     Publish = new DotNetPublishPublishOptions
                     {
-                        Framework = "net10.0",
-                        Runtimes = new[] { "win-x64" },
+                        Framework = "net8.0",
+                        Runtimes = new[] { "win-arm64" },
                         Style = DotNetPublishStyle.PortableCompat,
                         UseStaging = false
                     }
@@ -612,8 +612,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Dictionary<string, string> properties = DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
                 plan,
                 portablePlan,
-                "net10.0",
-                "win-x64",
+                "net8.0",
+                "win-arm64",
                 DotNetPublishStyle.PortableCompat);
 
             Assert.Equal(2, plan.MsiVersions.Count);
@@ -624,8 +624,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 DotNetPublishPipelineRunner.ResolvePublishReleaseVersion(
                     plan,
                     "portable",
-                    "net10.0",
-                    "win-x64",
+                    "net8.0",
+                    "win-arm64",
                     DotNetPublishStyle.PortableCompat));
         }
         finally

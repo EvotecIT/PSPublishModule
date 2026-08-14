@@ -521,8 +521,15 @@ public sealed partial class DotNetPublishPipelineRunner
             throw new InvalidOperationException("Portable inventory signing requires one common Authenticode publisher certificate.");
         DotNetPublishSignOptions resolved = DotNetPublishSigningProfileResolver.CloneSignOptions(configured)
             ?? throw new InvalidOperationException("Portable inventory signing configuration is missing.");
-        resolved.Thumbprint = thumbprints[0];
-        resolved.SubjectName = null;
+        if (resolved.Provider == DotNetPublishSigningProvider.AzureArtifactSigning)
+        {
+            resolved.Thumbprint = null;
+        }
+        else
+        {
+            resolved.Thumbprint = thumbprints[0];
+            resolved.SubjectName = null;
+        }
         return resolved;
     }
 

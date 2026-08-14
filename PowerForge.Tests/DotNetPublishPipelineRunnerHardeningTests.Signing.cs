@@ -64,7 +64,8 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             var processRunner = new StubProcessRunner(request =>
             {
                 Assert.Contains("DetachedSignedData", request.Arguments);
-                Assert.Contains("1.3.6.1.5.5.7.3.3", request.Arguments);
+                Assert.Contains("1.2.840.113549.1.7.1", request.Arguments);
+                Assert.DoesNotContain("1.3.6.1.5.5.7.3.3", request.Arguments);
                 int metadataIndex = request.Arguments.ToList().IndexOf("/dmdf");
                 metadataRoot = Path.GetDirectoryName(request.Arguments[metadataIndex + 1]);
                 int outputIndex = request.Arguments.ToList().IndexOf("/p7");
@@ -96,6 +97,40 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         Assert.Equal("EvotecSigning", clone.AzureArtifactSigning?.AccountName);
         Assert.Equal(source.AzureArtifactSigning?.ExcludeCredentials, clone.AzureArtifactSigning?.ExcludeCredentials);
         Assert.NotSame(source.AzureArtifactSigning?.ExcludeCredentials, clone.AzureArtifactSigning?.ExcludeCredentials);
+    }
+
+    [Fact]
+    public void SigningProfileOverrideToAzureClearsInheritedCertificateStoreSelectors()
+    {
+        var configured = new DotNetPublishSignOptions
+        {
+            Enabled = true,
+            Provider = DotNetPublishSigningProvider.CertificateStore,
+            Thumbprint = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            SubjectName = "CN=Local Publisher",
+            Csp = "Local CSP",
+            KeyContainer = "Local Key"
+        };
+        var patch = new DotNetPublishSignPatch
+        {
+            Provider = DotNetPublishSigningProvider.AzureArtifactSigning,
+            SubjectName = "CN=Azure Publisher",
+            AzureArtifactSigning = new DotNetPublishAzureArtifactSigningOptions
+            {
+                Endpoint = "https://wus.codesigning.azure.net/",
+                AccountName = "EvotecSigning",
+                CertificateProfileName = "PublicTrust",
+                DlibPath = "Azure.CodeSigning.Dlib.dll"
+            }
+        };
+
+        DotNetPublishSigningProfileResolver.ApplySignPatch(configured, patch);
+
+        Assert.Equal(DotNetPublishSigningProvider.AzureArtifactSigning, configured.Provider);
+        Assert.Null(configured.Thumbprint);
+        Assert.Null(configured.Csp);
+        Assert.Null(configured.KeyContainer);
+        Assert.Equal("CN=Azure Publisher", configured.SubjectName);
     }
 
     [Theory]
@@ -342,6 +377,28 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 
         Assert.Equal("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", resolved.Thumbprint);
         Assert.Null(resolved.SubjectName);
+    }
+
+    [Fact]
+    public void ResolvePortableInventorySigningOptions_AzureKeepsExpectedSubjectWithoutLocalThumbprint()
+    {
+        var runner = new DotNetPublishPipelineRunner(
+            new NullLogger(),
+            new StubProcessRunner(_ => throw new InvalidOperationException("Process execution was not expected.")),
+            readAuthenticodeSignature: _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
+                true,
+                0,
+                "CN=Azure Publisher",
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"));
+        DotNetPublishSignOptions configured = AzureSign("Azure.CodeSigning.Dlib.dll");
+
+        DotNetPublishSignOptions resolved = runner.ResolvePortableInventorySigningOptions(
+            new[] { "app.exe", "library.dll" },
+            configured);
+
+        Assert.Equal(DotNetPublishSigningProvider.AzureArtifactSigning, resolved.Provider);
+        Assert.Null(resolved.Thumbprint);
+        Assert.Equal(configured.SubjectName, resolved.SubjectName);
     }
 
     [Fact]

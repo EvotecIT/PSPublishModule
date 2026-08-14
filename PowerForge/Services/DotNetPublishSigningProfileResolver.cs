@@ -110,7 +110,19 @@ internal static class DotNetPublishSigningProfileResolver
         if (patch.Enabled.HasValue)
             sign.Enabled = patch.Enabled.Value;
         if (patch.Provider.HasValue)
+        {
             sign.Provider = patch.Provider.Value;
+            if (patch.Provider.Value == DotNetPublishSigningProvider.AzureArtifactSigning)
+            {
+                sign.Thumbprint = null;
+                sign.Csp = null;
+                sign.KeyContainer = null;
+            }
+            else
+            {
+                sign.AzureArtifactSigning = null;
+            }
+        }
         if (patch.AzureArtifactSigning is not null)
             sign.AzureArtifactSigning = CloneAzureArtifactSigningOptions(patch.AzureArtifactSigning);
         if (patch.IncludeDlls.HasValue)

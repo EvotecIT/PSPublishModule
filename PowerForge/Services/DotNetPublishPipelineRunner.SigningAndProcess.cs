@@ -193,7 +193,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 "/p7", signatureRoot,
                 "/p7ce", "DetachedSignedData",
-                "/p7co", "1.3.6.1.5.5.7.3.3"
+                "/p7co", "1.2.840.113549.1.7.1"
             });
             ProcessRunResult result = RunSigningTool(
                 signToolPath,
