@@ -26,6 +26,12 @@ internal static class PowerForgeReleaseConfigurationSecretValidator
     };
 
     internal static void Validate(PowerForgeReleaseSpec spec)
+        => ValidateObject(spec);
+
+    internal static void Validate(DotNetPublishSpec spec)
+        => ValidateObject(spec);
+
+    private static void ValidateObject<T>(T spec)
     {
         using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(spec));
         ValidateElement(document.RootElement, "$", violations: new List<string>());

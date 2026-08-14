@@ -59,4 +59,43 @@ public sealed partial class PowerForgeReleaseServiceTests
             TryDelete(root);
         }
     }
+
+    [Fact]
+    public void Execute_ReferencedDotNetPublishInlineSecret_RejectsBeforePlanningOrPublication()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string projectPath = Path.Combine(root, "Sample.csproj");
+            File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\" />", new UTF8Encoding(false));
+            string publishPath = Path.Combine(root, "publish.json");
+            File.WriteAllText(
+                publishPath,
+                "{\"DotNet\":{\"EnvironmentVariables\":{\"PRIVATE_TOKEN\":{\"Value\":\"secret\",\"Secret\":true}}},\"Targets\":[{\"Name\":\"Sample\",\"Kind\":\"Cli\",\"ProjectPath\":\"Sample.csproj\",\"Publish\":{\"Framework\":\"net10.0\",\"Runtimes\":[\"win-x64\"],\"Style\":\"PortableCompat\"}}]}",
+                new UTF8Encoding(false));
+            string releasePath = Path.Combine(root, "release.json");
+            File.WriteAllText(
+                releasePath,
+                "{\"Tools\":{\"DotNetPublishConfigPath\":\"publish.json\"}}",
+                new UTF8Encoding(false));
+            PowerForgeReleaseSpec spec = PowerForgeReleaseService.LoadConfiguration(releasePath);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new PowerForgeReleaseService(new NullLogger()).Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = releasePath,
+                        PlanOnly = true,
+                        ToolsOnly = true
+                    }));
+
+            Assert.Contains("$.DotNet.EnvironmentVariables.PRIVATE_TOKEN.Value", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Inline release secrets are not allowed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
 }

@@ -89,6 +89,17 @@ internal static class PowerForgePortablePayloadInventoryCms
             })
             .OrderBy(entry => entry.Path, StringComparer.Ordinal)
             .ToArray();
+        string normalizedExecutablePath = NormalizeRelative(root, executablePath);
+        string[] normalizedSignedPaths = signedFilePaths
+            .Select(path => NormalizeRelative(root, path))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+        if (!normalizedSignedPaths.Contains(normalizedExecutablePath, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "A signed portable payload must bind its primary executable to the configured publisher.");
+        }
         return new PowerForgePortablePayloadInventory
         {
             SchemaVersion = 1,
@@ -96,9 +107,9 @@ internal static class PowerForgePortablePayloadInventoryCms
             Target = artifactId,
             SourceRevision = sourceRevision.ToLowerInvariant(),
             Version = version,
-            ExecutablePath = NormalizeRelative(root, executablePath),
+            ExecutablePath = normalizedExecutablePath,
             ExecutableIdentity = executableIdentity,
-            SignedFilePaths = signedFilePaths.Select(path => NormalizeRelative(root, path)).OrderBy(path => path, StringComparer.Ordinal).ToArray(),
+            SignedFilePaths = normalizedSignedPaths,
             Entries = entries
         };
     }

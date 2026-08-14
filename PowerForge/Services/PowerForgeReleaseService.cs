@@ -4154,6 +4154,7 @@ internal sealed partial class PowerForgeReleaseService
         if (tools.DotNetPublish is not null)
         {
             ApplyDotNetPublishProfileOverride(tools);
+            PowerForgeReleaseConfigurationSecretValidator.Validate(tools.DotNetPublish);
 
             return (tools.DotNetPublish, releaseConfigPath);
         }
@@ -4182,6 +4183,8 @@ internal sealed partial class PowerForgeReleaseService
 
         if (!string.IsNullOrWhiteSpace(tools.DotNetPublishProfile))
             spec.Profile = tools.DotNetPublishProfile!.Trim();
+
+        PowerForgeReleaseConfigurationSecretValidator.Validate(spec);
 
         return (spec, configPath);
     }

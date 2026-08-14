@@ -94,7 +94,15 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 if (_logger.IsVerbose)
                     _logger.Verbose($"Preserving existing signature: {file}");
-                signed.Add(file);
+                if (_signatureMatchesPublisher(file, sign))
+                {
+                    signed.Add(file);
+                }
+                else if (_logger.IsVerbose)
+                {
+                    _logger.Verbose(
+                        $"Preserved signature is not owned by the configured publisher and will remain payload-bound only: {file}");
+                }
                 continue;
             }
 
@@ -142,6 +150,37 @@ public sealed partial class DotNetPublishPipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static bool SignatureMatchesPublisher(string filePath, DotNetPublishSignOptions sign)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            return false;
+        if (string.IsNullOrWhiteSpace(sign.Thumbprint) && string.IsNullOrWhiteSpace(sign.SubjectName))
+            return false;
+
+        try
+        {
+            DotNetPublishReleaseArtifactVerifier.AuthenticodeResult signature =
+                DotNetPublishReleaseArtifactVerifier.VerifyAuthenticode(filePath);
+            if (!signature.IsValid)
+                return false;
+            if (!string.IsNullOrWhiteSpace(sign.Thumbprint))
+            {
+                return string.Equals(
+                    DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(signature.Thumbprint),
+                    DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(sign.Thumbprint),
+                    StringComparison.OrdinalIgnoreCase);
+            }
+
+            return DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(
+                signature.Subject,
+                sign.SubjectName!);
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            return false;
+        }
     }
 
     private ProcessRunResult RunSigningTool(

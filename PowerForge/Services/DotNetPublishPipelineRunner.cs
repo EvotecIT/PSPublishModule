@@ -13,6 +13,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private readonly ILogger _logger;
     private readonly IProcessRunner _processRunner;
     private readonly Func<string, bool> _hasAuthenticodeSignature;
+    private readonly Func<string, DotNetPublishSignOptions, bool> _signatureMatchesPublisher;
     private readonly Func<byte[], DotNetPublishSignOptions, byte[]> _signPortableInventory;
     private readonly AsyncLocal<CancellationToken> _cancellationToken = new();
 
@@ -28,11 +29,13 @@ public sealed partial class DotNetPublishPipelineRunner
         ILogger logger,
         IProcessRunner processRunner,
         Func<string, bool>? hasAuthenticodeSignature = null,
-        Func<byte[], DotNetPublishSignOptions, byte[]>? signPortableInventory = null)
+        Func<byte[], DotNetPublishSignOptions, byte[]>? signPortableInventory = null,
+        Func<string, DotNetPublishSignOptions, bool>? signatureMatchesPublisher = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
         _hasAuthenticodeSignature = hasAuthenticodeSignature ?? WindowsAuthenticodeSignatureInspector.HasSignature;
+        _signatureMatchesPublisher = signatureMatchesPublisher ?? SignatureMatchesPublisher;
         _signPortableInventory = signPortableInventory ?? PowerForgePortablePayloadInventoryCms.Sign;
     }
 

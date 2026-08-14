@@ -106,17 +106,91 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             var sign = new DotNetPublishSignOptions
             {
                 Enabled = true,
+                SubjectName = "Test Publisher",
                 ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
                 OnMissingTool = DotNetPublishPolicyMode.Fail,
                 OnSignFailure = DotNetPublishPolicyMode.Fail
             };
 
             string[] signedFiles = Assert.IsType<string[]>(GetTrySignOutputMethod().Invoke(
-                new DotNetPublishPipelineRunner(new NullLogger(), processRunner, _ => true),
+                new DotNetPublishPipelineRunner(
+                    new NullLogger(),
+                    processRunner,
+                    _ => true,
+                    signatureMatchesPublisher: (_, _) => true),
                 new object[] { outputDir, sign }));
 
             Assert.Equal(executable, Assert.Single(signedFiles));
             Assert.Empty(requests);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void TrySignOutput_PreservedForeignSignature_IsNotClaimedAsPublisherOwned()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            var executable = Path.Combine(outputDir, "app.exe");
+            var dependency = Path.Combine(outputDir, "dependency.dll");
+            File.WriteAllText(executable, "dummy");
+            File.WriteAllText(dependency, "dummy");
+            var requests = new List<ProcessRunRequest>();
+            var processRunner = new StubProcessRunner(request =>
+            {
+                requests.Add(request);
+                return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            });
+            var sign = new DotNetPublishSignOptions
+            {
+                Enabled = true,
+                IncludeDlls = true,
+                SubjectName = "Configured Publisher",
+                ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                OnMissingTool = DotNetPublishPolicyMode.Fail,
+                OnSignFailure = DotNetPublishPolicyMode.Fail
+            };
+
+            string[] signedFiles = Assert.IsType<string[]>(GetTrySignOutputMethod().Invoke(
+                new DotNetPublishPipelineRunner(
+                    new NullLogger(),
+                    processRunner,
+                    path => string.Equals(path, dependency, StringComparison.OrdinalIgnoreCase),
+                    signatureMatchesPublisher: (_, _) => false),
+                new object[] { outputDir, sign }));
+
+            Assert.Equal(executable, Assert.Single(signedFiles));
+            Assert.Equal(executable, Assert.Single(requests).Arguments[^1]);
+
+            PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
+                outputDir,
+                "Sample",
+                new string('a', 40),
+                executable,
+                "Sample",
+                "1.2.3",
+                signedFiles);
+            Assert.Equal("app.exe", Assert.Single(inventory.SignedFilePaths));
+            Assert.Contains(inventory.Entries, entry => string.Equals(entry.Path, "dependency.dll", StringComparison.Ordinal));
+
+            InvalidOperationException foreignPrimary = Assert.Throws<InvalidOperationException>(() =>
+                PowerForgePortablePayloadInventoryCms.Create(
+                    outputDir,
+                    "Sample",
+                    new string('a', 40),
+                    executable,
+                    "Sample",
+                    "1.2.3",
+                    new[] { dependency }));
+            Assert.Contains("primary executable", foreignPrimary.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
