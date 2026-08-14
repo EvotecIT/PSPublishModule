@@ -27,30 +27,30 @@ declares cases, matrix axes, engines, operations, optional validation, custom
 metrics, comparison rules, README blocks, and artifact choices.
 
 ```powershell
-benchmark 'managed-modules' -out 'Ignore/Benchmarks/ManagedModules' {
-    cases {
-        case PSScriptAnalyzer @{
+New-BenchmarkSuite 'managed-modules' -OutputRoot 'Ignore/Benchmarks/ManagedModules' {
+    Add-BenchmarkCases {
+        Add-BenchmarkCase PSScriptAnalyzer @{
             ModuleName = 'PSScriptAnalyzer'
             Version = '1.25.0'
             AcceptLicense = $false
         }
     }
 
-    axis Operation Find, Install, Save
-    axis Host Current
+    Add-BenchmarkAxis Operation Find, Install, Save
+    Add-BenchmarkAxis Host Current
 
-    setup {
+    Set-BenchmarkSetup {
         param($case, $run)
         $run.RepositoryName = 'PSGallery'
     }
 
-    engine Managed {
-        operation Find {
+    Add-BenchmarkEngine Managed {
+        Add-BenchmarkOperation Find {
             param($case, $run)
             Find-ManagedModule -Name $case.ModuleName -Repository $run.RepositoryName | Out-Null
         }
 
-        operation Install {
+        Add-BenchmarkOperation Install {
             param($case, $run)
             Install-ManagedModule -Name $case.ModuleName `
                 -Version $case.Version `
@@ -61,51 +61,26 @@ benchmark 'managed-modules' -out 'Ignore/Benchmarks/ManagedModules' {
         }
     }
 
-    validate {
+    Add-BenchmarkValidation {
         param($case, $run)
         if (-not (Test-Path -LiteralPath $run.OutputDirectory)) {
             throw 'Expected benchmark output was not created.'
         }
     }
 
-    comparison Engine -Baseline Managed -Metric MedianMs -TieTolerance 0.05
-    readme 'README.MD' -Block 'managed-module-benchmark-table' -Renderer ComparisonTable
-    artifacts Json, Csv, Markdown
+    Add-BenchmarkComparison Engine -Baseline Managed -Metric MedianMs -TieTolerance 0.05
+    Add-BenchmarkReadmeBlock 'README.MD' -Block 'managed-module-benchmark-table' -Renderer ComparisonTable
+    Set-BenchmarkArtifacts Json, Csv, Markdown
 }
 ```
 
-Benchmark declaration words are real PSPublishModule commands. The shorter DSL
-keywords are aliases over the explicit command names, so a spec can use a compact
-Pester-style form while still being backed by normal PowerShell parameter
-binding.
+Benchmark declarations use the full PSPublishModule command names. Generic
+shorthand such as `setup`, `data`, or `case` is intentionally unsupported so
+benchmark evaluation cannot shadow commands from other modules.
 
 `-TieTolerance` is a fractional threshold for practical equivalence. For
 example, `0.05` labels results within five percent of the fastest successful
 engine as tied. Omitting it preserves exact ranking.
-
-| Short form | Explicit form |
-| --- | --- |
-| `benchmark` | `New-BenchmarkSuite` |
-| `cases` | `Add-BenchmarkCases` |
-| `case` | `Add-BenchmarkCase` |
-| `caseSource` | `Add-BenchmarkCaseSource` |
-| `axis` | `Add-BenchmarkAxis` |
-| `setup` | `Set-BenchmarkSetup` |
-| `data` | `Set-BenchmarkDataFactory` |
-| `profile` | `Set-BenchmarkProfile` |
-| `cleanup` | `Set-BenchmarkCleanup` |
-| `engine` | `Add-BenchmarkEngine` |
-| `operation` | `Add-BenchmarkOperation` |
-| `skip` | `Add-BenchmarkSkipRule` |
-| `validate` | `Add-BenchmarkValidation` |
-| `metric` | `Add-BenchmarkMetric` |
-| `metadata` | `Add-BenchmarkMetadata` |
-| `comparison` | `Add-BenchmarkComparison` |
-| `readme` | `Add-BenchmarkReadmeBlock` |
-| `artifacts` | `Set-BenchmarkArtifacts` |
-| `input` | `Get-BenchmarkInput` |
-| `inputInt` | `Get-BenchmarkInput -Int` |
-| `inputBool` | `Get-BenchmarkInput -Bool` |
 
 The managed-module provider comparison in
 `Benchmarks/ManagedModules/managed-modules.benchmark.ps1` is intentionally a
@@ -116,17 +91,17 @@ artifact, comparison, profile, and README update mechanics stay in PowerForge.
 
 ### Benchmark Inputs
 
-Use `input`, `inputInt`, and `inputBool` to read values supplied through
+Use `Get-BenchmarkInput` to read values supplied through
 `Invoke-BenchmarkSuite -Variable`. Specs should not parse `$BenchmarkVariables`
 or carry local string/int/bool helper functions.
 
 ```powershell
-$server = input Server localhost
-$rows = inputInt RowCount 1000, 5000, 20000
-$keepTables = inputBool KeepTables
+$server = Get-BenchmarkInput Server localhost
+$rows = Get-BenchmarkInput RowCount 1000, 5000, 20000 -Int
+$keepTables = Get-BenchmarkInput KeepTables -Bool
 
-benchmark 'sql-import' {
-    caseSource {
+New-BenchmarkSuite 'sql-import' {
+    Add-BenchmarkCaseSource {
         foreach ($rowCount in $rows) {
             [pscustomobject]@{ Name = "$rowCount rows"; RowCount = $rowCount }
         }
@@ -139,15 +114,15 @@ when a value has no safe default.
 
 ### Benchmark Provenance
 
-Use `metadata` for suite-specific provenance that should travel with every
+Use `Add-BenchmarkMetadata` for suite-specific provenance that should travel with every
 artifact, such as the exact compared product versions, binary hashes, source
 endpoints, or comparison mode:
 
 ```powershell
-benchmark 'installer-race' {
-    metadata ComparisonMode 'DefaultSources'
-    metadata ToolVersion '1.0.0-beta1'
-    metadata ToolSha256 '0123456789ABCDEF'
+New-BenchmarkSuite 'installer-race' {
+    Add-BenchmarkMetadata ComparisonMode 'DefaultSources'
+    Add-BenchmarkMetadata ToolVersion '1.0.0-beta1'
+    Add-BenchmarkMetadata ToolSha256 '0123456789ABCDEF'
 }
 ```
 
@@ -205,12 +180,12 @@ in this order:
 
 1. expand cases and axes into work items
 2. evaluate skip rules
-3. run `setup`
+3. run `Set-BenchmarkSetup`
 4. run the configured data factory
 5. run warmup iterations
-6. time the selected `operation`
-7. run `validate`
-8. capture custom `metric` values
+6. time the selected `Add-BenchmarkOperation` block
+7. run `Add-BenchmarkValidation`
+8. capture custom `Add-BenchmarkMetric` values
 9. write samples, summaries, comparisons, metadata, and requested artifacts
 
 Setup, data generation, validation, and metric capture are outside the timed
@@ -219,7 +194,7 @@ samples so fast but invalid output is visible.
 
 ## Profiles And Cleanup
 
-`profile` selects runner behavior. Supported profile values are:
+`Set-BenchmarkProfile` selects runner behavior. Supported profile values are:
 
 | Profile | Behavior |
 | --- | --- |
@@ -244,8 +219,8 @@ Cleanup modes:
 Example:
 
 ```powershell
-benchmark 'native-install' -out 'Ignore/Benchmarks/NativeInstall' {
-    profile TemporaryLocalUser -Cleanup KeepOnFailure
+New-BenchmarkSuite 'native-install' -OutputRoot 'Ignore/Benchmarks/NativeInstall' {
+    Set-BenchmarkProfile TemporaryLocalUser -Cleanup KeepOnFailure
     # cases, engines, and operations
 }
 ```

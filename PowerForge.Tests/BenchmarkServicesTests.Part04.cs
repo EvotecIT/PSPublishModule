@@ -683,11 +683,11 @@ public sealed partial class BenchmarkServicesTests
     public void DslRuntime_ResolvesShortAndLongEngineForms()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'short' {
-    cases { case A @{} }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'short' {
+    Add-BenchmarkCases { Add-BenchmarkCase A @{} }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 
 New-BenchmarkSuite 'long' {
@@ -712,12 +712,12 @@ New-BenchmarkSuite 'long' {
         var root = CreateTempRoot();
         var child = Directory.CreateDirectory(Path.Combine(root, "child")).FullName.Replace("'", "''");
         var script = ScriptBlock.Create($@"
-benchmark 'pwd' {{
-    cases {{ case A @{{}} }}
-    axis Operation Run
-    axis Engine Managed
-    engine Managed {{
-        operation Run {{
+New-BenchmarkSuite 'pwd' {{
+    Add-BenchmarkCases {{ Add-BenchmarkCase A @{{}} }}
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed {{
+        Add-BenchmarkOperation Run {{
             param($case, $run)
             Push-Location -LiteralPath '{child}'
             try {{
@@ -744,11 +744,11 @@ benchmark 'pwd' {{
     public void DslRuntime_StopsCaseSourceErrors()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'bad' {
-    cases { Add-BenchmarkCaseSource { Write-Error 'case boom' } }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'bad' {
+    Add-BenchmarkCases { Add-BenchmarkCaseSource { Write-Error 'case boom' } }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -761,11 +761,11 @@ benchmark 'bad' {
     public void DslRuntime_StopsCaseSourceNativeCommandFailures()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'bad' {
-    cases { Add-BenchmarkCaseSource { dotnet --not-a-real-option } }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'bad' {
+    Add-BenchmarkCases { Add-BenchmarkCaseSource { dotnet --not-a-real-option } }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -778,11 +778,11 @@ benchmark 'bad' {
     public void DslRuntime_StopsDesktopNativeExitCodes()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'bad' {
-    cases { Add-BenchmarkCaseSource { $global:LASTEXITCODE = 23 } }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'bad' {
+    Add-BenchmarkCases { Add-BenchmarkCaseSource { $global:LASTEXITCODE = 23 } }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -796,10 +796,10 @@ benchmark 'bad' {
     {
         var script = ScriptBlock.Create(@"
 Write-Error 'root boom'
-benchmark 'bad' {
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'bad' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -813,11 +813,11 @@ benchmark 'bad' {
     {
         var root = CreateTempRoot();
         var script = ScriptBlock.Create(@"
-benchmark 'rooted' {
-    cases { case A @{ Root = $PSScriptRoot } }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'rooted' {
+    Add-BenchmarkCases { Add-BenchmarkCase A @{ Root = $PSScriptRoot } }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -835,11 +835,11 @@ benchmark 'rooted' {
         File.WriteAllText(fixture, "ok");
         var script = ScriptBlock.Create(@"
 $fixture = Join-Path $PSScriptRoot 'fixture.txt'
-benchmark 'closure' {
-    axis Operation Run
-    axis Engine Managed
-    setup { param($case, $run) $run.FixtureText = Get-Content -LiteralPath $fixture -Raw }
-    engine Managed { operation Run { param($case, $run) if ($run.FixtureText -ne 'ok') { throw 'closure missing' } } }
+New-BenchmarkSuite 'closure' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Set-BenchmarkSetup { param($case, $run) $run.FixtureText = Get-Content -LiteralPath $fixture -Raw }
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) if ($run.FixtureText -ne 'ok') { throw 'closure missing' } } }
 }
 ");
 
@@ -858,11 +858,11 @@ benchmark 'closure' {
         var fixture = Path.Combine(root, "fixture.txt");
         File.WriteAllText(fixture, "ok");
         var script = ScriptBlock.Create(@"
-benchmark 'expandable-root' {
-    axis Operation Run
-    axis Engine Managed
-    setup { param($case, $run) $run.FixtureText = Get-Content -LiteralPath ""$PSScriptRoot/fixture.txt"" -Raw }
-    engine Managed { operation Run { param($case, $run) if ($run.FixtureText -ne 'ok') { throw 'expandable root missing' } } }
+New-BenchmarkSuite 'expandable-root' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Set-BenchmarkSetup { param($case, $run) $run.FixtureText = Get-Content -LiteralPath ""$PSScriptRoot/fixture.txt"" -Raw }
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) if ($run.FixtureText -ne 'ok') { throw 'expandable root missing' } } }
 }
 ");
 
@@ -881,11 +881,11 @@ benchmark 'expandable-root' {
         var fixture = Path.Combine(root, "fixture.txt");
         File.WriteAllText(fixture, "ok");
         var script = ScriptBlock.Create(@"
-benchmark 'expandable-subexpression-root' {
-    axis Operation Run
-    axis Engine Managed
-    setup { param($case, $run) $run.FixtureText = Get-Content -LiteralPath ""$($PSScriptRoot)/fixture.txt"" -Raw }
-    engine Managed { operation Run { param($case, $run) if ($run.FixtureText -ne 'ok') { throw 'expandable subexpression root missing' } } }
+New-BenchmarkSuite 'expandable-subexpression-root' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Set-BenchmarkSetup { param($case, $run) $run.FixtureText = Get-Content -LiteralPath ""$($PSScriptRoot)/fixture.txt"" -Raw }
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) if ($run.FixtureText -ne 'ok') { throw 'expandable subexpression root missing' } } }
 }
 ");
 
@@ -902,10 +902,10 @@ benchmark 'expandable-subexpression-root' {
     {
         var script = ScriptBlock.Create(@"
 $ErrorActionPreference = 'Continue'
-benchmark 'preferences' {
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) Write-Error 'should stop' } }
+New-BenchmarkSuite 'preferences' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) Write-Error 'should stop' } }
 }
 ");
 
@@ -924,10 +924,10 @@ benchmark 'preferences' {
     {
         var script = ScriptBlock.Create(@"
 $PSDefaultParameterValues = @{ 'Write-Error:ErrorAction' = 'SilentlyContinue' }
-benchmark 'default-parameter-values' {
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) Write-Error 'should stop' } }
+New-BenchmarkSuite 'default-parameter-values' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) Write-Error 'should stop' } }
 }
 ");
 

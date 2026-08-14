@@ -247,10 +247,10 @@ public sealed partial class BenchmarkServicesTests
             ps.Invoke();
         }
         var script = ScriptBlock.Create(@"
-benchmark 'stale-native-exit' {
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) $run.Seen = 'ok' } }
+New-BenchmarkSuite 'stale-native-exit' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) $run.Seen = 'ok' } }
 }
 ");
 

@@ -1,10 +1,10 @@
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
-$repositoryName = input RepositoryName PSGallery
-$repositoryUri = input RepositoryUri 'https://www.powershellgallery.com/api/v3/index.json'
-$moduleFastSource = input ModuleFastSource 'https://pwsh.gallery/index.json'
-$moduleFastModulePath = input ModuleFastPath
-$managedModulePath = input ManagedModulePath
-$updateReadme = inputBool UpdateReadme $false
+$repositoryName = Get-BenchmarkInput RepositoryName PSGallery
+$repositoryUri = Get-BenchmarkInput RepositoryUri 'https://www.powershellgallery.com/api/v3/index.json'
+$moduleFastSource = Get-BenchmarkInput ModuleFastSource 'https://pwsh.gallery/index.json'
+$moduleFastModulePath = Get-BenchmarkInput ModuleFastPath
+$managedModulePath = Get-BenchmarkInput ManagedModulePath
+$updateReadme = Get-BenchmarkInput UpdateReadme $false -Bool
 $comparisonMode = if ($repositoryUri.TrimEnd('/') -eq $moduleFastSource.TrimEnd('/')) { 'IdenticalFeed' } else { 'DefaultSources' }
 
 $managedArtifactPath = if ($managedModulePath -and $managedModulePath.Trim()) {
@@ -22,7 +22,7 @@ if (Test-Path -LiteralPath $managedArtifactPath -PathType Leaf) {
 $moduleFastManifestPath = if ($moduleFastModulePath -and $moduleFastModulePath.Trim()) {
     [System.IO.Path]::GetFullPath($moduleFastModulePath)
 } else {
-    [string] (Get-Module -ListAvailable -Name ModuleFast | Sort-Object Version -Descending | Select-Object -First 1).Path
+    Get-Module -ListAvailable -Name ModuleFast | Sort-Object Version -Descending | Select-Object -First 1 -ExpandProperty Path
 }
 $moduleFastVersion = $null
 $moduleFastSha256 = $null
@@ -39,27 +39,27 @@ if ($moduleFastManifestPath -and (Test-Path -LiteralPath $moduleFastManifestPath
     }
 }
 
-benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\ManagedModules') {
-    metadata ComparisonMode $comparisonMode
-    metadata ManagedRepositoryUri $repositoryUri
-    metadata ModuleFastSource $moduleFastSource
-    if ($managedArtifactVersion) { metadata ManagedModuleVersion $managedArtifactVersion }
-    if ($managedArtifactSha256) { metadata ManagedModuleSha256 $managedArtifactSha256 }
-    if ($moduleFastVersion) { metadata ModuleFastVersion $moduleFastVersion }
-    if ($moduleFastSha256) { metadata ModuleFastSha256 $moduleFastSha256 }
+New-BenchmarkSuite 'managed-modules' -OutputRoot (Join-Path $repositoryRoot 'Ignore\Benchmarks\ManagedModules') {
+    Add-BenchmarkMetadata ComparisonMode $comparisonMode
+    Add-BenchmarkMetadata ManagedRepositoryUri $repositoryUri
+    Add-BenchmarkMetadata ModuleFastSource $moduleFastSource
+    if ($managedArtifactVersion) { Add-BenchmarkMetadata ManagedModuleVersion $managedArtifactVersion }
+    if ($managedArtifactSha256) { Add-BenchmarkMetadata ManagedModuleSha256 $managedArtifactSha256 }
+    if ($moduleFastVersion) { Add-BenchmarkMetadata ModuleFastVersion $moduleFastVersion }
+    if ($moduleFastSha256) { Add-BenchmarkMetadata ModuleFastSha256 $moduleFastSha256 }
 
-    policy -Warmup 1 -Iterations 3 -Order Rotated -OutlierMode None
-    profile Current -Cleanup KeepOnFailure
-    caseSource @(
+    Set-BenchmarkPolicy -Warmup 1 -Iterations 3 -Order Rotated -OutlierMode None
+    Set-BenchmarkProfile Current -Cleanup KeepOnFailure
+    Add-BenchmarkCaseSource @(
         [pscustomobject]@{ Name = 'SingleModule'; ModuleName = 'PSScriptAnalyzer'; Version = '1.25.0'; AcceptLicense = $false }
         [pscustomobject]@{ Name = 'GraphAuthentication'; ModuleName = 'Microsoft.Graph.Authentication'; Version = '2.29.1'; AcceptLicense = $true }
         [pscustomobject]@{ Name = 'Graph'; ModuleName = 'Microsoft.Graph'; Version = '2.29.1'; AcceptLicense = $true }
         [pscustomobject]@{ Name = 'AzAccounts'; ModuleName = 'Az.Accounts'; Version = '5.1.0'; AcceptLicense = $true }
         [pscustomobject]@{ Name = 'Az'; ModuleName = 'Az'; Version = '14.0.0'; AcceptLicense = $true }
     )
-    axis Host Core, Desktop
+    Add-BenchmarkAxis Host Core, Desktop
 
-    setup {
+    Set-BenchmarkSetup {
         param($case, $run)
 
         $run.RepositoryName = $repositoryName
@@ -103,7 +103,7 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         }
     }
 
-    skip {
+    Add-BenchmarkSkipRule {
         param($case)
 
         if ($case.Engine -eq 'ModuleFast' -and $case.Operation -ne 'Install') {
@@ -135,14 +135,14 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         return $false
     }
 
-    engine Managed {
-        operation Find {
+    Add-BenchmarkEngine Managed {
+        Add-BenchmarkOperation Find {
             param($case, $run)
 
             Find-ManagedModule -Name $case.ModuleName -Repository $run.RepositoryUri -RepositoryName $run.RepositoryName | Out-Null
         }
 
-        operation Install {
+        Add-BenchmarkOperation Install {
             param($case, $run)
 
             $run.ManagedResult = Install-ManagedModule `
@@ -157,7 +157,7 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
                 -Force
         }
 
-        operation Save {
+        Add-BenchmarkOperation Save {
             param($case, $run)
 
             $run.ManagedResult = Save-ManagedModule `
@@ -173,8 +173,8 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         }
     }
 
-    engine ModuleFast {
-        operation Install {
+    Add-BenchmarkEngine ModuleFast {
+        Add-BenchmarkOperation Install {
             param($case, $run)
 
             Install-ModuleFast "$($case.ModuleName)=$($case.Version)" `
@@ -186,22 +186,22 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         }
     }
 
-    engine PSResourceGet {
-        operation Find {
+    Add-BenchmarkEngine PSResourceGet {
+        Add-BenchmarkOperation Find {
             param($case, $run)
 
             Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop
             Find-PSResource -Name $case.ModuleName -Repository $run.RepositoryName | Out-Null
         }
 
-        operation Install {
+        Add-BenchmarkOperation Install {
             param($case, $run)
 
             Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop
             Install-PSResource -Name $case.ModuleName -Version $case.Version -Repository $run.RepositoryName -TrustRepository -AcceptLicense -Reinstall | Out-Null
         }
 
-        operation Save {
+        Add-BenchmarkOperation Save {
             param($case, $run)
 
             Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop
@@ -209,22 +209,22 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         }
     }
 
-    engine PowerShellGet {
-        operation Find {
+    Add-BenchmarkEngine PowerShellGet {
+        Add-BenchmarkOperation Find {
             param($case, $run)
 
             Import-Module PowerShellGet -ErrorAction Stop
             Find-Module -Name $case.ModuleName -Repository $run.RepositoryName | Out-Null
         }
 
-        operation Install {
+        Add-BenchmarkOperation Install {
             param($case, $run)
 
             Import-Module PowerShellGet -ErrorAction Stop
             Install-Module -Name $case.ModuleName -RequiredVersion $case.Version -Repository $run.RepositoryName -Scope CurrentUser -AllowClobber -AcceptLicense -Force | Out-Null
         }
 
-        operation Save {
+        Add-BenchmarkOperation Save {
             param($case, $run)
 
             Import-Module PowerShellGet -ErrorAction Stop
@@ -232,7 +232,7 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         }
     }
 
-    validate {
+    Add-BenchmarkValidation {
         param($case, $run)
 
         $root = switch ($case.Operation) {
@@ -245,20 +245,20 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         }
 
         $moduleRoot = Join-Path $root $case.ModuleName
-        assertPath $moduleRoot
+        Assert-BenchmarkPath $moduleRoot
         $manifests = @(Get-ChildItem -LiteralPath $moduleRoot -Recurse -File -Filter "$($case.ModuleName).psd1")
-        assertValue -Actual $manifests.Count -Expected 1 -Message 'Expected exactly one requested module manifest.'
+        Assert-BenchmarkValue -Actual $manifests.Count -Expected 1 -Message 'Expected exactly one requested module manifest.'
         $manifest = Import-PowerShellDataFile -Path $manifests[0].FullName
-        assertValue -Actual ([string] $manifest.ModuleVersion) -Expected $case.Version -Message 'Installed manifest version must match the requested exact version.'
+        Assert-BenchmarkValue -Actual ([string] $manifest.ModuleVersion) -Expected $case.Version -Message 'Installed manifest version must match the requested exact version.'
         if ($case.Engine -eq 'Managed' -and $run.ManagedModulePath -and $run.ManagedModulePath.Trim()) {
-            assertValue -Actual $run.ManagedCommandSha256 -Expected $run.ManagedExpectedSha256 -Message 'Managed benchmark must use the pinned PSPublishModule binary bytes.'
+            Assert-BenchmarkValue -Actual $run.ManagedCommandSha256 -Expected $run.ManagedExpectedSha256 -Message 'Managed benchmark must use the pinned PSPublishModule binary bytes.'
         }
         if ($case.Engine -eq 'ModuleFast' -and $run.ModuleFastModulePath -and $run.ModuleFastModulePath.Trim()) {
-            assertValue -Actual $run.ModuleFastCommandSha256 -Expected $run.ModuleFastExpectedSha256 -Message 'ModuleFast benchmark must use the pinned ModuleFast binary bytes.'
+            Assert-BenchmarkValue -Actual $run.ModuleFastCommandSha256 -Expected $run.ModuleFastExpectedSha256 -Message 'ModuleFast benchmark must use the pinned ModuleFast binary bytes.'
         }
     }
 
-    metric DependencyCount {
+    Add-BenchmarkMetric DependencyCount {
         param($case, $run)
 
         if ($null -eq $run.ManagedResult -or $null -eq $run.ManagedResult.DependenciesInstalled) {
@@ -268,23 +268,23 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         return $run.ManagedResult.DependenciesInstalled.Count
     }
 
-    metric InstalledFileCount {
+    Add-BenchmarkMetric InstalledFileCount {
         param($case, $run)
 
         $root = if ($case.Operation -eq 'Save') { $run.SaveRoot } else { $run.InstallRoot }
         return @(Get-ChildItem -LiteralPath $root -Recurse -File).Count
     }
 
-    metric InstalledBytes {
+    Add-BenchmarkMetric InstalledBytes {
         param($case, $run)
 
         $root = if ($case.Operation -eq 'Save') { $run.SaveRoot } else { $run.InstallRoot }
         return [long] ((Get-ChildItem -LiteralPath $root -Recurse -File | Measure-Object -Property Length -Sum).Sum)
     }
 
-    comparison Engine -Baseline Managed -Metric MedianMs
+    Add-BenchmarkComparison Engine -Baseline Managed -Metric MedianMs
     if ($updateReadme) {
-        readme (Join-Path $repositoryRoot 'README.MD') -Block 'managed-module-benchmark-table' -Renderer ComparisonTable
+        Add-BenchmarkReadmeBlock (Join-Path $repositoryRoot 'README.MD') -Block 'managed-module-benchmark-table' -Renderer ComparisonTable
     }
-    artifacts Json, Csv, Markdown
+    Set-BenchmarkArtifacts Json, Csv, Markdown
 }

@@ -123,11 +123,11 @@ function Read-FixtureText {
     Get-Content -LiteralPath $Path -Raw
 }
 $fixture = Join-Path $PSScriptRoot 'fixture.txt'
-benchmark 'helpers' {
-    axis Operation Run
-    axis Engine Managed
-    setup { param($case, $run) $run.FixtureText = Read-FixtureText -Path $fixture }
-    engine Managed { operation Run { param($case, $run) if ($run.FixtureText -ne 'ok') { throw 'helper missing' } } }
+New-BenchmarkSuite 'helpers' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Set-BenchmarkSetup { param($case, $run) $run.FixtureText = Read-FixtureText -Path $fixture }
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) if ($run.FixtureText -ne 'ok') { throw 'helper missing' } } }
 }
 ");
 
@@ -173,11 +173,11 @@ benchmark 'helpers' {
 
             var script = ScriptBlock.Create(@"
 function Get-PowerForgeBenchmarkProbe { 'captured' }
-benchmark 'helpers' {
-    axis Operation Run
-    axis Engine Managed
-    setup { param($case, $run) $run.Probe = Get-PowerForgeBenchmarkProbe }
-    engine Managed { operation Run { param($case, $run) if ($run.Probe -ne 'captured') { throw 'helper missing' } } }
+New-BenchmarkSuite 'helpers' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Set-BenchmarkSetup { param($case, $run) $run.Probe = Get-PowerForgeBenchmarkProbe }
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) if ($run.Probe -ne 'captured') { throw 'helper missing' } } }
 }
 ");
 
@@ -202,11 +202,11 @@ benchmark 'helpers' {
     public void DslRuntime_RejectsDuplicateEngineNames()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'dup' {
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
-    engine managed { operation Other { param($case, $run) } }
+New-BenchmarkSuite 'dup' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
+    Add-BenchmarkEngine managed { Add-BenchmarkOperation Other { param($case, $run) } }
 }
 ");
 
@@ -219,12 +219,12 @@ benchmark 'dup' {
     public void DslRuntime_RejectsDuplicateAxisNames()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'dup-axis' {
-    axis Rows 1
-    axis rows 2
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'dup-axis' {
+    Add-BenchmarkAxis Rows 1
+    Add-BenchmarkAxis rows 2
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -237,12 +237,12 @@ benchmark 'dup-axis' {
     public void DslRuntime_RejectsDuplicateOperationNames()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'dup-operation' {
-    axis Operation Run
-    axis Engine Managed
-    engine Managed {
-        operation Run { param($case, $run) }
-        operation run { param($case, $run) }
+New-BenchmarkSuite 'dup-operation' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed {
+        Add-BenchmarkOperation Run { param($case, $run) }
+        Add-BenchmarkOperation run { param($case, $run) }
     }
 }
 ");
@@ -256,12 +256,12 @@ benchmark 'dup-operation' {
     public void DslRuntime_RejectsDuplicateMetricNames()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'dup-metric' {
-    axis Operation Run
-    axis Engine Managed
-    metric RowsPerSecond { 1 }
-    metric rowspersecond { 2 }
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'dup-metric' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkMetric RowsPerSecond { 1 }
+    Add-BenchmarkMetric rowspersecond { 2 }
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -274,11 +274,11 @@ benchmark 'dup-metric' {
     public void DslRuntime_RejectsReservedPrimaryMetricNames()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'reserved-metric' {
-    axis Operation Run
-    axis Engine Managed
-    metric MedianMs { 123 }
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'reserved-metric' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkMetric MedianMs { 123 }
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -292,11 +292,11 @@ benchmark 'reserved-metric' {
     public void DslRuntime_RejectsReservedArtifactMetricNames()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'reserved-artifact-metric' {
-    axis Operation Run
-    axis Engine Managed
-    metric Status { 'custom' }
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'reserved-artifact-metric' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkMetric Status { 'custom' }
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -314,11 +314,11 @@ benchmark 'reserved-artifact-metric' {
     public void DslRuntime_RejectsReservedTimingMetricAliases(string metricName)
     {
         var script = ScriptBlock.Create($$"""
-benchmark 'reserved-timing-alias' {
-    axis Operation Run
-    axis Engine Managed
-    metric {{metricName}} { 123 }
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'reserved-timing-alias' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkMetric {{metricName}} { 123 }
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 """);
 
@@ -332,11 +332,11 @@ benchmark 'reserved-timing-alias' {
     public void DslRuntime_ParsesTemporaryLocalUserProfileAndCleanup()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'temp-user' {
-    profile TemporaryLocalUser -Cleanup KeepOnFailure
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'temp-user' {
+    Set-BenchmarkProfile TemporaryLocalUser -Cleanup KeepOnFailure
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -350,11 +350,11 @@ benchmark 'temp-user' {
     public void DslRuntime_ParsesBenchmarkPolicy()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'policy-suite' {
-    policy -Warmup 2 -Iterations 5 -RunMode publish -Order Sequential -MemoryCleanup BeforeIteration -CooldownMilliseconds 10 -OutlierMode ExcludeMinMax
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'policy-suite' {
+    Set-BenchmarkPolicy -Warmup 2 -Iterations 5 -RunMode publish -Order Sequential -MemoryCleanup BeforeIteration -CooldownMilliseconds 10 -OutlierMode ExcludeMinMax
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -373,11 +373,11 @@ benchmark 'policy-suite' {
     public void DslRuntime_PreservesLegacyPositionalBenchmarkPolicyArguments()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'legacy-policy-suite' {
-    policy 1 3 publish Rotated 10 ExcludeMinMax
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'legacy-policy-suite' {
+    Set-BenchmarkPolicy 1 3 publish Rotated 10 ExcludeMinMax
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -411,14 +411,14 @@ benchmark 'legacy-policy-suite' {
     public void DslRuntime_ExposesBenchmarkVariablesToSpecs()
     {
         var script = ScriptBlock.Create(@"
-$caseName = input CaseName DefaultCase
-$rows = inputInt Rows 1, 2
-$keep = inputBool KeepTables
-benchmark 'variables' {
-    caseSource { [pscustomobject]@{ Name = $caseName; Rows = ($rows -join ','); KeepTables = $keep } }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+$caseName = Get-BenchmarkInput CaseName DefaultCase
+$rows = Get-BenchmarkInput Rows @(1, 2) -Int
+$keep = Get-BenchmarkInput KeepTables -Bool
+New-BenchmarkSuite 'variables' {
+    Add-BenchmarkCaseSource { [pscustomobject]@{ Name = $caseName; Rows = ($rows -join ','); KeepTables = $keep } }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
         var variables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
@@ -439,14 +439,14 @@ benchmark 'variables' {
     public void DslRuntime_BenchmarkInputHelpersUseDefaultsAndRejectMissingRequiredValues()
     {
         var script = ScriptBlock.Create(@"
-$caseName = input CaseName DefaultCase
-$rows = inputInt Rows 5, 10
-$enabled = inputBool Enabled $true
-benchmark 'defaults' {
-    caseSource { [pscustomobject]@{ Name = $caseName; Rows = ($rows -join ','); Enabled = $enabled } }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+$caseName = Get-BenchmarkInput CaseName DefaultCase
+$rows = Get-BenchmarkInput Rows @(5, 10) -Int
+$enabled = Get-BenchmarkInput Enabled $true -Bool
+New-BenchmarkSuite 'defaults' {
+    Add-BenchmarkCaseSource { [pscustomobject]@{ Name = $caseName; Rows = ($rows -join ','); Enabled = $enabled } }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -457,12 +457,12 @@ benchmark 'defaults' {
         Assert.Equal(true, item.Values["Enabled"]);
 
         var required = ScriptBlock.Create(@"
-$caseName = input CaseName -Required
-benchmark 'required' {
-    caseSource { [pscustomobject]@{ Name = $caseName } }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+$caseName = Get-BenchmarkInput CaseName -Required
+New-BenchmarkSuite 'required' {
+    Add-BenchmarkCaseSource { [pscustomobject]@{ Name = $caseName } }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -479,11 +479,11 @@ benchmark 'required' {
 $caseName = Get-BenchmarkInput CaseName DefaultCase
 $rows = Get-BenchmarkInput Rows @(5, 10) -Int
 $enabled = Get-BenchmarkInput Enabled $true -Bool
-benchmark 'typed-inputs' {
-    caseSource { [pscustomobject]@{ Name = $caseName; Rows = ($rows -join ','); Enabled = $enabled } }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'typed-inputs' {
+    Add-BenchmarkCaseSource { [pscustomobject]@{ Name = $caseName; Rows = ($rows -join ','); Enabled = $enabled } }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
         var variables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
@@ -501,18 +501,34 @@ benchmark 'typed-inputs' {
     }
 
     [Fact]
+    public void GetBenchmarkInputCommand_DoesNotInferTypeFromCallerAliasName()
+    {
+        var initialSessionState = InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new SessionStateCmdletEntry("Get-BenchmarkInput", typeof(PSPublishModule.GetBenchmarkInputCommand), helpFileName: null));
+        using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        using var ps = PowerShell.Create(runspace);
+        ps.AddScript("$BenchmarkVariables = @{ Rows = '42,84' }; Set-Alias inputInt Get-BenchmarkInput; inputInt Rows");
+
+        var output = ps.Invoke();
+
+        Assert.Empty(ps.Streams.Error);
+        Assert.Equal("42,84", Assert.Single(output).BaseObject);
+    }
+
+    [Fact]
     public void DslRuntime_BenchmarkBoolInputsParseStringDefaults()
     {
         var script = ScriptBlock.Create(@"
-$shortFalse = inputBool ShortFalse false
-$shortOff = inputBool ShortOff off
+$shortFalse = Get-BenchmarkInput ShortFalse false -Bool
+$shortOff = Get-BenchmarkInput ShortOff off -Bool
 $cmdletFalse = Get-BenchmarkInput CmdletFalse false -Bool
 $cmdletOn = Get-BenchmarkInput CmdletOn on -Bool
-benchmark 'bool-defaults' {
-    caseSource { [pscustomobject]@{ Name = 'Default'; ShortFalse = $shortFalse; ShortOff = $shortOff; CmdletFalse = $cmdletFalse; CmdletOn = $cmdletOn } }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'bool-defaults' {
+    Add-BenchmarkCaseSource { [pscustomobject]@{ Name = 'Default'; ShortFalse = $shortFalse; ShortOff = $shortOff; CmdletFalse = $cmdletFalse; CmdletOn = $cmdletOn } }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -528,11 +544,11 @@ benchmark 'bool-defaults' {
     public void DslRuntime_RejectsUnsupportedProfileNames()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'bad-profile' {
-    profile LocalAdmin
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'bad-profile' {
+    Set-BenchmarkProfile LocalAdmin
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -551,18 +567,18 @@ benchmark 'bad-profile' {
         var script = ScriptBlock.Create(@"
 $Path = Join-Path $PSScriptRoot 'outer.txt'
 $fixture = 'outer'
-benchmark 'closure' {
+New-BenchmarkSuite 'closure' {
     $Path = Join-Path $PSScriptRoot 'inner.txt'
     $fixture = 'inner'
-    axis Operation Run
-    axis Engine Managed
-    setup {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Set-BenchmarkSetup {
         param($case, $run)
         $run.FixtureText = Get-Content -LiteralPath $Path -Raw
         $run.FixtureName = $fixture
     }
-    engine Managed {
-        operation Run {
+    Add-BenchmarkEngine Managed {
+        Add-BenchmarkOperation Run {
             param($case, $run)
             if ($run.FixtureText -ne 'inner' -or $run.FixtureName -ne 'inner') {
                 throw 'wrong captured scope'
@@ -590,15 +606,15 @@ function Get-BenchmarkFixturePath {
     Join-Path $PSScriptRoot 'helper.txt'
 }
 
-benchmark 'helper-root' {
-    axis Operation Run
-    axis Engine Managed
-    setup {
+New-BenchmarkSuite 'helper-root' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Set-BenchmarkSetup {
         param($case, $run)
         $run.FixtureText = Get-Content -LiteralPath (Get-BenchmarkFixturePath) -Raw
     }
-    engine Managed {
-        operation Run {
+    Add-BenchmarkEngine Managed {
+        Add-BenchmarkOperation Run {
             param($case, $run)
             if ($run.FixtureText -ne 'from-helper') {
                 throw 'helper root was not rewritten'
@@ -620,11 +636,11 @@ benchmark 'helper-root' {
     public void DslRuntime_HandlesOrderedDictionaryCaseSources()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'ordered' {
-    cases { Add-BenchmarkCaseSource { [ordered]@{ Name = 'A'; Rows = 10 } } }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'ordered' {
+    Add-BenchmarkCases { Add-BenchmarkCaseSource { [ordered]@{ Name = 'A'; Rows = 10 } } }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -640,11 +656,11 @@ benchmark 'ordered' {
     public void DslRuntime_HandlesDirectHashtableCaseSourceAsSingleCase()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'hashtable-source' {
-    caseSource @{ Name = 'Small'; Rows = 1 }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'hashtable-source' {
+    Add-BenchmarkCaseSource @{ Name = 'Small'; Rows = 1 }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -660,13 +676,13 @@ benchmark 'hashtable-source' {
     public void DslRuntime_EvaluatesShortDslWithoutImportedCmdlets()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'self-contained' {
-    policy -Warmup 0 -Iterations 1 -Order Sequential
-    caseSource @{ Name = 'Default'; Rows = 1 }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
-    compare Engine -Baseline Managed
+New-BenchmarkSuite 'self-contained' {
+    Set-BenchmarkPolicy -Warmup 0 -Iterations 1 -Order Sequential
+    Add-BenchmarkCaseSource @{ Name = 'Default'; Rows = 1 }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
+    Add-BenchmarkComparison Engine -Baseline Managed
 }
 ");
 
@@ -680,7 +696,7 @@ benchmark 'self-contained' {
     }
 
     [Fact]
-    public void DslRuntime_PrefersRuntimeDslHelpersOverAliases()
+    public void DslRuntime_DoesNotTouchUnrelatedAliases()
     {
         var previousRunspace = Runspace.DefaultRunspace;
         using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
@@ -691,25 +707,30 @@ benchmark 'self-contained' {
             using (var setup = PowerShell.Create(runspace))
             {
                 setup.AddScript("""
+$module = New-Module -Name BenchmarkAliasOwner -ScriptBlock {
 function New-BenchmarkSuite { throw 'benchmark alias was used' }
 function Add-BenchmarkAxis { throw 'axis alias was used' }
 function Add-BenchmarkEngine { throw 'engine alias was used' }
-Set-Alias -Name benchmark -Value New-BenchmarkSuite
-Set-Alias -Name axis -Value Add-BenchmarkAxis
-Set-Alias -Name engine -Value Add-BenchmarkEngine
+Set-Alias -Name benchmark -Value New-BenchmarkSuite -Description 'owned benchmark alias'
+Set-Alias -Name axis -Value Add-BenchmarkAxis -Description 'owned axis alias'
+Set-Alias -Name engine -Value Add-BenchmarkEngine -Description 'owned engine alias'
+Export-ModuleMember -Alias benchmark, axis, engine
+}
+Import-Module $module
+Set-Alias -Name policy -Value Get-Date -Description 'described policy alias'
 """);
                 setup.Invoke();
                 Assert.Empty(setup.Streams.Error);
             }
 
             var script = ScriptBlock.Create("""
-    benchmark 'alias-shadow' {
-        policy -Warmup 0 -Iterations 1
-        caseSource @{ Name = 'Default' }
-        axis Operation Run
-        axis Engine Managed
-        engine Managed { operation Run { param($case, $run) } }
-        compare Engine -Baseline Managed
+    New-BenchmarkSuite 'alias-shadow' {
+        Set-BenchmarkPolicy -Warmup 0 -Iterations 1
+        Add-BenchmarkCaseSource @{ Name = 'Default' }
+        Add-BenchmarkAxis Operation Run
+        Add-BenchmarkAxis Engine Managed
+        Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
+        Add-BenchmarkComparison Engine -Baseline Managed
     }
 """);
 
@@ -722,16 +743,43 @@ Set-Alias -Name engine -Value Add-BenchmarkEngine
             verify.AddCommand("Get-Alias").AddArgument("benchmark");
             var benchmarkAlias = Assert.IsType<AliasInfo>(Assert.Single(verify.Invoke()).BaseObject);
             Assert.Equal("New-BenchmarkSuite", benchmarkAlias.Definition);
+            Assert.Equal("BenchmarkAliasOwner", benchmarkAlias.ModuleName);
 
             verify.Commands.Clear();
             verify.AddCommand("Get-Alias").AddArgument("engine");
             var engineAlias = Assert.IsType<AliasInfo>(Assert.Single(verify.Invoke()).BaseObject);
             Assert.Equal("Add-BenchmarkEngine", engineAlias.Definition);
+            Assert.Equal("BenchmarkAliasOwner", engineAlias.ModuleName);
+
+            verify.Commands.Clear();
+            verify.AddCommand("Get-Alias").AddArgument("policy");
+            var policyAlias = Assert.IsType<AliasInfo>(Assert.Single(verify.Invoke()).BaseObject);
+            Assert.Equal("Get-Date", policyAlias.Definition);
+            Assert.Equal("described policy alias", policyAlias.Description);
+
+            verify.Commands.Clear();
+            verify.AddCommand("Remove-Module").AddArgument("BenchmarkAliasOwner").AddParameter("Force");
+            verify.Invoke();
+            Assert.Empty(verify.Streams.Error);
+
+            verify.Commands.Clear();
+            verify.AddCommand("Get-Alias").AddArgument("benchmark").AddParameter("ErrorAction", "SilentlyContinue");
+            Assert.Empty(verify.Invoke());
         }
         finally
         {
             Runspace.DefaultRunspace = previousRunspace;
         }
+    }
+
+    [Fact]
+    public void DslRuntime_DoesNotInjectCompactCommands()
+    {
+        var script = ScriptBlock.Create("benchmark 'unsupported' { }");
+
+        var exception = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDslWithoutImportedCommands(script));
+
+        Assert.Contains("benchmark", exception.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -746,23 +794,23 @@ Set-Alias -Name engine -Value Add-BenchmarkEngine
         ps.AddScript("""
 Invoke-BenchmarkSuite -Settings {
     function Get-Probe { 'first' }
-    benchmark 'first' {
-        policy -Warmup 0 -Iterations 1
-        caseSource @{ Name = 'Default' }
-        axis Operation Run
-        axis Engine Managed
-        setup { param($case, $run) $run.Probe = Get-Probe }
-        engine Managed { operation Run { param($case, $run) if ($run.Probe -ne 'first') { throw "expected first, got $($run.Probe)" } } }
+    New-BenchmarkSuite 'first' {
+        Set-BenchmarkPolicy -Warmup 0 -Iterations 1
+        Add-BenchmarkCaseSource @{ Name = 'Default' }
+        Add-BenchmarkAxis Operation Run
+        Add-BenchmarkAxis Engine Managed
+        Set-BenchmarkSetup { param($case, $run) $run.Probe = Get-Probe }
+        Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) if ($run.Probe -ne 'first') { throw "expected first, got $($run.Probe)" } } }
     }
 
     function Get-Probe { 'second' }
-    benchmark 'second' {
-        policy -Warmup 0 -Iterations 1
-        caseSource @{ Name = 'Default' }
-        axis Operation Run
-        axis Engine Managed
-        setup { param($case, $run) $run.Probe = Get-Probe }
-        engine Managed { operation Run { param($case, $run) if ($run.Probe -ne 'second') { throw "expected second, got $($run.Probe)" } } }
+    New-BenchmarkSuite 'second' {
+        Set-BenchmarkPolicy -Warmup 0 -Iterations 1
+        Add-BenchmarkCaseSource @{ Name = 'Default' }
+        Add-BenchmarkAxis Operation Run
+        Add-BenchmarkAxis Engine Managed
+        Set-BenchmarkSetup { param($case, $run) $run.Probe = Get-Probe }
+        Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) if ($run.Probe -ne 'second') { throw "expected second, got $($run.Probe)" } } }
     }
 }
 """);
@@ -779,7 +827,7 @@ Invoke-BenchmarkSuite -Settings {
     }
 
     [Fact]
-    public void InvokeBenchmarkSuiteCommand_PrefersRuntimeAssertionsOverImportedAliases()
+    public void InvokeBenchmarkSuiteCommand_UsesCanonicalAssertionsWithoutExportingGenericAliases()
     {
         var root = CreateTempRoot();
         File.WriteAllText(Path.Combine(root, "expected.txt"), "ok");
@@ -792,13 +840,13 @@ Invoke-BenchmarkSuite -Settings {
         using var ps = PowerShell.Create(runspace);
         ps.AddScript($$"""
 Invoke-BenchmarkSuite -Settings {
-    benchmark 'assert-alias' -out '{{escapedRoot}}' {
-        policy -Warmup 0 -Iterations 1
-        caseSource @{ Name = 'Default' }
-        axis Operation Run
-        axis Engine Managed
-        engine Managed { operation Run { param($case, $run) } }
-        validate { param($case, $run) assertPath (Join-Path '{{escapedRoot}}' 'expected.txt') }
+    New-BenchmarkSuite 'assert-command' -OutputRoot '{{escapedRoot}}' {
+        Set-BenchmarkPolicy -Warmup 0 -Iterations 1
+        Add-BenchmarkCaseSource @{ Name = 'Default' }
+        Add-BenchmarkAxis Operation Run
+        Add-BenchmarkAxis Engine Managed
+        Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
+        Add-BenchmarkValidation { param($case, $run) Assert-BenchmarkPath (Join-Path '{{escapedRoot}}' 'expected.txt') }
     }
 }
 """);
@@ -810,9 +858,10 @@ Invoke-BenchmarkSuite -Settings {
         Assert.All(result.Samples, sample => Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status));
 
         ps.Commands.Clear();
-        ps.AddCommand("Get-Alias").AddArgument("assertPath");
-        var assertPathAlias = Assert.IsType<AliasInfo>(Assert.Single(ps.Invoke()).BaseObject);
-        Assert.Equal("Assert-BenchmarkPath", assertPathAlias.Definition);
+        ps.AddCommand("Get-Command")
+            .AddArgument("assertPath")
+            .AddParameter("ErrorAction", "SilentlyContinue");
+        Assert.Empty(ps.Invoke());
     }
 
     [Fact]
@@ -822,13 +871,13 @@ Invoke-BenchmarkSuite -Settings {
         File.WriteAllText(Path.Combine(root, "expected.txt"), "ok");
         var escapedRoot = root.Replace("'", "''");
         var script = ScriptBlock.Create($$"""
-benchmark 'runtime-assert' -out '{{escapedRoot}}' {
-    policy -Warmup 0 -Iterations 1
-    caseSource @{ Name = 'Default' }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
-    validate { param($case, $run) assertPath (Join-Path '{{escapedRoot}}' 'expected.txt') }
+New-BenchmarkSuite 'runtime-assert' -OutputRoot '{{escapedRoot}}' {
+    Set-BenchmarkPolicy -Warmup 0 -Iterations 1
+    Add-BenchmarkCaseSource @{ Name = 'Default' }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
+    Add-BenchmarkValidation { param($case, $run) Assert-BenchmarkPath (Join-Path '{{escapedRoot}}' 'expected.txt') }
 }
 """);
 
@@ -839,22 +888,21 @@ benchmark 'runtime-assert' -out '{{escapedRoot}}' {
     }
 
     [Fact]
-    public void AddBenchmarkComparisonCommand_ExportsOnlyImportSafeAlias()
+    public void AddBenchmarkComparisonCommand_DoesNotExportGenericAliases()
     {
-        var alias = typeof(PSPublishModule.AddBenchmarkComparisonCommand)
+        var aliases = typeof(PSPublishModule.AddBenchmarkComparisonCommand)
             .GetCustomAttributes(inherit: false)
             .OfType<AliasAttribute>()
-            .Single();
+            .ToArray();
 
-        Assert.Contains("comparison", alias.AliasNames);
-        Assert.DoesNotContain("compare", alias.AliasNames);
+        Assert.Empty(aliases);
     }
 
     [Fact]
     public void AddBenchmarkComparisonCommand_DefaultsDimensionToEngine()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'comparison-default' {
+New-BenchmarkSuite 'comparison-default' {
     Add-BenchmarkComparison -Baseline 'Managed'
 }
 ");
@@ -870,11 +918,11 @@ benchmark 'comparison-default' {
     public void DslRuntime_StripsGeneratedScenarioCaseMetadata()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'scenario-case' {
-    cases { Add-BenchmarkCaseSource { [pscustomobject]@{ Scenario = 'Generated'; Rows = 20 } } }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'scenario-case' {
+    Add-BenchmarkCases { Add-BenchmarkCaseSource { [pscustomobject]@{ Scenario = 'Generated'; Rows = 20 } } }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -890,11 +938,11 @@ benchmark 'scenario-case' {
     public void DslRuntime_HonorsArtifactsNone()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'none' {
-    artifacts None
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'none' {
+    Set-BenchmarkArtifacts None
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -907,11 +955,11 @@ benchmark 'none' {
     public void DslRuntime_RejectsUnknownArtifactNames()
     {
         var script = ScriptBlock.Create(@"
-benchmark 'bad' {
-    artifacts Json, MarkDownn
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'bad' {
+    Set-BenchmarkArtifacts Json, MarkDownn
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
 
@@ -960,13 +1008,13 @@ benchmark 'bad' {
         var root = CreateTempRoot();
         var spec = Path.Combine(root, "variables.benchmark.ps1");
         File.WriteAllText(spec, @"
-$caseName = input CaseName
-$rows = inputInt Rows
-benchmark 'variables' {
-    caseSource { [pscustomobject]@{ Name = $caseName; Rows = ($rows -join ',') } }
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+$caseName = Get-BenchmarkInput CaseName
+$rows = Get-BenchmarkInput Rows -Int
+New-BenchmarkSuite 'variables' {
+    Add-BenchmarkCaseSource { [pscustomobject]@{ Name = $caseName; Rows = ($rows -join ',') } }
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
         var initialSessionState = InitialSessionState.CreateDefault();
@@ -1012,10 +1060,10 @@ benchmark 'variables' {
             ps.Commands.Clear();
 
             var settings = ScriptBlock.Create(@"
-benchmark 'path' -out 'relative-out' {
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'path' -OutputRoot 'relative-out' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
             ps.AddCommand("Invoke-BenchmarkSuite")
@@ -1051,11 +1099,11 @@ benchmark 'path' -out 'relative-out' {
 $moduleName = 'FromClosure'
 Invoke-BenchmarkSuite -Settings {
     $rootProbe = $PSScriptRoot
-    benchmark 'inline-closure' {
-        cases { case A @{ ModuleName = $moduleName; Root = $PSScriptRoot } }
-        axis Operation Run
-        axis Engine Managed
-        engine Managed { operation Run { param($case, $run) } }
+    New-BenchmarkSuite 'inline-closure' {
+        Add-BenchmarkCases { Add-BenchmarkCase A @{ ModuleName = $moduleName; Root = $PSScriptRoot } }
+        Add-BenchmarkAxis Operation Run
+        Add-BenchmarkAxis Engine Managed
+        Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
     }
 } -Plan
 """);
@@ -1082,11 +1130,11 @@ Invoke-BenchmarkSuite -Settings {
         using var ps = System.Management.Automation.PowerShell.Create(runspace);
         var escapedRoot = root.Replace("'", "''");
         var settings = ScriptBlock.Create($@"
-benchmark 'whatif' -out '{escapedRoot}' {{
-    axis Operation Run
-    axis Engine Managed
-    readme '{readme.Replace("'", "''")}' -block results -renderer SummaryTable
-    engine Managed {{ operation Run {{ param($case, $run) }} }}
+New-BenchmarkSuite 'whatif' -OutputRoot '{escapedRoot}' {{
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkReadmeBlock '{readme.Replace("'", "''")}' -block results -renderer SummaryTable
+    Add-BenchmarkEngine Managed {{ Add-BenchmarkOperation Run {{ param($case, $run) }} }}
 }}
 ");
         ps.AddCommand("Invoke-BenchmarkSuite")
@@ -1110,11 +1158,11 @@ benchmark 'whatif' -out '{escapedRoot}' {{
         ImportBenchmarkDslCommands(runspace);
         using var ps = System.Management.Automation.PowerShell.Create(runspace);
         var settings = ScriptBlock.Create(@"
-benchmark 'inline-temp-user' {
-    profile TemporaryLocalUser
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'inline-temp-user' {
+    Set-BenchmarkProfile TemporaryLocalUser
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 ");
         ps.AddCommand("Invoke-BenchmarkSuite")
@@ -1131,11 +1179,11 @@ benchmark 'inline-temp-user' {
         var root = CreateTempRoot();
         var spec = Path.Combine(root, "temp-user.benchmark.ps1");
         File.WriteAllText(spec, """
-benchmark 'path-temp-user' -out 'out' {
-    profile TemporaryLocalUser
-    axis Operation Run
-    axis Engine Managed
-    engine Managed { operation Run { param($case, $run) } }
+New-BenchmarkSuite 'path-temp-user' -OutputRoot 'out' {
+    Set-BenchmarkProfile TemporaryLocalUser
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
 }
 """);
         var initialSessionState = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault();

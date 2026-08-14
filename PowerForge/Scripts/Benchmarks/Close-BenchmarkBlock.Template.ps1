@@ -13,11 +13,10 @@ $skipNames = @(
 )
 $skipFunctions = @(
     '__PowerForgeCloseBenchmarkBlock', '__PowerForgeBenchmarkDslInvoke',
-    'benchmark', 'cases', 'case', 'caseSource', 'from', 'axis', 'setup', 'data', 'skip', 'validate', 'policy', 'profile', 'cleanup', 'engine', 'operation', 'metric', 'compare', 'comparison', 'readme', 'artifacts',
     'New-BenchmarkSuite', 'Add-BenchmarkCases', 'Add-BenchmarkCase', 'Add-BenchmarkCaseSource', 'Add-BenchmarkAxis',
     'Set-BenchmarkSetup', 'Set-BenchmarkDataFactory', 'Set-BenchmarkPolicy', 'Set-BenchmarkProfile', 'Set-BenchmarkCleanup', 'Add-BenchmarkEngine', 'Add-BenchmarkOperation',
-    'Add-BenchmarkSkipRule', 'Add-BenchmarkValidation', 'Add-BenchmarkMetric', 'Add-BenchmarkComparison',
-    'Add-BenchmarkReadmeBlock', 'Set-BenchmarkArtifacts'
+    'Add-BenchmarkSkipRule', 'Add-BenchmarkValidation', 'Add-BenchmarkMetric', 'Add-BenchmarkMetadata', 'Add-BenchmarkComparison',
+    'Add-BenchmarkReadmeBlock', 'Set-BenchmarkArtifacts', 'Get-BenchmarkInput'
 )
 
 function __PowerForgeBenchmarkDslInvoke {

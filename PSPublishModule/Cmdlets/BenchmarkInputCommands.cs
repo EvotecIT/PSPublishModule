@@ -10,7 +10,6 @@ namespace PSPublishModule;
 /// Gets a caller-supplied benchmark input variable.
 /// </summary>
 [Cmdlet(VerbsCommon.Get, "BenchmarkInput", DefaultParameterSetName = TextParameterSet)]
-[Alias("input", "inputInt", "inputBool")]
 [OutputType(typeof(string), typeof(int), typeof(bool))]
 public sealed class GetBenchmarkInputCommand : PSCmdlet
 {
@@ -66,9 +65,6 @@ public sealed class GetBenchmarkInputCommand : PSCmdlet
 
     private BenchmarkInputKind GetInputKind()
     {
-        var invokedAs = MyInvocation.InvocationName;
-        if (string.Equals(invokedAs, "inputInt", StringComparison.OrdinalIgnoreCase)) return BenchmarkInputKind.Int;
-        if (string.Equals(invokedAs, "inputBool", StringComparison.OrdinalIgnoreCase)) return BenchmarkInputKind.Bool;
         if (Int.IsPresent) return BenchmarkInputKind.Int;
         if (Bool.IsPresent) return BenchmarkInputKind.Bool;
         return BenchmarkInputKind.Text;

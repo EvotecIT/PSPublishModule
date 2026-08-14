@@ -8,12 +8,12 @@ public sealed partial class BenchmarkServicesTests
     public void BenchmarkDsl_PropagatesFastestBaselineGate()
     {
         var script = System.Management.Automation.ScriptBlock.Create("""
-benchmark 'gate' {
-    axis Operation Run
-    axis Engine Managed, Other
-    engine Managed { operation Run { param($case, $run) } }
-    engine Other { operation Run { param($case, $run) } }
-    comparison Engine -Baseline Managed -Metric MedianMs -TieTolerance 0.05 -RequireBaselineFastest
+New-BenchmarkSuite 'gate' {
+    Add-BenchmarkAxis Operation Run
+    Add-BenchmarkAxis Engine Managed, Other
+    Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
+    Add-BenchmarkEngine Other { Add-BenchmarkOperation Run { param($case, $run) } }
+    Add-BenchmarkComparison Engine -Baseline Managed -Metric MedianMs -TieTolerance 0.05 -RequireBaselineFastest
 }
 """);
 

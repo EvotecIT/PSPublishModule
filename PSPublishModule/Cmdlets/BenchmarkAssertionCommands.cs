@@ -7,7 +7,6 @@ namespace PSPublishModule;
 /// Asserts that a benchmark path exists or does not exist.
 /// </summary>
 [Cmdlet("Assert", "BenchmarkPath")]
-[Alias("assertPath")]
 [OutputType(typeof(string))]
 public sealed class AssertBenchmarkPathCommand : PSCmdlet
 {
@@ -55,7 +54,6 @@ public sealed class AssertBenchmarkPathCommand : PSCmdlet
 /// Asserts a benchmark value condition.
 /// </summary>
 [Cmdlet("Assert", "BenchmarkValue", DefaultParameterSetName = ParameterSetEquals)]
-[Alias("assertValue")]
 [OutputType(typeof(object))]
 public sealed class AssertBenchmarkValueCommand : PSCmdlet
 {

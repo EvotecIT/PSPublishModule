@@ -54,29 +54,6 @@ public abstract class BenchmarkDslCommand : PSCmdlet
 
     private static readonly HashSet<string> BenchmarkDslCommandNames = new(StringComparer.OrdinalIgnoreCase)
     {
-        "benchmark",
-        "cases",
-        "case",
-        "caseSource",
-        "from",
-        "axis",
-        "setup",
-        "data",
-        "skip",
-        "validate",
-        "policy",
-        "profile",
-        "cleanup",
-        "engine",
-        "operation",
-        "metric",
-        "compare",
-        "comparison",
-        "readme",
-        "artifacts",
-        "input",
-        "inputInt",
-        "inputBool",
         "New-BenchmarkSuite",
         "Add-BenchmarkCases",
         "Add-BenchmarkCase",
@@ -92,10 +69,13 @@ public abstract class BenchmarkDslCommand : PSCmdlet
         "Add-BenchmarkSkipRule",
         "Add-BenchmarkValidation",
         "Add-BenchmarkMetric",
+        "Add-BenchmarkMetadata",
         "Add-BenchmarkComparison",
         "Add-BenchmarkReadmeBlock",
         "Set-BenchmarkArtifacts",
-        "Get-BenchmarkInput"
+        "Get-BenchmarkInput",
+        "Assert-BenchmarkPath",
+        "Assert-BenchmarkValue"
     };
 }
 
@@ -103,7 +83,6 @@ public abstract class BenchmarkDslCommand : PSCmdlet
 /// Declares a PowerShell benchmark suite.
 /// </summary>
 [Cmdlet(VerbsCommon.New, "BenchmarkSuite")]
-[Alias("benchmark")]
 public sealed class NewBenchmarkSuiteCommand : BenchmarkDslCommand
 {
     /// <summary>Suite name.</summary>
@@ -113,7 +92,6 @@ public sealed class NewBenchmarkSuiteCommand : BenchmarkDslCommand
 
     /// <summary>Output root for benchmark artifacts.</summary>
     [Parameter]
-    [Alias("out")]
     public string? OutputRoot { get; set; }
 
     /// <summary>Suite declaration body.</summary>
@@ -132,7 +110,6 @@ public sealed class NewBenchmarkSuiteCommand : BenchmarkDslCommand
 /// Groups benchmark case declarations.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "BenchmarkCases")]
-[Alias("cases")]
 public sealed class AddBenchmarkCasesCommand : BenchmarkDslCommand
 {
     /// <summary>Case declaration body.</summary>
@@ -148,7 +125,6 @@ public sealed class AddBenchmarkCasesCommand : BenchmarkDslCommand
 /// Adds one benchmark case.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "BenchmarkCase")]
-[Alias("case")]
 public sealed class AddBenchmarkCaseCommand : BenchmarkDslCommand
 {
     /// <summary>Case name.</summary>
@@ -169,7 +145,6 @@ public sealed class AddBenchmarkCaseCommand : BenchmarkDslCommand
 /// Adds benchmark cases from a script block or evaluated objects.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "BenchmarkCaseSource", DefaultParameterSetName = ParameterSetInputObject)]
-[Alias("caseSource", "from")]
 public sealed class AddBenchmarkCaseSourceCommand : BenchmarkDslCommand
 {
     private const string ParameterSetScriptBlock = "ScriptBlock";
@@ -200,7 +175,6 @@ public sealed class AddBenchmarkCaseSourceCommand : BenchmarkDslCommand
 /// Adds a benchmark matrix axis.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "BenchmarkAxis")]
-[Alias("axis")]
 public sealed class AddBenchmarkAxisCommand : BenchmarkDslCommand
 {
     /// <summary>Axis name.</summary>
@@ -221,7 +195,6 @@ public sealed class AddBenchmarkAxisCommand : BenchmarkDslCommand
 /// Sets the suite setup block.
 /// </summary>
 [Cmdlet(VerbsCommon.Set, "BenchmarkSetup")]
-[Alias("setup")]
 public sealed class SetBenchmarkSetupCommand : BenchmarkDslCommand
 {
     /// <summary>Setup block.</summary>
@@ -237,7 +210,6 @@ public sealed class SetBenchmarkSetupCommand : BenchmarkDslCommand
 /// Sets the suite data factory block.
 /// </summary>
 [Cmdlet(VerbsCommon.Set, "BenchmarkDataFactory")]
-[Alias("data")]
 public sealed class SetBenchmarkDataFactoryCommand : BenchmarkDslCommand
 {
     /// <summary>Data factory block.</summary>
@@ -253,7 +225,6 @@ public sealed class SetBenchmarkDataFactoryCommand : BenchmarkDslCommand
 /// Sets benchmark run policy defaults.
 /// </summary>
 [Cmdlet(VerbsCommon.Set, "BenchmarkPolicy")]
-[Alias("policy")]
 public sealed class SetBenchmarkPolicyCommand : BenchmarkDslCommand
 {
     /// <summary>Warmup iteration count.</summary>
@@ -304,7 +275,6 @@ public sealed class SetBenchmarkPolicyCommand : BenchmarkDslCommand
 /// Sets the benchmark profile mode.
 /// </summary>
 [Cmdlet(VerbsCommon.Set, "BenchmarkProfile")]
-[Alias("profile")]
 public sealed class SetBenchmarkProfileCommand : BenchmarkDslCommand
 {
     /// <summary>Profile kind.</summary>
@@ -324,7 +294,6 @@ public sealed class SetBenchmarkProfileCommand : BenchmarkDslCommand
 /// Sets the benchmark cleanup mode.
 /// </summary>
 [Cmdlet(VerbsCommon.Set, "BenchmarkCleanup")]
-[Alias("cleanup")]
 public sealed class SetBenchmarkCleanupCommand : BenchmarkDslCommand
 {
     /// <summary>Cleanup mode.</summary>
@@ -340,7 +309,6 @@ public sealed class SetBenchmarkCleanupCommand : BenchmarkDslCommand
 /// Adds a benchmark engine.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "BenchmarkEngine")]
-[Alias("engine")]
 public sealed class AddBenchmarkEngineCommand : BenchmarkDslCommand
 {
     /// <summary>Engine name.</summary>
@@ -361,7 +329,6 @@ public sealed class AddBenchmarkEngineCommand : BenchmarkDslCommand
 /// Adds an operation handler to the current benchmark engine.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "BenchmarkOperation")]
-[Alias("operation")]
 public sealed class AddBenchmarkOperationCommand : BenchmarkDslCommand
 {
     /// <summary>Operation name.</summary>
@@ -382,7 +349,6 @@ public sealed class AddBenchmarkOperationCommand : BenchmarkDslCommand
 /// Adds a benchmark skip rule.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "BenchmarkSkipRule")]
-[Alias("skip")]
 public sealed class AddBenchmarkSkipRuleCommand : BenchmarkDslCommand
 {
     /// <summary>Skip rule block.</summary>
@@ -398,7 +364,6 @@ public sealed class AddBenchmarkSkipRuleCommand : BenchmarkDslCommand
 /// Adds a benchmark validation block.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "BenchmarkValidation")]
-[Alias("validate")]
 public sealed class AddBenchmarkValidationCommand : BenchmarkDslCommand
 {
     /// <summary>Validation block.</summary>
@@ -414,7 +379,6 @@ public sealed class AddBenchmarkValidationCommand : BenchmarkDslCommand
 /// Adds a custom benchmark metric.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "BenchmarkMetric")]
-[Alias("metric")]
 public sealed class AddBenchmarkMetricCommand : BenchmarkDslCommand
 {
     /// <summary>Metric name.</summary>
@@ -439,7 +403,6 @@ public sealed class AddBenchmarkMetricCommand : BenchmarkDslCommand
 /// <code>Add-BenchmarkMetadata -Name 'runtime' -Value 'net10.0'</code>
 /// </example>
 [Cmdlet(VerbsCommon.Add, "BenchmarkMetadata")]
-[Alias("metadata")]
 public sealed class AddBenchmarkMetadataCommand : BenchmarkDslCommand
 {
     /// <summary>Metadata name.</summary>
@@ -461,7 +424,6 @@ public sealed class AddBenchmarkMetadataCommand : BenchmarkDslCommand
 /// Adds a benchmark comparison definition.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "BenchmarkComparison")]
-[Alias("comparison")]
 public sealed class AddBenchmarkComparisonCommand : BenchmarkDslCommand
 {
     /// <summary>Dimension to compare.</summary>
@@ -496,7 +458,6 @@ public sealed class AddBenchmarkComparisonCommand : BenchmarkDslCommand
 /// Adds a README or Markdown benchmark block target.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "BenchmarkReadmeBlock")]
-[Alias("readme")]
 public sealed class AddBenchmarkReadmeBlockCommand : BenchmarkDslCommand
 {
     /// <summary>Document path.</summary>
@@ -522,7 +483,6 @@ public sealed class AddBenchmarkReadmeBlockCommand : BenchmarkDslCommand
 /// Sets requested benchmark artifacts.
 /// </summary>
 [Cmdlet(VerbsCommon.Set, "BenchmarkArtifacts")]
-[Alias("artifacts")]
 public sealed class SetBenchmarkArtifactsCommand : BenchmarkDslCommand
 {
     /// <summary>Artifact kinds.</summary>

@@ -123,6 +123,27 @@ public sealed class PSPublishModuleManifestContractTests
     }
 
     [Fact]
+    public void Manifest_does_not_export_benchmark_grammar_as_global_aliases()
+    {
+        var repoRoot = RepoRootLocator.Find();
+        var manifestPath = Path.Combine(repoRoot, "Module", "PSPublishModule.psd1");
+        var aliasesLine = Assert.Single(
+            File.ReadLines(manifestPath),
+            static line => line.Contains("AliasesToExport", StringComparison.Ordinal));
+        var genericNames = new[]
+        {
+            "benchmark", "cases", "case", "caseSource", "from", "axis", "setup", "data", "policy", "profile",
+            "cleanup", "engine", "operation", "skip", "validate", "metric", "metadata", "comparison", "readme",
+            "artifacts", "input", "inputInt", "inputBool", "assertPath", "assertValue"
+        };
+
+        foreach (var name in genericNames)
+        {
+            Assert.DoesNotContain($"'{name}'", aliasesLine, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public void Json_build_recipe_does_not_declare_feature_specific_tool_modules()
     {
         var repoRoot = RepoRootLocator.Find();

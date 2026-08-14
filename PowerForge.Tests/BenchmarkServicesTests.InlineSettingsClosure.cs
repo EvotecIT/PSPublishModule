@@ -18,12 +18,12 @@ public sealed partial class BenchmarkServicesTests
         ps.AddScript("""
 $caseName = 'FromClosure'
 $settings = {
-    benchmark 'inline-closure' {
-        policy -Warmup 0 -Iterations 1
-        cases { case A @{ Probe = $caseName } }
-        axis Operation Run
-        axis Engine Managed
-        engine Managed { operation Run { param($case, $run) } }
+    New-BenchmarkSuite 'inline-closure' {
+        Set-BenchmarkPolicy -Warmup 0 -Iterations 1
+        Add-BenchmarkCases { Add-BenchmarkCase A @{ Probe = $caseName } }
+        Add-BenchmarkAxis Operation Run
+        Add-BenchmarkAxis Engine Managed
+        Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
     }
 }.GetNewClosure()
 Invoke-BenchmarkSuite -Settings $settings -Plan
