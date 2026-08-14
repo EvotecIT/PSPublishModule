@@ -2349,11 +2349,7 @@ internal sealed partial class PowerForgeReleaseService
                 using var directExportSnapshot = direct ? AppleDirectExportSnapshot.Create() : null;
                 using var uploadMutationMonitor = uploadSnapshot is null
                     ? null
-                    : new AppleReleaseSourceMutationMonitor(
-                        uploadSnapshot.RootPath,
-                        "private Apple upload archive snapshot",
-                        "xcodebuild exportArchive",
-                        "Discard the upload/export result and inspect remote state before retrying.");
+                    : uploadSnapshot.MonitorChanges();
                 AppleAppArchiveUploadResult upload;
                 var uploadRemoteMutationStarted = false;
                 try
