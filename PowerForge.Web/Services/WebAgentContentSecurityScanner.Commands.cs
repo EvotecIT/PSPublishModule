@@ -8,7 +8,7 @@ public sealed partial class WebAgentContentSecurityScanner
         @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|nuget(?=\s+(?:install|restore|update)\b)|Install-Package|Update-Package|Install-Module|Save-Module|Install-Script|Update-Script|Save-Script|Install-PSResource|Save-PSResource|Update-Module|Update-PSResource|Install-PackageProvider|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|poetry(?=\s+(?:add|install|sync|update|remove|lock|run|build|self|plugin|source|config|python)\b)|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ShellTokenConstructionRegex = new(
-        @"[\x5C`\^](?!\r?\n)[^\r\n]",
+        @"[\x5C`](?!\r?\n)[^\r\n]",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ShellContinuationTokenConstructionRegex = new(
         @"(?<=\S)[\x5C`\^]\r?\n(?=\S)",
@@ -190,174 +190,6 @@ public sealed partial class WebAgentContentSecurityScanner
             "set-psresourcerepository" or "corepack" or "npm" or "npx" or "pnpx" or "pnpm" or "yarn" or
             "bun" or "bunx" or "python" or "py" or "pip" or "uv" or "uvx" or "pipx" or "poetry" or
             "cargo" or "gem" or "composer" or "bundle";
-
-    private static void ParsePython(
-        string[] tokens,
-        string path,
-        int line,
-        ICollection<WebAgentPackageReference> references,
-        ICollection<WebAgentContentSecurityFinding> findings)
-    {
-        if (!ValidatePackageSourceOptions("pypi", tokens, path, line, findings))
-            return;
-        var command = tokens[0].ToLowerInvariant();
-        if (command is "python" or "python3" or "py")
-        {
-            var moduleIndex = FindPythonModuleIndex(tokens, path, line, findings);
-            if (moduleIndex < 0 || moduleIndex + 1 >= tokens.Length ||
-                !IsPythonPipModule(tokens[moduleIndex + 1]))
-                return;
-            if (IsPipInformationalInvocation(tokens, moduleIndex + 2))
-                return;
-            var installIndex = FindVerbIndex(tokens, moduleIndex + 2, "install", $"{tokens[0]} -m pip", path, line, findings);
-            if (installIndex >= 0)
-                AddMultipleOperands("pypi", $"{tokens[0]} -m pip install", tokens, installIndex + 1, path, line, references, findings);
-            return;
-        }
-        if (command is "pip" or "pip3")
-        {
-            if (IsPipInformationalInvocation(tokens, 1))
-                return;
-            var installIndex = FindVerbIndex(tokens, 1, "install", tokens[0], path, line, findings);
-            if (installIndex >= 0)
-                AddMultipleOperands("pypi", tokens[0] + " install", tokens, installIndex + 1, path, line, references, findings);
-            return;
-        }
-        if (command == "uv")
-        {
-            var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "pip", "add", "tool", "run", "sync" }, "uv", path, line, findings);
-            var start = -1;
-            if (verbIndex >= 0 && tokens[verbIndex].Equals("pip", StringComparison.OrdinalIgnoreCase))
-            {
-                var installIndex = FindVerbIndex(tokens, verbIndex + 1, "install", "uv pip", path, line, findings);
-                if (installIndex >= 0)
-                    start = installIndex + 1;
-            }
-            else if (verbIndex >= 0 && tokens[verbIndex].Equals("tool", StringComparison.OrdinalIgnoreCase))
-            {
-                var installIndex = FindVerbIndex(tokens, verbIndex + 1, "install", "uv tool", path, line, findings);
-                if (installIndex >= 0)
-                {
-                    var auxiliaryInput = FindOptionValue(tokens, installIndex + 1,
-                        "--with", "--with-requirements", "--with-editable");
-                    if (auxiliaryInput is not null)
-                    {
-                        AddUnverifiableOperand("uv tool install", path, line, findings, "auxiliary dependency input");
-                        return;
-                    }
-                    AddRunnerOperand("pypi", "uv tool install", tokens, installIndex + 1, path, line, references, findings);
-                }
-                return;
-            }
-            else if (verbIndex >= 0)
-            {
-                if (tokens[verbIndex].Equals("sync", StringComparison.OrdinalIgnoreCase))
-                {
-                    AddUnverifiableOperand("uv sync", path, line, findings, "lockfile or project dependency set");
-                    return;
-                }
-                if (tokens[verbIndex].Equals("run", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (RejectUvRunPackageManagerPayload(tokens, verbIndex + 1, path, line, findings))
-                        return;
-                    var requirementInput = FindOptionValue(tokens, verbIndex + 1, "--with-requirements", "--with-editable");
-                    if (requirementInput is not null)
-                    {
-                        AddUnverifiableOperand("uv run", path, line, findings, "external or editable dependency input");
-                        return;
-                    }
-                    var dependencies = FindOptionValues(tokens, verbIndex + 1, "--with");
-                    if (dependencies.Count == 0)
-                        AddUnverifiableOperand("uv run", path, line, findings, "project dependency set");
-                    else
-                        foreach (var dependency in dependencies)
-                            AddToken("pypi", "uv run --with", dependency, null, path, line, references, findings);
-                    return;
-                }
-                start = verbIndex + 1;
-            }
-            if (start >= 0)
-                AddMultipleOperands("pypi", "uv", tokens, start, path, line, references, findings);
-            return;
-        }
-        if (command == "pipx")
-        {
-            if (FindOptionValue(tokens, 1, "--pip-args", "--preinstall") is not null)
-            {
-                AddUnverifiableOperand("pipx", path, line, findings, "auxiliary dependency or pip argument input");
-                return;
-            }
-            var verbIndex = FindKnownVerbIndex(tokens, 1,
-                new[] { "install", "run", "runpip", "inject", "upgrade", "upgrade-all", "reinstall", "reinstall-all" },
-                "pipx", path, line, findings);
-            if (verbIndex < 0)
-                return;
-            if (tokens[verbIndex].Equals("upgrade-all", StringComparison.OrdinalIgnoreCase) ||
-                tokens[verbIndex].Equals("reinstall-all", StringComparison.OrdinalIgnoreCase))
-            {
-                AddUnverifiableOperand("pipx " + tokens[verbIndex], path, line, findings, "installed application package set");
-                return;
-            }
-            if (tokens[verbIndex].Equals("runpip", StringComparison.OrdinalIgnoreCase))
-            {
-                AddUnverifiableOperand("pipx runpip", path, line, findings, "forwarded pip command");
-                return;
-            }
-            if (!tokens[verbIndex].Equals("inject", StringComparison.OrdinalIgnoreCase))
-            {
-                AddRunnerOperand("pypi", "pipx " + tokens[verbIndex], tokens, verbIndex + 1, path, line, references, findings);
-                return;
-            }
-
-            var environmentIndex = FindNextOperand(tokens, verbIndex + 1);
-            AddMultipleOperands("pypi", "pipx inject", tokens, environmentIndex < 0 ? tokens.Length : environmentIndex + 1,
-                path, line, references, findings);
-        }
-    }
-
-    private static bool IsPythonPipModule(string module)
-        => module.Equals("pip", StringComparison.OrdinalIgnoreCase) ||
-           module.Equals("pip.__main__", StringComparison.OrdinalIgnoreCase);
-
-    private static bool RejectUvRunPackageManagerPayload(
-        string[] tokens,
-        int start,
-        string path,
-        int line,
-        ICollection<WebAgentContentSecurityFinding> findings)
-    {
-        for (var index = start; index < tokens.Length; index++)
-        {
-            var token = tokens[index];
-            if (token == "--")
-            {
-                index++;
-                return RejectPackageManagerInvocationAt("uv run", tokens, index, path, line, findings);
-            }
-            if (token.Equals("--with", StringComparison.OrdinalIgnoreCase) ||
-                token.Equals("--with-requirements", StringComparison.OrdinalIgnoreCase) ||
-                token.Equals("--with-editable", StringComparison.OrdinalIgnoreCase) ||
-                token.Equals("--python", StringComparison.OrdinalIgnoreCase) ||
-                token.Equals("--directory", StringComparison.OrdinalIgnoreCase) ||
-                token.Equals("--project", StringComparison.OrdinalIgnoreCase))
-            {
-                index++;
-                continue;
-            }
-            if (token.StartsWith("--with=", StringComparison.OrdinalIgnoreCase) ||
-                token.StartsWith("--with-requirements=", StringComparison.OrdinalIgnoreCase) ||
-                token.StartsWith("--with-editable=", StringComparison.OrdinalIgnoreCase) ||
-                token.StartsWith("--python=", StringComparison.OrdinalIgnoreCase) ||
-                token.StartsWith("--directory=", StringComparison.OrdinalIgnoreCase) ||
-                token.StartsWith("--project=", StringComparison.OrdinalIgnoreCase) ||
-                token is "--isolated" or "--no-project")
-                continue;
-            if (token.StartsWith("-", StringComparison.Ordinal))
-                continue;
-            return RejectPackageManagerInvocationAt("uv run", tokens, index, path, line, findings);
-        }
-        return false;
-    }
 
     private static void ParsePositionalInstall(
         string ecosystem,
@@ -543,6 +375,12 @@ public sealed partial class WebAgentContentSecurityScanner
         ICollection<WebAgentContentSecurityFinding> findings)
     {
         token = NormalizeToken(token);
+        if (ecosystem != "packagist" && token.Contains('^'))
+        {
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND", path, line,
+                "Package operands outside Composer must not use caret shell construction.");
+            return;
+        }
         if (ecosystem == "npm" && IsNpmNonRegistryOperand(token))
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
@@ -556,6 +394,8 @@ public sealed partial class WebAgentContentSecurityScanner
             return;
         }
         var (id, embeddedVersion) = SplitPackageVersion(ecosystem, token);
+        if (ecosystem == "packagist" && IsComposerPlatformRequirement(id))
+            return;
         if (!IsCandidatePackageId(id))
         {
             AddUnverifiableOperand(command, path, line, findings, token);

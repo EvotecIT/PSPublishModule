@@ -129,7 +129,7 @@ public sealed partial class WebAgentContentSecurityScanner
         if (tokens.Length < 2 || !ValidatePackageSourceOptions("rubygems", tokens, path, line, findings))
             return;
         var verbIndex = FindKnownVerbIndex(tokens, 1,
-            new[] { "install", "i", "in", "ins", "inst", "insta", "instal", "update", "up", "upd", "upda", "updat", "exec", "ex", "exe" },
+            new[] { "install", "i", "in", "ins", "inst", "insta", "instal", "update", "up", "upd", "upda", "updat", "exec", "ex", "exe", "pristine", "build" },
             "gem", path, line, findings);
         if (verbIndex < 0)
             return;
@@ -149,6 +149,13 @@ public sealed partial class WebAgentContentSecurityScanner
                 return;
             }
             AddRunnerOperand("rubygems", "gem exec", tokens, verbIndex + 1, path, line, references, findings);
+            return;
+        }
+        if (tokens[verbIndex].Equals("pristine", StringComparison.OrdinalIgnoreCase) ||
+            tokens[verbIndex].Equals("build", StringComparison.OrdinalIgnoreCase))
+        {
+            AddUnverifiableOperand("gem " + tokens[verbIndex], path, line, findings,
+                "installed dependency rebuild or project gemspec execution");
             return;
         }
         if (tokens.Any(static token =>
@@ -284,6 +291,17 @@ public sealed partial class WebAgentContentSecurityScanner
            id[0] != '-' &&
            id.IndexOfAny(new[] { '$', '{', '}', '<', '>', '*', '?', '%', '(', ')' }) < 0 &&
            !Uri.TryCreate(id, UriKind.Absolute, out _);
+
+    private static bool IsComposerPlatformRequirement(string id)
+        => id.Equals("php", StringComparison.OrdinalIgnoreCase) ||
+           id.Equals("php-64bit", StringComparison.OrdinalIgnoreCase) ||
+           id.Equals("php-ipv6", StringComparison.OrdinalIgnoreCase) ||
+           id.Equals("hhvm", StringComparison.OrdinalIgnoreCase) ||
+           id.Equals("composer", StringComparison.OrdinalIgnoreCase) ||
+           id.Equals("composer-plugin-api", StringComparison.OrdinalIgnoreCase) ||
+           id.Equals("composer-runtime-api", StringComparison.OrdinalIgnoreCase) ||
+           id.StartsWith("ext-", StringComparison.OrdinalIgnoreCase) ||
+           id.StartsWith("lib-", StringComparison.OrdinalIgnoreCase);
 
     private static readonly string[] NodeVerbs =
     {

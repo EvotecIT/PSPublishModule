@@ -22,6 +22,14 @@ public sealed partial class WebAgentContentSecurityScanner
                     $"Node package project-root option '{option}' can select uninspected registry configuration.");
                 return false;
             }
+            if (ecosystem == "packagist" &&
+                (option.Equals("-d", StringComparison.OrdinalIgnoreCase) ||
+                 option.Equals("--working-dir", StringComparison.OrdinalIgnoreCase)))
+            {
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                    $"Composer project-root option '{option}' can select uninspected repository, plugin, and dependency configuration.");
+                return false;
+            }
             if (ecosystem == "pypi" && (option.Equals("-r", StringComparison.OrdinalIgnoreCase) ||
                                         option.Equals("--requirement", StringComparison.OrdinalIgnoreCase) ||
                                         option.Equals("-c", StringComparison.OrdinalIgnoreCase) ||

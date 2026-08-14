@@ -155,6 +155,13 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         if (!ValidatePackageSourceOptions("nuget", tokens, path, line, findings))
             return;
+        var provider = FindOptionValue(tokens, 1, "-ProviderName");
+        if (!string.Equals(provider, "NuGet", StringComparison.OrdinalIgnoreCase))
+        {
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                "PackageManagement commands must select '-ProviderName NuGet' explicitly; alternate or implicit providers cannot be verified against nuget.org.");
+            return;
+        }
         var nameIndex = Array.FindIndex(tokens, 1, token =>
             token.Equals("-Name", StringComparison.OrdinalIgnoreCase) ||
             token.Equals("-Id", StringComparison.OrdinalIgnoreCase));

@@ -94,11 +94,11 @@ public sealed partial class WebAgentContentSecurityScannerTests
     }
 
     [Theory]
-    [InlineData("npm install safe-package\\evil")]
-    [InlineData("npm install safe-package^evil")]
-    [InlineData("npm install safe-package`evil")]
-    [InlineData("npm install safe-package\\\nevil")]
-    public void Scan_RejectsShellConstructionInsidePackageOperands(string command)
+    [InlineData("npm install safe-package\\evil", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND")]
+    [InlineData("npm install safe-package^evil", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND")]
+    [InlineData("npm install safe-package`evil", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND")]
+    [InlineData("npm install safe-package\\\nevil", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND")]
+    public void Scan_RejectsShellConstructionInsidePackageOperands(string command, string expectedCode)
     {
         using var handler = new RegistryHandler(_ => throw new InvalidOperationException("Registry must not be called."));
         using var scanner = new WebAgentContentSecurityScanner(new HttpClient(handler));
@@ -108,7 +108,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
             var result = scanner.Scan(new WebAgentContentSecurityOptions { SiteRoot = root, Files = ["llms.txt"] });
 
             Assert.False(result.Success);
-            Assert.Contains(result.Findings, finding => finding.Code == "PFAGENT.PACKAGE.OBFUSCATED_COMMAND");
+            Assert.Contains(result.Findings, finding => finding.Code == expectedCode);
             Assert.Equal(0, result.PackageReferenceCount);
             Assert.Equal(0, handler.RequestCount);
         }
