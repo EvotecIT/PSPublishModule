@@ -19,7 +19,7 @@ public sealed partial class WebAgentContentSecurityScanner
         @"\b(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b[^\r\n|;&]*(?:\|[^\r\n|;&]*)*\|\s*(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php)(?:\.exe)?\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SavedDownloadCommandRegex = new(
-        @"\b(?<downloader>curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b(?<arguments>[^\r\n;&|]*)(?<separator>&&|;)(?<tail>[^\r\n]*)",
+        @"\b(?<downloader>curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b(?<arguments>[^\r\n]*?)(?<separator>&&|;)(?<tail>[^\r\n]*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex CurlOutputPathRegex = new(
         @"(?:^|\s)(?:-o(?:=|\s+)?|--output(?:=|\s+))(?<path>""[^""]+""|'[^']+'|[^\s;&|]+)",
@@ -30,9 +30,24 @@ public sealed partial class WebAgentContentSecurityScanner
     private static readonly Regex PowerShellOutputPathRegex = new(
         @"(?:^|\s)-OutFile(?::|=|\s+)(?<path>""[^""]+""|'[^']+'|[^\s;&|]+)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    private static readonly Regex InterpreterCommandRegex = new(
-        @"(?:^|[|;&]\s*|\s)(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php)(?:\.exe)?\b(?<arguments>[^\r\n;&|]*)",
+    private static readonly Regex ShellOutputPathRegex = new(
+        @"(?:^|\s)(?:&>>?|\*>>?|>\||>&|(?:1)?>>?)\s*(?<path>""[^""]+""|'[^']+'|[^\s;&|]+)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex TeeOutputPathRegex = new(
+        @"\|\s*tee\b(?:\s+-[^\s;&|]+)*\s+(?<path>""[^""]+""|'[^']+'|[^\s;&|]+)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex PowerShellPipelineOutputPathRegex = new(
+        @"\|\s*(?:Set-Content|Out-File)\b(?:\s+-(?:LiteralPath|Path|FilePath))?\s+(?<path>""[^""]+""|'[^']+'|[^\s;&|]+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex InterpreterCommandRegex = new(
+        @"(?:^|[|;&]\s*|\s)(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php|source)(?:\.exe)?\b(?<arguments>[^\r\n;&|]*)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex SavedArtifactInvocationRegex = new(
+        @"(?:^|&&|;|(?<!&)&(?!&))\s*(?:sudo\s+)?(?:(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?<command>""[^""]+""|'[^']+'|[^\s;&|]+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex SavedArtifactDotSourceRegex = new(
+        @"(?:^|&&|;)\s*\.\s+(?<path>""[^""]+""|'[^']+'|[^\s;&|]+)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex RemoteExecutionPowerShellExpressionRegex = new(
         @"\b(?:iex|Invoke-Expression)\b\s*(?:(?:\$\s*)?\(+|[""']\s*\$\()\s*(?:(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b|[^\r\n]{0,200}\bDownloadString\s*\()",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -153,7 +168,32 @@ public sealed partial class WebAgentContentSecurityScanner
                     "Downloaded content is saved and then passed to an interpreter. Prefer a pinned, integrity-checked artifact and a separate execution step.");
                 break;
             }
+
+            if (TailExecutesSavedPath(download.Groups["tail"].Value, outputPath))
+            {
+                AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path,
+                    GetReportedLine(original, download.Index, lineOffset, countLogicalLines),
+                    "A downloaded artifact is executed directly. Prefer a pinned, integrity-checked artifact and a separate execution step.");
+            }
         }
+    }
+
+    private static bool TailExecutesSavedPath(string tail, string outputPath)
+    {
+        var expected = NormalizeComparedPath(outputPath);
+        if (SavedArtifactInvocationRegex.Matches(tail)
+            .Any(match => NormalizeComparedPath(match.Groups["command"].Value).Equals(expected, StringComparison.OrdinalIgnoreCase)))
+            return true;
+        return SavedArtifactDotSourceRegex.Matches(tail)
+            .Any(match => NormalizeComparedPath(match.Groups["path"].Value).Equals(expected, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string NormalizeComparedPath(string value)
+    {
+        var normalized = NormalizeToken(value).Replace('\\', '/');
+        while (normalized.StartsWith("./", StringComparison.Ordinal))
+            normalized = normalized[2..];
+        return normalized;
     }
 
     private static string? FindDownloadedOutputPath(string downloader, string arguments)
@@ -165,7 +205,17 @@ public sealed partial class WebAgentContentSecurityScanner
             _ => PowerShellOutputPathRegex
         };
         var match = pattern.Match(arguments);
-        return match.Success ? match.Groups["path"].Value.Trim('"', '\'') : null;
+        var outputPath = match.Success ? match.Groups["path"].Value.Trim('"', '\'') : null;
+        if (!string.IsNullOrWhiteSpace(outputPath) && outputPath != "-")
+            return outputPath;
+
+        foreach (var outputPattern in new[] { TeeOutputPathRegex, PowerShellPipelineOutputPathRegex, ShellOutputPathRegex })
+        {
+            match = outputPattern.Match(arguments);
+            if (match.Success)
+                return match.Groups["path"].Value.Trim('"', '\'');
+        }
+        return null;
     }
 
     private static void ExtractUrls(string content, ISet<Uri> urls)

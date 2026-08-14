@@ -40,6 +40,12 @@ public sealed partial class WebAgentContentSecurityScanner
                     $"Python dependency input '{option}' can introduce packages that are not statically verifiable from the command.");
                 return false;
             }
+            if (ecosystem == "pypi" && IsPythonTransportTrustOption(option))
+            {
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                    $"Python transport-trust option '{option}' can bypass canonical registry certificate or host validation; the configured value is redacted.");
+                return false;
+            }
             if (!IsPackageSourceOption(ecosystem, option))
                 continue;
 
@@ -98,6 +104,12 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("--dir", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--cwd", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-C", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPythonTransportTrustOption(string option)
+        => option.Equals("--trusted-host", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--cert", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--client-cert", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--allow-insecure-host", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsPowerShellRepositoryOption(string option)
         => option.Equals("-Repository", StringComparison.OrdinalIgnoreCase) ||

@@ -354,9 +354,12 @@ public sealed partial class WebAgentContentSecurityScanner
                 }
                 continue;
             }
-            var optionVersion = ecosystem is "crates" or "rubygems"
-                ? FindVersionOption(tokens, 0)
-                : null;
+            var optionVersion = ecosystem switch
+            {
+                "crates" => FindOptionValue(tokens, 0, "--version"),
+                "rubygems" => FindVersionOption(tokens, 0),
+                _ => null
+            };
             AddToken(ecosystem, command, token, optionVersion, path, line, references, findings);
             added = true;
         }
@@ -394,6 +397,11 @@ public sealed partial class WebAgentContentSecurityScanner
             return;
         }
         var (id, embeddedVersion) = SplitPackageVersion(ecosystem, token);
+        if (ecosystem == "packagist" && embeddedVersion?.Contains('#', StringComparison.Ordinal) == true)
+        {
+            AddUnverifiableOperand(command, path, line, findings, "Composer commit-reference constraint");
+            return;
+        }
         if (ecosystem == "packagist" && IsComposerPlatformRequirement(id))
             return;
         if (!IsCandidatePackageId(id))

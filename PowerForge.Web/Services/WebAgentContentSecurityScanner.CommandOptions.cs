@@ -113,6 +113,7 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("--pre", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--no-deps", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--dry-run", StringComparison.OrdinalIgnoreCase) ||
+           (IsComposerOptionContext(optionContext) && IsComposerSafeFlag(option)) ||
            option.Equals("--dev", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--build", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--optional", StringComparison.OrdinalIgnoreCase) ||
@@ -136,4 +137,15 @@ public sealed partial class WebAgentContentSecurityScanner
     private static bool IsNodeOptionContext(string? optionContext)
         => optionContext is not null && optionContext.Split(' ', 2)[0].ToLowerInvariant() is
             "npm" or "npx" or "pnpx" or "pnpm" or "yarn" or "bun" or "bunx";
+
+    private static bool IsComposerOptionContext(string? optionContext)
+        => optionContext?.Split(' ', 2)[0].ToLowerInvariant() is "composer" or "packagist";
+
+    private static bool IsComposerSafeFlag(string option)
+        => option.Equals("--no-plugins", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--no-scripts", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--no-update", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--no-install", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--no-progress", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--no-dev", StringComparison.OrdinalIgnoreCase);
 }
