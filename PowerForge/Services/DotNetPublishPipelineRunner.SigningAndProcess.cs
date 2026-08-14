@@ -226,13 +226,18 @@ public sealed partial class DotNetPublishPipelineRunner
             PowerForgePayloadInventorySignature verifiedSignature;
             try
             {
-                verifiedSignature = PowerForgePortablePayloadInventoryCms.Verify(content, signature);
+                verifiedSignature = _verifyPortableInventory(content, signature);
             }
             catch (Exception exception) when (exception is CryptographicException || exception is InvalidDataException)
             {
                 throw new InvalidOperationException(
                     "Azure Artifact Signing produced an invalid detached portable inventory signature.",
                     exception);
+            }
+            if (!verifiedSignature.CertificateTrusted)
+            {
+                throw new InvalidOperationException(
+                    "Azure Artifact Signing produced a detached portable inventory signature without a trusted code-signing certificate chain.");
             }
             if (!DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(
                     verifiedSignature.Subject,

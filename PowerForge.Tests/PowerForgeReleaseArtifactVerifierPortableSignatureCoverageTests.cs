@@ -98,7 +98,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 : new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
             _ => "1.2.3+" + SourceRevision,
             _ => "Sample.CLI",
-            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint));
+            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint, certificateTrusted: true));
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
             verifier.Verify(request));

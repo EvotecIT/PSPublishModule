@@ -147,6 +147,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         VerifiedSignature payloadSigner = allowSubjectMatchedCertificateRotation
             ? RequireOnePublisherSubject(signatures)
             : RequireOneSigner(signatures);
+        if (allowSubjectMatchedCertificateRotation && !inventorySignature.CertificateTrusted)
+        {
+            throw Invalid(
+                "Portable payload inventory signature does not have a trusted code-signing certificate chain.");
+        }
         if (!allowSubjectMatchedCertificateRotation && !string.Equals(
                 inventorySignature.Thumbprint,
                 payloadSigner.Thumbprint,

@@ -435,7 +435,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             string? inventorySignerThumbprint = null,
             string? sbomSignerThumbprint = null,
             Func<byte[], byte[], PowerForgePayloadInventorySignature>? verifyInventory = null,
-            Func<string, string>? signerThumbprintSelector = null) =>
+            Func<string, string>? signerThumbprintSelector = null,
+            bool inventoryCertificateTrusted = true) =>
             new(
                 path => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
                     true,
@@ -448,7 +449,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     "CN=Publisher",
                     signature.Length > 0 && signature[0] == 2
                         ? sbomSignerThumbprint ?? signerThumbprint
-                        : inventorySignerThumbprint ?? signerThumbprint)));
+                        : inventorySignerThumbprint ?? signerThumbprint,
+                    inventoryCertificateTrusted)));
 
         public void Dispose()
         {

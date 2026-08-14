@@ -53,6 +53,37 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         }
     }
 
+    [Fact]
+    public void SignPortableInventory_AzureArtifactSigningRejectsUntrustedCertificateChain()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows()) return;
+        string root = CreateTempRoot();
+        try
+        {
+            byte[] content = [1, 2, 3];
+            using X509Certificate2 certificate = CreateCmsCertificate("CN=Evotec Artifact Signing");
+            string dlib = Path.Combine(root, "Azure.CodeSigning.Dlib.dll");
+            File.WriteAllText(dlib, "dlib");
+            var processRunner = new StubProcessRunner(request =>
+            {
+                int outputIndex = request.Arguments.ToList().IndexOf("/p7");
+                string signaturePath = Path.Combine(request.Arguments[outputIndex + 1], "inventory.p7");
+                File.WriteAllBytes(signaturePath, CreateDetachedCms(content, certificate));
+                return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            });
+            var runner = new DotNetPublishPipelineRunner(new NullLogger(), processRunner);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                runner.SignPortableInventory(content, AzureSign(dlib)));
+
+            Assert.Contains("trusted code-signing certificate chain", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData("Endpoint")]
     [InlineData("AccountName")]
@@ -255,12 +286,20 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                 File.WriteAllBytes(signaturePath, CreateDetachedCms(content, certificate));
                 return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
             });
-            var runner = new DotNetPublishPipelineRunner(new NullLogger(), processRunner);
+            var runner = new DotNetPublishPipelineRunner(
+                new NullLogger(),
+                processRunner,
+                verifyPortableInventory: (payload, signature) =>
+                {
+                    PowerForgePayloadInventorySignature parsed = PowerForgePortablePayloadInventoryCms.Verify(payload, signature);
+                    return new PowerForgePayloadInventorySignature(parsed.Subject, parsed.Thumbprint, certificateTrusted: true);
+                });
 
             byte[] signature = runner.SignPortableInventory(content, AzureSign(dlib));
 
             PowerForgePayloadInventorySignature verified = PowerForgePortablePayloadInventoryCms.Verify(content, signature);
             Assert.Equal("CN=Evotec Artifact Signing", verified.Subject);
+            Assert.False(verified.CertificateTrusted);
             Assert.NotNull(metadataRoot);
             Assert.False(Directory.Exists(metadataRoot));
         }
@@ -298,7 +337,14 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                 File.WriteAllBytes(signaturePath, signature);
                 return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
             });
-            var runner = new DotNetPublishPipelineRunner(new NullLogger(), processRunner);
+            var runner = new DotNetPublishPipelineRunner(
+                new NullLogger(),
+                processRunner,
+                verifyPortableInventory: (payload, signature) =>
+                {
+                    PowerForgePayloadInventorySignature parsed = PowerForgePortablePayloadInventoryCms.Verify(payload, signature);
+                    return new PowerForgePayloadInventorySignature(parsed.Subject, parsed.Thumbprint, certificateTrusted: true);
+                });
 
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
                 runner.SignPortableInventory(content, AzureSign(dlib)));

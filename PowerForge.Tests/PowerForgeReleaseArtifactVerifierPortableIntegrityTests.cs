@@ -437,6 +437,31 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsUntrustedInventoryCertificateDuringAzureRotation()
+    {
+        using var fixture = new PortableFixture();
+        string dependency = fixture.AddSignedDependency();
+        fixture.EnableDllSigning(dependency);
+        fixture.ConfigureSubjectNameSigning(azureArtifactSigning: true, includeDlls: true);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = "CN=Publisher";
+        request.SignaturePaths = new[] { fixture.ExecutablePath, dependency };
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() => fixture
+            .CreateVerifier(
+                Thumbprint,
+                VendorThumbprint,
+                path => path.EndsWith("Dependency.dll", StringComparison.OrdinalIgnoreCase)
+                    ? VendorThumbprint
+                    : Thumbprint,
+                inventoryCertificateTrusted: false)
+            .Verify(request));
+
+        Assert.Contains("trusted code-signing certificate chain", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliRebasesRelocatedManifestArtifactPathsFromChecksums()
     {
         using var fixture = new PortableFixture();
