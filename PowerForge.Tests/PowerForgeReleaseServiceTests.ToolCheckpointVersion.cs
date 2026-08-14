@@ -52,7 +52,11 @@ public sealed partial class PowerForgeReleaseServiceTests
                         {
                             Name = "PowerForge",
                             ProjectPath = missingProjectPath,
-                            Version = "1.2.3"
+                            Version = "1.2.3",
+                            Publish = new DotNetPublishPublishOptions
+                            {
+                                Zip = true
+                            }
                         }
                     ]
                 },
