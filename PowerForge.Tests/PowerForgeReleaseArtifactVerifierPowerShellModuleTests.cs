@@ -7,6 +7,40 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseArtifactVerifierTests
 {
     [Fact]
+    public void Verify_PowerShellModuleRejectsOversizedPayloadBeforeHashing()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string archivePath = Path.Combine(root, "Sample.zip");
+            using (ZipArchive created = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry entry = created.CreateEntry("Sample/data.bin");
+                using Stream stream = entry.Open();
+                stream.Write(new byte[9], 0, 9);
+            }
+            using ZipArchive archive = ZipFile.OpenRead(archivePath);
+            Dictionary<string, ZipArchiveEntry> entries = archive.Entries.ToDictionary(
+                entry => entry.FullName,
+                StringComparer.Ordinal);
+
+            InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+                PowerForgeReleaseArtifactVerifier.ValidateModuleArchiveBounds(
+                    entries,
+                    maximumEntryBytes: 8,
+                    maximumTotalBytes: 16));
+
+            Assert.Contains("exceeds", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("data.bin", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Verify_PowerShellModuleReturnsEmbeddedProvenanceAndExternalSbomEvidence()
     {
         using var fixture = new ModuleFixture();

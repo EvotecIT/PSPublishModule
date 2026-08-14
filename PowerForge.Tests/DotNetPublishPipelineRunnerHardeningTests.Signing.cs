@@ -264,6 +264,29 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void ResolvePrimaryExecutable_UsesIdentityMatchingDllWhenWindowsAppHostIsDisabled()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string entryPoint = Path.Combine(root, "Sample.CLI.dll");
+            File.WriteAllText(entryPoint, "managed entrypoint");
+            File.WriteAllText(Path.Combine(root, "Updater.exe"), "helper");
+
+            string? selected = DotNetPublishPipelineRunner.ResolvePrimaryExecutable(
+                root,
+                "win-x64",
+                new[] { "Sample.CLI" });
+
+            Assert.Equal(entryPoint, selected);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void TrySignOutput_OverwriteOptInSkipsExistingSignatureCheck()
     {
         if (!DotNetPublishPipelineRunner.IsWindows())

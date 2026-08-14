@@ -107,12 +107,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             executableIdentity = _readPortableIdentity(artifactPath);
         }
 
-        if (!DotNetPublishPipelineRunner.PortableExecutableIdentityMatches(
+        if (expected.ExecutableIdentities.Length > 0 &&
+            !DotNetPublishPipelineRunner.PortableExecutableIdentityMatches(
                 executableIdentity,
                 expected.ExecutableIdentities))
         {
             throw Invalid(
                 "Signed executable product or assembly identity does not match the configured publish project identity.");
+        }
+        if (!artifactIsArchive && expected.ExecutableIdentities.Length == 0)
+        {
+            throw Invalid(
+                "Direct portable executable verification requires Publish.ExecutableIdentity or the configured project file.");
         }
         VerifiedSignature signer = RequireOneSigner(signatures);
         ValidatePortableSourceBinding(signedProductVersion, expectedRevision);
@@ -267,7 +273,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             ? projectPath!
             : Path.Combine(projectRoot, projectPath!));
         if (!File.Exists(resolvedProjectPath) && string.IsNullOrWhiteSpace(configuredIdentity))
-            throw Invalid($"Configured portable publish project was not found: {resolvedProjectPath}");
+            return Array.Empty<string>();
 
         return DotNetPublishPipelineRunner.ResolvePortableExecutableIdentities(
             resolvedProjectPath,

@@ -59,7 +59,15 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         string downloadRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         try
         {
-            foreach (string source in Directory.EnumerateFiles(fixture.Root, "*", SearchOption.AllDirectories))
+            string[] releaseAssets =
+            {
+                fixture.ArchivePath,
+                fixture.ChecksumsPath,
+                fixture.ManifestPath,
+                fixture.ConfigurationPath,
+                fixture.SbomPath
+            };
+            foreach (string source in releaseAssets)
             {
                 string destination = Path.Combine(downloadRoot, Path.GetRelativePath(fixture.Root, source));
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
@@ -78,6 +86,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(request);
 
             Assert.Equal("valid", evidence.SignatureStatus);
+            Assert.False(File.Exists(Path.Combine(downloadRoot, Path.GetFileName(fixture.ProjectPath))));
         }
         finally
         {

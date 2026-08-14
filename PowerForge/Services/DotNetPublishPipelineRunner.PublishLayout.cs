@@ -268,14 +268,38 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string> expectedIdentities)
     {
         bool isWindowsRid = rid.StartsWith("win-", StringComparison.OrdinalIgnoreCase);
-        string pattern = isWindowsRid ? "*.exe" : "*";
         string[] expected = (expectedIdentities ?? Array.Empty<string>())
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(NormalizePortableExecutableIdentity)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        string[] candidates = Directory.EnumerateFiles(root, pattern, SearchOption.TopDirectoryOnly)
-            .Where(path => isWindowsRid || string.IsNullOrWhiteSpace(Path.GetExtension(path)))
+        string[] candidates = FindIdentityMatchingPrimaryCandidates(
+            root,
+            isWindowsRid ? "*.exe" : "*",
+            requireNoExtension: !isWindowsRid,
+            expected: expected);
+        if (candidates.Length == 0 && isWindowsRid)
+            candidates = FindIdentityMatchingPrimaryCandidates(
+                root,
+                "*.dll",
+                requireNoExtension: false,
+                expected: expected);
+        if (candidates.Length > 1)
+        {
+            throw new InvalidOperationException(
+                $"Publish output must contain exactly one primary executable matching the configured project identity; found {candidates.Length}.");
+        }
+        return candidates.SingleOrDefault();
+    }
+
+    private static string[] FindIdentityMatchingPrimaryCandidates(
+        string root,
+        string pattern,
+        bool requireNoExtension,
+        IReadOnlyCollection<string> expected)
+    {
+        return Directory.EnumerateFiles(root, pattern, SearchOption.TopDirectoryOnly)
+            .Where(path => !requireNoExtension || string.IsNullOrWhiteSpace(Path.GetExtension(path)))
             .Where(path =>
             {
                 FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(path);
@@ -291,12 +315,6 @@ public sealed partial class DotNetPublishPipelineRunner
             })
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        if (candidates.Length > 1)
-        {
-            throw new InvalidOperationException(
-                $"Publish output must contain exactly one primary executable matching the configured project identity; found {candidates.Length}.");
-        }
-        return candidates.SingleOrDefault();
     }
 
     private DotNetPublishServicePackageResult TryCreateServicePackage(

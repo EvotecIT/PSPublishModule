@@ -10,6 +10,25 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     private const long MaxModuleSignedEntryBytes = 512L * 1024L * 1024L;
     private const long MaxModuleSignedEntriesBytes = 2L * 1024L * 1024L * 1024L;
 
+    internal static void ValidateModuleArchiveBounds(
+        IReadOnlyDictionary<string, ZipArchiveEntry> entries,
+        long maximumEntryBytes = MaxModuleSignedEntryBytes,
+        long maximumTotalBytes = MaxModuleSignedEntriesBytes)
+    {
+        long totalBytes = 0;
+        foreach (KeyValuePair<string, ZipArchiveEntry> entry in entries)
+        {
+            if (entry.Value.Length > maximumEntryBytes)
+            {
+                throw Invalid(
+                    $"Module archive entry '{entry.Key}' exceeds the {maximumEntryBytes} byte limit.");
+            }
+            totalBytes = checked(totalBytes + entry.Value.Length);
+            if (totalBytes > maximumTotalBytes)
+                throw Invalid($"Module archive entries exceed the {maximumTotalBytes} byte aggregate limit.");
+        }
+    }
+
     private PortableArchiveVerification VerifyPortableArchiveInventory(
         string archivePath,
         string? expectedThumbprint,

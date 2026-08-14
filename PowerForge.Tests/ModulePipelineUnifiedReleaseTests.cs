@@ -172,13 +172,14 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.Contains("HtmlTinkerX.2.0.1-beta1.snupkg", manifestJson, StringComparison.Ordinal);
             string checksumsPath = Path.Combine(resolvedStageRoot, "metadata", "SHA256SUMS.txt");
             string[] checksumLines = File.ReadAllLines(checksumsPath);
-            Assert.Contains(checksumLines, line => line.Contains("nuget/HtmlTinkerX.2.0.1-beta1.nupkg", StringComparison.Ordinal));
-            Assert.Contains(checksumLines, line => line.Contains("nuget/HtmlTinkerX.2.0.1-beta1.snupkg", StringComparison.Ordinal));
+            Assert.Contains(checksumLines, line => line.EndsWith("*HtmlTinkerX.2.0.1-beta1.nupkg", StringComparison.Ordinal));
+            Assert.Contains(checksumLines, line => line.EndsWith("*HtmlTinkerX.2.0.1-beta1.snupkg", StringComparison.Ordinal));
+            Assert.All(checksumLines, line => Assert.DoesNotContain("/", line, StringComparison.Ordinal));
             Assert.All(checksumLines, line => Assert.Matches("^[0-9a-f]{64} \\*.+$", line));
             Assert.All(releaseManifest.RootElement.GetProperty("assets").EnumerateArray(), asset =>
                 Assert.True(DotNetPublishReleaseArtifactVerifier.ChecksumContains(
                     checksumsPath,
-                    asset.GetProperty("relativePath").GetString()!,
+                    asset.GetProperty("fileName").GetString()!,
                     asset.GetProperty("sha256").GetString()!)));
             Assert.Single(result.PublishResults);
             Assert.Equal(gitHubRequest.AssetFilePaths.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase), result.PublishResults[0].AssetPaths.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase));

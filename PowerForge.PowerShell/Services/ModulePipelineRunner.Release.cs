@@ -614,6 +614,15 @@ public sealed partial class ModulePipelineRunner
             })
             .OrderBy(static asset => asset.relativePath, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var duplicateAssetName = assetEntries
+            .GroupBy(static asset => asset.fileName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateAssetName is not null)
+        {
+            throw new InvalidOperationException(
+                $"Release assets contain multiple files named '{duplicateAssetName.Key}'. " +
+                "GitHub release assets require unique file names.");
+        }
 
         var manifestPath = Path.Combine(metadataRoot, "release-manifest.json");
         var moduleVersion = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
@@ -634,7 +643,7 @@ public sealed partial class ModulePipelineRunner
         var checksumsPath = Path.Combine(metadataRoot, "SHA256SUMS.txt");
         File.WriteAllLines(
             checksumsPath,
-            assetEntries.Select(static asset => $"{asset.sha256} *{asset.relativePath}"));
+            assetEntries.Select(static asset => $"{asset.sha256} *{asset.fileName}"));
 
         return new[] { manifestPath, checksumsPath };
     }

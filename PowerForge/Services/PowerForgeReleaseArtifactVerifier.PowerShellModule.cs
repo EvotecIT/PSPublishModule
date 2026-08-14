@@ -46,6 +46,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
         using ZipArchive archive = ZipFile.OpenRead(artifactPath);
         Dictionary<string, ZipArchiveEntry> entries = ValidateArchiveEntries(archive);
+        ValidateModuleArchiveBounds(entries);
         string[] manifestEntries = entries.Keys.Where(entry =>
                 string.Equals(Path.GetFileName(entry), moduleName + ".psd1", StringComparison.Ordinal) &&
                 string.Equals(GetArchiveParentDirectoryName(entry), moduleName, StringComparison.Ordinal))
