@@ -123,7 +123,8 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                 if (options.CheckPromptInjection)
                     ScanPromptInjection(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
                 ScanRemoteExecution(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
-                packages.AddRange(ExtractPackageReferences(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings));
+                packages.AddRange(ExtractPackageReferences(
+                    segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings));
                 ExtractUrls(segment.Text, urls);
             }
         }
@@ -144,11 +145,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
             AddFinding(findings, "error", "PFAGENT.PACKAGE.LIMIT_EXCEEDED", null, null,
                 $"Artifacts contain {uniquePackages.Count} unique package references; the configured maximum is {options.MaxPackageReferences}. No registry requests were sent.");
         }
-        else if (options.VerifyPackages && selectorsValid && !findings.Any(static finding =>
-                     finding.Code is "PFAGENT.PACKAGE.UNTRUSTED_SOURCE" or
-                          "PFAGENT.PACKAGE.UNVERIFIABLE_ENVIRONMENT" or
-                          "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND" or
-                          "PFAGENT.FINDINGS.LIMIT_EXCEEDED"))
+        else if (options.VerifyPackages && selectorsValid)
         {
             var catalog = LoadOwnerCatalog(options, findings);
             var verificationCache = new Dictionary<string, PackageVerificationOutcome>(StringComparer.OrdinalIgnoreCase);

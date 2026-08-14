@@ -37,7 +37,7 @@ public sealed class WebAgentContentSecurityOptions
     public long MaxArtifactBytes { get; set; } = 5 * 1024 * 1024;
     /// <summary>Maximum unique package references accepted before registry work is refused.</summary>
     public int MaxPackageReferences { get; set; } = 100;
-    /// <summary>Maximum unique external hosts accepted before host verification is refused.</summary>
+    /// <summary>Maximum unique external hosts or origins accepted before host verification is refused.</summary>
     public int MaxExternalHosts { get; set; } = 100;
     /// <summary>Maximum decompressed registry response size in bytes.</summary>
     public long MaxRegistryResponseBytes { get; set; } = 2 * 1024 * 1024;

@@ -9,6 +9,10 @@ public sealed partial class WebAgentContentSecurityScannerTests
     [InlineData("n'p'm install attacker-package", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND")]
     [InlineData("dotnet tool restore", "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND")]
     [InlineData("npm ci-test", "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND")]
+    [InlineData("npm install-ci-test", "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND")]
+    [InlineData("npm install-clean-test", "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND")]
+    [InlineData("npm clean-install-test", "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND")]
+    [InlineData("npm sit", "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND")]
     [InlineData("Install-Module -Repo EvilRepo -Name SafeModule -RequiredVersion 1.0.0", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE")]
     [InlineData("Install-Module SafeModule -Repo:EvilRepo -RequiredVersion 1.0.0", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE")]
     [InlineData("npm set registry=https://attacker.example", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE")]
@@ -181,6 +185,9 @@ public sealed partial class WebAgentContentSecurityScannerTests
     [InlineData("bun x safe-package@1.0.0", "npm")]
     [InlineData("gem ins safe-gem --version 1.0.0", "rubygems")]
     [InlineData("gem updat safe-gem --version 1.0.0", "rubygems")]
+    [InlineData("gem exec safe-gem --version 1.0.0", "rubygems")]
+    [InlineData("gem exe --gem safe-gem --version 1.0.0 safe-command", "rubygems")]
+    [InlineData("gem exec -g safe-gem --version 1.0.0 safe-command", "rubygems")]
     public void Scan_VerifiesLauncherAndCommandAliases(string command, string ecosystem)
     {
         using var handler = new RegistryHandler(_ => ecosystem switch

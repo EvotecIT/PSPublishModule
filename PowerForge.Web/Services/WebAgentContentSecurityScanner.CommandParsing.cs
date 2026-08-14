@@ -82,6 +82,49 @@ public sealed partial class WebAgentContentSecurityScanner
         AddMultipleOperands("rubygems", "bundle add", tokens, verbIndex + 1, path, line, references, findings);
     }
 
+    private static void ParseRubyGems(
+        string[] tokens,
+        string path,
+        int line,
+        ICollection<WebAgentPackageReference> references,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        if (tokens.Length < 2 || !ValidatePackageSourceOptions("rubygems", tokens, path, line, findings))
+            return;
+        var verbIndex = FindKnownVerbIndex(tokens, 1,
+            new[] { "install", "i", "in", "ins", "inst", "insta", "instal", "update", "upd", "upda", "updat", "exec", "ex", "exe" },
+            "gem", path, line, findings);
+        if (verbIndex < 0)
+            return;
+        if (tokens[verbIndex].Equals("exec", StringComparison.OrdinalIgnoreCase) ||
+            tokens[verbIndex].Equals("ex", StringComparison.OrdinalIgnoreCase) ||
+            tokens[verbIndex].Equals("exe", StringComparison.OrdinalIgnoreCase))
+        {
+            var selectedGems = FindOptionValues(tokens, verbIndex + 1, "--gem", "-g");
+            if (selectedGems.Count > 1 || selectedGems.Any(string.IsNullOrWhiteSpace))
+            {
+                AddUnverifiableOperand("gem exec", path, line, findings, "ambiguous --gem package selection");
+                return;
+            }
+            if (selectedGems.Count == 1)
+            {
+                AddToken("rubygems", "gem exec", selectedGems[0], FindVersionOption(tokens, 0), path, line, references, findings);
+                return;
+            }
+            AddRunnerOperand("rubygems", "gem exec", tokens, verbIndex + 1, path, line, references, findings);
+            return;
+        }
+        if (tokens.Any(static token =>
+                token.Equals("-g", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("--file", StringComparison.OrdinalIgnoreCase) ||
+                token.StartsWith("--file=", StringComparison.OrdinalIgnoreCase)))
+        {
+            AddUnverifiableOperand("gem", path, line, findings, "RubyGems dependency file");
+            return;
+        }
+        AddMultipleOperands("rubygems", "gem " + tokens[verbIndex], tokens, verbIndex + 1, path, line, references, findings);
+    }
+
     private static void AddNodeInitializer(
         string[] tokens,
         int start,
@@ -137,23 +180,38 @@ public sealed partial class WebAgentContentSecurityScanner
         int line,
         ICollection<WebAgentContentSecurityFinding> findings)
     {
+        var verb = FindLeadingVerb(tokens, executable);
         var changesConfiguration = executable is "register-psrepository" or "set-psrepository" or
                 "register-psresourcerepository" or "set-psresourcerepository" ||
             executable == "dotnet" && tokens.Length > 3 && tokens[1].Equals("nuget", StringComparison.OrdinalIgnoreCase) &&
                 tokens[3].Equals("source", StringComparison.OrdinalIgnoreCase) ||
-            executable == "gem" && tokens.Length > 1 && tokens[1].Equals("sources", StringComparison.OrdinalIgnoreCase) ||
-            executable is "composer" or "bundle" && tokens.Length > 1 && tokens[1].Equals("config", StringComparison.OrdinalIgnoreCase) ||
-            executable is "pip" or "pip3" && tokens.Length > 1 && tokens[1].Equals("config", StringComparison.OrdinalIgnoreCase) ||
+            executable == "gem" && verb == "sources" ||
+            executable == "composer" && verb is "config" or "repository" or "repo" ||
+            executable == "bundle" && verb == "config" ||
+            executable is "npm" or "pnpm" or "yarn" or "bun" && NormalizeNodeVerb(verb ?? string.Empty) is "config" or "set" ||
+            executable is "pip" or "pip3" && verb == "config" ||
             executable is "python" or "python3" or "py" && tokens.Length > 3 &&
                 tokens[1].Equals("-m", StringComparison.OrdinalIgnoreCase) && tokens[2].Equals("pip", StringComparison.OrdinalIgnoreCase) &&
                 tokens[3].Equals("config", StringComparison.OrdinalIgnoreCase) ||
-            executable == "cargo" && tokens.Length > 1 && tokens[1].Equals("config", StringComparison.OrdinalIgnoreCase);
+            executable == "cargo" && verb == "config";
         if (!changesConfiguration)
             return false;
 
         AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
             $"Package-manager configuration command '{string.Join(' ', tokens)}' can change the source used by later installation commands.");
         return true;
+    }
+
+    private static string? FindLeadingVerb(string[] tokens, string optionContext)
+    {
+        for (var index = 1; index < tokens.Length; index++)
+        {
+            if (!tokens[index].StartsWith("-", StringComparison.Ordinal))
+                return tokens[index].ToLowerInvariant();
+            if (!TrySkipOption(tokens, ref index, optionContext))
+                return null;
+        }
+        return null;
     }
 
     private static bool TrySkipOption(string[] tokens, ref int index, string? optionContext = null)
@@ -193,7 +251,8 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         "exec", "x", "dlx", "install", "i", "in", "ins", "inst", "insta", "instal",
         "isnt", "isnta", "isntal", "isntall", "add", "ci", "clean-install", "ic", "install-clean", "isntall-clean",
-        "install-test", "it", "ci-test", "cit", "update", "up", "upgrade", "udpate",
+        "install-test", "it", "ci-test", "cit", "install-ci-test", "install-clean-test", "clean-install-test", "sit",
+        "update", "up", "upgrade", "udpate",
         "audit", "link", "ln", "dedupe", "ddp", "rebuild",
         "config", "c", "conf", "set", "init", "create", "innit"
     };
@@ -214,7 +273,7 @@ public sealed partial class WebAgentContentSecurityScanner
                 "isnt" or "isnta" or "isntal" or "isntall" => "install",
             "c" or "conf" => "config",
             "clean-install" or "ic" or "install-clean" or "isntall-clean" => "ci",
-            "ci-test" or "cit" => "ci",
+            "ci-test" or "cit" or "install-ci-test" or "install-clean-test" or "clean-install-test" or "sit" => "ci",
             "install-test" or "it" => "install",
             "up" or "upgrade" or "udpate" => "update",
             "ln" => "link",

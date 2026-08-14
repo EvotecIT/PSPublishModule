@@ -11,15 +11,24 @@ public sealed partial class WebAgentContentSecurityScanner
         List<WebAgentContentSecurityFinding> findings,
         CancellationToken networkBudget)
     {
-        var hosts = urls
+        var endpoints = urls
             .Where(static uri => !string.IsNullOrWhiteSpace(uri.IdnHost))
             .Where(uri => !IsTrustedDomain(uri.IdnHost.TrimEnd('.'), options.TrustedDomains))
+            .Select(static uri => new UriBuilder(uri.Scheme, uri.IdnHost, uri.IsDefaultPort ? -1 : uri.Port).Uri)
+            .Distinct(UriComparer.Instance)
+            .ToArray();
+        if (endpoints.Length > options.MaxExternalHosts)
+        {
+            AddFinding(findings, "error", "PFAGENT.HOST.LIMIT_EXCEEDED", null, null,
+                $"Artifacts contain {endpoints.Length} unique external origins; the configured maximum is {options.MaxExternalHosts}. No host requests were sent.");
+            return 0;
+        }
+
+        var hosts = endpoints
             .GroupBy(static uri => uri.IdnHost.TrimEnd('.'), StringComparer.OrdinalIgnoreCase)
             .Select(static group => new HostTargets(
                 group.Key,
-                group.Select(static uri => new UriBuilder(uri.Scheme, uri.IdnHost, uri.IsDefaultPort ? -1 : uri.Port).Uri)
-                    .Distinct(UriComparer.Instance)
-                    .ToArray()))
+                group.ToArray()))
             .OrderBy(static target => target.Host, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 

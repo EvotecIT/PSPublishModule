@@ -192,6 +192,36 @@ public sealed partial class WebAgentContentSecurityScannerTests
     }
 
     [Fact]
+    public void Scan_RefusesEndpointWorkWhenOneHostExceedsTheOriginLimit()
+    {
+        using var handler = new RegistryHandler(_ => throw new InvalidOperationException("HTTP must not be called."));
+        using var client = new HttpClient(handler);
+        using var scanner = new WebAgentContentSecurityScanner(client);
+        var root = CreateArtifact("llms.txt", "https://example.test:10001/ https://example.test:10002/");
+
+        try
+        {
+            var result = scanner.Scan(new WebAgentContentSecurityOptions
+            {
+                SiteRoot = root,
+                Files = ["llms.txt"],
+                VerifyPackages = false,
+                VerifyExternalHosts = true,
+                MaxExternalHosts = 1
+            });
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Findings, issue => issue.Code == "PFAGENT.HOST.LIMIT_EXCEEDED");
+            Assert.Equal(0, result.ExternalHostCount);
+            Assert.Equal(0, handler.RequestCount);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Scan_ReportsWholeNetworkBudgetBeforeSkippingConfiguredHostChecks()
     {
         using var handler = new DelayedRegistryHandler(

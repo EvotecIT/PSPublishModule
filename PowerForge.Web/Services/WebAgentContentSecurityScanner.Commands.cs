@@ -50,32 +50,34 @@ public sealed partial class WebAgentContentSecurityScanner
             }
             if (RejectPersistentPackageConfiguration(executable, tokens, path, line, findings))
                 continue;
+            var commandReferences = new List<WebAgentPackageReference>();
+            var findingCountBefore = findings.Count;
             switch (executable)
             {
                 case "dotnet":
-                    ParseDotNet(tokens, path, line, references, findings);
+                    ParseDotNet(tokens, path, line, commandReferences, findings);
                     break;
                 case "dnx":
                     if (ValidatePackageSourceOptions("nuget", tokens, path, line, findings))
-                        AddRunnerOperand("nuget", "dnx", tokens, 1, path, line, references, findings);
+                        AddRunnerOperand("nuget", "dnx", tokens, 1, path, line, commandReferences, findings);
                     break;
                 case "install-module":
                 case "install-psresource":
                 case "update-module":
                 case "update-psresource":
-                    ParsePowerShell(tokens, path, line, references, findings);
+                    ParsePowerShell(tokens, path, line, commandReferences, findings);
                     break;
                 case "npm":
                 case "pnpm":
                 case "yarn":
                 case "bun":
-                    ParseNode(tokens, path, line, references, findings);
+                    ParseNode(tokens, path, line, commandReferences, findings);
                     break;
                 case "npx":
                 case "pnpx":
                 case "bunx":
                     if (ValidatePackageSourceOptions("npm", tokens, path, line, findings))
-                        AddRunnerOperand("npm", tokens[0], tokens, 1, path, line, references, findings);
+                        AddRunnerOperand("npm", tokens[0], tokens, 1, path, line, commandReferences, findings);
                     break;
                 case "python":
                 case "python3":
@@ -84,27 +86,27 @@ public sealed partial class WebAgentContentSecurityScanner
                 case "pip3":
                 case "uv":
                 case "pipx":
-                    ParsePython(tokens, path, line, references, findings);
+                    ParsePython(tokens, path, line, commandReferences, findings);
                     break;
                 case "uvx":
                     if (ValidatePackageSourceOptions("pypi", tokens, path, line, findings))
-                        AddRunnerOperand("pypi", "uvx", tokens, 1, path, line, references, findings);
+                        AddRunnerOperand("pypi", "uvx", tokens, 1, path, line, commandReferences, findings);
                     break;
                 case "cargo":
-                    ParsePositionalInstall("crates", "cargo", tokens, new[] { "add", "install" }, path, line, references, findings);
+                    ParsePositionalInstall("crates", "cargo", tokens, new[] { "add", "install" }, path, line, commandReferences, findings);
                     break;
                 case "gem":
-                    ParsePositionalInstall("rubygems", "gem", tokens,
-                        new[] { "install", "i", "in", "ins", "inst", "insta", "instal", "update", "upd", "upda", "updat" },
-                        path, line, references, findings);
+                    ParseRubyGems(tokens, path, line, commandReferences, findings);
                     break;
                 case "composer":
-                    ParseComposer(tokens, path, line, references, findings);
+                    ParseComposer(tokens, path, line, commandReferences, findings);
                     break;
                 case "bundle":
-                    ParseBundle(tokens, path, line, references, findings);
+                    ParseBundle(tokens, path, line, commandReferences, findings);
                     break;
             }
+            if (findings.Count == findingCountBefore && findings.Count < MaximumFindingCount)
+                references.AddRange(commandReferences);
         }
         return references;
     }
