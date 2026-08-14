@@ -13,7 +13,9 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         if (!ValidatePackageSourceOptions("packagist", tokens, path, line, findings))
             return;
-        var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "require", "install", "i", "create-project", "config" }, "composer", path, line, findings);
+        var verbIndex = FindKnownVerbIndex(tokens, 1,
+            new[] { "require", "install", "i", "create-project", "config", "update", "u", "upgrade", "reinstall", "remove", "rm", "uninstall" },
+            "composer", path, line, findings);
         if (verbIndex < 0)
             return;
         if (tokens[verbIndex].Equals("config", StringComparison.OrdinalIgnoreCase))
@@ -25,6 +27,17 @@ public sealed partial class WebAgentContentSecurityScanner
         if (tokens[verbIndex].Equals("create-project", StringComparison.OrdinalIgnoreCase))
         {
             AddUnverifiableOperand("composer create-project", path, line, findings, "project dependency set");
+            return;
+        }
+        if (tokens[verbIndex].Equals("update", StringComparison.OrdinalIgnoreCase) ||
+            tokens[verbIndex].Equals("u", StringComparison.OrdinalIgnoreCase) ||
+            tokens[verbIndex].Equals("upgrade", StringComparison.OrdinalIgnoreCase) ||
+            tokens[verbIndex].Equals("reinstall", StringComparison.OrdinalIgnoreCase) ||
+            tokens[verbIndex].Equals("remove", StringComparison.OrdinalIgnoreCase) ||
+            tokens[verbIndex].Equals("rm", StringComparison.OrdinalIgnoreCase) ||
+            tokens[verbIndex].Equals("uninstall", StringComparison.OrdinalIgnoreCase))
+        {
+            AddUnverifiableOperand("composer " + tokens[verbIndex], path, line, findings, "project dependency set");
             return;
         }
         if (tokens[verbIndex].Equals("install", StringComparison.OrdinalIgnoreCase) ||
@@ -45,7 +58,7 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         if (!ValidatePackageSourceOptions("rubygems", tokens, path, line, findings))
             return;
-        var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "add", "install", "config" }, "bundle", path, line, findings);
+        var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "add", "install", "config", "update" }, "bundle", path, line, findings);
         if (verbIndex < 0)
             return;
         if (tokens[verbIndex].Equals("config", StringComparison.OrdinalIgnoreCase))
@@ -57,6 +70,11 @@ public sealed partial class WebAgentContentSecurityScanner
         if (tokens[verbIndex].Equals("install", StringComparison.OrdinalIgnoreCase))
         {
             AddUnverifiableOperand("bundle install", path, line, findings, "lockfile dependency set");
+            return;
+        }
+        if (tokens[verbIndex].Equals("update", StringComparison.OrdinalIgnoreCase))
+        {
+            AddUnverifiableOperand("bundle update", path, line, findings, "project dependency set");
             return;
         }
         AddMultipleOperands("rubygems", "bundle add", tokens, verbIndex + 1, path, line, references, findings);
@@ -174,6 +192,7 @@ public sealed partial class WebAgentContentSecurityScanner
         "exec", "x", "dlx", "install", "i", "in", "ins", "inst", "insta", "instal",
         "isnt", "isnta", "isntal", "isntall", "add", "ci", "clean-install", "ic", "install-clean", "isntall-clean",
         "install-test", "it", "ci-test", "cit", "update", "up", "upgrade", "udpate",
+        "audit", "link", "ln", "dedupe", "ddp", "rebuild",
         "config", "c", "conf", "set", "init", "create", "innit"
     };
 
@@ -196,6 +215,8 @@ public sealed partial class WebAgentContentSecurityScanner
             "ci-test" or "cit" => "ci",
             "install-test" or "it" => "install",
             "up" or "upgrade" or "udpate" => "update",
+            "ln" => "link",
+            "ddp" => "dedupe",
             "create" or "innit" => "init",
             _ => verb
         };

@@ -17,6 +17,15 @@ public sealed partial class WebAgentContentSecurityScanner
     private static readonly Regex RemoteExecutionRegex = new(
         @"\b(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b[^\r\n|;]*(?:\||;)\s*(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;]*[\\/])?(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php)(?:\.exe)?\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex RemoteExecutionPowerShellExpressionRegex = new(
+        @"\b(?:iex|Invoke-Expression)\b\s*(?:(?:\$\s*)?\(+|[""']\s*\$\()\s*(?:(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b|[^\r\n]{0,200}\bDownloadString\s*\()",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex RemoteExecutionShellExpressionRegex = new(
+        @"\b(?:eval\b\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:sh|bash|zsh|pwsh|powershell|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php)\b[^\r\n]{0,80}?(?:-c|-Command)\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:sh|bash|zsh)\b\s*<\(\s*(?:curl(?:\.exe)?|wget)\b)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex RemoteExecutionScriptBlockRegex = new(
+        @"(?:&|Invoke-Command\b[^\r\n]{0,80})\s*\(\s*\[scriptblock\]::Create\s*\(\s*\(*\s*(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static void ScanInvisibleUnicode(
         string content,
@@ -78,10 +87,19 @@ public sealed partial class WebAgentContentSecurityScanner
         bool countLogicalLines = true)
     {
         var normalized = ShellContinuationRegex.Replace(content, static match => new string(' ', match.Length));
-        foreach (Match match in RemoteExecutionRegex.Matches(normalized))
+        foreach (var pattern in new[]
+                 {
+                     RemoteExecutionRegex,
+                     RemoteExecutionPowerShellExpressionRegex,
+                     RemoteExecutionShellExpressionRegex,
+                     RemoteExecutionScriptBlockRegex
+                 })
         {
-            AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path, GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
-                "Downloaded content is piped directly to an interpreter. Prefer a pinned, integrity-checked artifact and a separate execution step.");
+            foreach (Match match in pattern.Matches(normalized))
+            {
+                AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path, GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                    "Downloaded content is passed directly to an interpreter. Prefer a pinned, integrity-checked artifact and a separate execution step.");
+            }
         }
     }
 
