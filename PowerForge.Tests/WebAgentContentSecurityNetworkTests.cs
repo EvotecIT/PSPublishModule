@@ -252,7 +252,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
     [Fact]
     public void HostFingerprintProbe_DrainsChunkedBoundedResponse()
     {
-        var response = new HttpResponseMessage(HttpStatusCode.NotFound)
+        using var response = new HttpResponseMessage(HttpStatusCode.NotFound)
         {
             Content = new StreamContent(new ChunkedReadStream("prefix No such app suffix", 3))
         };
@@ -281,6 +281,23 @@ public sealed partial class WebAgentContentSecurityScannerTests
         method!.Invoke(null, new object[] { new Uri("https://example.test/"), response, 5, findings, CancellationToken.None });
 
         Assert.Contains(findings, issue => issue.Code == "PFAGENT.HOST.RESPONSE_READ_FAILED");
+    }
+
+    [Fact]
+    public void HostFingerprintProbe_ReportsResponseReadTimeout()
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StreamContent(new StalledReadStream())
+        };
+        var method = typeof(WebAgentContentSecurityScanner).GetMethod(
+            "InspectTakeoverResponse", BindingFlags.NonPublic | BindingFlags.Static);
+        var findings = new List<WebAgentContentSecurityFinding>();
+
+        Assert.NotNull(method);
+        method!.Invoke(null, new object[] { new Uri("https://example.test/"), response, 1, findings, CancellationToken.None });
+
+        Assert.Contains(findings, issue => issue.Code == "PFAGENT.HOST.RESPONSE_READ_TIMEOUT");
     }
 
     [Fact]

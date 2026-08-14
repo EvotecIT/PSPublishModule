@@ -225,10 +225,18 @@ public sealed partial class WebAgentContentSecurityScanner
                 "lockfile dependency set");
             return;
         }
+        if (verb == "update")
+        {
+            AddMultipleOperands("npm", $"{tokens[0]} {tokens[verbIndex]}", tokens, verbIndex + 1,
+                path, line, references, findings);
+            return;
+        }
         if ((tokens[0].Equals("npm", StringComparison.OrdinalIgnoreCase) ||
              tokens[0].Equals("pnpm", StringComparison.OrdinalIgnoreCase)) &&
             verb is "exec" or "x")
         {
+            if (RejectNestedPackageManagerPayload(tokens[0] + " " + tokens[verbIndex], tokens, verbIndex + 1, path, line, findings))
+                return;
             var packageOptions = FindOptionValues(tokens, verbIndex + 1, "--package", "-p");
             if (packageOptions.Count > 0)
             {
@@ -399,7 +407,30 @@ public sealed partial class WebAgentContentSecurityScanner
         int line,
         ICollection<WebAgentPackageReference> references,
         ICollection<WebAgentContentSecurityFinding> findings)
-        => AddSingleOperand(ecosystem, command, tokens, start, path, line, references, findings);
+    {
+        if (RejectNestedPackageManagerPayload(command, tokens, start, path, line, findings))
+            return;
+        AddSingleOperand(ecosystem, command, tokens, start, path, line, references, findings);
+    }
+
+    private static bool RejectNestedPackageManagerPayload(
+        string command,
+        string[] tokens,
+        int start,
+        string path,
+        int line,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        var delimiterIndex = Array.FindIndex(tokens, start, static token => token == "--");
+        if (delimiterIndex < 0 || delimiterIndex + 1 >= tokens.Length)
+            return false;
+        var payload = string.Join(' ', tokens[(delimiterIndex + 1)..]);
+        if (!CommandSegmentRegex.IsMatch(payload) && !ObfuscatedExecutableRegex.IsMatch(payload))
+            return false;
+
+        AddUnverifiableOperand(command, path, line, findings, "nested package-manager runner payload");
+        return true;
+    }
 
     private static void AddSingleOperand(
         string ecosystem,

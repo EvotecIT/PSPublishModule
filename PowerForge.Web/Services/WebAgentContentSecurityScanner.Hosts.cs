@@ -95,8 +95,8 @@ public sealed partial class WebAgentContentSecurityScanner
                 var client = pinnedClient ?? _httpClient;
                 using var response = client.GetAsync(endpoint, HttpCompletionOption.ResponseHeadersRead, cancellation.Token)
                     .GetAwaiter().GetResult();
-                responseCount++;
                 InspectTakeoverResponse(endpoint, response, timeoutSeconds, findings, networkBudget);
+                responseCount++;
             }
             catch (Exception ex) when (ex is SocketException or OperationCanceledException or HttpRequestException)
             {
@@ -156,6 +156,11 @@ public sealed partial class WebAgentContentSecurityScanner
         {
             AddFinding(findings, "error", "PFAGENT.HOST.RESPONSE_READ_FAILED", null, null,
                 $"External endpoint '{endpoint}' response could not be read safely: {ex.Message}");
+        }
+        catch (OperationCanceledException ex) when (!networkBudget.IsCancellationRequested)
+        {
+            AddFinding(findings, "error", "PFAGENT.HOST.RESPONSE_READ_TIMEOUT", null, null,
+                $"External endpoint '{endpoint}' response body exceeded the {timeoutSeconds}-second read timeout: {ex.Message}");
         }
     }
 

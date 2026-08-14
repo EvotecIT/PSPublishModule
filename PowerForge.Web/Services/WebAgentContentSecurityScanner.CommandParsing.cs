@@ -13,9 +13,15 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         if (!ValidatePackageSourceOptions("packagist", tokens, path, line, findings))
             return;
-        var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "require", "install", "i", "create-project" }, "composer", path, line, findings);
+        var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "require", "install", "i", "create-project", "config" }, "composer", path, line, findings);
         if (verbIndex < 0)
             return;
+        if (tokens[verbIndex].Equals("config", StringComparison.OrdinalIgnoreCase))
+        {
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                $"Package-manager configuration command '{string.Join(' ', tokens)}' can change the source used by later installation commands.");
+            return;
+        }
         if (tokens[verbIndex].Equals("create-project", StringComparison.OrdinalIgnoreCase))
         {
             AddUnverifiableOperand("composer create-project", path, line, findings, "project dependency set");
@@ -39,9 +45,15 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         if (!ValidatePackageSourceOptions("rubygems", tokens, path, line, findings))
             return;
-        var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "add", "install" }, "bundle", path, line, findings);
+        var verbIndex = FindKnownVerbIndex(tokens, 1, new[] { "add", "install", "config" }, "bundle", path, line, findings);
         if (verbIndex < 0)
             return;
+        if (tokens[verbIndex].Equals("config", StringComparison.OrdinalIgnoreCase))
+        {
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                $"Package-manager configuration command '{string.Join(' ', tokens)}' can change the source used by later installation commands.");
+            return;
+        }
         if (tokens[verbIndex].Equals("install", StringComparison.OrdinalIgnoreCase))
         {
             AddUnverifiableOperand("bundle install", path, line, findings, "lockfile dependency set");
@@ -161,7 +173,8 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         "exec", "x", "dlx", "install", "i", "in", "ins", "inst", "insta", "instal",
         "isnt", "isnta", "isntal", "isntall", "add", "ci", "clean-install", "ic", "install-clean", "isntall-clean",
-        "install-test", "it", "ci-test", "cit", "config", "c", "conf", "set", "init", "create", "innit"
+        "install-test", "it", "ci-test", "cit", "update", "up", "upgrade", "udpate",
+        "config", "c", "conf", "set", "init", "create", "innit"
     };
 
     private static string[] Tokenize(string command)
@@ -182,6 +195,7 @@ public sealed partial class WebAgentContentSecurityScanner
             "clean-install" or "ic" or "install-clean" or "isntall-clean" => "ci",
             "ci-test" or "cit" => "ci",
             "install-test" or "it" => "install",
+            "up" or "upgrade" or "udpate" => "update",
             "create" or "innit" => "init",
             _ => verb
         };

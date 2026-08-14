@@ -77,7 +77,8 @@ public sealed partial class WebAgentContentSecurityScanner
         int lineOffset = 0,
         bool countLogicalLines = true)
     {
-        foreach (Match match in RemoteExecutionRegex.Matches(content))
+        var normalized = ShellContinuationRegex.Replace(content, static match => new string(' ', match.Length));
+        foreach (Match match in RemoteExecutionRegex.Matches(normalized))
         {
             AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path, GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
                 "Downloaded content is piped directly to an interpreter. Prefer a pinned, integrity-checked artifact and a separate execution step.");
