@@ -16,7 +16,7 @@ public sealed partial class WebAgentContentSecurityScanner
         (new Regex(@"\b(?:reveal|print|exfiltrate|send)\s+(?:the\s+)?(?:system\s+prompt|secrets?|credentials?|tokens?)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant), "secret-exfiltration-directive")
     };
     private static readonly Regex RemoteExecutionRegex = new(
-        @"\b(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b[^\r\n|;&]*(?:\||;|&&)\s*(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php)(?:\.exe)?\b",
+        @"\b(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b[^\r\n|;&]*(?:(?:\|[^\r\n|;&]*)*\||;|&&)\s*(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php)(?:\.exe)?\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex RemoteExecutionPowerShellExpressionRegex = new(
         @"\b(?:iex|Invoke-Expression)\b\s*(?:(?:\$\s*)?\(+|[""']\s*\$\()\s*(?:(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b|[^\r\n]{0,200}\bDownloadString\s*\()",

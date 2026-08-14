@@ -36,7 +36,7 @@ public sealed partial class WebAgentContentSecurityScanner
         {
             var matchedCommand = match.Groups["command"].Value;
             var commandForValidation = StripShellComment(matchedCommand);
-            if (IsPathQualifiedExecutable(content, match.Index) ||
+            if (IsUntrustedExecutableReference(content, match.Index) ||
                 HasShellQuoteConcatenation(commandForValidation) ||
                 ShellTokenConstructionRegex.IsMatch(commandForValidation) ||
                 ShellContinuationTokenConstructionRegex.IsMatch(commandForValidation))
@@ -58,12 +58,19 @@ public sealed partial class WebAgentContentSecurityScanner
                 continue;
 
             tokens[0] = NormalizeExecutable(tokens[0]);
+            if (!IsSupportedPackageExecutable(tokens[0]))
+            {
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND", path,
+                    GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                    "Package-manager executable tokens must be literal known launcher names without shell expansion or surrounding syntax.");
+                continue;
+            }
             var executable = tokens[0];
             var line = GetReportedLine(content, match.Index, lineOffset, countLogicalLines);
             if (tokens.Length < 2)
             {
-                if (executable == "yarn")
-                    AddUnverifiableOperand("yarn", path, line, findings, "lockfile dependency set");
+                if (executable is "yarn" or "bundle")
+                    AddUnverifiableOperand(executable, path, line, findings, "lockfile dependency set");
                 continue;
             }
             if (RejectPersistentPackageConfiguration(executable, tokens, path, line, findings))

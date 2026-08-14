@@ -293,6 +293,7 @@ public sealed partial class WebAgentContentSecurityScanner
         "update", "up", "upgrade", "udpate",
         "audit", "link", "ln", "dedupe", "ddp", "rebuild",
         "run", "run-script", "rum", "urn", "start", "stop", "restart", "test", "tst", "t",
+        "pack", "publish", "version",
         "config", "c", "conf", "set", "init", "create", "innit"
     };
 
@@ -303,8 +304,8 @@ public sealed partial class WebAgentContentSecurityScanner
             .Where(static token => !string.IsNullOrWhiteSpace(token))
             .ToArray();
 
-    private static bool IsPathQualifiedExecutable(string content, int matchIndex)
-        => matchIndex > 0 && content[matchIndex - 1] is '/' or '\\' or ':';
+    private static bool IsUntrustedExecutableReference(string content, int matchIndex)
+        => matchIndex > 0 && content[matchIndex - 1] is '/' or '\\' or ':' or '$' or '%' or '{' or '}';
 
     private static bool HasShellQuoteConcatenation(string command)
     {
@@ -344,7 +345,8 @@ public sealed partial class WebAgentContentSecurityScanner
             "up" or "upgrade" or "udpate" => "update",
             "ln" => "link",
             "ddp" => "dedupe",
-            "run-script" or "rum" or "urn" or "start" or "stop" or "restart" or "test" or "tst" or "t" => "run",
+            "run-script" or "rum" or "urn" or "start" or "stop" or "restart" or "test" or "tst" or "t" or
+                "pack" or "publish" or "version" => "run",
             "create" or "innit" => "init",
             _ => verb
         };
