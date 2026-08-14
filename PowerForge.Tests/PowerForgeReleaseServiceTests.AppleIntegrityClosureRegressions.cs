@@ -291,8 +291,10 @@ public sealed partial class PowerForgeReleaseServiceTests {
         }
     }
 
-    [Fact]
-    public void Execute_AppleUpload_allows_transient_xcode_sandbox_scratch_for_approved_archive_file() {
+    [Theory]
+    [InlineData("rg00hz")]
+    [InlineData("3qvlpX")]
+    public void Execute_AppleUpload_allows_transient_xcode_sandbox_scratch_for_approved_archive_file(string finalToken) {
         const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
         var root = CreateSandbox();
         try {
@@ -314,7 +316,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
                     uploadAppleApp: request => {
                         var scratch = Path.Combine(
                             request.ArchivePath!,
-                            "Info.plist.sb-2f65fadd-rg00hz");
+                            $"Info.plist.sb-2f65fadd-{finalToken}");
                         File.WriteAllText(scratch, "xcode scratch bytes");
                         Thread.Sleep(1000);
                         File.Delete(scratch);
@@ -328,6 +330,58 @@ public sealed partial class PowerForgeReleaseServiceTests {
 
             Assert.True(result.Success, result.ErrorMessage);
             Assert.True(Assert.Single(result.AppleApps).Upload?.Succeeded);
+        } finally {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_ApplePreparePlan_reuses_remote_screenshots_without_local_approval_or_pixels() {
+        var root = CreateSandbox();
+        try {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            File.WriteAllText(
+                Path.Combine(root, "screenshots.json"),
+                """
+                {
+                  "appId": "6778025328",
+                  "versionString": "1.2.0",
+                  "platform": "iOS",
+                  "locale": "en-US",
+                  "quality": {
+                    "enabled": true,
+                    "requireApprovalManifest": true,
+                    "approvalManifestPath": "missing.approval.json"
+                  },
+                  "screenshotSets": [
+                    {
+                      "screenshotDisplayType": "APP_IPHONE_67",
+                      "path": "missing-screenshots",
+                      "filter": "*.png"
+                    }
+                  ]
+                }
+                """);
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.SyncScreenshots = true;
+            spec.AppleApps.ReplaceScreenshots = true;
+            spec.AppleApps.ScreenshotConfigPath = "screenshots.json";
+
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, "VALID"),
+                    checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request))
+                .Execute(spec, new PowerForgeReleaseRequest {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Prepare,
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.False(Assert.IsType<PowerForgeAppleReleasePlan>(result.AppleAppPlan).SyncScreenshots);
+            Assert.Contains("screenshots.json", result.AppleReceipt!.MutationInputFiles.Keys);
+            Assert.DoesNotContain("missing.approval.json", result.AppleReceipt.MutationInputFiles.Keys);
         } finally {
             TryDelete(root);
         }

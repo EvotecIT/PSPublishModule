@@ -381,8 +381,7 @@ internal sealed partial class PowerForgeReleaseService
         foreach (var path in effectiveInputs)
             AddApplePlanInputFile(plan.ProjectRoot, path!, files);
 
-        if (plan.SyncScreenshots || plan.CheckReleaseReadiness ||
-            (plan.SubmitForReview && !plan.SkipReviewReadinessCheck))
+        if (plan.SyncScreenshots)
         {
             foreach (var configured in LoadAppleScreenshotSpecs(plan))
             {
