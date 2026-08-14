@@ -1461,6 +1461,7 @@ public sealed partial class DotNetPublishPipelineRunner
             PropertyName = versioning.PropertyName,
             ApplyToPublish = versioning.ApplyToPublish,
             PublishProperties = versioning.PublishProperties?.ToArray() ?? Array.Empty<string>(),
+            AdditionalPublishTargets = versioning.AdditionalPublishTargets?.ToArray() ?? Array.Empty<string>(),
             PatchCap = versioning.PatchCap,
             AllowOutputOverwrite = versioning.AllowOutputOverwrite
         };
@@ -2212,8 +2213,79 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
+        AddAdditionalPublishTargetVersionPlans(versions, installers, targets);
         return versions;
     }
+
+    private static void AddAdditionalPublishTargetVersionPlans(
+        IDictionary<string, DotNetPublishMsiVersionPlan> versions,
+        IEnumerable<DotNetPublishInstallerPlan> installers,
+        IEnumerable<DotNetPublishTargetPlan>? targets)
+    {
+        DotNetPublishTargetPlan[] targetPlans = (targets ?? Array.Empty<DotNetPublishTargetPlan>()).ToArray();
+        var lookupPlan = new DotNetPublishPlan
+        {
+            MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>(versions, StringComparer.OrdinalIgnoreCase)
+        };
+        foreach (DotNetPublishInstallerPlan installer in installers ?? Array.Empty<DotNetPublishInstallerPlan>())
+        {
+            DotNetPublishMsiVersionOptions? versioning = installer.Versioning;
+            if (versioning is not { Enabled: true, ApplyToPublish: true } ||
+                versioning.AdditionalPublishTargets.Length == 0)
+                continue;
+
+            foreach (string additionalTargetName in versioning.AdditionalPublishTargets)
+            {
+                DotNetPublishTargetPlan? additionalTarget = targetPlans.SingleOrDefault(target =>
+                    string.Equals(target.Name, additionalTargetName, StringComparison.OrdinalIgnoreCase));
+                if (additionalTarget is null)
+                    continue;
+
+                foreach (DotNetPublishTargetCombination combination in additionalTarget.Combinations)
+                {
+                    DotNetPublishMsiVersionPlan? source = FindResolvedMsiVersion(
+                        lookupPlan,
+                        installer.Id,
+                        installer.PrepareFromTarget,
+                        combination.Framework,
+                        combination.Runtime,
+                        combination.Style);
+                    if (source is null)
+                        continue;
+
+                    string key = BuildMsiVersionKey(
+                        installer.Id,
+                        additionalTarget.Name,
+                        combination.Framework,
+                        combination.Runtime,
+                        combination.Style);
+                    if (versions.TryGetValue(key, out DotNetPublishMsiVersionPlan? existing) &&
+                        !string.Equals(existing.Version, source.Version, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException(
+                            $"Additional publish target '{additionalTarget.Name}' resolved conflicting release versions.");
+                    }
+
+                    versions[key] = CloneMsiVersionPlan(source);
+                }
+            }
+        }
+    }
+
+    private static DotNetPublishMsiVersionPlan CloneMsiVersionPlan(DotNetPublishMsiVersionPlan source) => new()
+    {
+        Version = source.Version,
+        VersionPropertyName = source.VersionPropertyName,
+        AssemblyVersion = source.AssemblyVersion,
+        Patch = source.Patch,
+        StatePath = source.StatePath,
+        Authority = source.Authority,
+        AuthorityKey = source.AuthorityKey,
+        GitRemote = source.GitRemote,
+        GitTagPrefix = source.GitTagPrefix,
+        AuthorityWorkingDirectory = source.AuthorityWorkingDirectory,
+        AllowOutputOverwrite = source.AllowOutputOverwrite
+    };
 
     private static MsiReleaseGroupCompatibility BuildMsiReleaseGroupCompatibility(
         DotNetPublishPlan plan,
@@ -3193,6 +3265,7 @@ public sealed partial class DotNetPublishPipelineRunner
         else
             clone.PropertyName = clone.PropertyName!.Trim();
         clone.PublishProperties = NormalizeStrings(clone.PublishProperties);
+        clone.AdditionalPublishTargets = NormalizeStrings(clone.AdditionalPublishTargets);
 
         return clone;
     }

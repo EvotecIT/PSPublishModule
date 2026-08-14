@@ -173,6 +173,26 @@ internal sealed class DotNetPublishPreparationService
                             || selected.Contains(i.PrepareFromTarget)))
                     .ToArray();
             }
+
+            if (spec.Bundles is { Length: > 0 })
+            {
+                spec.Bundles = spec.Bundles
+                    .Where(item =>
+                        item is not null
+                        && (string.IsNullOrWhiteSpace(item.PrepareFromTarget)
+                            || selected.Contains(item.PrepareFromTarget)))
+                    .ToArray();
+            }
+
+            if (spec.StorePackages is { Length: > 0 })
+            {
+                spec.StorePackages = spec.StorePackages
+                    .Where(item =>
+                        item is not null
+                        && (string.IsNullOrWhiteSpace(item.PrepareFromTarget)
+                            || selected.Contains(item.PrepareFromTarget)))
+                    .ToArray();
+            }
         }
 
         if (overrideRuntimes.Length > 0

@@ -431,7 +431,7 @@ internal static partial class Program
             ?? throw new InvalidOperationException("Failed to clone dotnet publish spec.");
     }
 
-    static void ApplyDotNetPublishSpecOverrides(
+    internal static void ApplyDotNetPublishSpecOverrides(
         DotNetPublishSpec spec,
         string[] overrideTargets,
         string[] overrideRids,
@@ -464,6 +464,22 @@ internal static partial class Program
                     .Where(t => selectedTargetNames.Contains(t.Name, StringComparer.OrdinalIgnoreCase))
                     .ToArray();
                 targets = spec.Targets;
+                var selectedTargets = new HashSet<string>(selectedTargetNames, StringComparer.OrdinalIgnoreCase);
+                spec.Bundles = (spec.Bundles ?? Array.Empty<DotNetPublishBundle>())
+                    .Where(item =>
+                        string.IsNullOrWhiteSpace(item.PrepareFromTarget) ||
+                        selectedTargets.Contains(item.PrepareFromTarget.Trim()))
+                    .ToArray();
+                spec.Installers = (spec.Installers ?? Array.Empty<DotNetPublishInstaller>())
+                    .Where(item =>
+                        string.IsNullOrWhiteSpace(item.PrepareFromTarget) ||
+                        selectedTargets.Contains(item.PrepareFromTarget.Trim()))
+                    .ToArray();
+                spec.StorePackages = (spec.StorePackages ?? Array.Empty<DotNetPublishStorePackage>())
+                    .Where(item =>
+                        string.IsNullOrWhiteSpace(item.PrepareFromTarget) ||
+                        selectedTargets.Contains(item.PrepareFromTarget.Trim()))
+                    .ToArray();
             }
         }
 

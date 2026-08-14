@@ -81,40 +81,170 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var signed = new List<string>(targets.Length);
         var runDir = string.IsNullOrWhiteSpace(workingDirectory) ? Environment.CurrentDirectory : workingDirectory;
-
-        foreach (var file in targets)
+        string? metadataRoot = null;
+        string? metadataPath = null;
+        string? dlibPath = null;
+        Exception? signingFailure = null;
+        if (sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning)
         {
-            if (!File.Exists(file))
+            ValidateAzureArtifactSigningOptions(sign);
+            dlibPath = ResolveAzureArtifactSigningDlibPath(sign.AzureArtifactSigning!.DlibPath);
+            if (string.IsNullOrWhiteSpace(dlibPath))
             {
-                HandlePolicy(sign.OnSignFailure, $"Signing target not found: {file}");
-                continue;
+                HandlePolicy(
+                    sign.OnMissingTool,
+                    "Azure Artifact Signing requested but Azure.CodeSigning.Dlib.dll was not found.");
+                return Array.Empty<string>();
+            }
+            metadataRoot = Directory.CreateDirectory(Path.Combine(
+                Path.GetTempPath(),
+                "PowerForge.AzureArtifactSigning",
+                Guid.NewGuid().ToString("N"))).FullName;
+            metadataPath = Path.Combine(metadataRoot, "metadata.json");
+            WriteAzureArtifactSigningMetadata(metadataPath, sign.AzureArtifactSigning);
+        }
+
+        try
+        {
+            foreach (var file in targets)
+            {
+                if (!File.Exists(file))
+                {
+                    HandlePolicy(sign.OnSignFailure, $"Signing target not found: {file}");
+                    continue;
+                }
+
+                if (!sign.OverwriteSigned && _hasAuthenticodeSignature(file))
+                {
+                    if (_logger.IsVerbose)
+                        _logger.Verbose($"Preserving existing signature: {file}");
+                    if (_signatureMatchesPublisher(file, sign))
+                    {
+                        signed.Add(file);
+                    }
+                    else if (_logger.IsVerbose)
+                    {
+                        _logger.Verbose(
+                            $"Preserved signature is not owned by the configured publisher and will remain payload-bound only: {file}");
+                    }
+                    continue;
+                }
+
+                var timeout = TimeSpan.FromSeconds(Math.Max(1, sign.TimeoutSeconds));
+                List<string> args = BuildSignToolArguments(sign, file, dlibPath, metadataPath);
+                var res = RunSigningTool(
+                    signToolPath,
+                    runDir,
+                    args,
+                    timeout);
+                if (res.ExitCode != 0)
+                {
+                    var details = TailLines(res.StdErr, maxLines: 10, maxChars: 2000) ?? string.Empty;
+                    var message = string.IsNullOrWhiteSpace(details)
+                        ? $"Signing failed for '{file}' (exit code: {res.ExitCode})."
+                        : $"Signing failed for '{file}' (exit code: {res.ExitCode}). {details.Trim()}";
+                    HandlePolicy(sign.OnSignFailure, message);
+                    continue;
+                }
+
+                signed.Add(file);
+            }
+        }
+        catch (Exception exception)
+        {
+            signingFailure = exception;
+            throw;
+        }
+        finally
+        {
+            DeleteAzureArtifactSigningMetadata(metadataRoot, signingFailure);
+        }
+
+        return signed
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    internal byte[] SignPortableInventory(byte[] content, DotNetPublishSignOptions sign)
+    {
+        if (sign.Provider != DotNetPublishSigningProvider.AzureArtifactSigning)
+            return PowerForgePortablePayloadInventoryCms.Sign(content, sign);
+
+        ValidateAzureArtifactSigningOptions(sign);
+        string signToolPath = ResolveSignToolPath(sign.ToolPath)
+            ?? throw new InvalidOperationException("Azure Artifact Signing requested but signtool.exe was not found.");
+        string dlibPath = ResolveAzureArtifactSigningDlibPath(sign.AzureArtifactSigning!.DlibPath)
+            ?? throw new InvalidOperationException("Azure Artifact Signing requested but Azure.CodeSigning.Dlib.dll was not found.");
+        string tempRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.AzureArtifactSigning",
+            Guid.NewGuid().ToString("N"))).FullName;
+        Exception? signingFailure = null;
+        try
+        {
+            string inventoryPath = Path.Combine(tempRoot, PowerForgePortablePayloadInventory.InventoryFileName);
+            string metadataPath = Path.Combine(tempRoot, "metadata.json");
+            string signatureRoot = Directory.CreateDirectory(Path.Combine(tempRoot, "signature")).FullName;
+            File.WriteAllBytes(inventoryPath, content);
+            WriteAzureArtifactSigningMetadata(metadataPath, sign.AzureArtifactSigning);
+            List<string> arguments = BuildSignToolArguments(sign, inventoryPath, dlibPath, metadataPath);
+            arguments.InsertRange(arguments.Count - 1, new[]
+            {
+                "/p7", signatureRoot,
+                "/p7ce", "DetachedSignedData",
+                "/p7co", "1.3.6.1.5.5.7.3.3"
+            });
+            ProcessRunResult result = RunSigningTool(
+                signToolPath,
+                tempRoot,
+                arguments,
+                TimeSpan.FromSeconds(Math.Max(1, sign.TimeoutSeconds)));
+            if (result.ExitCode != 0)
+            {
+                string details = TailLines(result.StdErr, maxLines: 10, maxChars: 2000) ?? string.Empty;
+                throw new InvalidOperationException(
+                    string.IsNullOrWhiteSpace(details)
+                        ? $"Azure Artifact Signing failed for the portable inventory (exit code: {result.ExitCode})."
+                        : $"Azure Artifact Signing failed for the portable inventory (exit code: {result.ExitCode}). {details.Trim()}");
             }
 
-            if (!sign.OverwriteSigned && _hasAuthenticodeSignature(file))
-            {
-                if (_logger.IsVerbose)
-                    _logger.Verbose($"Preserving existing signature: {file}");
-                if (_signatureMatchesPublisher(file, sign))
-                {
-                    signed.Add(file);
-                }
-                else if (_logger.IsVerbose)
-                {
-                    _logger.Verbose(
-                        $"Preserved signature is not owned by the configured publisher and will remain payload-bound only: {file}");
-                }
-                continue;
-            }
+            string[] signatures = Directory.GetFiles(signatureRoot, "*.p7", SearchOption.TopDirectoryOnly);
+            if (signatures.Length != 1)
+                throw new InvalidOperationException("Azure Artifact Signing did not produce exactly one detached portable inventory signature.");
+            return File.ReadAllBytes(signatures[0]);
+        }
+        catch (Exception exception)
+        {
+            signingFailure = exception;
+            throw;
+        }
+        finally
+        {
+            DeleteAzureArtifactSigningMetadata(tempRoot, signingFailure);
+        }
+    }
 
-            var timeout = TimeSpan.FromSeconds(Math.Max(1, sign.TimeoutSeconds));
-            var args = new List<string> { "sign", "/fd", "SHA256" };
-            if (!string.IsNullOrWhiteSpace(sign.TimestampUrl))
-                args.AddRange(new[] { "/tr", sign.TimestampUrl!, "/td", "SHA256" });
-            if (!string.IsNullOrWhiteSpace(sign.Description))
-                args.AddRange(new[] { "/d", sign.Description! });
-            if (!string.IsNullOrWhiteSpace(sign.Url))
-                args.AddRange(new[] { "/du", sign.Url! });
+    private static List<string> BuildSignToolArguments(
+        DotNetPublishSignOptions sign,
+        string file,
+        string? dlibPath,
+        string? metadataPath)
+    {
+        var args = new List<string> { "sign", "/fd", "SHA256" };
+        if (!string.IsNullOrWhiteSpace(sign.TimestampUrl))
+            args.AddRange(new[] { "/tr", sign.TimestampUrl!, "/td", "SHA256" });
+        if (!string.IsNullOrWhiteSpace(sign.Description))
+            args.AddRange(new[] { "/d", sign.Description! });
+        if (!string.IsNullOrWhiteSpace(sign.Url))
+            args.AddRange(new[] { "/du", sign.Url! });
 
+        if (sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning)
+        {
+            args.AddRange(new[] { "/dlib", dlibPath!, "/dmdf", metadataPath! });
+        }
+        else
+        {
             if (!string.IsNullOrWhiteSpace(sign.Thumbprint))
                 args.AddRange(new[] { "/sha1", sign.Thumbprint! });
             else if (!string.IsNullOrWhiteSpace(sign.SubjectName))
@@ -126,30 +256,75 @@ public sealed partial class DotNetPublishPipelineRunner
                 args.AddRange(new[] { "/csp", sign.Csp! });
             if (!string.IsNullOrWhiteSpace(sign.KeyContainer))
                 args.AddRange(new[] { "/kc", sign.KeyContainer! });
-
-            args.Add(file);
-            var res = RunSigningTool(
-                signToolPath,
-                runDir,
-                args,
-                timeout);
-            if (res.ExitCode != 0)
-            {
-                var details = TailLines(res.StdErr, maxLines: 10, maxChars: 2000) ?? string.Empty;
-                var message = string.IsNullOrWhiteSpace(details)
-                    ? $"Signing failed for '{file}' (exit code: {res.ExitCode})."
-                    : $"Signing failed for '{file}' (exit code: {res.ExitCode}). {details.Trim()}";
-                HandlePolicy(sign.OnSignFailure, message);
-                continue;
-            }
-
-            signed.Add(file);
         }
 
-        return signed
+        args.Add(file);
+        return args;
+    }
+
+    private static void ValidateAzureArtifactSigningOptions(DotNetPublishSignOptions sign)
+    {
+        DotNetPublishAzureArtifactSigningOptions options = sign.AzureArtifactSigning
+            ?? throw new ArgumentException("Azure Artifact Signing settings are required when that provider is selected.");
+        if (!Uri.TryCreate(options.Endpoint?.Trim(), UriKind.Absolute, out Uri? endpoint) ||
+            !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Azure Artifact Signing Endpoint must be an absolute HTTPS URL.");
+        if (string.IsNullOrWhiteSpace(options.AccountName))
+            throw new ArgumentException("Azure Artifact Signing AccountName is required.");
+        if (string.IsNullOrWhiteSpace(options.CertificateProfileName))
+            throw new ArgumentException("Azure Artifact Signing CertificateProfileName is required.");
+        if (string.IsNullOrWhiteSpace(options.DlibPath))
+            throw new ArgumentException("Azure Artifact Signing DlibPath is required.");
+        if (string.IsNullOrWhiteSpace(sign.SubjectName))
+            throw new ArgumentException("Azure Artifact Signing requires the expected certificate SubjectName for release verification.");
+    }
+
+    private static string? ResolveAzureArtifactSigningDlibPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        string raw = path!.Trim().Trim('"');
+        if (File.Exists(raw)) return Path.GetFullPath(raw);
+        return ResolveOnPath(raw);
+    }
+
+    private static void WriteAzureArtifactSigningMetadata(
+        string path,
+        DotNetPublishAzureArtifactSigningOptions options)
+    {
+        string endpoint = new Uri(options.Endpoint!.Trim(), UriKind.Absolute).AbsoluteUri;
+        var metadata = new Dictionary<string, object?>
+        {
+            ["Endpoint"] = endpoint,
+            ["CodeSigningAccountName"] = options.AccountName!.Trim(),
+            ["CertificateProfileName"] = options.CertificateProfileName!.Trim()
+        };
+        if (!string.IsNullOrWhiteSpace(options.CorrelationId))
+            metadata["CorrelationId"] = options.CorrelationId!.Trim();
+        string[] excluded = (options.ExcludeCredentials ?? Array.Empty<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        if (excluded.Length > 0)
+            metadata["ExcludeCredentials"] = excluded;
+        File.WriteAllText(path, JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true }), Encoding.UTF8);
+    }
+
+    private void DeleteAzureArtifactSigningMetadata(string? root, Exception? activeFailure)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return;
+        try
+        {
+            Directory.Delete(root, recursive: true);
+        }
+        catch (Exception cleanupFailure) when (activeFailure is not null)
+        {
+            _logger.Warn($"Azure Artifact Signing metadata cleanup failed after signing failed: {cleanupFailure.Message}");
+        }
+        catch (Exception cleanupFailure)
+        {
+            throw new IOException("Azure Artifact Signing metadata cleanup failed.", cleanupFailure);
+        }
     }
 
     private static bool SignatureMatchesPublisher(string filePath, DotNetPublishSignOptions sign)

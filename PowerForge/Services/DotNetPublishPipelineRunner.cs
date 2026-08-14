@@ -38,7 +38,7 @@ public sealed partial class DotNetPublishPipelineRunner
         _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
         _hasAuthenticodeSignature = hasAuthenticodeSignature ?? WindowsAuthenticodeSignatureInspector.HasSignature;
         _signatureMatchesPublisher = signatureMatchesPublisher ?? SignatureMatchesPublisher;
-        _signPortableInventory = signPortableInventory ?? PowerForgePortablePayloadInventoryCms.Sign;
+        _signPortableInventory = signPortableInventory ?? SignPortableInventory;
         _readAuthenticodeSignature = readAuthenticodeSignature ?? DotNetPublishReleaseArtifactVerifier.VerifyAuthenticode;
     }
 

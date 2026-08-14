@@ -1,10 +1,103 @@
 using System.Reflection;
+using System.Text.Json;
 using Xunit;
 
 namespace PowerForge.Tests;
 
 public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 {
+    [Fact]
+    public void TrySignOutput_AzureArtifactSigningUsesDlibMetadataWithoutLocalCertificateSelectors()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows()) return;
+        string root = CreateTempRoot();
+        try
+        {
+            string output = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            string executable = Path.Combine(output, "app.exe");
+            string dlib = Path.Combine(root, "Azure.CodeSigning.Dlib.dll");
+            File.WriteAllText(executable, "payload");
+            File.WriteAllText(dlib, "dlib");
+            ProcessRunRequest? captured = null;
+            string? metadataJson = null;
+            var processRunner = new StubProcessRunner(request =>
+            {
+                captured = request;
+                int metadataIndex = request.Arguments.ToList().IndexOf("/dmdf");
+                metadataJson = File.ReadAllText(request.Arguments[metadataIndex + 1]);
+                return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            });
+            DotNetPublishSignOptions sign = AzureSign(dlib);
+
+            string[] signed = Assert.IsType<string[]>(GetTrySignOutputMethod().Invoke(
+                new DotNetPublishPipelineRunner(new NullLogger(), processRunner, _ => false),
+                new object[] { output, sign }));
+
+            Assert.Equal(executable, Assert.Single(signed));
+            Assert.NotNull(captured);
+            Assert.Contains("/dlib", captured!.Arguments);
+            Assert.Contains("/dmdf", captured.Arguments);
+            Assert.DoesNotContain("/sha1", captured.Arguments);
+            Assert.DoesNotContain("/n", captured.Arguments);
+            Assert.DoesNotContain("/a", captured.Arguments);
+            using JsonDocument metadata = JsonDocument.Parse(metadataJson!);
+            Assert.Equal("https://wus.codesigning.azure.net/", metadata.RootElement.GetProperty("Endpoint").GetString());
+            Assert.Equal("EvotecSigning", metadata.RootElement.GetProperty("CodeSigningAccountName").GetString());
+            Assert.Equal("PublicTrust", metadata.RootElement.GetProperty("CertificateProfileName").GetString());
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void SignPortableInventory_AzureArtifactSigningProducesDetachedPkcs7AndCleansMetadata()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows()) return;
+        string root = CreateTempRoot();
+        string? metadataRoot = null;
+        try
+        {
+            string dlib = Path.Combine(root, "Azure.CodeSigning.Dlib.dll");
+            File.WriteAllText(dlib, "dlib");
+            var processRunner = new StubProcessRunner(request =>
+            {
+                Assert.Contains("DetachedSignedData", request.Arguments);
+                Assert.Contains("1.3.6.1.5.5.7.3.3", request.Arguments);
+                int metadataIndex = request.Arguments.ToList().IndexOf("/dmdf");
+                metadataRoot = Path.GetDirectoryName(request.Arguments[metadataIndex + 1]);
+                int outputIndex = request.Arguments.ToList().IndexOf("/p7");
+                string signaturePath = Path.Combine(request.Arguments[outputIndex + 1], "inventory.p7");
+                File.WriteAllBytes(signaturePath, [9, 8, 7]);
+                return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            });
+            var runner = new DotNetPublishPipelineRunner(new NullLogger(), processRunner);
+
+            byte[] signature = runner.SignPortableInventory([1, 2, 3], AzureSign(dlib));
+
+            Assert.Equal([9, 8, 7], signature);
+            Assert.NotNull(metadataRoot);
+            Assert.False(Directory.Exists(metadataRoot));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void SigningProfileClonePreservesAzureProviderConfiguration()
+    {
+        DotNetPublishSignOptions source = AzureSign("Azure.CodeSigning.Dlib.dll");
+        DotNetPublishSignOptions clone = DotNetPublishSigningProfileResolver.CloneSignOptions(source)!;
+
+        Assert.Equal(DotNetPublishSigningProvider.AzureArtifactSigning, clone.Provider);
+        Assert.Equal("EvotecSigning", clone.AzureArtifactSigning?.AccountName);
+        Assert.Equal(source.AzureArtifactSigning?.ExcludeCredentials, clone.AzureArtifactSigning?.ExcludeCredentials);
+        Assert.NotSame(source.AzureArtifactSigning?.ExcludeCredentials, clone.AzureArtifactSigning?.ExcludeCredentials);
+    }
+
     [Theory]
     [InlineData(unchecked((int)0x800B0100), true)]
     [InlineData(unchecked((int)0x800B0001), true)]
@@ -369,4 +462,23 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             TryDelete(root);
         }
     }
+
+    private static DotNetPublishSignOptions AzureSign(string dlibPath) => new()
+    {
+        Enabled = true,
+        OverwriteSigned = true,
+        Provider = DotNetPublishSigningProvider.AzureArtifactSigning,
+        ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+        SubjectName = "CN=Evotec Artifact Signing",
+        OnMissingTool = DotNetPublishPolicyMode.Fail,
+        OnSignFailure = DotNetPublishPolicyMode.Fail,
+        AzureArtifactSigning = new DotNetPublishAzureArtifactSigningOptions
+        {
+            Endpoint = "https://wus.codesigning.azure.net/",
+            AccountName = "EvotecSigning",
+            CertificateProfileName = "PublicTrust",
+            DlibPath = dlibPath,
+            ExcludeCredentials = ["ManagedIdentityCredential"]
+        }
+    };
 }

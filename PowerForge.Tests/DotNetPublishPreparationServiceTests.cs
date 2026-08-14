@@ -53,6 +53,26 @@ public sealed class DotNetPublishPreparationServiceTests
       "id": "ToolInstaller",
       "prepareFromTarget": "Tool"
     }
+  ],
+  "bundles": [
+    {
+      "id": "AppBundle",
+      "prepareFromTarget": "App"
+    },
+    {
+      "id": "ToolBundle",
+      "prepareFromTarget": "Tool"
+    }
+  ],
+  "storePackages": [
+    {
+      "id": "AppStore",
+      "prepareFromTarget": "App"
+    },
+    {
+      "id": "ToolStore",
+      "prepareFromTarget": "Tool"
+    }
   ]
 }
 """);
@@ -94,6 +114,8 @@ public sealed class DotNetPublishPreparationServiceTests
             Assert.Equal("Artifacts/Portable/{target}/{rid}", context.Spec.Targets[0].Publish.OutputPath);
             Assert.Equal("true", context.Spec.DotNet.MsBuildProperties!["UseLocalHtmlForgeX"]);
             Assert.Empty(context.Spec.Installers);
+            Assert.Equal("AppBundle", Assert.Single(context.Spec.Bundles).Id);
+            Assert.Equal("AppStore", Assert.Single(context.Spec.StorePackages).Id);
             Assert.False(context.Spec.DotNet.Restore);
             Assert.False(context.Spec.DotNet.Build);
             Assert.True(context.Spec.DotNet.NoRestoreInPublish);

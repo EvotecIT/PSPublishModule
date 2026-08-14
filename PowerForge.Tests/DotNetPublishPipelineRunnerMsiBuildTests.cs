@@ -578,6 +578,63 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void Plan_ReleaseGroupAppliesResolvedVersionToCompanionPortableTarget()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string app = CreateProject(root, "App/App.csproj");
+            string portable = CreateProject(root, "Portable/Portable.csproj");
+            DotNetPublishSpec spec = CreateBaseSpec(root, app);
+            spec.Targets[0].Publish.Style = DotNetPublishStyle.PortableCompat;
+            spec.Targets = spec.Targets.Concat(new[]
+            {
+                new DotNetPublishTarget
+                {
+                    Name = "portable",
+                    ProjectPath = portable,
+                    Kind = DotNetPublishTargetKind.Cli,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net10.0",
+                        Runtimes = new[] { "win-x64" },
+                        Style = DotNetPublishStyle.PortableCompat,
+                        UseStaging = false
+                    }
+                }
+            }).ToArray();
+            DotNetPublishInstaller installer = CreateReleaseGroupInstaller("monitoring.msi", "MonitoringFiles");
+            installer.Versioning!.AdditionalPublishTargets = new[] { "portable" };
+            spec.Installers = new[] { installer };
+
+            DotNetPublishPlan plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            DotNetPublishTargetPlan portablePlan = Assert.Single(plan.Targets, target => target.Name == "portable");
+            Dictionary<string, string> properties = DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
+                plan,
+                portablePlan,
+                "net10.0",
+                "win-x64",
+                DotNetPublishStyle.PortableCompat);
+
+            Assert.Equal(2, plan.MsiVersions.Count);
+            Assert.Equal(plan.MsiVersions.Values.First().Version, properties["Version"]);
+            Assert.Equal(plan.MsiVersions.Values.First().AssemblyVersion, properties["AssemblyVersion"]);
+            Assert.Equal(
+                plan.MsiVersions.Values.First().Version,
+                DotNetPublishPipelineRunner.ResolvePublishReleaseVersion(
+                    plan,
+                    "portable",
+                    "net10.0",
+                    "win-x64",
+                    DotNetPublishStyle.PortableCompat));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_ReleaseGroupRejectsDifferentVersionAuthorities()
     {
         var root = CreateTempRoot();

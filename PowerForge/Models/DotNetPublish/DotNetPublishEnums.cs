@@ -47,6 +47,16 @@ public enum DotNetPublishPolicyMode
     Skip
 }
 
+/// <summary>Provider used to produce Windows Authenticode and detached release signatures.</summary>
+public enum DotNetPublishSigningProvider
+{
+    /// <summary>Uses a certificate with a locally available private key.</summary>
+    CertificateStore,
+
+    /// <summary>Uses Microsoft Azure Artifact Signing through its SignTool dlib integration.</summary>
+    AzureArtifactSigning
+}
+
 /// <summary>
 /// Execution mode for service lifecycle actions.
 /// </summary>

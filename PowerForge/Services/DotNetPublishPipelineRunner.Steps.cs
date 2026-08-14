@@ -306,6 +306,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var cfg = plan.Configuration;
         var tfm = string.IsNullOrWhiteSpace(framework) ? target.Publish.Framework : framework.Trim();
         var style = styleOverride ?? target.Publish.Style;
+        string releaseVersion = ResolvePublishReleaseVersion(plan, target.Name, tfm, rid, style) ?? string.Empty;
 
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -313,7 +314,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ["rid"] = rid,
             ["framework"] = tfm,
             ["style"] = style.ToString(),
-            ["configuration"] = cfg
+            ["configuration"] = cfg,
+            ["version"] = releaseVersion
         };
 
         var outputDirTemplate = string.IsNullOrWhiteSpace(target.Publish.OutputPath)
@@ -640,7 +642,10 @@ public sealed partial class DotNetPublishPipelineRunner
         string? reservationOwner = null)
     {
         foreach (var installer in plan.Installers.Where(i =>
-                     string.Equals(i.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase)))
+                     string.Equals(i.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase) ||
+                     (i.Versioning?.AdditionalPublishTargets ?? Array.Empty<string>()).Contains(
+                         targetName,
+                         StringComparer.OrdinalIgnoreCase)))
         {
             var versioning = installer.Versioning;
             if (versioning is null || !versioning.Enabled || !versioning.ApplyToPublish)
@@ -708,11 +713,44 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishStyle style)
     {
         return (installers ?? Array.Empty<DotNetPublishInstallerPlan>())
-            .Where(installer => string.Equals(installer.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase))
+            .Where(installer =>
+                string.Equals(installer.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase) ||
+                (installer.Versioning?.AdditionalPublishTargets ?? Array.Empty<string>()).Contains(
+                    targetName,
+                    StringComparer.OrdinalIgnoreCase))
             .Any(installer =>
                 installer.Versioning?.Enabled == true
                 && installer.Versioning.ApplyToPublish
                 && msiVersions.ContainsKey(BuildMsiVersionKey(installer.Id, targetName, framework, runtime, style)));
+    }
+
+    internal static string? ResolvePublishReleaseVersion(
+        DotNetPublishPlan plan,
+        string targetName,
+        string framework,
+        string runtime,
+        DotNetPublishStyle style)
+    {
+        string[] versions = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
+            .Where(installer =>
+                string.Equals(installer.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase) ||
+                (installer.Versioning?.AdditionalPublishTargets ?? Array.Empty<string>()).Contains(
+                    targetName,
+                    StringComparer.OrdinalIgnoreCase))
+            .Select(installer => FindResolvedMsiVersion(
+                plan,
+                installer.Id,
+                targetName,
+                framework,
+                runtime,
+                style)?.Version)
+            .Where(version => !string.IsNullOrWhiteSpace(version))
+            .Select(version => version!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (versions.Length > 1)
+            throw new InvalidOperationException($"Publish target '{targetName}' resolved conflicting release versions.");
+        return versions.SingleOrDefault();
     }
 
     private static string[] ResolvePublishVersionProperties(DotNetPublishMsiVersionOptions versioning)

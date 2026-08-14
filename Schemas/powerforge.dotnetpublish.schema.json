@@ -143,6 +143,11 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
+        "AdditionalPublishTargets": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
         "PatchCap": { "type": "integer", "minimum": 1, "maximum": 65535 },
         "AllowOutputOverwrite": { "type": "boolean", "default": false }
       }
@@ -602,8 +607,11 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "Provider": { "$ref": "#/$defs/DotNetPublishSigningProvider" },
+        "AzureArtifactSigning": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishAzureArtifactSigningOptions" }, { "type": "null" }] },
         "Enabled": { "type": "boolean" },
         "IncludeDlls": { "type": "boolean" },
+        "OverwriteSigned": { "type": "boolean" },
         "ToolPath": { "type": ["string", "null"] },
         "OnMissingTool": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
         "OnSignFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
@@ -621,8 +629,11 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "Provider": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSigningProvider" }, { "type": "null" }] },
+        "AzureArtifactSigning": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishAzureArtifactSigningOptions" }, { "type": "null" }] },
         "Enabled": { "type": ["boolean", "null"] },
         "IncludeDlls": { "type": ["boolean", "null"] },
+        "OverwriteSigned": { "type": ["boolean", "null"] },
         "ToolPath": { "type": ["string", "null"] },
         "OnMissingTool": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishPolicyMode" }, { "type": "null" }] },
         "OnSignFailure": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishPolicyMode" }, { "type": "null" }] },
@@ -634,6 +645,26 @@
         "Url": { "type": ["string", "null"] },
         "Csp": { "type": ["string", "null"] },
         "KeyContainer": { "type": ["string", "null"] }
+      }
+    },
+    "DotNetPublishSigningProvider": {
+      "type": "string",
+      "enum": ["CertificateStore", "AzureArtifactSigning"]
+    },
+    "DotNetPublishAzureArtifactSigningOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Endpoint": { "type": ["string", "null"], "format": "uri" },
+        "AccountName": { "type": ["string", "null"] },
+        "CertificateProfileName": { "type": ["string", "null"] },
+        "DlibPath": { "type": ["string", "null"] },
+        "CorrelationId": { "type": ["string", "null"] },
+        "ExcludeCredentials": {
+          "type": ["array", "null"],
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
       }
     },
     "DotNetPublishStateRule": {

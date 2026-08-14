@@ -26,7 +26,10 @@ public sealed class PowerForgeReleaseArtifactVerificationRequest
     /// <summary>Repository root used to resolve checksum-relative paths.</summary>
     public string ProjectRoot { get; set; } = string.Empty;
 
-    /// <summary>Path to the artifact being admitted to the release set.</summary>
+    /// <summary>
+    /// Path to the artifact being admitted to the release set. Portable CLI verification defaults to
+    /// the uniquely selected manifest archive or executable when omitted.
+    /// </summary>
     public string ArtifactPath { get; set; } = string.Empty;
 
     /// <summary>Path to the PowerForge SHA-256 checksum catalog.</summary>

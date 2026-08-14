@@ -57,7 +57,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
         string manifestArchive = ReadString(entry, "ZipPath");
         string manifestExecutable = ReadString(entry, "ExePath");
-        string artifactPath = ResolveRequestFile(projectRoot, request.ArtifactPath, nameof(request.ArtifactPath));
+        string artifactSelection = string.IsNullOrWhiteSpace(request.ArtifactPath)
+            ? (!string.IsNullOrWhiteSpace(manifestArchive) ? manifestArchive : manifestExecutable)
+            : request.ArtifactPath!;
+        string artifactPath = string.IsNullOrWhiteSpace(request.ArtifactPath)
+            ? ResolveManifestPath(projectRoot, artifactSelection, expected.AllowOutsideProjectRoot)
+            : ResolveRequestFile(projectRoot, artifactSelection, nameof(request.ArtifactPath));
         bool artifactIsArchive = IsZipArchive(artifactPath);
         if (artifactIsArchive != expected.Zip)
         {
