@@ -802,7 +802,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         foreach (var installer in installers ?? Array.Empty<DotNetPublishInstaller>())
         {
-            if (installer?.Versioning is null)
+            if (installer?.Versioning is not { Enabled: true, ApplyToPublish: true })
                 continue;
 
             string[] missingAdditionalTargets = (installer.Versioning.AdditionalPublishTargets ?? Array.Empty<string>())

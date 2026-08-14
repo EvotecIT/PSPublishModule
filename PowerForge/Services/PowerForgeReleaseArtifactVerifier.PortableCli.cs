@@ -325,9 +325,6 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         }
 
         string fileName = Path.GetFileName(normalized);
-        string? requiredRecoverySuffix = directEntry.HasValue
-            ? BuildPortableManifestExecutableRecoverySuffix(directEntry.Value, manifestValue)
-            : null;
         string? matrixAssetName = directEntry.HasValue
             ? DotNetPublishReleaseAssetNaming.CreateDirectMatrixAssetName(
                 ReadString(directEntry.Value, "Target"),
@@ -338,6 +335,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 bundleId: null,
                 manifestValue)
             : null;
+        string? requiredRecoverySuffix = directEntry.HasValue
+            ? TryBuildPortableManifestExecutableRecoverySuffix(directEntry.Value, manifestValue)
+            : null;
         string[] candidateNames = new[] { fileName, matrixAssetName }
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -347,9 +347,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             .SelectMany(name => DotNetPublishReleaseArtifactVerifier.FindChecksumPathsByFileName(checksumsPath, name))
             .Select(path => ResolveManifestPath(projectRoot, path, allowOutsideProjectRoot))
             .Where(File.Exists)
-            .Where(path => string.IsNullOrWhiteSpace(requiredRecoverySuffix) ||
-                           PortablePathEndsWith(path, requiredRecoverySuffix!) ||
-                           string.Equals(Path.GetFileName(path), matrixAssetName, StringComparison.OrdinalIgnoreCase))
+            .Where(path => directEntry is null ||
+                           string.Equals(Path.GetFileName(path), matrixAssetName, StringComparison.OrdinalIgnoreCase) ||
+                           (!string.IsNullOrWhiteSpace(requiredRecoverySuffix) &&
+                            PortablePathEndsWith(path, requiredRecoverySuffix!)))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (candidates.Length != 1)
@@ -365,6 +366,13 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     }
 
     private static string BuildPortableManifestExecutableRecoverySuffix(JsonElement entry, string manifestExecutable)
+    {
+        return TryBuildPortableManifestExecutableRecoverySuffix(entry, manifestExecutable)
+               ?? throw Invalid(
+                   "A relocated direct portable executable must preserve its runtime, framework, and style path identity.");
+    }
+
+    private static string? TryBuildPortableManifestExecutableRecoverySuffix(JsonElement entry, string manifestExecutable)
     {
         string normalized = DotNetPublishReleaseArtifactVerifier.RequireText(
                 manifestExecutable,
@@ -383,10 +391,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 segment => string.Equals(segment, dimension, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
         if (dimensionIndexes.Any(index => index < 0))
-        {
-            throw Invalid(
-                "A relocated direct portable executable must preserve its runtime, framework, and style path identity.");
-        }
+            return null;
 
         return string.Join("/", segments.Skip(dimensionIndexes.Min()));
     }

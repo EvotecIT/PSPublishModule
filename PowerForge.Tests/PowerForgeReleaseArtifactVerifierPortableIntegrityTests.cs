@@ -479,6 +479,21 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRecoversMatrixNamedDirectExecutableFromCustomOutputPath()
+    {
+        using var fixture = new PortableFixture();
+        string relocatedExecutable = fixture.WriteRelocatedMatrixNamedDirectExecutableFromCustomOutputPath();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = string.Empty;
+        request.SignaturePaths = Array.Empty<string>();
+        request.SbomPaths = Array.Empty<string>();
+
+        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal(Path.GetFullPath(relocatedExecutable), result.ArtifactPath);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsExplicitDirectExecutableFromDifferentMatrixEntry()
     {
         using var fixture = new PortableFixture();
@@ -625,6 +640,44 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             }));
             base.WriteChecksums(ManifestPath, ConfigurationPath, differentMatrixExecutable);
             return differentMatrixExecutable;
+        }
+
+        internal string WriteRelocatedMatrixNamedDirectExecutableFromCustomOutputPath()
+        {
+            string aliasName = DotNetPublishReleaseAssetNaming.CreateDirectMatrixAssetName(
+                "Sample.CLI",
+                "net10.0",
+                "win-x64",
+                "PortableCompat",
+                DotNetPublishArtefactCategory.Publish,
+                bundleId: null,
+                ExecutablePath);
+            string relocatedDirectory = Directory.CreateDirectory(Path.Combine(Root, "release-assets")).FullName;
+            string relocatedExecutable = Path.Combine(relocatedDirectory, aliasName);
+            File.Copy(ExecutablePath, relocatedExecutable, overwrite: true);
+            File.Delete(ExecutablePath);
+            string retiredExecutable = Path.Combine("custom-output", Path.GetFileName(ExecutablePath));
+            File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    Category = "Publish",
+                    Target = "Sample.CLI",
+                    Kind = "Cli",
+                    Runtime = "win-x64",
+                    Framework = "net10.0",
+                    Style = "PortableCompat",
+                    OutputDir = Path.GetDirectoryName(retiredExecutable)!,
+                    ZipPath = string.Empty,
+                    ExePath = retiredExecutable,
+                    SignedFiles = 1,
+                    SignedFilePaths = new[] { retiredExecutable },
+                    SourceRevision,
+                    SourceDirty = false
+                }
+            }));
+            base.WriteChecksums(ManifestPath, ConfigurationPath, relocatedExecutable);
+            return relocatedExecutable;
         }
 
         internal void AddUnexpectedArchiveEntry(string name, string content)

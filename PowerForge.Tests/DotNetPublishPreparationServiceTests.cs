@@ -194,7 +194,11 @@ public sealed class DotNetPublishPreparationServiceTests
     {
       "id": "AppInstaller",
       "prepareFromTarget": "App",
-      "versioning": { "additionalPublishTargets": [ "Portable", "Missing" ] }
+      "versioning": {
+        "enabled": true,
+        "applyToPublish": true,
+        "additionalPublishTargets": [ "Portable", "Missing" ]
+      }
     }
   ]
 }
