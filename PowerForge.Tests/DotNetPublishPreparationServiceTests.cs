@@ -47,7 +47,7 @@ public sealed class DotNetPublishPreparationServiceTests
   "installers": [
     {
       "id": "AppInstaller",
-      "prepareFromTarget": "App"
+      "prepareFromTarget": " App "
     },
     {
       "id": "ToolInstaller",
@@ -57,7 +57,7 @@ public sealed class DotNetPublishPreparationServiceTests
   "bundles": [
     {
       "id": "AppBundle",
-      "prepareFromTarget": "App"
+      "prepareFromTarget": " App "
     },
     {
       "id": "ToolBundle",
@@ -67,7 +67,7 @@ public sealed class DotNetPublishPreparationServiceTests
   "storePackages": [
     {
       "id": "AppStore",
-      "prepareFromTarget": "App"
+      "prepareFromTarget": " App "
     },
     {
       "id": "ToolStore",

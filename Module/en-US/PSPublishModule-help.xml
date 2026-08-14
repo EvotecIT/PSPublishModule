@@ -40211,6 +40211,18 @@ Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {execu
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>New-ConfigurationDotNetSign</maml:name>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AzureArtifactSigning</maml:name>
+          <maml:description>
+            <maml:para>Azure Artifact Signing settings used when Provider selects that provider.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishAzureArtifactSigningOptions</command:parameterValue>
+          <dev:type>
+            <maml:name>DotNetPublishAzureArtifactSigningOptions</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Csp</maml:name>
           <maml:description>
             <maml:para>Optional CSP name.</maml:para>
@@ -40317,6 +40329,22 @@ Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {execu
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Provider</maml:name>
+          <maml:description>
+            <maml:para>Signing provider. Local certificate-store signing remains the default.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishSigningProvider</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">CertificateStore</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AzureArtifactSigning</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>DotNetPublishSigningProvider</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>SubjectName</maml:name>
           <maml:description>
             <maml:para>Optional certificate subject name.</maml:para>
@@ -40379,6 +40407,18 @@ Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {execu
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AzureArtifactSigning</maml:name>
+        <maml:description>
+          <maml:para>Azure Artifact Signing settings used when Provider selects that provider.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishAzureArtifactSigningOptions</command:parameterValue>
+        <dev:type>
+          <maml:name>DotNetPublishAzureArtifactSigningOptions</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Csp</maml:name>
         <maml:description>
@@ -40486,6 +40526,22 @@ Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {execu
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Provider</maml:name>
+        <maml:description>
+          <maml:para>Signing provider. Local certificate-store signing remains the default.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishSigningProvider</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">CertificateStore</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AzureArtifactSigning</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>DotNetPublishSigningProvider</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>SubjectName</maml:name>
         <maml:description>
           <maml:para>Optional certificate subject name.</maml:para>
@@ -40569,6 +40625,13 @@ Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {execu
       <command:example>
         <maml:title>Enable signing by thumbprint</maml:title>
         <dev:code>New-ConfigurationDotNetSign -Enabled -Thumbprint '0123456789ABCDEF' -OnMissingTool Fail -OnSignFailure Fail</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Enable Azure Artifact Signing</maml:title>
+        <dev:code>New-ConfigurationDotNetSign -Enabled -Provider AzureArtifactSigning -SubjectName 'CN=Publisher' -AzureArtifactSigning $azureSigning</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

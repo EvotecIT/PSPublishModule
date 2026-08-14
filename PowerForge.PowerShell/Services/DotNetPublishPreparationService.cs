@@ -170,7 +170,7 @@ internal sealed class DotNetPublishPreparationService
                     .Where(i =>
                         i is not null
                         && (string.IsNullOrWhiteSpace(i.PrepareFromTarget)
-                            || selected.Contains(i.PrepareFromTarget)))
+                            || selected.Contains(i.PrepareFromTarget.Trim())))
                     .ToArray();
             }
 
@@ -180,7 +180,7 @@ internal sealed class DotNetPublishPreparationService
                     .Where(item =>
                         item is not null
                         && (string.IsNullOrWhiteSpace(item.PrepareFromTarget)
-                            || selected.Contains(item.PrepareFromTarget)))
+                            || selected.Contains(item.PrepareFromTarget.Trim())))
                     .ToArray();
             }
 
@@ -190,7 +190,7 @@ internal sealed class DotNetPublishPreparationService
                     .Where(item =>
                         item is not null
                         && (string.IsNullOrWhiteSpace(item.PrepareFromTarget)
-                            || selected.Contains(item.PrepareFromTarget)))
+                            || selected.Contains(item.PrepareFromTarget.Trim())))
                     .ToArray();
             }
         }
