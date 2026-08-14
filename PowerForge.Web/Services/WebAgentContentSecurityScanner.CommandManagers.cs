@@ -29,13 +29,26 @@ public sealed partial class WebAgentContentSecurityScanner
             return;
         if (!ValidatePackageSourceOptions("nuget", tokens, path, line, findings))
             return;
-        if (tokens[1].Equals("restore", StringComparison.OrdinalIgnoreCase))
+        var primaryVerb = tokens[1].ToLowerInvariant();
+        if (primaryVerb == "restore")
         {
             AddUnverifiableOperand("dotnet restore", path, line, findings, "project dependency set");
             return;
         }
-        if (tokens.Length < 3)
+        if (primaryVerb is "build" or "publish" or "run" or "test" or "pack" or
+            "msbuild" or "vstest" or "watch" or "format" or "workload")
+        {
+            AddUnverifiableOperand("dotnet " + tokens[1], path, line, findings,
+                "project dependency graph or executable project targets");
             return;
+        }
+        if (tokens.Length < 3)
+        {
+            if (primaryVerb is not ("--info" or "--version" or "--list-sdks" or "--list-runtimes" or "--help" or "-h" or "help"))
+                AddUnverifiableOperand("dotnet " + tokens[1], path, line, findings,
+                    "unsupported SDK command or project dependency set");
+            return;
+        }
         if (tokens[1].Equals("tool", StringComparison.OrdinalIgnoreCase) &&
             tokens[2].Equals("restore", StringComparison.OrdinalIgnoreCase))
         {
@@ -68,8 +81,13 @@ public sealed partial class WebAgentContentSecurityScanner
             AddUnverifiableOperand("dotnet new update", path, line, findings, "installed template package set");
             return;
         }
-        if (!tokens[1].Equals("add", StringComparison.OrdinalIgnoreCase))
+        if (primaryVerb != "add")
+        {
+            if (primaryVerb is not ("--info" or "--version" or "--list-sdks" or "--list-runtimes" or "--help" or "-h" or "help"))
+                AddUnverifiableOperand("dotnet " + tokens[1], path, line, findings,
+                    "unsupported SDK command or project dependency set");
             return;
+        }
         var packageIndex = Array.FindIndex(tokens, 2, token => token.Equals("package", StringComparison.OrdinalIgnoreCase));
         if (packageIndex >= 0)
             AddSingleOperand("nuget", "dotnet add package", tokens, packageIndex + 1, path, line, references, findings);

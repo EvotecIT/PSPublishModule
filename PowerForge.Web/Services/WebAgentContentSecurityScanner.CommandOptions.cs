@@ -27,6 +27,8 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("-Id", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--tag", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--group", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--package", StringComparison.OrdinalIgnoreCase) ||
+           (option.Equals("-p", StringComparison.Ordinal) && IsNodeOptionContext(optionContext)) ||
            option.Equals("--pip-args", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--python", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-X", StringComparison.OrdinalIgnoreCase) ||
@@ -83,6 +85,15 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("-v", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--save-dev", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-D", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--save", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--save-prod", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("-P", StringComparison.Ordinal) ||
+           option.Equals("--save-optional", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("-O", StringComparison.Ordinal) ||
+           option.Equals("--save-peer", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--save-bundle", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("-B", StringComparison.Ordinal) ||
+           option.Equals("--save-exact", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--no-save", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--no-audit", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--no-fund", StringComparison.OrdinalIgnoreCase) ||
@@ -122,6 +133,6 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("-TrustRepository", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsNodeOptionContext(string? optionContext)
-        => optionContext is not null && optionContext.ToLowerInvariant() is
+        => optionContext is not null && optionContext.Split(' ', 2)[0].ToLowerInvariant() is
             "npm" or "npx" or "pnpx" or "pnpm" or "yarn" or "bun" or "bunx";
 }

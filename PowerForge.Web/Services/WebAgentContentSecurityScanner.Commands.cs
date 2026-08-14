@@ -5,8 +5,14 @@ namespace PowerForge.Web;
 public sealed partial class WebAgentContentSecurityScanner
 {
     private static readonly Regex CommandSegmentRegex = new(
-        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|Install-Package|Update-Package|Install-Module|Install-PSResource|Update-Module|Update-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|\^(?!\r?\n)|[\x5C`\^]\r?\n)*)",
+        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|Install-Package|Update-Package|Install-Module|Install-PSResource|Update-Module|Update-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex ShellTokenConstructionRegex = new(
+        @"[\x5C`\^](?!\r?\n)[^\r\n]",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex ShellContinuationTokenConstructionRegex = new(
+        @"(?<=\S)[\x5C`\^]\r?\n(?=\S)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ObfuscatedExecutableRegex = new(
         @"(?<![A-Za-z0-9_.-])(?<command>(?:[A-Za-z0-9_.-]+[\x5C`\^][A-Za-z0-9_.\x5C`\^-]+|[A-Za-z0-9_.-]+(?:['""][A-Za-z0-9_.-]*['""][A-Za-z0-9_.-]*)+))(?=\s|$)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline);
@@ -28,6 +34,15 @@ public sealed partial class WebAgentContentSecurityScanner
         ScanObfuscatedPackageExecutables(content, path, lineOffset, countLogicalLines, findings);
         foreach (Match match in CommandSegmentRegex.Matches(content))
         {
+            var matchedCommand = match.Groups["command"].Value;
+            if (ShellTokenConstructionRegex.IsMatch(matchedCommand) ||
+                ShellContinuationTokenConstructionRegex.IsMatch(matchedCommand))
+            {
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND", path,
+                    GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                    "Package command operands must not use shell escape construction; spell the executable and package identifiers literally.");
+                continue;
+            }
             if (HasCommandScopedEnvironmentPrefix(content, match.Index))
             {
                 AddFinding(findings, "error", "PFAGENT.PACKAGE.UNVERIFIABLE_ENVIRONMENT", path,
@@ -35,7 +50,7 @@ public sealed partial class WebAgentContentSecurityScanner
                     "Package commands with command-scoped environment assignments cannot be proven to use the canonical public registry.");
                 continue;
             }
-            var tokens = Tokenize(match.Groups["command"].Value);
+            var tokens = Tokenize(matchedCommand);
             if (tokens.Length == 0)
                 continue;
 
@@ -367,7 +382,7 @@ public sealed partial class WebAgentContentSecurityScanner
         var delimiterIndex = Array.FindIndex(tokens, start, static token => token == "--");
         var payloadStart = delimiterIndex >= 0
             ? delimiterIndex + 1
-            : FindNextOperand(tokens, start);
+            : FindNextOperand(tokens, start, command);
         return RejectPackageManagerInvocationAt(command, tokens, payloadStart, path, line, findings);
     }
 
@@ -406,9 +421,11 @@ public sealed partial class WebAgentContentSecurityScanner
             return arguments.Length > 0 &&
                    (arguments[0].Equals("restore", StringComparison.OrdinalIgnoreCase) ||
                     arguments[0].Equals("add", StringComparison.OrdinalIgnoreCase) ||
-                    arguments[0].Equals("package", StringComparison.OrdinalIgnoreCase) ||
-                    arguments[0].Equals("tool", StringComparison.OrdinalIgnoreCase) ||
-                    arguments[0].Equals("new", StringComparison.OrdinalIgnoreCase));
+                     arguments[0].Equals("package", StringComparison.OrdinalIgnoreCase) ||
+                     arguments[0].Equals("tool", StringComparison.OrdinalIgnoreCase) ||
+                     arguments[0].Equals("new", StringComparison.OrdinalIgnoreCase) ||
+                     arguments[0] is "build" or "publish" or "run" or "test" or "pack" or "msbuild" or
+                         "vstest" or "watch" or "format" or "workload");
         }
         return executable is "dnx" or "install-package" or "update-package" or "corepack" or
             "install-module" or "install-psresource" or "update-module" or "update-psresource" or
