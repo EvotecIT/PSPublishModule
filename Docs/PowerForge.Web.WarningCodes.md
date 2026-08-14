@@ -69,7 +69,10 @@ SARIF output.
 | `PFAGENT.ARTIFACT` | A configured machine-facing artifact is missing, oversized, or invalid JSON. |
 | `PFAGENT.TEXT` | Invalid UTF-8, invisible Unicode controls, or a high-confidence prompt directive. |
 | `PFAGENT.COMMAND.REMOTE_EXECUTION` | Downloaded content is piped directly into a shell or interpreter. |
+| `PFAGENT.COMMAND.RUNTIME_INJECTION` | A runtime startup-hook or module-path environment variable can execute or redirect code before a package command. |
 | `PFAGENT.PACKAGE.INVALID_ID` | A package identifier uses an invalid registry shape or non-ASCII lookalike characters. |
+| `PFAGENT.PACKAGE.OBFUSCATED_COMMAND` | Shell escaping or quote concatenation hides a supported package-manager executable. |
+| `PFAGENT.PACKAGE.UNVERIFIABLE_*` | A command or dependency set cannot be reduced to static package identifiers and canonical sources. |
 | `PFAGENT.PACKAGE.NOT_FOUND` | The referenced package is not registered. |
 | `PFAGENT.PACKAGE.VERSION_NOT_FOUND` | The referenced exact version is not registered. |
 | `PFAGENT.PACKAGE.UNTRUSTED_SOURCE` | An install command overrides its ecosystem's canonical public registry. |

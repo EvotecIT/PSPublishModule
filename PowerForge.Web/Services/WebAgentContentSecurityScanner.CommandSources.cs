@@ -13,11 +13,14 @@ public sealed partial class WebAgentContentSecurityScanner
         {
             var token = tokens[index];
             var separator = token.IndexOf('=');
+            if (separator < 0 && ecosystem == "powershellgallery")
+                separator = token.IndexOf(':');
             var option = separator > 0 ? token[..separator] : token;
             if (ecosystem == "pypi" && (option.Equals("-r", StringComparison.OrdinalIgnoreCase) ||
                                         option.Equals("--requirement", StringComparison.OrdinalIgnoreCase) ||
                                         option.Equals("-c", StringComparison.OrdinalIgnoreCase) ||
-                                        option.Equals("--constraint", StringComparison.OrdinalIgnoreCase)))
+                                        option.Equals("--constraint", StringComparison.OrdinalIgnoreCase) ||
+                                        option.Equals("--group", StringComparison.OrdinalIgnoreCase)))
             {
                 AddFinding(findings, "error", "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND", path, line,
                     $"Python dependency input '{option}' can introduce packages that are not statically verifiable from the command.");
@@ -48,7 +51,7 @@ public sealed partial class WebAgentContentSecurityScanner
                        option.Equals("-s", StringComparison.OrdinalIgnoreCase) ||
                        option.Equals("--add-source", StringComparison.OrdinalIgnoreCase) ||
                        option.Equals("--configfile", StringComparison.OrdinalIgnoreCase),
-            "powershellgallery" => option.Equals("-Repository", StringComparison.OrdinalIgnoreCase),
+            "powershellgallery" => IsPowerShellRepositoryOption(option),
             "npm" => option.Equals("--registry", StringComparison.OrdinalIgnoreCase) ||
                      option.Equals("--userconfig", StringComparison.OrdinalIgnoreCase) ||
                      option.Equals("--globalconfig", StringComparison.OrdinalIgnoreCase),
@@ -69,6 +72,10 @@ public sealed partial class WebAgentContentSecurityScanner
             "packagist" => option.Equals("--repository", StringComparison.OrdinalIgnoreCase),
             _ => false
         };
+
+    private static bool IsPowerShellRepositoryOption(string option)
+        => option.Equals("-Repository", StringComparison.OrdinalIgnoreCase) ||
+            option.Length >= 4 && "-Repository".StartsWith(option, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsCanonicalPackageSource(string ecosystem, string option, string value)
     {

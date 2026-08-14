@@ -5,20 +5,14 @@ namespace PowerForge.Web;
 public sealed partial class WebAgentContentSecurityScanner
 {
     private static readonly Regex CommandSegmentRegex = new(
-        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|Install-Module|Install-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|npm|npx|pnpx|pnpm|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|\^(?!\r?\n)|[\x5C`\^]\r?\n)*)",
+        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|Install-Module|Install-PSResource|Update-Module|Update-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|npm|npx|pnpx|pnpm|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|\^(?!\r?\n)|[\x5C`\^]\r?\n)*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    private static readonly Regex EscapedExecutableRegex = new(
-        @"(?<![A-Za-z0-9_.-])(?<command>[A-Za-z0-9_.-]+[\x5C`\^][A-Za-z0-9_.\x5C`\^-]+)(?=\s|$)",
+    private static readonly Regex ObfuscatedExecutableRegex = new(
+        @"(?<![A-Za-z0-9_.-])(?<command>(?:[A-Za-z0-9_.-]+[\x5C`\^][A-Za-z0-9_.\x5C`\^-]+|[A-Za-z0-9_.-]+(?:['""][A-Za-z0-9_.-]*['""][A-Za-z0-9_.-]*)+))(?=\s|$)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline);
     private static readonly Regex ShellContinuationRegex = new(
         @"[\x5C\`\^]\r?\n",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex CommandEnvironmentPrefixRegex = new(
-        @"(?:^|\s)(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|""[^""]*""|[^\s;&|]+)\s*)+(?:env\s+)?$",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    private static readonly Regex PackageSourceEnvironmentRegex = new(
-        @"(?<![A-Za-z0-9_])(?:\$env:)?(?:NPM_CONFIG_[A-Za-z0-9_]+|PIP_INDEX_URL|PIP_EXTRA_INDEX_URL|PIP_FIND_LINKS|PIP_CONFIG_FILE|UV_INDEX_URL|UV_EXTRA_INDEX_URL|UV_DEFAULT_INDEX|UV_INDEX|UV_FIND_LINKS|UV_CONSTRAINT|UV_OVERRIDE|UV_BUILD_CONSTRAINT|UV_CONFIG_FILE|BUN_INSTALL_REGISTRY|GEM_HOST|BUNDLE_MIRROR__[A-Za-z0-9_]+|CARGO_REGISTRIES_[A-Za-z0-9_]+_INDEX)\s*=",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ShellTokenRegex = new(
         @"['""](?<quoted>[^'""]+)['""]|(?<plain>[^\s]+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -31,7 +25,7 @@ public sealed partial class WebAgentContentSecurityScanner
         List<WebAgentContentSecurityFinding> findings)
     {
         var references = new List<WebAgentPackageReference>();
-        ScanEscapedPackageExecutables(content, path, lineOffset, countLogicalLines, findings);
+        ScanObfuscatedPackageExecutables(content, path, lineOffset, countLogicalLines, findings);
         foreach (Match match in CommandSegmentRegex.Matches(content))
         {
             if (HasCommandScopedEnvironmentPrefix(content, match.Index))
@@ -67,6 +61,8 @@ public sealed partial class WebAgentContentSecurityScanner
                     break;
                 case "install-module":
                 case "install-psresource":
+                case "update-module":
+                case "update-psresource":
                     ParsePowerShell(tokens, path, line, references, findings);
                     break;
                 case "npm":
@@ -111,74 +107,37 @@ public sealed partial class WebAgentContentSecurityScanner
         return references;
     }
 
-    private static void ScanEscapedPackageExecutables(
+    private static void ScanObfuscatedPackageExecutables(
         string content,
         string path,
         int lineOffset,
         bool countLogicalLines,
         ICollection<WebAgentContentSecurityFinding> findings)
     {
-        foreach (Match match in EscapedExecutableRegex.Matches(content))
+        foreach (Match match in ObfuscatedExecutableRegex.Matches(content))
         {
             var escaped = match.Groups["command"].Value;
             var normalized = NormalizeExecutable(escaped.Replace("\\", string.Empty, StringComparison.Ordinal)
                 .Replace("`", string.Empty, StringComparison.Ordinal)
-                .Replace("^", string.Empty, StringComparison.Ordinal));
+                .Replace("^", string.Empty, StringComparison.Ordinal)
+                .Replace("'", string.Empty, StringComparison.Ordinal)
+                .Replace("\"", string.Empty, StringComparison.Ordinal));
             if (!IsSupportedPackageExecutable(normalized))
                 continue;
 
             AddFinding(findings, "error", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND", path,
                 GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
-                $"Package-manager executable '{escaped}' uses shell escaping that obscures the command from static verification.");
+                $"Package-manager executable '{escaped}' uses shell token construction that obscures the command from static verification.");
         }
     }
 
     private static bool IsSupportedPackageExecutable(string executable)
         => executable is "dotnet" or "dnx" or "install-module" or "install-psresource" or
+            "update-module" or "update-psresource" or
             "register-psrepository" or "set-psrepository" or "register-psresourcerepository" or
             "set-psresourcerepository" or "npm" or "npx" or "pnpx" or "pnpm" or "yarn" or
             "bun" or "bunx" or "python" or "py" or "pip" or "uv" or "uvx" or "pipx" or
             "cargo" or "gem" or "composer" or "bundle";
-
-    private static void ScanPackageSourceEnvironmentOverrides(
-        string content,
-        string path,
-        int lineOffset,
-        bool countLogicalLines,
-        ICollection<WebAgentContentSecurityFinding> findings)
-    {
-        foreach (Match match in PackageSourceEnvironmentRegex.Matches(content))
-        {
-            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path,
-                GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
-                $"Package source environment override '{match.Value.TrimEnd('=')}' is not allowed in machine-facing installation instructions.");
-        }
-    }
-
-    private static bool HasCommandScopedEnvironmentPrefix(string content, int commandIndex)
-    {
-        var start = commandIndex - 1;
-        while (start >= 0)
-        {
-            if (content[start] is ';' or '&' or '|')
-                break;
-            if (content[start] is '\r' or '\n')
-            {
-                var previous = start - 1;
-                if (content[start] == '\n' && previous >= 0 && content[previous] == '\r')
-                    previous--;
-                while (previous >= 0 && content[previous] is ' ' or '\t')
-                    previous--;
-                if (previous < 0 || content[previous] is not ('\\' or '`'))
-                    break;
-                start = previous - 1;
-                continue;
-            }
-            start--;
-        }
-        var prefix = ShellContinuationRegex.Replace(content[(start + 1)..commandIndex], " ");
-        return CommandEnvironmentPrefixRegex.IsMatch(prefix);
-    }
 
     private static void ParseDotNet(
         string[] tokens,
@@ -191,6 +150,12 @@ public sealed partial class WebAgentContentSecurityScanner
             return;
         if (!ValidatePackageSourceOptions("nuget", tokens, path, line, findings))
             return;
+        if (tokens[1].Equals("tool", StringComparison.OrdinalIgnoreCase) &&
+            tokens[2].Equals("restore", StringComparison.OrdinalIgnoreCase))
+        {
+            AddUnverifiableOperand("dotnet tool restore", path, line, findings, "tool manifest dependency set");
+            return;
+        }
         if (tokens[1].Equals("tool", StringComparison.OrdinalIgnoreCase) &&
             (tokens[2].Equals("install", StringComparison.OrdinalIgnoreCase) ||
              tokens[2].Equals("update", StringComparison.OrdinalIgnoreCase)))
@@ -248,7 +213,7 @@ public sealed partial class WebAgentContentSecurityScanner
             return;
         }
         var verb = NormalizeNodeVerb(tokens[verbIndex]);
-        if (verb == "config")
+        if (verb is "config" or "set")
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
                 $"Package-manager configuration command '{string.Join(' ', tokens)}' can change the registry used by later installation commands.");
@@ -488,7 +453,7 @@ public sealed partial class WebAgentContentSecurityScanner
                     index++;
                     continue;
                 }
-                if (!TrySkipOption(tokens, ref index))
+                if (!TrySkipOption(tokens, ref index, ecosystem))
                 {
                     AddUnverifiableOperand(command, path, line, findings, token);
                     return;
@@ -545,7 +510,7 @@ public sealed partial class WebAgentContentSecurityScanner
         });
     }
 
-    private static int FindNextOperand(string[] tokens, int start)
+    private static int FindNextOperand(string[] tokens, int start, string? optionContext = null)
     {
         for (var index = start; index < tokens.Length; index++)
         {
@@ -554,7 +519,7 @@ public sealed partial class WebAgentContentSecurityScanner
                 continue;
             if (!token.StartsWith("-", StringComparison.Ordinal))
                 return index;
-            if (!TrySkipOption(tokens, ref index))
+            if (!TrySkipOption(tokens, ref index, optionContext))
                 return -1;
         }
         return -1;
@@ -610,7 +575,7 @@ public sealed partial class WebAgentContentSecurityScanner
         {
             if (tokens[index].Equals(verb, StringComparison.OrdinalIgnoreCase))
                 return index;
-            if (tokens[index].StartsWith("-", StringComparison.Ordinal) && TrySkipOption(tokens, ref index))
+            if (tokens[index].StartsWith("-", StringComparison.Ordinal) && TrySkipOption(tokens, ref index, command))
                 continue;
             AddUnverifiableOperand(command, path, line, findings, tokens[index]);
             return -1;
@@ -638,7 +603,7 @@ public sealed partial class WebAgentContentSecurityScanner
         {
             if (verbs.Contains(tokens[index], StringComparer.OrdinalIgnoreCase))
                 return index;
-            if (tokens[index].StartsWith("-", StringComparison.Ordinal) && TrySkipOption(tokens, ref index))
+            if (tokens[index].StartsWith("-", StringComparison.Ordinal) && TrySkipOption(tokens, ref index, command))
                 continue;
             AddUnverifiableOperand(command, path, line, findings, tokens[index]);
             return -1;

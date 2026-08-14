@@ -2,7 +2,7 @@ namespace PowerForge.Web;
 
 public sealed partial class WebAgentContentSecurityScanner
 {
-    private static bool OptionConsumesValue(string option)
+    private static bool OptionConsumesValue(string option, string? optionContext = null)
         => option.Equals("--index-url", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--extra-index-url", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--prefix", StringComparison.OrdinalIgnoreCase) ||
@@ -17,7 +17,7 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("--userconfig", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--globalconfig", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--source", StringComparison.OrdinalIgnoreCase) ||
-           option.Equals("-s", StringComparison.OrdinalIgnoreCase) ||
+           (option.Equals("-s", StringComparison.OrdinalIgnoreCase) && !IsNodeOptionContext(optionContext)) ||
            option.Equals("--index", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--version", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-Version", StringComparison.OrdinalIgnoreCase) ||
@@ -61,8 +61,9 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("-Destination", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-DestinationPath", StringComparison.OrdinalIgnoreCase);
 
-    private static bool OptionIsFlag(string option)
-        => option.Equals("--global", StringComparison.OrdinalIgnoreCase) ||
+    private static bool OptionIsFlag(string option, string? optionContext = null)
+        => (option.Equals("-s", StringComparison.OrdinalIgnoreCase) && IsNodeOptionContext(optionContext)) ||
+           option.Equals("--global", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-g", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--local", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--prerelease", StringComparison.OrdinalIgnoreCase) ||
@@ -116,4 +117,8 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("-SkipPublisherCheck", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-AcceptLicense", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-TrustRepository", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsNodeOptionContext(string? optionContext)
+        => optionContext is not null && optionContext.ToLowerInvariant() is
+            "npm" or "npx" or "pnpx" or "pnpm" or "yarn" or "bun" or "bunx";
 }

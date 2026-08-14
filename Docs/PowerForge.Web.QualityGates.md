@@ -170,7 +170,7 @@ When enabled, the step fails fast unless these checks are explicitly set in the 
 - `checkHeadingOrder`
 - `checkLinkPurposeConsistency`
 - `checkMediaEmbeds`
-- `checkAgentContentSecurity`
+- `checkAgentContentSecurity` (`audit` only)
 
 Example:
 ```json

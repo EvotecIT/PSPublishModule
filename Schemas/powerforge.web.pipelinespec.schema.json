@@ -302,7 +302,7 @@
         "checkMedia": { "type": "boolean" },
         "requireExplicitChecks": {
           "type": "boolean",
-          "description": "When true, require explicit values for compatibility-sensitive checks (checkSeoMeta, checkNetworkHints, checkRenderBlockingResources, checkHeadingOrder, checkLinkPurposeConsistency, checkMediaEmbeds, checkAgentContentSecurity)."
+          "description": "When true, require explicit values for compatibility-sensitive checks (checkSeoMeta, checkNetworkHints, checkRenderBlockingResources, checkHeadingOrder, checkLinkPurposeConsistency, checkMediaEmbeds)."
         },
         "require-explicit-checks": {
           "type": "boolean",

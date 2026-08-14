@@ -190,8 +190,7 @@ public class WebPipelineRunnerExplicitCheckContractTests
                       "checkRenderBlockingResources": true,
                       "checkHeadingOrder": true,
                       "checkLinkPurposeConsistency": true,
-                      "checkMediaEmbeds": true,
-                      "checkAgentContentSecurity": false
+                      "checkMediaEmbeds": true
                     }
                   ]
                 }

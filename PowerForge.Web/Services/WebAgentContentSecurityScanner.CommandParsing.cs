@@ -124,18 +124,18 @@ public sealed partial class WebAgentContentSecurityScanner
         return true;
     }
 
-    private static bool TrySkipOption(string[] tokens, ref int index)
+    private static bool TrySkipOption(string[] tokens, ref int index, string? optionContext = null)
     {
         var option = tokens[index];
         var equals = option.IndexOf('=');
         if (equals > 0)
         {
             var name = option[..equals];
-            return OptionConsumesValue(name) || OptionIsFlag(name);
+            return OptionConsumesValue(name, optionContext) || OptionIsFlag(name, optionContext);
         }
-        if (OptionIsFlag(option))
+        if (OptionIsFlag(option, optionContext))
             return true;
-        if (!OptionConsumesValue(option) || index + 1 >= tokens.Length)
+        if (!OptionConsumesValue(option, optionContext) || index + 1 >= tokens.Length)
             return false;
         index++;
         return true;
@@ -161,7 +161,7 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         "exec", "x", "dlx", "install", "i", "in", "ins", "inst", "insta", "instal",
         "isnt", "isnta", "isntal", "isntall", "add", "ci", "clean-install", "ic", "install-clean", "isntall-clean",
-        "config", "c", "conf", "init", "create", "innit"
+        "install-test", "it", "ci-test", "cit", "config", "c", "conf", "set", "init", "create", "innit"
     };
 
     private static string[] Tokenize(string command)
@@ -180,6 +180,8 @@ public sealed partial class WebAgentContentSecurityScanner
                 "isnt" or "isnta" or "isntal" or "isntall" => "install",
             "c" or "conf" => "config",
             "clean-install" or "ic" or "install-clean" or "isntall-clean" => "ci",
+            "ci-test" or "cit" => "ci",
+            "install-test" or "it" => "install",
             "create" or "innit" => "init",
             _ => verb
         };
