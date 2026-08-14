@@ -2,6 +2,123 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests {
     [Fact]
+    public void Execute_AppleCheckpoint_rejects_linked_swiftpm_metadata_root() {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var root = CreateSandbox();
+        var outside = root + "-swiftpm-metadata";
+        try {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            File.WriteAllText(
+                Path.Combine(root, "Package.swift"),
+                "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"CasaRay\")\n");
+            Directory.CreateDirectory(outside);
+            Directory.CreateSymbolicLink(Path.Combine(root, ".swiftpm"), outside);
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var sourceCommit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
+
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Archive-only checkpoint must not query App Store Connect."),
+                    archiveAppleApp: _ => throw new InvalidOperationException("Linked SwiftPM metadata must fail before archive."))
+                .Execute(CreateAppleAutomationSpec(root, keyPath), new PowerForgeReleaseRequest {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Archive,
+                    AppleSourceCommit = sourceCommit,
+                    RequireImmutableAppleSourceSnapshot = true
+                });
+
+            Assert.False(result.Success);
+            Assert.Contains("symbolic link", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        } finally {
+            TryDelete(root);
+            TryDelete(outside);
+        }
+    }
+
+    [Fact]
+    public void AppleReleaseSourceSnapshot_revalidates_prepared_swiftpm_state_when_monitoring_begins() {
+        var root = CreateSandbox();
+        try {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            File.WriteAllText(
+                Path.Combine(root, "Package.swift"),
+                "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"CasaRay\")\n");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var sourceCommit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
+
+            using var snapshot = AppleReleaseSourceSnapshot.CreateIfRequired(new PowerForgeAppleReleasePlan {
+                ProjectRoot = root,
+                SourceCommit = sourceCommit,
+                RequireImmutableSourceSnapshot = true,
+                Archive = true
+            });
+            Assert.NotNull(snapshot);
+            File.WriteAllText(
+                Path.Combine(snapshot!.RootPath, ".swiftpm", "configuration", "workspace-state.json"),
+                "unbound state inserted after snapshot preflight");
+
+            var exception = Assert.Throws<InvalidOperationException>(() => snapshot.MonitorChanges());
+
+            Assert.Contains("untracked state", exception.Message, StringComparison.OrdinalIgnoreCase);
+        } finally {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleCheckpoint_rejects_files_created_in_prepared_swiftpm_directories() {
+        var root = CreateSandbox();
+        try {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            File.WriteAllText(
+                Path.Combine(root, "Package.swift"),
+                "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"CasaRay\")\n");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var sourceCommit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
+
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Archive-only checkpoint must not query App Store Connect."),
+                    archiveAppleApp: request => {
+                        var snapshotRoot = Path.GetDirectoryName(request.ProjectPath)!;
+                        File.WriteAllText(
+                            Path.Combine(snapshotRoot, ".swiftpm", "configuration", "workspace-state.json"),
+                            "untrusted state");
+                        var archive = Directory.CreateDirectory(request.ArchivePath!);
+                        File.WriteAllText(Path.Combine(archive.FullName, "payload"), "untrusted archive");
+                        return CreateSuccessfulArchive(request);
+                    })
+                .Execute(CreateAppleAutomationSpec(root, keyPath), new PowerForgeReleaseRequest {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Archive,
+                    AppleSourceCommit = sourceCommit,
+                    RequireImmutableAppleSourceSnapshot = true
+                });
+
+            Assert.False(result.Success);
+            Assert.Contains("snapshot changed while xcodebuild", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        } finally {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleCheckpoint_rejects_transient_exact_source_snapshot_mutation() {
         var root = CreateSandbox();
         try {

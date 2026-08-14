@@ -131,7 +131,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             var originResult = RunGitAllowFailure(entry, "remote", "get-url", "origin");
             if (!originResult.Succeeded || string.IsNullOrWhiteSpace(originResult.StdOut))
                 throw new InvalidOperationException($"Xcode materialized Swift package checkout has no approved origin: {entry}");
-            var origin = originResult.StdOut.Trim();
+            var origin = ResolveMaterializedPackageOrigin(root, entry, originResult.StdOut.Trim());
             var normalizedOrigin = NormalizePackageLocation(origin);
             if (!approvedRevisions.TryGetValue(normalizedOrigin, out var approvedRevision))
                 throw new InvalidOperationException($"Xcode materialized an additional Swift package checkout outside the approved graph: {origin}");
@@ -148,6 +148,126 @@ internal sealed partial class AppleReleaseSourceTrustService
         var missing = approvedRevisions.Keys.FirstOrDefault(key => !observed.Contains(key));
         if (missing is not null)
             throw new InvalidOperationException($"Xcode did not materialize approved Swift package checkout '{missing}'.");
+    }
+
+    private string ResolveMaterializedPackageOrigin(
+        string sourcePackagesRoot,
+        string checkoutPath,
+        string origin)
+    {
+        if (origin.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            origin.StartsWith("ssh://", StringComparison.OrdinalIgnoreCase) ||
+            origin.StartsWith("git@", StringComparison.OrdinalIgnoreCase))
+        {
+            return origin;
+        }
+
+        var resolvedOrigin = Path.IsPathRooted(origin)
+            ? Path.GetFullPath(origin)
+            : Path.GetFullPath(Path.Combine(checkoutPath, origin));
+        var repositories = Path.Combine(sourcePackagesRoot, "repositories");
+        var directMirror = Directory.Exists(repositories) &&
+                           Directory.Exists(resolvedOrigin) &&
+                           GetPathComparer().Equals(Path.GetDirectoryName(resolvedOrigin), repositories);
+        if (!directMirror)
+            return origin;
+
+        ValidateXcodeRepositoryMirrorMetadata(repositories, resolvedOrigin);
+        var canonicalOrigin = RunGitAllowFailure(resolvedOrigin, "remote", "get-url", "origin");
+        if (!canonicalOrigin.Succeeded || string.IsNullOrWhiteSpace(canonicalOrigin.StdOut))
+        {
+            throw new InvalidOperationException(
+                $"Xcode materialized Swift package repository mirror has no approved origin: {resolvedOrigin}");
+        }
+
+        return canonicalOrigin.StdOut.Trim();
+    }
+
+    private void ValidateXcodeRepositoryMirrorMetadata(string repositoriesRoot, string mirrorPath)
+    {
+        EnsureNoLinkedTraversal(repositoriesRoot, mirrorPath, "Xcode materialized Swift package repository mirror");
+
+        var configPath = Path.Combine(mirrorPath, "config");
+        if (!File.Exists(configPath))
+        {
+            throw new InvalidOperationException(
+                $"Xcode materialized Swift package repository mirror config was not found: {configPath}");
+        }
+        EnsureNoLinkedTraversal(mirrorPath, configPath, "Xcode materialized Swift package repository mirror config");
+        var includes = RunGitAllowFailure(
+            mirrorPath,
+            "config",
+            "--file",
+            configPath,
+            "--no-includes",
+            "--get-regexp",
+            "^include");
+        if (includes.Succeeded)
+        {
+            throw new InvalidOperationException(
+                $"Xcode materialized Swift package repository mirror config must not include external Git configuration: {configPath}");
+        }
+        if (includes.ExitCode != 1)
+        {
+            throw new InvalidOperationException(
+                $"Xcode materialized Swift package repository mirror config could not be inspected safely: {configPath}");
+        }
+
+        var objectsPath = Path.Combine(mirrorPath, "objects");
+        var objectsInfoPath = Path.Combine(objectsPath, "info");
+        EnsureDirectoryWithinRepository(mirrorPath, objectsPath, "Xcode materialized Swift package repository mirror object database");
+        EnsureDirectoryWithinRepository(mirrorPath, objectsInfoPath, "Xcode materialized Swift package repository mirror object metadata");
+        foreach (var alternateName in new[] { "alternates", "http-alternates" })
+        {
+            var alternatesPath = Path.Combine(objectsInfoPath, alternateName);
+            if (PathEntryExistsOrIsLink(alternatesPath))
+            {
+                throw new InvalidOperationException(
+                    $"Xcode materialized Swift package repository mirror must not use Git object alternates: {alternatesPath}");
+            }
+        }
+
+        var bare = RunGitAllowFailure(mirrorPath, "rev-parse", "--is-bare-repository");
+        if (!bare.Succeeded || !bare.StdOut.Trim().Equals("true", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Xcode materialized Swift package repository mirror is not a self-contained bare repository: {mirrorPath}");
+        }
+
+        var gitDirectory = RunGitAllowFailure(mirrorPath, "rev-parse", "--git-dir");
+        var commonDirectory = RunGitAllowFailure(mirrorPath, "rev-parse", "--git-common-dir");
+        if (!gitDirectory.Succeeded || !commonDirectory.Succeeded)
+        {
+            throw new InvalidOperationException(
+                $"Xcode materialized Swift package repository mirror has unresolved Git metadata: {mirrorPath}");
+        }
+
+        if (!gitDirectory.StdOut.Trim().Equals(".", StringComparison.Ordinal) ||
+            !commonDirectory.StdOut.Trim().Equals(".", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Xcode materialized Swift package repository mirror Git metadata must be self-contained: {mirrorPath}");
+        }
+
+    }
+
+    private static bool PathEntryExistsOrIsLink(string path)
+    {
+        if (File.Exists(path) || Directory.Exists(path))
+            return true;
+#if NET8_0_OR_GREATER
+        try
+        {
+            return !string.IsNullOrWhiteSpace(new FileInfo(path).LinkTarget) ||
+                   !string.IsNullOrWhiteSpace(new DirectoryInfo(path).LinkTarget);
+        }
+        catch (IOException)
+        {
+            return true;
+        }
+#else
+        return false;
+#endif
     }
 
     private void EnsureRemotePackageHasNoGitLinks(string checkoutPath, string repositoryUrl)

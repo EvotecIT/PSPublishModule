@@ -17,6 +17,8 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
         new Dictionary<string, string>(StringComparer.Ordinal);
     private string? _snapshotConfigPath;
     private string? _expectedConfigSha256;
+    private readonly Dictionary<string, AppleArchiveUploadSnapshot.SnapshotIdentity> _preparedSwiftPackageMetadata =
+        new(GetPathComparer());
     private bool _disposed;
 
     private AppleReleaseSourceSnapshot(
@@ -80,6 +82,7 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
                 snapshotRoot,
                 snapshotProjectRoot,
                 sourceCommit);
+            snapshot.PrepareSwiftPackageWorkingDirectories();
             snapshot._trackedFileMutationIdentities = snapshot.CaptureTrackedFileMutationIdentities();
             snapshot.ValidateUnchanged();
             if (!string.IsNullOrWhiteSpace(plan.ExactSourceConfigPath))
@@ -148,7 +151,153 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
 
     /// <summary>Begins monitoring the detached source tree for transient changes during xcodebuild.</summary>
     internal AppleReleaseSourceMutationMonitor MonitorChanges()
-        => new(RootPath);
+    {
+        var monitor = new AppleReleaseSourceMutationMonitor(RootPath);
+        try
+        {
+            ValidatePreparedSwiftPackageWorkingDirectories();
+            return monitor;
+        }
+        catch
+        {
+            monitor.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Prepares the empty package-local directories that Xcode creates while resolving a tracked
+    /// local Swift package. Files and later mutations remain observable by the snapshot monitor.
+    /// </summary>
+    private void PrepareSwiftPackageWorkingDirectories()
+    {
+        var trackedPaths = Run(
+                _git,
+                RootPath,
+                new[] { "ls-files", "-z" },
+                "enumerate local Swift package roots")
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var relativePath in trackedPaths.Where(path =>
+                     Path.GetFileName(path).Equals("Package.swift", StringComparison.Ordinal)))
+        {
+            var packageManifest = Path.GetFullPath(Path.Combine(
+                RootPath,
+                relativePath.Replace('/', Path.DirectorySeparatorChar)));
+            EnsureContained(RootPath, packageManifest, "Apple snapshot Swift package manifest");
+            var metadataRoot = Path.Combine(Path.GetDirectoryName(packageManifest)!, ".swiftpm");
+            EnsureRealDirectory(metadataRoot, "Apple snapshot Swift package metadata root", createIfMissing: true);
+            foreach (var name in new[] { "configuration", "xcode" })
+            {
+                var directory = Path.Combine(metadataRoot, name);
+                EnsureRealDirectory(directory, $"Apple snapshot Swift package {name} directory", createIfMissing: true);
+            }
+            ValidateSwiftPackageMetadataTree(metadataRoot);
+            _preparedSwiftPackageMetadata[metadataRoot] = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+                metadataRoot,
+                "prepared Apple snapshot Swift package metadata");
+        }
+    }
+
+    private void ValidatePreparedSwiftPackageWorkingDirectories()
+    {
+        foreach (var pair in _preparedSwiftPackageMetadata)
+        {
+            var metadataRoot = pair.Key;
+            EnsureRealDirectory(metadataRoot, "Apple snapshot Swift package metadata root");
+            foreach (var name in new[] { "configuration", "xcode" })
+            {
+                EnsureRealDirectory(
+                    Path.Combine(metadataRoot, name),
+                    $"Apple snapshot Swift package {name} directory");
+            }
+            ValidateSwiftPackageMetadataTree(metadataRoot);
+            var current = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+                metadataRoot,
+                "prepared Apple snapshot Swift package metadata");
+            if (!pair.Value.Equals(current))
+            {
+                throw new InvalidOperationException(
+                    $"Apple snapshot Swift package metadata changed before the Apple build started: {metadataRoot}");
+            }
+        }
+    }
+
+    private void ValidateSwiftPackageMetadataTree(string metadataRoot)
+    {
+        var relativeRoot = FrameworkCompatibility.GetRelativePath(RootPath, metadataRoot).Replace('\\', '/');
+        var trackedFiles = Run(
+                _git,
+                RootPath,
+                new[] { "ls-files", "-z", "--", relativeRoot + "/" },
+                "enumerate tracked Swift package metadata")
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(path => Path.GetFullPath(Path.Combine(RootPath, path.Replace('/', Path.DirectorySeparatorChar))))
+            .ToHashSet(GetPathComparer());
+        var allowedDirectories = new HashSet<string>(GetPathComparer())
+        {
+            metadataRoot,
+            Path.Combine(metadataRoot, "configuration"),
+            Path.Combine(metadataRoot, "xcode")
+        };
+        foreach (var trackedFile in trackedFiles)
+        {
+            EnsureContained(metadataRoot, trackedFile, "tracked Apple snapshot Swift package metadata");
+            for (var directory = Path.GetDirectoryName(trackedFile);
+                 directory is not null && !directory.Equals(metadataRoot, GetPathComparison());
+                 directory = Path.GetDirectoryName(directory))
+            {
+                allowedDirectories.Add(directory);
+            }
+        }
+        var pending = new Stack<string>();
+        pending.Push(metadataRoot);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
+            {
+                var attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Apple snapshot Swift package metadata must not contain a symbolic link or reparse point: {entry}");
+                }
+                if ((attributes & FileAttributes.Directory) != 0)
+                {
+                    if (!allowedDirectories.Contains(Path.GetFullPath(entry)))
+                    {
+                        throw new InvalidOperationException(
+                            $"Apple snapshot Swift package metadata contains an untracked directory: {entry}");
+                    }
+                    pending.Push(entry);
+                    continue;
+                }
+                var fullPath = Path.GetFullPath(entry);
+                if (!trackedFiles.Contains(fullPath))
+                {
+                    throw new InvalidOperationException(
+                        $"Apple snapshot Swift package metadata contains untracked state: {entry}");
+                }
+            }
+        }
+    }
+
+    private void EnsureRealDirectory(string directory, string name, bool createIfMissing = false)
+    {
+        EnsureContained(RootPath, directory, name);
+        if (!Directory.Exists(directory))
+        {
+            if (!createIfMissing || File.Exists(directory))
+                throw new InvalidOperationException($"{name} must be an ordinary directory: {directory}");
+            Directory.CreateDirectory(directory);
+            return;
+        }
+        if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"{name} must not be a symbolic link or reparse point: {directory}");
+        }
+    }
 
     private string MapRepositoryPath(string sourcePath)
     {
@@ -353,6 +502,9 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
 
     private static StringComparer GetPathComparer()
         => Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private static StringComparison GetPathComparison()
+        => Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     public void Dispose()
     {

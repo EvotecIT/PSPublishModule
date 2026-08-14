@@ -504,6 +504,12 @@ public sealed partial class PowerForgeReleaseServiceTests
         try
         {
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            File.WriteAllText(
+                Path.Combine(root, "Package.swift"),
+                "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"CasaRay\")\n");
+            var trackedSwiftPackageMetadata = Path.Combine(root, ".swiftpm", "configuration", "mirrors.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(trackedSwiftPackageMetadata)!);
+            File.WriteAllText(trackedSwiftPackageMetadata, "{\"object\":{\"pins\":[]},\"version\":1}");
             var sourceFile = Path.Combine(root, "CasaRay.xcodeproj", "project.pbxproj");
             var committedContents = File.ReadAllText(sourceFile);
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
@@ -520,6 +526,12 @@ public sealed partial class PowerForgeReleaseServiceTests
                 archiveAppleApp: request =>
                 {
                     archivedProjectPath = request.ProjectPath;
+                    var snapshotRoot = Path.GetDirectoryName(request.ProjectPath)!;
+                    Assert.True(Directory.Exists(Path.Combine(snapshotRoot, ".swiftpm", "configuration")));
+                    Assert.True(Directory.Exists(Path.Combine(snapshotRoot, ".swiftpm", "xcode")));
+                    Assert.Equal(
+                        File.ReadAllText(trackedSwiftPackageMetadata),
+                        File.ReadAllText(Path.Combine(snapshotRoot, ".swiftpm", "configuration", "mirrors.json")));
                     File.AppendAllText(sourceFile, "\n// concurrent original-worktree mutation");
                     Assert.Equal(committedContents, File.ReadAllText(Path.Combine(request.ProjectPath, "project.pbxproj")));
                     var archive = Directory.CreateDirectory(request.ArchivePath!);
