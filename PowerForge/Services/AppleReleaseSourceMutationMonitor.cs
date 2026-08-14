@@ -11,6 +11,7 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
     private readonly string _failureInstruction;
     private readonly string? _exactPath;
     private readonly bool _includeExactPathDescendants;
+    private readonly Func<FileSystemEventArgs, bool>? _ignoredMutation;
     private int _enforceMutations;
     private long _mutationSequence;
     private string? _firstMutation;
@@ -24,12 +25,14 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         string failureInstruction = "Discard the archive and rebuild from a new snapshot.",
         bool enableImmediately = true,
         string? exactPath = null,
-        bool includeExactPathDescendants = false) {
+        bool includeExactPathDescendants = false,
+        Func<FileSystemEventArgs, bool>? ignoredMutation = null) {
         _scopeDescription = scopeDescription;
         _readerDescription = readerDescription;
         _failureInstruction = failureInstruction;
         _exactPath = string.IsNullOrWhiteSpace(exactPath) ? null : Path.GetFullPath(exactPath);
         _includeExactPathDescendants = includeExactPathDescendants;
+        _ignoredMutation = ignoredMutation;
         _watcher = new FileSystemWatcher(rootPath) {
             IncludeSubdirectories = true,
             InternalBufferSize = 64 * 1024,
@@ -60,7 +63,8 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         _watcher.EnableRaisingEvents = false;
         if (_watcherError is not null) {
             throw new InvalidOperationException(
-                $"The {_scopeDescription} mutation monitor failed; its output cannot be trusted. {_failureInstruction}",
+                $"The {_scopeDescription} mutation monitor failed; its output cannot be trusted. " +
+                $"{_watcherError.Message} {_failureInstruction}",
                 _watcherError);
         }
         if (!string.IsNullOrWhiteSpace(_firstMutation)) {
@@ -75,7 +79,8 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
             throw new ArgumentNullException(nameof(capture));
         if (_watcherError is not null) {
             throw new InvalidOperationException(
-                $"The {_scopeDescription} mutation monitor failed at the {producerDescription} completion boundary. {_failureInstruction}",
+                $"The {_scopeDescription} mutation monitor failed at the {producerDescription} completion boundary. " +
+                $"{_watcherError.Message} {_failureInstruction}",
                 _watcherError);
         }
 
@@ -140,7 +145,8 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         Thread.Sleep(250);
         if (_watcherError is not null) {
             throw new InvalidOperationException(
-                $"The {_scopeDescription} changed while its {producerDescription} output was being bound. {_failureInstruction}",
+                $"The {_scopeDescription} changed while its {producerDescription} output was being bound. " +
+                $"{_watcherError.Message} {_failureInstruction}",
                 _watcherError);
         }
         var currentOutput = capture();
@@ -160,6 +166,19 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
     {
         if (_exactPath is not null && !MutationTouchesExactPath(args, _exactPath, _includeExactPathDescendants))
             return;
+        if (_ignoredMutation is not null)
+        {
+            try
+            {
+                if (_ignoredMutation(args))
+                    return;
+            }
+            catch (Exception exception)
+            {
+                Interlocked.CompareExchange(ref _watcherError, exception, null);
+                return;
+            }
+        }
         Interlocked.Increment(ref _mutationSequence);
         if (Volatile.Read(ref _enforceMutations) != 0)
             Interlocked.CompareExchange(ref _firstMutation, args.FullPath, null);

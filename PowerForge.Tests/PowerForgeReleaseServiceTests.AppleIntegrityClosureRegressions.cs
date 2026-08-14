@@ -292,6 +292,92 @@ public sealed partial class PowerForgeReleaseServiceTests {
     }
 
     [Fact]
+    public void Execute_AppleUpload_allows_transient_xcode_sandbox_scratch_for_approved_archive_file() {
+        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        var root = CreateSandbox();
+        try {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.MinimumFreeSpaceGB = 0;
+            spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            spec.AppleApps.Automation.WaitForProcessing = false;
+
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, processingState: null),
+                    archiveAppleApp: request => {
+                        var archive = Directory.CreateDirectory(request.ArchivePath!);
+                        File.WriteAllText(Path.Combine(archive.FullName, "Info.plist"), "approved bytes");
+                        return CreateSuccessfulArchive(request);
+                    },
+                    uploadAppleApp: request => {
+                        var scratch = Path.Combine(
+                            request.ArchivePath!,
+                            "Info.plist.sb-2f65fadd-rg00hz");
+                        File.WriteAllText(scratch, "xcode scratch bytes");
+                        Thread.Sleep(1000);
+                        File.Delete(scratch);
+                        return CreateSuccessfulUpload(request);
+                    })
+                .Execute(spec, new PowerForgeReleaseRequest {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleSourceCommit = sourceCommit
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.True(Assert.Single(result.AppleApps).Upload?.Succeeded);
+        } finally {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("Unapproved.plist.sb-2f65fadd-rg00hz")]
+    [InlineData("Products/Info.plist.sb-2f65fadd-rg00hz")]
+    public void Execute_AppleUpload_rejects_xcode_sandbox_scratch_outside_exact_archive_info_plist(string scratchRelativePath) {
+        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        var root = CreateSandbox();
+        try {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.MinimumFreeSpaceGB = 0;
+            spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            spec.AppleApps.Automation.WaitForProcessing = false;
+
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, processingState: null),
+                    archiveAppleApp: request => {
+                        var archive = Directory.CreateDirectory(request.ArchivePath!);
+                        File.WriteAllText(Path.Combine(archive.FullName, "Info.plist"), "approved bytes");
+                        var products = Directory.CreateDirectory(Path.Combine(archive.FullName, "Products"));
+                        File.WriteAllText(Path.Combine(products.FullName, "Info.plist"), "approved nested bytes");
+                        return CreateSuccessfulArchive(request);
+                    },
+                    uploadAppleApp: request => {
+                        var scratch = Path.Combine(request.ArchivePath!, scratchRelativePath);
+                        File.WriteAllText(scratch, "unapproved scratch bytes");
+                        Thread.Sleep(1000);
+                        File.Delete(scratch);
+                        return CreateSuccessfulUpload(request);
+                    })
+                .Execute(spec, new PowerForgeReleaseRequest {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleSourceCommit = sourceCommit
+                });
+
+            Assert.False(result.Success);
+            Assert.Contains("private Apple upload archive snapshot changed", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        } finally {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleUpload_rejects_transient_private_archive_hard_link_alias_mutation() {
         const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
         var root = CreateSandbox();

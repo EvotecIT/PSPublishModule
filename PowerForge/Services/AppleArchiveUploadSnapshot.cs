@@ -54,6 +54,19 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         }
     }
 
+    /// <summary>
+    /// Monitors the private archive while allowing only Xcode's transient sandbox scratch files.
+    /// The scratch name must correspond to an approved archive file, and the complete archive
+    /// identity is still revalidated after export so a retained scratch file or base-file change fails.
+    /// </summary>
+    internal AppleReleaseSourceMutationMonitor MonitorChanges()
+        => new(
+            RootPath,
+            "private Apple upload archive snapshot",
+            "xcodebuild exportArchive",
+            "Discard the upload/export result and inspect remote state before retrying.",
+            ignoredMutation: IsExpectedXcodeExportScratchMutation);
+
     internal void ValidateUnchanged(string expectedSha256)
     {
         var current = CaptureCompleteIdentity(ArchivePath);
@@ -80,7 +93,8 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         {
             return new SnapshotIdentity(
                 sha256,
-                ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(archivePath, description));
+                ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(archivePath, description),
+                new HashSet<string>(GetPathComparer(archivePath)));
         }
         var identities = CaptureFileMutationIdentities(archivePath, description);
         var canonical = new System.Text.StringBuilder();
@@ -93,7 +107,60 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         var digest = BitConverter.ToString(hash.ComputeHash(System.Text.Encoding.UTF8.GetBytes(canonical.ToString())))
             .Replace("-", string.Empty)
             .ToLowerInvariant();
-        return new SnapshotIdentity(sha256, digest);
+        return new SnapshotIdentity(
+            sha256,
+            digest,
+            new HashSet<string>(identities.Keys, GetPathComparer(archivePath)));
+    }
+
+    private bool IsExpectedXcodeExportScratchMutation(FileSystemEventArgs args)
+    {
+        if (args is RenamedEventArgs)
+            return false;
+        return IsExpectedXcodeExportScratchPath(args.FullPath);
+    }
+
+    private bool IsExpectedXcodeExportScratchPath(string path)
+    {
+        var scratchPath = Path.GetFullPath(path);
+        var archiveRoot = Path.GetFullPath(ArchivePath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        var prefix = archiveRoot + Path.DirectorySeparatorChar;
+        if (!scratchPath.StartsWith(prefix, comparison))
+            return false;
+
+        var relativePath = FrameworkCompatibility.GetRelativePath(archiveRoot, scratchPath)
+            .Replace('\\', '/');
+        if (relativePath.IndexOf('/') >= 0)
+            return false;
+        var fileName = Path.GetFileName(relativePath);
+        var marker = fileName.LastIndexOf(".sb-", StringComparison.Ordinal);
+        if (marker <= 0)
+            return false;
+
+        var firstTokenStart = marker + 4;
+        var separator = fileName.IndexOf('-', firstTokenStart);
+        if (separator != firstTokenStart + 8 || fileName.Length != separator + 7)
+            return false;
+        for (var index = firstTokenStart; index < separator; index++)
+        {
+            var character = fileName[index];
+            if (!((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')))
+                return false;
+        }
+        for (var index = separator + 1; index < fileName.Length; index++)
+        {
+            var character = fileName[index];
+            if (!((character >= '0' && character <= '9') || (character >= 'a' && character <= 'z')))
+                return false;
+        }
+
+        var approvedFileName = fileName.Substring(0, marker);
+        return string.Equals(approvedFileName, "Info.plist", StringComparison.Ordinal) &&
+               _identity.ApprovedFiles.Contains(approvedFileName);
     }
 
     private static IReadOnlyDictionary<string, string> CaptureFileMutationIdentities(
@@ -165,15 +232,21 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
 
     internal sealed class SnapshotIdentity : IEquatable<SnapshotIdentity>
     {
-        internal SnapshotIdentity(string sha256, string mutationDigest)
+        internal SnapshotIdentity(
+            string sha256,
+            string mutationDigest,
+            HashSet<string> approvedFiles)
         {
             Sha256 = sha256;
             MutationDigest = mutationDigest;
+            ApprovedFiles = approvedFiles;
         }
 
         internal string Sha256 { get; }
 
         internal string MutationDigest { get; }
+
+        internal HashSet<string> ApprovedFiles { get; }
 
         public bool Equals(SnapshotIdentity? other)
             => other is not null &&
