@@ -5,7 +5,7 @@ namespace PowerForge.Web;
 public sealed partial class WebAgentContentSecurityScanner
 {
     private static readonly Regex CommandSegmentRegex = new(
-        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|Install-Package|Update-Package|Install-Module|Install-PSResource|Update-Module|Update-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|\^(?!\r?\n)|[\x5C`\^]\r?\n)*)",
+        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|Install-Package|Update-Package|Install-Module|Install-PSResource|Update-Module|Update-PSResource|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|\^(?!\r?\n)|[\x5C`\^]\r?\n)*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ObfuscatedExecutableRegex = new(
         @"(?<![A-Za-z0-9_.-])(?<command>(?:[A-Za-z0-9_.-]+[\x5C`\^][A-Za-z0-9_.\x5C`\^-]+|[A-Za-z0-9_.-]+(?:['""][A-Za-z0-9_.-]*['""][A-Za-z0-9_.-]*)+))(?=\s|$)",
@@ -70,6 +70,9 @@ public sealed partial class WebAgentContentSecurityScanner
                 case "install-package":
                 case "update-package":
                     ParsePowerShellNuGet(tokens, path, line, commandReferences, findings);
+                    break;
+                case "corepack":
+                    ParseCorepack(tokens, path, line, findings);
                     break;
                 case "npm":
                 case "pnpm":
@@ -143,7 +146,7 @@ public sealed partial class WebAgentContentSecurityScanner
         => executable is "dotnet" or "dnx" or "install-package" or "update-package" or "install-module" or "install-psresource" or
             "update-module" or "update-psresource" or
             "register-psrepository" or "set-psrepository" or "register-psresourcerepository" or
-            "set-psresourcerepository" or "npm" or "npx" or "pnpx" or "pnpm" or "yarn" or
+            "set-psresourcerepository" or "corepack" or "npm" or "npx" or "pnpx" or "pnpm" or "yarn" or
             "bun" or "bunx" or "python" or "py" or "pip" or "uv" or "uvx" or "pipx" or
             "cargo" or "gem" or "composer" or "bundle";
 
@@ -240,7 +243,7 @@ public sealed partial class WebAgentContentSecurityScanner
                 return;
             }
             var verbIndex = FindKnownVerbIndex(tokens, 1,
-                new[] { "install", "run", "inject", "upgrade", "upgrade-all", "reinstall", "reinstall-all" },
+                new[] { "install", "run", "runpip", "inject", "upgrade", "upgrade-all", "reinstall", "reinstall-all" },
                 "pipx", path, line, findings);
             if (verbIndex < 0)
                 return;
@@ -248,6 +251,11 @@ public sealed partial class WebAgentContentSecurityScanner
                 tokens[verbIndex].Equals("reinstall-all", StringComparison.OrdinalIgnoreCase))
             {
                 AddUnverifiableOperand("pipx " + tokens[verbIndex], path, line, findings, "installed application package set");
+                return;
+            }
+            if (tokens[verbIndex].Equals("runpip", StringComparison.OrdinalIgnoreCase))
+            {
+                AddUnverifiableOperand("pipx runpip", path, line, findings, "forwarded pip command");
                 return;
             }
             if (!tokens[verbIndex].Equals("inject", StringComparison.OrdinalIgnoreCase))
@@ -402,7 +410,7 @@ public sealed partial class WebAgentContentSecurityScanner
                     arguments[0].Equals("tool", StringComparison.OrdinalIgnoreCase) ||
                     arguments[0].Equals("new", StringComparison.OrdinalIgnoreCase));
         }
-        return executable is "dnx" or "install-package" or "update-package" or
+        return executable is "dnx" or "install-package" or "update-package" or "corepack" or
             "install-module" or "install-psresource" or "update-module" or "update-psresource" or
             "npm" or "npx" or "pnpx" or "pnpm" or "yarn" or "bun" or "bunx" or
             "pip" or "uv" or "uvx" or "pipx" or "cargo" or "gem" or "composer" or "bundle";
@@ -488,6 +496,12 @@ public sealed partial class WebAgentContentSecurityScanner
         ICollection<WebAgentContentSecurityFinding> findings)
     {
         token = NormalizeToken(token);
+        if (ecosystem == "npm" && IsNpmNonRegistryOperand(token))
+        {
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                $"npm package operand '{token}' uses a local archive, path, URL, or other non-registry source.");
+            return;
+        }
         if (ecosystem == "npm" && TryGetNpmSelector(token, out var npmSelector) && !IsNpmRegistrySelector(npmSelector))
         {
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
@@ -701,30 +715,6 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         var bracket = token.IndexOf('[');
         return bracket > 0 ? token[..bracket] : token;
-    }
-
-    private static bool IsNpmRegistrySelector(string selector)
-    {
-        selector = selector.Trim();
-        if (string.IsNullOrWhiteSpace(selector))
-            return false;
-        return !selector.Contains(':', StringComparison.Ordinal) &&
-               !selector.StartsWith(".", StringComparison.Ordinal) &&
-               !selector.StartsWith("/", StringComparison.Ordinal) &&
-               !selector.StartsWith("\\", StringComparison.Ordinal) &&
-               !selector.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool TryGetNpmSelector(string token, out string selector)
-    {
-        var separator = token.StartsWith('@') ? token.IndexOf('@', 1) : token.IndexOf('@');
-        if (separator <= 0)
-        {
-            selector = string.Empty;
-            return false;
-        }
-        selector = token[(separator + 1)..];
-        return true;
     }
 
 }

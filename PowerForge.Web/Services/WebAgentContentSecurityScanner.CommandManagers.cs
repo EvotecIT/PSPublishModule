@@ -2,6 +2,22 @@ namespace PowerForge.Web;
 
 public sealed partial class WebAgentContentSecurityScanner
 {
+    private static void ParseCorepack(
+        string[] tokens,
+        string path,
+        int line,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        if (tokens.Length < 2)
+            return;
+        var verb = tokens[1].ToLowerInvariant();
+        if (verb is "--help" or "-h" or "--version" or "-v" or "help" or "enable" or "disable" ||
+            verb == "cache" && tokens.Skip(2).FirstOrDefault()?.Equals("clean", StringComparison.OrdinalIgnoreCase) == true)
+            return;
+        AddUnverifiableOperand("corepack " + tokens[1], path, line, findings,
+            "package-manager release or project dependency set");
+    }
+
     private static void ParseDotNet(
         string[] tokens,
         string path,

@@ -16,6 +16,12 @@ public sealed partial class WebAgentContentSecurityScanner
             if (separator < 0 && ecosystem == "powershellgallery")
                 separator = token.IndexOf(':');
             var option = separator > 0 ? token[..separator] : token;
+            if (ecosystem == "npm" && IsNpmProjectRootOption(option))
+            {
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                    $"Node package project-root option '{option}' can select uninspected registry configuration.");
+                return false;
+            }
             if (ecosystem == "pypi" && (option.Equals("-r", StringComparison.OrdinalIgnoreCase) ||
                                         option.Equals("--requirement", StringComparison.OrdinalIgnoreCase) ||
                                         option.Equals("-c", StringComparison.OrdinalIgnoreCase) ||
@@ -73,6 +79,15 @@ public sealed partial class WebAgentContentSecurityScanner
             "packagist" => option.Equals("--repository", StringComparison.OrdinalIgnoreCase),
             _ => false
         };
+
+    private static bool IsNpmProjectRootOption(string option)
+        => option.Equals("--prefix", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--workspace", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--workspaces", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--directory", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--dir", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("--cwd", StringComparison.OrdinalIgnoreCase) ||
+           option.Equals("-C", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsPowerShellRepositoryOption(string option)
         => option.Equals("-Repository", StringComparison.OrdinalIgnoreCase) ||

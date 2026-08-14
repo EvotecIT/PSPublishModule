@@ -333,6 +333,8 @@ public sealed partial class WebAgentContentSecurityScanner
             "pnpx.cjs" => "pnpx",
             "yarn.js" => "yarn",
             "yarnpkg.js" => "yarn",
+            "corepack.js" => "corepack",
+            "corepack.cjs" => "corepack",
             "composer.phar" => "composer",
             _ => normalized
         };
@@ -343,5 +345,53 @@ public sealed partial class WebAgentContentSecurityScanner
         if (Regex.IsMatch(normalized, @"^pip\d+(?:\.\d+)*$", RegexOptions.CultureInvariant))
             return "pip";
         return normalized;
+    }
+
+    private static bool IsNpmRegistrySelector(string selector)
+    {
+        selector = selector.Trim();
+        if (string.IsNullOrWhiteSpace(selector))
+            return false;
+        return !selector.Contains(':', StringComparison.Ordinal) &&
+               !selector.StartsWith(".", StringComparison.Ordinal) &&
+               !selector.StartsWith("/", StringComparison.Ordinal) &&
+               !selector.StartsWith("\\", StringComparison.Ordinal) &&
+               !selector.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsNpmNonRegistryOperand(string token)
+    {
+        var value = token.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+        var selectorSeparator = value.StartsWith('@') ? value.IndexOf('@', 1) : value.IndexOf('@');
+        var packagePart = selectorSeparator > 0 ? value[..selectorSeparator] : value;
+        if (packagePart.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase) ||
+            packagePart.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
+            packagePart.EndsWith(".tar", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (value.StartsWith(".", StringComparison.Ordinal) ||
+            value.StartsWith("/", StringComparison.Ordinal) ||
+            value.StartsWith("\\", StringComparison.Ordinal) ||
+            value.StartsWith("~", StringComparison.Ordinal) ||
+            value.Contains('\\') ||
+            Regex.IsMatch(value, @"^[A-Za-z]:", RegexOptions.CultureInvariant))
+            return true;
+        if (!value.StartsWith('@') && value.Contains('/'))
+            return true;
+        return value.Contains(':', StringComparison.Ordinal) ||
+               value.Contains('#', StringComparison.Ordinal);
+    }
+
+    private static bool TryGetNpmSelector(string token, out string selector)
+    {
+        var separator = token.StartsWith('@') ? token.IndexOf('@', 1) : token.IndexOf('@');
+        if (separator <= 0)
+        {
+            selector = string.Empty;
+            return false;
+        }
+        selector = token[(separator + 1)..];
+        return true;
     }
 }
