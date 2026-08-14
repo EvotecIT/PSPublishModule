@@ -35,10 +35,13 @@ internal static class CloudflareCachePurger
         if (mode == CloudflareCachePurgeMode.Incremental)
             return (false, "Incremental purge requires current and previous deployment manifests.");
 
+        var targetComparer = mode == CloudflareCachePurgeMode.Files
+            ? StringComparer.Ordinal
+            : StringComparer.OrdinalIgnoreCase;
         var normalizedTargets = (targets ?? Array.Empty<string>())
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(value => value.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(targetComparer)
             .ToArray();
 
         if (mode != CloudflareCachePurgeMode.Everything && normalizedTargets.Length == 0)

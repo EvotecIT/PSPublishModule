@@ -254,6 +254,28 @@ public sealed class CloudflareStaticCacheProfileTests
     }
 
     [Fact]
+    public void Purge_Files_ShouldPreserveCaseDistinctUrls()
+    {
+        var handler = new SequenceHandler(JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+        using var client = NewClient(handler);
+
+        var result = CloudflareCachePurger.Purge(
+            ZoneId,
+            "secret-token",
+            CloudflareCachePurgeMode.Files,
+            ["https://example.com/docs/A.html", "https://example.com/docs/a.html"],
+            dryRun: false,
+            logger: null,
+            client);
+
+        Assert.True(result.ok, result.message);
+        var payload = JsonNode.Parse(Assert.Single(handler.Requests).Body)!.AsObject();
+        Assert.Equal(
+            ["https://example.com/docs/A.html", "https://example.com/docs/a.html"],
+            payload["files"]!.AsArray().Select(value => value!.GetValue<string>()).ToArray());
+    }
+
+    [Fact]
     public void PurgeJson_ShouldPreserveSchemaOneFieldsAlongsideTheNewModeContract()
     {
         var result = WebCliCommandHandlers.BuildCloudflarePurgeResult(
