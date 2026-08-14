@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -221,7 +222,26 @@ public sealed partial class DotNetPublishPipelineRunner
             string[] signatures = Directory.GetFiles(signatureRoot, "*.p7", SearchOption.TopDirectoryOnly);
             if (signatures.Length != 1)
                 throw new InvalidOperationException("Azure Artifact Signing did not produce exactly one detached portable inventory signature.");
-            return File.ReadAllBytes(signatures[0]);
+            byte[] signature = File.ReadAllBytes(signatures[0]);
+            PowerForgePayloadInventorySignature verifiedSignature;
+            try
+            {
+                verifiedSignature = PowerForgePortablePayloadInventoryCms.Verify(content, signature);
+            }
+            catch (Exception exception) when (exception is CryptographicException || exception is InvalidDataException)
+            {
+                throw new InvalidOperationException(
+                    "Azure Artifact Signing produced an invalid detached portable inventory signature.",
+                    exception);
+            }
+            if (!DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(
+                    verifiedSignature.Subject,
+                    sign.SubjectName!))
+            {
+                throw new InvalidOperationException(
+                    "Azure Artifact Signing produced a detached portable inventory signature that does not match the configured publisher subject.");
+            }
+            return signature;
         }
         catch (Exception exception)
         {

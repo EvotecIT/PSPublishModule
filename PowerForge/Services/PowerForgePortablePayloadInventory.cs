@@ -52,6 +52,8 @@ internal sealed class PowerForgePayloadInventorySignature
 
 internal static class PowerForgePortablePayloadInventoryCms
 {
+    private const string Pkcs7DataContentTypeOid = "1.2.840.113549.1.7.1";
+
     internal static (string InventoryPath, string SignaturePath) ResolveEvidencePaths(
         string outputDirectory,
         string executablePath,
@@ -112,7 +114,6 @@ internal static class PowerForgePortablePayloadInventoryCms
                 exception);
         }
     }
-
     internal static byte[] Sign(byte[] content, DotNetPublishSignOptions options)
     {
         X509Certificate2 certificate = FindSigningCertificate(options);
@@ -125,6 +126,8 @@ internal static class PowerForgePortablePayloadInventoryCms
     {
         var cms = new SignedCms(new ContentInfo(content), detached: true);
         cms.Decode(signature);
+        if (!string.Equals(cms.ContentInfo.ContentType.Value, Pkcs7DataContentTypeOid, StringComparison.Ordinal))
+            throw new InvalidDataException("Portable payload inventory signature must use the PKCS#7 data content type.");
         cms.CheckSignature(verifySignatureOnly: true);
         if (cms.SignerInfos.Count != 1 || cms.SignerInfos[0].Certificate is null)
             throw new InvalidDataException("Portable payload inventory must have exactly one certificate-backed signature.");

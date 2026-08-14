@@ -1,4 +1,7 @@
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Security.Cryptography.Pkcs;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Xunit;
 
@@ -236,6 +239,8 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         string? metadataRoot = null;
         try
         {
+            byte[] content = [1, 2, 3];
+            using X509Certificate2 certificate = CreateCmsCertificate("CN=Evotec Artifact Signing");
             string dlib = Path.Combine(root, "Azure.CodeSigning.Dlib.dll");
             File.WriteAllText(dlib, "dlib");
             var processRunner = new StubProcessRunner(request =>
@@ -247,14 +252,61 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                 metadataRoot = Path.GetDirectoryName(request.Arguments[metadataIndex + 1]);
                 int outputIndex = request.Arguments.ToList().IndexOf("/p7");
                 string signaturePath = Path.Combine(request.Arguments[outputIndex + 1], "inventory.p7");
-                File.WriteAllBytes(signaturePath, [9, 8, 7]);
+                File.WriteAllBytes(signaturePath, CreateDetachedCms(content, certificate));
                 return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
             });
             var runner = new DotNetPublishPipelineRunner(new NullLogger(), processRunner);
 
-            byte[] signature = runner.SignPortableInventory([1, 2, 3], AzureSign(dlib));
+            byte[] signature = runner.SignPortableInventory(content, AzureSign(dlib));
 
-            Assert.Equal([9, 8, 7], signature);
+            PowerForgePayloadInventorySignature verified = PowerForgePortablePayloadInventoryCms.Verify(content, signature);
+            Assert.Equal("CN=Evotec Artifact Signing", verified.Subject);
+            Assert.NotNull(metadataRoot);
+            Assert.False(Directory.Exists(metadataRoot));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("malformed")]
+    [InlineData("wrong-content")]
+    [InlineData("wrong-subject")]
+    public void SignPortableInventory_AzureArtifactSigningRejectsUnverifiedDetachedSignature(string failure)
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows()) return;
+        string root = CreateTempRoot();
+        string? metadataRoot = null;
+        try
+        {
+            byte[] content = [1, 2, 3];
+            using X509Certificate2 certificate = CreateCmsCertificate(
+                failure == "wrong-subject" ? "CN=Different Publisher" : "CN=Evotec Artifact Signing");
+            string dlib = Path.Combine(root, "Azure.CodeSigning.Dlib.dll");
+            File.WriteAllText(dlib, "dlib");
+            var processRunner = new StubProcessRunner(request =>
+            {
+                int metadataIndex = request.Arguments.ToList().IndexOf("/dmdf");
+                metadataRoot = Path.GetDirectoryName(request.Arguments[metadataIndex + 1]);
+                int outputIndex = request.Arguments.ToList().IndexOf("/p7");
+                string signaturePath = Path.Combine(request.Arguments[outputIndex + 1], "inventory.p7");
+                byte[] signature = failure == "malformed"
+                    ? [9, 8, 7]
+                    : CreateDetachedCms(failure == "wrong-content" ? [4, 5, 6] : content, certificate);
+                File.WriteAllBytes(signaturePath, signature);
+                return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            });
+            var runner = new DotNetPublishPipelineRunner(new NullLogger(), processRunner);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                runner.SignPortableInventory(content, AzureSign(dlib)));
+
+            Assert.Contains(
+                failure == "wrong-subject" ? "publisher subject" : "invalid detached",
+                exception.Message,
+                StringComparison.OrdinalIgnoreCase);
             Assert.NotNull(metadataRoot);
             Assert.False(Directory.Exists(metadataRoot));
         }
@@ -738,4 +790,18 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             ExcludeCredentials = ["ManagedIdentityCredential"]
         }
     };
+
+    private static X509Certificate2 CreateCmsCertificate(string subject)
+    {
+        using RSA rsa = RSA.Create(2048);
+        var request = new CertificateRequest(subject, rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+    }
+
+    private static byte[] CreateDetachedCms(byte[] content, X509Certificate2 certificate)
+    {
+        var cms = new SignedCms(new ContentInfo(content), detached: true);
+        cms.ComputeSignature(new CmsSigner(certificate) { IncludeOption = X509IncludeOption.EndCertOnly });
+        return cms.Encode();
+    }
 }

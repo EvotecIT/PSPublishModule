@@ -463,6 +463,38 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsRelocatedDirectExecutableFromDifferentMatrixEntry()
+    {
+        using var fixture = new PortableFixture();
+        fixture.WriteRelocatedDirectExecutableForDifferentMatrixEntry();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = string.Empty;
+        request.SignaturePaths = Array.Empty<string>();
+        request.SbomPaths = Array.Empty<string>();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("runtime, framework, and style", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_PortableCliRejectsExplicitDirectExecutableFromDifferentMatrixEntry()
+    {
+        using var fixture = new PortableFixture();
+        string differentMatrixExecutable = fixture.WriteRelocatedDirectExecutableForDifferentMatrixEntry();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = differentMatrixExecutable;
+        request.SignaturePaths = Array.Empty<string>();
+        request.SbomPaths = Array.Empty<string>();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("release-asset identity", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsUnrelatedDirectExecutableSubstitution()
     {
         using var fixture = new PortableFixture();
@@ -508,7 +540,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 
         internal void WriteMissingRelativeManifestPaths()
         {
-            string missingDirectory = Path.Combine("retired-runner", Guid.NewGuid().ToString("N"));
+            string missingRoot = Path.Combine("retired-runner", Guid.NewGuid().ToString("N"));
+            string missingDirectory = Path.Combine(
+                missingRoot,
+                "Artifacts",
+                "Sample.CLI",
+                "win-x64",
+                "net10.0",
+                "PortableCompat");
             File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
             {
                 new
@@ -519,8 +558,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     Runtime = "win-x64",
                     Framework = "net10.0",
                     Style = "PortableCompat",
-                    OutputDir = Path.Combine(missingDirectory, "Artifacts", "Sample.CLI"),
-                    ZipPath = Path.Combine(missingDirectory, Path.GetFileName(ArchivePath)),
+                    OutputDir = missingDirectory,
+                    ZipPath = Path.Combine(missingRoot, Path.GetFileName(ArchivePath)),
                     ExePath = Path.Combine(missingDirectory, Path.GetFileName(ExecutablePath)),
                     SignedFiles = 1,
                     SignedFilePaths = new[] { Path.Combine(missingDirectory, Path.GetFileName(ExecutablePath)) },
@@ -529,6 +568,63 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 }
             }));
             WriteChecksums();
+        }
+
+        internal string WriteRelocatedDirectExecutableForDifferentMatrixEntry()
+        {
+            string differentMatrixDirectory = Directory.CreateDirectory(Path.Combine(
+                Root,
+                "Artifacts",
+                "Sample.CLI",
+                "linux-x64",
+                "net10.0",
+                "PortableCompat")).FullName;
+            string differentMatrixExecutable = Path.Combine(differentMatrixDirectory, Path.GetFileName(ExecutablePath));
+            File.Copy(ExecutablePath, differentMatrixExecutable, overwrite: true);
+            File.Delete(ExecutablePath);
+            string retiredExecutable = Path.Combine(
+                "retired-runner",
+                "win-x64",
+                "net10.0",
+                "PortableCompat",
+                Path.GetFileName(ExecutablePath));
+            File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    Category = "Publish",
+                    Target = "Sample.CLI",
+                    Kind = "Cli",
+                    Runtime = "win-x64",
+                    Framework = "net10.0",
+                    Style = "PortableCompat",
+                    OutputDir = Path.GetDirectoryName(retiredExecutable)!,
+                    ZipPath = string.Empty,
+                    ExePath = retiredExecutable,
+                    SignedFiles = 1,
+                    SignedFilePaths = new[] { retiredExecutable },
+                    SourceRevision,
+                    SourceDirty = false
+                },
+                new
+                {
+                    Category = "Publish",
+                    Target = "Sample.CLI",
+                    Kind = "Cli",
+                    Runtime = "linux-x64",
+                    Framework = "net10.0",
+                    Style = "PortableCompat",
+                    OutputDir = differentMatrixDirectory,
+                    ZipPath = string.Empty,
+                    ExePath = differentMatrixExecutable,
+                    SignedFiles = 1,
+                    SignedFilePaths = new[] { differentMatrixExecutable },
+                    SourceRevision,
+                    SourceDirty = false
+                }
+            }));
+            base.WriteChecksums(ManifestPath, ConfigurationPath, differentMatrixExecutable);
+            return differentMatrixExecutable;
         }
 
         internal void AddUnexpectedArchiveEntry(string name, string content)
