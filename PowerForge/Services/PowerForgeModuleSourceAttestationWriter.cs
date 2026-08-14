@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 
 namespace PowerForge;
 
@@ -47,6 +48,50 @@ public static class PowerForgeModuleSourceAttestationWriter
         });
         File.WriteAllText(destination, content, new UTF8Encoding(false));
         return destination;
+    }
+
+    internal static (string RegistryProvenancePath, string SourceAttestationPath) WriteReleaseProvenance(
+        string manifestPath,
+        string moduleName,
+        string version,
+        string repositoryUrl,
+        string sourceRevision,
+        bool sourceDirty)
+    {
+        string manifest = Path.GetFullPath(RequireText(manifestPath, nameof(manifestPath)));
+        if (!File.Exists(manifest))
+            throw new FileNotFoundException("Primary module manifest was not found.", manifest);
+        if (sourceDirty)
+            throw new InvalidOperationException("Module release provenance cannot claim a dirty checkout.");
+
+        string name = RequireSafeValue(moduleName, nameof(moduleName));
+        string normalizedVersion = RequireSafeValue(version, nameof(version));
+        string revision = DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(
+            sourceRevision,
+            nameof(sourceRevision)).ToLowerInvariant();
+        string repository = RequireText(repositoryUrl, nameof(repositoryUrl));
+        string registryProvenancePath = Path.Combine(
+            Path.GetDirectoryName(manifest)!,
+            PublishedRegistryProvenanceValidator.ModuleProvenanceFileName);
+        File.WriteAllBytes(
+            registryProvenancePath,
+            JsonSerializer.SerializeToUtf8Bytes(
+                new
+                {
+                    moduleName = name,
+                    version = normalizedVersion,
+                    repository,
+                    commit = revision,
+                    sourceDirty = false
+                },
+                new JsonSerializerOptions { WriteIndented = true }));
+        string sourceAttestationPath = Write(
+            manifest,
+            name,
+            normalizedVersion,
+            revision,
+            sourceDirty: false);
+        return (registryProvenancePath, sourceAttestationPath);
     }
 
     /// <summary>

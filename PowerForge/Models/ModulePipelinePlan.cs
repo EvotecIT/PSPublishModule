@@ -10,6 +10,9 @@ public sealed class ModulePipelinePlan
     internal bool UseLocalVersioning { get; set; }
     internal string? SourceRevision { get; set; }
     internal bool SourceDirty { get; set; }
+    internal bool GenerateReleaseProvenance { get; set; }
+    internal string? SourceRepositoryUrl { get; set; }
+    internal string[] SourceInputPaths { get; set; } = Array.Empty<string>();
 
     /// <summary>
     /// Module name resolved for the pipeline.

@@ -8,6 +8,13 @@ namespace PowerForge;
 public sealed class ModulePipelineSpec
 {
     /// <summary>
+    /// Additional files that supplied the effective build configuration. These paths are runtime provenance inputs
+    /// and are intentionally excluded from serialized module-pipeline configuration.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string[] SourceInputPaths { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Optional schema version for external tooling.
     /// </summary>
     public int SchemaVersion { get; set; } = 1;

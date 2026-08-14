@@ -572,9 +572,12 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         public ModuleSigningResult NextSigningResult { get; set; } = new();
         public Queue<ModuleSigningResult> SigningResults { get; } = new();
         public bool AutoSuccessfulSigningResult { get; set; }
+        public bool AutoSuccessfulPublishResult { get; set; }
+        public Action<int>? SigningCallStarted { get; set; }
         public List<string> SigningRootPaths { get; } = new();
         public List<string> OperationOrder { get; } = new();
         public string[] LastDocumentationCommands { get; private set; } = Array.Empty<string>();
+        public ArtefactBuildResult[] LastPublishedArtefacts { get; private set; } = Array.Empty<ArtefactBuildResult>();
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
             ModuleDependency[] dependencies,
@@ -649,7 +652,28 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             Action? remotePublishAttempted,
             Action? remoteSideEffectObserved,
             IGitHubReleaseProgressReporter? gitHubProgress)
-            => throw new InvalidOperationException("Not used in this test.");
+        {
+            if (!AutoSuccessfulPublishResult)
+                throw new InvalidOperationException("Not used in this test.");
+
+            remotePublishAttempted?.Invoke();
+            remoteSideEffectObserved?.Invoke();
+            LastPublishedArtefacts = artefactResults.ToArray();
+            string[] assets = LastPublishedArtefacts
+                .SelectMany(static artefact => new[] { artefact.OutputPath }.Concat(artefact.EvidencePaths))
+                .ToArray();
+            return new ModulePublishResult(
+                publish.Destination,
+                publish.RepositoryName,
+                publish.UserName,
+                "v" + plan.ResolvedVersion,
+                plan.ResolvedVersion,
+                isPreRelease: false,
+                assets,
+                "https://example.invalid/release",
+                succeeded: true,
+                errorMessage: null);
+        }
 
         public void ValidateModuleImports(
             string manifestPath,
@@ -684,6 +708,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         {
             OperationOrder.Add("Sign");
             SignCalls++;
+            SigningCallStarted?.Invoke(SignCalls);
             SigningRootPaths.Add(Path.GetFullPath(rootPath));
             LastPackageFilePaths = packageFilePaths ?? Array.Empty<string>();
             LastIncludePatterns = includePatterns ?? Array.Empty<string>();

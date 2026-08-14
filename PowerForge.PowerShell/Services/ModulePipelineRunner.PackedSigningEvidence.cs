@@ -31,14 +31,42 @@ public sealed partial class ModulePipelineRunner
         string sourceAttestationPath = Path.Combine(
             context.MainModulePath,
             PowerForgeModuleSourceAttestationWriter.FileName);
-        if (!File.Exists(sourceAttestationPath) && !string.IsNullOrWhiteSpace(plan.SourceRevision))
+        if (plan.GenerateReleaseProvenance)
         {
-            PowerForgeModuleSourceAttestationWriter.Write(
+            if (string.IsNullOrWhiteSpace(plan.SourceRevision) ||
+                plan.SourceDirty ||
+                string.IsNullOrWhiteSpace(plan.SourceRepositoryUrl))
+            {
+                throw new InvalidOperationException(
+                    "Signed GitHub module release provenance was not resolved from a clean source checkout.");
+            }
+
+            string projectManifestPath = Path.Combine(plan.ProjectRoot, plan.ModuleName + ".psd1");
+            if (!File.Exists(projectManifestPath) ||
+                (File.GetAttributes(projectManifestPath) & FileAttributes.ReparsePoint) != 0 ||
+                !File.ReadAllBytes(projectManifestPath).SequenceEqual(File.ReadAllBytes(context.ManifestPath)))
+            {
+                throw new InvalidOperationException(
+                    "The generated project manifest does not match the final packed module manifest.");
+            }
+
+            ValidateReleaseSourceUnchanged(
+                plan,
+                new[]
+                {
+                    context.RootPath,
+                    context.OutputPath,
+                    plan.BuildSpec.StagingPath ?? string.Empty
+                },
+                new[] { projectManifestPath });
+
+            PowerForgeModuleSourceAttestationWriter.WriteReleaseProvenance(
                 context.ManifestPath,
                 context.ModuleName,
                 context.Version,
+                plan.SourceRepositoryUrl!,
                 plan.SourceRevision!,
-                plan.SourceDirty);
+                sourceDirty: false);
         }
         string[] packageFiles = Directory.EnumerateFiles(context.RootPath, "*", SearchOption.AllDirectories)
             .Select(Path.GetFullPath)

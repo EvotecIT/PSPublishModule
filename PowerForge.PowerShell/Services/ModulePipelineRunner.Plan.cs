@@ -1057,11 +1057,148 @@ public sealed partial class ModulePipelineRunner
             deleteGeneratedStagingAfterRun: deleteAfter,
             embeddedModules: embeddedModules);
         plan.UseLocalVersioning = localVersioning;
-        if (plan.SignModule && plan.Artefacts.Length > 0)
+        plan.GenerateReleaseProvenance = plan.SignModule &&
+                                         plan.Artefacts.Length > 0 &&
+                                         plan.Publishes.Any(static publish =>
+                                             publish?.Configuration?.Destination == PublishDestination.GitHub);
+        if (plan.GenerateReleaseProvenance)
         {
-            (plan.SourceRevision, plan.SourceDirty) = ReadModuleSourceProvenance(plan.ProjectRoot);
+            string[] generatedProvenancePaths = GetGeneratedReleaseProvenancePaths(plan.ProjectRoot);
+            plan.SourceInputPaths = CollectReleaseSourceInputPaths(
+                plan.BuildSpec,
+                spec.SourceInputPaths,
+                generatedProvenancePaths);
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    plan.ProjectRoot,
+                    generatedPaths: generatedProvenancePaths,
+                    explicitInputPaths: plan.SourceInputPaths);
+            if (string.IsNullOrWhiteSpace(provenance.Revision) || provenance.Dirty is not false)
+            {
+                throw new InvalidOperationException(
+                    "Signed GitHub module releases require a resolved clean Git checkout before packaging.");
+            }
+
+            plan.SourceRevision = DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(
+                provenance.Revision,
+                "module source revision");
+            plan.SourceDirty = false;
+            plan.SourceRepositoryUrl = ResolveGitHubModuleRepositoryUrl(plan);
         }
         return plan;
+    }
+
+    private static string[] GetGeneratedReleaseProvenancePaths(string projectRoot) =>
+        new[]
+        {
+            Path.Combine(projectRoot, PublishedRegistryProvenanceValidator.ModuleProvenanceFileName),
+            Path.Combine(projectRoot, PowerForgeModuleSourceAttestationWriter.FileName)
+        };
+
+    private static string[] CollectReleaseSourceInputPaths(
+        ModuleBuildSpec build,
+        IEnumerable<string>? configuredInputs,
+        IEnumerable<string>? generatedPaths)
+    {
+        var comparer = Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var generated = new HashSet<string>(
+            (generatedPaths ?? Array.Empty<string>()).Select(Path.GetFullPath),
+            comparer);
+        var inputs = new HashSet<string>(
+            (configuredInputs ?? Array.Empty<string>())
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Select(Path.GetFullPath),
+            comparer);
+        if (!string.IsNullOrWhiteSpace(build.CsprojPath))
+            inputs.Add(Path.GetFullPath(build.CsprojPath!));
+
+        var excludedDirectories = new HashSet<string>(
+            (build.ExcludeDirectories ?? Array.Empty<string>())
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(static name => name.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+        var excludedFiles = new HashSet<string>(
+            (build.ExcludeFiles ?? Array.Empty<string>())
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(static name => name.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+        var pending = new Stack<string>();
+        pending.Push(Path.GetFullPath(build.SourcePath));
+        while (pending.Count > 0)
+        {
+            string directory = pending.Pop();
+            if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Signed GitHub module release source directory '{directory}' cannot be a reparse point.");
+            }
+            foreach (string file in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
+            {
+                if (!excludedFiles.Contains(Path.GetFileName(file)))
+                {
+                    string fullPath = Path.GetFullPath(file);
+                    if (!generated.Contains(fullPath))
+                        inputs.Add(fullPath);
+                }
+            }
+            foreach (string child in Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly))
+            {
+                if (!excludedDirectories.Contains(Path.GetFileName(child)))
+                {
+                    if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Signed GitHub module release source directory '{child}' cannot be a reparse point.");
+                    }
+                    pending.Push(child);
+                }
+            }
+        }
+        return inputs.OrderBy(static path => path, comparer).ToArray();
+    }
+
+    private static void ValidateReleaseSourceUnchanged(
+        ModulePipelinePlan plan,
+        IEnumerable<string>? generatedOutputPaths,
+        IEnumerable<string>? trackedGeneratedOutputPaths)
+    {
+        string[] generatedPaths = GetGeneratedReleaseProvenancePaths(plan.ProjectRoot)
+            .Concat(generatedOutputPaths ?? Array.Empty<string>())
+            .Distinct(Path.DirectorySeparatorChar == '\\'
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal)
+            .ToArray();
+        string[] currentInputs = CollectReleaseSourceInputPaths(
+            plan.BuildSpec,
+            plan.SourceInputPaths,
+            generatedPaths);
+        DotNetPublishPipelineRunner.SourceProvenance current =
+            DotNetPublishPipelineRunner.ReadSourceProvenance(
+                plan.ProjectRoot,
+                generatedPaths: generatedPaths,
+                explicitInputPaths: currentInputs,
+                trackedGeneratedPaths: trackedGeneratedOutputPaths);
+        if (string.IsNullOrWhiteSpace(current.Revision) ||
+            !string.Equals(current.Revision, plan.SourceRevision, StringComparison.OrdinalIgnoreCase) ||
+            current.Dirty is not false)
+        {
+            throw new InvalidOperationException(
+                "Signed GitHub module release source changed after planning; packaging is blocked before final signing.");
+        }
+    }
+
+    private static string ResolveGitHubModuleRepositoryUrl(ModulePipelinePlan plan)
+    {
+        PublishConfiguration publish = plan.Publishes
+            .Select(static segment => segment.Configuration)
+            .First(static configuration => configuration.Destination == PublishDestination.GitHub);
+        if (string.IsNullOrWhiteSpace(publish.UserName))
+            throw new InvalidOperationException("UserName is required for GitHub publishing.");
+
+        string repository = string.IsNullOrWhiteSpace(publish.RepositoryName)
+            ? plan.ModuleName
+            : publish.RepositoryName!.Trim();
+        return $"https://github.com/{publish.UserName!.Trim()}/{repository}";
     }
 
     private void ApplyGateModeToPlanInputs(

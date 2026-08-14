@@ -46,7 +46,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("$moduleProvenanceCreated", script, StringComparison.Ordinal);
         Assert.Contains("$moduleSignedProvenanceCreated", script, StringComparison.Ordinal);
         Assert.Contains("ReceiptPath must stay outside the release checkout", script, StringComparison.Ordinal);
-        Assert.Contains("GetRelativePath($repositoryRoot, $ReceiptPath)", script, StringComparison.Ordinal);
+        Assert.Contains("Test-PowerForgeTrackedReleaseReceipt", script, StringComparison.Ordinal);
         Assert.Contains("ReceiptPath must not identify a tracked repository file", script, StringComparison.Ordinal);
         Assert.True(
             script.IndexOf("Get-PowerForgeReleaseSourceState", StringComparison.Ordinal) <
@@ -437,6 +437,9 @@ public sealed partial class AppleReleaseWorkflowTests
             File.Copy(
                 Path.Combine(root, "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1"),
                 Path.Combine(privateDirectory, "Get-PowerForgeReleaseSourceState.ps1"));
+            File.Copy(
+                Path.Combine(root, "Build", "Private", "Test-PowerForgeTrackedReleaseReceipt.ps1"),
+                Path.Combine(privateDirectory, "Test-PowerForgeTrackedReleaseReceipt.ps1"));
             Run("git", repository.FullName, "init").EnsureSuccess();
             Run("git", repository.FullName, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
             Run("git", repository.FullName, "config", "user.name", "PowerForge Tests").EnsureSuccess();
@@ -510,6 +513,104 @@ public sealed partial class AppleReleaseWorkflowTests
             Assert.NotEqual(0, result.ExitCode);
             Assert.Equal("tracked-input", File.ReadAllText(trackedInputPath));
             Assert.Contains("dedicated release-receipts", result.StandardError, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { repository.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData("powershell")]
+    [InlineData("pwsh")]
+    public void TrackedReleaseReceiptProbeUsesPortableLiteralGitPathspec(string shell)
+    {
+        var repository = Directory.CreateTempSubdirectory();
+        try
+        {
+            string receiptDirectory = Path.Combine(repository.FullName, "release-receipts");
+            Directory.CreateDirectory(receiptDirectory);
+            string receiptPath = Path.Combine(receiptDirectory, "release[1].json");
+            File.WriteAllText(receiptPath, "tracked-receipt");
+            Run("git", repository.FullName, "init").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.name", "PowerForge Tests").EnsureSuccess();
+            Run("git", repository.FullName, "add", ".").EnsureSuccess();
+            Run("git", repository.FullName, "commit", "-m", "fixture").EnsureSuccess();
+            string helperPath = Path.Combine(
+                FindRepoRoot(),
+                "Build",
+                "Private",
+                "Test-PowerForgeTrackedReleaseReceipt.ps1");
+            string command = $". '{helperPath.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                             $"Test-PowerForgeTrackedReleaseReceipt -RepositoryRoot '{repository.FullName.Replace("'", "''", StringComparison.Ordinal)}' -ReceiptPath '{receiptPath.Replace("'", "''", StringComparison.Ordinal)}'";
+
+            var result = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+
+            Assert.Equal("True", result.StandardOutput.Trim());
+        }
+        finally
+        {
+            try { repository.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData("Plan")]
+    [InlineData("Prepare")]
+    [InlineData("Publish")]
+    public void PublicModuleReleaseNeverMutatesTrackedReceipt(string operation)
+    {
+        var sourceRoot = FindRepoRoot();
+        var repository = Directory.CreateTempSubdirectory();
+        try
+        {
+            string buildDirectory = Path.Combine(repository.FullName, "Build");
+            string privateDirectory = Path.Combine(buildDirectory, "Private");
+            string receiptDirectory = Path.Combine(repository.FullName, "release-receipts");
+            Directory.CreateDirectory(privateDirectory);
+            Directory.CreateDirectory(receiptDirectory);
+            string scriptPath = Path.Combine(buildDirectory, "Invoke-PowerForgePublicRelease.ps1");
+            string configPath = Path.Combine(buildDirectory, "release.json");
+            string receiptPath = Path.Combine(receiptDirectory, "tracked-release.json");
+            File.Copy(Path.Combine(sourceRoot, "Build", "Invoke-PowerForgePublicRelease.ps1"), scriptPath);
+            File.Copy(
+                Path.Combine(sourceRoot, "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1"),
+                Path.Combine(privateDirectory, "Get-PowerForgeReleaseSourceState.ps1"));
+            File.Copy(
+                Path.Combine(sourceRoot, "Build", "Private", "Test-PowerForgeTrackedReleaseReceipt.ps1"),
+                Path.Combine(privateDirectory, "Test-PowerForgeTrackedReleaseReceipt.ps1"));
+            File.WriteAllText(configPath, "{}");
+            File.WriteAllText(receiptPath, "tracked-receipt");
+            Run("git", repository.FullName, "init").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.name", "PowerForge Tests").EnsureSuccess();
+            Run("git", repository.FullName, "add", ".").EnsureSuccess();
+            Run("git", repository.FullName, "commit", "-m", "fixture").EnsureSuccess();
+            string revision = Run("git", repository.FullName, "rev-parse", "HEAD").EnsureSuccess().StandardOutput.Trim();
+
+            var result = Run(
+                "pwsh",
+                repository.FullName,
+                "-NoProfile",
+                "-File",
+                scriptPath,
+                "-Operation",
+                operation,
+                "-Version",
+                "3.0.81",
+                "-ExpectedCommit",
+                revision,
+                "-ConfigPath",
+                configPath,
+                "-ReceiptPath",
+                receiptPath);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("must not identify a tracked repository file", result.StandardError, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("tracked-receipt", File.ReadAllText(receiptPath));
+            Assert.True(string.IsNullOrWhiteSpace(
+                Run("git", repository.FullName, "status", "--porcelain=v1").EnsureSuccess().StandardOutput));
         }
         finally
         {

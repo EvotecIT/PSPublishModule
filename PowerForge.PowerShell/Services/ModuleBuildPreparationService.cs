@@ -123,6 +123,7 @@ internal sealed class ModuleBuildPreparationService
             throw new FileNotFoundException($"Module build config file not found: {configFullPath}", configFullPath);
 
         var spec = new ModulePipelineConfigurationService().Load(configFullPath).Spec;
+        spec.SourceInputPaths = new[] { configFullPath };
         ResolvePipelineSpecPaths(spec, configFullPath);
         ApplyConfigOverrides(spec, request);
         spec.Segments = AddRunModeSegment(spec.Segments ?? Array.Empty<IConfigurationSegment>(), request.RunMode);

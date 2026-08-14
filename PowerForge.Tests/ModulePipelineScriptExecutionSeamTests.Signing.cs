@@ -1,5 +1,5 @@
-using System.Reflection;
 using System.Diagnostics;
+using System.Reflection;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -79,7 +79,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
     }
 
     [Fact]
-    public void Run_SignedPackedArtifactGeneratesEvidenceFromCleanGitSource()
+    public void Run_SignedGitHubPackedArtifactGeneratesAndVerifiesCompleteReleaseEvidence()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -92,10 +92,15 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             RunGit(root.FullName, "add", ".");
             RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
             string revision = RunGit(root.FullName, "rev-parse", "HEAD");
-            var hostedOperations = new FakeHostedOperations { AutoSuccessfulSigningResult = true };
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                AutoSuccessfulPublishResult = true
+            };
             var runner = CreateRunner(hostedOperations);
             string outputRoot = Path.Combine(root.FullName, "Artefacts", "Packed");
             ModulePipelineSpec spec = CreateSignedPackedSpec(root.FullName, moduleName, outputRoot);
+            EnableGitHubPublish(spec, moduleName);
 
             ModulePipelineResult result = runner.Run(spec, runner.Plan(spec));
 
@@ -103,8 +108,191 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             string evidencePath = Assert.Single(artefact.EvidencePaths);
             Assert.True(File.Exists(evidencePath));
             Assert.Contains(revision, File.ReadAllText(evidencePath), StringComparison.OrdinalIgnoreCase);
+            ArtefactBuildResult publishedArtefact = Assert.Single(hostedOperations.LastPublishedArtefacts);
+            Assert.Equal(artefact.OutputPath, publishedArtefact.OutputPath);
+            Assert.Equal(new[] { evidencePath }, publishedArtefact.EvidencePaths);
             using var archive = System.IO.Compression.ZipFile.OpenRead(artefact.OutputPath);
             Assert.Contains(archive.Entries, entry => entry.FullName == "TestModule/PowerForge.ReleaseProvenance.psd1");
+            Assert.Contains(archive.Entries, entry => entry.FullName == "TestModule/PowerForge.ReleaseProvenance.json");
+            archive.Dispose();
+
+            string checksumPath = ModulePublisher.WriteDirectGitHubChecksumCatalog(
+                result.ArtefactResults,
+                new[] { artefact.OutputPath, evidencePath });
+            const string publisherThumbprint = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+            var verifier = new PowerForgeReleaseArtifactVerifier(
+                _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
+                    true,
+                    0,
+                    "CN=Publisher",
+                    publisherThumbprint),
+                _ => "1.0.0");
+            PowerForgeReleaseArtifactEvidence verified = verifier.Verify(
+                new PowerForgeReleaseArtifactVerificationRequest
+                {
+                    Kind = PowerForgeReleaseArtifactKind.PowerShellModule,
+                    ArtifactId = moduleName,
+                    ProjectRoot = Path.GetDirectoryName(artefact.OutputPath)!,
+                    ArtifactPath = artefact.OutputPath,
+                    ChecksumsPath = checksumPath,
+                    ExpectedSourceRevision = revision,
+                    ExpectedVersion = "1.0.0",
+                    SignThumbprint = publisherThumbprint,
+                    SigningEvidencePath = evidencePath
+                });
+            Assert.Equal(revision, verified.SourceRevision, ignoreCase: true);
+            Assert.Equal("valid", verified.SignatureStatus);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void Plan_SignedGitHubPackedArtifactRequiresResolvedCleanGitSource(bool initializeGit, bool makeDirty)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            if (initializeGit)
+            {
+                RunGit(root.FullName, "init", "--quiet");
+                RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+                RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+                RunGit(root.FullName, "add", ".");
+                RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            }
+            if (makeDirty)
+                File.WriteAllText(Path.Combine(root.FullName, "dirty.txt"), "dirty");
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            EnableGitHubPublish(spec, moduleName);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                CreateRunner(new FakeHostedOperations()).Plan(spec));
+
+            Assert.Contains("resolved clean Git checkout", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Plan_SignedGitHubPackedArtifactRejectsIgnoredPackagedSourceInput()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            File.WriteAllText(Path.Combine(root.FullName, ".gitignore"), "ignored-input.json\n");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            File.WriteAllText(Path.Combine(root.FullName, "ignored-input.json"), "{\"configuration\":true}");
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            EnableGitHubPublish(spec, moduleName);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                CreateRunner(new FakeHostedOperations()).Plan(spec));
+
+            Assert.Contains("resolved clean Git checkout", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_SignedGitHubPackedArtifactRejectsPostPlanTrackedSourceMutation()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            string sourceModule = Path.Combine(root.FullName, moduleName + ".psm1");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                SigningCallStarted = call =>
+                {
+                    if (call == 1)
+                        File.AppendAllText(sourceModule, Environment.NewLine + "# changed during build");
+                }
+            };
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            EnableGitHubPublish(spec, moduleName);
+            ModulePipelinePlan plan = runner.Plan(spec);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+
+            Assert.Contains("source changed after planning", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_SignedGitHubPackedArtifactRejectsPostPlanIgnoredSourceMutation()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            File.WriteAllText(Path.Combine(root.FullName, ".gitignore"), "ignored-during-build.json\n");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                SigningCallStarted = call =>
+                {
+                    if (call == 1)
+                        File.WriteAllText(Path.Combine(root.FullName, "ignored-during-build.json"), "{}");
+                }
+            };
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            EnableGitHubPublish(spec, moduleName);
+            ModulePipelinePlan plan = runner.Plan(spec);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+
+            Assert.Contains("source changed after planning", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -259,6 +447,24 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
                 }
             }
         };
+    }
+
+    private static void EnableGitHubPublish(ModulePipelineSpec spec, string moduleName)
+    {
+        spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
+        {
+            new ConfigurationPublishSegment
+            {
+                Configuration = new PublishConfiguration
+                {
+                    Destination = PublishDestination.GitHub,
+                    Enabled = true,
+                    UserName = "EvotecIT",
+                    RepositoryName = moduleName,
+                    ApiKey = "test-token"
+                }
+            }
+        }).ToArray();
     }
 
     [Fact]

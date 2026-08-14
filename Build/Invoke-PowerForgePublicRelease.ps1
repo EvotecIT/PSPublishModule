@@ -106,9 +106,10 @@ try {
         throw "The release checkout must start clean. Tracked or untracked changes: $(@($sourceState.Changes) -join ', ')"
     }
 
-    $receiptGitPath = [IO.Path]::GetRelativePath($repositoryRoot, $ReceiptPath).Replace([IO.Path]::DirectorySeparatorChar, '/')
-    & git -C $repositoryRoot ls-files --error-unmatch -- $receiptGitPath *> $null
-    $receiptIsTracked = $LASTEXITCODE -eq 0
+    . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Test-PowerForgeTrackedReleaseReceipt.ps1')
+    $receiptIsTracked = Test-PowerForgeTrackedReleaseReceipt `
+        -RepositoryRoot $repositoryRoot `
+        -ReceiptPath $ReceiptPath
     if ($receiptIsTracked) {
         throw 'ReceiptPath must not identify a tracked repository file.'
     }
