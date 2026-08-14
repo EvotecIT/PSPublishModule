@@ -45,6 +45,17 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("--client-cert", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--cache-dir", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--log", StringComparison.OrdinalIgnoreCase) ||
+           (IsPythonOptionContext(optionContext) &&
+            (option.Equals("--target", StringComparison.OrdinalIgnoreCase) ||
+             option.Equals("-t", StringComparison.OrdinalIgnoreCase) ||
+             option.Equals("--root", StringComparison.OrdinalIgnoreCase) ||
+             option.Equals("--src", StringComparison.OrdinalIgnoreCase) ||
+             option.Equals("--report", StringComparison.OrdinalIgnoreCase) ||
+             option.Equals("--platform", StringComparison.OrdinalIgnoreCase) ||
+             option.Equals("--python-version", StringComparison.OrdinalIgnoreCase) ||
+             option.Equals("--implementation", StringComparison.OrdinalIgnoreCase) ||
+             option.Equals("--abi", StringComparison.OrdinalIgnoreCase) ||
+             option.Equals("--root-user-action", StringComparison.OrdinalIgnoreCase))) ||
            option.Equals("--omit", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--include", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--color", StringComparison.OrdinalIgnoreCase) ||
@@ -140,6 +151,10 @@ public sealed partial class WebAgentContentSecurityScanner
 
     private static bool IsComposerOptionContext(string? optionContext)
         => optionContext?.Split(' ', 2)[0].ToLowerInvariant() is "composer" or "packagist";
+
+    private static bool IsPythonOptionContext(string? optionContext)
+        => optionContext?.Split(' ', 2)[0].ToLowerInvariant() is
+            "pypi" or "pip" or "pip3" or "python" or "py" or "uv";
 
     private static bool IsComposerSafeFlag(string option)
         => option.Equals("--no-plugins", StringComparison.OrdinalIgnoreCase) ||

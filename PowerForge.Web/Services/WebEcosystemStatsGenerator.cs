@@ -342,9 +342,18 @@ public static partial class WebEcosystemStatsGenerator
     {
         var skip = 0;
         var pageSize = 100;
+        const int maximumPages = 100;
+        var pagesRead = 0;
+        var pageFingerprints = new HashSet<string>(StringComparer.Ordinal);
 
         while (modules.Count < maxItems)
         {
+            if (pagesRead >= maximumPages)
+            {
+                warnings.Add($"PowerShell Gallery pagination stopped after {maximumPages} pages; owner-filtered results may be incomplete.");
+                break;
+            }
+
             var take = Math.Min(pageSize, maxItems - modules.Count);
             var encodedFilter = Uri.EscapeDataString(filterExpression);
             var url = $"{PowerShellGalleryApiBase}?$filter={encodedFilter}&$orderby=DownloadCount%20desc&$top={take}&$skip={skip}";
@@ -361,6 +370,13 @@ public static partial class WebEcosystemStatsGenerator
             var rawEntryCount = CountPowerShellGalleryEntries(document);
             if (rawEntryCount == 0)
                 break;
+            pagesRead++;
+            var pageFingerprint = GetPowerShellGalleryPageFingerprint(document);
+            if (!pageFingerprints.Add(pageFingerprint))
+            {
+                warnings.Add("PowerShell Gallery pagination stopped after a repeated page; owner-filtered results may be incomplete.");
+                break;
+            }
             var entries = ParsePowerShellGalleryModules(document, requiredOwner);
 
             foreach (var module in entries)
@@ -377,10 +393,17 @@ public static partial class WebEcosystemStatsGenerator
                     break;
             }
 
-            skip += take;
+            skip += rawEntryCount;
             if (rawEntryCount < take)
                 break;
         }
+    }
+
+    private static string GetPowerShellGalleryPageFingerprint(XDocument document)
+    {
+        var atomNs = XNamespace.Get("http://www.w3.org/2005/Atom");
+        return string.Join('\n', (document.Root?.Elements(atomNs + "entry") ?? Enumerable.Empty<XElement>())
+            .Select(static entry => entry.ToString(SaveOptions.DisableFormatting)));
     }
 
     private static XDocument? LoadXmlSafe(Stream stream, List<string> warnings)

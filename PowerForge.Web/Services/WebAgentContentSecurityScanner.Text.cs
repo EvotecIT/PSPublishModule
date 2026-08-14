@@ -16,7 +16,7 @@ public sealed partial class WebAgentContentSecurityScanner
         (new Regex(@"\b(?:reveal|print|exfiltrate|send)\s+(?:the\s+)?(?:system\s+prompt|secrets?|credentials?|tokens?)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant), "secret-exfiltration-directive")
     };
     private static readonly Regex RemoteExecutionPipelineRegex = new(
-        @"\b(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b[^\r\n|;&]*(?:\|[^\r\n|;&]*)*\|\s*(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php)(?:\.exe)?\b",
+        @"\b(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b[^\r\n|;&]*(?:\|[^\r\n|;&]*)*\|\s*(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:busybox|toybox)(?:\.exe)?\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|dash|ash|ksh|fish|csh|tcsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php)(?:\.exe)?\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SavedDownloadCommandRegex = new(
         @"\b(?<downloader>curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b(?<arguments>[^\r\n]*?)(?<separator>&&|;)(?<tail>[^\r\n]*)",
@@ -40,7 +40,7 @@ public sealed partial class WebAgentContentSecurityScanner
         @"\|\s*(?:Set-Content|Out-File)\b(?:\s+-(?:LiteralPath|Path|FilePath))?\s+(?<path>""[^""]+""|'[^']+'|[^\s;&|]+)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex InterpreterCommandRegex = new(
-        @"(?:^|[|;&]\s*|\s)(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php|source)(?:\.exe)?\b(?<arguments>[^\r\n;&|]*)",
+        @"(?:^|[|;&]\s*|\s)(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:busybox|toybox)(?:\.exe)?\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|dash|ash|ksh|fish|csh|tcsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php|source)(?:\.exe)?\b(?<arguments>[^\r\n;&|]*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SavedArtifactInvocationRegex = new(
         @"(?:^|&&|;|(?<!&)&(?!&))\s*(?:sudo\s+)?(?:(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?<command>""[^""]+""|'[^']+'|[^\s;&|]+)",
@@ -52,7 +52,7 @@ public sealed partial class WebAgentContentSecurityScanner
         @"\b(?:iex|Invoke-Expression)\b\s*(?:(?:\$\s*)?\(+|[""']\s*\$\()\s*(?:(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b|[^\r\n]{0,200}\bDownloadString\s*\()",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex RemoteExecutionShellExpressionRegex = new(
-        @"\b(?:eval\b\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:sh|bash|zsh|python(?:\d+(?:\.\d+)*)?|py)\b[^\r\n]{0,80}?-c\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:pwsh|powershell)\b[^\r\n]{0,80}?(?:-c|-Command)\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:node)\b[^\r\n]{0,80}?(?:-e|--eval|-p|--print)\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:ruby|perl)\b[^\r\n]{0,80}?(?:-e|--eval)\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|php\b[^\r\n]{0,80}?-r\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:sh|bash|zsh)\b\s*<\(\s*(?:curl(?:\.exe)?|wget)\b|(?:source\b|\.)\s*<\(\s*(?:curl(?:\.exe)?|wget)\b)",
+        @"\b(?:eval\b\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:sh|bash|zsh|dash|ash|ksh|fish|csh|tcsh|python(?:\d+(?:\.\d+)*)?|py)\b[^\r\n]{0,80}?-c\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:pwsh|powershell)\b[^\r\n]{0,80}?(?:-c|-Command)\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:node)\b[^\r\n]{0,80}?(?:-e|--eval|-p|--print)\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:ruby|perl)\b[^\r\n]{0,80}?(?:-e|--eval)\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|php\b[^\r\n]{0,80}?-r\s*[""']?\s*\$\(\s*(?:curl(?:\.exe)?|wget)\b|(?:sh|bash|zsh|dash|ash|ksh|fish|csh|tcsh)\b\s*<\(\s*(?:curl(?:\.exe)?|wget)\b|(?:source\b|\.)\s*<\(\s*(?:curl(?:\.exe)?|wget)\b)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex RemoteExecutionScriptBlockRegex = new(
         @"(?:&|Invoke-Command\b[^\r\n]{0,80})\s*\(\s*\[scriptblock\]::Create\s*\(\s*\(*\s*(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b",
