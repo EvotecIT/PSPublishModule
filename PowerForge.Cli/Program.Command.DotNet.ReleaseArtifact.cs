@@ -156,7 +156,6 @@ internal static partial class Program
         var artifactPath = TryGetOptionValue(commandArgs, "--artifact");
         var checksumsPath = TryGetOptionValue(commandArgs, "--checksums");
         var sourceRevision = TryGetOptionValue(commandArgs, "--source-revision");
-        var checksumsSignaturePath = TryGetOptionValue(commandArgs, "--checksums-signature");
         var manifestPath = TryGetOptionValue(commandArgs, "--manifest");
         var configurationPath = TryGetOptionValue(commandArgs, "--config");
         var signingEvidencePath = TryGetOptionValue(commandArgs, "--signing-evidence");
@@ -216,7 +215,6 @@ internal static partial class Program
                     ProjectRoot = projectRoot!,
                     ArtifactPath = artifactPath!,
                     ChecksumsPath = checksumsPath!,
-                    ChecksumsSignaturePath = checksumsSignaturePath,
                     ExpectedSourceRevision = sourceRevision!,
                     ExpectedVersion = TryGetOptionValue(commandArgs, "--version"),
                     ManifestPath = manifestPath,

@@ -32,9 +32,6 @@ public sealed class PowerForgeReleaseArtifactVerificationRequest
     /// <summary>Path to the PowerForge SHA-256 checksum catalog.</summary>
     public string ChecksumsPath { get; set; } = string.Empty;
 
-    /// <summary>Optional detached CMS signature over the exact checksum catalog bytes. Required for external SBOMs.</summary>
-    public string? ChecksumsSignaturePath { get; set; }
-
     /// <summary>Source revision expected by the release workflow.</summary>
     public string ExpectedSourceRevision { get; set; } = string.Empty;
 

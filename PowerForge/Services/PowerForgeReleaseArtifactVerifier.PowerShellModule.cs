@@ -233,9 +233,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             sbomPaths: request.SbomPaths,
             artifactId: moduleName,
             artifactVersion: version,
-            artifactDigest: artifactDigest,
-            checksumsSignaturePath: request.ChecksumsSignaturePath,
-            publisher: signer).ToList();
+            artifactDigest: artifactDigest).ToList();
         evidence.Add(new PowerForgeReleaseEvidenceFile
         {
             Role = "signing-policy",
