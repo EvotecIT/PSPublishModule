@@ -167,6 +167,33 @@ public sealed partial class PowerForgeReleaseServiceTests
                 }));
             File.WriteAllBytes(releaseConfigPath, loadedConfiguration);
 
+            byte[] loadedStagedConfiguration = File.ReadAllBytes(stagedPublishConfigPath);
+            File.WriteAllText(stagedPublishConfigPath, "{}", new UTF8Encoding(false));
+            var bindingRequest = new PowerForgeReleaseRequest
+            {
+                ConfigPath = sourceConfigPath,
+                EffectiveConfigurationPath = releaseConfigPath,
+                LoadedConfigurationSha256 = AppleNotarizationService.ComputeFileSha256(releaseConfigPath),
+                PlanOnly = true,
+                ModuleRunMode = ConfigurationGateMode.Publish
+            };
+            var bindingMethod = typeof(PowerForgeReleaseService).GetMethod(
+                "BindGeneratedConfigurationInput",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.NotNull(bindingMethod);
+            System.Reflection.TargetInvocationException invocationException = Assert.Throws<System.Reflection.TargetInvocationException>(() =>
+                bindingMethod!.Invoke(
+                    null,
+                    new object[]
+                    {
+                        plan,
+                        bindingRequest
+                    }));
+            InvalidOperationException stagedConfigurationException = Assert.IsType<InvalidOperationException>(
+                invocationException.InnerException);
+            Assert.Contains("does not match its SHA-256 filename", stagedConfigurationException.Message, StringComparison.OrdinalIgnoreCase);
+            File.WriteAllBytes(stagedPublishConfigPath, loadedStagedConfiguration);
+
             PowerForgeReleaseSpec forgedSpec = PowerForgeReleaseService.LoadConfiguration(sourceConfigPath);
             Assert.Throws<InvalidOperationException>(() => service.Execute(
                 forgedSpec,

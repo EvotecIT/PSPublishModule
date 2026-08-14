@@ -413,6 +413,32 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         }
     }
 
+    [Fact]
+    public void CollectModuleReleaseAssets_RetainsDeclaredMissingEvidenceForPublicationPreflight()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        string archive = Path.Combine(root, "Sample.zip");
+        string missingEvidence = Path.Combine(root, "Sample.zip.signing.json");
+        var artefact = new ArtefactBuildResult(
+            ArtefactType.Packed,
+            "release",
+            archive,
+            Array.Empty<ArtefactModuleEntry>(),
+            Array.Empty<ArtefactCopyEntry>(),
+            new[] { missingEvidence });
+        var method = typeof(ModulePipelineRunner).GetMethod(
+            "CollectModuleReleaseAssets",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        string[] assets = Assert.IsType<string[]>(method!.Invoke(
+            null,
+            new object?[] { new[] { artefact }, "release" }));
+
+        Assert.Equal(new[] { Path.GetFullPath(archive), Path.GetFullPath(missingEvidence) }, assets);
+        Assert.False(File.Exists(missingEvidence));
+    }
+
     private static ModuleSigningResult CreateSigningResult(
         string verifiedPath,
         int signedNew,
