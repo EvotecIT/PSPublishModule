@@ -698,22 +698,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Name))
                 .Select(t => t.Name.Trim()),
             StringComparer.OrdinalIgnoreCase);
-        foreach (var installer in spec.Installers ?? Array.Empty<DotNetPublishInstaller>())
-        {
-            if (installer?.Versioning is null)
-                continue;
-
-            var missingAdditionalTargets = (installer.Versioning.AdditionalPublishTargets ?? Array.Empty<string>())
-                .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Select(name => name.Trim())
-                .Where(name => !allTargetNames.Contains(name))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            if (missingAdditionalTargets.Length > 0)
-                throw new ArgumentException(
-                    $"Installer '{installer.Id}' references unknown additional publish target(s): {string.Join(", ", missingAdditionalTargets)}.",
-                    nameof(spec));
-        }
+        ValidateAdditionalPublishTargetNames(spec.Installers, allTargetNames, nameof(spec));
 
         var selectedInstallers = CloneInstallers(spec.Installers ?? Array.Empty<DotNetPublishInstaller>())
             .Where(i =>
@@ -805,6 +790,34 @@ public sealed partial class DotNetPublishPipelineRunner
             .Select(name => name.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    internal static void ValidateAdditionalPublishTargetNames(
+        IEnumerable<DotNetPublishInstaller>? installers,
+        ISet<string> allTargetNames,
+        string parameterName)
+    {
+        if (allTargetNames is null)
+            throw new ArgumentNullException(nameof(allTargetNames));
+
+        foreach (var installer in installers ?? Array.Empty<DotNetPublishInstaller>())
+        {
+            if (installer?.Versioning is null)
+                continue;
+
+            string[] missingAdditionalTargets = (installer.Versioning.AdditionalPublishTargets ?? Array.Empty<string>())
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name.Trim())
+                .Where(name => !allTargetNames.Contains(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (missingAdditionalTargets.Length > 0)
+            {
+                throw new ArgumentException(
+                    $"Installer '{installer.Id}' references unknown additional publish target(s): {string.Join(", ", missingAdditionalTargets)}.",
+                    parameterName);
+            }
+        }
     }
 
     private static DotNetPublishDotNetOptions CloneDotNet(DotNetPublishDotNetOptions dotNet)

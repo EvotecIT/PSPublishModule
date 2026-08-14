@@ -147,6 +147,15 @@ public sealed partial class DotNetPublishPipelineRunner
                     continue;
                 }
 
+                if (sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning
+                    && !_signatureMatchesPublisher(file, sign))
+                {
+                    HandlePolicy(
+                        sign.OnSignFailure,
+                        $"Azure Artifact Signing produced a signature for '{file}' that does not match the configured publisher subject.");
+                    continue;
+                }
+
                 signed.Add(file);
             }
         }

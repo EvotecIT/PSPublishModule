@@ -448,6 +448,14 @@ internal static partial class Program
 
         if (selectedTargetNames.Length > 0)
         {
+            var allTargetNames = new HashSet<string>(
+                targets.Where(target => !string.IsNullOrWhiteSpace(target.Name)).Select(target => target.Name.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            DotNetPublishPipelineRunner.ValidateAdditionalPublishTargetNames(
+                spec.Installers,
+                allTargetNames,
+                nameof(spec));
+
             var missing = selectedTargetNames
                 .Where(n => targets.All(t => !t.Name.Equals(n, StringComparison.OrdinalIgnoreCase)))
                 .ToArray();

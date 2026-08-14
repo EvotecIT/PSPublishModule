@@ -5,10 +5,10 @@ using System.Text.Json;
 
 namespace PowerForge.Tests;
 
-    public sealed class PowerForgeCliDotNetPublishTests
-    {
-        [Fact]
-        public async Task Version_CliAcceptsOutputSelectionBeforeVersionFlag()
+public sealed class PowerForgeCliDotNetPublishTests
+{
+    [Fact]
+    public async Task Version_CliAcceptsOutputSelectionBeforeVersionFlag()
     {
         var repoRoot = FindRepositoryRoot();
         var cliPath = Path.Combine(
@@ -26,12 +26,56 @@ namespace PowerForge.Tests;
         using var document = JsonDocument.Parse(stdout);
         Assert.True(document.RootElement.GetProperty("success").GetBoolean());
         Assert.Equal("version", document.RootElement.GetProperty("command").GetString());
-            Assert.False(string.IsNullOrWhiteSpace(
-                document.RootElement.GetProperty("result").GetProperty("version").GetString()));
-        }
+        Assert.False(string.IsNullOrWhiteSpace(
+            document.RootElement.GetProperty("result").GetProperty("version").GetString()));
+    }
 
-        [Fact]
-        public async Task DotNetPublish_TargetOverrideRemovesDependentOutputsForExcludedTargets()
+    [Fact]
+    public async Task DotNetPublish_TargetOverrideRejectsUnknownCompanionTargetBeforePruning()
+    {
+        string repoRoot = FindRepositoryRoot();
+        string tempRoot = CreateTempDirectory();
+        try
+        {
+            string configPath = Path.Combine(tempRoot, "powerforge.dotnetpublish.json");
+            var spec = new DotNetPublishSpec
+            {
+                Targets =
+                [
+                    new DotNetPublishTarget { Name = "monitoring" },
+                    new DotNetPublishTarget { Name = "portable" }
+                ],
+                Installers =
+                [
+                    new DotNetPublishInstaller
+                    {
+                        Id = "monitoring-msi",
+                        PrepareFromTarget = "monitoring",
+                        Versioning = new DotNetPublishMsiVersionOptions
+                        {
+                            AdditionalPublishTargets = ["portable", "misspelled"]
+                        }
+                    }
+                ]
+            };
+            File.WriteAllText(configPath, JsonSerializer.Serialize(spec));
+
+            var (exitCode, stdout, stderr) = await RunCliAsync(
+                repoRoot,
+                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet publish --config \"{configPath}\" --target monitoring --validate --output json");
+
+            Assert.NotEqual(0, exitCode);
+            Assert.Contains("misspelled", stdout + stderr, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DotNetPublish_TargetOverrideRemovesDependentOutputsForExcludedTargets()
     {
         string repoRoot = FindRepositoryRoot();
         string tempRoot = CreateTempDirectory();

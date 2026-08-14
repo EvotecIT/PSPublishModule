@@ -160,7 +160,11 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             DotNetPublishSignOptions sign = AzureSign(dlib);
 
             string[] signed = Assert.IsType<string[]>(GetTrySignOutputMethod().Invoke(
-                new DotNetPublishPipelineRunner(new NullLogger(), processRunner, _ => false),
+                new DotNetPublishPipelineRunner(
+                    new NullLogger(),
+                    processRunner,
+                    _ => false,
+                    signatureMatchesPublisher: (_, _) => true),
                 new object[] { output, sign }));
 
             Assert.Equal(executable, Assert.Single(signed));
@@ -174,6 +178,40 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             Assert.Equal("https://wus.codesigning.azure.net/", metadata.RootElement.GetProperty("Endpoint").GetString());
             Assert.Equal("EvotecSigning", metadata.RootElement.GetProperty("CodeSigningAccountName").GetString());
             Assert.Equal("PublicTrust", metadata.RootElement.GetProperty("CertificateProfileName").GetString());
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void TrySignOutput_AzureSubjectMismatchUsesSignFailurePolicy()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows()) return;
+        string root = CreateTempRoot();
+        try
+        {
+            string output = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            string dlib = Path.Combine(root, "Azure.CodeSigning.Dlib.dll");
+            File.WriteAllText(Path.Combine(output, "app.exe"), "payload");
+            File.WriteAllText(dlib, "dlib");
+            var processRunner = new StubProcessRunner(request =>
+                new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false));
+            DotNetPublishSignOptions sign = AzureSign(dlib);
+            sign.OnSignFailure = DotNetPublishPolicyMode.Fail;
+
+            TargetInvocationException exception = Assert.Throws<TargetInvocationException>(() =>
+                GetTrySignOutputMethod().Invoke(
+                    new DotNetPublishPipelineRunner(
+                        new NullLogger(),
+                        processRunner,
+                        _ => false,
+                        signatureMatchesPublisher: (_, _) => false),
+                    new object[] { output, sign }));
+
+            Assert.IsType<InvalidOperationException>(exception.InnerException);
+            Assert.Contains("publisher subject", exception.InnerException!.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

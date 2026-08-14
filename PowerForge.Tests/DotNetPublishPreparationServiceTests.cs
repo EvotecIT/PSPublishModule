@@ -176,6 +176,51 @@ public sealed class DotNetPublishPreparationServiceTests
     }
 
     [Fact]
+    public void Prepare_target_override_rejects_unknown_companion_before_pruning()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-unknown-companion-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var configPath = Path.Combine(root.FullName, "publish.json");
+            File.WriteAllText(configPath, """
+{
+  "dotNet": { "projectRoot": "." },
+  "targets": [
+    { "name": "App", "projectPath": "src/App/App.csproj" },
+    { "name": "Portable", "projectPath": "src/Portable/Portable.csproj" }
+  ],
+  "installers": [
+    {
+      "id": "AppInstaller",
+      "prepareFromTarget": "App",
+      "versioning": { "additionalPublishTargets": [ "Portable", "Missing" ] }
+    }
+  ]
+}
+""");
+
+            var request = new DotNetPublishPreparationRequest
+            {
+                ParameterSetName = "Config",
+                CurrentPath = root.FullName,
+                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                ConfigPath = configPath,
+                Target = new[] { "App" }
+            };
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+                new DotNetPublishPreparationService(new NullLogger()).Prepare(request));
+
+            Assert.Contains("Missing", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Prepare_from_settings_defaults_json_path_to_current_path()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-dsl-" + Guid.NewGuid().ToString("N")));

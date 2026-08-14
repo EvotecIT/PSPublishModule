@@ -128,6 +128,13 @@ internal sealed class DotNetPublishPreparationService
         {
             var knownTargets = spec.Targets ?? Array.Empty<DotNetPublishTarget>();
             var selected = new HashSet<string>(overrideTargets, StringComparer.OrdinalIgnoreCase);
+            var allTargetNames = new HashSet<string>(
+                knownTargets.Where(target => !string.IsNullOrWhiteSpace(target.Name)).Select(target => target.Name.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            DotNetPublishPipelineRunner.ValidateAdditionalPublishTargetNames(
+                spec.Installers,
+                allTargetNames,
+                nameof(spec));
             var missing = selected
                 .Where(name => knownTargets.All(t => !string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase)))
                 .ToArray();
