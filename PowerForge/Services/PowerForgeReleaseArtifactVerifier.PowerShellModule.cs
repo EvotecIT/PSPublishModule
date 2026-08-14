@@ -67,11 +67,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string prerelease = prereleaseValues.SingleOrDefault() ?? string.Empty;
         string version = NormalizeModuleVersion(manifestVersion!, prerelease);
         ValidateExpectedModuleVersion(request.ExpectedVersion, version);
-        if (!ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, "RootModule", out string? rootModule) ||
-            string.IsNullOrWhiteSpace(rootModule))
-            throw Invalid("Packed module manifest must declare a RootModule entrypoint.");
-        string rootModulePath = ResolveArchiveRelativePath(manifestPath, rootModule!);
-        if (!entries.ContainsKey(rootModulePath))
+        ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, "RootModule", out string? rootModule);
+        string? rootModulePath = string.IsNullOrWhiteSpace(rootModule)
+            ? null
+            : ResolveArchiveRelativePath(manifestPath, rootModule!);
+        if (rootModulePath is not null && !entries.ContainsKey(rootModulePath))
             throw Invalid($"Packed module RootModule '{rootModulePath}' was not found in the archive.");
         string[] loadedContentPaths = ModuleManifestLoadedContent.ReadRelativePathsFromText(manifestText)
             .Select(path => ResolveArchiveRelativePath(manifestPath, path))
@@ -92,7 +92,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             manifestPath,
             PowerForgeModuleSourceAttestationWriter.FileName);
         if (!signaturePaths.Contains(manifestPath, StringComparer.Ordinal) ||
-            !signaturePaths.Contains(rootModulePath, StringComparer.Ordinal) ||
+            (rootModulePath is not null && !signaturePaths.Contains(rootModulePath, StringComparer.Ordinal)) ||
             !signaturePaths.Contains(signedProvenancePath, StringComparer.Ordinal) ||
             !loadedContentPaths.All(path => signaturePaths.Contains(path, StringComparer.Ordinal)))
             throw Invalid("Module signing evidence must cover the manifest, all manifest-loaded content, and signed source attestation.");
@@ -115,7 +115,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 StringComparison.OrdinalIgnoreCase))
             throw Invalid("Module signing evidence inventory digest does not match its complete signable-file inventory.");
         if (thirdPartySignatures.ContainsKey(manifestPath) ||
-            thirdPartySignatures.ContainsKey(rootModulePath) ||
+            (rootModulePath is not null && thirdPartySignatures.ContainsKey(rootModulePath)) ||
             thirdPartySignatures.ContainsKey(signedProvenancePath) ||
             loadedContentPaths.Any(thirdPartySignatures.ContainsKey))
             throw Invalid("The module manifest, RootModule and other manifest-loaded content, and source attestation must be owned by the configured release publisher.");

@@ -182,6 +182,34 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
     }
 
     [Fact]
+    public void Create_ManifestOnlyModuleWithNestedEntrypointReturnsEvidence()
+    {
+        using var fixture = new SigningFixture();
+        File.WriteAllText(
+            fixture.ManifestPath,
+            "@{ ModuleVersion = '2.3.4'; NestedModules = @('Sample.psm1') }");
+        var signingResult = new ModuleSigningResult
+        {
+            TotalMatched = 3,
+            TotalAfterExclude = 3,
+            SignedNew = 3,
+            VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath, fixture.SourceAttestationPath }
+        };
+        fixture.BindSigningInventory(signingResult);
+
+        PowerForgeModuleSigningEvidence evidence = PowerForgeModuleSigningEvidenceWriter.Create(
+            fixture.Root,
+            "Sample",
+            "2.3.4",
+            SourceRevision,
+            sourceDirty: false,
+            fixture.ManifestPath,
+            signingResult);
+
+        Assert.Contains("Sample/Sample.psm1", evidence.SignableFiles);
+    }
+
+    [Fact]
     public void Create_DirtySourceFailsClosed()
     {
         using var fixture = new SigningFixture();

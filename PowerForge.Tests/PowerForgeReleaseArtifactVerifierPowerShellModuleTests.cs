@@ -75,6 +75,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PowerShellManifestOnlyModuleAcceptsNestedEntrypoint()
+    {
+        using var fixture = new ModuleFixture();
+        fixture.PrepareManifestOnlyModule();
+
+        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier().Verify(fixture.CreateRequest());
+
+        Assert.Contains(result.SignaturePaths, path =>
+            path.EndsWith("!Sample/Sample.psm1", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Verify_PowerShellModuleRejectsArchiveFromAnotherRevisionEvenWithUpdatedChecksum()
     {
         using var fixture = new ModuleFixture();
@@ -261,7 +273,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             bool provenanceDirty = false,
             bool caseDuplicateManifest = false,
             string manifestEntryPath = "Sample/Sample.psd1",
-            string rootModuleValue = "Sample.psm1",
+            string? rootModuleValue = "Sample.psm1",
             Encoding? manifestEncoding = null,
             byte[]? manifestBytes = null,
             string? signedSourceRevision = null,
@@ -278,7 +290,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 ? string.Empty
                 : $"; PrivateData = @{{ PSData = @{{ Prerelease = '{prerelease}' }} }}";
             string formatData = includeManifestLoadedFormat ? "; FormatsToProcess = @('Sample.Format.ps1xml')" : string.Empty;
-            string manifestText = $"@{{ RootModule = '{rootModuleValue}'; ModuleVersion = '2.3.4'{formatData}{prereleaseData} }}";
+            string entrypointData = string.IsNullOrWhiteSpace(rootModuleValue)
+                ? "NestedModules = @('Sample.psm1');"
+                : $"RootModule = '{rootModuleValue}';";
+            string manifestText = $"@{{ {entrypointData} ModuleVersion = '2.3.4'{formatData}{prereleaseData} }}";
             WriteEntry(archive, manifestEntryPath, manifestBytes ?? Encode(manifestText, manifestEncoding));
             if (duplicateManifest)
                 WriteEntry(archive, "Sample/Sample.psd1", "@{ RootModule = 'Sample.psm1'; ModuleVersion = '2.3.4' }");
@@ -357,6 +372,13 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         internal void PrepareManifestLoadedFormatOmission()
         {
             WriteArchive(SourceRevision, includeManifestLoadedFormat: true);
+            WriteSigningEvidence();
+            WriteChecksums();
+        }
+
+        internal void PrepareManifestOnlyModule()
+        {
+            WriteArchive(SourceRevision, rootModuleValue: null);
             WriteSigningEvidence();
             WriteChecksums();
         }

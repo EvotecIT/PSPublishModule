@@ -7,6 +7,28 @@ namespace PowerForge.Tests;
 public sealed class ModuleManifestValueReaderTests
 {
     [Fact]
+    public void ReadTopLevelStringOrArrayFromText_IgnoresNestedMetadataWithSameKey()
+    {
+        const string manifest = """
+            @{
+                PrivateData = @{
+                    RequiredAssemblies = @('MetadataOnly.dll')
+                }
+                RequiredAssemblies = @('Runtime.dll')
+            }
+            """;
+
+        string[] values = ModuleManifestValueReader.ReadTopLevelStringOrArrayFromText(
+            manifest,
+            "RequiredAssemblies");
+
+        Assert.Equal(new[] { "Runtime.dll" }, values);
+        Assert.Empty(ModuleManifestValueReader.ReadTopLevelStringOrArrayFromText(
+            "@{ PrivateData = @{ RequiredAssemblies = @('MetadataOnly.dll') } }",
+            "RequiredAssemblies"));
+    }
+
+    [Fact]
     public void ReadPsDataStringOrArray_ParsesSingleLinePsDataArrays()
     {
         var projectRoot = Path.Combine(Path.GetTempPath(), "PowerForgeManifestValueReaderTests", Path.GetRandomFileName());

@@ -3940,7 +3940,6 @@ internal sealed partial class PowerForgeReleaseService
         {
             result.ManifestJsonPath,
             result.ManifestTextPath,
-            result.ChecksumsPath,
             result.RunReportPath,
             result.RunReportMarkdownPath
         };
@@ -4008,6 +4007,20 @@ internal sealed partial class PowerForgeReleaseService
                 continue;
             }
 
+            string checksumDirectory = !string.IsNullOrWhiteSpace(result.ChecksumsPath)
+                ? Path.GetDirectoryName(Path.GetFullPath(result.ChecksumsPath!))!
+                : Path.GetDirectoryName(Path.GetFullPath(uniqueAssets[0]))!;
+            string safeTarget = string.Concat(target.Name.Select(character =>
+                Path.GetInvalidFileNameChars().Contains(character) || character is '/' or '\\' or ':'
+                    ? '_'
+                    : character));
+            string releaseChecksumsPath = ModulePublisher.WriteGitHubChecksumCatalog(
+                Path.Combine(checksumDirectory, safeTarget + ".SHA256SUMS.txt"),
+                uniqueAssets);
+            string[] releaseAssets = uniqueAssets
+                .Concat(new[] { releaseChecksumsPath })
+                .ToArray();
+
             releases.Add(PublishGitHubRelease(
                 resolved.Owner!,
                 resolved.Repository!,
@@ -4015,7 +4028,7 @@ internal sealed partial class PowerForgeReleaseService
                 gitHub,
                 target.Name,
                 version!,
-                uniqueAssets,
+                releaseAssets,
                 cancellationToken));
         }
 

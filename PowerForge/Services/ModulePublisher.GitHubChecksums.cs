@@ -14,6 +14,18 @@ public sealed partial class ModulePublisher
             ?? throw new InvalidOperationException("The packed artefact output directory could not be resolved.");
         string catalogName = Path.GetFileNameWithoutExtension(primary.OutputPath) + ".SHA256SUMS.txt";
         string catalogPath = Path.Combine(directory, catalogName);
+        return WriteGitHubChecksumCatalog(catalogPath, assets);
+    }
+
+    internal static string WriteGitHubChecksumCatalog(
+        string catalogPath,
+        IReadOnlyList<string> assets)
+    {
+        string resolvedCatalogPath = Path.GetFullPath(catalogPath);
+        string? directory = Path.GetDirectoryName(resolvedCatalogPath);
+        if (string.IsNullOrWhiteSpace(directory))
+            throw new InvalidOperationException("The GitHub checksum catalog directory could not be resolved.");
+        Directory.CreateDirectory(directory);
         var assetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var lines = new List<string>();
         foreach (string asset in (assets ?? Array.Empty<string>()).OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
@@ -23,7 +35,9 @@ public sealed partial class ModulePublisher
                 throw new InvalidOperationException($"GitHub release assets contain duplicate file name '{name}'.");
             lines.Add($"{DotNetPublishReleaseArtifactVerifier.ComputeSha256(asset)} *{name}");
         }
-        File.WriteAllLines(catalogPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        return catalogPath;
+        if (assetNames.Contains(Path.GetFileName(resolvedCatalogPath)))
+            throw new InvalidOperationException("The GitHub checksum catalog file name collides with another release asset.");
+        File.WriteAllLines(resolvedCatalogPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        return resolvedCatalogPath;
     }
 }

@@ -58,8 +58,16 @@ internal sealed partial class PowerForgeReleaseService
 
         string effectiveConfigDirectory = Path.GetDirectoryName(effectiveConfigPath)
             ?? throw new InvalidOperationException("Generated authorized configuration directory could not be resolved.");
+        string[] referencedConfigurationPaths = ResolveStagedConfigurationReferences(effectiveConfigPath).ToArray();
+        string? invalidReference = referencedConfigurationPaths.FirstOrDefault(path => !IsTrustedStagedConfiguration(path));
+        if (invalidReference is not null)
+        {
+            throw new InvalidOperationException(
+                $"Staged DotNet publish configuration '{invalidReference}' is missing or does not match its SHA-256 filename.");
+        }
+
         string[] stagedConfigurationPaths = plan.ConfigurationInputPaths
-            .Concat(ResolveStagedConfigurationReferences(effectiveConfigPath))
+            .Concat(referencedConfigurationPaths)
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetFullPath)
             .Where(path => string.Equals(

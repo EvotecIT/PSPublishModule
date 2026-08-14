@@ -53,14 +53,15 @@ public static class PowerForgeModuleSigningEvidenceWriter
                 pathComparer.Equals(ResolveFileUnderRoot(root, signature.Path, "preserved third-party signing path"), manifest)))
             throw new InvalidOperationException("The module manifest must be owned by the configured release publisher.");
         string? rootModule = ModuleManifestValueReader.ReadTopLevelString(manifest, "RootModule");
-        if (string.IsNullOrWhiteSpace(rootModule))
-            throw new InvalidOperationException("The module manifest must declare a RootModule entrypoint.");
-        string rootModulePath = ResolveModuleEntrypoint(root, manifest, rootModule!);
-        if (!verifiedFiles.Contains(rootModulePath, pathComparer))
-            throw new InvalidOperationException("Module signing evidence must include the RootModule entrypoint.");
-        if (preservedThirdPartySignatures.Any(signature =>
-                pathComparer.Equals(ResolveFileUnderRoot(root, signature.Path, "preserved third-party signing path"), rootModulePath)))
-            throw new InvalidOperationException("The RootModule entrypoint must be owned by the configured release publisher.");
+        if (!string.IsNullOrWhiteSpace(rootModule))
+        {
+            string rootModulePath = ResolveModuleEntrypoint(root, manifest, rootModule!);
+            if (!verifiedFiles.Contains(rootModulePath, pathComparer))
+                throw new InvalidOperationException("Module signing evidence must include the RootModule entrypoint.");
+            if (preservedThirdPartySignatures.Any(signature =>
+                    pathComparer.Equals(ResolveFileUnderRoot(root, signature.Path, "preserved third-party signing path"), rootModulePath)))
+                throw new InvalidOperationException("The RootModule entrypoint must be owned by the configured release publisher.");
+        }
         string manifestDirectory = Path.GetDirectoryName(manifest) ?? root;
         foreach (string relativePath in ModuleManifestLoadedContent.ReadRelativePaths(manifest))
         {

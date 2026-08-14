@@ -29,11 +29,14 @@ internal static class ModuleManifestValueReader
 
     internal static string[] ReadTopLevelStringOrArrayFromText(string manifestText, string key)
     {
+        if (!ModuleManifestTextParser.TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression) ||
+            string.IsNullOrWhiteSpace(expression))
+            return Array.Empty<string>();
 
-        if (ModuleManifestTextParser.TryGetStringArrayValue(manifestText, key, out var values) && values is not null)
+        if (ModuleManifestTextParser.TryParseStringArrayExpression(expression!, out var values) && values is not null)
             return values;
 
-        if (ModuleManifestTextParser.TryGetQuotedStringValue(manifestText, key, out var value) && !string.IsNullOrWhiteSpace(value))
+        if (ModuleManifestTextParser.TryParseQuotedStringExpression(expression!, out var value) && !string.IsNullOrWhiteSpace(value))
             return new[] { value! };
 
         return Array.Empty<string>();

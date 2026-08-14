@@ -17,15 +17,33 @@ public sealed partial class DotNetPublishPipelineRunner
             XDocument document = XDocument.Load(projectPath, LoadOptions.None);
             foreach (string propertyName in new[] { "Product", "AssemblyName" })
             {
-                identities.AddRange(document
+                XElement[] declarations = document
                     .Descendants()
                     .Where(element => string.Equals(
                         element.Name.LocalName,
                         propertyName,
                         StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                if (declarations.Any(element => element
+                        .AncestorsAndSelf()
+                        .Any(owner => !string.IsNullOrWhiteSpace(owner.Attribute("Condition")?.Value))))
+                {
+                    throw new InvalidOperationException(
+                        $"Project '{projectPath}' declares conditional {propertyName} values. " +
+                        "Configure an explicit portable executable identity for deterministic release verification.");
+                }
+                string[] staticValues = declarations
                     .Select(element => element.Value)
                     .Where(IsStaticPortableExecutableIdentity)
-                    .Select(NormalizePortableExecutableIdentity));
+                    .Select(NormalizePortableExecutableIdentity)
+                    .ToArray();
+                if (staticValues.Length != declarations.Length)
+                {
+                    throw new InvalidOperationException(
+                        $"Project '{projectPath}' declares evaluated {propertyName} values. " +
+                        "Configure an explicit portable executable identity for deterministic release verification.");
+                }
+                identities.AddRange(staticValues);
             }
         }
         catch (IOException)
@@ -37,7 +55,8 @@ public sealed partial class DotNetPublishPipelineRunner
             // The caller separately validates the project input. Fall back to its stable file identity.
         }
 
-        identities.Add(NormalizePortableExecutableIdentity(Path.GetFileNameWithoutExtension(projectPath)));
+        if (identities.Count == 0)
+            identities.Add(NormalizePortableExecutableIdentity(Path.GetFileNameWithoutExtension(projectPath)));
         return identities
             .Where(identity => !string.IsNullOrWhiteSpace(identity))
             .Distinct(StringComparer.OrdinalIgnoreCase)

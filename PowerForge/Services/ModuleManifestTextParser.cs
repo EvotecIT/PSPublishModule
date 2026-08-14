@@ -306,7 +306,7 @@ internal static class ModuleManifestTextParser
         return !string.IsNullOrWhiteSpace(expression);
     }
 
-    private static bool TryReadTopLevelAssignedExpressionByKey(string text, string key, out string? expression)
+    internal static bool TryReadTopLevelAssignedExpressionByKey(string text, string key, out string? expression)
     {
         expression = null;
         if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(key))
@@ -498,7 +498,10 @@ internal static class ModuleManifestTextParser
             if (TryGetCompositeStart(text, i, out var nestedIndex, out var nestedCloser))
             {
                 stack.Push(nestedCloser);
-                i = nestedIndex;
+                // The loop increment must land on the first character inside the nested
+                // composite. Skipping that character can lose an opening quote and leave
+                // the remaining manifest incorrectly treated as quoted text.
+                i = nestedIndex - 1;
                 continue;
             }
 

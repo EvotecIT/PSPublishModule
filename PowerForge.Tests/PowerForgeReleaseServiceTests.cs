@@ -4487,12 +4487,15 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_PublishesDotNetPublishAssetsToGitHub()
     {
-        var zip = Path.GetTempFileName();
-        var secondZip = Path.GetTempFileName();
-        var msi = Path.GetTempFileName();
-        var storeUpload = Path.GetTempFileName();
-        var manifest = Path.GetTempFileName();
-        var checksums = Path.GetTempFileName();
+        var root = CreateSandbox();
+        var zip = Path.Combine(root, "PowerForge.zip");
+        var secondZip = Path.Combine(root, "PowerForge.Agent.zip");
+        var msi = Path.Combine(root, "PowerForge.msi");
+        var storeUpload = Path.Combine(root, "PowerForge.msixupload");
+        var manifest = Path.Combine(root, "manifest.json");
+        var checksums = Path.Combine(root, "repository-SHA256SUMS.txt");
+        foreach (string path in new[] { zip, secondZip, msi, storeUpload, manifest, checksums })
+            File.WriteAllText(path, Path.GetFileName(path), new UTF8Encoding(false));
         try
         {
             var publishCalls = new List<GitHubReleasePublishRequest>();
@@ -4668,7 +4671,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 new PowerForgeReleaseRequest
                 {
-                    ConfigPath = Path.Combine(Path.GetTempPath(), "release.json"),
+                    ConfigPath = Path.Combine(root, "release.json"),
                     ToolsOnly = true
                 });
 
@@ -4682,23 +4685,35 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Contains(msi, publish.AssetFilePaths);
             Assert.Contains(storeUpload, publish.AssetFilePaths);
             Assert.Contains(manifest, publish.AssetFilePaths);
-            Assert.Contains(checksums, publish.AssetFilePaths);
+            Assert.DoesNotContain(checksums, publish.AssetFilePaths);
+            string publishChecksums = Assert.Single(
+                publish.AssetFilePaths,
+                path => path.EndsWith("PowerForge.SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase));
+            string[] publishChecksumLines = File.ReadAllLines(publishChecksums);
+            Assert.Contains(publishChecksumLines, line => line.EndsWith("*" + Path.GetFileName(zip), StringComparison.Ordinal));
+            Assert.Contains(publishChecksumLines, line => line.EndsWith("*" + Path.GetFileName(msi), StringComparison.Ordinal));
+            Assert.All(publishChecksumLines, line => Assert.DoesNotContain(Path.GetDirectoryName(zip)!, line, StringComparison.OrdinalIgnoreCase));
+            Assert.True(DotNetPublishReleaseArtifactVerifier.ChecksumContains(
+                publishChecksums,
+                Path.GetFileName(zip),
+                DotNetPublishReleaseArtifactVerifier.ComputeSha256(zip)));
             var secondPublish = Assert.Single(publishCalls, entry => entry.TagName == "PowerForge.Agent-v1.2.3");
             Assert.Contains(secondZip, secondPublish.AssetFilePaths);
             Assert.Contains(manifest, secondPublish.AssetFilePaths);
-            Assert.Contains(checksums, secondPublish.AssetFilePaths);
+            Assert.DoesNotContain(checksums, secondPublish.AssetFilePaths);
+            string secondChecksums = Assert.Single(
+                secondPublish.AssetFilePaths,
+                path => path.EndsWith("PowerForge.Agent.SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(
+                File.ReadAllLines(secondChecksums),
+                line => line.EndsWith("*" + Path.GetFileName(secondZip), StringComparison.Ordinal));
 
             Assert.Equal(2, result.ToolGitHubReleases.Length);
             Assert.All(result.ToolGitHubReleases, release => Assert.True(release.Success));
         }
         finally
         {
-            TryDelete(zip);
-            TryDelete(secondZip);
-            TryDelete(msi);
-            TryDelete(storeUpload);
-            TryDelete(manifest);
-            TryDelete(checksums);
+            TryDelete(root);
         }
     }
 

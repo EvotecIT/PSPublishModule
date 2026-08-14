@@ -134,7 +134,7 @@ public sealed class DotNetPublishPipelineRunnerMatrixProjectTests
         var root = CreateTempRoot();
         try
         {
-            string projectPath = CreateProject(root, "src/Actual.Cli.csproj");
+            string projectPath = CreateProject(root, "src/Friendly.ProjectFile.csproj");
             File.WriteAllText(projectPath, """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
@@ -156,7 +156,7 @@ public sealed class DotNetPublishPipelineRunnerMatrixProjectTests
                     new DotNetPublishTarget
                     {
                         Name = "FriendlyAlias",
-                        ProjectPath = "src/Actual.Cli.csproj",
+                        ProjectPath = "src/Friendly.ProjectFile.csproj",
                         Publish = new DotNetPublishPublishOptions
                         {
                             Framework = "net10.0",
@@ -172,6 +172,7 @@ public sealed class DotNetPublishPipelineRunnerMatrixProjectTests
 
             Assert.Contains("Actual Product", target.ExecutableIdentities);
             Assert.Contains("Actual.Cli", target.ExecutableIdentities);
+            Assert.DoesNotContain("Friendly.ProjectFile", target.ExecutableIdentities);
             Assert.DoesNotContain("FriendlyAlias", target.ExecutableIdentities);
 
             spec.Targets[0].Publish.ExecutableIdentity = "Imported.Identity";
@@ -201,6 +202,45 @@ public sealed class DotNetPublishPipelineRunnerMatrixProjectTests
                 internalName: null,
                 originalFileName: "Actual.Cli.exe",
                 executablePath: Path.Combine("Artifacts", "friendly.exe")));
+    }
+
+    [Fact]
+    public void ResolvePortableExecutableIdentities_RequiresExplicitIdentityForConditionalProperties()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string projectPath = CreateProject(root, "Conditional.csproj");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+                    <AssemblyName>Release.Tool</AssemblyName>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                DotNetPublishPipelineRunner.ResolvePortableExecutableIdentities(projectPath, configuredIdentity: null));
+
+            Assert.Contains("explicit portable executable identity", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(
+                new[] { "Configured.Tool" },
+                DotNetPublishPipelineRunner.ResolvePortableExecutableIdentities(projectPath, "Configured.Tool"));
+
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <AssemblyName>$(ReleaseAssemblyName)</AssemblyName>
+                  </PropertyGroup>
+                </Project>
+                """);
+            Assert.Throws<InvalidOperationException>(() =>
+                DotNetPublishPipelineRunner.ResolvePortableExecutableIdentities(projectPath, configuredIdentity: null));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
     }
 
     [Fact]
