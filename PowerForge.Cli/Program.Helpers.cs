@@ -33,7 +33,7 @@ internal static partial class Program
                         [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>]
                         [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <Tool|Portable|Installer|Store>[,<...>]]
                         [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]
-      powerforge apple-release <Status|Doctor|Version|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>
+      powerforge apple-release <Status|Doctor|Version|Archive|Rehearse|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>
                         [--config <release.json>] [--plan] [--validate] [--confirm-apple-action] [--apple-expected-plan-sha256 <sha256>] [--apple-resume|--no-apple-resume]
                         [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>]
                                 [--target <Name[,Name...]>] [--summary] [--output json]
@@ -88,6 +88,7 @@ internal static partial class Program
       --no-color                       Disable ANSI colors
       --view auto|standard|ansi        Console rendering mode (default: auto)
       --output json                    Emit machine-readable JSON output      
+      --version                        Print the exact PowerForge CLI version
 
     Default config discovery (when --config is omitted):
       Searches for powerforge.json / powerforge.pipeline.json / .powerforge/pipeline.json

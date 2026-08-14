@@ -583,7 +583,18 @@ internal sealed partial class AppleReleaseSourceTrustService
             .Select(entry => Path.GetFullPath(Path.Combine(repositoryRoot, entry.Substring(2))))
             .ToHashSet(GetPathComparer());
         var headBlobs = ReadHeadTreeBlobIds(repositoryRoot, relativeRoot);
-        foreach (var entry in Directory.EnumerateFileSystemEntries(path, "*", SearchOption.AllDirectories))
+        var entries = Directory.EnumerateFileSystemEntries(path, "*", SearchOption.AllDirectories).ToArray();
+        var trackedFiles = entries
+            .Where(File.Exists)
+            .Select(Path.GetFullPath)
+            .ToArray();
+        EnsureNoCustomGitFilters(
+            repositoryRoot,
+            trackedFiles
+                .Select(file => FrameworkCompatibility.GetRelativePath(repositoryRoot, file).Replace('\\', '/'))
+                .ToArray(),
+            name);
+        foreach (var entry in entries)
         {
             if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
                 throw new InvalidOperationException($"{name} must not contain a symbolic link or reparse point: {entry}");
@@ -597,7 +608,6 @@ internal sealed partial class AppleReleaseSourceTrustService
             {
                 var fullPath = Path.GetFullPath(entry);
                 var relativePath = FrameworkCompatibility.GetRelativePath(repositoryRoot, fullPath).Replace('\\', '/');
-                EnsureNoCustomGitFilter(repositoryRoot, relativePath, name);
                 var worktreeBlob = ComputeRawGitBlobId(repositoryRoot, fullPath);
                 if (!headBlobs.TryGetValue(fullPath, out var expectedBlob))
                 {
@@ -614,6 +624,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                         $"{name} differs from the exact source commit: " +
                         relativePath);
                 }
+                _validatedTrackedFileBlobs[fullPath] = worktreeBlob;
                 ValidateSourceLevelIncludes(
                     repositoryRoot,
                     fullPath,

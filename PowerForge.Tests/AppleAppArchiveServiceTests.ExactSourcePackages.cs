@@ -15,6 +15,7 @@ public sealed partial class AppleAppArchiveServiceTests
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
             RunGit(root.FullName, "init", "--quiet");
             var runner = new ExactPackageProcessRunner(root.FullName);
+            var progress = new List<string>();
             WritePackageLock(root.FullName, runner.RemoteUrl, runner.ApprovedRevision);
             CommitApprovedInputs(root.FullName);
 
@@ -23,7 +24,8 @@ public sealed partial class AppleAppArchiveServiceTests
                 ProjectPath = project.FullName,
                 Scheme = "App",
                 ArchivePath = Path.Combine(root.FullName, "App.xcarchive"),
-                RequireExactPackageSnapshot = true
+                RequireExactPackageSnapshot = true,
+                Progress = progress.Add
             });
 
             Assert.True(result.Succeeded);
@@ -50,6 +52,9 @@ public sealed partial class AppleAppArchiveServiceTests
                 archive.Arguments[Array.IndexOf(archive.Arguments.ToArray(), "-derivedDataPath") + 1]);
             Assert.False(Directory.Exists(runner.SourcePackagesRoot));
             Assert.False(Directory.Exists(runner.DerivedDataRoot));
+            Assert.Single(progress, message => message.Equals(
+                "Validating materialized Swift package source and Git provenance",
+                StringComparison.Ordinal));
         }
         finally
         {

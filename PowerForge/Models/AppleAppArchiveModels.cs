@@ -5,6 +5,11 @@ namespace PowerForge;
 /// </summary>
 public sealed class AppleAppArchiveRequest
 {
+    internal Action<string>? Progress { get; set; }
+
+    internal void ReportProgress(string detail)
+        => Progress?.Invoke(detail);
+
     /// <summary>Path to the Xcode project or workspace.</summary>
     public string ProjectPath { get; set; } = string.Empty;
 

@@ -549,7 +549,10 @@ the signing-capable Windows runner and has three explicit operations:
    require explicit reconciliation.
 3. `Publish` accepts only a merged version and an exact
    `publish:<version>:<main-commit>` confirmation, then publishes and verifies NuGet,
-   PowerShell Gallery, and the GitHub release. Its effective configuration replaces every
+   PowerShell Gallery, and the GitHub release. That release includes the canonical
+   standalone PowerForge installer and a generated runtime/checksum/commit manifest, so
+   exact CLI consumers use the same binaries that passed the coordinated release gate.
+   Its effective configuration replaces every
    X-pattern with the authorized exact version and disables source-version mutation, so a
    recovery run cannot advance a partially published release train. If the exact stable
    GitHub release already exists after a partial asset upload, recovery first binds its

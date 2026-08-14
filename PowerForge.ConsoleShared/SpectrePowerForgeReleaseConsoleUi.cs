@@ -174,6 +174,9 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             if (runPackages) phases.Add(PowerForgeReleaseProgressPhase.Packages);
             if (runTools) phases.Add(PowerForgeReleaseProgressPhase.Tools);
         }
+        var runAppleApps = PowerForgeReleaseService.ShouldRunAppleAppsForProgress(spec, request);
+        if (runAppleApps)
+            phases.Add(PowerForgeReleaseProgressPhase.AppleApps);
         var explicitAppleAction = request.AppleAction != PowerForgeAppleReleaseAction.Configured;
         var publishUnifiedGitHub = !explicitAppleAction &&
                                    PowerForgeReleaseService.ShouldPublishUnifiedGitHub(spec, request, runModule);
@@ -244,6 +247,9 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                     ? "Build and publish NuGet packages"
                     : "Build NuGet packages",
             PowerForgeReleaseProgressPhase.Tools => "Build executable matrix",
+            PowerForgeReleaseProgressPhase.AppleApps => request.AppleAction == PowerForgeAppleReleaseAction.Configured
+                ? "Run Apple release configuration"
+                : $"Apple {request.AppleAction}",
             PowerForgeReleaseProgressPhase.GitHub => "Publish unified GitHub release",
             PowerForgeReleaseProgressPhase.VirusTotal => "VirusTotal Monitor registration",
             _ => phase.ToString()

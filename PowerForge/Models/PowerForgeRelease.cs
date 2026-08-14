@@ -344,6 +344,12 @@ internal sealed class PowerForgeReleaseOutputsOptions
 
     public string? ChecksumsPath { get; set; }
 
+    /// <summary>Optional generated consumer lock manifest for the standalone PowerForge tool.</summary>
+    public string? PowerForgeToolManifestPath { get; set; }
+
+    /// <summary>Additional tracked release files included in staging, checksums, and the unified GitHub release.</summary>
+    public string[] AdditionalAssetPaths { get; set; } = Array.Empty<string>();
+
     public PowerForgeReleaseStagingOptions? Staging { get; set; }
 }
 
@@ -520,6 +526,8 @@ internal sealed class PowerForgeAppleLocalDeploymentProfile
 
 internal sealed class PowerForgeAppleReleasePlan
 {
+    internal IPowerForgeReleaseProgressReporterV2? Progress { get; set; }
+
     public string ProjectRoot { get; set; } = string.Empty;
 
     public string Configuration { get; set; } = "Release";
@@ -551,6 +559,9 @@ internal sealed class PowerForgeAppleReleasePlan
     public bool Archive { get; set; }
 
     public bool Upload { get; set; }
+
+    /// <summary>Archive and export locally without App Store upload or notarization submission.</summary>
+    public bool Rehearse { get; set; }
 
     public bool SyncScreenshots { get; set; }
 

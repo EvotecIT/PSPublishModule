@@ -20,6 +20,10 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
     },
+    "commit": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{40}$"
+    },
     "assets": {
       "type": "object",
       "minProperties": 1,
@@ -28,9 +32,11 @@
         "^(osx|linux|win)-(arm64|x64)$": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["sha256"],
+          "required": ["sha256", "executableSha256"],
           "properties": {
-            "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
+            "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.zip$" },
+            "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+            "executableSha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
           }
         }
       }

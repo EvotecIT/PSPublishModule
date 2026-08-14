@@ -99,10 +99,13 @@ public sealed partial class AppleAppArchiveService
                         request.IsWorkspace,
                         request.Scheme.Trim(),
                         timeout,
-                        cancellationToken)
+                        cancellationToken,
+                        request.Progress)
                     .ConfigureAwait(false);
                 packageSnapshot.AppendArchiveArguments(args);
             }
+
+            request.ReportProgress("Creating signed Xcode archive");
 
             var archiveParent = Path.GetDirectoryName(archivePath)
                 ?? throw new InvalidOperationException($"Apple archive path has no parent: {archivePath}");
@@ -137,6 +140,8 @@ public sealed partial class AppleAppArchiveService
             });
             result = await _processRunner.RunAsync(processRequest, cancellationToken).ConfigureAwait(false);
             processRequest.InvokeCompletionBoundary(result);
+            if (result.Succeeded)
+                request.ReportProgress("Signed Xcode archive completed");
             packageSnapshot?.ValidateUnchanged();
             archiveOutputMonitor.ValidateNoChanges();
             if (result.Succeeded &&
@@ -250,7 +255,8 @@ public sealed partial class AppleAppArchiveService
                 captureOutput: true,
                 captureError: true,
                 inheritEnvironment: toolEnvironment is null);
-        processRequest.SetStartBoundary(request.InvokeRemoteMutationStarted);
+        if (!directExport)
+            processRequest.SetStartBoundary(request.InvokeRemoteMutationStarted);
         if (directExport)
         {
             processRequest.SetCompletionBoundary(completionResult =>

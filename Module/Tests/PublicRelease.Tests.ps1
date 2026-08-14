@@ -1,5 +1,30 @@
 Set-StrictMode -Version Latest
 
+Describe 'Standalone PowerForge installer host compatibility' {
+    BeforeAll {
+        $script:ToolInstallerPath = [IO.Path]::GetFullPath(
+            (Join-Path $PSScriptRoot '..\..\Build\Install-PowerForgeTool.ps1'))
+    }
+
+    It 'parses without errors in the current PowerShell host' {
+        $tokens = $null
+        $errors = $null
+        [System.Management.Automation.Language.Parser]::ParseFile(
+            $script:ToolInstallerPath,
+            [ref] $tokens,
+            [ref] $errors) | Out-Null
+
+        @($errors).Count | Should -Be 0
+    }
+
+    It 'uses the shared Windows PowerShell 5.1 and PowerShell 7 surface' {
+        $content = Get-Content -Raw -LiteralPath $script:ToolInstallerPath
+        $content | Should -Not -Match 'ConvertFrom-Json\s+-Depth'
+        $content | Should -Not -Match '\$(?:IsWindows|IsMacOS|IsLinux)\b'
+        $content | Should -Match '\$PSVersionTable\.PSEdition'
+    }
+}
+
 Describe 'Public release committed version validation' {
     BeforeAll {
         $script:RepositoryRoot = [IO.Path]::GetFullPath(

@@ -5,8 +5,6 @@ namespace PowerForge;
 /// </summary>
 internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 {
-    private readonly AppleReleaseSourceTrustService _sourceTrust = new();
-    private readonly IReadOnlyDictionary<string, string> _approvedPackageRevisions;
     private readonly IReadOnlyDictionary<string, string?> _environmentVariables;
     private readonly AppleReleaseSourceMutationMonitor _monitor;
     private readonly AppleArchiveUploadSnapshot.SnapshotIdentity _materializedPackagesIdentity;
@@ -20,7 +18,6 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         AppleArchiveUploadSnapshot.SnapshotIdentity materializedPackagesIdentity)
     {
         RootPath = rootPath;
-        _approvedPackageRevisions = approvedPackageRevisions;
         _environmentVariables = environmentVariables;
         _monitor = monitor;
         _materializedPackagesIdentity = materializedPackagesIdentity;
@@ -43,7 +40,8 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         bool isWorkspace,
         string scheme,
         TimeSpan timeout,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<string>? progress = null)
     {
         var parent = Path.Combine(Path.GetTempPath(), "PowerForge", "apple-swiftpm-build-snapshots");
         Directory.CreateDirectory(parent);
@@ -81,6 +79,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 "-skipPackageUpdates"
             };
             var sourceTrust = new AppleReleaseSourceTrustService();
+            progress?.Invoke("Resolving the pinned Swift package graph");
             monitor = new AppleReleaseSourceMutationMonitor(
                 sourcePackagesPath,
                 "materialized Swift package root",
@@ -102,11 +101,19 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 if (!completionResult.Succeeded)
                     return;
                 materializedPackagesIdentity = monitor.CaptureExpectedProducerOutput(
-                    () => CaptureMaterializedPackageIdentity(
-                        sourceTrust,
-                        sourcePackagesPath,
-                        approvedPackageRevisions),
+                    () => CaptureMaterializedPackageIdentity(sourcePackagesPath),
                     "xcodebuild -resolvePackageDependencies");
+                progress?.Invoke("Validating materialized Swift package source and Git provenance");
+                sourceTrust.ValidateMaterializedPackageCheckouts(sourcePackagesPath, approvedPackageRevisions);
+                var identityAfterValidation = CaptureMaterializedPackageIdentity(sourcePackagesPath);
+                if (!identityAfterValidation.Equals(materializedPackagesIdentity))
+                {
+                    throw new InvalidOperationException(
+                        "The materialized Swift package root changed while its exact package graph was being validated. " +
+                        "Discard the archive and resolve the exact package graph again.");
+                }
+                monitor.ValidateNoChanges();
+                progress?.Invoke("Pinned Swift package graph validated");
             });
             var result = await processRunner.RunAsync(processRequest, cancellationToken).ConfigureAwait(false);
             processRequest.InvokeCompletionBoundary(result);
@@ -154,10 +161,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 
     internal void ValidateUnchanged()
     {
-        var actual = CaptureMaterializedPackageIdentity(
-            _sourceTrust,
-            SourcePackagesPath,
-            _approvedPackageRevisions);
+        var actual = CaptureMaterializedPackageIdentity(SourcePackagesPath);
         if (!actual.Equals(_materializedPackagesIdentity))
         {
             throw new InvalidOperationException(
@@ -168,11 +172,8 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
     }
 
     private static AppleArchiveUploadSnapshot.SnapshotIdentity CaptureMaterializedPackageIdentity(
-        AppleReleaseSourceTrustService sourceTrust,
-        string sourcePackagesPath,
-        IReadOnlyDictionary<string, string> approvedPackageRevisions)
+        string sourcePackagesPath)
     {
-        sourceTrust.ValidateMaterializedPackageCheckouts(sourcePackagesPath, approvedPackageRevisions);
         var artifactsPath = Path.Combine(sourcePackagesPath, "artifacts");
         if (Directory.Exists(artifactsPath))
             ValidateNoEscapingArtifactLinks(artifactsPath);

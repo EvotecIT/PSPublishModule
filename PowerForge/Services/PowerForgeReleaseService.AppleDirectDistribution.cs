@@ -39,19 +39,20 @@ internal sealed partial class PowerForgeReleaseService
     internal static string ResolveDirectAppleArtifactPath(string exportPath)
     {
         if (!Directory.Exists(exportPath))
-            throw new DirectoryNotFoundException($"Developer ID export path was not found: {exportPath}");
+            throw new DirectoryNotFoundException($"Apple export path was not found: {exportPath}");
 
         var artifacts = Directory.EnumerateFileSystemEntries(exportPath)
             .Where(path =>
                 (Directory.Exists(path) && Path.GetExtension(path).Equals(".app", StringComparison.OrdinalIgnoreCase)) ||
                 (File.Exists(path) &&
                  (Path.GetExtension(path).Equals(".dmg", StringComparison.OrdinalIgnoreCase) ||
-                  Path.GetExtension(path).Equals(".pkg", StringComparison.OrdinalIgnoreCase))))
+                  Path.GetExtension(path).Equals(".pkg", StringComparison.OrdinalIgnoreCase) ||
+                  Path.GetExtension(path).Equals(".ipa", StringComparison.OrdinalIgnoreCase))))
             .ToArray();
         if (artifacts.Length != 1)
         {
             throw new InvalidOperationException(
-                $"Developer ID export '{exportPath}' must contain exactly one .app, .dmg, or signed flat .pkg artifact; found {artifacts.Length}.");
+                $"Apple export '{exportPath}' must contain exactly one .app, .dmg, .pkg, or .ipa artifact; found {artifacts.Length}.");
         }
 
         return Path.GetFullPath(artifacts[0]);

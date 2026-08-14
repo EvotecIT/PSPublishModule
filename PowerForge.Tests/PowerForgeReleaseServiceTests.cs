@@ -4715,6 +4715,54 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_PlanOnly_EmbedsExactReleaseCommitInToolInformationalVersion()
+    {
+        const string commit = "0123456789abcdef0123456789abcdef01234567";
+        var service = new PowerForgeReleaseService(
+            new NullLogger(),
+            executePackages: (_, _, _) =>
+            {
+                var release = new DotNetRepositoryReleaseResult
+                {
+                    Success = true,
+                    ResolvedVersion = "3.0.110"
+                };
+                release.ResolvedVersionsByProject["PowerForge"] = "3.0.110";
+                return new ProjectBuildHostExecutionResult
+                {
+                    Success = true,
+                    Result = new ProjectBuildResult { Success = true, Release = release }
+                };
+            },
+            planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+            runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+            loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+            planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+            {
+                ProjectRoot = Path.GetTempPath(),
+                Configuration = "Release"
+            },
+            runDotNetTools: _ => throw new InvalidOperationException("DotNet publish should not run."),
+            publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+        var result = service.Execute(
+            new PowerForgeReleaseSpec
+            {
+                Packages = new ProjectBuildConfiguration { GitHubPrimaryProject = "PowerForge" },
+                Tools = new PowerForgeToolReleaseSpec { DotNetPublish = new DotNetPublishSpec() },
+                GitHub = new PowerForgeReleaseGitHubOptions { Commitish = commit }
+            },
+            new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(Path.GetTempPath(), "release.json"),
+                PlanOnly = true
+            });
+
+        Assert.True(result.Success);
+        Assert.Equal("3.0.110+" + commit, result.DotNetToolPlan!.MsBuildProperties["InformationalVersion"]);
+    }
+
+    [Fact]
     public void Execute_PublishesDotNetPublishAssetsToGitHub_PrefersResolvedPackageVersionOverProjectVersion()
     {
         var root = CreateSandbox();

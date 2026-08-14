@@ -107,6 +107,12 @@
       "ReleaseNameTemplate": "{Target} {Version}"
     }
   },
+  "Outputs": {
+    "PowerForgeToolManifestPath": "../Artefacts/ProjectBuild/PowerForge-tool-manifest.json",
+    "AdditionalAssetPaths": [
+      "Install-PowerForgeTool.ps1"
+    ]
+  },
   "GitHub": {
     "Publish": true,
     "VersionSource": "Module",

@@ -12,20 +12,43 @@ public sealed partial class AppleReleaseWorkflowTests
     {
         var root = FindRepoRoot();
         var action = Read(root, ".github", "actions", "setup-powerforge", "action.yml");
-        var script = Read(root, ".github", "actions", "setup-powerforge", "Install-PinnedPowerForge.ps1");
+        var wrapper = Read(root, ".github", "actions", "setup-powerforge", "Install-PinnedPowerForge.ps1");
+        var script = Read(root, "Build", "Install-PowerForgeTool.ps1");
         var schema = Read(root, "Schemas", "powerforge.tool.schema.json");
 
         Assert.Contains("manifest-path", action, StringComparison.Ordinal);
         Assert.Contains("Get-FileHash", script, StringComparison.Ordinal);
         Assert.Contains("checksum mismatch", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("executableSha256", schema, StringComparison.Ordinal);
+        Assert.Contains("executableSha256", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConvertFrom-Json -Depth", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("$IsWindows", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("$IsMacOS", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("$IsLinux", script, StringComparison.Ordinal);
+        Assert.Contains("$PSVersionTable.PSEdition -eq 'Desktop'", script, StringComparison.Ordinal);
+        Assert.Contains("$stageRoot = Join-Path $installParent", script, StringComparison.Ordinal);
+        Assert.Contains("[IO.Directory]::Move($stageRoot, $installRoot)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Move-Item -LiteralPath $stageRoot", script, StringComparison.Ordinal);
+        Assert.Contains("LastWriteTimeUtc -lt [DateTime]::UtcNow.AddDays(-1)", script, StringComparison.Ordinal);
+        Assert.Contains("[IO.FileAttributes]::ReparsePoint", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("catch [IO.IOException]", script, StringComparison.Ordinal);
+        var cacheHashCheck = script.IndexOf(
+            "Get-FileHash -LiteralPath $toolPath",
+            StringComparison.Ordinal);
+        var cacheExecution = script.IndexOf("& $toolPath --version", StringComparison.Ordinal);
+        Assert.True(cacheHashCheck >= 0 && cacheHashCheck < cacheExecution);
         Assert.Contains("^\\d+\\.\\d+\\.\\d+$", script, StringComparison.Ordinal);
         Assert.Contains("sha256", schema, StringComparison.Ordinal);
         Assert.Contains("releaseTag", schema, StringComparison.Ordinal);
-        Assert.Contains("$manifest.releaseTag", script, StringComparison.Ordinal);
+        Assert.Contains("Get-ManifestPropertyValue -Object $manifest -Name 'releaseTag'", script, StringComparison.Ordinal);
         Assert.Contains("$releaseTag = \"v$version\"", script, StringComparison.Ordinal);
         Assert.Contains("releases/download/$releaseTag/$assetName", script, StringComparison.Ordinal);
         Assert.Contains("unsupported characters", script, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("latest", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("/latest/", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("POWERFORGE_TOOL_CACHE", script, StringComparison.Ordinal);
+        Assert.Contains("Test-InstalledTool", script, StringComparison.Ordinal);
+        Assert.Contains("--version", script, StringComparison.Ordinal);
+        Assert.Contains("Build/Install-PowerForgeTool.ps1", wrapper, StringComparison.Ordinal);
         Assert.Contains("MANIFEST_PATH: ${{ inputs.manifest-path }}", action, StringComparison.Ordinal);
         Assert.DoesNotContain("-ManifestPath '${{", action, StringComparison.Ordinal);
     }
