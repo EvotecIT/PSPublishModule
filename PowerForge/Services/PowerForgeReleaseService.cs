@@ -268,6 +268,13 @@ internal sealed partial class PowerForgeReleaseService
         string expectedLoadedConfigurationPath = string.IsNullOrWhiteSpace(request.EffectiveConfigurationPath)
             ? configPath
             : Path.GetFullPath(request.EffectiveConfigurationPath!.Trim().Trim('"'));
+        if (!string.IsNullOrWhiteSpace(request.EffectiveConfigurationPath) &&
+            (string.IsNullOrWhiteSpace(spec.LoadedConfigurationPath) ||
+             !AppleReleasePathsEqual(Path.GetFullPath(spec.LoadedConfigurationPath!), expectedLoadedConfigurationPath)))
+        {
+            throw new InvalidOperationException(
+                "Generated configuration attestation must use the exact authorized configuration loaded by the release engine.");
+        }
         if (!string.IsNullOrWhiteSpace(spec.LoadedConfigurationPath) &&
             AppleReleasePathsEqual(Path.GetFullPath(spec.LoadedConfigurationPath!), expectedLoadedConfigurationPath))
         {
@@ -328,7 +335,7 @@ internal sealed partial class PowerForgeReleaseService
                                                   selectedTargets.Length > 0 &&
                                                   appleTargetMatches.Length == selectedTargets.Length &&
                                                   inlineMatches.Length == 0;
-                var externalConfigExists = DotNetToolsConfigExists(spec.Tools!, configPath);
+                var externalConfigExists = DotNetToolsConfigExists(spec.Tools!, expectedLoadedConfigurationPath);
                 var appleTargetsNeedDotNetDisambiguation = selectedTargetsAreAppleOnly &&
                                                            AppleTargetSelectionUsesNameOrScheme(spec.AppleApps!, selectedTargets);
                 var shouldLoadDotNetSpec = selectedTargets.Length == 0 ||
@@ -337,9 +344,11 @@ internal sealed partial class PowerForgeReleaseService
                                            externalConfigExists && appleTargetsNeedDotNetDisambiguation;
                 if (shouldLoadDotNetSpec)
                 {
-                    var dotNetSource = _loadDotNetToolsSpec(spec.Tools!, configPath);
+                    var dotNetSource = _loadDotNetToolsSpec(spec.Tools!, expectedLoadedConfigurationPath);
                     dotNetSpecForTools = dotNetSource.Spec;
-                    dotNetSourcePathForTools = dotNetSource.SourceConfigPath;
+                    dotNetSourcePathForTools = ResolveDotNetPlanningConfigurationPath(
+                        dotNetSource.SourceConfigPath,
+                        configPath);
                     toolTargetMatches = ResolveDotNetToolTargetMatches(dotNetSpecForTools, selectedTargets);
                 }
                 else
@@ -4158,7 +4167,14 @@ internal sealed partial class PowerForgeReleaseService
             : Path.Combine(releaseConfigDirectory, tools.DotNetPublishConfigPath!));
 
         if (!File.Exists(configPath))
+        {
+            if (StagedDotNetPublishConfigurationFileName.IsMatch(Path.GetFileName(configPath)))
+            {
+                throw new InvalidOperationException(
+                    $"Authorized DotNet publish configuration evidence was not found: {configPath}");
+            }
             throw new FileNotFoundException($"DotNet publish config not found: {configPath}", configPath);
+        }
 
         var json = File.ReadAllText(configPath);
         var spec = JsonSerializer.Deserialize<DotNetPublishSpec>(json, DotNetToolsJsonOptions)
@@ -4168,6 +4184,37 @@ internal sealed partial class PowerForgeReleaseService
             spec.Profile = tools.DotNetPublishProfile!.Trim();
 
         return (spec, configPath);
+    }
+
+    private static string ResolveDotNetPlanningConfigurationPath(
+        string loadedConfigurationPath,
+        string sourceReleaseConfigurationPath)
+    {
+        string loadedPath = Path.GetFullPath(loadedConfigurationPath);
+        Match stagedMatch = StagedDotNetPublishConfigurationFileName.Match(Path.GetFileName(loadedPath));
+        if (!stagedMatch.Success)
+            return loadedPath;
+
+        PowerForgeReleaseSpec sourceSpec = LoadConfiguration(sourceReleaseConfigurationPath);
+        string? sourceReference = sourceSpec.Tools?.DotNetPublishConfigPath;
+        if (string.IsNullOrWhiteSpace(sourceReference))
+            throw new InvalidOperationException(
+                "The source release configuration no longer identifies the staged DotNet publish configuration.");
+        string sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourceReleaseConfigurationPath))
+            ?? Directory.GetCurrentDirectory();
+        string sourcePath = Path.GetFullPath(Path.IsPathRooted(sourceReference)
+            ? sourceReference
+            : Path.Combine(sourceDirectory, sourceReference));
+        if (!File.Exists(sourcePath) || !string.Equals(
+                AppleNotarizationService.ComputeFileSha256(sourcePath),
+                stagedMatch.Groups["sha256"].Value,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "The staged DotNet publish configuration does not match the caller-owned source configuration.");
+        }
+
+        return sourcePath;
     }
 
     private static DotNetPublishPlan PlanDotNetTools(

@@ -14,8 +14,23 @@ public sealed partial class ModulePipelineRunner
     {
         SigningOptionsConfiguration signing = plan.Signing ?? throw new InvalidOperationException(
             "Signing is enabled but no signing options were provided.");
+        string manifestDirectory = Path.GetDirectoryName(context.ManifestPath)
+            ?? throw new InvalidOperationException("Packed module manifest directory could not be resolved.");
+        string[] loadedContentFiles = ModuleManifestLoadedContent.ReadRelativePaths(context.ManifestPath)
+            .Select(path => Path.GetFullPath(Path.Combine(manifestDirectory, path)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        string rootPrefix = Path.GetFullPath(context.RootPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (loadedContentFiles.Any(path =>
+                !path.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) || !File.Exists(path)))
+        {
+            throw new InvalidOperationException(
+                "Every manifest-loaded module file must exist inside the final packed module layout before signing.");
+        }
         string[] packageFiles = Directory.EnumerateFiles(context.RootPath, "*", SearchOption.AllDirectories)
             .Select(Path.GetFullPath)
+            .Except(loadedContentFiles, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         string[] includePatterns = BuildSigningIncludePatterns(signing);
         string[] excludeSubstrings = BuildSigningExcludeSubstrings(
@@ -29,6 +44,20 @@ public sealed partial class ModulePipelineRunner
             includePatterns,
             excludeSubstrings,
             signing);
+        if (loadedContentFiles.Length > 0)
+        {
+            SigningOptionsConfiguration loadedContentSigning = CloneSigningOptions(signing)
+                ?? throw new InvalidOperationException("Signing options could not be cloned.");
+            loadedContentSigning.OverwriteSigned = true;
+            ModuleSigningResult loadedContentResult = _hostedOperations.SignModuleOutput(
+                context.ModuleName,
+                context.RootPath,
+                loadedContentFiles,
+                new[] { "*" },
+                Array.Empty<string>(),
+                loadedContentSigning);
+            signingResult = AggregateSigningResults(signingResult, loadedContentResult);
+        }
 
         string sourceAttestationPath = Path.Combine(
             context.MainModulePath,

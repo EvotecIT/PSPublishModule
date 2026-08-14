@@ -115,7 +115,8 @@ try {
     . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Resolve-PowerForgeEffectiveConfigurationReferences.ps1')
     $releaseConfig = Resolve-PowerForgeEffectiveConfigurationReferences `
         -ReleaseConfig $releaseConfig `
-        -SourceConfigurationPath $ConfigPath
+        -SourceConfigurationPath $ConfigPath `
+        -EvidenceDirectory $effectiveConfigDirectory
     $releaseConfig.GitHub | Add-Member -NotePropertyName Commitish -NotePropertyValue $ExpectedCommit -Force
     $certificateThumbprint = [string] $releaseConfig.Packages.CertificateThumbprint
     $certificateStore = [string] $releaseConfig.Packages.CertificateStore

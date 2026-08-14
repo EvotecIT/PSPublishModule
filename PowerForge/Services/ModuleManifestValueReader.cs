@@ -24,6 +24,12 @@ internal static class ModuleManifestValueReader
         if (!TryReadManifestText(manifestPath, out var manifestText))
             return Array.Empty<string>();
 
+        return ReadTopLevelStringOrArrayFromText(manifestText, key);
+    }
+
+    internal static string[] ReadTopLevelStringOrArrayFromText(string manifestText, string key)
+    {
+
         if (ModuleManifestTextParser.TryGetStringArrayValue(manifestText, key, out var values) && values is not null)
             return values;
 

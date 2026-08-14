@@ -7,6 +7,9 @@ internal sealed partial class PowerForgeReleaseService
     private static readonly Regex AuthorizedConfigurationFileName = new(
         @"^\.release\.authorized\.\d+\.\d+\.\d+\.[0-9a-f]{40}\.json$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex StagedDotNetPublishConfigurationFileName = new(
+        @"^\.release\.dotnetpublish\.(?<sha256>[0-9a-f]{64})\.json$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static void BindGeneratedConfigurationInput(
         DotNetPublishPlan plan,
@@ -53,12 +56,52 @@ internal sealed partial class PowerForgeReleaseService
                 "Generated configuration attestation does not match the exact configuration loaded by the release engine.");
         }
 
-        plan.ConfigurationInputPaths = plan.ConfigurationInputPaths
-            .Concat(new[] { effectiveConfigPath })
+        string effectiveConfigDirectory = Path.GetDirectoryName(effectiveConfigPath)
+            ?? throw new InvalidOperationException("Generated authorized configuration directory could not be resolved.");
+        string[] stagedConfigurationPaths = plan.ConfigurationInputPaths
+            .Concat(ResolveStagedConfigurationReferences(effectiveConfigPath))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Where(path => string.Equals(
+                Path.GetDirectoryName(path),
+                effectiveConfigDirectory,
+                StringComparison.OrdinalIgnoreCase))
+            .Where(path => IsTrustedStagedConfiguration(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        plan.GeneratedConfigurationInputPaths = new[] { effectiveConfigPath };
+
+        plan.ConfigurationInputPaths = plan.ConfigurationInputPaths
+            .Concat(new[] { effectiveConfigPath })
+            .Concat(stagedConfigurationPaths)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        plan.GeneratedConfigurationInputPaths = new[] { effectiveConfigPath }
+            .Concat(stagedConfigurationPaths)
+            .ToArray();
         plan.GeneratedProvenancePaths = request.GeneratedProvenancePaths.ToArray();
+    }
+
+    private static bool IsTrustedStagedConfiguration(string path)
+    {
+        if (!File.Exists(path))
+            return false;
+        Match match = StagedDotNetPublishConfigurationFileName.Match(Path.GetFileName(path));
+        return match.Success && string.Equals(
+            AppleNotarizationService.ComputeFileSha256(path),
+            match.Groups["sha256"].Value,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<string> ResolveStagedConfigurationReferences(string effectiveConfigPath)
+    {
+        PowerForgeReleaseSpec effectiveSpec = LoadConfiguration(effectiveConfigPath);
+        string? reference = effectiveSpec.Tools?.DotNetPublishConfigPath;
+        if (string.IsNullOrWhiteSpace(reference))
+            yield break;
+        string directory = Path.GetDirectoryName(effectiveConfigPath) ?? Directory.GetCurrentDirectory();
+        yield return Path.GetFullPath(Path.IsPathRooted(reference)
+            ? reference
+            : Path.Combine(directory, reference));
     }
 
     private static IEnumerable<PowerForgeReleaseAssetEntry> CreateGeneratedConfigurationAssetEntries(

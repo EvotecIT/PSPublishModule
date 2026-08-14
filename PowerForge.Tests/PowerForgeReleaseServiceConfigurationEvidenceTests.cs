@@ -98,12 +98,17 @@ public sealed partial class PowerForgeReleaseServiceTests
 }
 """, new UTF8Encoding(false));
             string evidenceRoot = CreateSandbox();
+            string publishConfigSha256 = AppleNotarizationService.ComputeFileSha256(publishConfigPath);
+            string stagedPublishConfigPath = Path.Combine(
+                evidenceRoot,
+                $".release.dotnetpublish.{publishConfigSha256}.json");
+            File.Copy(publishConfigPath, stagedPublishConfigPath);
             string releaseConfigPath = Path.Combine(
                 evidenceRoot,
                 ".release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
-            File.WriteAllText(releaseConfigPath, """
+            File.WriteAllText(releaseConfigPath, $$"""
 {
-  "Tools": { "DotNetPublishConfigPath": "powerforge.dotnetpublish.json" }
+  "Tools": { "DotNetPublishConfigPath": "{{Path.GetFileName(stagedPublishConfigPath)}}" }
 }
 """, new UTF8Encoding(false));
             PowerForgeReleaseSpec spec = PowerForgeReleaseService.LoadConfiguration(releaseConfigPath);
@@ -137,9 +142,13 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(result.Success);
             DotNetPublishPlan plan = Assert.IsType<DotNetPublishPlan>(result.DotNetToolPlan);
-            Assert.Equal(new[] { releaseConfigPath }, plan.GeneratedConfigurationInputPaths, StringComparer.OrdinalIgnoreCase);
+            Assert.Equal(
+                new[] { releaseConfigPath, stagedPublishConfigPath },
+                plan.GeneratedConfigurationInputPaths,
+                StringComparer.OrdinalIgnoreCase);
             Assert.Contains(sourceConfigPath, plan.ConfigurationInputPaths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(releaseConfigPath, plan.ConfigurationInputPaths, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(stagedPublishConfigPath, plan.ConfigurationInputPaths, StringComparer.OrdinalIgnoreCase);
             Assert.Equal(
                 new[] { jsonProvenancePath, signedProvenancePath },
                 plan.GeneratedProvenancePaths,

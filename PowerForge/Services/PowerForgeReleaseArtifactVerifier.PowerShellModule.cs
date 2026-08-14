@@ -72,6 +72,13 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string rootModulePath = ResolveArchiveRelativePath(manifestPath, rootModule!);
         if (!entries.ContainsKey(rootModulePath))
             throw Invalid($"Packed module RootModule '{rootModulePath}' was not found in the archive.");
+        string[] loadedContentPaths = ModuleManifestLoadedContent.ReadRelativePathsFromText(manifestText)
+            .Select(path => ResolveArchiveRelativePath(manifestPath, path))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        string? missingLoadedContent = loadedContentPaths.FirstOrDefault(path => !entries.ContainsKey(path));
+        if (missingLoadedContent is not null)
+            throw Invalid($"Manifest-loaded module content '{missingLoadedContent}' was not found in the archive.");
 
         string sourceRevisionFromEvidence = DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(
             signingEvidence.SourceRevision,
@@ -85,8 +92,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             PowerForgeModuleSourceAttestationWriter.FileName);
         if (!signaturePaths.Contains(manifestPath, StringComparer.Ordinal) ||
             !signaturePaths.Contains(rootModulePath, StringComparer.Ordinal) ||
-            !signaturePaths.Contains(signedProvenancePath, StringComparer.Ordinal))
-            throw Invalid("Module signing evidence must cover the manifest, RootModule, and signed source attestation.");
+            !signaturePaths.Contains(signedProvenancePath, StringComparer.Ordinal) ||
+            !loadedContentPaths.All(path => signaturePaths.Contains(path, StringComparer.Ordinal)))
+            throw Invalid("Module signing evidence must cover the manifest, all manifest-loaded content, and signed source attestation.");
         string[] requestedSignaturePaths = (request.SignaturePaths ?? Array.Empty<string>())
             .Select(NormalizeArchivePath)
             .Distinct(StringComparer.Ordinal)
@@ -107,8 +115,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             throw Invalid("Module signing evidence inventory digest does not match its complete signable-file inventory.");
         if (thirdPartySignatures.ContainsKey(manifestPath) ||
             thirdPartySignatures.ContainsKey(rootModulePath) ||
-            thirdPartySignatures.ContainsKey(signedProvenancePath))
-            throw Invalid("The module manifest, RootModule, and source attestation must be owned by the configured release publisher.");
+            thirdPartySignatures.ContainsKey(signedProvenancePath) ||
+            loadedContentPaths.Any(thirdPartySignatures.ContainsKey))
+            throw Invalid("The module manifest, RootModule and other manifest-loaded content, and source attestation must be owned by the configured release publisher.");
 
         string provenancePath = ResolveArchiveRelativePath(
             manifestPath,

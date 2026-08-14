@@ -119,6 +119,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         Assert.Contains("complete signing inventory", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Verify_PowerShellModuleRejectsManifestLoadedFormatOutsideSigningInventory()
+    {
+        using var fixture = new ModuleFixture();
+        fixture.PrepareManifestLoadedFormatOmission();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("manifest-loaded", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(".ps1xml")]
     [InlineData(".cdxml")]
@@ -211,14 +223,16 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             bool omitPrimaryProvenance = false,
             bool directoryCollision = false,
             bool includeBoundHelper = false,
-            string? vendorThumbprint = null)
+            string? vendorThumbprint = null,
+            bool includeManifestLoadedFormat = false)
         {
             if (File.Exists(ArchivePath)) File.Delete(ArchivePath);
             using ZipArchive archive = ZipFile.Open(ArchivePath, ZipArchiveMode.Create);
             string prereleaseData = string.IsNullOrWhiteSpace(prerelease)
                 ? string.Empty
                 : $"; PrivateData = @{{ PSData = @{{ Prerelease = '{prerelease}' }} }}";
-            string manifestText = $"@{{ RootModule = '{rootModuleValue}'; ModuleVersion = '2.3.4'{prereleaseData} }}";
+            string formatData = includeManifestLoadedFormat ? "; FormatsToProcess = @('Sample.Format.ps1xml')" : string.Empty;
+            string manifestText = $"@{{ RootModule = '{rootModuleValue}'; ModuleVersion = '2.3.4'{formatData}{prereleaseData} }}";
             WriteEntry(archive, manifestEntryPath, manifestBytes ?? Encode(manifestText, manifestEncoding));
             if (duplicateManifest)
                 WriteEntry(archive, "Sample/Sample.psd1", "@{ RootModule = 'Sample.psm1'; ModuleVersion = '2.3.4' }");
@@ -251,6 +265,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 WriteEntry(archive, "Sample/lib/Vendor.dll", "valid vendor-signed dependency");
             if (includeBoundHelper)
                 WriteEntry(archive, "Sample/Private/Helper.ps1", "function Invoke-Helper { }");
+            if (includeManifestLoadedFormat)
+                WriteEntry(archive, "Sample/Sample.Format.ps1xml", "<Configuration />");
             if (traversalEntry)
                 WriteEntry(archive, "../escape.ps1", "# unsafe payload");
             if (!omitPrimaryProvenance)
@@ -285,6 +301,13 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         internal void PrepareSigningInventoryOmission()
         {
             WriteArchive(SourceRevision, includeBoundHelper: true);
+            WriteSigningEvidence();
+            WriteChecksums();
+        }
+
+        internal void PrepareManifestLoadedFormatOmission()
+        {
+            WriteArchive(SourceRevision, includeManifestLoadedFormat: true);
             WriteSigningEvidence();
             WriteChecksums();
         }

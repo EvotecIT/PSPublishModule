@@ -61,6 +61,16 @@ public static class PowerForgeModuleSigningEvidenceWriter
         if (preservedThirdPartySignatures.Any(signature =>
                 pathComparer.Equals(ResolveFileUnderRoot(root, signature.Path, "preserved third-party signing path"), rootModulePath)))
             throw new InvalidOperationException("The RootModule entrypoint must be owned by the configured release publisher.");
+        string manifestDirectory = Path.GetDirectoryName(manifest) ?? root;
+        foreach (string relativePath in ModuleManifestLoadedContent.ReadRelativePaths(manifest))
+        {
+            string loadedPath = ResolveFileUnderRoot(root, Path.Combine(manifestDirectory, relativePath), "manifest-loaded content");
+            if (!verifiedFiles.Contains(loadedPath, pathComparer))
+                throw new InvalidOperationException($"Module signing evidence must include manifest-loaded content '{relativePath}'.");
+            if (preservedThirdPartySignatures.Any(signature =>
+                    pathComparer.Equals(ResolveFileUnderRoot(root, signature.Path, "preserved third-party signing path"), loadedPath)))
+                throw new InvalidOperationException($"Manifest-loaded content '{relativePath}' must be owned by the configured release publisher.");
+        }
         string sourceAttestationPath = ResolveFileUnderRoot(
             root,
             Path.Combine(Path.GetDirectoryName(manifest) ?? root, PowerForgeModuleSourceAttestationWriter.FileName),

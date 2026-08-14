@@ -180,14 +180,17 @@ public sealed partial class AppleReleaseWorkflowTests
     [Theory]
     [InlineData("powershell")]
     [InlineData("pwsh")]
-    public void PublicModuleReleaseAnchorsRelativeExternalConfigurationBeforeRelocation(string shell)
+    public void PublicModuleReleaseStagesRelativeExternalConfigurationForPortableVerification(string shell)
     {
         var repository = Directory.CreateTempSubdirectory();
         try
         {
             string sourceConfigurationPath = Path.Combine(repository.FullName, "Build", "release.json");
-            string expected = Path.Combine(repository.FullName, "Build", "dotnet", "publish.json");
+            string sourcePublishPath = Path.Combine(repository.FullName, "Build", "dotnet", "publish.json");
+            string evidenceDirectory = Path.Combine(repository.FullName, "evidence");
             Directory.CreateDirectory(Path.GetDirectoryName(sourceConfigurationPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(sourcePublishPath)!);
+            File.WriteAllText(sourcePublishPath, "{\"Targets\":[]}");
             string helper = Path.Combine(
                 FindRepoRoot(),
                 "Build",
@@ -195,12 +198,16 @@ public sealed partial class AppleReleaseWorkflowTests
                 "Resolve-PowerForgeEffectiveConfigurationReferences.ps1");
             string command = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
                              "$config = '{\"Tools\":{\"DotNetPublishConfigPath\":\"dotnet/publish.json\"}}' | ConvertFrom-Json; " +
-                             $"$result = Resolve-PowerForgeEffectiveConfigurationReferences -ReleaseConfig $config -SourceConfigurationPath '{sourceConfigurationPath.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                             $"$result = Resolve-PowerForgeEffectiveConfigurationReferences -ReleaseConfig $config -SourceConfigurationPath '{sourceConfigurationPath.Replace("'", "''", StringComparison.Ordinal)}' -EvidenceDirectory '{evidenceDirectory.Replace("'", "''", StringComparison.Ordinal)}'; " +
                              "$result.Tools.DotNetPublishConfigPath";
 
             var result = Run(shell, repository.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
 
-            Assert.Equal(Path.GetFullPath(expected), result.StandardOutput.Trim(), ignoreCase: true);
+            string stagedFileName = result.StandardOutput.Trim();
+            Assert.Matches(@"^\.release\.dotnetpublish\.[0-9a-f]{64}\.json$", stagedFileName);
+            Assert.Equal(
+                File.ReadAllBytes(sourcePublishPath),
+                File.ReadAllBytes(Path.Combine(evidenceDirectory, stagedFileName)));
         }
         finally
         {

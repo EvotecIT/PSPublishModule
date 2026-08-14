@@ -151,6 +151,37 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
     }
 
     [Fact]
+    public void Create_ManifestLoadedFormatMissingFromSigningResultFailsClosed()
+    {
+        using var fixture = new SigningFixture();
+        string formatPath = Path.Combine(Path.GetDirectoryName(fixture.ManifestPath)!, "Sample.Format.ps1xml");
+        File.WriteAllText(formatPath, "<Configuration />");
+        File.WriteAllText(
+            fixture.ManifestPath,
+            "@{ ModuleVersion = '2.3.4'; RootModule = 'Sample.psm1'; FormatsToProcess = @('Sample.Format.ps1xml') }");
+        var signingResult = new ModuleSigningResult
+        {
+            TotalMatched = 3,
+            TotalAfterExclude = 3,
+            SignedNew = 3,
+            VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.ModulePath, fixture.SourceAttestationPath }
+        };
+        fixture.BindSigningInventory(signingResult);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeModuleSigningEvidenceWriter.Create(
+                fixture.Root,
+                "Sample",
+                "2.3.4",
+                SourceRevision,
+                sourceDirty: false,
+                fixture.ManifestPath,
+                signingResult));
+
+        Assert.Contains("manifest-loaded content", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Create_DirtySourceFailsClosed()
     {
         using var fixture = new SigningFixture();
