@@ -156,11 +156,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         }
     }
 
-    [Fact]
-    public void Verify_PortableCliDirectExecutableRemainsVerifiableAfterFreshDownload()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Verify_PortableCliDirectExecutableRemainsVerifiableAfterFreshDownload(bool configureExplicitIdentity)
     {
         using var fixture = new PortableFixture();
-        fixture.ConfigureExplicitExecutableIdentity();
+        if (configureExplicitIdentity)
+            fixture.ConfigureExplicitExecutableIdentity();
         string downloadRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         try
         {

@@ -1059,8 +1059,9 @@ public sealed partial class ModulePipelineRunner
         plan.UseLocalVersioning = localVersioning;
         plan.GenerateReleaseProvenance = plan.SignModule &&
                                          plan.Artefacts.Length > 0 &&
-                                         plan.Publishes.Any(static publish =>
-                                             publish?.Configuration?.Destination == PublishDestination.GitHub);
+                                         (spec.UnifiedGitHubRelease ||
+                                          plan.Publishes.Any(static publish =>
+                                              publish?.Configuration?.Destination == PublishDestination.GitHub));
         if (plan.GenerateReleaseProvenance)
         {
             string[] generatedProvenancePaths = GetGeneratedReleaseProvenancePaths(plan.ProjectRoot);
@@ -1195,11 +1196,54 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
+    private static void ValidatePackageReleaseSourceUnchanged(
+        ModulePipelinePlan plan,
+        DotNetRepositoryReleaseSpec spec)
+    {
+        string[] projectPaths = DotNetRepositoryReleaseService.ResolveSelectedProjectPaths(spec);
+        string[] generatedPaths = GetGeneratedReleaseProvenancePaths(plan.ProjectRoot)
+            .Concat(new[] { spec.OutputPath, spec.ReleaseZipOutputPath })
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(static path => Path.GetFullPath(path!))
+            .Distinct(Path.DirectorySeparatorChar == '\\'
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal)
+            .ToArray();
+        DotNetPublishPipelineRunner.SourceProvenance current =
+            DotNetPublishPipelineRunner.ReadSourceProvenance(
+                plan.ProjectRoot,
+                generatedPaths: generatedPaths,
+                explicitInputPaths: (plan.SourceInputPaths ?? Array.Empty<string>()).Concat(projectPaths),
+                buildProjectPaths: projectPaths,
+                buildConfiguration: spec.Configuration);
+        if (string.IsNullOrWhiteSpace(current.Revision) ||
+            !string.Equals(current.Revision, plan.SourceRevision, StringComparison.OrdinalIgnoreCase) ||
+            current.Dirty is not false)
+        {
+            throw new InvalidOperationException(
+                "Signed GitHub module release package source changed after planning; publication is blocked before remote mutation.");
+        }
+    }
+
     private static string ResolveGitHubModuleRepositoryUrl(ModulePipelinePlan plan)
     {
-        PublishConfiguration publish = plan.Publishes
+        PublishConfiguration? publish = plan.Publishes
             .Select(static segment => segment.Configuration)
-            .First(static configuration => configuration.Destination == PublishDestination.GitHub);
+            .FirstOrDefault(static configuration => configuration.Destination == PublishDestination.GitHub);
+        if (publish is null)
+        {
+            GitCommandResult remote = new GitClient(defaultTimeout: TimeSpan.FromSeconds(15))
+                .GetRemoteUrlAsync(plan.ProjectRoot)
+                .GetAwaiter()
+                .GetResult();
+            if (!remote.Succeeded || string.IsNullOrWhiteSpace(remote.StdOut))
+            {
+                throw new InvalidOperationException(
+                    "Unified GitHub module release provenance requires a resolved source repository URL.");
+            }
+
+            return remote.StdOut.Trim();
+        }
         if (string.IsNullOrWhiteSpace(publish.UserName))
             throw new InvalidOperationException("UserName is required for GitHub publishing.");
 

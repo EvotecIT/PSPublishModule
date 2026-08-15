@@ -62,6 +62,7 @@ internal sealed class ModuleBuildPreparationService
 
         var spec = new ModulePipelineSpec
         {
+            UnifiedGitHubRelease = request.UnifiedGitHubRelease,
             Build = new ModuleBuildSpec
             {
                 Name = moduleName!,
@@ -153,6 +154,7 @@ internal sealed class ModuleBuildPreparationService
 
     private static void ApplyConfigOverrides(ModulePipelineSpec spec, ModuleBuildPreparationRequest request)
     {
+        spec.UnifiedGitHubRelease = request.UnifiedGitHubRelease;
         if (spec.Build is null)
             return;
 

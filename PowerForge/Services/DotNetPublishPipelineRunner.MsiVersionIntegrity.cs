@@ -274,12 +274,18 @@ public sealed partial class DotNetPublishPipelineRunner
                 buildConfiguration,
                 buildPlan,
                 out string[] projectDirectories,
-                out HashSet<string> buildInputs))
+                out HashSet<string> buildInputs,
+                out HashSet<string> sourceInputs))
             return true;
         if (HasGeneratedOutputInputOverlap(projectRoot, generatedPaths, buildInputs))
             return true;
         if (projectDirectories.Any(directory =>
                 !IsBuildProjectDirectoryAdmitted(directory, projectRoot, gitRoot)))
+        {
+            return true;
+        }
+        if (sourceInputs.Any(path =>
+                !IsBuildSourceInputAdmitted(path, projectRoot, gitRoot)))
         {
             return true;
         }
@@ -318,6 +324,17 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
         return !HasReparsePointBelowRoot(fullDirectory, fullGitRoot);
+    }
+
+    private static bool IsBuildSourceInputAdmitted(
+        string path,
+        string projectRoot,
+        string gitRoot)
+    {
+        string fullPath = Path.GetFullPath(path);
+        if (ToGitRelativeExclusion(projectRoot, gitRoot, fullPath) is null)
+            return false;
+        return !HasReparsePointBelowRoot(fullPath, gitRoot);
     }
 
     internal static bool HasReparsePointBelowRoot(string path, string root)

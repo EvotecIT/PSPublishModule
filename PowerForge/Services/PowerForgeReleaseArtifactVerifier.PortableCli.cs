@@ -156,11 +156,6 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             throw Invalid(
                 "Signed executable product or assembly identity does not match the configured publish project identity.");
         }
-        if (!artifactIsArchive && expected.ExecutableIdentities.Length == 0)
-        {
-            throw Invalid(
-                "Direct portable executable verification requires Publish.ExecutableIdentity or the configured project file.");
-        }
         VerifiedSignature signer = RequireOneSigner(signatures);
         ValidatePortableSourceBinding(signedProductVersion, expectedRevision);
         string version = NormalizePortableVersion(signedProductVersion);

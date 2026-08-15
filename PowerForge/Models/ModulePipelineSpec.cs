@@ -15,6 +15,13 @@ public sealed class ModulePipelineSpec
     public string[] SourceInputPaths { get; set; } = Array.Empty<string>();
 
     /// <summary>
+    /// Indicates that the parent release service will publish the packed module through its unified GitHub release.
+    /// This runtime-only signal keeps module evidence generation enabled after the module-owned GitHub segment is removed.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool UnifiedGitHubRelease { get; set; }
+
+    /// <summary>
     /// Optional schema version for external tooling.
     /// </summary>
     public int SchemaVersion { get; set; } = 1;

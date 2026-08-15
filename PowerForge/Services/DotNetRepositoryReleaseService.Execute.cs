@@ -620,7 +620,10 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         if (!TryResolveSelectedProjectCandidates(spec, logger: null, out var candidates, out string? error))
             throw new InvalidOperationException(error);
-        return candidates.Select(static candidate => candidate.Path).ToArray();
+        return candidates
+            .Where(static candidate => IsPackable(candidate.Path))
+            .Select(static candidate => candidate.Path)
+            .ToArray();
     }
 
     private static bool TryResolveSelectedProjectCandidates(

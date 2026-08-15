@@ -473,6 +473,12 @@ internal static class ModuleManifestTextParser
                 continue;
             }
 
+            if (ch == '<' && i + 1 < text.Length && text[i + 1] == '#')
+            {
+                i = SkipBlockComment(text, i) - 1;
+                continue;
+            }
+
             if (ch == '#')
             {
                 while (i < text.Length && text[i] != '\r' && text[i] != '\n')
@@ -570,6 +576,12 @@ internal static class ModuleManifestTextParser
                 continue;
             }
 
+            if (ch == '<' && index + 1 < text.Length && text[index + 1] == '#')
+            {
+                index = SkipBlockComment(text, index);
+                continue;
+            }
+
             if (ch == '#')
             {
                 while (index < text.Length && text[index] != '\r' && text[index] != '\n')
@@ -594,6 +606,12 @@ internal static class ModuleManifestTextParser
                 continue;
             }
 
+            if (ch == '<' && index + 1 < text.Length && text[index + 1] == '#')
+            {
+                index = SkipBlockComment(text, index);
+                continue;
+            }
+
             if (ch == '#')
             {
                 while (index < text.Length && text[index] != '\r' && text[index] != '\n')
@@ -605,6 +623,12 @@ internal static class ModuleManifestTextParser
         }
 
         return index;
+    }
+
+    private static int SkipBlockComment(string text, int index)
+    {
+        int end = text.IndexOf("#>", index + 2, StringComparison.Ordinal);
+        return end < 0 ? text.Length : end + 2;
     }
 
     private static bool IsArrayExpression(string expression)

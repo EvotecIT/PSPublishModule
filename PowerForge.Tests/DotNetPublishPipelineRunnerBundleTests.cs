@@ -480,6 +480,12 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             string executable = Path.Combine(publishDir, "PowerForge.Tests.dll");
             File.Copy(typeof(DotNetPublishPipelineRunnerBundleTests).Assembly.Location, executable);
             File.WriteAllText(Path.Combine(publishDir, "runtime-data.json"), "{\"data\":true}");
+            File.WriteAllText(
+                Path.Combine(publishDir, PowerForgePortablePayloadInventory.InventoryFileName),
+                "source inventory");
+            File.WriteAllText(
+                Path.Combine(publishDir, PowerForgePortablePayloadInventory.SignatureFileName),
+                "source signature");
             string outputDir = Path.Combine(root, "Artifacts", "Bundles", "package");
             string zipPath = Path.Combine(root, "Artifacts", "Bundles", "package.zip");
             var sign = new DotNetPublishSignOptions
@@ -499,7 +505,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
                         Name = "app",
                         Kind = DotNetPublishTargetKind.Cli,
                         ExecutableIdentities = new[] { "PowerForge.Tests" },
-                        Publish = new DotNetPublishPublishOptions { Sign = sign }
+                        Publish = new DotNetPublishPublishOptions { Sign = sign, Zip = true }
                     }
                 ],
                 Bundles =
@@ -523,7 +529,8 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
                     Runtime = "win-x64",
                     Style = DotNetPublishStyle.PortableCompat,
                     OutputDir = publishDir,
-                    PublishDir = publishDir
+                    PublishDir = publishDir,
+                    ExePath = executable
                 }
             };
             var step = new DotNetPublishStep
@@ -583,6 +590,12 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             string publishDir = Directory.CreateDirectory(Path.Combine(root, "publish", "app")).FullName;
             string executable = Path.Combine(publishDir, "PowerForge.Tests.dll");
             File.Copy(typeof(DotNetPublishPipelineRunnerBundleTests).Assembly.Location, executable);
+            File.WriteAllText(
+                executable + PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                "source inventory");
+            File.WriteAllText(
+                executable + PowerForgePortablePayloadInventory.DirectSignatureSuffix,
+                "source signature");
             string outputDir = Path.Combine(root, "Artifacts", "Bundles", "package");
             var sign = new DotNetPublishSignOptions
             {
@@ -625,7 +638,8 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
                     Runtime = "win-x64",
                     Style = DotNetPublishStyle.PortableCompat,
                     OutputDir = publishDir,
-                    PublishDir = publishDir
+                    PublishDir = publishDir,
+                    ExePath = executable
                 }
             };
             var step = new DotNetPublishStep
@@ -665,8 +679,84 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             Assert.Equal("win-x64", inventory.Runtime);
             Assert.Equal("net10.0", inventory.Framework);
             Assert.Equal("PortableCompat", inventory.Style);
-            Assert.True(inventory.SourceDirty);
+            Assert.False(inventory.SourceDirty);
             Assert.Single(inventory.Entries);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void BuildBundle_SignedOutputRejectsDirtySourceBeforeAssemblyOrSigning()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            string sourceRevision = InitializeGitRepository(root);
+            string publishDir = Directory.CreateDirectory(Path.Combine(root, "publish", "app")).FullName;
+            File.WriteAllText(Path.Combine(publishDir, "app.exe"), "payload");
+            File.AppendAllText(Path.Combine(root, "source.txt"), Environment.NewLine + "changed");
+            string outputDir = Path.Combine(root, "Artifacts", "Bundles", "package");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                SourceRevision = sourceRevision,
+                Targets =
+                [
+                    new DotNetPublishTargetPlan
+                    {
+                        Name = "app",
+                        ExecutableIdentities = ["app"],
+                        Publish = new DotNetPublishPublishOptions
+                        {
+                            Sign = new DotNetPublishSignOptions { Enabled = true }
+                        }
+                    }
+                ],
+                Bundles =
+                [
+                    new DotNetPublishBundlePlan
+                    {
+                        Id = "package",
+                        PrepareFromTarget = "app"
+                    }
+                ]
+            };
+            var artefacts = new[]
+            {
+                new DotNetPublishArtefactResult
+                {
+                    Category = DotNetPublishArtefactCategory.Publish,
+                    Target = "app",
+                    Framework = "net8.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.PortableCompat,
+                    OutputDir = publishDir,
+                    PublishDir = publishDir
+                }
+            };
+            var step = new DotNetPublishStep
+            {
+                Key = "bundle",
+                Kind = DotNetPublishStepKind.Bundle,
+                BundleId = "package",
+                TargetName = "app",
+                Framework = "net8.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.PortableCompat,
+                BundleOutputPath = outputDir
+            };
+            var runner = new DotNetPublishPipelineRunner(
+                new NullLogger(),
+                new BundleProcessRunner(_ => throw new InvalidOperationException("Process execution was not expected.")));
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                runner.BuildBundle(plan, artefacts, step));
+
+            Assert.Contains("portable signing is blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(outputDir));
         }
         finally
         {

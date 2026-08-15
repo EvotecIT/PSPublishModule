@@ -97,6 +97,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             RunGit(root.FullName, "init", "--quiet");
             RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
             RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "remote", "add", "origin", "https://github.com/EvotecIT/TestModule.git");
             RunGit(root.FullName, "add", ".");
             RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
             string revision = RunGit(root.FullName, "rev-parse", "HEAD");
@@ -150,6 +151,50 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
                 });
             Assert.Equal(revision, verified.SourceRevision, ignoreCase: true);
             Assert.Equal("valid", verified.SignatureStatus);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_SignedUnifiedGitHubPackedArtifactGeneratesReleaseEvidenceWithoutModulePublishSegment()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "remote", "add", "origin", "https://github.com/EvotecIT/TestModule.git");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                AutoSuccessfulPublishResult = true
+            };
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            spec.UnifiedGitHubRelease = true;
+
+            ModulePipelinePlan plan = runner.Plan(spec);
+            ModulePipelineResult result = runner.Run(spec, plan);
+
+            Assert.True(plan.GenerateReleaseProvenance);
+            ArtefactBuildResult artefact = Assert.Single(result.ArtefactResults);
+            string evidencePath = Assert.Single(artefact.EvidencePaths);
+            Assert.True(File.Exists(evidencePath));
+            Assert.Empty(hostedOperations.LastPublishedArtefacts);
+            using var archive = System.IO.Compression.ZipFile.OpenRead(artefact.OutputPath);
+            Assert.Contains(archive.Entries, entry => entry.FullName == "TestModule/PowerForge.ReleaseProvenance.psd1");
+            Assert.Contains(archive.Entries, entry => entry.FullName == "TestModule/PowerForge.ReleaseProvenance.json");
         }
         finally
         {
@@ -346,6 +391,86 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
 
             Assert.Contains("source changed after planning", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_SignedGitHubModuleRejectsEmbeddedPackageSourceMutationBeforeRemotePublish()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string packageProject = Path.Combine(root.FullName, "Package.csproj");
+            string packageSource = Path.Combine(root.FullName, "Package.cs");
+            File.WriteAllText(packageProject, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(packageSource, "public static class PackageSource { }");
+            File.WriteAllText(Path.Combine(root.FullName, ".gitignore"), "Artifacts/\nArtefacts/\nbin/\nobj/\n");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                AutoSuccessfulPublishResult = true
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations,
+                packageBuildExecutor: (request, _, configPath) =>
+                {
+                    if (request.PublishNuget == true)
+                    {
+                        request.BuildSpecPrepared?.Invoke(new DotNetRepositoryReleaseSpec
+                        {
+                            RootPath = root.FullName,
+                            Configuration = "Release",
+                            Publish = true
+                        });
+                        File.AppendAllText(packageSource, Environment.NewLine + "// mutated during package build");
+                        request.RemotePublishAttempted?.Invoke();
+                    }
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult { Success = true }
+                    };
+                });
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            EnableGitHubPublish(spec, moduleName);
+            spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
+            {
+                new ConfigurationPackageBuildSegment
+                {
+                    Configuration = new PackageBuildConfiguration
+                    {
+                        Name = "Packages",
+                        RootPath = root.FullName,
+                        Build = true,
+                        PublishNuget = true,
+                        BuildBeforeModule = false
+                    }
+                }
+            }).ToArray();
+            ModulePipelinePlan plan = runner.Plan(spec);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+
+            Assert.Contains("package source changed", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

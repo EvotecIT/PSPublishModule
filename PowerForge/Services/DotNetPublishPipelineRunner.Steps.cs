@@ -324,6 +324,9 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!plan.AllowOutputOutsideProjectRoot)
             EnsurePathWithinRoot(plan.ProjectRoot, outputDir, $"Target '{target.Name}' output path");
 
+        if (target.Publish.Sign?.Enabled == true)
+            _ = ReadPortableInventorySourceProvenance(plan, outputDir);
+
         EnsureOutputDirectoryUnlocked(
             plan,
             outputDir,

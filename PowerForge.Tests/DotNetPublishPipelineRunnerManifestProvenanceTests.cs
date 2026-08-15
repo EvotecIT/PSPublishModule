@@ -663,7 +663,11 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
         finally
         {
             if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
                 Directory.Delete(root, recursive: true);
+            }
         }
     }
 
@@ -1061,6 +1065,240 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void ReadPortableInventorySourceProvenance_RejectsDirtySameRevision()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string sourcePath = Path.Combine(root, "source.txt");
+            File.WriteAllText(sourcePath, "approved");
+            RunGit(root, "add source.txt");
+            RunGit(root, "commit -m \"approved source\"");
+            string revision = RunGit(root, "rev-parse HEAD").Trim();
+            File.WriteAllText(sourcePath, "changed without a commit");
+            string outputDirectory = Path.Combine(root, "Artifacts", "app");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                SourceRevision = revision
+            };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                DotNetPublishPipelineRunner.ReadPortableInventorySourceProvenance(plan, outputDirectory));
+
+            Assert.Contains("portable signing is blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Run_SignedPortableBuildRejectsDirtySourceBeforeDotNetBuild()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string projectPath = Path.Combine(root, "Sample.csproj");
+            string sourcePath = Path.Combine(root, "Program.cs");
+            File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(sourcePath, "internal static class Program { }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "Artifacts/\nbin/\nobj/\n");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            string revision = RunGit(root, "rev-parse HEAD").Trim();
+            File.AppendAllText(sourcePath, Environment.NewLine + "// changed");
+            int processCalls = 0;
+            var runner = new DotNetPublishPipelineRunner(
+                new NullLogger(),
+                new RecordingProcessRunner(_ =>
+                {
+                    processCalls++;
+                    return new ProcessRunResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, timedOut: false);
+                }));
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                SourceRevision = revision,
+                Targets =
+                [
+                    new DotNetPublishTargetPlan
+                    {
+                        Name = "Sample",
+                        ProjectPath = projectPath,
+                        ExecutableIdentities = ["Sample"],
+                        Publish = new DotNetPublishPublishOptions
+                        {
+                            Framework = "net8.0",
+                            Runtimes = ["win-x64"],
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputPath = Path.Combine("Artifacts", "app"),
+                            UseStaging = false,
+                            Sign = new DotNetPublishSignOptions { Enabled = true }
+                        }
+                    }
+                ],
+                Steps =
+                [
+                    new DotNetPublishStep
+                    {
+                        Key = "build",
+                        Kind = DotNetPublishStepKind.Build,
+                        Title = "Build"
+                    },
+                    new DotNetPublishStep
+                    {
+                        Key = "publish",
+                        Kind = DotNetPublishStepKind.Publish,
+                        TargetName = "Sample",
+                        Framework = "net8.0",
+                        Runtime = "win-x64",
+                        Style = DotNetPublishStyle.PortableCompat
+                    }
+                ]
+            };
+
+            DotNetPublishResult result = runner.Run(plan, progress: null);
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("portable signing is blocked", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, processCalls);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_RejectsEvaluatedSourceOutsideCheckout()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        string outside = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string externalSource = Path.Combine(outside, "External.cs");
+            string projectPath = Path.Combine(root, "Sample.csproj");
+            File.WriteAllText(externalSource, "internal static class External { }");
+            File.WriteAllText(projectPath, $"""
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup><Compile Include="{externalSource}" /></ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+            if (Directory.Exists(outside))
+                Directory.Delete(outside, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_RejectsProjectFileSymlinkOutsideCheckout()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        string outside = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            RunGit(root, "config core.symlinks true");
+            string externalProject = Path.Combine(outside, "External.csproj");
+            string projectPath = Path.Combine(root, "Sample.csproj");
+            File.WriteAllText(
+                externalProject,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+            File.CreateSymbolicLink(projectPath, externalProject);
+            File.WriteAllText(Path.Combine(root, "Program.cs"), "internal static class Program { }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            Assert.True(string.IsNullOrWhiteSpace(RunGit(root, "status --porcelain")));
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+            if (Directory.Exists(outside))
+                Directory.Delete(outside, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveSelectedProjectPaths_ExcludesNonPackableRoots()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string packable = Path.Combine(root, "Packable.csproj");
+            string nonPackable = Path.Combine(root, "Support.csproj");
+            File.WriteAllText(packable, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+            File.WriteAllText(nonPackable, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><IsPackable>false</IsPackable></PropertyGroup></Project>");
+
+            string selected = Assert.Single(DotNetRepositoryReleaseService.ResolveSelectedProjectPaths(
+                new DotNetRepositoryReleaseSpec { RootPath = root }));
+
+            Assert.Equal(packable, selected, ignoreCase: OperatingSystem.IsWindows());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void RunBuildInputEvaluationProcess_DrainsBothStreamsAndEnforcesTimeout()
     {
         string fileName;
@@ -1345,5 +1583,13 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
         string error = process.StandardError.ReadToEnd();
         Assert.True(process.WaitForExit(120000), $"dotnet {arguments} timed out");
         Assert.True(process.ExitCode == 0, $"dotnet {arguments} failed: {output}{error}");
+    }
+
+    private sealed class RecordingProcessRunner(Func<ProcessRunRequest, ProcessRunResult> execute) : IProcessRunner
+    {
+        public Task<ProcessRunResult> RunAsync(
+            ProcessRunRequest request,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(execute(request));
     }
 }

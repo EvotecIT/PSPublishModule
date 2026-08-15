@@ -27,9 +27,27 @@ public sealed partial class DotNetPublishPipelineRunner
         "ProjectReference"
     ];
 
+    private static readonly HashSet<string> EvaluatedSourceItemNames = new(
+    [
+        "Compile",
+        "Content",
+        "EmbeddedResource",
+        "AdditionalFiles",
+        "EditorConfigFiles",
+        "GlobalAnalyzerConfigFiles",
+        "ApplicationDefinition",
+        "Page",
+        "Resource",
+        "SplashScreen",
+        "RazorComponent",
+        "TypeScriptCompile"
+    ],
+    StringComparer.Ordinal);
+
     internal static SourceProvenance ReadPortableInventorySourceProvenance(
         DotNetPublishPlan plan,
-        string outputDirectory)
+        string? outputDirectory = null,
+        IEnumerable<string>? additionalGeneratedPaths = null)
     {
         string[] projectPaths = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
             .Select(target => target.ProjectPath)
@@ -40,7 +58,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 Array.Empty<DotNetPublishArtefactResult>(),
                 Array.Empty<DotNetPublishStorePackageResult>(),
                 Array.Empty<DotNetPublishMsiBuildResult>())
-            .Concat(new[] { outputDirectory });
+            .Concat(string.IsNullOrWhiteSpace(outputDirectory)
+                ? Array.Empty<string>()
+                : new[] { outputDirectory! })
+            .Concat(additionalGeneratedPaths ?? Array.Empty<string>());
         SourceProvenance provenance = ReadSourceProvenance(
             plan.ProjectRoot,
             generatedPaths,
@@ -55,6 +76,11 @@ public sealed partial class DotNetPublishPipelineRunner
             throw new InvalidOperationException(
                 $"Release source revision changed after planning; expected '{plan.SourceRevision ?? "unknown"}', " +
                 $"received '{provenance.Revision ?? "unknown"}'.");
+        }
+        if (provenance.Dirty is not false)
+        {
+            throw new InvalidOperationException(
+                "Release source changed after planning; portable signing is blocked before build or signing.");
         }
         return provenance;
     }
@@ -280,7 +306,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string? configuration,
         DotNetPublishPlan? buildPlan,
         out string[] projectDirectories,
-        out HashSet<string> buildInputs)
+        out HashSet<string> buildInputs,
+        out HashSet<string> sourceInputs)
     {
         var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var pending = new Queue<ProjectEvaluationRequest>(BuildProjectEvaluationRequests(
@@ -290,6 +317,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var visited = new HashSet<string>(comparison);
         var directories = new HashSet<string>(comparison);
         buildInputs = new HashSet<string>(comparison);
+        sourceInputs = new HashSet<string>(comparison);
 
         while (pending.Count > 0)
         {
@@ -301,6 +329,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string projectDirectory = Path.GetDirectoryName(request.ProjectPath)!;
             directories.Add(projectDirectory);
             buildInputs.Add(request.ProjectPath);
+            sourceInputs.Add(request.ProjectPath);
             if (!TryReadEvaluatedProjectInputs(request, out EvaluatedProjectInputs? evaluation) || evaluation is null)
             {
                 projectDirectories = directories.ToArray();
@@ -309,6 +338,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
             foreach (string input in evaluation.BuildInputs)
                 buildInputs.Add(input);
+            foreach (string input in evaluation.SourceInputs)
+                sourceInputs.Add(input);
             if (request.TargetFramework is null)
             {
                 if (evaluation.TargetFrameworks.Length > 0)
@@ -346,6 +377,8 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             foreach (DotNetPublishTargetPlan target in targets)
             {
+                if (target is null || string.IsNullOrWhiteSpace(target.ProjectPath))
+                    continue;
                 DotNetPublishTargetCombination[] combinations = target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>();
                 if (combinations.Length == 0)
                 {
@@ -474,6 +507,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
             JsonElement root = document.RootElement;
             var inputs = new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            var sourceInputs = new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var references = new Dictionary<string, EvaluatedProjectReference>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var rawReferences = new HashSet<string>(
@@ -523,6 +557,12 @@ public sealed partial class DotNetPublishPipelineRunner
                         else if (!itemName.Equals("None", StringComparison.Ordinal) || IsOutputRelevantNoneItem(item))
                         {
                             inputs.Add(fullPath);
+                            if (File.Exists(fullPath) &&
+                                (EvaluatedSourceItemNames.Contains(itemName) ||
+                                 (itemName.Equals("None", StringComparison.Ordinal) && IsOutputRelevantNoneItem(item))))
+                            {
+                                sourceInputs.Add(fullPath);
+                            }
                         }
                     }
                 }
@@ -547,6 +587,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
             evaluation = new EvaluatedProjectInputs(
                 inputs.ToArray(),
+                sourceInputs.ToArray(),
                 references.Values.ToArray(),
                 targetFrameworks.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
             return true;
@@ -830,15 +871,18 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         internal EvaluatedProjectInputs(
             string[] buildInputs,
+            string[] sourceInputs,
             EvaluatedProjectReference[] projectReferences,
             string[] targetFrameworks)
         {
             BuildInputs = buildInputs;
+            SourceInputs = sourceInputs;
             ProjectReferences = projectReferences;
             TargetFrameworks = targetFrameworks;
         }
 
         internal string[] BuildInputs { get; }
+        internal string[] SourceInputs { get; }
         internal EvaluatedProjectReference[] ProjectReferences { get; }
         internal string[] TargetFrameworks { get; }
     }
