@@ -68,24 +68,24 @@ public sealed partial class WebEcosystemStatsGeneratorTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var match = Regex.Match(request.RequestUri?.Query ?? string.Empty, @"(?:^|&)\$skip=(?<skip>\d+)");
-            var skip = match.Success ? int.Parse(match.Groups["skip"].Value) : 0;
-            var id = skip == 0 ? "Spoofed.Module" : "Owned.Module";
-            var owner = skip == 0 ? "Attacker" : "ExpectedOwner";
+            var query = request.RequestUri?.Query ?? string.Empty;
+            var skipMatch = Regex.Match(query, @"(?:^|&)\$skip=(?<skip>\d+)");
+            var takeMatch = Regex.Match(query, @"(?:^|&)\$top=(?<take>\d+)");
+            var skip = skipMatch.Success ? int.Parse(skipMatch.Groups["skip"].Value) : 0;
+            var take = takeMatch.Success ? int.Parse(takeMatch.Groups["take"].Value) : 100;
+            var entries = string.Concat(
+                Enumerable.Range(0, 100)
+                    .Select(index => (Id: $"Spoofed.Module.{index}", Owner: "Attacker"))
+                    .Append((Id: "Owned.Module", Owner: "ExpectedOwner"))
+                    .Skip(skip)
+                    .Take(take)
+                    .Select(static module => Entry(module.Id, module.Owner)));
             var feed = $$"""
                 <?xml version="1.0" encoding="utf-8"?>
                 <feed xmlns="http://www.w3.org/2005/Atom"
                       xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices"
                       xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata">
-                  <entry>
-                    <m:properties>
-                      <d:Id>{{id}}</d:Id>
-                      <d:Version>1.0.0</d:Version>
-                      <d:Authors>Shared Author</d:Authors>
-                      <d:Owners>{{owner}}</d:Owners>
-                      <d:DownloadCount>1</d:DownloadCount>
-                    </m:properties>
-                  </entry>
+                  {{entries}}
                 </feed>
                 """;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
@@ -102,20 +102,13 @@ public sealed partial class WebEcosystemStatsGeneratorTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             RequestCount++;
-            const string feed = """
+            var entries = string.Concat(Enumerable.Range(0, 100).Select(index => Entry($"Spoofed.Module.{index}", "Attacker")));
+            var feed = $$"""
                 <?xml version="1.0" encoding="utf-8"?>
                 <feed xmlns="http://www.w3.org/2005/Atom"
                       xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices"
                       xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata">
-                  <entry>
-                    <m:properties>
-                      <d:Id>Spoofed.Module</d:Id>
-                      <d:Version>1.0.0</d:Version>
-                      <d:Authors>Shared Author</d:Authors>
-                      <d:Owners>Attacker</d:Owners>
-                      <d:DownloadCount>1</d:DownloadCount>
-                    </m:properties>
-                  </entry>
+                  {{entries}}
                 </feed>
                 """;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
@@ -124,4 +117,17 @@ public sealed partial class WebEcosystemStatsGeneratorTests
             });
         }
     }
+
+    private static string Entry(string id, string owner)
+        => $$"""
+             <entry>
+               <m:properties>
+                 <d:Id>{{id}}</d:Id>
+                 <d:Version>1.0.0</d:Version>
+                 <d:Authors>Shared Author</d:Authors>
+                 <d:Owners>{{owner}}</d:Owners>
+                 <d:DownloadCount>1</d:DownloadCount>
+               </m:properties>
+             </entry>
+             """;
 }

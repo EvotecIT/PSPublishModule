@@ -46,6 +46,14 @@ public sealed partial class WebAgentContentSecurityScanner
         int line,
         ICollection<WebAgentContentSecurityFinding> findings)
     {
+        if (IsPowerShellPackageCommand(tokens[0]) &&
+            tokens.Skip(1).Any(static token => token.StartsWith('@')))
+        {
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                "PowerShell splatted package-command arguments can hide repository, source, provider, or proxy parameters and cannot be verified statically.");
+            return false;
+        }
+
         for (var index = 1; index < tokens.Length; index++)
         {
             var token = tokens[index];
@@ -121,6 +129,11 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         return true;
     }
+
+    private static bool IsPowerShellPackageCommand(string executable)
+        => executable is "install-package" or "update-package" or "install-module" or "save-module" or
+            "install-script" or "update-script" or "save-script" or "install-psresource" or
+            "save-psresource" or "update-module" or "update-psresource";
 
     private static bool IsPackageSourceOption(string ecosystem, string option)
         => ecosystem switch

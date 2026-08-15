@@ -354,7 +354,7 @@ public static partial class WebEcosystemStatsGenerator
                 break;
             }
 
-            var take = Math.Min(pageSize, maxItems - modules.Count);
+            var take = pageSize;
             var encodedFilter = Uri.EscapeDataString(filterExpression);
             var url = $"{PowerShellGalleryApiBase}?$filter={encodedFilter}&$orderby=DownloadCount%20desc&$top={take}&$skip={skip}";
             using var request = new HttpRequestMessage(HttpMethod.Get, url);

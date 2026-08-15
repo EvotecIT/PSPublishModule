@@ -120,10 +120,26 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
 
             artifactCount++;
             var segments = ExtractTextSegments(content, Path.GetExtension(fullPath), configuredPath, findings);
-            var remoteExecutionFlow = new RemoteExecutionFlowState();
-            var packageExecutionFlow = new PackageExecutionFlowState();
+            var remoteExecutionFlows = new Dictionary<JsonFlowKey, RemoteExecutionFlowState>();
+            var packageExecutionFlows = new Dictionary<JsonFlowKey, PackageExecutionFlowState>();
             foreach (var segment in segments)
             {
+                RemoteExecutionFlowState? remoteExecutionFlow = null;
+                PackageExecutionFlowState? packageExecutionFlow = null;
+                if (segment.OrderedCommandFlowGroup is { } flowGroup)
+                {
+                    if (!remoteExecutionFlows.TryGetValue(flowGroup, out remoteExecutionFlow))
+                    {
+                        remoteExecutionFlow = new RemoteExecutionFlowState();
+                        remoteExecutionFlows.Add(flowGroup, remoteExecutionFlow);
+                    }
+                    if (!packageExecutionFlows.TryGetValue(flowGroup, out packageExecutionFlow))
+                    {
+                        packageExecutionFlow = new PackageExecutionFlowState();
+                        packageExecutionFlows.Add(flowGroup, packageExecutionFlow);
+                    }
+                }
+
                 ScanPackageSourceEnvironmentOverrides(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings);
                 ScanPowerShellPackageSourceDefaults(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings);
                 ScanRuntimeInjectionEnvironmentOverrides(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings);
@@ -134,10 +150,10 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                 if (options.CheckPromptInjection)
                     ScanPromptInjection(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
                 ScanRemoteExecution(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines,
-                    segment.ParticipatesInOrderedCommandFlow ? remoteExecutionFlow : null);
+                    remoteExecutionFlow);
                 packages.AddRange(ExtractPackageReferences(
                     segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings,
-                    segment.ParticipatesInOrderedCommandFlow ? packageExecutionFlow : null));
+                    packageExecutionFlow));
                 ExtractUrls(segment.Text, urls);
             }
         }
@@ -296,7 +312,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
         List<WebAgentContentSecurityFinding> findings)
     {
         if (!extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
-            return new[] { new TextSegment(content, 0, true, true) };
+            return new[] { new TextSegment(content, 0, true, new JsonFlowKey(0, "$")) };
 
         var segments = new List<TextSegment>();
         try
@@ -305,8 +321,32 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
             var reader = new Utf8JsonReader(utf8, isFinalBlock: true, state: default);
             var scannedThrough = 0;
             var physicalLineOffset = 0;
+            var nextFlowGroup = 0;
+            var containers = new List<JsonContainer>();
             while (reader.Read())
             {
+                if (reader.TokenType == JsonTokenType.StartArray)
+                {
+                    containers.Add(new JsonContainer(
+                        isArray: true,
+                        arrayGroup: nextFlowGroup++,
+                        path: GetJsonValuePath(containers)));
+                    continue;
+                }
+                if (reader.TokenType == JsonTokenType.StartObject)
+                {
+                    containers.Add(new JsonContainer(
+                        isArray: false,
+                        arrayGroup: null,
+                        path: GetJsonValuePath(containers)));
+                    continue;
+                }
+                if (reader.TokenType is JsonTokenType.EndArray or JsonTokenType.EndObject)
+                {
+                    if (containers.Count > 0)
+                        containers.RemoveAt(containers.Count - 1);
+                    continue;
+                }
                 if (reader.TokenType is not (JsonTokenType.String or JsonTokenType.PropertyName))
                     continue;
                 var value = reader.GetString();
@@ -319,7 +359,21 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                         physicalLineOffset++;
                 }
                 scannedThrough = tokenStart;
-                segments.Add(new TextSegment(value, physicalLineOffset, false, reader.TokenType == JsonTokenType.String));
+                if (reader.TokenType == JsonTokenType.PropertyName && containers.Count > 0)
+                    containers[^1].CurrentPropertyName = value;
+
+                JsonFlowKey? orderedCommandFlowGroup = null;
+                if (reader.TokenType == JsonTokenType.String)
+                {
+                    var arrayContainer = containers.LastOrDefault(static container => container.IsArray);
+                    if (arrayContainer?.ArrayGroup is { } arrayGroup)
+                    {
+                        orderedCommandFlowGroup = new JsonFlowKey(
+                            arrayGroup,
+                            GetJsonValuePath(containers));
+                    }
+                }
+                segments.Add(new TextSegment(value, physicalLineOffset, false, orderedCommandFlowGroup));
             }
         }
         catch (JsonException ex)
@@ -328,6 +382,21 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                 $"Configured JSON artifact is invalid: {ex.Message}");
         }
         return segments;
+    }
+
+    private static string GetJsonValuePath(IReadOnlyList<JsonContainer> containers)
+    {
+        if (containers.Count == 0)
+            return "$";
+
+        var parent = containers[^1];
+        if (parent.IsArray)
+            return parent.Path + "/[]";
+
+        var propertyName = parent.CurrentPropertyName ?? string.Empty;
+        return parent.Path + "/" + propertyName
+            .Replace("~", "~0", StringComparison.Ordinal)
+            .Replace("/", "~1", StringComparison.Ordinal);
     }
 
     private static void AddFinding(
@@ -368,7 +437,17 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
         string Text,
         int LineOffset,
         bool CountLogicalLines,
-        bool ParticipatesInOrderedCommandFlow);
+        JsonFlowKey? OrderedCommandFlowGroup);
+
+    private readonly record struct JsonFlowKey(int ArrayGroup, string Path);
+
+    private sealed class JsonContainer(bool isArray, int? arrayGroup, string path)
+    {
+        public bool IsArray { get; } = isArray;
+        public int? ArrayGroup { get; } = arrayGroup;
+        public string Path { get; } = path;
+        public string? CurrentPropertyName { get; set; }
+    }
 
     private sealed class ArtifactTooLargeException(long observedBytes, long maximumBytes) : IOException
     {
