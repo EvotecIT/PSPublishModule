@@ -34,7 +34,7 @@ public sealed partial class ArtefactBuilder
         InformationConfiguration? information = null,
         DeliveryOptionsConfiguration? delivery = null,
         bool includeScriptFolders = true)
-        => Build(
+        => BuildWithFinalizer(
             segment,
             projectRoot,
             stagingPath,
@@ -61,7 +61,7 @@ public sealed partial class ArtefactBuilder
     /// <param name="delivery">Optional delivery configuration used to auto-include bundled internals.</param>
     /// <param name="includeScriptFolders">When false, skips packaging script-only folders (Public/Private/Classes/Enums).</param>
     /// <param name="finalizePackedArtefact">Optional finalizer invoked after the complete packed layout is assembled and before it is archived. Returned files are recorded as release evidence and remain owned by the callback.</param>
-    public ArtefactBuildResult Build(
+    public ArtefactBuildResult BuildWithFinalizer(
         ConfigurationArtefactSegment segment,
         string projectRoot,
         string stagingPath,

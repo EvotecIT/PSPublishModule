@@ -472,6 +472,9 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:TargetFramework",
             "-getProperty:TargetFrameworks",
             "-getProperty:MSBuildAllProjects",
+            "-getProperty:BaseIntermediateOutputPath",
+            "-getProperty:MSBuildProjectExtensionsPath",
+            "-getProperty:IntermediateOutputPath",
             "-p:Configuration=" + request.Configuration
         };
         foreach (string itemName in EvaluatedBuildItemNames)
@@ -513,13 +516,20 @@ public sealed partial class DotNetPublishPipelineRunner
             var rawReferences = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var targetFrameworks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var generatedBuildRoots = new HashSet<string>(
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
+                AddPropertyPath(properties, "BaseIntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
+                AddPropertyPath(properties, "MSBuildProjectExtensionsPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
+                AddPropertyPath(properties, "IntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddSemicolonSeparatedPaths(
                     properties,
                     "MSBuildAllProjects",
                     Path.GetDirectoryName(request.ProjectPath)!,
-                    inputs);
+                    inputs,
+                    sourceInputs,
+                    generatedBuildRoots);
                 AddSemicolonSeparatedValues(properties, "TargetFrameworks", targetFrameworks);
                 if (targetFrameworks.Count == 0)
                     AddSemicolonSeparatedValues(properties, "TargetFramework", targetFrameworks);
@@ -796,7 +806,9 @@ public sealed partial class DotNetPublishPipelineRunner
         JsonElement properties,
         string name,
         string baseDirectory,
-        HashSet<string> values)
+        HashSet<string> values,
+        HashSet<string>? sourceValues = null,
+        IEnumerable<string>? generatedBuildRoots = null)
     {
         if (!properties.TryGetProperty(name, out JsonElement property) || property.ValueKind != JsonValueKind.String)
             return;
@@ -807,8 +819,87 @@ public sealed partial class DotNetPublishPipelineRunner
             string fullPath = Path.GetFullPath(
                 Path.IsPathRooted(value) ? value : Path.Combine(baseDirectory, value));
             if (File.Exists(fullPath))
+            {
                 values.Add(fullPath);
+                if (sourceValues is not null &&
+                    !IsTrustedExternalBuildInfrastructurePath(fullPath) &&
+                    !IsGeneratedBuildInfrastructurePath(fullPath, generatedBuildRoots))
+                    sourceValues.Add(fullPath);
+            }
         }
+    }
+
+    private static bool IsGeneratedBuildInfrastructurePath(
+        string path,
+        IEnumerable<string>? generatedBuildRoots)
+    {
+        if (!(generatedBuildRoots ?? Array.Empty<string>())
+            .Any(root => IsSameOrBelowBuildInputPath(path, root)))
+        {
+            return false;
+        }
+
+        string fileName = Path.GetFileName(path);
+        return fileName.EndsWith(".nuget.g.props", StringComparison.OrdinalIgnoreCase) ||
+               fileName.EndsWith(".nuget.g.targets", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AddPropertyPath(
+        JsonElement properties,
+        string name,
+        string baseDirectory,
+        HashSet<string> values)
+    {
+        if (!properties.TryGetProperty(name, out JsonElement property) ||
+            property.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(property.GetString()))
+        {
+            return;
+        }
+
+        string value = property.GetString()!;
+        values.Add(Path.GetFullPath(Path.IsPathRooted(value) ? value : Path.Combine(baseDirectory, value)));
+    }
+
+    private static bool IsTrustedExternalBuildInfrastructurePath(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        var roots = new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        AddEnvironmentDirectory(roots, "DOTNET_ROOT");
+        AddEnvironmentDirectory(roots, "DOTNET_ROOT(x86)");
+        AddEnvironmentDirectory(roots, "MSBuildSDKsPath");
+        AddEnvironmentDirectory(roots, "MSBuildExtensionsPath");
+        AddEnvironmentDirectory(roots, "NUGET_PACKAGES");
+
+        string? programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        if (!string.IsNullOrWhiteSpace(programFiles))
+            roots.Add(Path.GetFullPath(Path.Combine(programFiles, "dotnet")));
+        string? programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+        if (!string.IsNullOrWhiteSpace(programFilesX86))
+            roots.Add(Path.GetFullPath(Path.Combine(programFilesX86, "dotnet")));
+        string? userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(userProfile))
+            roots.Add(Path.GetFullPath(Path.Combine(userProfile, ".nuget", "packages")));
+
+        return roots.Any(root => IsSameOrBelowBuildInputPath(fullPath, root));
+    }
+
+    private static void AddEnvironmentDirectory(HashSet<string> roots, string name)
+    {
+        string? value = Environment.GetEnvironmentVariable(name);
+        if (!string.IsNullOrWhiteSpace(value))
+            roots.Add(Path.GetFullPath(value));
+    }
+
+    private static bool IsSameOrBelowBuildInputPath(string path, string root)
+    {
+        string fullRoot = Path.GetFullPath(root)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        StringComparison comparison = IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return string.Equals(path, fullRoot, comparison) ||
+               path.StartsWith(fullRoot + Path.DirectorySeparatorChar, comparison);
     }
 
     private static void AddSemicolonSeparatedValues(

@@ -38,6 +38,7 @@ public sealed class ArtefactBuilderLayoutTests
         };
 
         Assert.NotNull(typeof(ArtefactBuilder).GetMethod("Build", parameterTypes));
+        Assert.Single(typeof(ArtefactBuilder).GetMethods(), method => method.Name == "Build");
     }
 
     [Fact]
@@ -71,7 +72,7 @@ public sealed class ArtefactBuilderLayoutTests
 
             using (var lockedArchive = new FileStream(archivePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
             {
-                Assert.ThrowsAny<IOException>(() => new ArtefactBuilder(new NullLogger()).Build(
+                Assert.ThrowsAny<IOException>(() => new ArtefactBuilder(new NullLogger()).BuildWithFinalizer(
                     segment,
                     root.FullName,
                     stagingRoot.FullName,
@@ -113,7 +114,7 @@ public sealed class ArtefactBuilderLayoutTests
                 }
             };
 
-            ArtefactBuildResult result = new ArtefactBuilder(new NullLogger()).Build(
+            ArtefactBuildResult result = new ArtefactBuilder(new NullLogger()).BuildWithFinalizer(
                 segment,
                 root.FullName,
                 stagingRoot.FullName,

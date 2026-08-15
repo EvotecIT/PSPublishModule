@@ -1279,6 +1279,60 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void ReadSourceProvenance_RejectsImportedBuildFileInsideExternalGeneratedRoot()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        string outside = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string externalBuildRoot = Directory.CreateDirectory(Path.Combine(outside, "obj")).FullName;
+            string externalImport = Path.Combine(externalBuildRoot, "External.props");
+            string projectPath = Path.Combine(root, "Sample.csproj");
+            File.WriteAllText(
+                externalImport,
+                "<Project><PropertyGroup><ExternalBuildInput>true</ExternalBuildInput>" +
+                "<MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>" +
+                "</PropertyGroup></Project>");
+            File.WriteAllText(projectPath, $"""
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <BaseIntermediateOutputPath>{externalBuildRoot}\</BaseIntermediateOutputPath>
+                    <MSBuildProjectExtensionsPath>{externalBuildRoot}\</MSBuildProjectExtensionsPath>
+                  </PropertyGroup>
+                  <Import Project="{externalImport}" />
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(root, "Program.cs"), "internal static class Program { }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+            if (Directory.Exists(outside))
+                Directory.Delete(outside, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ReadSourceProvenance_RejectsProjectFileSymlinkOutsideCheckout()
     {
         string root = Directory.CreateTempSubdirectory().FullName;

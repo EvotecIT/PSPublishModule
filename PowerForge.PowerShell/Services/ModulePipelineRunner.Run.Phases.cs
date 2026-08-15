@@ -711,7 +711,7 @@ public sealed partial class ModulePipelineRunner
                 session.Start(step);
                 try
                 {
-                    ArtefactBuildResult result = builder.Build(
+                    ArtefactBuildResult result = builder.BuildWithFinalizer(
                         segment: artefact,
                         projectRoot: plan.ProjectRoot,
                         stagingPath: buildResult.StagingPath,
