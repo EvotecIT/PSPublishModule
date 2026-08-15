@@ -119,6 +119,21 @@ public sealed partial class AppStoreConnectClientTests
                 {
                   "data": [
                     {
+                      "id": "info-loc-live",
+                      "type": "appInfoLocalizations",
+                      "attributes": {
+                        "locale": "en-US",
+                        "privacyPolicyUrl": "https://tactra.dev/privacy/"
+                      }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
                       "id": "info-loc-1",
                       "type": "appInfoLocalizations",
                       "attributes": {
@@ -163,7 +178,7 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("https://old.example/privacy/", result.Before.PrivacyPolicyUrl);
         Assert.Equal("https://tactra.dev/privacy/", result.After.PrivacyPolicyUrl);
         Assert.Equal(new[] { "privacyPolicyUrl" }, result.UpdatedFields);
-        Assert.Contains("appInfos/info-editable/appInfoLocalizations", handler.RequestUris[1].ToString(), StringComparison.Ordinal);
+        Assert.Contains("appInfos/info-editable/appInfoLocalizations", handler.RequestUris[2].ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -199,6 +214,206 @@ public sealed partial class AppStoreConnectClientTests
 
         Assert.Contains("does not belong to app 'app-1'", exception.Message, StringComparison.Ordinal);
         Assert.Single(handler.RequestUris);
+    }
+
+    [Fact]
+    public async Task AppInfoMetadataSyncService_AcceptsConvergedLockedResourcesWithoutMutation()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "info-live", "type": "appInfos", "attributes": { "state": "READY_FOR_DISTRIBUTION" } },
+                    { "id": "info-review", "type": "appInfos", "attributes": { "state": "IN_REVIEW" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "loc-live", "type": "appInfoLocalizations", "attributes": { "locale": "en-US", "privacyPolicyUrl": "https://casaray.dev/privacy/" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "loc-review", "type": "appInfoLocalizations", "attributes": { "locale": "en-US", "privacyPolicyUrl": "https://casaray.dev/privacy/" } }
+                  ]
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var result = await new AppStoreConnectAppInfoMetadataSyncService(client).SyncAsync(
+            new AppStoreConnectAppInfoMetadataSyncRequest
+            {
+                Spec = new AppStoreConnectAppInfoMetadataSpec
+                {
+                    AppId = "app-1",
+                    Locale = "en-US",
+                    Metadata = new AppStoreConnectAppInfoLocalizationUpdate
+                    {
+                        PrivacyPolicyUrl = "https://casaray.dev/privacy/"
+                    }
+                }
+            });
+
+        Assert.Empty(result.UpdatedFields);
+        Assert.Equal(result.Before.Id, result.After.Id);
+        Assert.Equal(3, handler.RequestUris.Count);
+        Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+    }
+
+    [Fact]
+    public async Task AppInfoMetadataSyncService_RejectsChangedMetadataWhenResourcesAreLocked()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "info-review", "type": "appInfos", "attributes": { "state": "IN_REVIEW" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "loc-review", "type": "appInfoLocalizations", "attributes": { "locale": "en-US", "privacyPolicyUrl": "https://old.example/privacy/" } }
+                  ]
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new AppStoreConnectAppInfoMetadataSyncService(client).SyncAsync(
+                new AppStoreConnectAppInfoMetadataSyncRequest
+                {
+                    Spec = new AppStoreConnectAppInfoMetadataSpec
+                    {
+                        AppId = "app-1",
+                        Locale = "en-US",
+                        Metadata = new AppStoreConnectAppInfoLocalizationUpdate
+                        {
+                            PrivacyPolicyUrl = "https://casaray.dev/privacy/"
+                        }
+                    }
+                }));
+
+        Assert.Contains("locked resources do not already match", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, handler.RequestUris.Count);
+        Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+    }
+
+    [Fact]
+    public async Task AppInfoMetadataSyncService_RejectsMismatchedLockedResourceAlongsideEditableResource()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "info-editable", "type": "appInfos", "attributes": { "state": "PREPARE_FOR_SUBMISSION" } },
+                    { "id": "info-review", "type": "appInfos", "attributes": { "state": "IN_REVIEW" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "loc-editable", "type": "appInfoLocalizations", "attributes": { "locale": "en-US", "privacyPolicyUrl": "https://casaray.dev/privacy/" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "loc-review", "type": "appInfoLocalizations", "attributes": { "locale": "en-US", "privacyPolicyUrl": "https://old.example/privacy/" } }
+                  ]
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new AppStoreConnectAppInfoMetadataSyncService(client).SyncAsync(
+                new AppStoreConnectAppInfoMetadataSyncRequest
+                {
+                    Spec = new AppStoreConnectAppInfoMetadataSpec
+                    {
+                        AppId = "app-1",
+                        Locale = "en-US",
+                        Metadata = new AppStoreConnectAppInfoLocalizationUpdate
+                        {
+                            PrivacyPolicyUrl = "https://casaray.dev/privacy/"
+                        }
+                    }
+                }));
+
+        Assert.Contains("locked resources do not already match", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(3, handler.RequestUris.Count);
+        Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+    }
+
+    [Fact]
+    public async Task AppInfoMetadataSyncService_ExplicitLockedIdStillChecksEveryLockedResource()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "info-live", "type": "appInfos", "attributes": { "state": "READY_FOR_DISTRIBUTION" } },
+                    { "id": "info-review", "type": "appInfos", "attributes": { "state": "IN_REVIEW" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "loc-live", "type": "appInfoLocalizations", "attributes": { "locale": "en-US", "privacyPolicyUrl": "https://casaray.dev/privacy/" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "loc-review", "type": "appInfoLocalizations", "attributes": { "locale": "en-US", "privacyPolicyUrl": "https://old.example/privacy/" } }
+                  ]
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new AppStoreConnectAppInfoMetadataSyncService(client).SyncAsync(
+                new AppStoreConnectAppInfoMetadataSyncRequest
+                {
+                    Spec = new AppStoreConnectAppInfoMetadataSpec
+                    {
+                        AppId = "app-1",
+                        AppInfoId = "info-live",
+                        Locale = "en-US",
+                        Metadata = new AppStoreConnectAppInfoLocalizationUpdate
+                        {
+                            PrivacyPolicyUrl = "https://casaray.dev/privacy/"
+                        }
+                    }
+                }));
+
+        Assert.Contains("locked resources do not already match", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(3, handler.RequestUris.Count);
+        Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
     }
 
     [Fact]

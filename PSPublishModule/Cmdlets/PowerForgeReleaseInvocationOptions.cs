@@ -176,6 +176,12 @@ internal sealed class PowerForgeReleaseInvocationOptions
 
     public string? AppleExpectedPlanSha256 { get; set; }
 
+    public string[] AppleShipTestFlightTargets { get; set; } = Array.Empty<string>();
+
+    public string[] AppleShipAppStoreTargets { get; set; } = Array.Empty<string>();
+
+    public bool AppleShipReuseRemoteScreenshots { get; set; } = true;
+
     public bool AppleActionConfirmed { get; set; }
 
     public bool AppleAdoptExistingBuild { get; set; }

@@ -51,7 +51,20 @@ public enum PowerForgeAppleReleaseAction
     Cleanup,
 
     /// <summary>Create signed archives and complete local export validation without uploading or notarizing them.</summary>
-    Rehearse
+    Rehearse,
+
+    /// <summary>Execute one reviewed, resumable TestFlight and App Store Review shipping intent.</summary>
+    Ship
+}
+
+/// <summary>Current durable phase of one Apple Ship intent.</summary>
+public enum PowerForgeAppleShipPhase
+{
+    /// <summary>The checked-in Apple version source must be updated, reviewed, and merged before shipping resumes.</summary>
+    VersionCheckpoint,
+
+    /// <summary>The exact merged source can be archived, uploaded, prepared, and submitted according to the target routes.</summary>
+    Release
 }
 
 /// <summary>
@@ -160,7 +173,10 @@ internal sealed class PowerForgeAppleReleaseReceipt
 
     public DateTimeOffset CheckedAt { get; set; } = DateTimeOffset.UtcNow;
 
-    /// <summary>SHA-256 binding the stable action, source, target, and observed Apple state represented by a plan.</summary>
+    /// <summary>
+    /// SHA-256 binding the approved action. Ship binds a durable exact-source intent that remains stable
+    /// while its own attested remote operations progress; other actions also bind observed Apple state.
+    /// </summary>
     public string? PlanSha256 { get; set; }
 
     /// <summary>Canonical SHA-256 of effective mutation flags and every local payload consumed by this plan.</summary>
@@ -189,6 +205,9 @@ internal sealed class PowerForgeAppleReleaseReceipt
 
     /// <summary>True when the operator explicitly authorized recovery after independently verifying the remote Apple operation.</summary>
     public bool AdoptExistingBuild { get; set; }
+
+    /// <summary>Current phase when Action is Ship.</summary>
+    public PowerForgeAppleShipPhase? ShipPhase { get; set; }
 
     public PowerForgeAppleVersionReceipt? Versioning { get; set; }
 
@@ -273,6 +292,12 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
     public string[] Capabilities { get; set; } = Array.Empty<string>();
 
     public AppleTestFlightPolicy TestFlightPolicy { get; set; }
+
+    /// <summary>True when this target is included in the Ship internal-TestFlight intent.</summary>
+    public bool ShipToTestFlight { get; set; }
+
+    /// <summary>True when this target is included in the Ship App Store Review intent.</summary>
+    public bool ShipToAppStoreReview { get; set; }
 
     public string? AppId { get; set; }
 

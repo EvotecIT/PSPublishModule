@@ -16,8 +16,10 @@ internal sealed partial class PowerForgeReleaseService
         _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
         {
             Action = plan.Action,
+            ShipPhase = plan.ShipPhase,
             SourceCommit = plan.SourceCommit,
-            PlanSha256 = expectedPlanSha256,
+            PlanSha256 = plan.ApprovedPlanSha256 ?? expectedPlanSha256,
+            Versioning = plan.ApprovedVersioning,
             OperationPhase = "Started",
             Success = false,
             ErrorMessage = "Apple release operation started; inspect later receipts and remote state before retrying.",
@@ -46,7 +48,10 @@ internal sealed partial class PowerForgeReleaseService
         {
             AttemptId = attemptId,
             Action = plan.Action,
+            ShipPhase = plan.ShipPhase,
             SourceCommit = plan.SourceCommit,
+            PlanSha256 = plan.ApprovedPlanSha256,
+            Versioning = plan.ApprovedVersioning,
             OperationPhase = "UploadAttested",
             Success = true,
             Targets = new[] { target }
@@ -75,7 +80,10 @@ internal sealed partial class PowerForgeReleaseService
         {
             AttemptId = attemptId,
             Action = plan.Action,
+            ShipPhase = plan.ShipPhase,
             SourceCommit = plan.SourceCommit,
+            PlanSha256 = plan.ApprovedPlanSha256,
+            Versioning = plan.ApprovedVersioning,
             OperationPhase = "UploadAmbiguous",
             Success = false,
             ErrorMessage = target.ErrorMessage,
@@ -109,6 +117,7 @@ internal sealed partial class PowerForgeReleaseService
         _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
         {
             Action = plan.Action,
+            ShipPhase = plan.ShipPhase,
             SourceCommit = plan.SourceCommit,
             OperationPhase = "NotarizationAttested",
             Success = result.Notarization.Succeeded,
@@ -140,6 +149,7 @@ internal sealed partial class PowerForgeReleaseService
         _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
         {
             Action = plan.Action,
+            ShipPhase = plan.ShipPhase,
             SourceCommit = plan.SourceCommit,
             OperationPhase = "NotarizationAccepted",
             Success = false,
@@ -169,6 +179,7 @@ internal sealed partial class PowerForgeReleaseService
         _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
         {
             Action = plan.Action,
+            ShipPhase = plan.ShipPhase,
             SourceCommit = plan.SourceCommit,
             OperationPhase = "NotarizationAmbiguous",
             Success = false,
@@ -200,6 +211,7 @@ internal sealed partial class PowerForgeReleaseService
         _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
         {
             Action = plan.Action,
+            ShipPhase = plan.ShipPhase,
             SourceCommit = plan.SourceCommit,
             OperationPhase = "NotarizationStapled",
             Success = false,
@@ -227,6 +239,8 @@ internal sealed partial class PowerForgeReleaseService
             ParentTarget = app.ParentTarget,
             Capabilities = app.Capabilities,
             TestFlightPolicy = app.TestFlightPolicy,
+            ShipToTestFlight = app.ShipToTestFlight,
+            ShipToAppStoreReview = app.ShipToAppStoreReview,
             AppId = app.AppStoreConnectAppId,
             Version = app.MarketingVersion,
             Build = app.BuildNumber

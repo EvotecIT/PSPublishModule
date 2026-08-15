@@ -256,6 +256,15 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? AppleExpectedPlanSha256 { get; set; }
 
+    /// <summary>Stable target names or schemes that should receive the build through internal TestFlight.</summary>
+    public string[] AppleShipTestFlightTargets { get; set; } = Array.Empty<string>();
+
+    /// <summary>Stable target names or schemes that should be submitted to App Store Review.</summary>
+    public string[] AppleShipAppStoreTargets { get; set; } = Array.Empty<string>();
+
+    /// <summary>Reuse already-delivered remote screenshots instead of publishing local screenshot bytes.</summary>
+    public bool AppleShipReuseRemoteScreenshots { get; set; } = true;
+
     /// <summary>Checkpoint-only archive hashes keyed by stable Apple target name.</summary>
     internal Dictionary<string, string> AppleExpectedArchiveSha256ByTarget { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -567,7 +576,21 @@ internal sealed class PowerForgeAppleReleasePlan
 
     public bool RequireImmutableSourceSnapshot { get; set; }
 
+    /// <summary>Reviewed Ship intent hash supplied for execution or recovery.</summary>
+    internal string? ApprovedPlanSha256 { get; set; }
+
+    /// <summary>Version identity bound by the reviewed Ship intent.</summary>
+    internal PowerForgeAppleVersionReceipt? ApprovedVersioning { get; set; }
+
     public bool AdoptExistingBuild { get; set; }
+
+    public PowerForgeAppleShipPhase? ShipPhase { get; set; }
+
+    public string[] ShipTestFlightTargets { get; set; } = Array.Empty<string>();
+
+    public string[] ShipAppStoreTargets { get; set; } = Array.Empty<string>();
+
+    public bool ShipReuseRemoteScreenshots { get; set; } = true;
 
     public bool Archive { get; set; }
 
@@ -686,6 +709,10 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
     public string[] Capabilities { get; set; } = Array.Empty<string>();
 
     public AppleTestFlightPolicy TestFlightPolicy { get; set; } = AppleTestFlightPolicy.Automatic;
+
+    public bool ShipToTestFlight { get; set; }
+
+    public bool ShipToAppStoreReview { get; set; }
 
     public string[] RequiredEmbeddedBundleIds { get; set; } = Array.Empty<string>();
 

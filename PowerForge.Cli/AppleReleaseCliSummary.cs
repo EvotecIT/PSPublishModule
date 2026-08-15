@@ -18,6 +18,10 @@ internal sealed class AppleReleaseCliPlanSummary
 
     public bool AdoptExistingBuild { get; set; }
 
+    public PowerForgeAppleShipPhase? ShipPhase { get; set; }
+
+    public bool ReuseRemoteScreenshots { get; set; }
+
     public bool WaitForProcessing { get; set; }
 
     public int ProcessingTimeoutSeconds { get; set; }
@@ -46,6 +50,10 @@ internal sealed class AppleReleaseCliTargetSummary
     public string[] Capabilities { get; set; } = Array.Empty<string>();
 
     public AppleTestFlightPolicy TestFlightPolicy { get; set; }
+
+    public bool ShipToTestFlight { get; set; }
+
+    public bool ShipToAppStoreReview { get; set; }
 
     public string? BundleId { get; set; }
 

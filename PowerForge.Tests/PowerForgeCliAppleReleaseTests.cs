@@ -8,6 +8,48 @@ public sealed class PowerForgeCliAppleReleaseTests
     private const string ApprovedSourceCommit = "0123456789abcdef0123456789abcdef01234567";
 
     [Fact]
+    public void AppleRelease_ShipCliMapsRouteIntentAndDefaultsToRemoteScreenshots()
+    {
+        var request = BuildReleaseRequest(
+            [
+                "--apple-action", "Ship",
+                "--apple-version", "1.8",
+                "--apple-source-commit", ApprovedSourceCommit,
+                "--apple-testflight-target", "CasaRay iOS,CasaRay Mac",
+                "--apple-app-store-target", "CasaRay iOS"
+            ],
+            "/tmp/powerforge.release.json",
+            planOnly: true,
+            validateOnly: false,
+            packagesOnly: false,
+            moduleOnly: false,
+            toolsOnly: false);
+
+        Assert.Equal(PowerForgeAppleReleaseAction.Ship, request.AppleAction);
+        Assert.Equal("1.8", request.AppleMarketingVersion);
+        Assert.Equal(ApprovedSourceCommit, request.AppleSourceCommit);
+        Assert.True(request.RequireImmutableAppleSourceSnapshot);
+        Assert.Equal(["CasaRay iOS", "CasaRay Mac"], request.AppleShipTestFlightTargets);
+        Assert.Equal(["CasaRay iOS"], request.AppleShipAppStoreTargets);
+        Assert.True(request.AppleShipReuseRemoteScreenshots);
+    }
+
+    [Fact]
+    public void AppleRelease_ShipCliRequiresExplicitSwitchForScreenshotSynchronization()
+    {
+        var request = BuildReleaseRequest(
+            ["--apple-action", "Ship", "--apple-app-store-target", "CasaRay iOS", "--apple-sync-screenshots"],
+            "/tmp/powerforge.release.json",
+            planOnly: true,
+            validateOnly: false,
+            packagesOnly: false,
+            moduleOnly: false,
+            toolsOnly: false);
+
+        Assert.False(request.AppleShipReuseRemoteScreenshots);
+    }
+
+    [Fact]
     public async Task AppleRelease_JsonRedactionPreservesPropertyNames()
     {
         var repoRoot = FindRepositoryRoot();
@@ -517,6 +559,26 @@ public sealed class PowerForgeCliAppleReleaseTests
               }
             }
             """);
+
+    private static PowerForgeReleaseRequest BuildReleaseRequest(
+        string[] arguments,
+        string configPath,
+        bool planOnly,
+        bool validateOnly,
+        bool packagesOnly,
+        bool moduleOnly,
+        bool toolsOnly)
+    {
+        var cliAssembly = System.Reflection.Assembly.LoadFrom(GetCliPath(FindRepositoryRoot()));
+        var program = cliAssembly.GetType("Program", throwOnError: true)!;
+        var method = program.GetMethod(
+            "BuildReleaseRequestFromArgs",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new MissingMethodException(program.FullName, "BuildReleaseRequestFromArgs");
+        return (PowerForgeReleaseRequest)method.Invoke(
+            null,
+            [arguments, configPath, planOnly, validateOnly, packagesOnly, moduleOnly, toolsOnly, null])!;
+    }
 
     private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(
         string workingDirectory,
