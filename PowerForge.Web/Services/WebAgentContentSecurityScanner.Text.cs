@@ -184,6 +184,7 @@ public sealed partial class WebAgentContentSecurityScanner
         }
 
         PropagateDownloadedPathsThroughFileTransforms(normalized, positionOffset, flowState);
+        ScanDownloadedReaderPipelines(normalized, path, findings, positionOffset, flowState);
 
         if (flowState.DownloadedPaths.Count == 0)
             return;

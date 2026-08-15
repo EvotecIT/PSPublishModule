@@ -7,6 +7,9 @@ public sealed partial class WebAgentContentSecurityScanner
     private static readonly Regex FileTransformCommandRegex = new(
         @"(?:^|&&|;|(?<!&)&(?!&)|\r?\n)\s*(?:sudo\s+)?(?<command>mv|move|cp|copy|ren|rename|Move-Item|Copy-Item|Rename-Item|mi|cpi|rni)\b(?<arguments>[^\r\n;&|]*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline);
+    private static readonly Regex DownloadedArtifactReaderPipelineRegex = new(
+        @"(?:^|&&|;|(?<!&)&(?!&)|\r?\n)\s*(?:sudo\s+)?(?<reader>cat|type|more|head|tail|Get-Content|gc)\b(?<arguments>[^\r\n;&|]*)(?<pipeline>(?:\|[^\r\n;&]*)+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline);
 
     private static void PropagateDownloadedPathsThroughFileTransforms(
         string content,
@@ -25,6 +28,34 @@ public sealed partial class WebAgentContentSecurityScanner
 
                 foreach (var candidate in ResolveFileTransformDestinations(normalizedSource, destination))
                     flowState.DownloadedPaths.TryAdd(candidate, download);
+            }
+        }
+    }
+
+    private static void ScanDownloadedReaderPipelines(
+        string content,
+        string path,
+        List<WebAgentContentSecurityFinding> findings,
+        long positionOffset,
+        RemoteExecutionFlowState flowState)
+    {
+        foreach (Match reader in DownloadedArtifactReaderPipelineRegex.Matches(content))
+        {
+            if (!InterpreterCommandRegex.IsMatch(reader.Groups["pipeline"].Value))
+                continue;
+
+            var readerPosition = positionOffset + reader.Index;
+            foreach (var token in Tokenize(reader.Groups["arguments"].Value))
+            {
+                var candidate = NormalizeComparedPath(token);
+                if (!flowState.DownloadedPaths.TryGetValue(candidate, out var download) ||
+                    download.Position >= readerPosition ||
+                    !flowState.ReportedPaths.Add(candidate))
+                    continue;
+
+                AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path, download.Line,
+                    "Downloaded content is read from a saved file and piped to an interpreter. Prefer a pinned, integrity-checked artifact and a separate execution step.");
+                break;
             }
         }
     }

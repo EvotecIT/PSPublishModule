@@ -7,7 +7,7 @@ public sealed partial class WebAgentContentSecurityScanner
     private const string PackageSourceEnvironmentNamePattern =
         @"(?:HOME|USERPROFILE|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_CACHE_HOME|NPM_CONFIG_[A-Za-z0-9_]+|YARN_(?:[A-Za-z0-9_]*REGISTRY[A-Za-z0-9_]*|RC_FILENAME)|PIP_INDEX_URL|PIP_EXTRA_INDEX_URL|PIP_FIND_LINKS|PIP_CONFIG_FILE|PIP_REQUIREMENT|PIP_CONSTRAINT|PIP_BUILD_CONSTRAINT|PIP_GROUP|PIP_EDITABLE|PIP_TRUSTED_HOST|PIP_CERT|PIP_CLIENT_CERT|UV_INDEX_URL|UV_EXTRA_INDEX_URL|UV_DEFAULT_INDEX|UV_INDEX|UV_FIND_LINKS|UV_CONSTRAINT|UV_OVERRIDE|UV_BUILD_CONSTRAINT|UV_CONFIG_FILE|UV_INSECURE_HOST|NODE_TLS_REJECT_UNAUTHORIZED|NODE_EXTRA_CA_CERTS|CURL_CA_BUNDLE|SSL_CERT_FILE|SSL_CERT_DIR|REQUESTS_CA_BUNDLE|GIT_SSL_NO_VERIFY|BUN_INSTALL_REGISTRY|GEM_HOST|BUNDLE_MIRROR__[A-Za-z0-9_]+|COMPOSER|COMPOSER_HOME|COMPOSER_AUTH|COMPOSER_REPO_PACKAGIST|CARGO_HOME|CARGO_NET_OFFLINE|CARGO_REGISTRY_DEFAULT|CARGO_REGISTRIES_[A-Za-z0-9_]+_INDEX)";
     private const string RuntimeInjectionEnvironmentNamePattern =
-        @"(?:NODE_OPTIONS|DOTNET_STARTUP_HOOKS|CORECLR_ENABLE_PROFILING|CORECLR_PROFILER_PATH|PYTHONPATH|PYTHONSTARTUP|RUBYOPT|RUBYLIB|BUNDLE_GEMFILE)";
+        @"(?:NODE_OPTIONS|DOTNET_STARTUP_HOOKS|CORECLR_ENABLE_PROFILING|CORECLR_PROFILER_PATH|PYTHONPATH|PYTHONSTARTUP|RUBYOPT|RUBYLIB|BUNDLE_GEMFILE|RUSTC|RUSTDOC|RUSTC_WRAPPER|RUSTC_WORKSPACE_WRAPPER|RUSTFLAGS|RUSTDOCFLAGS|CARGO_ENCODED_RUSTFLAGS|CARGO_BUILD_RUSTC|CARGO_BUILD_RUSTDOC|CARGO_BUILD_RUSTC_WRAPPER|CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER|CARGO_TARGET_[A-Za-z0-9_]+_(?:RUNNER|LINKER))";
     private const string CommandResolutionEnvironmentNamePattern = @"(?:PATH|PATHEXT|PSModulePath)";
     private static readonly Regex CommandEnvironmentPrefixRegex = new(
         @"(?:^|\s)(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|""[^""]*""|[^\s;&|]+)\s*)+(?:env\s+)?$",
@@ -176,6 +176,9 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         var tokens = Tokenize(ShellContinuationRegex.Replace(content[(start + 1)..commandIndex], " "));
 
+        if (HasUnsafeRuntimeLauncherPrefix(tokens))
+            return true;
+
         if (tokens.Any(static token =>
             {
                 var executable = Path.GetFileNameWithoutExtension(NormalizeToken(token).Replace('\\', '/'));
@@ -264,5 +267,31 @@ public sealed partial class WebAgentContentSecurityScanner
                 firstExecutable.Equals("gfind", StringComparison.OrdinalIgnoreCase)) &&
                tokens.Any(static token => token.Equals("-exec", StringComparison.OrdinalIgnoreCase) ||
                                           token.Equals("-execdir", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool HasUnsafeRuntimeLauncherPrefix(string[] tokens)
+    {
+        var rubyIndex = Array.FindIndex(tokens, static token =>
+        {
+            var executable = Path.GetFileNameWithoutExtension(NormalizeToken(token).Replace('\\', '/'));
+            return executable.Equals("ruby", StringComparison.OrdinalIgnoreCase) ||
+                   executable.Equals("jruby", StringComparison.OrdinalIgnoreCase) ||
+                   executable.Equals("truffleruby", StringComparison.OrdinalIgnoreCase);
+        });
+        if (rubyIndex < 0)
+            return false;
+
+        return tokens.Skip(rubyIndex + 1).Any(static token =>
+            token.Equals("-S", StringComparison.Ordinal) ||
+            token.Equals("-e", StringComparison.Ordinal) ||
+            token.Equals("--eval", StringComparison.OrdinalIgnoreCase) ||
+            token.Equals("-r", StringComparison.Ordinal) ||
+            token.StartsWith("-r", StringComparison.Ordinal) && token.Length > 2 ||
+            token.Equals("--require", StringComparison.OrdinalIgnoreCase) ||
+            token.StartsWith("--require=", StringComparison.OrdinalIgnoreCase) ||
+            token.Equals("-I", StringComparison.Ordinal) ||
+            token.StartsWith("-I", StringComparison.Ordinal) && token.Length > 2 ||
+            token.Equals("--include", StringComparison.OrdinalIgnoreCase) ||
+            token.StartsWith("--include=", StringComparison.OrdinalIgnoreCase));
     }
 }

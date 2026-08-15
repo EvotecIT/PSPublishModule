@@ -92,6 +92,18 @@ public sealed partial class WebAgentContentSecurityScanner
                     $"Python transport-trust option '{option}' can bypass canonical registry certificate or host validation; the configured value is redacted.");
                 return false;
             }
+            if (ecosystem == "pypi" && option.Equals("--python", StringComparison.OrdinalIgnoreCase))
+            {
+                var pythonExecutable = separator > 0
+                    ? token[(separator + 1)..]
+                    : index + 1 < tokens.Length ? tokens[index + 1] : string.Empty;
+                if (!IsCanonicalPythonExecutable(pythonExecutable))
+                {
+                    AddFinding(findings, "error", "PFAGENT.PACKAGE.UNVERIFIABLE_ENVIRONMENT", path, line,
+                        "Python interpreter selectors must use a literal canonical Python launcher; paths, environments, and dynamic values cannot be verified.");
+                    return false;
+                }
+            }
             if (!IsPackageSourceOption(ecosystem, option))
                 continue;
 
@@ -156,6 +168,12 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("--cert", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--client-cert", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--allow-insecure-host", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsCanonicalPythonExecutable(string value)
+        => Regex.IsMatch(
+            NormalizeToken(value),
+            @"^(?:python(?:\d+(?:\.\d+)*)?|py)(?:\.exe)?$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static bool IsPowerShellRepositoryOption(string option)
         => option.Equals("-Repository", StringComparison.OrdinalIgnoreCase) ||

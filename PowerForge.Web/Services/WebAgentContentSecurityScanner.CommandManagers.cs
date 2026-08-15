@@ -182,11 +182,9 @@ public sealed partial class WebAgentContentSecurityScanner
         var verbIndex = FindKnownVerbIndex(tokens, 1, NodeVerbs, tokens[0], path, line, findings);
         if (verbIndex < 0)
         {
-            if (tokens[0].Equals("yarn", StringComparison.OrdinalIgnoreCase) &&
-                !IsYarnInformationalInvocation(tokens))
-            {
-                AddUnverifiableOperand("yarn", path, line, findings, "lockfile dependency set");
-            }
+            if (!IsNodeInformationalInvocation(tokens))
+                AddUnverifiableOperand(tokens[0], path, line, findings,
+                    tokens.Skip(1).FirstOrDefault() ?? "missing package-manager verb");
             return;
         }
         var verb = NormalizeNodeVerb(tokens[verbIndex]);
@@ -346,10 +344,19 @@ public sealed partial class WebAgentContentSecurityScanner
         return -1;
     }
 
-    private static bool IsYarnInformationalInvocation(string[] tokens)
-        => tokens.Length > 1 && tokens.Skip(1).All(static token =>
-            token.Equals("--version", StringComparison.OrdinalIgnoreCase) ||
-            token.Equals("-v", StringComparison.OrdinalIgnoreCase) ||
-            token.Equals("--help", StringComparison.OrdinalIgnoreCase) ||
-            token.Equals("-h", StringComparison.OrdinalIgnoreCase));
+    private static bool IsNodeInformationalInvocation(string[] tokens)
+    {
+        if (tokens.Length < 2)
+            return false;
+
+        var informational = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "--version", "-v", "--help", "-h", "help", "view", "info", "show", "search",
+            "list", "ls", "why", "outdated", "doctor", "ping", "whoami", "fund", "explain",
+            "root", "prefix", "bin", "query", "pm"
+        };
+        return informational.Contains(tokens[1]) &&
+               tokens.Skip(1).All(static token =>
+                   token.IndexOfAny(['$', '%', '{', '}', '(', ')', '`']) < 0);
+    }
 }
