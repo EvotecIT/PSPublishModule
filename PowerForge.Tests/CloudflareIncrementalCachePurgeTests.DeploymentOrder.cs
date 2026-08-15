@@ -124,9 +124,15 @@ public sealed partial class CloudflareIncrementalCachePurgeTests
                     throw "Unexpected GitHub test URI: $Uri"
                 }
                 if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing GitHub test response: $path" }
-                Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+                $response = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+                Write-Output -NoEnumerate $response
             }
-            & $env:POWERFORGE_TEST_SCRIPT
+            try {
+                & $env:POWERFORGE_TEST_SCRIPT
+            } catch {
+                [Console]::Error.WriteLine($_.ScriptStackTrace)
+                throw
+            }
             """);
         var startInfo = new ProcessStartInfo("pwsh")
         {
