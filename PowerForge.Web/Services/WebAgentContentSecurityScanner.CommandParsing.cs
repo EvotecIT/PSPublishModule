@@ -416,6 +416,8 @@ public sealed partial class WebAgentContentSecurityScanner
         };
         if (normalized == "yarnpkg")
             return "yarn";
+        if (normalized == "bundler")
+            return "bundle";
         if (Regex.IsMatch(normalized, @"^python\d+(?:\.\d+)*$", RegexOptions.CultureInvariant))
             return "python";
         if (Regex.IsMatch(normalized, @"^pip\d+(?:\.\d+)*$", RegexOptions.CultureInvariant))

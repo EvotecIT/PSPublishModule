@@ -200,7 +200,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
             """
             dotnet add package Sample.NuGet --version 1.0.0
             npm install sample-npm@2.0.0
-            python -m pip install sample-pypi==3.0.0
+            python -P -m pip install sample-pypi==3.0.0
             cargo add sample-crate@4.0.0
             gem install sample-gem --version 5.0.0
             composer require vendor/package:6.0.0

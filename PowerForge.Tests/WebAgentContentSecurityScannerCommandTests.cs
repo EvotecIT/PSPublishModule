@@ -434,7 +434,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
     [InlineData("uvx sample-tool==1.0.0", "pypi")]
     [InlineData("pipx run sample-tool==1.0.0", "pypi")]
     [InlineData("pipx --python python3 run sample-tool==1.0.0", "pypi")]
-    [InlineData("py -3 -m pip install sample-tool==1.0.0", "pypi")]
+    [InlineData("py -3 -P -m pip install sample-tool==1.0.0", "pypi")]
     [InlineData("uv --quiet pip install sample-tool==1.0.0", "pypi")]
     [InlineData("npm exec --package=sample-tool@1.0.0 -- command", "npm")]
     [InlineData("pnpx sample-tool@1.0.0", "npm")]
@@ -539,7 +539,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
     [InlineData("pipx inject existing-app sample-tool==1.0.0")]
     [InlineData("pipx inject --include-apps existing-app sample-tool==1.0.0")]
     [InlineData("pip install \"sample-tool>=1.0.0\"")]
-    [InlineData("python -m pip install 'sample-tool~=1.0'")]
+    [InlineData("python -P -m pip install 'sample-tool~=1.0'")]
     public void Scan_VerifiesPythonInjectedPackagesAndRequirementConstraints(string command)
     {
         using var handler = new RegistryHandler(_ => JsonResponse("""{"releases":{"1.0.0":[]}}"""));
@@ -567,7 +567,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
 
     [Theory]
     [InlineData("pip --quiet install sample-tool==1.0.0")]
-    [InlineData("python -m pip --isolated install sample-tool==1.0.0")]
+    [InlineData("python -P -m pip --isolated install sample-tool==1.0.0")]
     [InlineData("npm install sample-tool@1.0.0 --no-audit --no-fund --package-lock-only")]
     [InlineData("gem install sample-gem --clear-sources -s https://rubygems.org")]
     public void Scan_AcceptsSupportedGlobalAndInstallFlags(string command)

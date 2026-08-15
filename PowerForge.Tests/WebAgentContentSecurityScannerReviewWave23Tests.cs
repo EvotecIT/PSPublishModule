@@ -81,8 +81,8 @@ public sealed partial class WebAgentContentSecurityScannerTests
     [InlineData("pip --version")]
     [InlineData("pip -V")]
     [InlineData("pip --help")]
-    [InlineData("python -m pip --version")]
-    [InlineData("py -m pip -h")]
+    [InlineData("python -P -m pip --version")]
+    [InlineData("py -I -m pip -h")]
     public void Scan_AllowsPipInformationalCommands(string command)
     {
         using var scanner = new WebAgentContentSecurityScanner();

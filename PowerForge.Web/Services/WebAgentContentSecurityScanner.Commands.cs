@@ -5,7 +5,7 @@ namespace PowerForge.Web;
 public sealed partial class WebAgentContentSecurityScanner
 {
     private static readonly Regex CommandSegmentRegex = new(
-        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|nuget(?:\.exe|\.cmd)?(?=\s+(?:install|restore|update)\b)|Install-Package|Update-Package|Install-Module|Save-Module|Install-Script|Update-Script|Save-Script|Install-PSResource|Save-PSResource|Update-Module|Update-PSResource|Install-PackageProvider|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|poetry(?=\s+(?:add|install|sync|update|remove|lock|run|build|self|plugin|source|config|python)\b)|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
+        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|nuget(?:\.exe|\.cmd)?(?=\s+(?:install|restore|update)\b)|Install-Package|Update-Package|Install-Module|Save-Module|Install-Script|Update-Script|Save-Script|Install-PSResource|Save-PSResource|Update-Module|Update-PSResource|Install-PackageProvider|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|poetry(?=\s+(?:add|install|sync|update|remove|lock|run|build|self|plugin|source|config|python)\b)|cargo|gem|composer|bundler|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ShellTokenConstructionRegex = new(
         @"[\x5C`](?!\r?\n)[^\r\n]",
@@ -44,6 +44,13 @@ public sealed partial class WebAgentContentSecurityScanner
                 AddFinding(findings, "error", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND", path,
                     GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
                     "Package command operands must not use shell escape construction; spell the executable and package identifiers literally.");
+                continue;
+            }
+            if (HasDataAppendingWrapperPrefix(content, match.Index))
+            {
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND", path,
+                    GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                    "Package commands invoked through data-appending wrappers can receive unchecked package operands from standard input.");
                 continue;
             }
             if (HasCommandScopedEnvironmentPrefix(content, match.Index) ||
@@ -592,6 +599,9 @@ public sealed partial class WebAgentContentSecurityScanner
             return -1;
         for (var index = 1; index < moduleIndex; index++)
         {
+            if (tokens[index].Equals("-P", StringComparison.Ordinal) ||
+                tokens[index].Equals("-I", StringComparison.Ordinal))
+                continue;
             if (tokens[index].Equals("-c", StringComparison.Ordinal) ||
                 tokens[index].StartsWith("-c", StringComparison.Ordinal) && tokens[index].Length > 2)
             {

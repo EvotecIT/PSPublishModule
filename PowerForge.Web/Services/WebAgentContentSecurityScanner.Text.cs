@@ -126,6 +126,16 @@ public sealed partial class WebAgentContentSecurityScanner
         RemoteExecutionFlowState? flowState = null)
     {
         var normalized = ShellContinuationRegex.Replace(content, static match => new string(' ', match.Length));
+        foreach (Match download in SavedDownloadCommandRegex.Matches(normalized))
+        {
+            if (!UsesServerSelectedDownloadName(
+                    download.Groups["downloader"].Value,
+                    download.Groups["arguments"].Value))
+                continue;
+            AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path,
+                GetReportedLine(content, download.Index, lineOffset, countLogicalLines),
+                "Server-selected download filenames cannot be correlated safely with later execution; use an explicit local output path.");
+        }
         foreach (var pattern in new[]
                  {
                      RemoteExecutionPipelineRegex,
@@ -295,6 +305,23 @@ public sealed partial class WebAgentContentSecurityScanner
                         : NormalizeToken(outputDirectory).TrimEnd('/', '\\') + "/" + fileName;
             }
         }
+    }
+
+    private static bool UsesServerSelectedDownloadName(string downloader, string arguments)
+    {
+        var executable = NormalizeExecutable(downloader);
+        return Tokenize(arguments).Any(token => executable switch
+        {
+            "wget" => token.Equals("--content-disposition", StringComparison.OrdinalIgnoreCase) ||
+                      token.StartsWith("--content-disposition=", StringComparison.OrdinalIgnoreCase) ||
+                      token.Equals("--trust-server-names", StringComparison.OrdinalIgnoreCase) ||
+                      token.StartsWith("--trust-server-names=", StringComparison.OrdinalIgnoreCase),
+            "curl" => token.Equals("--remote-header-name", StringComparison.OrdinalIgnoreCase) ||
+                      token.StartsWith("--remote-header-name=", StringComparison.OrdinalIgnoreCase) ||
+                      token.StartsWith("-", StringComparison.Ordinal) &&
+                      !token.StartsWith("--", StringComparison.Ordinal) && token[1..].Contains('J'),
+            _ => false
+        });
     }
 
     private static void ExtractUrls(string content, ISet<Uri> urls)

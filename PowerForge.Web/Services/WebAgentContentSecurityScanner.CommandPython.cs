@@ -24,6 +24,13 @@ public sealed partial class WebAgentContentSecurityScanner
             if (moduleIndex < 0 || moduleIndex + 1 >= tokens.Length)
                 return;
             var module = tokens[moduleIndex + 1];
+            if ((IsPythonPipModule(module) || IsPythonPipxModule(module)) &&
+                !HasSafePythonModuleLookup(tokens, moduleIndex))
+            {
+                AddUnverifiableOperand($"{tokens[0]} -m {module}", path, line, findings,
+                    "unsafe local Python module lookup");
+                return;
+            }
             if (IsPythonPipxModule(module))
             {
                 ParsePipx(tokens, moduleIndex + 2, $"{tokens[0]} -m pipx", path, line, references, findings);
@@ -127,6 +134,11 @@ public sealed partial class WebAgentContentSecurityScanner
     private static bool IsPythonPipxModule(string module)
         => module.Equals("pipx", StringComparison.OrdinalIgnoreCase) ||
            module.Equals("pipx.__main__", StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasSafePythonModuleLookup(string[] tokens, int moduleIndex)
+        => tokens.Take(moduleIndex).Any(static token =>
+            token.Equals("-P", StringComparison.Ordinal) ||
+            token.Equals("-I", StringComparison.Ordinal));
 
     private static void ParsePipx(
         string[] tokens,

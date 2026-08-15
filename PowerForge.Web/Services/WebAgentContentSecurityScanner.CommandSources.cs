@@ -39,9 +39,9 @@ public sealed partial class WebAgentContentSecurityScanner
                     $"Composer project-root option '{option}' can select uninspected repository, plugin, and dependency configuration.");
                 return false;
             }
-            if (ecosystem == "pypi" && (option.Equals("-r", StringComparison.OrdinalIgnoreCase) ||
+            if (ecosystem == "pypi" && (option.Equals("-r", StringComparison.Ordinal) ||
                                         option.Equals("--requirement", StringComparison.OrdinalIgnoreCase) ||
-                                        option.Equals("-c", StringComparison.OrdinalIgnoreCase) ||
+                                        option.Equals("-c", StringComparison.Ordinal) ||
                                         option.Equals("--constraint", StringComparison.OrdinalIgnoreCase) ||
                                         option.Equals("--group", StringComparison.OrdinalIgnoreCase)))
             {
@@ -87,12 +87,12 @@ public sealed partial class WebAgentContentSecurityScanner
                      option.Equals("--userconfig", StringComparison.OrdinalIgnoreCase) ||
                      option.Equals("--globalconfig", StringComparison.OrdinalIgnoreCase),
              "pypi" => option.Equals("--index-url", StringComparison.OrdinalIgnoreCase) ||
-                       option.Equals("-i", StringComparison.OrdinalIgnoreCase) ||
+                       option.Equals("-i", StringComparison.Ordinal) ||
                        option.Equals("--index", StringComparison.OrdinalIgnoreCase) ||
                        option.Equals("--default-index", StringComparison.OrdinalIgnoreCase) ||
                       option.Equals("--extra-index-url", StringComparison.OrdinalIgnoreCase) ||
                       option.Equals("--find-links", StringComparison.OrdinalIgnoreCase) ||
-                      option.Equals("-f", StringComparison.OrdinalIgnoreCase) ||
+                      option.Equals("-f", StringComparison.Ordinal) ||
                       option.Equals("--config-file", StringComparison.OrdinalIgnoreCase),
             "crates" => option.Equals("--registry", StringComparison.OrdinalIgnoreCase) ||
                         option.Equals("--index", StringComparison.OrdinalIgnoreCase) ||
@@ -140,7 +140,7 @@ public sealed partial class WebAgentContentSecurityScanner
             "powershellgallery" => value.Equals("PSGallery", StringComparison.OrdinalIgnoreCase),
             "npm" => value.Equals("https://registry.npmjs.org", StringComparison.OrdinalIgnoreCase),
             "pypi" when option.Equals("--index-url", StringComparison.OrdinalIgnoreCase) ||
-                        option.Equals("-i", StringComparison.OrdinalIgnoreCase) ||
+                        option.Equals("-i", StringComparison.Ordinal) ||
                         option.Equals("--index", StringComparison.OrdinalIgnoreCase) ||
                         option.Equals("--default-index", StringComparison.OrdinalIgnoreCase) =>
                 value.Equals("https://pypi.org/simple", StringComparison.OrdinalIgnoreCase),

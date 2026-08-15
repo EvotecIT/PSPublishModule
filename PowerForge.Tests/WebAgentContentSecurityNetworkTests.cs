@@ -9,10 +9,10 @@ public sealed partial class WebAgentContentSecurityScannerTests
 {
     [Theory]
     [InlineData("dotnet.exe tool install Sample.Tool --version 1.0.0", "nuget")]
-    [InlineData("python.exe -m pip install sample-tool==1.0.0", "pypi")]
+    [InlineData("python.exe -P -m pip install sample-tool==1.0.0", "pypi")]
     [InlineData("pip.exe install sample-tool==1.0.0", "pypi")]
     [InlineData("npm.cmd install sample-tool@1.0.0", "npm")]
-    [InlineData("python3.12.exe -m pip install sample-tool==1.0.0", "pypi")]
+    [InlineData("python3.12.exe -P -m pip install sample-tool==1.0.0", "pypi")]
     [InlineData("pip3.12 install sample-tool==1.0.0", "pypi")]
     public void Scan_NormalizesWindowsExecutableSuffixes(string command, string ecosystem)
     {

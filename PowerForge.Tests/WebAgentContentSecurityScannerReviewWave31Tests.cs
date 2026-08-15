@@ -31,9 +31,9 @@ public sealed partial class WebAgentContentSecurityScannerTests
     }
 
     [Theory]
-    [InlineData("python -m pipx install safe-package==1.0.0")]
-    [InlineData("python3 -m pipx.__main__ run safe-package==1.0.0")]
-    [InlineData("py -m pipx upgrade safe-package==1.0.0")]
+    [InlineData("python -P -m pipx install safe-package==1.0.0")]
+    [InlineData("python3 -I -m pipx.__main__ run safe-package==1.0.0")]
+    [InlineData("py -P -m pipx upgrade safe-package==1.0.0")]
     public void Scan_VerifiesPythonModulePipxPackages(string command)
     {
         using var handler = new RegistryHandler(_ => JsonResponse("""{"releases":{"1.0.0":[{}]}}"""));

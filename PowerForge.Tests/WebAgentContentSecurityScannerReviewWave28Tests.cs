@@ -7,7 +7,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
     [Theory]
     [InlineData("pip install --target ./vendor safe-package==1.2.3")]
     [InlineData("pip install -t ./vendor safe-package==1.2.3")]
-    [InlineData("python -m pip install safe-package==1.2.3 --platform manylinux_2_17_x86_64")]
+    [InlineData("python -P -m pip install safe-package==1.2.3 --platform manylinux_2_17_x86_64")]
     [InlineData("uv pip install --python-version 3.12 safe-package==1.2.3")]
     public void Scan_AcceptsPythonDestinationAndSelectionOptions(string command)
     {

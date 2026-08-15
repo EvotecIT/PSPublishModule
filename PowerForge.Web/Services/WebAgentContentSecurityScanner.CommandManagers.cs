@@ -294,6 +294,16 @@ public sealed partial class WebAgentContentSecurityScanner
         var verb = tokens[verbIndex].ToLowerInvariant();
         if (verb is "add" or "install")
         {
+            if (tokens.Any(static token =>
+                    token.Equals("--offline", StringComparison.OrdinalIgnoreCase) ||
+                    token.StartsWith("--offline=", StringComparison.OrdinalIgnoreCase) ||
+                    token.Equals("--frozen", StringComparison.OrdinalIgnoreCase) ||
+                    token.StartsWith("--frozen=", StringComparison.OrdinalIgnoreCase)))
+            {
+                AddUnverifiableOperand("cargo " + verb, path, line, findings,
+                    "offline or frozen local-cache dependency mode");
+                return;
+            }
             AddMultipleOperands("crates", "cargo " + verb, tokens, verbIndex + 1, path, line, references, findings);
             return;
         }
