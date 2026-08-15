@@ -234,6 +234,12 @@ public sealed partial class WebAgentContentSecurityScanner
                 path, line, references, findings);
             return;
         }
+        if (tokens[0].Equals("yarn", StringComparison.OrdinalIgnoreCase) && verb is "exec" or "x")
+        {
+            AddUnverifiableOperand("yarn " + tokens[verbIndex], path, line, findings,
+                "shell command or unsupported executable payload");
+            return;
+        }
         if ((tokens[0].Equals("npm", StringComparison.OrdinalIgnoreCase) ||
              tokens[0].Equals("pnpm", StringComparison.OrdinalIgnoreCase) ||
              tokens[0].Equals("bun", StringComparison.OrdinalIgnoreCase)) &&
