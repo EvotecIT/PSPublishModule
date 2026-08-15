@@ -32,6 +32,34 @@ inputs:
     description: Checkout the caller commit before reading site-config. Set false only when the caller already checked out the exact source.
     required: false
     default: "true"
+  manage-incremental-purge:
+    description: Restore, apply, and save the private deployment-manifest baseline. Intended for the reusable deployment workflow after it uploads the current manifest.
+    required: false
+    default: "false"
+  deployment-id:
+    description: Exact deployed source commit used to version the successful manifest baseline.
+    required: false
+    default: ""
+  deployment-run-id:
+    description: Workflow run that performed the GitHub Pages deployment.
+    required: false
+    default: ""
+  deployment-run-attempt:
+    description: Workflow attempt that performed the GitHub Pages deployment.
+    required: false
+    default: ""
+  deployment-job-id:
+    description: Exact Actions job/check-run identifier that performed this GitHub Pages deployment.
+    required: false
+    default: ""
+  manifest-artifact-name:
+    description: Invocation-scoped private deployment-manifest artifact produced by the website build.
+    required: false
+    default: "powerforge-cloudflare-cache-manifest"
+  github-token:
+    description: Caller repository token with Actions read and Deployments read permission for repository-wide baseline lookup and exact Pages deployment ordering.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -53,7 +81,127 @@ runs:
       with:
         global-json-file: ${{ github.action_path }}/../../../global.json
 
+    - name: Build PowerForge Web CLI
+      shell: pwsh
+      env:
+        POWERFORGE_CLOUDFLARE_CLI_PROJECT: ${{ github.action_path }}/../../../PowerForge.Web.Cli/PowerForge.Web.Cli.csproj
+      run: |
+        dotnet build $env:POWERFORGE_CLOUDFLARE_CLI_PROJECT --configuration Release --framework net10.0 --nologo --verbosity minimal
+        if ($LASTEXITCODE -ne 0) {
+          throw "Building the PowerForge Web CLI failed with exit code $LASTEXITCODE."
+        }
+
+    - name: Resolve incremental purge state
+      id: incremental
+      shell: pwsh
+      env:
+        POWERFORGE_MANAGE_INCREMENTAL_PURGE: ${{ inputs.manage-incremental-purge }}
+        POWERFORGE_CLOUDFLARE_CLI_PROJECT: ${{ github.action_path }}/../../../PowerForge.Web.Cli/PowerForge.Web.Cli.csproj
+        POWERFORGE_DEPLOYMENT_ID: ${{ inputs.deployment-id }}
+        POWERFORGE_DEPLOYMENT_JOB_ID: ${{ inputs.deployment-job-id }}
+        POWERFORGE_CLOUDFLARE_SITE_CONFIG: ${{ inputs.site-config }}
+        POWERFORGE_CLOUDFLARE_HOSTNAME_OVERRIDE: ${{ inputs.hostname }}
+        POWERFORGE_CLOUDFLARE_BASE_PATH_OVERRIDE: ${{ inputs.base-path }}
+        POWERFORGE_GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+        POWERFORGE_GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([IO.Path]::DirectorySeparatorChar)
+        $workspacePrefix = $workspace + [IO.Path]::DirectorySeparatorChar
+        $siteConfig = [IO.Path]::GetFullPath((Join-Path $workspace $env:POWERFORGE_CLOUDFLARE_SITE_CONFIG))
+        if (-not $siteConfig.StartsWith($workspacePrefix, [StringComparison]::Ordinal) -or
+            -not (Test-Path -LiteralPath $siteConfig -PathType Leaf)) {
+          throw 'site-config must identify a file inside the caller repository.'
+        }
+
+        if ($env:POWERFORGE_MANAGE_INCREMENTAL_PURGE -notin @('true', 'false')) {
+          throw 'manage-incremental-purge must be true or false.'
+        }
+        $jsonOutput = @(dotnet run --no-build --no-restore --configuration Release --framework net10.0 --project $env:POWERFORGE_CLOUDFLARE_CLI_PROJECT -- cloudflare inspect --site-config $siteConfig --output json)
+        if ($LASTEXITCODE -ne 0) {
+          throw "Resolving the inherited Cloudflare site profile failed with exit code $LASTEXITCODE."
+        }
+        try {
+          $profile = ($jsonOutput -join [Environment]::NewLine) | ConvertFrom-Json
+          if ($profile.success -ne $true -or [string]::IsNullOrWhiteSpace([string]$profile.result.purgeMode)) {
+            throw 'The Cloudflare profile result did not contain purgeMode.'
+          }
+        } catch {
+          throw "Resolving the inherited Cloudflare site profile returned invalid JSON: $($_.Exception.Message)"
+        }
+        $enabled = ($env:POWERFORGE_MANAGE_INCREMENTAL_PURGE -eq 'true' -and [string]$profile.result.purgeMode -ceq 'incremental')
+        if ($enabled -and [string]::IsNullOrWhiteSpace($env:POWERFORGE_GITHUB_TOKEN)) {
+          throw 'Incremental purge requires github-token with Actions read and Deployments read permission.'
+        }
+        if ($enabled -and $env:POWERFORGE_DEPLOYMENT_JOB_ID -notmatch '^[1-9][0-9]*$') {
+          throw 'Managed incremental purge requires the exact GitHub Pages deployment-job-id.'
+        }
+        if ($enabled -and (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_HOSTNAME_OVERRIDE) -or
+                          -not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_BASE_PATH_OVERRIDE))) {
+          throw 'Managed incremental purge does not support hostname or base-path overrides; configure the canonical BaseUrl in site-config.'
+        }
+        $relativeConfig = [IO.Path]::GetRelativePath($workspace, $siteConfig).Replace([IO.Path]::DirectorySeparatorChar, '/')
+        $scopeBytes = [Text.Encoding]::UTF8.GetBytes("$($env:POWERFORGE_GITHUB_REPOSITORY_ID)|$relativeConfig")
+        $scope = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($scopeBytes)).ToLowerInvariant()
+        $deployment = [string]$env:POWERFORGE_DEPLOYMENT_ID
+        if ([string]::IsNullOrWhiteSpace($deployment)) {
+          $deployment = [string]$env:GITHUB_SHA
+        }
+        if ($deployment -notmatch '^[a-fA-F0-9]{40,64}$') {
+          throw 'deployment-id must be an exact source commit.'
+        }
+        "enabled=$($enabled.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "scope=$scope" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "deployment=$($deployment.ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "baseline_artifact=powerforge-cloudflare-manifest-v2-$($env:POWERFORGE_GITHUB_REPOSITORY_ID)-$scope" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+    - name: Download current deployment manifest
+      if: ${{ steps.incremental.outputs.enabled == 'true' }}
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: ${{ inputs.manifest-artifact-name }}
+        path: ${{ runner.temp }}/powerforge-cloudflare-cache-current
+
+    - name: Locate last deployed manifest
+      if: ${{ steps.incremental.outputs.enabled == 'true' }}
+      id: locate_manifest
+      shell: pwsh
+      env:
+        POWERFORGE_ARTIFACT_NAME: ${{ steps.incremental.outputs.baseline_artifact }}
+        POWERFORGE_GITHUB_API_URL: ${{ github.api_url }}
+        POWERFORGE_GITHUB_REPOSITORY: ${{ github.repository }}
+        POWERFORGE_GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: '& "$env:GITHUB_ACTION_PATH/Resolve-PowerForgeRepositoryArtifact.ps1"'
+
+    - name: Download last deployed manifest
+      if: ${{ steps.incremental.outputs.enabled == 'true' && steps.locate_manifest.outputs.found == 'true' }}
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: ${{ steps.incremental.outputs.baseline_artifact }}
+        path: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline
+        github-token: ${{ inputs.github-token }}
+        repository: ${{ github.repository }}
+        run-id: ${{ steps.locate_manifest.outputs.run_id }}
+
+    - name: Resolve deployment baseline order
+      if: ${{ steps.incremental.outputs.enabled == 'true' }}
+      id: baseline_order
+      shell: pwsh
+      env:
+        POWERFORGE_CLOUDFLARE_BASELINE_STATE: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline/state.json
+        POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline/manifest.json
+        POWERFORGE_BASELINE_ARTIFACT_RUN_ID: ${{ steps.locate_manifest.outputs.run_id }}
+        POWERFORGE_GITHUB_API_URL: ${{ github.api_url }}
+        POWERFORGE_GITHUB_REPOSITORY: ${{ github.repository }}
+        POWERFORGE_GITHUB_TOKEN: ${{ inputs.github-token }}
+        POWERFORGE_DEPLOYMENT_RUN_ATTEMPT: ${{ inputs.deployment-run-attempt || github.run_attempt }}
+        POWERFORGE_DEPLOYMENT_RUN_ID: ${{ inputs.deployment-run-id || github.run_id }}
+        POWERFORGE_DEPLOYMENT_JOB_ID: ${{ inputs.deployment-job-id }}
+      run: '& "$env:GITHUB_ACTION_PATH/Resolve-PowerForgeCloudflareBaselineOrder.ps1"'
+
     - name: Apply Cloudflare site policy
+      if: ${{ steps.incremental.outputs.enabled != 'true' || steps.baseline_order.outputs.stale != 'true' }}
+      id: site_policy
       shell: pwsh
       env:
         POWERFORGE_CLOUDFLARE_API_TOKEN: ${{ inputs.api-token }}
@@ -64,3 +212,48 @@ runs:
         POWERFORGE_CLOUDFLARE_SITE_CONFIG: ${{ inputs.site-config }}
         POWERFORGE_CLOUDFLARE_ZONE_ID: ${{ inputs.zone-id }}
       run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeCloudflareSitePolicy.ps1"'
+
+    - name: Purge changed Cloudflare URLs
+      if: ${{ steps.incremental.outputs.enabled == 'true' && steps.baseline_order.outputs.stale != 'true' }}
+      shell: pwsh
+      env:
+        POWERFORGE_CLOUDFLARE_API_TOKEN: ${{ inputs.api-token }}
+        POWERFORGE_CLOUDFLARE_BASELINE_REASON: ${{ steps.baseline_order.outputs.reason }}
+        POWERFORGE_CLOUDFLARE_CURRENT_MANIFEST: ${{ runner.temp }}/powerforge-cloudflare-cache-current/manifest.json
+        POWERFORGE_CLOUDFLARE_DRY_RUN: ${{ inputs.dry-run }}
+        POWERFORGE_CLOUDFLARE_FORCE_HOSTNAME_FALLBACK: ${{ steps.site_policy.outputs.changes_required || 'false' }}
+        POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline/manifest.json
+        POWERFORGE_CLOUDFLARE_SITE_CONFIG: ${{ inputs.site-config }}
+        POWERFORGE_CLOUDFLARE_USE_PREVIOUS: ${{ steps.baseline_order.outputs.use_previous }}
+        POWERFORGE_CLOUDFLARE_ZONE_ID: ${{ inputs.zone-id }}
+      run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeCloudflareIncrementalPurge.ps1"'
+
+    - name: Save deployed manifest baseline
+      if: ${{ steps.incremental.outputs.enabled == 'true' && steps.baseline_order.outputs.stale != 'true' && inputs.dry-run != 'true' }}
+      shell: pwsh
+      env:
+        POWERFORGE_CLOUDFLARE_BASELINE_STATE: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline/state.json
+        POWERFORGE_CLOUDFLARE_CURRENT_MANIFEST: ${{ runner.temp }}/powerforge-cloudflare-cache-current/manifest.json
+        POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline/manifest.json
+        POWERFORGE_DEPLOYMENT_RUN_ATTEMPT: ${{ inputs.deployment-run-attempt || github.run_attempt }}
+        POWERFORGE_DEPLOYMENT_RUN_ID: ${{ inputs.deployment-run-id || github.run_id }}
+        POWERFORGE_DEPLOYMENT_JOB_ID: ${{ inputs.deployment-job-id }}
+      run: |
+        $baselineDirectory = Split-Path -Parent $env:POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST
+        New-Item -ItemType Directory -Path $baselineDirectory -Force | Out-Null
+        Copy-Item -LiteralPath $env:POWERFORGE_CLOUDFLARE_CURRENT_MANIFEST -Destination $env:POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST -Force
+        [ordered]@{
+          schemaVersion = 1
+          deploymentRunId = [string] $env:POWERFORGE_DEPLOYMENT_RUN_ID
+          deploymentRunAttempt = [int] $env:POWERFORGE_DEPLOYMENT_RUN_ATTEMPT
+          deploymentJobId = [string] $env:POWERFORGE_DEPLOYMENT_JOB_ID
+        } | ConvertTo-Json -Compress | Set-Content -LiteralPath $env:POWERFORGE_CLOUDFLARE_BASELINE_STATE -Encoding utf8
+
+    - name: Upload deployed manifest baseline
+      if: ${{ steps.incremental.outputs.enabled == 'true' && steps.baseline_order.outputs.stale != 'true' && inputs.dry-run != 'true' }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ steps.incremental.outputs.baseline_artifact }}
+        path: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline
+        retention-days: 7
+        overwrite: true

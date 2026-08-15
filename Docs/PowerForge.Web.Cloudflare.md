@@ -8,7 +8,7 @@ Cloudflare proxy. It can:
 - reconcile host-scoped cache rules without replacing unrelated rules
 - set response security headers from the site's existing `AgentReadiness.SecurityHeaders` policy
 - optionally reconcile Smart Tiered Cache for the zone
-- purge individual URLs, a hostname, or the entire zone after deployment
+- purge changed deployment URLs incrementally, explicit URLs, a hostname, or the entire zone after deployment
 - verify live `CF-Cache-Status` behavior after warmup
 
 GitHub Pages does not consume `_headers`. A proxied GitHub Pages site therefore
@@ -92,7 +92,7 @@ Sites without a `Cloudflare.Cache` block retain the compatibility policy:
 | Data and discovery | Origin-controlled | Origin-controlled | Covers JSON, XML, text, sitemap, and LLM discovery files. |
 | Static assets | Origin-controlled | Origin-controlled | Covers CSS, JavaScript, images, fonts, audio/video media, maps, PDFs, archives, and Blazor binaries. |
 
-For a generated static site, opt in to a longer edge TTL and hostname-wide purge:
+For a generated static site, opt in to a longer edge TTL and incremental purge:
 
 ```json
 {
@@ -100,7 +100,7 @@ For a generated static site, opt in to a longer edge TTL and hostname-wide purge
     "Cache": {
       "EdgeTtlSeconds": 604800
     },
-    "PurgeMode": "hostname",
+    "PurgeMode": "incremental",
     "SmartTieredCache": true
   }
 }
@@ -161,22 +161,91 @@ secrets:
 The existing `powerforge-cloudflare-cache-policy` action remains cache-only for
 backward compatibility.
 
+When `PurgeMode` is `incremental`, the reusable deployment workflow creates a
+private manifest from the exact Pages `artifact.tar`. It reads the tar
+sequentially and hashes each deployed file without reopening thousands of files
+from the generated output tree. The manifest is uploaded as a one-day workflow
+artifact and compared with the last successfully purged baseline. Successful
+baselines are private, site-scoped repository artifacts, so deployments from
+different branches share the same continuity state. They are retained for seven
+days and are never published with the website;
+after a longer idle period, the next deployment safely uses a hostname purge.
+Purge-mode detection loads the effective site specification, including
+`extends`, so an inherited `Cloudflare.PurgeMode` has the same behavior as a
+value declared directly in the child configuration.
+Current-manifest artifact names remain unique to each reusable-workflow
+invocation so one caller run can deploy multiple sites or matrix entries without
+collisions.
+
+Lowercase `index.html` files map to both their physical URL and clean directory
+URL, so changing `docs/index.html` invalidates both `docs/index.html` and
+`docs/`. Other filename casing remains a distinct deployed path. Added, changed,
+and removed paths are purged. Up to 500 changed URL paths are sent in batches of
+100, matching Cloudflare's per-request URL limit. A missing, unreadable, or
+different-site baseline, or a larger diff, safely falls back to a hostname
+purge. The new baseline is saved only after deployment and purge succeed.
+The manifest also fingerprints the effective managed cache policy. Changing a
+cache-affecting setting such as `Cloudflare.Cache.EdgeTtlSeconds` therefore
+forces a hostname purge even when every deployed file is byte-for-byte
+unchanged. A baseline created before policy fingerprints existed also receives
+the same safe one-time fallback.
+If the live managed site policy drifted, policy reconciliation forces the same
+hostname fallback even when the desired manifest fingerprint and deployed files
+are unchanged. This removes objects created under the drifted cache settings.
+When a site keeps the same deployment scope but changes `BaseUrl`, the fallback
+purges both the previous and current hostnames before advancing the baseline.
+Cloudflare must accept both hostnames for the configured zone; otherwise the
+purge fails closed so the old hostname is not silently abandoned.
+Managed cache-rule expressions match both `GET` and Cloudflare's internal
+`PURGE` evaluation, as required for reliable URL invalidation.
+Action dry-runs calculate and report the same bounded decision but neither send
+the purge request nor advance the last-successful deployment baseline.
+The policy job correlates GitHub's actual Pages deployment records with the
+exact Actions run and deployment job check-run id that produced the successful
+baseline. This keeps separate reusable-site jobs in the same caller invocation
+distinct. Retrying only an older policy job after a newer deployment skips the
+stale policy, purge, and baseline update; deliberately rerunning the older Pages
+deployment remains supported and is distinguished from the earlier attempt. If Pages succeeds but
+the later policy or purge fails, the next run still sees that intervening Pages
+deployment and uses a hostname purge instead of comparing against a non-adjacent
+baseline. The last successful baseline remains available in this case only to
+discover a previous hostname; it is never used for a file diff. A hostname
+migration therefore invalidates both the old and current host even when an
+intervening deployment prevents incremental comparison. This remains safe when
+deployment and policy jobs from different runs overlap and does not depend on a
+post-deployment receipt upload. The caller token must grant `actions: read` and
+`deployments: read`; the reusable workflow declares both permissions.
+
+Incremental purge targets the canonical URLs emitted by the deployment. It is
+therefore intended for static sites whose query parameters do not select a
+different representation. Cloudflare's default cache key includes the query
+string, and a canonical URL purge does not enumerate arbitrary cached query
+variants. Keep `PurgeMode` set to `hostname` for a site that intentionally
+caches query-dependent responses.
+The reusable managed-incremental action derives its hostname and base path from
+the same `site.json` `BaseUrl` used to build the manifest. It rejects the
+action's `hostname` and `base-path` overrides in this mode so purge targets
+cannot silently diverge from the policy application target.
+
 ## Purge and verify after deployment
 
-The purge command uses `Cloudflare.PurgeMode` from `site.json`. With the static
-profile above, it purges every cached object for the site's hostname after the
-new origin content is available:
+The purge command uses `Cloudflare.PurgeMode` from `site.json`. The reusable
+deployment workflow supplies the private current and previous manifests
+automatically. For manual incremental execution, provide the same inputs:
 
 ```bash
 powerforge-web cloudflare purge \
   --zone-id <ZONE_ID> \
   --token-env CLOUDFLARE_API_TOKEN \
-  --site-config ./site.json
+  --site-config ./site.json \
+  --current-manifest ./current-manifest.json \
+  --previous-manifest ./previous-manifest.json
 ```
 
 Cloudflare accepts at most 30 normalized hostnames or 100 URLs in one purge
-request. PowerForge validates the applicable mode-specific limit before sending
-the request.
+request. PowerForge validates explicit mode-specific limits and batches the
+bounded incremental diff. Omitting the previous manifest intentionally triggers
+the safe hostname fallback used for first deployment.
 
 Verify public cache behavior:
 
@@ -206,10 +275,12 @@ did not use the intended cache policy.
 
 Run purge only after the new origin content is available. A first request may be
 `MISS`; warmup followed by an allowed cache status proves that the edge can
-actually retain the response. Prefer hostname purge for a generated static site
-with many routes; file purge remains useful when only a small, explicit URL set
-should be invalidated. Use zone-wide `everything` purge only when every hostname
-in the zone must be cleared.
+actually retain the response. Prefer incremental purge for a generated static
+site deployed through the reusable workflow. Keep hostname purge as the broad
+fallback or for deployment systems that cannot retain a trustworthy baseline;
+file purge remains useful when only a small, explicit URL set should be
+invalidated. Use zone-wide `everything` purge only when every hostname in the
+zone must be cleared.
 
 ## Cloudflare Pages readiness gate
 

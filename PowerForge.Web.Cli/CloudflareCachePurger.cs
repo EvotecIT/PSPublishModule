@@ -8,6 +8,7 @@ namespace PowerForge.Web.Cli;
 internal enum CloudflareCachePurgeMode
 {
     Files,
+    Incremental,
     Hostname,
     Everything
 }
@@ -17,7 +18,7 @@ internal static class CloudflareCachePurger
     private const int MaxFileTargets = 100;
     private const int MaxHostnameTargets = 30;
 
-    internal static (bool ok, string message) Purge(
+    internal static (bool ok, string message, bool requestAttempted) Purge(
         string zoneId,
         string apiToken,
         CloudflareCachePurgeMode mode,
@@ -28,30 +29,35 @@ internal static class CloudflareCachePurger
     {
         var normalizedZoneId = (zoneId ?? string.Empty).Trim();
         if (normalizedZoneId.Length != 32 || normalizedZoneId.Any(character => !Uri.IsHexDigit(character)))
-            return (false, "Cloudflare zoneId must be a 32-character hexadecimal identifier.");
+            return (false, "Cloudflare zoneId must be a 32-character hexadecimal identifier.", false);
         if (string.IsNullOrWhiteSpace(apiToken))
-            return (false, "Missing apiToken.");
+            return (false, "Missing apiToken.", false);
+        if (mode == CloudflareCachePurgeMode.Incremental)
+            return (false, "Incremental purge requires current and previous deployment manifests.", false);
 
+        var targetComparer = mode == CloudflareCachePurgeMode.Files
+            ? StringComparer.Ordinal
+            : StringComparer.OrdinalIgnoreCase;
         var normalizedTargets = (targets ?? Array.Empty<string>())
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(value => value.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(targetComparer)
             .ToArray();
 
         if (mode != CloudflareCachePurgeMode.Everything && normalizedTargets.Length == 0)
-            return (false, $"Nothing to purge in {FormatMode(mode)} mode.");
+            return (false, $"Nothing to purge in {FormatMode(mode)} mode.", false);
 
         if (mode == CloudflareCachePurgeMode.Files)
         {
             if (normalizedTargets.Length > MaxFileTargets)
-                return (false, $"Cloudflare file purge accepts at most {MaxFileTargets} URLs per request.");
+                return (false, $"Cloudflare file purge accepts at most {MaxFileTargets} URLs per request.", false);
 
             foreach (var target in normalizedTargets)
             {
                 if (!Uri.TryCreate(target, UriKind.Absolute, out var uri) ||
                     (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
                     string.IsNullOrWhiteSpace(uri.Host))
-                    return (false, $"Cloudflare file purge target must be an absolute HTTP or HTTPS URL: '{target}'.");
+                    return (false, $"Cloudflare file purge target must be an absolute HTTP or HTTPS URL: '{target}'.", false);
             }
         }
         else if (mode == CloudflareCachePurgeMode.Hostname)
@@ -65,11 +71,11 @@ internal static class CloudflareCachePurger
             }
             catch (ArgumentException ex)
             {
-                return (false, ex.Message);
+                return (false, ex.Message, false);
             }
 
             if (normalizedTargets.Length > MaxHostnameTargets)
-                return (false, $"Cloudflare hostname purge accepts at most {MaxHostnameTargets} hostnames per request.");
+                return (false, $"Cloudflare hostname purge accepts at most {MaxHostnameTargets} hostnames per request.", false);
         }
 
         if (dryRun)
@@ -79,7 +85,7 @@ internal static class CloudflareCachePurger
                 logger?.Info($"  - {target}");
             if (normalizedTargets.Length > 50)
                 logger?.Info($"  ... ({normalizedTargets.Length - 50} more)");
-            return (true, "Dry run.");
+            return (true, "Dry run.", false);
         }
 
         var payload = mode switch
@@ -100,13 +106,13 @@ internal static class CloudflareCachePurger
                 apiToken,
                 payload);
             if (!response.Success)
-                return (false, $"Cloudflare purge failed: {response.ErrorMessage}");
+                return (false, $"Cloudflare purge failed: {response.ErrorMessage}", true);
 
             return mode switch
             {
-                CloudflareCachePurgeMode.Everything => (true, "Purged everything."),
-                CloudflareCachePurgeMode.Hostname => (true, $"Purged {normalizedTargets.Length} hostname(s)."),
-                _ => (true, $"Purged {normalizedTargets.Length} URL(s).")
+                CloudflareCachePurgeMode.Everything => (true, "Purged everything.", true),
+                CloudflareCachePurgeMode.Hostname => (true, $"Purged {normalizedTargets.Length} hostname(s).", true),
+                _ => (true, $"Purged {normalizedTargets.Length} URL(s).", true)
             };
         }
         finally
@@ -123,6 +129,10 @@ internal static class CloudflareCachePurger
             case "":
             case "files":
                 mode = CloudflareCachePurgeMode.Files;
+                return true;
+            case "incremental":
+            case "manifest":
+                mode = CloudflareCachePurgeMode.Incremental;
                 return true;
             case "hostname":
             case "host":
@@ -146,6 +156,9 @@ internal static class CloudflareCachePurger
             case "files":
                 mode = CloudflareCachePurgeMode.Files;
                 return true;
+            case "incremental":
+                mode = CloudflareCachePurgeMode.Incremental;
+                return true;
             case "hostname":
                 mode = CloudflareCachePurgeMode.Hostname;
                 return true;
@@ -160,6 +173,7 @@ internal static class CloudflareCachePurger
 
     internal static string FormatMode(CloudflareCachePurgeMode mode) => mode switch
     {
+        CloudflareCachePurgeMode.Incremental => "incremental",
         CloudflareCachePurgeMode.Hostname => "hostname",
         CloudflareCachePurgeMode.Everything => "everything",
         _ => "files"

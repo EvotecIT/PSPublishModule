@@ -168,6 +168,7 @@ on:
 permissions:
   actions: write
   contents: read
+  deployments: read
   packages: read
 
 env:
@@ -252,6 +253,7 @@ jobs:
       site_artifact_name: ${{ inputs.deployment_target == 'linux' && format('powerforge-site-{0}', inputs.deployment_site) || '' }}
       site_artifact_path: ${{ inputs.site_output_path }}
       site_artifact_retention_days: ${{ inputs.deployment_artifact_retention_days }}
+      generate_cloudflare_cache_manifest: ${{ inputs.deployment_target == 'github-pages' && inputs.manage_cloudflare_site_policy }}
     secrets:
       indexnow_key: ${{ secrets.indexnow_key }}
       repository_read_token: ${{ secrets.repository_read_token }}
@@ -263,10 +265,15 @@ jobs:
     needs: [build, guardrails]
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    outputs:
+      run_id: ${{ steps.deployment_provenance.outputs.run_id }}
+      run_attempt: ${{ steps.deployment_provenance.outputs.run_attempt }}
+      job_id: ${{ steps.deployment_provenance.outputs.job_id }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     permissions:
+      actions: write
       contents: read
       pages: write
       id-token: write
@@ -281,6 +288,14 @@ jobs:
         id: deployment_retry
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
 
+      - name: Record GitHub Pages deployment provenance
+        if: ${{ steps.deployment.outcome == 'success' || steps.deployment_retry.outcome == 'success' }}
+        id: deployment_provenance
+        shell: pwsh
+        run: |
+          "run_id=${{ github.run_id }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "run_attempt=${{ github.run_attempt }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "job_id=${{ job.check_run_id }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
   cloudflare-site-policy:
     if: ${{ inputs.deployment_target == 'github-pages' && inputs.manage_cloudflare_site_policy }}
@@ -290,7 +305,9 @@ jobs:
     environment:
       name: github-pages
     permissions:
+      actions: write
       contents: read
+      deployments: read
     steps:
       - name: Checkout exact caller source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -313,6 +330,13 @@ jobs:
           zone-id: ${{ secrets.cloudflare_zone_id }}
           api-token: ${{ secrets.cloudflare_api_token }}
           checkout-caller: "false"
+          manage-incremental-purge: "true"
+          deployment-id: ${{ needs.build.outputs.source_sha }}
+          deployment-run-id: ${{ needs.deploy.outputs.run_id }}
+          deployment-run-attempt: ${{ needs.deploy.outputs.run_attempt }}
+          deployment-job-id: ${{ needs.deploy.outputs.job_id }}
+          manifest-artifact-name: ${{ needs.build.outputs.cloudflare_cache_manifest_artifact_name }}
+          github-token: ${{ github.token }}
 
   deploy-linux:
     if: ${{ inputs.deployment_target == 'linux' }}

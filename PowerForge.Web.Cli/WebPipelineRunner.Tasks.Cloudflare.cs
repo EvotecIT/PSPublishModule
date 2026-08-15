@@ -27,7 +27,7 @@ internal static partial class WebPipelineRunner
         if ((GetBool(step, "purgeHostname") ?? GetBool(step, "purge-hostname")) == true)
             purgeModeValue = "hostname";
         if (!CloudflareCachePurger.TryParseCanonicalMode(purgeModeValue, out var purgeMode))
-            throw new InvalidOperationException($"cloudflare: unsupported purge mode '{purgeModeValue}'. Use files, hostname, or everything.");
+            throw new InvalidOperationException($"cloudflare: unsupported purge mode '{purgeModeValue}'. Use files, incremental, hostname, or everything.");
 
         // The profile fallback depends on what the caller configured, not on URLs
         // discovered later from deployed HTML. Preserve the normal route gate when
@@ -87,6 +87,35 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException($"cloudflare: missing API token (set env '{tokenEnv}' or provide 'token').");
 
         var dryRun = (GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? false);
+        if (purgeMode == CloudflareCachePurgeMode.Incremental)
+        {
+            if (string.IsNullOrWhiteSpace(baseUrl))
+                throw new InvalidOperationException("cloudflare: incremental purge requires siteConfig or baseUrl.");
+
+            var currentManifestPath = ResolvePath(
+                baseDir,
+                GetString(step, "currentManifestPath") ?? GetString(step, "current-manifest-path"));
+            if (string.IsNullOrWhiteSpace(currentManifestPath))
+                throw new InvalidOperationException("cloudflare: incremental purge requires currentManifestPath.");
+
+            var previousManifestPath = ResolvePath(
+                baseDir,
+                GetString(step, "previousManifestPath") ?? GetString(step, "previous-manifest-path"));
+            var result = CloudflareIncrementalCachePurger.Purge(
+                zoneId,
+                token,
+                baseUrl,
+                currentManifestPath,
+                previousManifestPath,
+                dryRun,
+                logger: null);
+            stepResult.Success = result.Success;
+            stepResult.Message = result.Message;
+            if (!result.Success)
+                throw new InvalidOperationException(result.Message);
+            return;
+        }
+
         IReadOnlyList<string> purgeTargets = urls;
         if (purgeMode == CloudflareCachePurgeMode.Hostname)
         {
@@ -138,7 +167,7 @@ internal static partial class WebPipelineRunner
         IReadOnlyList<string> targets,
         WebPipelineStepResult stepResult)
     {
-        var (ok, message) = CloudflareCachePurger.Purge(
+        var (ok, message, _) = CloudflareCachePurger.Purge(
             zoneId: zoneId,
             apiToken: token,
             mode: purgeMode,

@@ -58,13 +58,18 @@ internal static class CloudflareSitePolicyManager
                     return Failure(dryRun, $"No changes were made. {tieredPreflight.Message}");
             }
 
+            var preflightChangesRequired = cachePreflight.ChangesRequired ||
+                                           headerPreflight.ChangesRequired ||
+                                           tieredPreflight?.ChangesRequired == true;
+
             if (dryRun)
                 return Success(
                     cachePreflight,
                     headerPreflight,
                     tieredPreflight,
                     changed: false,
-                    $"{headerPreflight.Message} {cachePreflight.Message}{FormatTieredMessage(tieredPreflight)}");
+                    $"{headerPreflight.Message} {cachePreflight.Message}{FormatTieredMessage(tieredPreflight)}",
+                    changesRequired: preflightChangesRequired);
 
             CloudflareSmartTieredCacheResult? tieredResult = null;
             if (smartTieredCache.HasValue)
@@ -106,7 +111,8 @@ internal static class CloudflareSitePolicyManager
                     headerResult,
                     tieredResult,
                     cacheResult.Changed || headerResult.Changed || tieredResult?.Changed == true,
-                    $"{headerResult.Message} {cacheResult.Message}{FormatTieredMessage(tieredResult)}");
+                    $"{headerResult.Message} {cacheResult.Message}{FormatTieredMessage(tieredResult)}",
+                    changesRequired: preflightChangesRequired || cacheResult.ChangesRequired || headerResult.ChangesRequired || tieredResult?.ChangesRequired == true);
 
             var rollbackMessages = new List<string>();
             var rollbackSucceeded = true;
@@ -152,11 +158,12 @@ internal static class CloudflareSitePolicyManager
         CloudflareManagedRulesetResult headers,
         CloudflareSmartTieredCacheResult? tiered,
         bool changed,
-        string message) => new()
+        string message,
+        bool? changesRequired = null) => new()
     {
         Success = true,
         DryRun = cache.DryRun,
-        ChangesRequired = cache.ChangesRequired || headers.ChangesRequired || tiered?.ChangesRequired == true,
+        ChangesRequired = changesRequired ?? (cache.ChangesRequired || headers.ChangesRequired || tiered?.ChangesRequired == true),
         Changed = changed,
         CacheManagedRuleCount = cache.ManagedRuleCount,
         ResponseHeaderManagedRuleCount = headers.ManagedRuleCount,
