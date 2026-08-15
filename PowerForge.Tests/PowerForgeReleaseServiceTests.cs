@@ -4803,6 +4803,96 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void VerifySharedReleaseSourceCommit_rejects_dirty_tracked_and_untracked_source(bool modifyTrackedSource)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var trackedSource = Path.Combine(root, "source.cs");
+            File.WriteAllText(trackedSource, "internal sealed class Source { }");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var commit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
+            if (modifyTrackedSource)
+                File.AppendAllText(trackedSource, "\n// modified");
+            else
+                File.WriteAllText(Path.Combine(root, "Injected.cs"), "internal sealed class Injected { }");
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.VerifySharedReleaseSourceCommit(root, commit));
+
+            Assert.Contains("clean", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_PlanOnly_verifies_exact_commit_without_a_shared_version_override()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Source { }");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = root,
+                    Targets =
+                    [
+                        new DotNetPublishTargetPlan
+                        {
+                            Name = "PowerForge",
+                            Version = "3.0.110"
+                        }
+                    ]
+                },
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet publish should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var error = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec { DotNetPublish = new DotNetPublishSpec() },
+                    GitHub = new PowerForgeReleaseGitHubOptions
+                    {
+                        Commitish = "0123456789abcdef0123456789abcdef01234567"
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ToolsOnly = true,
+                    PlanOnly = true
+                }));
+
+            Assert.Contains("does not match", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Fact]
     public void Execute_PublishesDotNetPublishAssetsToGitHub_PrefersResolvedPackageVersionOverProjectVersion()
     {

@@ -3,6 +3,31 @@ namespace PowerForge.Tests;
 public sealed class AppleReleaseSourceTrustPerformanceTests
 {
     [Fact]
+    public void EnumerateTreeWithoutLinks_rejects_a_link_before_descending_into_it()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.LinkAwareTreeTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var ordinaryDirectory = Directory.CreateDirectory(Path.Combine(root, "Sources"));
+            File.WriteAllText(Path.Combine(ordinaryDirectory.FullName, "Source.swift"), "struct Source { }");
+            Directory.CreateSymbolicLink(Path.Combine(ordinaryDirectory.FullName, "Recursive"), root);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                AppleReleaseSourceTrustService.EnumerateTreeWithoutLinks(root, "Xcode source input"));
+
+            Assert.Contains("symbolic link", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void EnsureNoCustomGitFilters_batches_large_trees_without_weakening_filter_rejection()
     {
         var runner = new GitAttributeRunner();

@@ -3264,10 +3264,10 @@ internal sealed partial class PowerForgeReleaseService
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
+        var verifiedSourceCommit = VerifySharedReleaseSourceCommit(plan.ProjectRoot, sourceCommit);
         if (string.IsNullOrWhiteSpace(sharedReleaseVersion))
             return;
 
-        var verifiedSourceCommit = VerifySharedReleaseSourceCommit(plan.ProjectRoot, sourceCommit);
         foreach (var entry in BuildSharedReleaseVersionProperties(sharedReleaseVersion!, verifiedSourceCommit))
             plan.MsBuildProperties[entry.Key] = entry.Value;
     }
@@ -3305,6 +3305,24 @@ internal sealed partial class PowerForgeReleaseService
         {
             throw new InvalidOperationException(
                 $"GitHub.Commitish '{expectedCommit}' does not match the DotNet publish checkout HEAD '{observedCommit}'.");
+        }
+
+        var status = git.RunRawAsync(
+                projectRoot,
+                ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+                TimeSpan.FromMinutes(2))
+            .GetAwaiter()
+            .GetResult();
+        if (!status.Succeeded)
+        {
+            throw new InvalidOperationException(
+                "Unable to verify that the DotNet publish checkout is clean. " +
+                (string.IsNullOrWhiteSpace(status.StdErr) ? "git status failed." : status.StdErr.Trim()));
+        }
+        if (!string.IsNullOrEmpty(status.StdOut))
+        {
+            throw new InvalidOperationException(
+                "An exact GitHub.Commitish requires a clean DotNet publish checkout with no tracked or untracked changes.");
         }
 
         return observedCommit.ToLowerInvariant();
