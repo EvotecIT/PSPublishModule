@@ -523,6 +523,43 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsTrustedArchiveInventoryFromDifferentPublisherDuringAzureRotation()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureSubjectNameSigning(azureArtifactSigning: true);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = "CN=Publisher";
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() => fixture
+            .CreateVerifier(
+                Thumbprint,
+                VendorThumbprint,
+                inventorySignerSubject: "CN=Other Publisher")
+            .Verify(request));
+
+        Assert.Contains("does not match", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("publisher", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateRotatedInventoryPublisher_RejectsTrustedDifferentSubject()
+    {
+        var inventorySigner = new PowerForgePayloadInventorySignature(
+            "CN=Other Publisher",
+            VendorThumbprint,
+            certificateTrusted: true);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            PowerForgeReleaseArtifactVerifier.ValidateRotatedInventoryPublisher(
+                inventorySigner,
+                "CN=Publisher",
+                "Portable payload inventory"));
+
+        Assert.Contains("does not match the Authenticode publisher subject", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliRebasesRelocatedManifestArtifactPathsFromChecksums()
     {
         using var fixture = new PortableFixture();

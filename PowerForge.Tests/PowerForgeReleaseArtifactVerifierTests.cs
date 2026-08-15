@@ -426,7 +426,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             string? inventorySignerThumbprint = null,
             Func<string, string>? signerThumbprintSelector = null,
             bool inventoryCertificateTrusted = true,
-            string? sbomSignerThumbprint = null) =>
+            string? sbomSignerThumbprint = null,
+            string? inventorySignerSubject = null) =>
             new(
                 path => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
                     true,
@@ -436,7 +437,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 _ => "1.2.3+" + SourceRevision,
                 _ => "Sample.CLI",
                 verifyPortableInventory: (_, signature) => new PowerForgePayloadInventorySignature(
-                    "CN=Publisher",
+                    signature.Length > 0 && signature[0] == 2
+                        ? "CN=Publisher"
+                        : inventorySignerSubject ?? "CN=Publisher",
                     signature.Length > 0 && signature[0] == 2
                         ? sbomSignerThumbprint ?? signerThumbprint
                         : inventorySignerThumbprint ?? signerThumbprint,

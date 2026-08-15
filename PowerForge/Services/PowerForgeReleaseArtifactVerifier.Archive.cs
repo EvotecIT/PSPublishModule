@@ -147,12 +147,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         VerifiedSignature payloadSigner = allowSubjectMatchedCertificateRotation
             ? RequireOnePublisherSubject(signatures)
             : RequireOneSigner(signatures);
-        if (allowSubjectMatchedCertificateRotation && !inventorySignature.CertificateTrusted)
+        if (allowSubjectMatchedCertificateRotation)
         {
-            throw Invalid(
-                "Portable payload inventory signature does not have a trusted code-signing certificate chain.");
+            ValidateRotatedInventoryPublisher(
+                inventorySignature,
+                payloadSigner.Subject,
+                "Portable payload inventory");
         }
-        if (!allowSubjectMatchedCertificateRotation && !string.Equals(
+        else if (!string.Equals(
                 inventorySignature.Thumbprint,
                 payloadSigner.Thumbprint,
                 StringComparison.OrdinalIgnoreCase))
@@ -202,18 +204,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         }
         if (allowSubjectMatchedCertificateRotation)
         {
-            if (!inventorySigner.CertificateTrusted)
-            {
-                throw Invalid(
-                    "Direct portable inventory signature does not have a trusted code-signing certificate chain.");
-            }
-            if (!DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(
-                    inventorySigner.Subject,
-                    artifactSigner.Subject))
-            {
-                throw Invalid(
-                    "Direct portable inventory signature does not match the Authenticode publisher subject.");
-            }
+            ValidateRotatedInventoryPublisher(
+                inventorySigner,
+                artifactSigner.Subject,
+                "Direct portable inventory");
         }
         else if (!string.Equals(
                      inventorySigner.Thumbprint,
@@ -274,6 +268,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                     Sha256 = signatureDigest
                 }
             });
+    }
+
+    internal static void ValidateRotatedInventoryPublisher(
+        PowerForgePayloadInventorySignature inventorySigner,
+        string payloadSignerSubject,
+        string label)
+    {
+        if (!inventorySigner.CertificateTrusted)
+            throw Invalid($"{label} signature does not have a trusted code-signing certificate chain.");
+        if (!DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(
+                inventorySigner.Subject,
+                payloadSignerSubject))
+            throw Invalid($"{label} signature does not match the Authenticode publisher subject.");
     }
 
     private sealed class PortableDirectVerification
