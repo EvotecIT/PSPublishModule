@@ -14,7 +14,8 @@ internal sealed partial class PowerForgeReleaseService
         string configDirectory,
         PowerForgeReleaseResult result,
         string? sharedReleaseVersion,
-        IReadOnlyCollection<PowerForgeReleaseAssetEntry> producedAssets)
+        IReadOnlyCollection<PowerForgeReleaseAssetEntry> producedAssets,
+        bool standaloneToolOutputSelected)
     {
         var paths = (spec.Outputs?.AdditionalAssetPaths ?? Array.Empty<string>())
             .Where(static path => !string.IsNullOrWhiteSpace(path))
@@ -24,7 +25,9 @@ internal sealed partial class PowerForgeReleaseService
             throw new FileNotFoundException($"Additional release asset was not found: {path}", path);
 
         var toolManifestPath = spec.Outputs?.PowerForgeToolManifestPath;
-        if (!string.IsNullOrWhiteSpace(toolManifestPath) && IsStandalonePowerForgeToolSelected(result))
+        if (!string.IsNullOrWhiteSpace(toolManifestPath) &&
+            standaloneToolOutputSelected &&
+            IsStandalonePowerForgeToolSelected(result))
         {
             var manifestPath = ResolveOutputPath(configDirectory, toolManifestPath!);
             WritePowerForgeToolLockManifest(spec, producedAssets, sharedReleaseVersion, manifestPath);
@@ -100,6 +103,12 @@ internal sealed partial class PowerForgeReleaseService
                 "clock-based placeholders are not supported.");
         }
         var releaseTag = ApplyUnifiedGitHubTemplate(tagTemplate, repository!, version!);
+        if (!IsSupportedPowerForgeToolManifestReleaseTag(releaseTag))
+        {
+            throw new InvalidOperationException(
+                $"PowerForge tool lock manifest release tag '{releaseTag}' contains characters the installer cannot consume. " +
+                "Use letters, numbers, periods, underscores, and hyphens only.");
+        }
         var assets = artifacts.ToDictionary(
             static artifact => artifact.Runtime!,
             artifact => new
@@ -162,6 +171,10 @@ internal sealed partial class PowerForgeReleaseService
     internal static bool IsDeterministicPowerForgeToolManifestTagTemplate(string tagTemplate)
         => new[] { "{Date}", "{UtcDate}", "{DateTime}", "{UtcDateTime}", "{Timestamp}", "{UtcTimestamp}" }
             .All(token => !tagTemplate.Contains(token, StringComparison.OrdinalIgnoreCase));
+
+    internal static bool IsSupportedPowerForgeToolManifestReleaseTag(string? releaseTag)
+        => !string.IsNullOrWhiteSpace(releaseTag) &&
+           Regex.IsMatch(releaseTag, "^[A-Za-z0-9][A-Za-z0-9._-]*$", RegexOptions.CultureInvariant);
 
     private static string ComputePowerForgeExecutableSha256(string archivePath, string runtime)
     {

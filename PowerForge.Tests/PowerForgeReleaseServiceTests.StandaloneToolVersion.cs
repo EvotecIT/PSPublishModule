@@ -368,6 +368,66 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_DotNetPublishToolOutputExcludedSkipsConsumerToolManifest()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var lockManifest = Path.Combine(root, "PowerForge-tool-manifest.json");
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools must not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools must not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = root,
+                    Targets =
+                    [
+                        new DotNetPublishTargetPlan
+                        {
+                            Name = "PowerForge",
+                            Version = "3.0.110",
+                            Combinations =
+                            [
+                                new DotNetPublishTargetCombination
+                                {
+                                    Framework = "net10.0",
+                                    Runtime = "osx-arm64",
+                                    Style = DotNetPublishStyle.PortableCompat
+                                }
+                            ]
+                        }
+                    ]
+                },
+                runDotNetTools: _ => new DotNetPublishResult { Succeeded = true },
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub must not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Outputs = new PowerForgeReleaseOutputsOptions { PowerForgeToolManifestPath = lockManifest },
+                    Tools = new PowerForgeToolReleaseSpec { DotNetPublish = new DotNetPublishSpec() }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ToolsOnly = true,
+                    ReleaseVersion = "3.0.110",
+                    SkipToolOutputs = [PowerForgeReleaseToolOutputKind.Tool]
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.False(File.Exists(lockManifest));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData("PowerForgeWeb", "SingleContained")]
     [InlineData("PowerForge", "SingleFx")]
@@ -484,6 +544,15 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("v{Version}-{UtcTimestamp}", false)]
     public void ToolManifest_requires_a_deterministic_release_tag(string template, bool expected)
         => Assert.Equal(expected, PowerForgeReleaseService.IsDeterministicPowerForgeToolManifestTagTemplate(template));
+
+    [Theory]
+    [InlineData("v3.0.110", true)]
+    [InlineData("PowerForge-v3.0.110", true)]
+    [InlineData("PowerForge/v3.0.110", false)]
+    [InlineData("PowerForge v3.0.110", false)]
+    [InlineData("", false)]
+    public void ToolManifest_accepts_only_installer_safe_release_tags(string? releaseTag, bool expected)
+        => Assert.Equal(expected, PowerForgeReleaseService.IsSupportedPowerForgeToolManifestReleaseTag(releaseTag));
 
     private static PowerForgeReleaseService CreateService(
         Func<PowerForgeReleaseRequest, PowerForgeToolReleasePlan> planTools)

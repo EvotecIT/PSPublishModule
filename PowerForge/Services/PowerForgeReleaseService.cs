@@ -3343,7 +3343,8 @@ internal sealed partial class PowerForgeReleaseService
             configDirectory,
             result,
             sharedReleaseVersion,
-            producedAssetEntries);
+            producedAssetEntries,
+            ResolveSelectedToolOutputs(request).Contains(PowerForgeReleaseToolOutputKind.Tool));
         var assetEntries = CollectReleaseAssetEntries(result, result.DotNetToolPlan, sharedReleaseVersion, additionalAssetPaths)
             .GroupBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
