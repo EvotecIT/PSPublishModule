@@ -336,6 +336,25 @@ public sealed partial class PowerForgeReleaseServiceTests {
     }
 
     [Fact]
+    public void AppleArchiveUploadSnapshot_allows_xcode_changed_signal_for_unchanged_archive_info_plist() {
+        var root = CreateSandbox();
+        try {
+            var archive = Directory.CreateDirectory(Path.Combine(root, "approved.xcarchive"));
+            var infoPlist = Path.Combine(archive.FullName, "Info.plist");
+            File.WriteAllText(infoPlist, "approved bytes");
+            var expectedSha256 = AppleNotarizationService.ComputeArtifactSha256(archive.FullName);
+
+            using var snapshot = AppleArchiveUploadSnapshot.Create(archive.FullName, expectedSha256);
+
+            Assert.True(snapshot.IsExpectedXcodeExportMutation(
+                new FileSystemEventArgs(WatcherChangeTypes.Changed, snapshot.ArchivePath, "Info.plist")));
+            snapshot.ValidateUnchanged(expectedSha256);
+        } finally {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ApplePreparePlan_reuses_remote_screenshots_without_local_approval_or_pixels() {
         var root = CreateSandbox();
         try {
