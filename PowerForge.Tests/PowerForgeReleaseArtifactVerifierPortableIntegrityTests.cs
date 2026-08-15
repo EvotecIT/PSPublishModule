@@ -680,6 +680,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             string relocatedDirectory = Directory.CreateDirectory(Path.Combine(Root, "release-assets")).FullName;
             string relocatedExecutable = Path.Combine(relocatedDirectory, aliasName);
             File.Copy(ExecutablePath, relocatedExecutable, overwrite: true);
+            string relocatedInventory = relocatedExecutable + PowerForgePortablePayloadInventory.DirectInventorySuffix;
+            string relocatedSignature = relocatedExecutable + PowerForgePortablePayloadInventory.DirectSignatureSuffix;
+            File.Copy(DirectInventoryPath, relocatedInventory, overwrite: true);
+            File.Copy(DirectSignaturePath, relocatedSignature, overwrite: true);
             File.Delete(ExecutablePath);
             string retiredExecutable = Path.Combine("custom-output", Path.GetFileName(ExecutablePath));
             File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
@@ -701,7 +705,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     SourceDirty = false
                 }
             }));
-            base.WriteChecksums(ManifestPath, ConfigurationPath, relocatedExecutable);
+            base.WriteChecksums(
+                ManifestPath,
+                ConfigurationPath,
+                relocatedExecutable,
+                relocatedInventory,
+                relocatedSignature);
             return relocatedExecutable;
         }
 

@@ -236,7 +236,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             artifactId: moduleName,
             artifactVersion: version,
             artifactDigest: artifactDigest,
-            publisherSigner: signer).ToList();
+            publisherSigners: new[] { signer }).ToList();
         evidence.Add(new PowerForgeReleaseEvidenceFile
         {
             Role = "signing-policy",

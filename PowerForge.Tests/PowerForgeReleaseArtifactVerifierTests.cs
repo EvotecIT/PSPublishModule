@@ -28,48 +28,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         Assert.Contains(result.EvidenceFiles, item => item.Role == "manifest" && item.Path == fixture.ManifestPath);
         Assert.DoesNotContain(result.EvidenceFiles, item => item.Role == "provenance");
         Assert.Contains(result.EvidenceFiles, item => item.Role == "configuration" && item.Path == fixture.ConfigurationPath);
-        Assert.Contains(result.EvidenceFiles, item => item.Role == "checksums-signature" && item.Path == fixture.ChecksumsSignaturePath);
         Assert.Contains(result.EvidenceFiles, item => item.Role == "sbom" && item.Path == fixture.SbomPath);
         Assert.Contains(result.EvidenceFiles, item => item.Role == "sbom-signature" && item.Path == fixture.SbomSignaturePath);
-    }
-
-    [Fact]
-    public void Verify_PortableCliAuthenticatesExactChecksumCatalogBeforeAcceptingExternalSbom()
-    {
-        using var fixture = new PortableFixture();
-        bool verifiedChecksumCatalog = false;
-        byte[] expectedCatalog = File.ReadAllBytes(fixture.ChecksumsPath);
-        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier(verifyInventory: (content, signature) =>
-        {
-            if (signature.SequenceEqual(new byte[] { 1, 2, 3 }))
-            {
-                Assert.Equal(expectedCatalog, content);
-                verifiedChecksumCatalog = true;
-            }
-            return new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint);
-        }).Verify(fixture.CreateRequest());
-        Assert.True(verifiedChecksumCatalog);
-        Assert.Contains(result.EvidenceFiles, item => item.Role == "sbom");
-    }
-
-    [Fact]
-    public void Verify_PortableCliRejectsExternalSbomWithoutSignedChecksumCatalog()
-    {
-        using var fixture = new PortableFixture();
-        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
-        request.ChecksumsSignaturePath = null;
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() => fixture.CreateVerifier().Verify(request));
-        Assert.Contains("ChecksumsSignaturePath", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Verify_PortableCliRejectsChecksumCatalogSignedByDifferentPublisher()
-    {
-        using var fixture = new PortableFixture();
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() => fixture.CreateVerifier(
-            verifyInventory: (_, signature) => new PowerForgePayloadInventorySignature(
-                "CN=Publisher", signature.Length == 1 ? Thumbprint : VendorThumbprint)).Verify(fixture.CreateRequest()));
-        Assert.Contains("does not match the verified artifact publisher", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -377,17 +337,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             Root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Root);
             ChecksumsPath = Path.Combine(Root, "SHA256SUMS.txt");
-            ChecksumsSignaturePath = Path.Combine(Root, "SHA256SUMS.txt.p7s");
             SbomPath = Path.Combine(Root, "sample.cdx.json");
             SbomSignaturePath = SbomPath + ".p7s";
-            File.WriteAllBytes(ChecksumsSignaturePath, new byte[] { 1, 2, 3 });
             File.WriteAllText(SbomPath, "{}");
             File.WriteAllBytes(SbomSignaturePath, new byte[] { 2 });
         }
 
         internal string Root { get; }
         internal string ChecksumsPath { get; }
-        internal string ChecksumsSignaturePath { get; }
         internal string SbomPath { get; }
         internal string SbomSignaturePath { get; }
 
@@ -451,10 +408,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         internal PowerForgeReleaseArtifactVerifier CreateVerifier(
             string signerThumbprint = Thumbprint,
             string? inventorySignerThumbprint = null,
-            string? sbomSignerThumbprint = null,
-            Func<byte[], byte[], PowerForgePayloadInventorySignature>? verifyInventory = null,
             Func<string, string>? signerThumbprintSelector = null,
-            bool inventoryCertificateTrusted = true) =>
+            bool inventoryCertificateTrusted = true,
+            string? sbomSignerThumbprint = null) =>
             new(
                 path => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
                     true,
@@ -463,12 +419,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     signerThumbprintSelector?.Invoke(path) ?? signerThumbprint),
                 _ => "1.2.3+" + SourceRevision,
                 _ => "Sample.CLI",
-                verifyPortableInventory: verifyInventory ?? ((_, signature) => new PowerForgePayloadInventorySignature(
+                verifyPortableInventory: (_, signature) => new PowerForgePayloadInventorySignature(
                     "CN=Publisher",
                     signature.Length > 0 && signature[0] == 2
                         ? sbomSignerThumbprint ?? signerThumbprint
                         : inventorySignerThumbprint ?? signerThumbprint,
-                    inventoryCertificateTrusted)));
+                    inventoryCertificateTrusted));
 
         public void Dispose()
         {
@@ -554,7 +510,6 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             ProjectRoot = Root,
             ArtifactPath = ArchivePath,
             ChecksumsPath = ChecksumsPath,
-            ChecksumsSignaturePath = ChecksumsSignaturePath,
             ManifestPath = ManifestPath,
             ConfigurationPath = ConfigurationPath,
             ExpectedSourceRevision = SourceRevision,

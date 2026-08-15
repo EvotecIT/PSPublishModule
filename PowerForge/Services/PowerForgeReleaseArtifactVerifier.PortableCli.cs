@@ -232,7 +232,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             artifactId,
             version,
             artifactDigest,
-            signer)
+            signatures)
             .Concat(directInventoryEvidence)
             .ToArray();
 
