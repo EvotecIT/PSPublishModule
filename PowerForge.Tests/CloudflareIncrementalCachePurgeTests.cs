@@ -141,6 +141,40 @@ public sealed class CloudflareIncrementalCachePurgeTests
     }
 
     [Fact]
+    public void IncrementalPurge_DryRunShouldReportPlannedBatchesWithoutCountingRequests()
+    {
+        var root = NewTempDirectory();
+        try
+        {
+            var previousPath = WriteManifest(root, "previous.json", Array.Empty<CloudflareDeploymentManifestEntry>());
+            var currentPath = WriteManifest(root, "current.json", Enumerable.Range(0, 101)
+                .Select(index => Entry($"docs/{index}.html", 'a')).ToArray());
+            var handler = new RecordingHandler();
+            using var client = NewClient(handler);
+
+            var result = CloudflareIncrementalCachePurger.Purge(
+                ZoneId,
+                "secret-token",
+                "https://example.test/",
+                currentPath,
+                previousPath,
+                dryRun: true,
+                logger: null,
+                client);
+
+            Assert.True(result.Success, result.Message);
+            Assert.Equal(101, result.TargetCount);
+            Assert.Equal(0, result.RequestCount);
+            Assert.Contains("2 planned batch", result.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(handler.Bodies);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void IncrementalPurge_ShouldUseHostnameFallbackWithoutPreviousBaseline()
     {
         var root = NewTempDirectory();
@@ -491,24 +525,19 @@ public sealed class CloudflareIncrementalCachePurgeTests
         Assert.Contains("manifest-artifact-name: ${{ needs.build.outputs.cloudflare_cache_manifest_artifact_name }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("deployment-run-id: ${{ needs.deploy.outputs.run_id }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("deployment-run-attempt: ${{ needs.deploy.outputs.run_attempt }}", deployWorkflow, StringComparison.Ordinal);
-        Assert.Contains("Upload GitHub Pages deployment receipt", deployWorkflow, StringComparison.Ordinal);
-        Assert.Contains("powerforge-cloudflare-deployment-v2-${{ github.repository_id }}-${{ needs.build.outputs.cloudflare_cache_manifest_scope }}", deployWorkflow, StringComparison.Ordinal);
-        Assert.Contains("retention-days: 7", deployWorkflow, StringComparison.Ordinal);
-        Assert.Contains("overwrite: true", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("actions: write", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("deployments: read", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("manage-incremental-purge: \"true\"", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("deployment-id: ${{ needs.build.outputs.source_sha }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("github-token: ${{ github.token }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("Resolve-PowerForgeRepositoryArtifact.ps1", action, StringComparison.Ordinal);
-        Assert.Contains("POWERFORGE_REFERENCE_RUN_ID", action, StringComparison.Ordinal);
-        Assert.Contains("POWERFORGE_CLOUDFLARE_CONTINUITY_GAP", action, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_BASELINE_ARTIFACT_RUN_ID", action, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_GITHUB_API_URL", action, StringComparison.Ordinal);
         Assert.Contains("does not support hostname or base-path overrides", action, StringComparison.Ordinal);
         Assert.Contains("github-token: ${{ inputs.github-token }}", action, StringComparison.Ordinal);
         Assert.Contains("repository: ${{ github.repository }}", action, StringComparison.Ordinal);
         Assert.Contains("run-id: ${{ steps.locate_manifest.outputs.run_id }}", action, StringComparison.Ordinal);
-        Assert.Contains("run-id: ${{ steps.locate_receipt.outputs.run_id }}", action, StringComparison.Ordinal);
         Assert.Contains("powerforge-cloudflare-manifest-v2-", action, StringComparison.Ordinal);
-        Assert.Contains("powerforge-cloudflare-deployment-v2-", action, StringComparison.Ordinal);
         Assert.Contains("retention-days: 7", action, StringComparison.Ordinal);
         Assert.Contains("overwrite: true", action, StringComparison.Ordinal);
         Assert.DoesNotContain("actions/cache/", action, StringComparison.Ordinal);
@@ -517,8 +546,8 @@ public sealed class CloudflareIncrementalCachePurgeTests
         Assert.Contains("$arguments += '--dry-run'", ReadRepoFile(".github", "actions", "powerforge-cloudflare-site-policy", "Invoke-PowerForgeCloudflareIncrementalPurge.ps1"), StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_CLOUDFLARE_USE_PREVIOUS", action, StringComparison.Ordinal);
         Assert.Contains("Resolve-PowerForgeCloudflareBaselineOrder.ps1", action, StringComparison.Ordinal);
-        Assert.Contains("Locate latest GitHub Pages deployment receipt", action, StringComparison.Ordinal);
-        Assert.Contains("Download latest GitHub Pages deployment receipt", action, StringComparison.Ordinal);
+        Assert.DoesNotContain("deployment receipt", action, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("deployment receipt", deployWorkflow, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("steps.baseline_order.outputs.stale != 'true'", action, StringComparison.Ordinal);
         Assert.Contains("inputs.dry-run != 'true'", action, StringComparison.Ordinal);
         Assert.Contains("retention-days: 1", runWorkflow, StringComparison.Ordinal);
@@ -588,7 +617,6 @@ public sealed class CloudflareIncrementalCachePurgeTests
             Assert.Equal("202", result["run_id"]);
             Assert.Equal("2", result["artifact_id"]);
             Assert.Equal("2026-08-14T10:00:00.0000000+00:00", result["created_at"]);
-            Assert.Equal("false", result["gap"]);
         }
         finally
         {
@@ -597,159 +625,92 @@ public sealed class CloudflareIncrementalCachePurgeTests
     }
 
     [Fact]
-    public void RepositoryArtifactLookup_ShouldDetectInterveningDeploymentReceipt()
+    public void BaselineOrder_ShouldDetectInterveningDeploymentAcrossRerunAttempts()
     {
-        if (!CommandExists("pwsh"))
-            return;
-
+        if (!CommandExists("pwsh")) return;
         var root = NewTempDirectory();
         try
         {
-            const string artifactName = "powerforge-cloudflare-deployment-v2-42-site";
-            var responsePath = Path.Combine(root, "response.json");
-            File.WriteAllText(responsePath,
-                $$"""
-                {
-                  "total_count": 3,
-                  "artifacts": [
-                    {
-                      "id": 30,
-                      "name": "{{artifactName}}",
-                      "expired": false,
-                      "created_at": "2026-08-14T12:00:00Z",
-                      "workflow_run": { "id": 300, "head_branch": "main" }
-                    },
-                    {
-                      "id": 20,
-                      "name": "{{artifactName}}",
-                      "expired": false,
-                      "created_at": "2026-08-14T11:00:00Z",
-                      "workflow_run": { "id": 200, "head_branch": "main" }
-                    },
-                    {
-                      "id": 10,
-                      "name": "{{artifactName}}",
-                      "expired": false,
-                      "created_at": "2026-08-14T09:00:00Z",
-                      "workflow_run": { "id": 100, "head_branch": "main" }
-                    }
-                  ]
-                }
-                """);
+            var files = WriteDeploymentOrderFixture(root,
+                baselineRunId: 100, baselineAttempt: 1,
+                currentRunId: 100, currentAttempt: 2,
+                deployments:
+                [
+                    (30, 100, "2026-08-14T12:00:00Z"),
+                    (20, 200, "2026-08-14T11:00:00Z"),
+                    (10, 100, "2026-08-14T09:00:00Z")
+                ],
+                jobWindows:
+                [
+                    (100, 1, "2026-08-14T08:50:00Z", "2026-08-14T09:10:00Z"),
+                    (100, 2, "2026-08-14T11:50:00Z", "2026-08-14T12:10:00Z")
+                ]);
 
-            var result = RunRepositoryArtifactLookup(
-                root,
-                responsePath,
-                artifactName,
-                referenceRunId: 100,
-                excludeRunId: 300);
-
-            Assert.Equal("300", result["run_id"]);
-            Assert.Equal("true", result["gap"]);
-
-            var missingReference = RunRepositoryArtifactLookup(
-                root,
-                responsePath,
-                artifactName,
-                referenceRunId: 999,
-                excludeRunId: 300);
-            Assert.Equal("true", missingReference["gap"]);
+            var result = RunBaselineOrder(root, files, 100, 2, 100);
+            Assert.Equal("false", result["stale"]);
+            Assert.Equal("false", result["use_previous"]);
+            Assert.Contains("intervening", result["reason"], StringComparison.OrdinalIgnoreCase);
         }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
+        finally { Directory.Delete(root, recursive: true); }
     }
 
     [Fact]
-    public void BaselineOrder_ShouldRejectOlderJobOnlyRerunsButAllowIntentionalRedeploys()
+    public void BaselineOrder_ShouldUseDeploymentHistoryEvenWhenInterveningPolicyNeverRecordedState()
     {
-        if (!CommandExists("pwsh"))
-            return;
-
+        if (!CommandExists("pwsh")) return;
         var root = NewTempDirectory();
         try
         {
-            var previousManifest = Path.Combine(root, "manifest.json");
-            var baselineState = Path.Combine(root, "state.json");
-            var deploymentReceipt = Path.Combine(root, "deployment.json");
-            File.WriteAllText(previousManifest, "{}");
-            File.WriteAllText(baselineState,
-                """
-                { "schemaVersion": 1, "deploymentRunId": "200", "deploymentRunAttempt": 1 }
-                """);
-            File.WriteAllText(deploymentReceipt,
-                """
-                { "schemaVersion": 1, "deploymentRunId": "200", "deploymentRunAttempt": 1 }
-                """);
+            var files = WriteDeploymentOrderFixture(root,
+                100, 1, 300, 1,
+                [(30, 300, "2026-08-14T11:00:00Z"), (20, 200, "2026-08-14T10:00:00Z"), (10, 100, "2026-08-14T09:00:00Z")],
+                [(100, 1, "2026-08-14T08:50:00Z", "2026-08-14T09:10:00Z"), (300, 1, "2026-08-14T10:50:00Z", "2026-08-14T11:10:00Z")]);
 
-            var stale = RunBaselineOrder(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 100, deploymentRunAttempt: 1);
+            var result = RunBaselineOrder(root, files, 300, 1, 100);
+            Assert.Equal("false", result["use_previous"]);
+            Assert.Contains("intervening", result["reason"], StringComparison.OrdinalIgnoreCase);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public void BaselineOrder_ShouldUseExactBaselineAndSkipAStalePolicyJob()
+    {
+        if (!CommandExists("pwsh")) return;
+        var root = NewTempDirectory();
+        try
+        {
+            var files = WriteDeploymentOrderFixture(root,
+                100, 1, 300, 1,
+                [(30, 300, "2026-08-14T11:00:00Z"), (10, 100, "2026-08-14T09:00:00Z")],
+                [(100, 1, "2026-08-14T08:50:00Z", "2026-08-14T09:10:00Z"), (300, 1, "2026-08-14T10:50:00Z", "2026-08-14T11:10:00Z")]);
+            var ordered = RunBaselineOrder(root, files, 300, 1, 100);
+            Assert.Equal("true", ordered["use_previous"]);
+
+            AddDeployment(root, files, 40, 400, "2026-08-14T12:00:00Z");
+            var stale = RunBaselineOrder(root, files, 300, 1, 100);
             Assert.Equal("true", stale["stale"]);
             Assert.Equal("false", stale["use_previous"]);
-
-            File.WriteAllText(deploymentReceipt,
-                """
-                { "schemaVersion": 1, "deploymentRunId": "100", "deploymentRunAttempt": 1 }
-                """);
-            var laggingReceipt = RunBaselineOrderProcess(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 200, deploymentRunAttempt: 1);
-            Assert.NotEqual(0, laggingReceipt.ExitCode);
-            Assert.Contains("predates", laggingReceipt.StandardError, StringComparison.OrdinalIgnoreCase);
-
-            File.WriteAllText(deploymentReceipt,
-                """
-                { "schemaVersion": 1, "deploymentRunId": "100", "deploymentRunAttempt": 2 }
-                """);
-            var redeployed = RunBaselineOrder(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 100, deploymentRunAttempt: 2);
-            Assert.Equal("false", redeployed["stale"]);
-            Assert.Equal("true", redeployed["use_previous"]);
-
-            var deploymentGap = RunBaselineOrder(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 100, deploymentRunAttempt: 2, continuityGap: true);
-            Assert.Equal("false", deploymentGap["stale"]);
-            Assert.Equal("false", deploymentGap["use_previous"]);
-            Assert.Contains("intervening", deploymentGap["reason"], StringComparison.OrdinalIgnoreCase);
-
-            File.Delete(baselineState);
-            File.WriteAllText(deploymentReceipt,
-                """
-                { "schemaVersion": 1, "deploymentRunId": "300", "deploymentRunAttempt": 1 }
-                """);
-            var legacy = RunBaselineOrder(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 300, deploymentRunAttempt: 1);
-            Assert.Equal("false", legacy["stale"]);
-            Assert.Equal("false", legacy["use_previous"]);
         }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
+        finally { Directory.Delete(root, recursive: true); }
     }
 
-    [Theory]
-    [InlineData(null, "unavailable")]
-    [InlineData("not-json", "invalid")]
-    public void BaselineOrder_ShouldFailClosedWithoutAValidLatestDeploymentReceipt(string? receiptContent, string expectedError)
+    [Fact]
+    public void BaselineOrder_ShouldFailClosedUntilCurrentDeploymentIsIndexed()
     {
-        if (!CommandExists("pwsh"))
-            return;
-
+        if (!CommandExists("pwsh")) return;
         var root = NewTempDirectory();
         try
         {
-            var previousManifest = Path.Combine(root, "manifest.json");
-            var baselineState = Path.Combine(root, "state.json");
-            var deploymentReceipt = Path.Combine(root, "deployment.json");
-            File.WriteAllText(previousManifest, "{}");
-            File.WriteAllText(baselineState, "{}");
-            if (receiptContent is not null)
-                File.WriteAllText(deploymentReceipt, receiptContent);
-
-            var failure = RunBaselineOrderProcess(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 100, deploymentRunAttempt: 1);
+            var files = WriteDeploymentOrderFixture(root,
+                100, 1, 300, 1,
+                [(10, 100, "2026-08-14T09:00:00Z")],
+                [(100, 1, "2026-08-14T08:50:00Z", "2026-08-14T09:10:00Z"), (300, 1, "2026-08-14T10:50:00Z", "2026-08-14T11:10:00Z")]);
+            var failure = RunBaselineOrderProcess(root, files, 300, 1, 100);
             Assert.NotEqual(0, failure.ExitCode);
-            Assert.Contains(expectedError, failure.StandardError, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("does not yet identify", failure.StandardError, StringComparison.OrdinalIgnoreCase);
         }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
+        finally { Directory.Delete(root, recursive: true); }
     }
 
     private static CloudflareDeploymentManifestEntry Entry(string path, char hashCharacter) => new()
@@ -828,14 +789,12 @@ public sealed class CloudflareIncrementalCachePurgeTests
 
     private static Dictionary<string, string> RunBaselineOrder(
         string root,
-        string previousManifest,
-        string baselineState,
-        string deploymentReceipt,
+        DeploymentOrderFixture fixture,
         long deploymentRunId,
         int deploymentRunAttempt,
-        bool continuityGap = false)
+        long baselineArtifactRunId)
     {
-        var result = RunBaselineOrderProcess(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId, deploymentRunAttempt, continuityGap);
+        var result = RunBaselineOrderProcess(root, fixture, deploymentRunId, deploymentRunAttempt, baselineArtifactRunId);
         Assert.True(result.ExitCode == 0, $"Baseline-order validation failed ({result.ExitCode}). stdout: {result.StandardOutput} stderr: {result.StandardError}");
 
         return File.ReadAllLines(result.OutputPath)
@@ -845,14 +804,32 @@ public sealed class CloudflareIncrementalCachePurgeTests
 
     private static (int ExitCode, string StandardOutput, string StandardError, string OutputPath) RunBaselineOrderProcess(
         string root,
-        string previousManifest,
-        string baselineState,
-        string deploymentReceipt,
+        DeploymentOrderFixture fixture,
         long deploymentRunId,
         int deploymentRunAttempt,
-        bool continuityGap = false)
+        long baselineArtifactRunId)
     {
         var outputPath = Path.Combine(root, $"output-{Guid.NewGuid():N}.txt");
+        var wrapperPath = Path.Combine(root, $"deployment-wrapper-{Guid.NewGuid():N}.ps1");
+        File.WriteAllText(wrapperPath,
+            """
+            $ErrorActionPreference = 'Stop'
+            function global:Invoke-RestMethod {
+                param($Method, $Uri, $Headers)
+                if ($Uri -match '/actions/runs/([0-9]+)/attempts/([0-9]+)/jobs') {
+                    $path = Join-Path $env:POWERFORGE_TEST_ROOT "jobs-$($Matches[1])-$($Matches[2]).json"
+                } elseif ($Uri -match '/deployments/([0-9]+)/statuses') {
+                    $path = Join-Path $env:POWERFORGE_TEST_ROOT "statuses-$($Matches[1]).json"
+                } elseif ($Uri -match '/deployments\?') {
+                    $path = Join-Path $env:POWERFORGE_TEST_ROOT 'deployments.json'
+                } else {
+                    throw "Unexpected GitHub test URI: $Uri"
+                }
+                if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing GitHub test response: $path" }
+                Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+            }
+            & $env:POWERFORGE_TEST_SCRIPT
+            """);
         var startInfo = new ProcessStartInfo("pwsh")
         {
             WorkingDirectory = root,
@@ -863,14 +840,18 @@ public sealed class CloudflareIncrementalCachePurgeTests
         startInfo.ArgumentList.Add("-NoLogo");
         startInfo.ArgumentList.Add("-NoProfile");
         startInfo.ArgumentList.Add("-File");
-        startInfo.ArgumentList.Add(RepoPath(".github", "actions", "powerforge-cloudflare-site-policy", "Resolve-PowerForgeCloudflareBaselineOrder.ps1"));
+        startInfo.ArgumentList.Add(wrapperPath);
         startInfo.Environment["GITHUB_OUTPUT"] = outputPath;
-        startInfo.Environment["POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST"] = previousManifest;
-        startInfo.Environment["POWERFORGE_CLOUDFLARE_BASELINE_STATE"] = baselineState;
-        startInfo.Environment["POWERFORGE_CLOUDFLARE_DEPLOYMENT_RECEIPT"] = deploymentReceipt;
-        startInfo.Environment["POWERFORGE_CLOUDFLARE_CONTINUITY_GAP"] = continuityGap.ToString().ToLowerInvariant();
+        startInfo.Environment["POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST"] = fixture.PreviousManifest;
+        startInfo.Environment["POWERFORGE_CLOUDFLARE_BASELINE_STATE"] = fixture.BaselineState;
+        startInfo.Environment["POWERFORGE_BASELINE_ARTIFACT_RUN_ID"] = baselineArtifactRunId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        startInfo.Environment["POWERFORGE_GITHUB_API_URL"] = "https://api.github.test";
+        startInfo.Environment["POWERFORGE_GITHUB_REPOSITORY"] = "EvotecIT/Example";
+        startInfo.Environment["POWERFORGE_GITHUB_TOKEN"] = "test-token";
         startInfo.Environment["POWERFORGE_DEPLOYMENT_RUN_ID"] = deploymentRunId.ToString(System.Globalization.CultureInfo.InvariantCulture);
         startInfo.Environment["POWERFORGE_DEPLOYMENT_RUN_ATTEMPT"] = deploymentRunAttempt.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        startInfo.Environment["POWERFORGE_TEST_ROOT"] = root;
+        startInfo.Environment["POWERFORGE_TEST_SCRIPT"] = RepoPath(".github", "actions", "powerforge-cloudflare-site-policy", "Resolve-PowerForgeCloudflareBaselineOrder.ps1");
 
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Unable to start PowerShell baseline-order validation.");
         var standardOutput = process.StandardOutput.ReadToEnd();
@@ -882,9 +863,7 @@ public sealed class CloudflareIncrementalCachePurgeTests
     private static Dictionary<string, string> RunRepositoryArtifactLookup(
         string root,
         string responsePath,
-        string artifactName,
-        long? referenceRunId = null,
-        long? excludeRunId = null)
+        string artifactName)
     {
         var outputPath = Path.Combine(root, $"artifact-output-{Guid.NewGuid():N}.txt");
         var wrapperPath = Path.Combine(root, $"artifact-wrapper-{Guid.NewGuid():N}.ps1");
@@ -915,8 +894,6 @@ public sealed class CloudflareIncrementalCachePurgeTests
         startInfo.Environment["POWERFORGE_GITHUB_API_URL"] = "https://api.github.test";
         startInfo.Environment["POWERFORGE_GITHUB_REPOSITORY"] = "EvotecIT/Example";
         startInfo.Environment["POWERFORGE_GITHUB_TOKEN"] = "test-token";
-        startInfo.Environment["POWERFORGE_REFERENCE_RUN_ID"] = referenceRunId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
-        startInfo.Environment["POWERFORGE_EXCLUDE_RUN_ID"] = excludeRunId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
         startInfo.Environment["POWERFORGE_TEST_RESPONSE"] = responsePath;
         startInfo.Environment["POWERFORGE_TEST_SCRIPT"] = RepoPath(".github", "actions", "powerforge-cloudflare-site-policy", "Resolve-PowerForgeRepositoryArtifact.ps1");
 
@@ -930,6 +907,68 @@ public sealed class CloudflareIncrementalCachePurgeTests
             .Select(line => line.Split('=', 2))
             .ToDictionary(parts => parts[0], parts => parts[1], StringComparer.Ordinal);
     }
+
+    private static DeploymentOrderFixture WriteDeploymentOrderFixture(
+        string root,
+        long baselineRunId,
+        int baselineAttempt,
+        long currentRunId,
+        int currentAttempt,
+        (long Id, long RunId, string DeployedAt)[] deployments,
+        (long RunId, int Attempt, string StartedAt, string CompletedAt)[] jobWindows)
+    {
+        var previousManifest = Path.Combine(root, "manifest.json");
+        var baselineState = Path.Combine(root, "state.json");
+        File.WriteAllText(previousManifest, "{}");
+        File.WriteAllText(baselineState, $$"""{ "schemaVersion": 1, "deploymentRunId": "{{baselineRunId}}", "deploymentRunAttempt": {{baselineAttempt}} }""");
+        File.WriteAllText(Path.Combine(root, "deployments.json"), JsonSerializer.Serialize(
+            deployments.Select(item => new { id = item.Id, created_at = item.DeployedAt }).ToArray()));
+        foreach (var item in deployments)
+        {
+            var deployedAt = DateTimeOffset.Parse(item.DeployedAt, System.Globalization.CultureInfo.InvariantCulture);
+            var matchingJob = jobWindows.SingleOrDefault(job =>
+                job.RunId == item.RunId &&
+                deployedAt >= DateTimeOffset.Parse(job.StartedAt, System.Globalization.CultureInfo.InvariantCulture) &&
+                deployedAt <= DateTimeOffset.Parse(job.CompletedAt, System.Globalization.CultureInfo.InvariantCulture));
+            var jobId = matchingJob == default ? item.Id : matchingJob.RunId * 10 + matchingJob.Attempt;
+            File.WriteAllText(Path.Combine(root, $"statuses-{item.Id}.json"), JsonSerializer.Serialize(new[]
+            {
+                new { state = "success", environment_url = "https://example.test/", log_url = $"https://github.test/EvotecIT/Example/actions/runs/{item.RunId}/job/{jobId}", created_at = item.DeployedAt }
+            }));
+        }
+        foreach (var job in jobWindows)
+        {
+            File.WriteAllText(Path.Combine(root, $"jobs-{job.RunId}-{job.Attempt}.json"), JsonSerializer.Serialize(new
+            {
+                total_count = 1,
+                jobs = new[]
+                {
+                    new
+                    {
+                        id = job.RunId * 10 + job.Attempt,
+                        started_at = job.StartedAt,
+                        completed_at = job.CompletedAt,
+                        steps = new[] { new { name = "Deploy to GitHub Pages", conclusion = "success" } }
+                    }
+                }
+            }));
+        }
+        return new DeploymentOrderFixture(previousManifest, baselineState);
+    }
+
+    private static void AddDeployment(string root, DeploymentOrderFixture fixture, long id, long runId, string deployedAt)
+    {
+        var path = Path.Combine(root, "deployments.json");
+        var deployments = JsonNode.Parse(File.ReadAllText(path))!.AsArray();
+        deployments.Insert(0, new JsonObject { ["id"] = id, ["created_at"] = deployedAt });
+        File.WriteAllText(path, deployments.ToJsonString());
+        File.WriteAllText(Path.Combine(root, $"statuses-{id}.json"), JsonSerializer.Serialize(new[]
+        {
+            new { state = "success", environment_url = "https://example.test/", log_url = $"https://github.test/EvotecIT/Example/actions/runs/{runId}/job/{id}", created_at = deployedAt }
+        }));
+    }
+
+    private sealed record DeploymentOrderFixture(string PreviousManifest, string BaselineState);
 
     private static bool CommandExists(string command)
     {

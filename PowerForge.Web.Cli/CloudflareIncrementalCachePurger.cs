@@ -105,6 +105,7 @@ internal static class CloudflareIncrementalCachePurger
         try
         {
             var requestCount = 0;
+            var plannedBatchCount = (urls.Length + FileTargetsPerRequest - 1) / FileTargetsPerRequest;
             foreach (var batch in urls.Chunk(FileTargetsPerRequest))
             {
                 var (ok, message) = CloudflareCachePurger.Purge(
@@ -117,14 +118,15 @@ internal static class CloudflareIncrementalCachePurger
                     httpClient);
                 if (!ok)
                     return Failure($"Incremental Cloudflare purge stopped after {requestCount} successful batch(es): {message}", urls.Length, requestCount);
-                requestCount++;
+                if (!dryRun)
+                    requestCount++;
             }
 
             return new CloudflareIncrementalPurgeResult
             {
                 Success = true,
                 Message = dryRun
-                    ? $"Incremental purge dry-run selected {urls.Length} changed URL(s) in {requestCount} batch(es)."
+                    ? $"Incremental purge dry-run selected {urls.Length} changed URL(s) in {plannedBatchCount} planned batch(es)."
                     : $"Incrementally purged {urls.Length} changed URL(s) in {requestCount} batch(es).",
                 ActualMode = CloudflareCachePurgeMode.Files,
                 TargetCount = urls.Length,

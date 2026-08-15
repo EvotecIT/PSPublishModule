@@ -168,6 +168,7 @@ on:
 permissions:
   actions: write
   contents: read
+  deployments: read
   packages: read
 
 env:
@@ -294,34 +295,6 @@ jobs:
           "run_id=${{ github.run_id }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "run_attempt=${{ github.run_attempt }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Write GitHub Pages deployment receipt
-        if: ${{ inputs.manage_cloudflare_site_policy && (steps.deployment.outcome == 'success' || steps.deployment_retry.outcome == 'success') }}
-        shell: pwsh
-        env:
-          POWERFORGE_CLOUDFLARE_SCOPE: ${{ needs.build.outputs.cloudflare_cache_manifest_scope }}
-          POWERFORGE_DEPLOYMENT_RECEIPT: ${{ runner.temp }}/powerforge-cloudflare-deployment-receipt/state.json
-        run: |
-          if ($env:POWERFORGE_CLOUDFLARE_SCOPE -notmatch '^[a-f0-9]{64}$') {
-            throw 'Cloudflare deployment receipt requires a valid repository/site scope.'
-          }
-          $directory = Split-Path -Parent $env:POWERFORGE_DEPLOYMENT_RECEIPT
-          New-Item -ItemType Directory -Path $directory -Force | Out-Null
-          [ordered]@{
-            schemaVersion = 1
-            deploymentRunId = '${{ github.run_id }}'
-            deploymentRunAttempt = [int] '${{ github.run_attempt }}'
-          } | ConvertTo-Json -Compress | Set-Content -LiteralPath $env:POWERFORGE_DEPLOYMENT_RECEIPT -Encoding utf8
-
-      - name: Upload GitHub Pages deployment receipt
-        if: ${{ inputs.manage_cloudflare_site_policy && (steps.deployment.outcome == 'success' || steps.deployment_retry.outcome == 'success') }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: powerforge-cloudflare-deployment-v2-${{ github.repository_id }}-${{ needs.build.outputs.cloudflare_cache_manifest_scope }}
-          path: ${{ runner.temp }}/powerforge-cloudflare-deployment-receipt
-          retention-days: 7
-          overwrite: true
-
-
   cloudflare-site-policy:
     if: ${{ inputs.deployment_target == 'github-pages' && inputs.manage_cloudflare_site_policy }}
     needs: [deploy, build, guardrails]
@@ -332,6 +305,7 @@ jobs:
     permissions:
       actions: write
       contents: read
+      deployments: read
     steps:
       - name: Checkout exact caller source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

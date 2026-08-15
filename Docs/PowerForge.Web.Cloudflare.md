@@ -166,9 +166,9 @@ private manifest from the exact Pages `artifact.tar`. It reads the tar
 sequentially and hashes each deployed file without reopening thousands of files
 from the generated output tree. The manifest is uploaded as a one-day workflow
 artifact and compared with the last successfully purged baseline. Successful
-baselines and deployment-order receipts are private, site-scoped repository
-artifacts, so deployments from different branches share the same continuity
-state. They are retained for seven days and are never published with the website;
+baselines are private, site-scoped repository artifacts, so deployments from
+different branches share the same continuity state. They are retained for seven
+days and are never published with the website;
 after a longer idle period, the next deployment safely uses a hostname purge.
 Current-manifest artifact names remain unique to each reusable-workflow
 invocation so one caller run can deploy multiple sites or matrix entries without
@@ -190,15 +190,17 @@ Managed cache-rule expressions match both `GET` and Cloudflare's internal
 `PURGE` evaluation, as required for reliable URL invalidation.
 Action dry-runs calculate and report the same bounded decision but neither send
 the purge request nor advance the last-successful deployment baseline.
-The Pages job records a private, site-scoped deployment-order receipt before
-the policy job starts. Retrying only an older policy job after a newer
-deployment skips the stale policy, purge, and baseline update; deliberately
-rerunning the older Pages deployment writes the newest receipt and remains
-supported, diffing back to that deployed artifact. If a Pages deployment
-succeeds but its later policy or purge step does not, the next run detects the
-intervening deployment receipt relative to the baseline's workflow run and uses
-a hostname purge instead of comparing against a non-adjacent baseline. This
-remains safe when deployment and policy jobs from different runs overlap.
+The policy job correlates GitHub's actual Pages deployment records with the
+exact Actions run attempt that produced the successful baseline. Retrying only
+an older policy job after a newer deployment skips the stale policy, purge, and
+baseline update; deliberately rerunning the older Pages deployment remains
+supported and is distinguished from the earlier attempt. If Pages succeeds but
+the later policy or purge fails, the next run still sees that intervening Pages
+deployment and uses a hostname purge instead of comparing against a non-adjacent
+baseline. This remains safe when deployment and policy jobs from different runs
+overlap and does not depend on a post-deployment receipt upload. The caller token
+must grant `actions: read` and `deployments: read`; the reusable workflow declares
+both permissions.
 
 Incremental purge targets the canonical URLs emitted by the deployment. It is
 therefore intended for static sites whose query parameters do not select a
