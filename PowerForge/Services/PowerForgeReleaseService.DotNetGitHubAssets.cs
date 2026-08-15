@@ -261,6 +261,7 @@ internal sealed partial class PowerForgeReleaseService
         DotNetPublishPlan plan,
         string stagingDirectory)
     {
+        DotNetPublishPipelineRunner.ValidateGeneratedConfigurationInputs(plan);
         string[] generatedInputs = ResolveExistingConfigurationInputs(plan.GeneratedConfigurationInputPaths);
         if (generatedInputs.Length > 0)
             return generatedInputs;

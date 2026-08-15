@@ -5505,6 +5505,10 @@ public sealed partial class PowerForgeReleaseServiceTests
                     Configuration = "Release",
                     ConfigurationInputPaths = new[] { authorizedConfig },
                     GeneratedConfigurationInputPaths = new[] { authorizedConfig },
+                    GeneratedConfigurationInputSha256 = new(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [authorizedConfig] = AppleNotarizationService.ComputeFileSha256(authorizedConfig)
+                    },
                     Targets = new[]
                     {
                         new DotNetPublishTargetPlan

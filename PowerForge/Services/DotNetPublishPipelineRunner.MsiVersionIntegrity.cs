@@ -151,9 +151,14 @@ public sealed partial class DotNetPublishPipelineRunner
         string[] bundleSourceInputs = EnumerateBundleSourceInputs(buildPlan);
         IEnumerable<string> allExplicitInputPaths = (explicitInputPaths ?? Array.Empty<string>())
             .Concat(bundleSourceInputs);
+        bool generatedOutputOverlapsInput = HasGeneratedOutputInputOverlap(
+            projectRoot,
+            generatedPaths,
+            allExplicitInputPaths);
         bool? dirty = trackedStatus is null || untrackedOutput is null
             ? null
             : statusChangedDuringVerification
+              || generatedOutputOverlapsInput
               || HasTrackedSourceChanges(
                 projectRoot,
                 gitRoot!,
@@ -179,6 +184,39 @@ public sealed partial class DotNetPublishPipelineRunner
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
             dirty);
+    }
+
+    private static bool HasGeneratedOutputInputOverlap(
+        string projectRoot,
+        IEnumerable<string>? generatedPaths,
+        IEnumerable<string>? inputPaths)
+    {
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        string[] generated = (generatedPaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(Path.IsPathRooted(path)
+                ? path
+                : Path.Combine(projectRoot, path)))
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
+        foreach (string inputPath in inputPaths ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(inputPath))
+                continue;
+            string input = Path.GetFullPath(Path.IsPathRooted(inputPath)
+                ? inputPath
+                : Path.Combine(projectRoot, inputPath));
+            if (generated.Any(path =>
+                    string.Equals(path, input, comparison) ||
+                    input.StartsWith(
+                        path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                        Path.DirectorySeparatorChar,
+                        comparison)))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static bool HasUntrackedOrIgnoredExplicitInputs(
@@ -229,13 +267,12 @@ public sealed partial class DotNetPublishPipelineRunner
             "ls-files --others --ignored --exclude-standard -z");
         if (ignoredOutput is null)
             return true;
-        string[] ignoredCandidates = ignoredOutput.Split(
+        string[] ignoredPaths = ignoredOutput.Split(
                 new[] { '\0' },
                 StringSplitOptions.RemoveEmptyEntries)
             .Select(path => path.Replace('\\', '/').TrimStart('/'))
-            .Where(path => !IsGeneratedPath(path, generatedExclusions, comparison))
             .ToArray();
-        if (ignoredCandidates.Length == 0)
+        if (ignoredPaths.Length == 0)
             return false;
         if (!TryEvaluateDotNetBuildInputs(
                 buildProjectPaths,
@@ -243,6 +280,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 buildPlan,
                 out string[] projectDirectories,
                 out HashSet<string> buildInputs))
+            return true;
+        if (HasGeneratedOutputInputOverlap(projectRoot, generatedPaths, buildInputs))
             return true;
         if (projectDirectories.Any(directory =>
                 !IsBuildProjectDirectoryAdmitted(directory, projectRoot, gitRoot)))
@@ -255,6 +294,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Where(path => !string.IsNullOrWhiteSpace(path))
                 .Select(path => path!.Replace('\\', '/').TrimStart('/')),
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        string[] ignoredCandidates = ignoredPaths
+            .Where(path => !IsGeneratedPath(path, generatedExclusions, comparison))
+            .ToArray();
         return ignoredCandidates.Any(gitRelativeBuildInputs.Contains);
     }
 

@@ -69,6 +69,29 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void Plan_RejectsOutputDirectoryThatContainsProjectSource()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var csproj = CreateProjectFile(root, "App.csproj");
+            var spec = CreateBaseSpec(root, csproj);
+            spec.Targets[0].Publish.OutputPath = root;
+            spec.Targets[0].Publish.ZipPath = Path.Combine(root, "Artifacts", "app.zip");
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Plan(spec, null));
+
+            Assert.Contains("cannot contain source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(csproj, exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_DeniesManifestPathOutsideProjectRoot_ByDefault()
     {
         var root = CreateTempRoot();

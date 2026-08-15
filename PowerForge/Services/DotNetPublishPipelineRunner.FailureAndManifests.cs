@@ -327,6 +327,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string>? cleanTrackedGeneratedProvenanceState = null,
         string? msiReservationOwner = null)
     {
+        ValidateGeneratedConfigurationInputs(plan);
         var orderedArtefacts = (artefacts ?? new List<DotNetPublishArtefactResult>())
             .OrderBy(a => a.Target, StringComparer.OrdinalIgnoreCase)
             .ThenBy(a => a.Framework, StringComparer.OrdinalIgnoreCase)

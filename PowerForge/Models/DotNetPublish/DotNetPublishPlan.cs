@@ -17,6 +17,12 @@ public sealed class DotNetPublishPlan
     /// </summary>
     public string[] GeneratedConfigurationInputPaths { get; internal set; } = Array.Empty<string>();
 
+    /// <summary>
+    /// SHA-256 digests admitted for wrapper-generated configuration evidence, keyed by absolute path.
+    /// </summary>
+    internal Dictionary<string, string> GeneratedConfigurationInputSha256 { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Service-owned generated module provenance files excluded from source-dirty capture.</summary>
     public string[] GeneratedProvenancePaths { get; internal set; } = Array.Empty<string>();
 

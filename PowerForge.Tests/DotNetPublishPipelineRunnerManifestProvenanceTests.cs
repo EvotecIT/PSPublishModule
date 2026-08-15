@@ -710,6 +710,10 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 ProjectRoot = root,
                 ConfigurationInputPaths = new[] { releaseConfig, publishConfig },
                 GeneratedConfigurationInputPaths = new[] { releaseConfig },
+                GeneratedConfigurationInputSha256 = new(StringComparer.OrdinalIgnoreCase)
+                {
+                    [releaseConfig] = AppleNotarizationService.ComputeFileSha256(releaseConfig)
+                },
                 GeneratedProvenancePaths = new[] { generatedJsonProvenance, generatedSignedProvenance },
                 Outputs = new DotNetPublishOutputs
                 {
@@ -815,13 +819,16 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                     <Content Include="property.custom" Condition="'$(CustomFlavor)' == 'Secure'" />
                     <Content Include="environment.custom" Condition="'$(POWERFORGE_TEST_INPUT)' == 'enabled'" />
                     <Content Include="assets/bin/payload.dat" />
+                    <Reference Include="Ignored.LocalAssembly">
+                      <HintPath>ignored/LocalAssembly.dll</HintPath>
+                    </Reference>
                     <EditorConfigFiles Include="analyzer.editorconfig" />
                     <GlobalAnalyzerConfigFiles Include="analyzer.globalconfig" />
                   </ItemGroup>
                 </Project>
                 """);
             File.WriteAllText(Path.Combine(root, "Program.cs"), "internal static class Program { }");
-            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\nrid.custom\nsingle.custom\nproperty.custom\nenvironment.custom\nanalyzer.editorconfig\nanalyzer.globalconfig\nassets/bin/\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\nrid.custom\nsingle.custom\nproperty.custom\nenvironment.custom\nanalyzer.editorconfig\nanalyzer.globalconfig\nignored/\nassets/bin/\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
             RunGit(root, "add Sample.csproj Program.cs .gitignore");
             RunGit(root, "commit -m \"tracked source\"");
 
@@ -903,6 +910,22 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 Assert.True(analyzerDirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
                 File.Delete(Path.Combine(root, analyzerInput));
             }
+
+            string ignoredReferenceDirectory = Directory.CreateDirectory(Path.Combine(root, "ignored")).FullName;
+            string ignoredReference = Path.Combine(ignoredReferenceDirectory, "LocalAssembly.dll");
+            File.WriteAllText(ignoredReference, "mutable assembly input");
+            InvokeWriteManifests(plan, artefacts);
+            using (JsonDocument referenceDirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+                Assert.True(referenceDirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+
+            artefacts[0].PublishDir = ignoredReferenceDirectory;
+            artefacts[0].OutputDir = ignoredReferenceDirectory;
+            InvokeWriteManifests(plan, artefacts);
+            using (JsonDocument overlappingOutputManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+                Assert.True(overlappingOutputManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+            artefacts[0].PublishDir = outputDirectory;
+            artefacts[0].OutputDir = outputDirectory;
+            File.Delete(ignoredReference);
 
             File.WriteAllText(Path.Combine(root, "payload.custom"), "published payload");
             InvokeWriteManifests(plan, artefacts);

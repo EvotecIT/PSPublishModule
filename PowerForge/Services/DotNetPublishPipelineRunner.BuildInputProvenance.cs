@@ -12,6 +12,9 @@ public sealed partial class DotNetPublishPipelineRunner
         "EmbeddedResource",
         "AdditionalFiles",
         "Analyzer",
+        "Reference",
+        "ReferencePath",
+        "ReferenceCopyLocalPaths",
         "EditorConfigFiles",
         "GlobalAnalyzerConfigFiles",
         "ApplicationDefinition",
@@ -423,6 +426,16 @@ public sealed partial class DotNetPublishPipelineRunner
                         continue;
                     foreach (JsonElement item in values.EnumerateArray())
                     {
+                        if (itemName.Equals("Reference", StringComparison.Ordinal) &&
+                            TryResolveEvaluatedItemPath(
+                                item,
+                                "HintPath",
+                                Path.GetDirectoryName(request.ProjectPath)!,
+                                out string? hintPath))
+                        {
+                            inputs.Add(hintPath!);
+                        }
+
                         if (!item.TryGetProperty("FullPath", out JsonElement fullPathElement) ||
                             fullPathElement.ValueKind != JsonValueKind.String ||
                             string.IsNullOrWhiteSpace(fullPathElement.GetString()))
@@ -469,6 +482,72 @@ public sealed partial class DotNetPublishPipelineRunner
         catch
         {
             return false;
+        }
+    }
+
+    private static bool TryResolveEvaluatedItemPath(
+        JsonElement item,
+        string metadataName,
+        string baseDirectory,
+        out string? fullPath)
+    {
+        fullPath = null;
+        string? value = ReadItemText(item, metadataName);
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        try
+        {
+            fullPath = Path.GetFullPath(Path.IsPathRooted(value)
+                ? value
+                : Path.Combine(baseDirectory, value));
+            return File.Exists(fullPath);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    internal static void ValidateGeneratedConfigurationInputs(DotNetPublishPlan? plan)
+    {
+        if (plan is null)
+            return;
+
+        string[] generatedPaths = (plan.GeneratedConfigurationInputPaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
+        if (generatedPaths.Length == 0)
+            return;
+
+        IReadOnlyDictionary<string, string> admitted = plan.GeneratedConfigurationInputSha256;
+        foreach (string path in generatedPaths)
+        {
+            if (!admitted.TryGetValue(path, out string? expectedSha256) ||
+                string.IsNullOrWhiteSpace(expectedSha256))
+            {
+                throw new InvalidOperationException(
+                    $"Generated configuration evidence '{path}' has no admitted SHA-256 digest.");
+            }
+            if (!File.Exists(path))
+            {
+                throw new InvalidOperationException(
+                    $"Generated configuration evidence is missing: {path}");
+            }
+
+            byte[] admittedBytes = File.ReadAllBytes(path);
+            string actualSha256 = ComputeSha256Hex(admittedBytes);
+            if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Generated configuration evidence changed after admission: {path}");
+            }
+
+            using var stream = new MemoryStream(admittedBytes, writable: false);
+            using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            PowerForgeReleaseConfigurationSecretValidator.ValidateJson(reader.ReadToEnd());
         }
     }
 

@@ -260,6 +260,111 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_AuthorizedInlineDotNetConfigurationUsesCallerPathBase()
+    {
+        string root = CreateSandbox();
+        string evidenceRoot = CreateSandbox();
+        try
+        {
+            InitializeGitRepository(root);
+            string projectPath = Path.Combine(root, "Sample.Cli.csproj");
+            File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\" />", new UTF8Encoding(false));
+            string sourceConfigPath = Path.Combine(root, "powerforge.release.json");
+            string releaseJson = """
+{
+  "Tools": {
+    "DotNetPublish": {
+      "Targets": [
+        {
+          "Name": "Sample.Cli",
+          "Kind": "Cli",
+          "ProjectPath": "Sample.Cli.csproj",
+          "Publish": { "Framework": "net10.0", "Runtimes": [ "win-x64" ], "Style": "PortableCompat" }
+        }
+      ]
+    }
+  }
+}
+""";
+            File.WriteAllText(sourceConfigPath, releaseJson, new UTF8Encoding(false));
+            string effectiveConfigPath = Path.Combine(
+                evidenceRoot,
+                ".release.authorized.1.2.3.cccccccccccccccccccccccccccccccccccccccc.json");
+            File.WriteAllText(effectiveConfigPath, releaseJson, new UTF8Encoding(false));
+            PowerForgeReleaseSpec spec = PowerForgeReleaseService.LoadConfiguration(effectiveConfigPath);
+
+            PowerForgeReleaseResult result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = sourceConfigPath,
+                    EffectiveConfigurationPath = effectiveConfigPath,
+                    PlanOnly = true,
+                    ToolsOnly = true
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            DotNetPublishPlan plan = Assert.IsType<DotNetPublishPlan>(result.DotNetToolPlan);
+            Assert.Equal(projectPath, Assert.Single(plan.Targets).ProjectPath, ignoreCase: true);
+            Assert.Equal(
+                AppleNotarizationService.ComputeFileSha256(effectiveConfigPath),
+                plan.GeneratedConfigurationInputSha256[effectiveConfigPath],
+                ignoreCase: true);
+        }
+        finally
+        {
+            TryDelete(evidenceRoot);
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void PublishBuiltReleaseOutputs_RejectsMutatedAuthorizedConfiguration()
+    {
+        string root = CreateSandbox();
+        string evidenceRoot = CreateSandbox();
+        try
+        {
+            string sourceConfigPath = Path.Combine(root, "powerforge.release.json");
+            File.WriteAllText(sourceConfigPath, "{}", new UTF8Encoding(false));
+            string effectiveConfigPath = Path.Combine(
+                evidenceRoot,
+                ".release.authorized.1.2.3.dddddddddddddddddddddddddddddddddddddddd.json");
+            File.WriteAllText(effectiveConfigPath, "{ \"SchemaVersion\": 1 }", new UTF8Encoding(false));
+            string admittedSha256 = AppleNotarizationService.ComputeFileSha256(effectiveConfigPath);
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                GeneratedConfigurationInputPaths = new[] { effectiveConfigPath },
+                GeneratedConfigurationInputSha256 = new(StringComparer.OrdinalIgnoreCase)
+                {
+                    [effectiveConfigPath] = admittedSha256
+                }
+            };
+            var request = new PowerForgeReleaseRequest
+            {
+                ConfigPath = sourceConfigPath,
+                EffectiveConfigurationPath = effectiveConfigPath,
+                DotNetPublishPlan = plan
+            };
+            File.WriteAllText(effectiveConfigPath, "{}", new UTF8Encoding(false));
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new PowerForgeReleaseService(new NullLogger()).PublishBuiltReleaseOutputs(
+                    new PowerForgeReleaseSpec(),
+                    request,
+                    new PowerForgeReleaseResult { Success = true }));
+
+            Assert.Contains("changed after admission", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(evidenceRoot);
+            TryDelete(root);
+        }
+    }
+
     private static void InitializeGitRepository(string root)
     {
         using var process = new System.Diagnostics.Process

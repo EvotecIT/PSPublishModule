@@ -355,7 +355,8 @@ internal sealed partial class PowerForgeReleaseService
                     dotNetSpecForTools = dotNetSource.Spec;
                     dotNetSourcePathForTools = ResolveDotNetPlanningConfigurationPath(
                         dotNetSource.SourceConfigPath,
-                        configPath);
+                        configPath,
+                        spec.Tools!.DotNetPublish is not null);
                     toolTargetMatches = ResolveDotNetToolTargetMatches(dotNetSpecForTools, selectedTargets);
                 }
                 else
@@ -978,6 +979,7 @@ internal sealed partial class PowerForgeReleaseService
 
         if (!request.PlanOnly && !request.ValidateOnly && !explicitAppleAction)
         {
+            ValidatePostBuildSourceState(request);
             PopulateReleaseOutputs(spec, request, configDirectory, result, sharedReleaseVersion);
             result.ToolGitHubReleasePlans = BuildToolGitHubReleasePlans(spec, result);
             GenerateWingetOutputs(spec, request, configDirectory, result);
@@ -4231,8 +4233,12 @@ internal sealed partial class PowerForgeReleaseService
 
     private static string ResolveDotNetPlanningConfigurationPath(
         string loadedConfigurationPath,
-        string sourceReleaseConfigurationPath)
+        string sourceReleaseConfigurationPath,
+        bool inlineConfiguration)
     {
+        if (inlineConfiguration)
+            return Path.GetFullPath(sourceReleaseConfigurationPath);
+
         string loadedPath = Path.GetFullPath(loadedConfigurationPath);
         Match stagedMatch = StagedDotNetPublishConfigurationFileName.Match(Path.GetFileName(loadedPath));
         if (!stagedMatch.Success)

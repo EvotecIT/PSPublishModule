@@ -86,7 +86,17 @@ internal sealed partial class PowerForgeReleaseService
         plan.GeneratedConfigurationInputPaths = new[] { effectiveConfigPath }
             .Concat(stagedConfigurationPaths)
             .ToArray();
+        plan.GeneratedConfigurationInputSha256 = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [effectiveConfigPath] = request.LoadedConfigurationSha256!
+        };
+        foreach (string stagedConfigurationPath in stagedConfigurationPaths)
+        {
+            Match stagedMatch = StagedDotNetPublishConfigurationFileName.Match(Path.GetFileName(stagedConfigurationPath));
+            plan.GeneratedConfigurationInputSha256[stagedConfigurationPath] = stagedMatch.Groups["sha256"].Value;
+        }
         plan.GeneratedProvenancePaths = request.GeneratedProvenancePaths.ToArray();
+        DotNetPublishPipelineRunner.ValidateGeneratedConfigurationInputs(plan);
     }
 
     private static bool IsTrustedStagedConfiguration(string path)
@@ -115,6 +125,7 @@ internal sealed partial class PowerForgeReleaseService
     private static IEnumerable<PowerForgeReleaseAssetEntry> CreateGeneratedConfigurationAssetEntries(
         DotNetPublishPlan? plan)
     {
+        DotNetPublishPipelineRunner.ValidateGeneratedConfigurationInputs(plan);
         foreach (string path in plan?.GeneratedConfigurationInputPaths ?? Array.Empty<string>())
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))

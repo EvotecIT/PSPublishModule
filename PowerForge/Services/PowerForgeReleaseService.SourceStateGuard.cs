@@ -13,6 +13,7 @@ internal sealed partial class PowerForgeReleaseService
 
     private static void ValidatePostBuildSourceState(PowerForgeReleaseRequest request)
     {
+        DotNetPublishPipelineRunner.ValidateGeneratedConfigurationInputs(request.DotNetPublishPlan);
         if (!HasPostBuildSourceStateGuard(request))
             return;
         if (string.IsNullOrWhiteSpace(request.SourceRepositoryRoot))
