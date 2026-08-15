@@ -3,6 +3,33 @@ namespace PowerForge.Tests;
 public sealed partial class ModuleBuildPreparationServiceTests
 {
     [Fact]
+    public void Prepare_from_dsl_preserves_parent_unified_github_release()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-dsl-unified-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "Sample.psd1"), "@{ ModuleVersion = '1.0.0' }");
+
+            var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+            {
+                ParameterSetName = "Modern",
+                ModuleName = "Sample",
+                InputPath = root.FullName,
+                CurrentPath = root.FullName,
+                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                UnifiedGitHubRelease = true
+            });
+
+            Assert.True(prepared.PipelineSpec.UnifiedGitHubRelease);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Prepare_from_config_applies_diagnostics_and_parent_publication_overrides()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-config-overrides-" + Guid.NewGuid().ToString("N")));
@@ -63,6 +90,7 @@ public sealed partial class ModuleBuildPreparationServiceTests
             Assert.True(prepared.PipelineSpec.Diagnostics.UpdateBaseline);
             Assert.True(prepared.PipelineSpec.Diagnostics.FailOnNewDiagnostics);
             Assert.Equal(BuildDiagnosticSeverity.Error, prepared.PipelineSpec.Diagnostics.FailOnSeverity);
+            Assert.True(prepared.PipelineSpec.UnifiedGitHubRelease);
             var publish = Assert.Single(prepared.PipelineSpec.Segments.OfType<ConfigurationPublishSegment>());
             Assert.Equal(PublishDestination.PowerShellGallery, publish.Configuration.Destination);
         }

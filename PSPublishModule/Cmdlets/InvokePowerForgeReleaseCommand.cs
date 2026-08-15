@@ -102,6 +102,32 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     public string? Configuration { get; set; }
 
     /// <summary>
+    /// Effective configuration created outside the checkout by the trusted public-release wrapper.
+    /// The original <see cref="ConfigPath"/> remains the source/provenance anchor.
+    /// </summary>
+    [Parameter(DontShow = true)]
+    public string? EffectiveConfigurationPath { get; set; }
+
+    /// <summary>
+    /// Git checkout whose source state must still match immediately after the module build and before publication.
+    /// </summary>
+    [Parameter(DontShow = true)]
+    public string? SourceRepositoryRoot { get; set; }
+
+    /// <summary>
+    /// Exact Git object id required by the post-build source-state guard.
+    /// </summary>
+    [Parameter(DontShow = true)]
+    [ValidatePattern("^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$")]
+    public string? ExpectedSourceRevision { get; set; }
+
+    /// <summary>
+    /// Caller-owned configuration and build inputs that must remain regular tracked files.
+    /// </summary>
+    [Parameter(DontShow = true)]
+    public string[]? SourceInputPath { get; set; }
+
+    /// <summary>
     /// Target framework used by the native module-release lane.
     /// </summary>
     [Parameter]
@@ -537,7 +563,10 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             else
             {
                 configFullPath = ResolveConfigPath(ConfigPath);
-                spec = LoadConfig(configFullPath);
+                string configurationToLoad = string.IsNullOrWhiteSpace(EffectiveConfigurationPath)
+                    ? configFullPath
+                    : Path.GetFullPath(EffectiveConfigurationPath!.Trim().Trim('"'));
+                spec = LoadConfig(configurationToLoad);
                 requestDefaults = new PowerForgeReleaseRequest
                 {
                     ConfigPath = configFullPath
@@ -788,6 +817,10 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             KeepSymbols = ResolveRequestedFlag(boundParameters, nameof(KeepSymbols)),
             EnableSigning = ResolveRequestedFlag(boundParameters, nameof(Sign)),
             Configuration = NormalizeNullable(Configuration),
+            EffectiveConfigurationPath = NormalizeNullable(EffectiveConfigurationPath),
+            SourceRepositoryRoot = NormalizeNullable(SourceRepositoryRoot),
+            ExpectedSourceRevision = NormalizeNullable(ExpectedSourceRevision),
+            SourceInputPaths = SourceInputPath ?? Array.Empty<string>(),
             ReleaseVersion = NormalizeNullable(ReleaseVersion),
             ModuleVersion = NormalizeNullable(ModuleVersion),
             ModulePreReleaseTag = NormalizeNullable(ModulePreReleaseTag),

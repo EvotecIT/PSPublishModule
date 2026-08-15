@@ -61,80 +61,15 @@ public sealed partial class DotNetRepositoryReleaseService
             if (!string.IsNullOrWhiteSpace(spec.PublishSource))
                 spec.PublishSource = ResolvePublishSource(spec.PublishSource!, root);
 
-            var include = BuildNameSet(spec.IncludeProjects);
-            var exclude = BuildNameSet(spec.ExcludeProjects);
+            if (!TryResolveSelectedProjectCandidates(spec, _logger, out var candidates, out string? selectionError))
+            {
+                result.Success = false;
+                result.ErrorMessage = selectionError;
+                return result;
+            }
+
             var expectedMap = BuildExpectedVersionMap(spec.ExpectedVersionsByProject);
-            if (include.Count > 0)
-            {
-                var includeList = string.Join(", ", include.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
-                _logger.Info($"Include projects: {includeList}");
-            }
-            if (exclude.Count > 0)
-            {
-                var excludeList = string.Join(", ", exclude.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
-                _logger.Info($"Exclude projects: {excludeList}");
-            }
-
-            var excludeDirectories = BuildExcludeDirectories(spec.ExcludeDirectories);
-            var enumeration = new ProjectEnumeration(
-                rootPath: root,
-                kind: ProjectKind.CSharp,
-                customExtensions: new[] { "*.csproj" },
-                excludeDirectories: excludeDirectories);
-
-            var projectFiles = ProjectFileEnumerator.Enumerate(enumeration)
-                .Where(p => p.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
             var projects = new List<DotNetRepositoryProjectResult>();
-            var candidates = new List<(string Name, string Path)>();
-            foreach (var csproj in projectFiles)
-            {
-                var name = Path.GetFileNameWithoutExtension(csproj) ?? csproj;
-                if (include.Count > 0 && !include.Contains(name)) continue;
-                if (exclude.Contains(name)) continue;
-
-                candidates.Add((name, csproj));
-            }
-
-            if (spec.ExpectedVersionMapAsInclude)
-            {
-                if (expectedMap.Count == 0)
-                {
-                    result.Success = false;
-                    result.ErrorMessage = "ExpectedVersionMapAsInclude is set but ExpectedVersionMap is empty.";
-                    return result;
-                }
-
-                var excludedByMap = new List<string>();
-                var filtered = new List<(string Name, string Path)>();
-                foreach (var candidate in candidates)
-                {
-                    if (MatchesExpectedMap(candidate.Name, expectedMap, spec.ExpectedVersionMapUseWildcards))
-                        filtered.Add(candidate);
-                    else
-                        excludedByMap.Add(candidate.Name);
-                }
-
-                var matched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var kvp in expectedMap)
-                {
-                    var pattern = kvp.Key;
-                    bool any = filtered.Any(c => MatchesPattern(c.Name, pattern, spec.ExpectedVersionMapUseWildcards));
-                    if (any) matched.Add(pattern);
-                    else _logger.Warn($"Expected version map entry '{pattern}' did not match any projects.");
-                }
-
-                candidates = filtered;
-                _logger.Info($"Expected version map include-only: {candidates.Count} project(s) matched.");
-                if (excludedByMap.Count > 0)
-                {
-                    var distinctExcluded = excludedByMap.Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
-                    _logger.Info($"Excluded by ExpectedVersionMap: {string.Join(", ", distinctExcluded)}");
-                }
-            }
 
             foreach (var group in candidates.GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
             {
@@ -679,6 +614,94 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             ActiveCancellationToken.Value = previousCancellationToken;
         }
+    }
+
+    internal static string[] ResolveSelectedProjectPaths(DotNetRepositoryReleaseSpec spec)
+    {
+        if (!TryResolveSelectedProjectCandidates(spec, logger: null, out var candidates, out string? error))
+            throw new InvalidOperationException(error);
+        return candidates
+            .Where(static candidate => IsPackable(candidate.Path))
+            .Select(static candidate => candidate.Path)
+            .ToArray();
+    }
+
+    private static bool TryResolveSelectedProjectCandidates(
+        DotNetRepositoryReleaseSpec spec,
+        ILogger? logger,
+        out List<(string Name, string Path)> candidates,
+        out string? error)
+    {
+        candidates = new List<(string Name, string Path)>();
+        error = null;
+        var include = BuildNameSet(spec.IncludeProjects);
+        var exclude = BuildNameSet(spec.ExcludeProjects);
+        var expectedMap = BuildExpectedVersionMap(spec.ExpectedVersionsByProject);
+        if (include.Count > 0)
+        {
+            var includeList = string.Join(", ", include.OrderBy(name => name, StringComparer.OrdinalIgnoreCase));
+            logger?.Info($"Include projects: {includeList}");
+        }
+        if (exclude.Count > 0)
+        {
+            var excludeList = string.Join(", ", exclude.OrderBy(name => name, StringComparer.OrdinalIgnoreCase));
+            logger?.Info($"Exclude projects: {excludeList}");
+        }
+
+        var enumeration = new ProjectEnumeration(
+            rootPath: spec.RootPath,
+            kind: ProjectKind.CSharp,
+            customExtensions: new[] { "*.csproj" },
+            excludeDirectories: BuildExcludeDirectories(spec.ExcludeDirectories));
+        foreach (string csproj in ProjectFileEnumerator.Enumerate(enumeration)
+                     .Where(path => path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            string name = Path.GetFileNameWithoutExtension(csproj) ?? csproj;
+            if (include.Count > 0 && !include.Contains(name))
+                continue;
+            if (!exclude.Contains(name))
+                candidates.Add((name, csproj));
+        }
+
+        if (!spec.ExpectedVersionMapAsInclude)
+            return true;
+        if (expectedMap.Count == 0)
+        {
+            error = "ExpectedVersionMapAsInclude is set but ExpectedVersionMap is empty.";
+            return false;
+        }
+
+        var excludedByMap = new List<string>();
+        candidates = candidates.Where(candidate =>
+            {
+                bool included = MatchesExpectedMap(
+                    candidate.Name,
+                    expectedMap,
+                    spec.ExpectedVersionMapUseWildcards);
+                if (!included)
+                    excludedByMap.Add(candidate.Name);
+                return included;
+            })
+            .ToList();
+        foreach (string pattern in expectedMap.Keys)
+        {
+            bool any = candidates.Any(candidate => MatchesPattern(
+                candidate.Name,
+                pattern,
+                spec.ExpectedVersionMapUseWildcards));
+            if (!any)
+                logger?.Warn($"Expected version map entry '{pattern}' did not match any projects.");
+        }
+
+        logger?.Info($"Expected version map include-only: {candidates.Count} project(s) matched.");
+        if (excludedByMap.Count > 0)
+        {
+            var distinctExcluded = excludedByMap.Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
+            logger?.Info($"Excluded by ExpectedVersionMap: {string.Join(", ", distinctExcluded)}");
+        }
+        return true;
     }
 
 }

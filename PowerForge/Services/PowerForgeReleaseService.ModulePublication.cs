@@ -13,10 +13,10 @@ internal sealed partial class PowerForgeReleaseService
         bool runPackages,
         bool willRunTools,
         bool willRunAppleApps)
-        => !releaseRequest.ModuleOnly &&
-           moduleRequest.RunMode == ConfigurationGateMode.Publish &&
+        => moduleRequest.RunMode == ConfigurationGateMode.Publish &&
            moduleRequest.IncludeModulePublishing &&
-           (runPackages || willRunTools || willRunAppleApps);
+           (!releaseRequest.ModuleOnly || HasPostBuildSourceStateGuard(releaseRequest)) &&
+           (runPackages || willRunTools || willRunAppleApps || HasPostBuildSourceStateGuard(releaseRequest));
 
     private ModuleBuildHostExecutionResult ExecuteModuleRequest(
         ModuleBuildHostBuildRequest request,

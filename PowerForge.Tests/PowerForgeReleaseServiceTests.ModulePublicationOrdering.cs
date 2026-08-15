@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
@@ -66,7 +68,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 VersionSource = PowerForgeReleaseVersionSource.Assets,
                 Owner = "EvotecIT",
                 Repository = "example",
-                Token = "token",
+                TokenEnvName = "PATH",
                 Commitish = "0123456789abcdef0123456789abcdef01234567",
                 ReuseExistingRelease = true,
                 RequireExpectedExistingRelease = true,
@@ -391,7 +393,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     VersionSource = PowerForgeReleaseVersionSource.Assets,
                     Owner = "EvotecIT",
                     Repository = "example",
-                    Token = "token",
+                    TokenEnvName = "PATH",
                     Commitish = "0123456789abcdef0123456789abcdef01234567",
                     RequirePublishedNuGetAssets = true,
                     RequirePublishedModuleAssets = true,
@@ -549,6 +551,353 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_post_build_source_guard_blocks_mutation_before_module_publication()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            var releasePath = Path.Combine(root, "release.json");
+            var trackedInput = Path.Combine(root, "tracked-input.txt");
+            File.WriteAllText(scriptPath, "# module build");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(trackedInput, "approved");
+            RunGitForSourceGuard(root, "init");
+            RunGitForSourceGuard(root, "config user.name \"PowerForge Tests\"");
+            RunGitForSourceGuard(root, "config user.email \"powerforge-tests@example.invalid\"");
+            RunGitForSourceGuard(root, "add .");
+            RunGitForSourceGuard(root, "commit -m \"approved source\"");
+            string revision = RunGitForSourceGuard(root, "rev-parse HEAD").Trim();
+
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true },
+                request =>
+                {
+                    if (request.RunMode == ConfigurationGateMode.Build)
+                        File.WriteAllText(trackedInput, "mutated during module build");
+                });
+            PowerForgeReleaseSpec spec = CreateReleaseSpec(root, scriptPath);
+            spec.Tools = null;
+
+            var exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleOnly = true,
+                    ModuleRunMode = ConfigurationGateMode.Publish,
+                    SourceRepositoryRoot = root,
+                    ExpectedSourceRevision = revision,
+                    SourceInputPaths = [releasePath]
+                }));
+
+            Assert.Contains("changed after the release build", exception.Message, StringComparison.OrdinalIgnoreCase);
+            var build = Assert.Single(moduleCalls);
+            Assert.Equal(ConfigurationGateMode.Build, build.RunMode);
+            Assert.False(build.IncludeModulePublishing);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_post_build_source_guard_rechecks_after_tool_build_before_publication()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            var releasePath = Path.Combine(root, "release.json");
+            var trackedInput = Path.Combine(root, "tracked-input.txt");
+            File.WriteAllText(scriptPath, "# module build");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(trackedInput, "approved");
+            RunGitForSourceGuard(root, "init");
+            RunGitForSourceGuard(root, "config user.name \"PowerForge Tests\"");
+            RunGitForSourceGuard(root, "config user.email \"powerforge-tests@example.invalid\"");
+            RunGitForSourceGuard(root, "add .");
+            RunGitForSourceGuard(root, "commit -m \"approved source\"");
+            string revision = RunGitForSourceGuard(root, "rev-parse HEAD").Trim();
+            int publicationAttempts = 0;
+
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true },
+                publishGitHubRelease: _ =>
+                {
+                    publicationAttempts++;
+                    return new GitHubReleasePublishResult { Succeeded = true };
+                },
+                onToolExecution: () => File.WriteAllText(trackedInput, "mutated during tool build"));
+            PowerForgeReleaseSpec spec = CreateReleaseSpec(root, scriptPath);
+            spec.Tools!.GitHub.Publish = true;
+
+            var exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleRunMode = ConfigurationGateMode.Publish,
+                    SourceRepositoryRoot = root,
+                    ExpectedSourceRevision = revision,
+                    SourceInputPaths = [releasePath]
+                }));
+
+            Assert.Contains("changed after the release build", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, publicationAttempts);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_post_build_source_guard_rejects_ignored_source_in_project_reference_graph()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var appDirectory = Directory.CreateDirectory(Path.Combine(root, "App")).FullName;
+            var libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "Library")).FullName;
+            var appProject = Path.Combine(appDirectory, "App.csproj");
+            var libraryProject = Path.Combine(libraryDirectory, "Library.csproj");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(libraryProject, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { }");
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.cs"), "internal static class Library { }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "Library/Generated.cs\n");
+            RunGitForSourceGuard(root, "init");
+            RunGitForSourceGuard(root, "config user.name \"PowerForge Tests\"");
+            RunGitForSourceGuard(root, "config user.email \"powerforge-tests@example.invalid\"");
+            RunGitForSourceGuard(root, "add .");
+            RunGitForSourceGuard(root, "commit -m \"approved source\"");
+            string revision = RunGitForSourceGuard(root, "rev-parse HEAD").Trim();
+            File.WriteAllText(Path.Combine(libraryDirectory, "Generated.cs"), "internal static class Injected { }");
+            int publicationAttempts = 0;
+
+            var service = CreateReleaseService(
+                root,
+                new List<ModuleExecutionSnapshot>(),
+                new PowerForgeToolReleaseResult { Success = true },
+                publishGitHubRelease: _ =>
+                {
+                    publicationAttempts++;
+                    return new GitHubReleasePublishResult { Succeeded = true };
+                });
+            PowerForgeReleaseSpec spec = CreateReleaseSpec(root, Path.Combine(root, "Build-Module.ps1"));
+            spec.Module = null;
+            spec.Tools!.GitHub.Publish = true;
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ToolsOnly = true,
+                    SourceRepositoryRoot = root,
+                    ExpectedSourceRevision = revision,
+                    SourceInputPaths = [releasePath, appProject]
+                }));
+
+            Assert.Contains("changed after the release build", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, publicationAttempts);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_post_build_source_guard_is_invoked_by_package_publisher_after_package_build()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var trackedInput = Path.Combine(root, "tracked-input.txt");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(trackedInput, "approved");
+            RunGitForSourceGuard(root, "init");
+            RunGitForSourceGuard(root, "config user.name \"PowerForge Tests\"");
+            RunGitForSourceGuard(root, "config user.email \"powerforge-tests@example.invalid\"");
+            RunGitForSourceGuard(root, "add .");
+            RunGitForSourceGuard(root, "commit -m \"approved source\"");
+            string revision = RunGitForSourceGuard(root, "rev-parse HEAD").Trim();
+
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true },
+                executePackages: (packageRequest, _, _) =>
+                {
+                    File.WriteAllText(trackedInput, "mutated during package build");
+                    packageRequest.RemotePublishAttempted?.Invoke();
+                    return new ProjectBuildHostExecutionResult { Success = true };
+                });
+            var spec = new PowerForgeReleaseSpec
+            {
+                Packages = new ProjectBuildConfiguration { PublishNuget = true }
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    PackagesOnly = true,
+                    PublishNuget = true,
+                    SourceRepositoryRoot = root,
+                    ExpectedSourceRevision = revision,
+                    SourceInputPaths = [releasePath]
+                }));
+
+            Assert.Contains("changed after the release build", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_package_source_guard_rejects_ignored_evaluated_project_input()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            string releasePath = Path.Combine(root, "release.json");
+            string projectPath = Path.Combine(root, "Package.csproj");
+            string ignoredDirectory = Directory.CreateDirectory(Path.Combine(root, "ignored")).FullName;
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+                  <ItemGroup><AdditionalFiles Include="ignored/rules.json" /></ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "ignored/\nbin/\nobj/\n");
+            RunGitForSourceGuard(root, "init");
+            RunGitForSourceGuard(root, "config user.name \"PowerForge Tests\"");
+            RunGitForSourceGuard(root, "config user.email \"powerforge-tests@example.invalid\"");
+            RunGitForSourceGuard(root, "add .");
+            RunGitForSourceGuard(root, "commit -m \"approved source\"");
+            string revision = RunGitForSourceGuard(root, "rev-parse HEAD").Trim();
+            File.WriteAllText(Path.Combine(ignoredDirectory, "rules.json"), "{\"mutable\":true}");
+
+            var service = CreateReleaseService(
+                root,
+                new List<ModuleExecutionSnapshot>(),
+                new PowerForgeToolReleaseResult { Success = true },
+                executePackages: (packageRequest, configuration, configPath) =>
+                {
+                    ProjectBuildPreparedContext prepared = new ProjectBuildPreparationService().Prepare(
+                        configuration,
+                        Path.GetDirectoryName(configPath)!,
+                        planPath: null,
+                        new ProjectBuildRequestedActions
+                        {
+                            Build = true,
+                            PublishNuget = true
+                        });
+                    packageRequest.BuildSpecPrepared?.Invoke(prepared.Spec);
+                    packageRequest.RemotePublishAttempted?.Invoke();
+                    return new ProjectBuildHostExecutionResult { Success = true };
+                });
+            var spec = new PowerForgeReleaseSpec
+            {
+                Packages = new ProjectBuildConfiguration
+                {
+                    RootPath = root,
+                    Build = true,
+                    PublishNuget = true
+                }
+            };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    PackagesOnly = true,
+                    PublishNuget = true,
+                    SourceRepositoryRoot = root,
+                    ExpectedSourceRevision = revision,
+                    SourceInputPaths = [releasePath]
+                }));
+
+            Assert.Contains("changed after the release build", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_post_build_source_guard_defers_and_allows_clean_module_publication()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            var releasePath = Path.Combine(root, "release.json");
+            File.WriteAllText(scriptPath, "# module build");
+            File.WriteAllText(releasePath, "{}");
+            RunGitForSourceGuard(root, "init");
+            RunGitForSourceGuard(root, "config user.name \"PowerForge Tests\"");
+            RunGitForSourceGuard(root, "config user.email \"powerforge-tests@example.invalid\"");
+            RunGitForSourceGuard(root, "add .");
+            RunGitForSourceGuard(root, "commit -m \"approved source\"");
+            string revision = RunGitForSourceGuard(root, "rev-parse HEAD").Trim();
+
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true });
+            PowerForgeReleaseSpec spec = CreateReleaseSpec(root, scriptPath);
+            spec.Tools = null;
+
+            PowerForgeReleaseResult result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleOnly = true,
+                    ModuleRunMode = ConfigurationGateMode.Publish,
+                    SourceRepositoryRoot = root,
+                    ExpectedSourceRevision = revision,
+                    SourceInputPaths = [releasePath]
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(2, moduleCalls.Count);
+            Assert.Equal(ConfigurationGateMode.Build, moduleCalls[0].RunMode);
+            Assert.Equal(ConfigurationGateMode.Publish, moduleCalls[1].RunMode);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void BuildModuleFailureMessage_UsesStructuredFailureWithoutRepeatingStandardOutput()
     {
         var message = PowerForgeReleaseService.BuildModuleFailureMessage(
@@ -685,11 +1034,13 @@ public sealed partial class PowerForgeReleaseServiceTests
         Func<GitHubReleasePublishRequest, GitHubReleasePublishResult>? publishGitHubRelease = null,
         Func<string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedNuGetAssets = null,
         Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedModuleAssets = null,
-        Func<VirusTotalMonitorPublishRequest, CancellationToken, VirusTotalMonitorPublishResult>? publishVirusTotalMonitor = null)
+        Func<VirusTotalMonitorPublishRequest, CancellationToken, VirusTotalMonitorPublishResult>? publishVirusTotalMonitor = null,
+        Action? onToolExecution = null,
+        Func<ProjectBuildHostRequest, ProjectBuildConfiguration, string, ProjectBuildHostExecutionResult>? executePackages = null)
         => new(
             new NullLogger(),
-            executePackages: (_, _, _) =>
-                throw new InvalidOperationException("Packages should not run."),
+            executePackages: executePackages ?? ((_, _, _) =>
+                throw new InvalidOperationException("Packages should not run.")),
             planTools: (_, _, _) => new PowerForgeToolReleasePlan {
                 ProjectRoot = root,
                 Targets = [
@@ -699,7 +1050,11 @@ public sealed partial class PowerForgeReleaseServiceTests
                     }
                 ]
             },
-            runTools: _ => toolResult,
+            runTools: _ =>
+            {
+                onToolExecution?.Invoke();
+                return toolResult;
+            },
             loadDotNetToolsSpec: (_, _) =>
                 throw new InvalidOperationException("DotNet tools should not run."),
             planDotNetTools: (_, _, _, _) =>
@@ -727,6 +1082,26 @@ public sealed partial class PowerForgeReleaseServiceTests
                     request.RequireReusableOutput));
                 return new ModuleBuildHostExecutionResult { ExitCode = 0 };
             });
+
+    private static string RunGitForSourceGuard(string workingDirectory, string arguments)
+    {
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "git",
+            Arguments = arguments,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        }) ?? throw new InvalidOperationException("Unable to start git.");
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"git {arguments} failed: {error}");
+        return output;
+    }
 
     private sealed record ModuleExecutionSnapshot(
         ConfigurationGateMode? RunMode,

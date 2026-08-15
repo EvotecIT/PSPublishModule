@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Text;
 
@@ -49,9 +50,19 @@ public sealed partial class DotNetPublishPipelineRunner
                 $"target='{bundle.PrepareFromTarget}', framework='{framework}', runtime='{runtime}', style='{style.Value}'.");
         }
 
+        var sourceTargetPlan = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .FirstOrDefault(entry => string.Equals(entry.Name, sourceArtefact.Target, StringComparison.OrdinalIgnoreCase));
+        DotNetPublishSignOptions? sign = sourceTargetPlan?.Publish?.Sign;
+
         var outputDir = Path.GetFullPath(step.BundleOutputPath!);
         if (!plan.AllowOutputOutsideProjectRoot)
             EnsurePathWithinRoot(plan.ProjectRoot, outputDir, $"Bundle '{bundleId}' output path");
+
+        if (sign?.Enabled == true)
+            _ = ReadPortableInventorySourceProvenance(
+                plan,
+                outputDir,
+                EnumerateBundleGeneratedArtefactPaths(artefacts));
 
         if (bundle.ClearOutput && Directory.Exists(outputDir))
         {
@@ -66,6 +77,7 @@ public sealed partial class DotNetPublishPipelineRunner
         EnsurePathWithinRoot(outputDir, primaryDestination, $"Bundle '{bundleId}' primary destination");
         Directory.CreateDirectory(primaryDestination);
         DirectoryCopy(sourceArtefact.OutputDir, primaryDestination);
+        RemoveCopiedPortableEvidence(plan, sourceArtefact, primaryDestination);
 
         foreach (var include in bundle.Includes ?? Array.Empty<DotNetPublishBundleIncludePlan>())
         {
@@ -99,6 +111,7 @@ public sealed partial class DotNetPublishPipelineRunner
             EnsurePathWithinRoot(outputDir, includeDestination, $"Bundle '{bundleId}' include destination");
             Directory.CreateDirectory(includeDestination);
             DirectoryCopy(includeArtefact.OutputDir, includeDestination);
+            RemoveCopiedPortableEvidence(plan, includeArtefact, includeDestination);
         }
 
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -116,8 +129,6 @@ public sealed partial class DotNetPublishPipelineRunner
             ["zip"] = step.BundleZipPath ?? string.Empty
         };
 
-        var sourceTargetPlan = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
-            .FirstOrDefault(entry => string.Equals(entry.Name, target, StringComparison.OrdinalIgnoreCase));
         tokens["keepSymbols"] = (sourceTargetPlan?.Publish?.KeepSymbols ?? false).ToString();
         tokens["keepDocs"] = (sourceTargetPlan?.Publish?.KeepDocs ?? false).ToString();
         tokens["signEnabled"] = (sourceTargetPlan?.Publish?.Sign?.Enabled ?? false).ToString();
@@ -147,11 +158,81 @@ public sealed partial class DotNetPublishPipelineRunner
             SignBundlePostProcessFiles(plan, bundle, outputDir);
         }
 
+        string[] signedFilePaths = Array.Empty<string>();
+        string[] evidencePaths = Array.Empty<string>();
+        string? primaryExecutable = null;
+        if (sign?.Enabled == true)
+        {
+            signedFilePaths = TrySignOutput(outputDir, sign);
+            primaryExecutable = ResolvePrimaryExecutable(outputDir, runtime, sourceTargetPlan!.ExecutableIdentities, recursive: true)
+                ?? throw new InvalidOperationException(
+                    $"Signed bundle '{bundleId}' does not contain a primary executable matching the configured project identity.");
+            FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(primaryExecutable);
+            string executableIdentity = ResolvePortableExecutableIdentity(
+                versionInfo.ProductName,
+                versionInfo.InternalName,
+                versionInfo.OriginalFilename,
+                primaryExecutable);
+            if (!PortableExecutableIdentityMatches(executableIdentity, sourceTargetPlan.ExecutableIdentities))
+            {
+                throw new InvalidOperationException(
+                    $"Signed bundle executable identity '{executableIdentity}' does not match the configured " +
+                    $"project identity for publish target '{sourceTargetPlan.Name}'.");
+            }
+
+            string portableVersion = FirstText(versionInfo.ProductVersion, versionInfo.FileVersion);
+            SourceProvenance provenance = ReadPortableInventorySourceProvenance(
+                plan,
+                outputDir,
+                EnumerateBundleGeneratedArtefactPaths(artefacts));
+            (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
+                outputDir,
+                primaryExecutable,
+                bundle.Zip);
+            PowerForgePortablePayloadInventoryCms.EnsureEvidencePathsAvailable(inventoryPath, signaturePath);
+            PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
+                    outputDir,
+                    sourceTargetPlan.Name,
+                    runtime,
+                    framework,
+                    style.Value.ToString(),
+                    plan.SourceRevision,
+                    ComputePortableConfigurationPolicySha256(
+                        sourceTargetPlan.Name,
+                        sourceTargetPlan.Kind,
+                        bundleId,
+                        bundle.Zip,
+                        sign),
+                    primaryExecutable,
+                    executableIdentity,
+                    portableVersion,
+                    signedFilePaths,
+                    bundleId,
+                    sourceDirty: provenance.Dirty is not false,
+                    includeCompleteOutput: bundle.Zip);
+            byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
+            byte[] signatureBytes = _signPortableInventory(
+                inventoryBytes,
+                ResolvePortableInventorySigningOptions(signedFilePaths, sign));
+            PowerForgePortablePayloadInventoryCms.WriteEvidenceFiles(
+                inventoryPath,
+                inventoryBytes,
+                signaturePath,
+                signatureBytes);
+            if (!bundle.Zip)
+                evidencePaths = new[] { inventoryPath, signaturePath };
+        }
+
         string? zipPath = null;
         if (bundle.Zip)
             zipPath = CreateBundleZip(plan, bundle, outputDir, step.BundleZipPath);
 
         var summary = SummarizeDirectory(outputDir, runtime);
+        primaryExecutable ??= ResolvePrimaryExecutable(
+            outputDir,
+            runtime,
+            sourceTargetPlan?.ExecutableIdentities ?? Array.Empty<string>(),
+            recursive: true);
         return new DotNetPublishArtefactResult
         {
             Category = DotNetPublishArtefactCategory.Bundle,
@@ -166,10 +247,75 @@ public sealed partial class DotNetPublishPipelineRunner
             ZipPath = zipPath,
             Files = summary.Files,
             TotalBytes = summary.TotalBytes,
-            ExePath = summary.ExePath,
-            ExeBytes = summary.ExeBytes
+            ExePath = primaryExecutable,
+            ExeBytes = primaryExecutable is null ? null : new FileInfo(primaryExecutable).Length,
+            SignedFiles = signedFilePaths.Length,
+            SignedFilePaths = signedFilePaths,
+            EvidencePaths = evidencePaths
         };
     }
+
+    private static void RemoveCopiedPortableEvidence(
+        DotNetPublishPlan plan,
+        DotNetPublishArtefactResult sourceArtefact,
+        string destinationRoot)
+    {
+        DotNetPublishTargetPlan? target = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .FirstOrDefault(entry => string.Equals(entry.Name, sourceArtefact.Target, StringComparison.OrdinalIgnoreCase));
+        if (target?.Publish?.Sign?.Enabled != true)
+            return;
+
+        string? executable = sourceArtefact.ExePath;
+        if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable))
+        {
+            executable = ResolvePrimaryExecutable(
+                sourceArtefact.OutputDir,
+                sourceArtefact.Runtime,
+                target.ExecutableIdentities);
+        }
+        if (string.IsNullOrWhiteSpace(executable))
+            throw new InvalidOperationException(
+                $"Signed bundle source '{sourceArtefact.Target}' does not identify its primary executable.");
+
+        (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
+            sourceArtefact.OutputDir,
+            executable!,
+            target.Publish.Zip);
+        string sourceRoot = Path.GetFullPath(sourceArtefact.OutputDir);
+        foreach (string sourceEvidencePath in new[] { inventoryPath, signaturePath })
+        {
+            if (!File.Exists(sourceEvidencePath))
+                throw new InvalidOperationException(
+                    $"Signed bundle source '{sourceArtefact.Target}' is missing release-inventory evidence '{sourceEvidencePath}'.");
+
+            string relativePath = FrameworkCompatibility.GetRelativePath(sourceRoot, Path.GetFullPath(sourceEvidencePath));
+            string copiedPath = Path.GetFullPath(Path.Combine(destinationRoot, relativePath));
+            EnsurePathWithinRoot(destinationRoot, copiedPath, "Copied portable release-inventory evidence");
+            if (!File.Exists(copiedPath) ||
+                !string.Equals(
+                    DotNetPublishReleaseArtifactVerifier.ComputeSha256(sourceEvidencePath),
+                    DotNetPublishReleaseArtifactVerifier.ComputeSha256(copiedPath),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Copied release-inventory evidence for bundle source '{sourceArtefact.Target}' was not preserved exactly.");
+            }
+
+            File.Delete(copiedPath);
+        }
+    }
+
+    private static IEnumerable<string> EnumerateBundleGeneratedArtefactPaths(
+        IEnumerable<DotNetPublishArtefactResult> artefacts)
+        => (artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
+            .SelectMany(static artefact => new[]
+            {
+                artefact.PublishDir,
+                artefact.OutputDir,
+                artefact.ZipPath
+            })
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(static path => path!);
 
     private static DotNetPublishArtefactResult? ResolveBundleSourceArtefact(
         IReadOnlyList<DotNetPublishArtefactResult> artefacts,

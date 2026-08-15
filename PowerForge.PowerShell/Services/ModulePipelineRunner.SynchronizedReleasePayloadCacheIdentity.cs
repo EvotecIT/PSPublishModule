@@ -77,11 +77,32 @@ public sealed partial class ModulePipelineRunner
                     result.Type.ToString(),
                     stableId.ToUpperInvariant(),
                     outputName),
-                result.Type is ArtefactType.Unpacked or ArtefactType.Script));
+                result.Type is ArtefactType.Unpacked or ArtefactType.Script,
+                ResolveSynchronizedReleasePayloadEvidence(result)));
         }
 
         return artefacts
             .OrderBy(static artefact => artefact.CacheKey, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static SynchronizedReleasePayloadEvidence[] ResolveSynchronizedReleasePayloadEvidence(
+        ArtefactBuildResult result)
+    {
+        var fileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return result.EvidencePaths
+            .Select(Path.GetFullPath)
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .Select(path =>
+            {
+                string fileName = Path.GetFileName(path);
+                if (string.IsNullOrWhiteSpace(fileName) || !fileNames.Add(fileName))
+                    throw new InvalidOperationException(
+                        $"Coordinated release artefact '{result.Type}' has duplicate evidence filename identity '{fileName}'.");
+                return new SynchronizedReleasePayloadEvidence(
+                    path,
+                    CreateSynchronizedReleaseFingerprint("payload-artefact-evidence", fileName.ToUpperInvariant()));
+            })
             .ToArray();
     }
 
@@ -180,10 +201,16 @@ public sealed partial class ModulePipelineRunner
             file.Kind,
             file.CacheKey);
 
-    private static string ResolveSynchronizedReleaseArtefactCacheEntry(
+    private static string ResolveSynchronizedReleaseArtefactPayloadCacheEntry(
         string cachePath,
         SynchronizedReleasePayloadArtefact artefact)
-        => Path.Combine(cachePath, "artefact", artefact.CacheKey);
+        => Path.Combine(cachePath, "artefact", artefact.CacheKey, "payload");
+
+    private static string ResolveSynchronizedReleaseArtefactEvidenceCacheEntry(
+        string cachePath,
+        SynchronizedReleasePayloadArtefact artefact,
+        SynchronizedReleasePayloadEvidence evidence)
+        => Path.Combine(cachePath, "artefact", artefact.CacheKey, "evidence", evidence.CacheKey);
 
     private static string ResolveSynchronizedReleasePayloadComponentLabel(
         SynchronizedReleasePayloadLane lane,
@@ -285,16 +312,31 @@ public sealed partial class ModulePipelineRunner
         public SynchronizedReleasePayloadArtefact(
             ArtefactBuildResult result,
             string cacheKey,
-            bool isDirectory)
+            bool isDirectory,
+            SynchronizedReleasePayloadEvidence[] evidence)
         {
             Result = result;
             CacheKey = cacheKey;
             IsDirectory = isDirectory;
+            Evidence = evidence ?? Array.Empty<SynchronizedReleasePayloadEvidence>();
         }
 
         public ArtefactBuildResult Result { get; }
         public string CacheKey { get; }
         public bool IsDirectory { get; }
+        public SynchronizedReleasePayloadEvidence[] Evidence { get; }
+    }
+
+    private sealed class SynchronizedReleasePayloadEvidence
+    {
+        public SynchronizedReleasePayloadEvidence(string path, string cacheKey)
+        {
+            Path = path;
+            CacheKey = cacheKey;
+        }
+
+        public string Path { get; }
+        public string CacheKey { get; }
     }
 
     private sealed class SynchronizedReleasePayloadProject

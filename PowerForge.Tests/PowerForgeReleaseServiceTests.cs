@@ -188,7 +188,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Publish = true,
                             Owner = "EvotecIT",
                             Repository = "PSPublishModule",
-                            Token = "token",
+                            TokenEnvName = "PATH",
                             TagTemplate = "{Target}-v{Version}",
                             ReleaseNameTemplate = "{Target} {Version}",
                             ReplaceExistingAssets = true
@@ -4487,11 +4487,16 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_PublishesDotNetPublishAssetsToGitHub()
     {
-        var zip = Path.GetTempFileName();
-        var msi = Path.GetTempFileName();
-        var storeUpload = Path.GetTempFileName();
-        var manifest = Path.GetTempFileName();
-        var checksums = Path.GetTempFileName();
+        var root = CreateSandbox();
+        var zip = Path.Combine(root, "PowerForge.zip");
+        var directOutput = Directory.CreateDirectory(Path.Combine(root, "PowerForge.Agent")).FullName;
+        var secondZip = Path.Combine(directOutput, "PowerForge.Agent.exe");
+        var msi = Path.Combine(root, "PowerForge.msi");
+        var storeUpload = Path.Combine(root, "PowerForge.msixupload");
+        var manifest = Path.Combine(root, "manifest.json");
+        var checksums = Path.Combine(root, "repository-SHA256SUMS.txt");
+        foreach (string path in new[] { zip, secondZip, msi, storeUpload, manifest, checksums })
+            File.WriteAllText(path, Path.GetFileName(path), new UTF8Encoding(false));
         try
         {
             var publishCalls = new List<GitHubReleasePublishRequest>();
@@ -4516,6 +4521,18 @@ public sealed partial class PowerForgeReleaseServiceTests
                                     Style = DotNetPublishStyle.PortableCompat,
                                     Zip = true
                                 }
+                            },
+                            new DotNetPublishTarget
+                            {
+                                Name = "PowerForge.Agent",
+                                ProjectPath = "PowerForge.Agent.csproj",
+                                Publish = new DotNetPublishPublishOptions
+                                {
+                                    Framework = "net10.0",
+                                    Runtimes = new[] { "win-x64" },
+                                    Style = DotNetPublishStyle.PortableCompat,
+                                    Zip = false
+                                }
                             }
                         }
                     },
@@ -4530,12 +4547,35 @@ public sealed partial class PowerForgeReleaseServiceTests
                         {
                             Name = "PowerForge",
                             ProjectPath = "PowerForge.Cli.csproj",
+                            Version = "1.2.3",
                             Publish = new DotNetPublishPublishOptions
                             {
                                 Framework = "net10.0",
                                 Runtimes = new[] { "win-x64" },
                                 Style = DotNetPublishStyle.PortableCompat,
                                 Zip = true
+                            },
+                            Combinations = new[]
+                            {
+                                new DotNetPublishTargetCombination
+                                {
+                                    Framework = "net10.0",
+                                    Runtime = "win-x64",
+                                    Style = DotNetPublishStyle.PortableCompat
+                                }
+                            }
+                        },
+                        new DotNetPublishTargetPlan
+                        {
+                            Name = "PowerForge.Agent",
+                            ProjectPath = "PowerForge.Agent.csproj",
+                            Version = "1.2.3",
+                            Publish = new DotNetPublishPublishOptions
+                            {
+                                Framework = "net10.0",
+                                Runtimes = new[] { "win-x64" },
+                                Style = DotNetPublishStyle.PortableCompat,
+                                Zip = false
                             },
                             Combinations = new[]
                             {
@@ -4564,6 +4604,15 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Style = DotNetPublishStyle.PortableCompat,
                             OutputDir = Path.GetTempPath(),
                             ZipPath = zip
+                        },
+                        new DotNetPublishArtefactResult
+                        {
+                            Target = "PowerForge.Agent",
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputDir = directOutput,
+                            ExePath = secondZip
                         }
                     },
                     MsiBuilds = new[]
@@ -4615,7 +4664,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Publish = true,
                             Owner = "EvotecIT",
                             Repository = "PSPublishModule",
-                            Token = "token",
+                            TokenEnvName = "PATH",
                             TagTemplate = "{Target}-v{Version}",
                             ReleaseNameTemplate = "{Target} {Version}"
                         }
@@ -4623,32 +4672,49 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 new PowerForgeReleaseRequest
                 {
-                    ConfigPath = Path.Combine(Path.GetTempPath(), "release.json"),
+                    ConfigPath = Path.Combine(root, "release.json"),
                     ToolsOnly = true
                 });
 
             Assert.True(result.Success);
 
-            var publish = Assert.Single(publishCalls);
+            Assert.Equal(2, publishCalls.Count);
+            var publish = Assert.Single(publishCalls, entry => entry.TagName == "PowerForge-v1.2.3");
             Assert.Equal("PowerForge-v1.2.3", publish.TagName);
             Assert.Equal("PowerForge 1.2.3", publish.ReleaseName);
             Assert.Contains(zip, publish.AssetFilePaths);
             Assert.Contains(msi, publish.AssetFilePaths);
             Assert.Contains(storeUpload, publish.AssetFilePaths);
             Assert.Contains(manifest, publish.AssetFilePaths);
-            Assert.Contains(checksums, publish.AssetFilePaths);
+            Assert.DoesNotContain(checksums, publish.AssetFilePaths);
+            string publishChecksums = Assert.Single(
+                publish.AssetFilePaths,
+                path => path.EndsWith("PowerForge.SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase));
+            string[] publishChecksumLines = File.ReadAllLines(publishChecksums);
+            Assert.Contains(publishChecksumLines, line => line.EndsWith("*" + Path.GetFileName(zip), StringComparison.Ordinal));
+            Assert.Contains(publishChecksumLines, line => line.EndsWith("*" + Path.GetFileName(msi), StringComparison.Ordinal));
+            Assert.All(publishChecksumLines, line => Assert.DoesNotContain(Path.GetDirectoryName(zip)!, line, StringComparison.OrdinalIgnoreCase));
+            Assert.True(DotNetPublishReleaseArtifactVerifier.ChecksumContains(
+                publishChecksums,
+                Path.GetFileName(zip),
+                DotNetPublishReleaseArtifactVerifier.ComputeSha256(zip)));
+            var secondPublish = Assert.Single(publishCalls, entry => entry.TagName == "PowerForge.Agent-v1.2.3");
+            Assert.Contains(secondZip, secondPublish.AssetFilePaths);
+            Assert.Contains(manifest, secondPublish.AssetFilePaths);
+            Assert.DoesNotContain(checksums, secondPublish.AssetFilePaths);
+            string secondChecksums = Assert.Single(
+                secondPublish.AssetFilePaths,
+                path => path.EndsWith("PowerForge.Agent.SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(
+                File.ReadAllLines(secondChecksums),
+                line => line.EndsWith("*" + Path.GetFileName(secondZip), StringComparison.Ordinal));
 
-            var release = Assert.Single(result.ToolGitHubReleases);
-            Assert.True(release.Success);
-            Assert.Equal(5, release.AssetPaths.Length);
+            Assert.Equal(2, result.ToolGitHubReleases.Length);
+            Assert.All(result.ToolGitHubReleases, release => Assert.True(release.Success));
         }
         finally
         {
-            TryDelete(zip);
-            TryDelete(msi);
-            TryDelete(storeUpload);
-            TryDelete(manifest);
-            TryDelete(checksums);
+            TryDelete(root);
         }
     }
 
@@ -4968,9 +5034,10 @@ public sealed partial class PowerForgeReleaseServiceTests
     public void Execute_PublishesDotNetPublishAssetsToGitHub_PrefersResolvedPackageVersionOverProjectVersion()
     {
         var root = CreateSandbox();
-        var zip = Path.Combine(root, "tray-portable.zip");
+        var directOutput = Directory.CreateDirectory(Path.Combine(root, "publish")).FullName;
+        var executable = Path.Combine(directOutput, "IntelligenceX.Tray.exe");
         var projectPath = Path.Combine(root, "IntelligenceX.Tray.csproj");
-        File.WriteAllText(zip, "zip", new UTF8Encoding(false));
+        File.WriteAllText(executable, "exe", new UTF8Encoding(false));
         File.WriteAllText(projectPath, """
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -5022,7 +5089,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                                 Framework = "net10.0-windows10.0.19041.0",
                                 Runtimes = new[] { "win-x64" },
                                 Style = DotNetPublishStyle.PortableCompat,
-                                Zip = true
+                                Zip = false
                             },
                             Combinations = new[]
                             {
@@ -5047,8 +5114,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Framework = "net10.0-windows10.0.19041.0",
                             Runtime = "win-x64",
                             Style = DotNetPublishStyle.PortableCompat,
-                            OutputDir = root,
-                            ZipPath = zip
+                            OutputDir = directOutput,
+                            ExePath = executable
                         }
                     }
                 },
@@ -5078,7 +5145,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Publish = true,
                             Owner = "EvotecIT",
                             Repository = "IntelligenceX",
-                            Token = "token",
+                            TokenEnvName = "PATH",
                             TagTemplate = "{Target}-v{Version}",
                             ReleaseNameTemplate = "{Target} {Version}"
                         }
@@ -5104,7 +5171,8 @@ public sealed partial class PowerForgeReleaseServiceTests
     public void Execute_PublishesDotNetPublishPreviewAssetsToStablePreviewTag()
     {
         var root = CreateSandbox();
-        var zip = Path.GetTempFileName();
+        var zip = Path.Combine(root, "PowerForgeWeb.zip");
+        File.WriteAllText(zip, "zip", new UTF8Encoding(false));
         try
         {
             var projectPath = Path.Combine(root, "PowerForge.Web.Cli.csproj");
@@ -5184,7 +5252,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Framework = "net10.0",
                             Runtime = "win-x64",
                             Style = DotNetPublishStyle.PortableCompat,
-                            OutputDir = Path.GetTempPath(),
+                            OutputDir = root,
                             ZipPath = zip
                         }
                     }
@@ -5211,7 +5279,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Publish = true,
                             Owner = "EvotecIT",
                             Repository = "PSPublishModule",
-                            Token = "token",
+                            TokenEnvName = "PATH",
                             TagTemplate = "{Target}-v{Version}-preview",
                             ReleaseNameTemplate = "{Target} {Version} Preview"
                         }
@@ -5219,7 +5287,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 new PowerForgeReleaseRequest
                 {
-                    ConfigPath = Path.Combine(Path.GetTempPath(), "release.json"),
+                    ConfigPath = Path.Combine(root, "release.json"),
                     ToolsOnly = true
                 });
 
@@ -5228,7 +5296,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             var publish = Assert.Single(publishCalls);
             Assert.Equal("PowerForgeWeb-v1.2.3-preview", publish.TagName);
             Assert.Equal("PowerForgeWeb 1.2.3 Preview", publish.ReleaseName);
-            Assert.Single(publish.AssetFilePaths);
+            Assert.Equal(2, publish.AssetFilePaths.Count);
+            Assert.Contains(zip, publish.AssetFilePaths);
+            Assert.Contains(
+                publish.AssetFilePaths,
+                path => path.EndsWith("PowerForgeWeb.SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase));
 
             var release = Assert.Single(result.ToolGitHubReleases);
             Assert.Equal("PowerForgeWeb-v1.2.3-preview", release.TagName);
@@ -5238,7 +5310,6 @@ public sealed partial class PowerForgeReleaseServiceTests
         finally
         {
             TryDelete(root);
-            TryDelete(zip);
         }
     }
 
@@ -5386,12 +5457,16 @@ public sealed partial class PowerForgeReleaseServiceTests
         var msi = Path.Combine(root, "IntelligenceX.Chat.Installer.msi");
         var storeUpload = Path.Combine(root, "IntelligenceX.Chat.Store.msixupload");
         var dotNetManifest = Path.Combine(root, "dotnet-manifest.json");
+        var authorizedConfig = Path.Combine(
+            root,
+            ".release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
         File.WriteAllText(package, "pkg", new UTF8Encoding(false));
         File.WriteAllText(symbolPackage, "symbols", new UTF8Encoding(false));
         File.WriteAllText(bundleZip, "zip", new UTF8Encoding(false));
         File.WriteAllText(msi, "msi", new UTF8Encoding(false));
         File.WriteAllText(storeUpload, "upload", new UTF8Encoding(false));
         File.WriteAllText(dotNetManifest, "{}", new UTF8Encoding(false));
+        File.WriteAllText(authorizedConfig, "{ \"effective\": true }", new UTF8Encoding(false));
 
         try
         {
@@ -5428,6 +5503,12 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ProjectRoot = root,
                     Configuration = "Release",
+                    ConfigurationInputPaths = new[] { authorizedConfig },
+                    GeneratedConfigurationInputPaths = new[] { authorizedConfig },
+                    GeneratedConfigurationInputSha256 = new(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [authorizedConfig] = AppleNotarizationService.ComputeFileSha256(authorizedConfig)
+                    },
                     Targets = new[]
                     {
                         new DotNetPublishTargetPlan
@@ -5529,6 +5610,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(File.Exists(Path.Combine(stageRoot, "installer", Path.GetFileName(msi))));
             Assert.True(File.Exists(Path.Combine(stageRoot, "store", Path.GetFileName(storeUpload))));
             Assert.True(File.Exists(Path.Combine(stageRoot, "metadata", Path.GetFileName(dotNetManifest))));
+            Assert.True(File.Exists(Path.Combine(stageRoot, "metadata", Path.GetFileName(authorizedConfig))));
             Assert.Contains(Path.Combine(stageRoot, "nuget", Path.GetFileName(package)), result.ReleaseAssets, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(Path.Combine(stageRoot, "nuget", Path.GetFileName(symbolPackage)), result.ReleaseAssets, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(Path.Combine(stageRoot, "portable", Path.GetFileName(bundleZip)), result.ReleaseAssets, StringComparer.OrdinalIgnoreCase);
@@ -5539,9 +5621,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("nuget/" + Path.GetFileName(package), stagedPackage.RelativeStagePath!.Replace('\\', '/'));
 
             var checksumText = File.ReadAllText(Path.Combine(stageRoot, "SHA256SUMS.txt"));
-            Assert.Contains("nuget/" + Path.GetFileName(package), checksumText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("nuget/" + Path.GetFileName(symbolPackage), checksumText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("portable/" + Path.GetFileName(bundleZip), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*" + Path.GetFileName(package), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*" + Path.GetFileName(symbolPackage), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*" + Path.GetFileName(bundleZip), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*" + Path.GetFileName(authorizedConfig), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("nuget/", checksumText.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(package.Replace('\\', '/'), checksumText, StringComparison.OrdinalIgnoreCase);
         }
         finally
@@ -5690,8 +5774,10 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Contains(stagedPortablePath, result.ReleaseAssets, StringComparer.OrdinalIgnoreCase);
 
             var checksumText = File.ReadAllText(Path.Combine(stageRoot, "SHA256SUMS.txt"));
-            Assert.Contains("NuGet/IntelligenceX.0.1.0.nupkg", checksumText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("GitHub/IntelligenceX.Chat.App-1.0.0-win-x64-portable.zip", checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*IntelligenceX.0.1.0.nupkg", checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*IntelligenceX.Chat.App-1.0.0-win-x64-portable.zip", checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("NuGet/", checksumText.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("GitHub/", checksumText.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("raw-portable.zip", checksumText, StringComparison.OrdinalIgnoreCase);
         }
         finally
@@ -5707,6 +5793,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         var trayX64 = Path.Combine(root, "tray-x64.zip");
         var trayArm64 = Path.Combine(root, "tray-arm64.zip");
         var trayProject = Path.Combine(root, "IntelligenceX.Tray.csproj");
+        var wingetToken = Path.Combine(root, "winget-token.txt");
         File.WriteAllText(trayX64, "zip", new UTF8Encoding(false));
         File.WriteAllText(trayArm64, "zip", new UTF8Encoding(false));
         File.WriteAllText(trayProject, """
@@ -5717,6 +5804,7 @@ public sealed partial class PowerForgeReleaseServiceTests
   </PropertyGroup>
 </Project>
 """, new UTF8Encoding(false));
+        File.WriteAllText(wingetToken, "secret-token", new UTF8Encoding(false));
 
         try
         {
@@ -5824,7 +5912,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         InstallerUrlTemplate = "https://github.com/EvotecIT/IntelligenceX/releases/download/v{PackageVersion}/{FileName}",
                         Submission = new PowerForgeReleaseWingetSubmissionOptions
                         {
-                            Token = "secret-token",
+                            TokenFilePath = wingetToken,
                             PullRequestTitle = "Submit {PackageIdentifier} {PackageVersion}"
                         },
                         Packages = new[]
@@ -6191,7 +6279,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Publish = true,
                             Owner = "EvotecIT",
                             Repository = "IntelligenceX",
-                            Token = "token",
+                            TokenEnvName = "PATH",
                             TagTemplate = "{Target}+v{Version}"
                         }
                     },
@@ -6389,7 +6477,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.NotNull(result.ReleaseChecksumsPath);
             var releaseChecksums = result.ReleaseChecksumsPath;
             var checksumText = File.ReadAllText(releaseChecksums!);
-            Assert.Contains("Winget/", checksumText.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*" + Path.GetFileName(manifestPath), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Winget/", checksumText.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -6541,7 +6630,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     GitHub = new PowerForgeReleaseGitHubOptions
                     {
                         Publish = true,
-                        Token = "token"
+                        TokenEnvName = "PATH"
                     },
                     Winget = new PowerForgeReleaseWingetOptions
                     {

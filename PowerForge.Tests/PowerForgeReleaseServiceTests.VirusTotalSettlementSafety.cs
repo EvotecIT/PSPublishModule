@@ -82,8 +82,10 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             var releasePath = Path.Combine(root, "release.json");
             var artifactPath = Path.Combine(root, "Example.msi");
+            var apiKeyPath = Path.Combine(root, "virustotal.key");
             File.WriteAllText(releasePath, "{}");
             File.WriteAllText(artifactPath, "signed installer");
+            File.WriteAllText(apiKeyPath, "test-api-key");
             var monitorCalled = false;
             var service = CreateReleaseService(
                 root,
@@ -95,6 +97,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                     return new VirusTotalMonitorPublishResult { Success = true };
                 });
             var spec = CreateVirusTotalInstallerSpec();
+            spec.VirusTotal!.ApiKey = null;
+            spec.VirusTotal.ApiKeyFilePath = apiKeyPath;
             spec.Packages = null;
             spec.Module = new PowerForgeModuleReleaseOptions();
             var builtResult = CreateBuiltInstallerResult(artifactPath);

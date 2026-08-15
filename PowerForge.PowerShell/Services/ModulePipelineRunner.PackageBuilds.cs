@@ -80,7 +80,7 @@ public sealed partial class ModulePipelineRunner
                 state.IsResumingSynchronizedRelease &&
                 WasSynchronizedReleaseOperationAttempted(state, operationKey);
             Action remotePublishAttempted = () => MarkSynchronizedReleaseOperationAttempted(state, operationKey);
-            if (TryExecuteExistingProjectBuildPublish(
+            if (!plan.GenerateReleaseProvenance && TryExecuteExistingProjectBuildPublish(
                     plan,
                     session,
                     state,
@@ -119,7 +119,7 @@ public sealed partial class ModulePipelineRunner
                 state.IsResumingSynchronizedRelease &&
                 WasSynchronizedReleaseOperationAttempted(state, operationKey);
             Action remotePublishAttempted = () => MarkSynchronizedReleaseOperationAttempted(state, operationKey);
-            if (TryExecuteExistingPackageBuildPublish(
+            if (!plan.GenerateReleaseProvenance && TryExecuteExistingPackageBuildPublish(
                     plan,
                     session,
                     state,
@@ -719,10 +719,12 @@ public sealed partial class ModulePipelineRunner
             ReleaseVersionFloorProject = releaseVersionFloor is null
                 ? null
                 : plan.Release?.Configuration?.PrimaryProject,
-            RemotePublishAttempted = remotePublishAttempted,
             CoordinatedReleaseCheckpointActive = coordinatedReleaseCheckpointActive,
             Progress = progress
         };
+        var sourceGuard = new PackagePublicationSourceGuard(plan, remotePublishAttempted);
+        request.BuildSpecPrepared = sourceGuard.Capture;
+        request.RemotePublishAttempted = sourceGuard.BeforeRemotePublish;
 
         _logger.Info($"Running package project build ({DescribePackageBuildMode(mode)}): {configPath}");
         return _packageBuildExecutor(request, configuration, configPath);
@@ -781,10 +783,12 @@ public sealed partial class ModulePipelineRunner
             ReleaseVersionFloorProject = releaseVersionFloor is null
                 ? null
                 : plan.Release?.Configuration?.PrimaryProject,
-            RemotePublishAttempted = remotePublishAttempted,
             CoordinatedReleaseCheckpointActive = coordinatedReleaseCheckpointActive,
             Progress = progress
         };
+        var sourceGuard = new PackagePublicationSourceGuard(plan, remotePublishAttempted);
+        request.BuildSpecPrepared = sourceGuard.Capture;
+        request.RemotePublishAttempted = sourceGuard.BeforeRemotePublish;
 
         _logger.Info($"Running inline package build ({DescribePackageBuildMode(mode)}).");
         return _packageBuildExecutor(request, projectBuildConfig, configPath);
@@ -1078,6 +1082,32 @@ public sealed partial class ModulePipelineRunner
     {
         NuGet,
         GitHub
+    }
+
+    private sealed class PackagePublicationSourceGuard
+    {
+        private readonly ModulePipelinePlan _plan;
+        private readonly Action? _downstream;
+        private DotNetRepositoryReleaseSpec? _spec;
+
+        internal PackagePublicationSourceGuard(ModulePipelinePlan plan, Action? downstream)
+        {
+            _plan = plan;
+            _downstream = downstream;
+        }
+
+        internal void Capture(DotNetRepositoryReleaseSpec spec) => _spec = spec;
+
+        internal void BeforeRemotePublish()
+        {
+            if (_plan.GenerateReleaseProvenance)
+            {
+                if (_spec is null)
+                    throw new InvalidOperationException("Package source provenance was not prepared before publication.");
+                ValidatePackageReleaseSourceUnchanged(_plan, _spec);
+            }
+            _downstream?.Invoke();
+        }
     }
 
     private readonly struct ProjectBuildEffectiveActions

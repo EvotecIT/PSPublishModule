@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
@@ -14,6 +15,7 @@ public sealed class ModulePipelineExecutionSessionTests
         {
             const string moduleName = "TestModule";
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            InitializeGitRepository(root.FullName);
 
             var runner = new ModulePipelineRunner(new NullLogger());
             var plan = runner.Plan(CreateSpec(root.FullName, moduleName));
@@ -64,6 +66,7 @@ public sealed class ModulePipelineExecutionSessionTests
         {
             const string moduleName = "TestModule";
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            InitializeGitRepository(root.FullName);
 
             var reporter = new RecordingProgressReporter();
             var runner = new ModulePipelineRunner(new NullLogger());
@@ -103,6 +106,7 @@ public sealed class ModulePipelineExecutionSessionTests
         {
             const string moduleName = "TestModule";
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            InitializeGitRepository(root.FullName);
 
             var reporter = new RecordingProgressReporter();
             var plan = new ModulePipelineRunner(new NullLogger()).Plan(CreateSpec(root.FullName, moduleName));
@@ -290,6 +294,34 @@ public sealed class ModulePipelineExecutionSessionTests
         }) + Environment.NewLine;
 
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
+    }
+
+    private static void InitializeGitRepository(string root)
+    {
+        RunGit(root, "init", "--quiet");
+        RunGit(root, "config", "user.name", "PowerForge Tests");
+        RunGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+        RunGit(root, "add", ".");
+        RunGit(root, "commit", "--quiet", "-m", "Tracked source");
+    }
+
+    private static void RunGit(string workingDirectory, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (string argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+        using Process process = Process.Start(startInfo)!;
+        _ = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)} failed: {error}");
     }
 
     private sealed class RecordingProgressReporter : IModulePipelineProgressReporterV3

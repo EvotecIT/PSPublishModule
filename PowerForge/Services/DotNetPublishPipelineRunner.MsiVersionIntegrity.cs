@@ -110,9 +110,14 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static SourceProvenance ReadSourceProvenance(
         string projectRoot,
         IEnumerable<string>? generatedPaths = null,
+        IEnumerable<string>? explicitInputPaths = null,
         IEnumerable<string>? trackedGeneratedPaths = null,
         IReadOnlyDictionary<string, string>? cleanTrackedGeneratedProvenanceState = null,
-        string? msiReservationOwner = null)
+        string? msiReservationOwner = null,
+        IEnumerable<string>? trustedExternalInputPaths = null,
+        IEnumerable<string>? buildProjectPaths = null,
+        string? buildConfiguration = null,
+        DotNetPublishPlan? buildPlan = null)
     {
         var gitRevision = ReadGitText(projectRoot, "rev-parse HEAD");
         var environmentRevision = Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim();
@@ -143,9 +148,19 @@ public sealed partial class DotNetPublishPipelineRunner
         var untrackedOutput = ReadGitText(gitRoot!, "ls-files --others --exclude-standard -z");
         var statusChangedDuringVerification = hasWriterContext
             && !string.Equals(trackedStatus, finalTrackedStatus, StringComparison.Ordinal);
+        string[] bundleSourceInputs = EnumerateBundleSourceInputs(buildPlan);
+        string[] commandHookSourceInputs = EnumerateCommandHookSourceInputs(buildPlan);
+        IEnumerable<string> allExplicitInputPaths = (explicitInputPaths ?? Array.Empty<string>())
+            .Concat(bundleSourceInputs)
+            .Concat(commandHookSourceInputs);
+        bool generatedOutputOverlapsInput = HasGeneratedOutputInputOverlap(
+            projectRoot,
+            generatedPaths,
+            allExplicitInputPaths);
         bool? dirty = trackedStatus is null || untrackedOutput is null
             ? null
             : statusChangedDuringVerification
+              || generatedOutputOverlapsInput
               || HasTrackedSourceChanges(
                 projectRoot,
                 gitRoot!,
@@ -155,10 +170,204 @@ public sealed partial class DotNetPublishPipelineRunner
                 projectRoot,
                 gitRoot!,
                 untrackedOutput,
-                generatedPaths);
+                generatedPaths)
+              || HasUntrackedOrIgnoredExplicitInputs(
+                  projectRoot,
+                  gitRoot!,
+                  allExplicitInputPaths,
+                  trustedExternalInputPaths)
+              || HasIgnoredBuildInputs(
+                  projectRoot,
+                  gitRoot!,
+                  buildProjectPaths,
+                  buildConfiguration,
+                  buildPlan,
+                  generatedPaths);
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
             dirty);
+    }
+
+    private static bool HasGeneratedOutputInputOverlap(
+        string projectRoot,
+        IEnumerable<string>? generatedPaths,
+        IEnumerable<string>? inputPaths)
+    {
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        string[] generated = (generatedPaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(Path.IsPathRooted(path)
+                ? path
+                : Path.Combine(projectRoot, path)))
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
+        foreach (string inputPath in inputPaths ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(inputPath))
+                continue;
+            string input = Path.GetFullPath(Path.IsPathRooted(inputPath)
+                ? inputPath
+                : Path.Combine(projectRoot, inputPath));
+            if (generated.Any(path =>
+                    string.Equals(path, input, comparison) ||
+                    input.StartsWith(
+                        path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                        Path.DirectorySeparatorChar,
+                        comparison)))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool HasUntrackedOrIgnoredExplicitInputs(
+        string projectRoot,
+        string gitRoot,
+        IEnumerable<string>? explicitInputPaths,
+        IEnumerable<string>? trustedExternalInputPaths)
+    {
+        var trustedExternalInputs = new HashSet<string>(
+            (trustedExternalInputPaths ?? Array.Empty<string>())
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(Path.GetFullPath),
+            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        foreach (string path in explicitInputPaths ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+            string fullPath = Path.GetFullPath(Path.IsPathRooted(path)
+                ? path
+                : Path.Combine(projectRoot, path));
+            string? relative = ToGitRelativeExclusion(projectRoot, gitRoot, path);
+            if (string.IsNullOrWhiteSpace(relative))
+            {
+                if (trustedExternalInputs.Contains(fullPath))
+                    continue;
+                return true;
+            }
+            if (HasReparsePointBelowRoot(fullPath, gitRoot))
+                return true;
+            if (ReadGitRawText(gitRoot, $"ls-files --error-unmatch -- {QuoteLiteralGitPath(relative!)}") is null)
+                return true;
+        }
+        return false;
+    }
+
+    private static bool HasIgnoredBuildInputs(
+        string projectRoot,
+        string gitRoot,
+        IEnumerable<string>? buildProjectPaths,
+        string? buildConfiguration,
+        DotNetPublishPlan? buildPlan,
+        IEnumerable<string>? generatedPaths)
+    {
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        string[] generatedExclusions = BuildGeneratedPathExclusions(projectRoot, gitRoot, generatedPaths);
+        string? ignoredOutput = ReadGitRawText(
+            gitRoot,
+            "ls-files --others --ignored --exclude-standard -z");
+        if (ignoredOutput is null)
+            return true;
+        if (!TryEvaluateDotNetBuildInputs(
+                buildProjectPaths,
+                buildConfiguration,
+                buildPlan,
+                out string[] projectDirectories,
+                out HashSet<string> buildInputs,
+                out HashSet<string> sourceInputs))
+            return true;
+        if (HasGeneratedOutputInputOverlap(projectRoot, generatedPaths, buildInputs))
+            return true;
+        if (projectDirectories.Any(directory =>
+                !IsBuildProjectDirectoryAdmitted(directory, projectRoot, gitRoot)))
+        {
+            return true;
+        }
+        if (sourceInputs.Any(path =>
+                !IsBuildSourceInputAdmitted(path, projectRoot, gitRoot)))
+        {
+            return true;
+        }
+        string[] ignoredPaths = ignoredOutput.Split(
+                new[] { '\0' },
+                StringSplitOptions.RemoveEmptyEntries)
+            .Select(path => path.Replace('\\', '/').TrimStart('/'))
+            .ToArray();
+        if (ignoredPaths.Length == 0)
+            return false;
+        var gitRelativeBuildInputs = new HashSet<string>(
+            buildInputs
+                .Select(path => ToGitRelativeExclusion(projectRoot, gitRoot, path))
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => path!.Replace('\\', '/').TrimStart('/')),
+            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        string[] ignoredCandidates = ignoredPaths
+            .Where(path => !IsGeneratedPath(path, generatedExclusions, comparison))
+            .ToArray();
+        return ignoredCandidates.Any(gitRelativeBuildInputs.Contains);
+    }
+
+    private static bool IsBuildProjectDirectoryAdmitted(
+        string directory,
+        string projectRoot,
+        string gitRoot)
+    {
+        string fullDirectory = Path.GetFullPath(directory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string fullGitRoot = Path.GetFullPath(gitRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!string.Equals(fullDirectory, fullGitRoot, comparison) &&
+            ToGitRelativeExclusion(projectRoot, gitRoot, fullDirectory) is null)
+        {
+            return false;
+        }
+        return !HasReparsePointBelowRoot(fullDirectory, fullGitRoot);
+    }
+
+    private static bool IsBuildSourceInputAdmitted(
+        string path,
+        string projectRoot,
+        string gitRoot)
+    {
+        string fullPath = Path.GetFullPath(path);
+        if (ToGitRelativeExclusion(projectRoot, gitRoot, fullPath) is null)
+            return false;
+        return !HasReparsePointBelowRoot(fullPath, gitRoot);
+    }
+
+    internal static bool HasReparsePointBelowRoot(string path, string root)
+    {
+        string current = Path.GetFullPath(path);
+        string boundary = Path.GetFullPath(root)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        while (!string.Equals(
+                   current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                   boundary,
+                   comparison))
+        {
+            try
+            {
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                    return true;
+            }
+            catch
+            {
+                return true;
+            }
+
+            string? parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, comparison))
+                return true;
+            current = parent;
+        }
+
+        return false;
     }
 
     private static IEnumerable<string> EnumerateGeneratedProvenancePaths(
@@ -167,6 +376,9 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<DotNetPublishStorePackageResult> storePackages,
         IEnumerable<DotNetPublishMsiBuildResult> msiBuilds)
     {
+        foreach (string provenancePath in plan.GeneratedProvenancePaths ?? Array.Empty<string>())
+            yield return provenancePath;
+
         yield return plan.Outputs.ManifestJsonPath ?? string.Empty;
         yield return plan.Outputs.ManifestTextPath ?? string.Empty;
         yield return plan.Outputs.ChecksumsPath ?? string.Empty;

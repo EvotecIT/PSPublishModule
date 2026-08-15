@@ -20,24 +20,52 @@ public sealed class ArtefactBuildResult
     /// <summary>Extra files/directories copied into the artefact output.</summary>
     public ArtefactCopyEntry[] CopiedItems { get; }
 
+    /// <summary>Evidence files emitted from the final assembled artefact. Their lifecycle remains owned by the producer.</summary>
+    public string[] EvidencePaths { get; }
+
     /// <summary>
     /// Creates a new result instance.
     /// </summary>
+    /// <param name="type">Artefact type that was created.</param>
+    /// <param name="id">Optional artefact ID used for publish selection.</param>
+    /// <param name="outputPath">Full path to the artefact output.</param>
+    /// <param name="modules">Modules included in the artefact.</param>
+    /// <param name="copiedItems">Extra files or directories copied into the artefact.</param>
     public ArtefactBuildResult(
         ArtefactType type,
         string? id,
         string outputPath,
         ArtefactModuleEntry[] modules,
         ArtefactCopyEntry[] copiedItems)
+        : this(type, id, outputPath, modules, copiedItems, Array.Empty<string>())
+    {
+    }
+
+    /// <summary>
+    /// Creates a new result instance with producer-owned release evidence.
+    /// </summary>
+    /// <param name="type">Artefact type that was created.</param>
+    /// <param name="id">Optional artefact ID used for publish selection.</param>
+    /// <param name="outputPath">Full path to the artefact output.</param>
+    /// <param name="modules">Modules included in the artefact.</param>
+    /// <param name="copiedItems">Extra files or directories copied into the artefact.</param>
+    /// <param name="evidencePaths">Evidence files emitted from the final assembled artefact.</param>
+    public ArtefactBuildResult(
+        ArtefactType type,
+        string? id,
+        string outputPath,
+        ArtefactModuleEntry[] modules,
+        ArtefactCopyEntry[] copiedItems,
+        string[]? evidencePaths)
     {
         Type = type;
         Id = id;
         OutputPath = outputPath;
         Modules = modules ?? Array.Empty<ArtefactModuleEntry>();
         CopiedItems = copiedItems ?? Array.Empty<ArtefactCopyEntry>();
+        EvidencePaths = evidencePaths ?? Array.Empty<string>();
     }
 }
-
 /// <summary>
 /// Represents a module folder that was included in an artefact.
 /// </summary>
@@ -91,4 +119,3 @@ public sealed class ArtefactCopyEntry
         IsDirectory = isDirectory;
     }
 }
-

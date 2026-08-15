@@ -568,9 +568,17 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         public string[] LastPackageFilePaths { get; private set; } = Array.Empty<string>();
         public string[] LastIncludePatterns { get; private set; } = Array.Empty<string>();
         public string[] LastExcludePatterns { get; private set; } = Array.Empty<string>();
+        public SigningOptionsConfiguration? LastSigningOptions { get; private set; }
         public ModuleSigningResult NextSigningResult { get; set; } = new();
+        public Queue<ModuleSigningResult> SigningResults { get; } = new();
+        public bool AutoSuccessfulSigningResult { get; set; }
+        public bool AutoSuccessfulPublishResult { get; set; }
+        public Action<int>? SigningCallStarted { get; set; }
+        public Action<ModulePipelineActionConfiguration, ModulePipelineActionContext>? ActionStarted { get; set; }
+        public List<string> SigningRootPaths { get; } = new();
         public List<string> OperationOrder { get; } = new();
         public string[] LastDocumentationCommands { get; private set; } = Array.Empty<string>();
+        public ArtefactBuildResult[] LastPublishedArtefacts { get; private set; } = Array.Empty<ArtefactBuildResult>();
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
             ModuleDependency[] dependencies,
@@ -645,7 +653,28 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             Action? remotePublishAttempted,
             Action? remoteSideEffectObserved,
             IGitHubReleaseProgressReporter? gitHubProgress)
-            => throw new InvalidOperationException("Not used in this test.");
+        {
+            if (!AutoSuccessfulPublishResult)
+                throw new InvalidOperationException("Not used in this test.");
+
+            remotePublishAttempted?.Invoke();
+            remoteSideEffectObserved?.Invoke();
+            LastPublishedArtefacts = artefactResults.ToArray();
+            string[] assets = LastPublishedArtefacts
+                .SelectMany(static artefact => new[] { artefact.OutputPath }.Concat(artefact.EvidencePaths))
+                .ToArray();
+            return new ModulePublishResult(
+                publish.Destination,
+                publish.RepositoryName,
+                publish.UserName,
+                "v" + plan.ResolvedVersion,
+                plan.ResolvedVersion,
+                isPreRelease: false,
+                assets,
+                "https://example.invalid/release",
+                succeeded: true,
+                errorMessage: null);
+        }
 
         public void ValidateModuleImports(
             string manifestPath,
@@ -668,7 +697,20 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             ModulePipelineActionContext context,
             string contextPath,
             string projectRoot)
-            => throw new InvalidOperationException("Not used in this test.");
+        {
+            if (ActionStarted is null)
+                throw new InvalidOperationException("Not used in this test.");
+            ActionStarted(action, context);
+            return new ModulePipelineActionResult
+            {
+                Name = context.ActionName,
+                Stage = context.Stage,
+                Succeeded = true,
+                ExitCode = 0,
+                ContextPath = contextPath,
+                WorkingDirectory = projectRoot
+            };
+        }
 
         public ModuleSigningResult SignModuleOutput(
             string moduleName,
@@ -680,10 +722,31 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         {
             OperationOrder.Add("Sign");
             SignCalls++;
+            SigningCallStarted?.Invoke(SignCalls);
+            SigningRootPaths.Add(Path.GetFullPath(rootPath));
             LastPackageFilePaths = packageFilePaths ?? Array.Empty<string>();
             LastIncludePatterns = includePatterns ?? Array.Empty<string>();
             LastExcludePatterns = excludeSubstrings ?? Array.Empty<string>();
-            return NextSigningResult;
+            LastSigningOptions = signing;
+            if (SigningResults.Count > 0)
+                return SigningResults.Dequeue();
+            if (!AutoSuccessfulSigningResult)
+                return NextSigningResult;
+
+            string[] verified = LastPackageFilePaths
+                .Where(path => LastIncludePatterns.Any(pattern =>
+                    string.Equals("*", pattern, StringComparison.Ordinal) ||
+                    string.Equals("*" + Path.GetExtension(path), pattern, StringComparison.OrdinalIgnoreCase)))
+                .Where(path => !LastExcludePatterns.Any(excluded =>
+                    path.IndexOf(excluded, StringComparison.OrdinalIgnoreCase) >= 0))
+                .ToArray();
+            return new ModuleSigningResult
+            {
+                TotalMatched = verified.Length,
+                TotalAfterExclude = verified.Length,
+                SignedNew = verified.Length,
+                VerifiedFilePaths = verified
+            };
         }
     }
 

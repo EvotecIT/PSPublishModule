@@ -69,6 +69,29 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void Plan_RejectsOutputDirectoryThatContainsProjectSource()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var csproj = CreateProjectFile(root, "App.csproj");
+            var spec = CreateBaseSpec(root, csproj);
+            spec.Targets[0].Publish.OutputPath = root;
+            spec.Targets[0].Publish.ZipPath = Path.Combine(root, "Artifacts", "app.zip");
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Plan(spec, null));
+
+            Assert.Contains("cannot contain source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(csproj, exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_DeniesManifestPathOutsideProjectRoot_ByDefault()
     {
         var root = CreateTempRoot();
@@ -468,6 +491,35 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         Assert.Equal("true", merged["SkipChatServiceSidecarBuild"]);
         Assert.Equal("NU1510", merged["WarningsNotAsErrors"]);
         Assert.Equal("true", merged["WindowsAppSDKSelfContained"]);
+    }
+
+    [Fact]
+    public void BuildPublishMsBuildProperties_BindsSignedProductVersionToPlanSourceRevision()
+    {
+        const string sourceRevision = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        var plan = new DotNetPublishPlan
+        {
+            SourceRevision = sourceRevision,
+            MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SourceRevisionId"] = new string('c', 40),
+                ["IncludeSourceRevisionInInformationalVersion"] = "false"
+            }
+        };
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "app",
+            ProjectPath = "App.csproj",
+            Publish = new DotNetPublishPublishOptions()
+        };
+
+        Dictionary<string, string> merged = DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
+            plan,
+            target,
+            DotNetPublishStyle.PortableCompat);
+
+        Assert.Equal(sourceRevision, merged["SourceRevisionId"]);
+        Assert.Equal("true", merged["IncludeSourceRevisionInInformationalVersion"]);
     }
 
     [Fact]

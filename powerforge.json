@@ -73,7 +73,8 @@
           "*.psd1",
           "*.Libraries.ps1",
           "License*",
-          "PowerForge.ReleaseProvenance.json"
+          "PowerForge.ReleaseProvenance.json",
+          "PowerForge.ReleaseProvenance.psd1"
         ]
       }
     },

@@ -1,31 +1,9 @@
-using System.Text.RegularExpressions;
-
 namespace PowerForge;
 
 internal static class ModuleManifestTextParser
 {
-    private const RegexOptions ManifestRegexOptions =
-        RegexOptions.IgnoreCase |
-        RegexOptions.Multiline |
-        RegexOptions.CultureInvariant |
-        RegexOptions.Compiled;
-
     internal static bool TryGetQuotedStringValue(string manifestText, string key, out string? value)
-    {
-        value = null;
-        if (string.IsNullOrWhiteSpace(manifestText) || string.IsNullOrWhiteSpace(key))
-            return false;
-
-        var match = Regex.Match(
-            manifestText,
-            $@"(?:^|[\r\n{{;])\s*{Regex.Escape(key)}\s*=\s*(?<value>'(?:[^']|'')*'|""(?:[^""]|"""")*"")",
-            ManifestRegexOptions);
-        if (!match.Success)
-            return false;
-
-        value = Unquote(match.Groups["value"].Value);
-        return !string.IsNullOrWhiteSpace(value);
-    }
+        => TryGetTopLevelQuotedStringValue(manifestText, key, out value);
 
     internal static bool TryGetTopLevelQuotedStringValue(string manifestText, string key, out string? value)
     {
@@ -62,7 +40,7 @@ internal static class ModuleManifestTextParser
     internal static bool TryGetRequiredModules(string manifestText, out RequiredModuleReference[]? modules)
     {
         modules = null;
-        if (!TryReadAssignedExpressionByKey(manifestText, "RequiredModules", out var expression) ||
+        if (!TryReadTopLevelAssignedExpressionByKey(manifestText, "RequiredModules", out var expression) ||
             string.IsNullOrWhiteSpace(expression))
             return false;
 
@@ -78,23 +56,23 @@ internal static class ModuleManifestTextParser
     internal static bool TryReadPsDataAssignedExpression(string manifestText, string key, out string? expression)
     {
         expression = null;
-        if (!TryReadAssignedExpressionByKey(manifestText, "PrivateData", out var privateData) ||
+        if (!TryReadTopLevelAssignedExpressionByKey(manifestText, "PrivateData", out var privateData) ||
             string.IsNullOrWhiteSpace(privateData))
             return false;
 
         var privateDataText = TrimCompositeWrapper(privateData!);
-        if (!TryReadAssignedExpressionByKey(privateDataText, "PSData", out var psData) ||
+        if (!TryReadTopLevelAssignedExpressionByKey(privateDataText, "PSData", out var psData) ||
             string.IsNullOrWhiteSpace(psData))
             return false;
 
         var psDataText = TrimCompositeWrapper(psData!);
-        return TryReadAssignedExpressionByKey(psDataText, key, out expression);
+        return TryReadTopLevelAssignedExpressionByKey(psDataText, key, out expression);
     }
 
     internal static bool TryGetStringArrayValue(string manifestText, string key, out string[]? values)
     {
         values = null;
-        if (!TryReadAssignedExpressionByKey(manifestText, key, out var expression) ||
+        if (!TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression) ||
             string.IsNullOrWhiteSpace(expression))
             return false;
 
@@ -109,7 +87,7 @@ internal static class ModuleManifestTextParser
     internal static bool TryGetStrictStringArrayValue(string manifestText, string key, out string[]? values)
     {
         values = null;
-        if (!TryReadAssignedExpressionByKey(manifestText, key, out var expression) ||
+        if (!TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression) ||
             string.IsNullOrWhiteSpace(expression))
             return false;
 
@@ -253,6 +231,30 @@ internal static class ModuleManifestTextParser
         return new RequiredModuleReference(name!, moduleVersion, requiredVersion, maximumVersion, guid);
     }
 
+    internal static bool TryParseModuleReferencePathExpression(string expression, out string[]? paths)
+    {
+        paths = null;
+        var trimmed = expression?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return false;
+
+        var body = IsArrayExpression(trimmed!)
+            ? TrimCompositeWrapper(trimmed!)
+            : trimmed!;
+        var values = new List<string>();
+        var index = 0;
+        while (TryReadValueExpression(body, ref index, out var itemExpression))
+        {
+            RequiredModuleReference? module = ParseRequiredModuleItem(itemExpression);
+            if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
+                return false;
+            values.Add(module.ModuleName.Trim());
+        }
+
+        paths = values.ToArray();
+        return true;
+    }
+
     private static IEnumerable<string> ParseStringArray(string expression)
     {
         var trimmed = expression.Trim();
@@ -288,25 +290,7 @@ internal static class ModuleManifestTextParser
         return TryGetStringArrayValue(body, key, out values);
     }
 
-    private static bool TryReadAssignedExpressionByKey(string text, string key, out string? expression)
-    {
-        expression = null;
-        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(key))
-            return false;
-
-        var match = Regex.Match(
-            text,
-            $@"(?:^|[\r\n{{;])\s*{Regex.Escape(key)}\s*=",
-            ManifestRegexOptions);
-        if (!match.Success)
-            return false;
-
-        var index = match.Index + match.Length;
-        expression = ReadAssignedValueExpression(text, ref index);
-        return !string.IsNullOrWhiteSpace(expression);
-    }
-
-    private static bool TryReadTopLevelAssignedExpressionByKey(string text, string key, out string? expression)
+    internal static bool TryReadTopLevelAssignedExpressionByKey(string text, string key, out string? expression)
     {
         expression = null;
         if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(key))
@@ -320,16 +304,30 @@ internal static class ModuleManifestTextParser
             if (index >= body.Length)
                 break;
 
-            var keyStart = index;
-            while (index < body.Length && IsManifestKeyCharacter(body[index]))
-                index++;
-            if (keyStart == index)
+            string candidateKey;
+            if (body[index] is '\'' or '"')
             {
-                index++;
-                continue;
+                if (!TryReadQuotedString(body, index, out int quotedKeyEnd) ||
+                    !TryUnquote(body.Substring(index, quotedKeyEnd - index), out candidateKey))
+                {
+                    index++;
+                    continue;
+                }
+                index = quotedKeyEnd;
+            }
+            else
+            {
+                var keyStart = index;
+                while (index < body.Length && IsManifestKeyCharacter(body[index]))
+                    index++;
+                if (keyStart == index)
+                {
+                    index++;
+                    continue;
+                }
+                candidateKey = body.Substring(keyStart, index - keyStart);
             }
 
-            var candidateKey = body.Substring(keyStart, index - keyStart);
             index = SkipTrivia(body, index, treatCommasAsTrivia: false);
             if (index >= body.Length || body[index] != '=')
             {
@@ -475,6 +473,12 @@ internal static class ModuleManifestTextParser
                 continue;
             }
 
+            if (ch == '<' && i + 1 < text.Length && text[i + 1] == '#')
+            {
+                i = SkipBlockComment(text, i) - 1;
+                continue;
+            }
+
             if (ch == '#')
             {
                 while (i < text.Length && text[i] != '\r' && text[i] != '\n')
@@ -498,7 +502,10 @@ internal static class ModuleManifestTextParser
             if (TryGetCompositeStart(text, i, out var nestedIndex, out var nestedCloser))
             {
                 stack.Push(nestedCloser);
-                i = nestedIndex;
+                // The loop increment must land on the first character inside the nested
+                // composite. Skipping that character can lose an opening quote and leave
+                // the remaining manifest incorrectly treated as quoted text.
+                i = nestedIndex - 1;
                 continue;
             }
 
@@ -569,6 +576,12 @@ internal static class ModuleManifestTextParser
                 continue;
             }
 
+            if (ch == '<' && index + 1 < text.Length && text[index + 1] == '#')
+            {
+                index = SkipBlockComment(text, index);
+                continue;
+            }
+
             if (ch == '#')
             {
                 while (index < text.Length && text[index] != '\r' && text[index] != '\n')
@@ -593,6 +606,12 @@ internal static class ModuleManifestTextParser
                 continue;
             }
 
+            if (ch == '<' && index + 1 < text.Length && text[index + 1] == '#')
+            {
+                index = SkipBlockComment(text, index);
+                continue;
+            }
+
             if (ch == '#')
             {
                 while (index < text.Length && text[index] != '\r' && text[index] != '\n')
@@ -604,6 +623,12 @@ internal static class ModuleManifestTextParser
         }
 
         return index;
+    }
+
+    private static int SkipBlockComment(string text, int index)
+    {
+        int end = text.IndexOf("#>", index + 2, StringComparison.Ordinal);
+        return end < 0 ? text.Length : end + 2;
     }
 
     private static bool IsArrayExpression(string expression)

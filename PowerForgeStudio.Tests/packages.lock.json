@@ -138,6 +138,11 @@
         "resolved": "10.0.10",
         "contentHash": "7f8JfUA85nD2yOrTX9fhuHPp8P01qqnbGTtRiMK6rwNhS1jNLqoCJfdzLMOIZY8b9sBoAX3eOH04k1fWeCgOYQ=="
       },
+      "System.Security.Cryptography.Pkcs": {
+        "type": "Transitive",
+        "resolved": "10.0.10",
+        "contentHash": "KG8t5RHczdgB3IWvRndpI0nE1DSo7ikDYSDbITxfgRFyIvnYiKzuPjaZOsPnwFQ1aOGUl9sEulJul9wlHLEUoA=="
+      },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
         "resolved": "10.0.10",
@@ -206,6 +211,7 @@
           "NuGet.Configuration": "[7.6.0, )",
           "System.IO.Packaging": "[10.0.10, )",
           "System.Reflection.MetadataLoadContext": "[10.0.10, )",
+          "System.Security.Cryptography.Pkcs": "[10.0.10, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
@@ -219,7 +225,7 @@
           "DBAClientX.Core": "[0.15.0, )",
           "DBAClientX.SQLite": "[0.13.0, )",
           "Microsoft.Data.Sqlite": "[10.0.10, )",
-          "PowerForge": "[3.0.104, )",
+          "PowerForge": "[3.0.108, )",
           "PowerForgeStudio.Domain": "[1.0.0, )"
         }
       }

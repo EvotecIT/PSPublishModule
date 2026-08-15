@@ -112,6 +112,13 @@ public sealed class DotNetPublishPublishOptions
     public string? RenameTo { get; set; }
 
     /// <summary>
+    /// Optional expected signed product or assembly identity for the primary executable.
+    /// When omitted, PowerForge derives the identity from the project file name and simple
+    /// <c>Product</c>/<c>AssemblyName</c> project properties.
+    /// </summary>
+    public string? ExecutableIdentity { get; set; }
+
+    /// <summary>
     /// Optional ReadyToRun toggle for non-AOT publish styles. When null, the project default is used.
     /// </summary>
     public bool? ReadyToRun { get; set; }

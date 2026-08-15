@@ -51,6 +51,8 @@ public sealed partial class ModulePipelineRunner
 
         try
         {
+            if (plan.GenerateReleaseProvenance)
+                ValidateReleaseSourceUnchanged(plan, generatedOutputPaths: null, trackedGeneratedOutputPaths: null);
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);
             if (plan.GateMode == ConfigurationGateMode.Documentation)
             {
@@ -64,6 +66,7 @@ public sealed partial class ModulePipelineRunner
             ExecuteDocumentationPhase(plan, session, session.Reporter, state);
             // Refresh the project-root manifest before validation or tests can abort the run so callers always see current metadata.
             state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan, state.BuildResult);
+            CaptureAuthorizedProjectManifest(plan, state);
             ExecuteValidationPhases(plan, session, state);
             ExecuteTestPhases(plan, session, state);
             ExecutePackagingPublishAndInstallPhases(spec, plan, session, packagingRequiredModules, pipeline, state);

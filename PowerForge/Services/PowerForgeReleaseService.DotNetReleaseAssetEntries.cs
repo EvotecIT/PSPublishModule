@@ -60,6 +60,24 @@ internal sealed partial class PowerForgeReleaseService
             BundleId = artifact.BundleId,
             IsFinalPackageOutput = true
         };
+
+        foreach (string evidencePath in (artifact.EvidencePaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
+        {
+            yield return new PowerForgeReleaseAssetEntry
+            {
+                Path = Path.GetFullPath(evidencePath),
+                Category = PowerForgeReleaseAssetCategory.Metadata,
+                Source = "DotNetPublish",
+                Target = artifact.Target,
+                Version = version,
+                Runtime = artifact.Runtime,
+                Framework = artifact.Framework,
+                Style = artifact.Style.ToString(),
+                BundleId = artifact.BundleId,
+                IsFinalPackageOutput = true
+            };
+        }
     }
 
     /// <summary>

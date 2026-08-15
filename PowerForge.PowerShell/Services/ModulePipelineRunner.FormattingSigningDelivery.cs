@@ -184,7 +184,8 @@ public sealed partial class ModulePipelineRunner
 
     internal static string[] BuildSigningExcludeSubstrings(
         SigningOptionsConfiguration signing,
-        DeliveryOptionsConfiguration? delivery = null)
+        DeliveryOptionsConfiguration? delivery = null,
+        bool excludeBundledRequiredModules = true)
     {
         var list = new List<string>();
         var internalsPath = ResolveDeliveryInternalsPath(delivery);
@@ -193,8 +194,10 @@ public sealed partial class ModulePipelineRunner
         if (signing.IncludeInternals != true)
             list.Add(internalsPath);
 
-        // Safety: never sign third-party downloaded dependencies by default.
-        list.Add("Modules");
+        // Staging does not own downloaded dependencies. Final packed-artifact signing includes them so
+        // existing vendor signatures are preserved and otherwise unsigned shipped code is publisher-owned.
+        if (excludeBundledRequiredModules)
+            list.Add("Modules");
 
         if (signing.ExcludePaths is { Length: > 0 })
             list.AddRange(signing.ExcludePaths.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()));

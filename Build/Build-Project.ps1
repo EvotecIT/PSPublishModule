@@ -3,6 +3,11 @@ param(
     [string] $ConfigPath,
     [ValidateSet('Release', 'Debug')]
     [string] $Configuration = 'Release',
+    [string] $EffectiveConfigurationPath,
+    [string] $SourceRepositoryRoot,
+    [ValidatePattern('^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$')]
+    [string] $ExpectedSourceRevision,
+    [string[]] $SourceInputPath,
     [Alias('ModuleRunMode')]
     [ValidateSet('Manifest', 'Documentation', 'Build', 'Publish')]
     [string] $RunMode = 'Build',

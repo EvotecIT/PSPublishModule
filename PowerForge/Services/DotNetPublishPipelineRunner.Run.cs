@@ -83,6 +83,11 @@ public sealed partial class DotNetPublishPipelineRunner
                             Clean(plan);
                             break;
                         case DotNetPublishStepKind.Build:
+                            if ((plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+                                .Any(static target => target?.Publish?.Sign?.Enabled == true))
+                            {
+                                _ = ReadPortableInventorySourceProvenance(plan);
+                            }
                             Build(plan, step);
                             break;
                         case DotNetPublishStepKind.Publish:
@@ -120,6 +125,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             break;
                         case DotNetPublishStepKind.Manifest:
                         {
+                            FinalizePortableEvidence(plan, artefacts);
                             (manifestJson, manifestText, checksumsPath) = WriteManifestsWithProvenance(
                                 plan,
                                 artefacts,

@@ -678,6 +678,7 @@
         "ZipPath": { "type": ["string", "null"] },
         "ZipNameTemplate": { "type": ["string", "null"] },
         "RenameTo": { "type": ["string", "null"] },
+        "ExecutableIdentity": { "type": ["string", "null"] },
         "ReadyToRun": { "type": ["boolean", "null"] },
         "MsBuildProperties": {
           "type": ["object", "null"],

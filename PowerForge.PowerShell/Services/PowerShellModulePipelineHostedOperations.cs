@@ -442,7 +442,16 @@ internal sealed class PowerShellModulePipelineHostedOperations :
             SigningException = retry.SigningException,
             CertificateThumbprint = retry.CertificateThumbprint ?? initial.CertificateThumbprint,
             FailedFiles = retry.FailedFiles ?? Array.Empty<string>(),
-            FailedFilePaths = retry.FailedFilePaths ?? Array.Empty<string>()
+            FailedFilePaths = retry.FailedFilePaths ?? Array.Empty<string>(),
+            VerifiedFilePaths = (initial.VerifiedFilePaths ?? Array.Empty<string>())
+                .Concat(retry.VerifiedFilePaths ?? Array.Empty<string>())
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
+            PreservedThirdPartySignatures = (initial.PreservedThirdPartySignatures ?? Array.Empty<ModuleSigningPreservedSignature>())
+                .Concat(retry.PreservedThirdPartySignatures ?? Array.Empty<ModuleSigningPreservedSignature>())
+                .GroupBy(signature => signature.FilePath, StringComparer.Ordinal)
+                .Select(group => group.Last())
+                .ToArray()
         };
 
     private void LogSigningDiagnostics(PowerShellRunResult result)

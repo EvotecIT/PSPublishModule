@@ -8,9 +8,9 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private int TrySignOutput(string outputDir, DotNetPublishSignOptions sign)
+    private string[] TrySignOutput(string outputDir, DotNetPublishSignOptions sign)
     {
-        if (sign is null || !sign.Enabled) return 0;
+        if (sign is null || !sign.Enabled) return Array.Empty<string>();
         var targets = new List<string>();
         try
         {
@@ -23,8 +23,7 @@ public sealed partial class DotNetPublishPipelineRunner
             // ignore
         }
 
-        var signed = TrySignFiles(targets, outputDir, sign, scope: "publish outputs");
-        return signed.Length;
+        return TrySignFiles(targets, outputDir, sign, scope: "publish outputs");
     }
 
     private string[] TrySignFiles(
@@ -95,7 +94,15 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 if (_logger.IsVerbose)
                     _logger.Verbose($"Preserving existing signature: {file}");
-                signed.Add(file);
+                if (_signatureMatchesPublisher(file, sign))
+                {
+                    signed.Add(file);
+                }
+                else if (_logger.IsVerbose)
+                {
+                    _logger.Verbose(
+                        $"Preserved signature is not owned by the configured publisher and will remain payload-bound only: {file}");
+                }
                 continue;
             }
 
@@ -143,6 +150,37 @@ public sealed partial class DotNetPublishPipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static bool SignatureMatchesPublisher(string filePath, DotNetPublishSignOptions sign)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            return false;
+        if (string.IsNullOrWhiteSpace(sign.Thumbprint) && string.IsNullOrWhiteSpace(sign.SubjectName))
+            return false;
+
+        try
+        {
+            DotNetPublishReleaseArtifactVerifier.AuthenticodeResult signature =
+                DotNetPublishReleaseArtifactVerifier.VerifyAuthenticode(filePath);
+            if (!signature.IsValid)
+                return false;
+            if (!string.IsNullOrWhiteSpace(sign.Thumbprint))
+            {
+                return string.Equals(
+                    DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(signature.Thumbprint),
+                    DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(sign.Thumbprint),
+                    StringComparison.OrdinalIgnoreCase);
+            }
+
+            return DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(
+                signature.Subject,
+                sign.SubjectName!);
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            return false;
+        }
     }
 
     private ProcessRunResult RunSigningTool(

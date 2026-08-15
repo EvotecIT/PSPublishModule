@@ -85,4 +85,11 @@
             $Exists | Should -BeTrue
         }
     }
+
+    It 'Ships external help for the executable identity parameter' {
+        $ParameterHelp = Get-Help -Name 'New-ConfigurationDotNetTarget' -Parameter 'ExecutableIdentity'
+
+        $ParameterHelp.Name | Should -Be 'ExecutableIdentity'
+        ($ParameterHelp.Description.Text -join ' ') | Should -Match 'signed product or assembly identity'
+    }
 }

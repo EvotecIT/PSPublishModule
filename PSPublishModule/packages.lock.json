@@ -229,6 +229,14 @@
         "resolved": "6.1.2",
         "contentHash": "2hBr6zdbIBTDE3EhK7NSVNdX58uTK6iHW/P/Axmm9sl1xoGSLqDvMtpecn226TNwHByFokYwJmt/aQQNlO5CRw=="
       },
+      "System.Security.Cryptography.Pkcs": {
+        "type": "Transitive",
+        "resolved": "10.0.10",
+        "contentHash": "KG8t5RHczdgB3IWvRndpI0nE1DSo7ikDYSDbITxfgRFyIvnYiKzuPjaZOsPnwFQ1aOGUl9sEulJul9wlHLEUoA==",
+        "dependencies": {
+          "Microsoft.Bcl.Cryptography": "10.0.10"
+        }
+      },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
         "resolved": "10.0.10",
@@ -279,6 +287,7 @@
         "dependencies": {
           "NuGet.Configuration": "[7.6.0, )",
           "System.Reflection.Metadata": "[10.0.10, )",
+          "System.Security.Cryptography.Pkcs": "[10.0.10, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
           "System.Text.Json": "[10.0.10, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
@@ -288,7 +297,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.5.ReferenceAssemblies": "[1.1.0, )",
-          "PowerForge": "[3.0.104, )",
+          "PowerForge": "[3.0.108, )",
           "System.Security.Cryptography.Xml": "[10.0.10, )",
           "System.Text.Json": "[10.0.10, )"
         }
@@ -1071,6 +1080,7 @@
           "NuGet.Configuration": "[7.6.0, )",
           "System.IO.Packaging": "[10.0.10, )",
           "System.Reflection.MetadataLoadContext": "[10.0.10, )",
+          "System.Security.Cryptography.Pkcs": "[10.0.10, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
@@ -1079,7 +1089,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.6.4, )",
-          "PowerForge": "[3.0.104, )",
+          "PowerForge": "[3.0.108, )",
           "System.Security.Cryptography.Xml": "[10.0.10, )"
         }
       }
@@ -1821,6 +1831,7 @@
           "NuGet.Configuration": "[7.6.0, )",
           "System.IO.Packaging": "[10.0.10, )",
           "System.Reflection.MetadataLoadContext": "[10.0.10, )",
+          "System.Security.Cryptography.Pkcs": "[10.0.10, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
@@ -1829,7 +1840,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.18, )",
-          "PowerForge": "[3.0.104, )",
+          "PowerForge": "[3.0.108, )",
           "System.Security.Cryptography.Xml": "[10.0.10, )"
         }
       }

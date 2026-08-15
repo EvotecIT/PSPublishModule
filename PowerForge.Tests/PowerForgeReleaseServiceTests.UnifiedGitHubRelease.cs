@@ -464,7 +464,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         VersionSource = PowerForgeReleaseVersionSource.Assets,
                         Owner = "EvotecIT",
                         Repository = "PSPublishModule",
-                        Token = "token",
+                        TokenEnvName = "PATH",
                         Commitish = "0123456789abcdef0123456789abcdef01234567",
                         ReuseExistingRelease = true,
                         RequireExpectedExistingRelease = true,
@@ -560,7 +560,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         VersionSource = PowerForgeReleaseVersionSource.Assets,
                         Owner = "EvotecIT",
                         Repository = "PSPublishModule",
-                        Token = "token",
+                        TokenEnvName = "PATH",
                         Commitish = "0123456789abcdef0123456789abcdef01234567",
                         ReuseExistingRelease = true,
                         RequireExpectedExistingRelease = true,
@@ -617,7 +617,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     VersionSource = PowerForgeReleaseVersionSource.Assets,
                     Owner = "EvotecIT",
                     Repository = "PSPublishModule",
-                    Token = "token"
+                    TokenEnvName = "PATH"
                 }
             };
             var built = new PowerForgeReleaseResult {
@@ -709,7 +709,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             VersionSource = PowerForgeReleaseVersionSource.Assets,
                             Owner = "EvotecIT",
                             Repository = "PSPublishModule",
-                            Token = "token"
+                            TokenEnvName = "PATH"
                         }
                     },
                     new PowerForgeReleaseRequest
@@ -772,7 +772,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         VersionSource = PowerForgeReleaseVersionSource.Assets,
                         Owner = "EvotecIT",
                         Repository = "Sample",
-                        Token = "token"
+                        TokenEnvName = "PATH"
                     }
                 },
                 new PowerForgeReleaseRequest
@@ -951,7 +951,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         VersionSource = PowerForgeReleaseVersionSource.Assets,
                         Owner = "EvotecIT",
                         Repository = "PSPublishModule",
-                        Token = "token"
+                        TokenEnvName = "PATH"
                     }
                 },
                 new PowerForgeReleaseRequest
@@ -1013,7 +1013,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Publish = false,
                             Owner = "EvotecIT",
                             Repository = "PSPublishModule",
-                            Token = "token"
+                            TokenEnvName = "PATH"
                         }
                     },
                     GitHub = new PowerForgeReleaseGitHubOptions
@@ -1022,7 +1022,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         VersionSource = PowerForgeReleaseVersionSource.Module,
                         Owner = "EvotecIT",
                         Repository = "PSPublishModule",
-                        Token = "token"
+                        TokenEnvName = "PATH"
                     }
                 },
                 new PowerForgeReleaseRequest

@@ -7,6 +7,28 @@ namespace PowerForge.Tests;
 public sealed class ModuleManifestValueReaderTests
 {
     [Fact]
+    public void ReadTopLevelStringOrArrayFromText_IgnoresNestedMetadataWithSameKey()
+    {
+        const string manifest = """
+            @{
+                PrivateData = @{
+                    RequiredAssemblies = @('MetadataOnly.dll')
+                }
+                RequiredAssemblies = @('Runtime.dll')
+            }
+            """;
+
+        string[] values = ModuleManifestValueReader.ReadTopLevelStringOrArrayFromText(
+            manifest,
+            "RequiredAssemblies");
+
+        Assert.Equal(new[] { "Runtime.dll" }, values);
+        Assert.Empty(ModuleManifestValueReader.ReadTopLevelStringOrArrayFromText(
+            "@{ PrivateData = @{ RequiredAssemblies = @('MetadataOnly.dll') } }",
+            "RequiredAssemblies"));
+    }
+
+    [Fact]
     public void ReadPsDataStringOrArray_ParsesSingleLinePsDataArrays()
     {
         var projectRoot = Path.Combine(Path.GetTempPath(), "PowerForgeManifestValueReaderTests", Path.GetRandomFileName());
@@ -50,4 +72,72 @@ public sealed class ModuleManifestValueReaderTests
             try { Directory.Delete(projectRoot, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void ReadPsDataStringOrArrayFromText_IgnoresNestedNonPsDataValue()
+    {
+        const string manifest = """
+            @{
+                ModuleVersion = '1.2.3'
+                PrivateData = @{
+                    Unrelated = @{
+                        Prerelease = 'nested-preview'
+                    }
+                }
+            }
+            """;
+
+        Assert.Empty(ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifest, "Prerelease"));
+    }
+
+    [Fact]
+    public void ReadTopLevelModuleReferencePathsFromText_ParsesStringsAndModuleSpecifications()
+    {
+        const string manifest = """
+            @{
+                NestedModules = @(
+                    'First.psm1'
+                    @{ ModuleName = 'Second.psm1'; ModuleVersion = '1.0' }
+                )
+            }
+            """;
+
+        Assert.Equal(
+            new[] { "First.psm1", "Second.psm1" },
+            ModuleManifestValueReader.ReadTopLevelModuleReferencePathsFromText(manifest, "NestedModules"));
+    }
+
+    [Fact]
+    public void ReadTopLevelModuleReferencePathsFromText_RejectsDynamicModuleSpecifications()
+    {
+        const string manifest = "@{ NestedModules = @(@{ ModuleName = (Join-Path 'lib' 'Dynamic.psm1') }) }";
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            ModuleManifestValueReader.ReadTopLevelModuleReferencePathsFromText(manifest, "NestedModules"));
+
+        Assert.Contains("literal ModuleName", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadManifestValues_AcceptsQuotedLiteralKeysAtEveryLevel()
+    {
+        const string manifest = """
+            @{
+                'ModuleVersion' = '1.2.3'
+                "RootModule" = 'Sample.psm1'
+                'NestedModules' = @(@{ ModuleName = 'Nested.psm1'; ModuleVersion = '1.0' })
+                'PrivateData' = @{ 'PSData' = @{ 'Prerelease' = 'preview.1' } }
+            }
+            """;
+
+        Assert.Equal("1.2.3", ModuleManifestValueReader.ReadTopLevelStringFromText(manifest, "ModuleVersion"));
+        Assert.Equal("Sample.psm1", ModuleManifestValueReader.ReadTopLevelStringFromText(manifest, "RootModule"));
+        Assert.Equal(
+            new[] { "Nested.psm1" },
+            ModuleManifestValueReader.ReadTopLevelModuleReferencePathsFromText(manifest, "NestedModules"));
+        Assert.Equal(
+            new[] { "preview.1" },
+            ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifest, "Prerelease"));
+    }
+
 }

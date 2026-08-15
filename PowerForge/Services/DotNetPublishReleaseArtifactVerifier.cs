@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -9,8 +10,10 @@ namespace PowerForge;
 /// Verifies that a signed MSI still matches the PowerForge build manifest, checksum catalog,
 /// source provenance, package identity, and signing configuration that produced it.
 /// </summary>
-public sealed class DotNetPublishReleaseArtifactVerifier
+public sealed partial class DotNetPublishReleaseArtifactVerifier
 {
+    internal const long MaxManifestBytes = 16L * 1024L * 1024L;
+    internal const long MaxConfigurationBytes = 16L * 1024L * 1024L;
     private static readonly JsonSerializerOptions ConfigurationJsonOptions = CreateConfigurationJsonOptions();
     private readonly Func<string, DotNetPublishMsiPackageMetadata> _readPackage;
     private readonly Func<string, AuthenticodeResult> _verifyAuthenticode;
@@ -48,7 +51,9 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         if (!ChecksumContains(checksumsPath, manifestRelativePath, manifestDigest))
             throw Invalid("PowerForge manifest SHA-256 does not match the checksum manifest.");
 
-        using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath), new JsonDocumentOptions
+        using var manifest = JsonDocument.Parse(
+            ReadBoundedText(manifestPath, "PowerForge manifest", MaxManifestBytes),
+            new JsonDocumentOptions
         {
             AllowTrailingCommas = true,
             CommentHandling = JsonCommentHandling.Skip
@@ -76,12 +81,9 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             throw Invalid("PowerForge manifest must come from a clean source checkout.");
 
         var sourceRevision = RequireFullGitObjectId(ReadString(entry, "SourceRevision"), "source revision");
-        var expectedRevision = RequireHex(request.ExpectedSourceRevision, 7, 64, "expected source revision");
-        var abbreviatedExpected = expectedRevision.Length < 40;
-        if (abbreviatedExpected
-                ? !sourceRevision.StartsWith(expectedRevision, StringComparison.OrdinalIgnoreCase)
-                : sourceRevision.Length != expectedRevision.Length ||
-                  !string.Equals(sourceRevision, expectedRevision, StringComparison.OrdinalIgnoreCase))
+        var expectedRevision = RequireFullGitObjectId(request.ExpectedSourceRevision, "expected source revision");
+        if (sourceRevision.Length != expectedRevision.Length ||
+            !string.Equals(sourceRevision, expectedRevision, StringComparison.OrdinalIgnoreCase))
         {
             throw Invalid("PowerForge manifest source revision does not match the release workflow commit.");
         }
@@ -139,12 +141,12 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             throw Invalid($"Installer Authenticode signature is not valid (0x{signature.StatusCode:X8}).");
         if (expected.SignerThumbprint is not null &&
             !string.Equals(signature.Thumbprint, expected.SignerThumbprint, StringComparison.OrdinalIgnoreCase))
-            throw Invalid("Installer signature does not use the configured release certificate.");
+            throw Invalid("Installer signature does not use the trusted publisher certificate.");
         if (expected.SignerThumbprint is null &&
             expected.SignerSubjectName is not null &&
-            signature.Subject.IndexOf(expected.SignerSubjectName, StringComparison.OrdinalIgnoreCase) < 0)
+            !CertificateSubjectsEqual(signature.Subject, expected.SignerSubjectName))
         {
-            throw Invalid("Installer signature does not match the configured release certificate subject.");
+            throw Invalid("Installer signature does not match the trusted publisher certificate subject.");
         }
 
         return new DotNetPublishReleaseArtifact
@@ -164,11 +166,66 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         };
     }
 
+    internal static bool CertificateSubjectsEqual(string actual, string expected)
+    {
+        try
+        {
+            X500DistinguishedName actualName = new(actual);
+            if (expected.IndexOf('=') >= 0)
+            {
+                X500DistinguishedName expectedName = new(expected);
+                return actualName.RawData.SequenceEqual(expectedName.RawData);
+            }
+
+            string expectedValue = expected.Trim();
+            return actualName
+                .Decode(X500DistinguishedNameFlags.UseNewLines)
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(component => component.Split(new[] { '=' }, 2))
+                .Any(component => component.Length == 2 &&
+                                  string.Equals(component[0].Trim(), "CN", StringComparison.OrdinalIgnoreCase) &&
+                                  string.Equals(component[1].Trim().Trim('"'), expectedValue, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (CryptographicException)
+        {
+            return false;
+        }
+    }
+
+    internal static string RequireCompleteCertificateSubject(string value, string parameterName)
+    {
+        string subject = RequireText(value, parameterName);
+        if (subject.IndexOf('=') < 1)
+            throw Invalid($"{parameterName} must be a complete X.500 distinguished name such as 'CN=Publisher, O=Organization'.");
+        try
+        {
+            _ = new X500DistinguishedName(subject);
+            return subject;
+        }
+        catch (CryptographicException exception)
+        {
+            throw new InvalidDataException($"{parameterName} must be a valid complete X.500 distinguished name.", exception);
+        }
+    }
+
     private static ExpectedInstaller ReadExpectedInstaller(
         string configurationPath,
         string installerId,
         DotNetPublishReleaseArtifactVerificationRequest request)
     {
+        var trustedSignerThumbprint = string.IsNullOrWhiteSpace(request.SignThumbprint)
+            ? null
+            : NormalizeThumbprint(request.SignThumbprint);
+        var trustedSignerSubjectName = trustedSignerThumbprint is not null || string.IsNullOrWhiteSpace(request.SignSubjectName)
+            ? null
+            : RequireCompleteCertificateSubject(request.SignSubjectName!, nameof(request.SignSubjectName));
+        if (trustedSignerThumbprint is null && trustedSignerSubjectName is null)
+        {
+            throw Invalid(
+                "Installer release verification requires an out-of-band publisher thumbprint or exact subject name; " +
+                "release configuration cannot establish publisher trust.");
+        }
+
         var configuration = ReadConfiguredPublishSpec(configurationPath);
         if (!string.IsNullOrWhiteSpace(request.Profile))
             configuration.Profile = request.Profile!.Trim();
@@ -219,27 +276,24 @@ public sealed class DotNetPublishReleaseArtifactVerifier
 
         var product = installer.Authoring?.Product;
         var expectedCombinations = ResolveExpectedCombinations(configuration, installer);
-        var signerThumbprint = string.IsNullOrWhiteSpace(sign.Thumbprint)
-            ? null
-            : NormalizeThumbprint(sign.Thumbprint);
-        var signerSubjectName = signerThumbprint is not null || string.IsNullOrWhiteSpace(sign.SubjectName)
-            ? null
-            : sign.SubjectName!.Trim();
-
         return new ExpectedInstaller(
             product is null ? null : RequireText(product.Name, "Product.Name"),
             product is null ? null : RequireText(product.Manufacturer, "Product.Manufacturer"),
             product is null ? null : NormalizeGuid(product.UpgradeCode, "Product.UpgradeCode"),
             product is null || installer.Versioning?.Enabled == true ? null : NormalizeVersion(product.Version),
             expectedCombinations,
-            signerThumbprint,
-            signerSubjectName,
+            trustedSignerThumbprint,
+            trustedSignerSubjectName,
             configuration.DotNet.AllowOutputOutsideProjectRoot);
     }
 
-    private static DotNetPublishSpec ReadConfiguredPublishSpec(string configurationPath)
+    internal static DotNetPublishSpec ReadConfiguredPublishSpec(string configurationPath) =>
+        ReadConfiguredPublishSpecWithInputs(configurationPath).Configuration;
+
+    internal static DotNetPublishConfiguredSpec ReadConfiguredPublishSpecWithInputs(string configurationPath)
     {
-        var json = File.ReadAllText(configurationPath);
+        configurationPath = RequireFile(configurationPath, nameof(configurationPath));
+        var json = ReadBoundedText(configurationPath, "PowerForge release configuration", MaxConfigurationBytes);
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions
         {
             CommentHandling = JsonCommentHandling.Skip,
@@ -247,8 +301,9 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         });
         if (!TryGet(document.RootElement, "Tools", out _))
         {
-            return JsonSerializer.Deserialize<DotNetPublishSpec>(json, ConfigurationJsonOptions)
+            var direct = JsonSerializer.Deserialize<DotNetPublishSpec>(json, ConfigurationJsonOptions)
                 ?? throw Invalid("PowerForge dotnet-publish configuration could not be deserialized.");
+            return new DotNetPublishConfiguredSpec(direct, new[] { configurationPath });
         }
 
         var release = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(json, ConfigurationJsonOptions)
@@ -259,6 +314,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             throw Invalid("Tools.DotNetPublish and Tools.DotNetPublishConfigPath are mutually exclusive.");
 
         DotNetPublishSpec configuration;
+        var inputPaths = new List<string> { configurationPath };
         if (tools.DotNetPublish is not null)
         {
             configuration = tools.DotNetPublish;
@@ -270,14 +326,44 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             var path = Path.GetFullPath(Path.IsPathRooted(configuredPath)
                 ? configuredPath
                 : Path.Combine(root, configuredPath));
-            var externalJson = File.ReadAllText(RequireFile(path, "Tools.DotNetPublishConfigPath"));
+            path = RequireFile(path, "Tools.DotNetPublishConfigPath");
+            var externalJson = ReadBoundedText(
+                path,
+                "Referenced PowerForge dotnet-publish configuration",
+                MaxConfigurationBytes);
             configuration = JsonSerializer.Deserialize<DotNetPublishSpec>(externalJson, ConfigurationJsonOptions)
                 ?? throw Invalid("Referenced PowerForge dotnet-publish configuration could not be deserialized.");
+            inputPaths.Add(path);
         }
 
         if (!string.IsNullOrWhiteSpace(tools.DotNetPublishProfile))
             configuration.Profile = tools.DotNetPublishProfile!.Trim();
-        return configuration;
+        return new DotNetPublishConfiguredSpec(configuration, inputPaths.ToArray());
+    }
+
+    private static string ReadBoundedText(string path, string label, long maximumBytes)
+    {
+        using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        if (input.Length > maximumBytes)
+            throw Invalid($"{label} exceeds the {maximumBytes} byte limit.");
+
+        using var bytes = new MemoryStream((int)input.Length);
+        var buffer = new byte[81920];
+        long total = 0;
+        while (true)
+        {
+            int read = input.Read(buffer, 0, buffer.Length);
+            if (read == 0)
+                break;
+            total = checked(total + read);
+            if (total > maximumBytes)
+                throw Invalid($"{label} exceeds the {maximumBytes} byte limit.");
+            bytes.Write(buffer, 0, read);
+        }
+
+        bytes.Position = 0;
+        using var reader = new StreamReader(bytes, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
     }
 
     private static void ValidatePackage(
@@ -405,7 +491,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             throw Invalid($"PowerForge manifest or configuration does not match MSI {name}.");
     }
 
-    private static AuthenticodeResult VerifyAuthenticode(string path)
+    internal static AuthenticodeResult VerifyAuthenticode(string path)
     {
         var status = WindowsAuthenticodeSignatureInspector.Verify(path);
         if (status != 0)
@@ -429,30 +515,11 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         }
     }
 
-    private static string ComputeSha256(string path)
+    internal static string ComputeSha256(string path)
     {
         using var input = File.OpenRead(path);
         using var hash = SHA256.Create();
         return BitConverter.ToString(hash.ComputeHash(input)).Replace("-", string.Empty);
-    }
-
-    private static bool ChecksumContains(string path, string relativePath, string digest)
-    {
-        var expected = relativePath.Replace('\\', '/');
-        foreach (var line in File.ReadLines(path))
-        {
-            var separator = line.IndexOf(" *", StringComparison.Ordinal);
-            if (separator <= 0) continue;
-            var listedDigest = line.Substring(0, separator).Trim();
-            var listedPath = line.Substring(separator + 2).Trim().Replace('\\', '/');
-            if (string.Equals(listedDigest, digest, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(listedPath, expected, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static JsonElement[] FilterEntries(JsonElement[] entries, string propertyName, string? selector)
@@ -466,7 +533,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
             .ToArray();
     }
 
-    private static string GetRelativePath(string root, string path)
+    internal static string GetRelativePath(string root, string path)
     {
 #if NET472
         return GetRelativePathViaUri(root, path);
@@ -506,7 +573,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         return options;
     }
 
-    private static string ResolveArtifactPath(string root, string relativePath, bool allowOutsideProjectRoot)
+    internal static string ResolveArtifactPath(string root, string relativePath, bool allowOutsideProjectRoot)
     {
         var platformPath = relativePath.Replace('/', Path.DirectorySeparatorChar);
         if (Path.IsPathRooted(platformPath) && !allowOutsideProjectRoot)
@@ -526,27 +593,19 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         return Directory.Exists(full) ? full : throw new DirectoryNotFoundException($"Directory was not found: {full}");
     }
 
-    private static string RequireFile(string? path, string name)
+    internal static string RequireFile(string? path, string name)
     {
         var full = Path.GetFullPath(RequireText(path, name));
         return File.Exists(full) ? full : throw new FileNotFoundException($"File was not found: {full}", full);
     }
 
-    private static string RequireText(string? value, string name)
+    internal static string RequireText(string? value, string name)
     {
         var normalized = value?.Trim() ?? string.Empty;
         return normalized.Length > 0 ? normalized : throw new InvalidDataException($"{name} is required.");
     }
 
-    private static string RequireHex(string? value, int minimum, int maximum, string name)
-    {
-        var normalized = RequireText(value, name);
-        if (normalized.Length < minimum || normalized.Length > maximum || normalized.Any(ch => !Uri.IsHexDigit(ch)))
-            throw Invalid($"PowerForge manifest does not contain a valid {name}.");
-        return normalized;
-    }
-
-    private static string RequireFullGitObjectId(string? value, string name)
+    internal static string RequireFullGitObjectId(string? value, string name)
     {
         var normalized = RequireText(value, name);
         if ((normalized.Length != 40 && normalized.Length != 64) || normalized.Any(ch => !Uri.IsHexDigit(ch)))
@@ -575,7 +634,7 @@ public sealed class DotNetPublishReleaseArtifactVerifier
         return parsed.ToString("B").ToUpperInvariant();
     }
 
-    private static string NormalizeThumbprint(string? value)
+    internal static string NormalizeThumbprint(string? value)
     {
         var normalized = RequireText(value, "signing certificate thumbprint")
             .Replace(" ", string.Empty)

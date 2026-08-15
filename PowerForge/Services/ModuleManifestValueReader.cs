@@ -6,8 +6,19 @@ internal static class ModuleManifestValueReader
 {
     internal static string? ReadTopLevelString(string manifestPath, string key)
     {
-        if (!TryGetTopLevelString(manifestPath, key, out var value) || string.IsNullOrWhiteSpace(value))
+        if (!TryReadManifestText(manifestPath, out var manifestText))
             return null;
+
+        return ReadTopLevelStringFromText(manifestText, key);
+    }
+
+    internal static string? ReadTopLevelStringFromText(string manifestText, string key)
+    {
+        if (!ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, key, out var value) ||
+            string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
 
         return value!.Trim();
     }
@@ -24,13 +35,45 @@ internal static class ModuleManifestValueReader
         if (!TryReadManifestText(manifestPath, out var manifestText))
             return Array.Empty<string>();
 
-        if (ModuleManifestTextParser.TryGetStringArrayValue(manifestText, key, out var values) && values is not null)
+        return ReadTopLevelStringOrArrayFromText(manifestText, key);
+    }
+
+    internal static string[] ReadTopLevelStringOrArrayFromText(string manifestText, string key)
+    {
+        if (!ModuleManifestTextParser.TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression) ||
+            string.IsNullOrWhiteSpace(expression))
+            return Array.Empty<string>();
+
+        if (ModuleManifestTextParser.TryParseStringArrayExpression(expression!, out var values) && values is not null)
             return values;
 
-        if (ModuleManifestTextParser.TryGetQuotedStringValue(manifestText, key, out var value) && !string.IsNullOrWhiteSpace(value))
+        if (ModuleManifestTextParser.TryParseQuotedStringExpression(expression!, out var value) && !string.IsNullOrWhiteSpace(value))
             return new[] { value! };
 
         return Array.Empty<string>();
+    }
+
+    internal static string[] ReadTopLevelModuleReferencePaths(string manifestPath, string key)
+    {
+        if (!TryReadManifestText(manifestPath, out var manifestText))
+            return Array.Empty<string>();
+
+        return ReadTopLevelModuleReferencePathsFromText(manifestText, key);
+    }
+
+    internal static string[] ReadTopLevelModuleReferencePathsFromText(string manifestText, string key)
+    {
+        if (!ModuleManifestTextParser.TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression) ||
+            string.IsNullOrWhiteSpace(expression))
+        {
+            return Array.Empty<string>();
+        }
+
+        if (ModuleManifestTextParser.TryParseModuleReferencePathExpression(expression!, out var paths) && paths is not null)
+            return paths;
+
+        throw new InvalidDataException(
+            $"PowerShell manifest property '{key}' must contain string paths or module specifications with a literal ModuleName.");
     }
 
     internal static string[]? ReadTopLevelLiteralStringOrArray(string manifestPath, string key)
@@ -63,18 +106,6 @@ internal static class ModuleManifestValueReader
             if (ModuleManifestTextParser.TryParseQuotedStringExpression(expression!, out var value) && !string.IsNullOrWhiteSpace(value))
                 return new[] { value! };
         }
-
-        if (ModuleManifestTextParser.TryGetPsDataStringArrayValue(manifestText, key, out var legacyValues) && legacyValues is not null)
-            return legacyValues;
-
-        if (ModuleManifestTextParser.TryGetPsDataStringValue(manifestText, key, out var legacyValue) && !string.IsNullOrWhiteSpace(legacyValue))
-            return new[] { legacyValue! };
-
-        if (ModuleManifestTextParser.TryGetStringArrayValue(manifestText, key, out var fallbackValues) && fallbackValues is not null)
-            return fallbackValues;
-
-        if (ModuleManifestTextParser.TryGetQuotedStringValue(manifestText, key, out var fallbackValue) && !string.IsNullOrWhiteSpace(fallbackValue))
-            return new[] { fallbackValue! };
 
         return Array.Empty<string>();
     }

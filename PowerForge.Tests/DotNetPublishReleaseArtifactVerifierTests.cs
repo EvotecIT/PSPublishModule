@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 
 namespace PowerForge.Tests;
 
-public sealed class DotNetPublishReleaseArtifactVerifierTests
+public sealed partial class DotNetPublishReleaseArtifactVerifierTests
 {
     private const string Thumbprint = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
@@ -26,6 +26,33 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_RejectsOversizedManifestBeforeParsing()
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteOversizedManifest();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("PowerForge manifest exceeds", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("byte limit", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_RejectsBareCommonNameAsOutOfBandPublisherTrust()
+    {
+        using var fixture = new ReleaseFixture();
+        DotNetPublishReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = "Publisher";
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("complete X.500", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_RejectsManifestFromAnotherWorkflowCommit()
     {
         using var fixture = new ReleaseFixture();
@@ -39,15 +66,16 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
     }
 
     [Fact]
-    public void Verify_AcceptsAbbreviatedExpectedWorkflowCommit()
+    public void Verify_RejectsAbbreviatedExpectedWorkflowCommit()
     {
         using var fixture = new ReleaseFixture();
         var request = fixture.CreateRequest();
         request.ExpectedSourceRevision = fixture.SourceRevision[..12];
 
-        DotNetPublishReleaseArtifact result = fixture.CreateVerifier().Verify(request);
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
 
-        Assert.Equal(fixture.SourceRevision, result.SourceRevision);
+        Assert.Contains("full valid expected source revision", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -75,7 +103,7 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
     }
 
     [Fact]
-    public void Verify_AcceptsFullAndAbbreviatedSha256WorkflowCommit()
+    public void Verify_AcceptsFullAndRejectsAbbreviatedSha256WorkflowCommit()
     {
         using var fixture = new ReleaseFixture();
         string sourceRevision = new string('c', 64);
@@ -86,7 +114,9 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
         abbreviatedRequest.ExpectedSourceRevision = sourceRevision[..20];
 
         Assert.Equal(sourceRevision, fixture.CreateVerifier().Verify(fullRequest).SourceRevision);
-        Assert.Equal(sourceRevision, fixture.CreateVerifier().Verify(abbreviatedRequest).SourceRevision);
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(abbreviatedRequest));
+        Assert.Contains("full valid expected source revision", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -240,7 +270,7 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
         InvalidDataException exception = Assert.Throws<InvalidDataException>(
             () => verifier.Verify(fixture.CreateRequest()));
 
-        Assert.Contains("configured release certificate", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("trusted publisher certificate", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -314,8 +344,10 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
             }
         });
 
+        DotNetPublishReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = overrideThumbprint;
         DotNetPublishReleaseArtifact result = fixture.CreateVerifier(overrideThumbprint)
-            .Verify(fixture.CreateRequest());
+            .Verify(request);
 
         Assert.Equal(overrideThumbprint, result.SignerThumbprint);
     }
@@ -475,13 +507,16 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
                 {
                     Id = "Test.MSI",
                     Authoring = ReleaseFixture.AuthoringIdentity,
-                    Sign = new { Enabled = true, SubjectName = "Test Publisher" }
+                    Sign = new { Enabled = true, SubjectName = "CN=Test Publisher" }
                 }
             }
         });
 
+        DotNetPublishReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = "CN=Test Publisher";
         DotNetPublishReleaseArtifact result = fixture.CreateVerifier(new string('B', 40))
-            .Verify(fixture.CreateRequest());
+            .Verify(request);
 
         Assert.Equal("CN=Test Publisher", result.SignerSubject);
     }
@@ -498,8 +533,10 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
             }
         });
 
+        DotNetPublishReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = new string('B', 40);
         DotNetPublishReleaseArtifact result = fixture.CreateVerifier(new string('B', 40))
-            .Verify(fixture.CreateRequest());
+            .Verify(request);
 
         Assert.Equal(new string('B', 40), result.SignerThumbprint);
     }
@@ -564,7 +601,8 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
         });
         var request = fixture.CreateRequest();
         request.SignProfile = "release";
-        request.SignSubjectName = "Test Publisher";
+        request.SignThumbprint = null;
+        request.SignSubjectName = "CN=Test Publisher";
 
         DotNetPublishReleaseArtifact result = fixture.CreateVerifier(new string('B', 40)).Verify(request);
 
@@ -603,7 +641,7 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
         var request = fixture.CreateRequest();
         request.EnableSigning = false;
         request.SignThumbprint = Thumbprint;
-        request.SignSubjectName = "Test Publisher";
+        request.SignSubjectName = "CN=Test Publisher";
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(
             () => fixture.CreateVerifier().Verify(request));
@@ -807,6 +845,17 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
             RefreshChecksums(["Artifacts/Test-1.2.3.msi"]);
         }
 
+        internal void WriteOversizedManifest()
+        {
+            using (FileStream stream = new(ManifestPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                stream.SetLength(DotNetPublishReleaseArtifactVerifier.MaxManifestBytes + 1L);
+                stream.Position = 0;
+                stream.WriteByte((byte)'[');
+            }
+            RefreshChecksums(["Artifacts/Test-1.2.3.msi"]);
+        }
+
         internal void WriteManifestWithSourceRevision(string sourceRevision)
         {
             File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
@@ -903,7 +952,8 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
             ChecksumsPath = ChecksumsPath,
             ConfigurationPath = ConfigurationPath,
             InstallerId = "Test.MSI",
-            ExpectedSourceRevision = SourceRevision
+            ExpectedSourceRevision = SourceRevision,
+            SignThumbprint = Thumbprint
         };
 
         internal DotNetPublishReleaseArtifactVerifier CreateVerifier(string thumbprint = Thumbprint) =>
@@ -928,7 +978,7 @@ public sealed class DotNetPublishReleaseArtifactVerifierTests
                     "CN=Test Publisher",
                     Thumbprint));
 
-        private DotNetPublishMsiPackageMetadata ReadPackageMetadata() => new()
+        internal DotNetPublishMsiPackageMetadata ReadPackageMetadata() => new()
         {
             Path = ArtifactPath,
             ProductName = "Test Product",

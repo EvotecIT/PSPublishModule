@@ -47,6 +47,19 @@ internal sealed class PowerForgeReleaseRequest
     internal CancellationToken CancellationToken { get; set; }
     internal string? ExactConfigurationContent { get; set; }
     internal string? LoadedConfigurationSha256 { get; set; }
+    internal string? EffectiveConfigurationPath { get; set; }
+
+    internal string[] GeneratedProvenancePaths { get; set; } = Array.Empty<string>();
+
+    internal string? SourceRepositoryRoot { get; set; }
+
+    internal string? ExpectedSourceRevision { get; set; }
+
+    internal string[] SourceInputPaths { get; set; } = Array.Empty<string>();
+
+    internal DotNetPublishPlan? DotNetPublishPlan { get; set; }
+
+    internal DotNetRepositoryReleaseSpec? PackageBuildSpec { get; set; }
 
     public string ConfigPath { get; set; } = string.Empty;
 

@@ -62,6 +62,7 @@ internal sealed class ModuleBuildPreparationService
 
         var spec = new ModulePipelineSpec
         {
+            UnifiedGitHubRelease = request.UnifiedGitHubRelease,
             Build = new ModuleBuildSpec
             {
                 Name = moduleName!,
@@ -123,6 +124,7 @@ internal sealed class ModuleBuildPreparationService
             throw new FileNotFoundException($"Module build config file not found: {configFullPath}", configFullPath);
 
         var spec = new ModulePipelineConfigurationService().Load(configFullPath).Spec;
+        spec.SourceInputPaths = new[] { configFullPath };
         ResolvePipelineSpecPaths(spec, configFullPath);
         ApplyConfigOverrides(spec, request);
         spec.Segments = AddRunModeSegment(spec.Segments ?? Array.Empty<IConfigurationSegment>(), request.RunMode);
@@ -152,6 +154,7 @@ internal sealed class ModuleBuildPreparationService
 
     private static void ApplyConfigOverrides(ModulePipelineSpec spec, ModuleBuildPreparationRequest request)
     {
+        spec.UnifiedGitHubRelease = request.UnifiedGitHubRelease;
         if (spec.Build is null)
             return;
 

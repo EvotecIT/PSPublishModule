@@ -324,6 +324,10 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!plan.AllowOutputOutsideProjectRoot)
             EnsurePathWithinRoot(plan.ProjectRoot, outputDir, $"Target '{target.Name}' output path");
 
+        string[] evidencePaths = Array.Empty<string>();
+        if (target.Publish.Sign?.Enabled == true)
+            _ = ReadPortableInventorySourceProvenance(plan, outputDir);
+
         EnsureOutputDirectoryUnlocked(
             plan,
             outputDir,
@@ -370,7 +374,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var cleanup = ApplyCleanup(publishDir, target.Publish);
 
         if (!string.IsNullOrWhiteSpace(target.Publish.RenameTo))
-            TryRenameMainExecutable(publishDir, rid, target.Publish.RenameTo!.Trim());
+            TryRenameMainExecutable(publishDir, rid, target.Publish.RenameTo!.Trim(), target.ExecutableIdentities);
 
         if (target.Publish.UseStaging)
         {
@@ -391,9 +395,69 @@ public sealed partial class DotNetPublishPipelineRunner
         if (target.Publish.Service is not null)
             servicePackage = TryCreateServicePackage(outputDir, target.Name, rid, target.Publish.Service);
 
-        var signedFiles = 0;
+        string[] signedFilePaths = Array.Empty<string>();
         if (target.Publish.Sign?.Enabled == true)
-            signedFiles = TrySignOutput(outputDir, target.Publish.Sign);
+        {
+            signedFilePaths = TrySignOutput(outputDir, target.Publish.Sign);
+            if (signedFilePaths.Length > 0)
+            {
+                string executable = ResolvePrimaryExecutable(outputDir, rid, target.ExecutableIdentities)
+                    ?? throw new InvalidOperationException(
+                        "Signed portable output does not contain a primary executable matching the configured project identity.");
+                FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(executable);
+                string executableIdentity = ResolvePortableExecutableIdentity(
+                    versionInfo.ProductName,
+                    versionInfo.InternalName,
+                    versionInfo.OriginalFilename,
+                    executable);
+                if (!PortableExecutableIdentityMatches(
+                        executableIdentity,
+                        target.ExecutableIdentities))
+                {
+                    throw new InvalidOperationException(
+                        $"Signed executable identity '{executableIdentity}' does not match the configured " +
+                        $"project identity for publish target '{target.Name}'. Set Publish.ExecutableIdentity " +
+                        "when the signed product identity is supplied by imported or generated build properties.");
+                }
+                string portableVersion = FirstText(versionInfo.ProductVersion, versionInfo.FileVersion);
+                SourceProvenance provenance = ReadPortableInventorySourceProvenance(plan, outputDir);
+                (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
+                    outputDir,
+                    executable,
+                    target.Publish.Zip);
+                PowerForgePortablePayloadInventoryCms.EnsureEvidencePathsAvailable(inventoryPath, signaturePath);
+                PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
+                    outputDir,
+                    target.Name,
+                    rid,
+                    tfm,
+                    style.ToString(),
+                    plan.SourceRevision,
+                    ComputePortableConfigurationPolicySha256(
+                        target.Name,
+                        target.Kind,
+                        bundleId: null,
+                        target.Publish.Zip,
+                        target.Publish.Sign),
+                    executable,
+                    executableIdentity,
+                    portableVersion,
+                    signedFilePaths,
+                    sourceDirty: provenance.Dirty is not false,
+                    includeCompleteOutput: target.Publish.Zip);
+                byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
+                byte[] signatureBytes = _signPortableInventory(
+                    inventoryBytes,
+                    ResolvePortableInventorySigningOptions(signedFilePaths, target.Publish.Sign));
+                PowerForgePortablePayloadInventoryCms.WriteEvidenceFiles(
+                    inventoryPath,
+                    inventoryBytes,
+                    signaturePath,
+                    signatureBytes);
+                if (!target.Publish.Zip)
+                    evidencePaths = new[] { inventoryPath, signaturePath };
+            }
+        }
 
         string? zipPath = null;
         if (target.Publish.Zip)
@@ -408,6 +472,9 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         var summary = SummarizeDirectory(outputDir, rid);
+        string? primaryExecutable = Directory.Exists(outputDir)
+            ? ResolvePrimaryExecutable(outputDir, rid, target.ExecutableIdentities)
+            : null;
         return new DotNetPublishArtefactResult
         {
             Target = target.Name,
@@ -420,13 +487,41 @@ public sealed partial class DotNetPublishPipelineRunner
             ZipPath = zipPath,
             Files = summary.Files,
             TotalBytes = summary.TotalBytes,
-            ExePath = summary.ExePath,
-            ExeBytes = summary.ExeBytes,
+            ExePath = primaryExecutable,
+            ExeBytes = primaryExecutable is null ? null : new FileInfo(primaryExecutable).Length,
             Cleanup = cleanup,
             ServicePackage = servicePackage,
             StateTransfer = stateTransfer,
-            SignedFiles = signedFiles
+            SignedFiles = signedFilePaths.Length,
+            SignedFilePaths = signedFilePaths,
+            EvidencePaths = evidencePaths
         };
+    }
+
+    private static string FirstText(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim()
+        ?? throw new InvalidOperationException("Portable executable identity metadata is missing.");
+
+    internal DotNetPublishSignOptions ResolvePortableInventorySigningOptions(
+        IReadOnlyList<string> signedFilePaths,
+        DotNetPublishSignOptions configured)
+    {
+        DotNetPublishReleaseArtifactVerifier.AuthenticodeResult[] signatures = signedFilePaths
+            .Select(_readAuthenticodeSignature)
+            .ToArray();
+        if (signatures.Length == 0 || signatures.Any(signature => !signature.IsValid))
+            throw new InvalidOperationException("Portable inventory signing requires valid Authenticode publisher signatures.");
+        string[] thumbprints = signatures
+            .Select(signature => DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(signature.Thumbprint))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (thumbprints.Length != 1 || string.IsNullOrWhiteSpace(thumbprints[0]))
+            throw new InvalidOperationException("Portable inventory signing requires one common Authenticode publisher certificate.");
+        DotNetPublishSignOptions resolved = DotNetPublishSigningProfileResolver.CloneSignOptions(configured)
+            ?? throw new InvalidOperationException("Portable inventory signing configuration is missing.");
+        resolved.Thumbprint = thumbprints[0];
+        resolved.SubjectName = null;
+        return resolved;
     }
 
     internal static List<string> BuildPublishArguments(
@@ -497,6 +592,13 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             foreach (var kv in styleOverride.MsBuildProperties)
                 merged[kv.Key] = kv.Value;
+        }
+
+        if (!string.IsNullOrWhiteSpace(plan.SourceRevision))
+        {
+            // Command-line global properties ensure the publisher-signed ProductVersion carries the exact source object ID.
+            merged["SourceRevisionId"] = plan.SourceRevision;
+            merged["IncludeSourceRevisionInInformationalVersion"] = "true";
         }
 
         ApplyPublishMsiVersionProperties(merged, plan, target.Name, framework, runtime, style);

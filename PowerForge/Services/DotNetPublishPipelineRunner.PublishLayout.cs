@@ -147,7 +147,11 @@ public sealed partial class DotNetPublishPipelineRunner
         catch { /* best effort */ }
     }
 
-    private void TryRenameMainExecutable(string publishDir, string rid, string renameTo)
+    private void TryRenameMainExecutable(
+        string publishDir,
+        string rid,
+        string renameTo,
+        IEnumerable<string> expectedIdentities)
     {
         var isWindowsRid = rid.StartsWith("win-", StringComparison.OrdinalIgnoreCase);
         var desired = renameTo;
@@ -156,7 +160,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!isWindowsRid && desired.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             desired = Path.GetFileNameWithoutExtension(desired);
 
-        var candidate = FindMainExecutable(publishDir, rid);
+        var candidate = ResolvePrimaryExecutable(publishDir, rid, expectedIdentities);
         if (string.IsNullOrWhiteSpace(candidate) || !File.Exists(candidate))
             return;
 
@@ -256,6 +260,64 @@ public sealed partial class DotNetPublishPipelineRunner
             _logger.Warn($"Failed to create zip for '{target.Name}' ({rid}). Error: {ex.Message}");
             return null;
         }
+    }
+
+    internal static string? ResolvePrimaryExecutable(
+        string root,
+        string rid,
+        IEnumerable<string> expectedIdentities,
+        bool recursive = false)
+    {
+        bool isWindowsRid = rid.StartsWith("win-", StringComparison.OrdinalIgnoreCase);
+        string[] expected = (expectedIdentities ?? Array.Empty<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(NormalizePortableExecutableIdentity)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        string[] candidates = FindIdentityMatchingPrimaryCandidates(
+            root,
+            isWindowsRid ? "*.exe" : "*",
+            requireNoExtension: !isWindowsRid,
+            expected: expected,
+            recursive);
+        if (candidates.Length == 0 && isWindowsRid)
+            candidates = FindIdentityMatchingPrimaryCandidates(
+                root,
+                "*.dll",
+                requireNoExtension: false,
+                expected: expected,
+                recursive);
+        if (candidates.Length > 1)
+        {
+            throw new InvalidOperationException(
+                $"Publish output must contain exactly one primary executable matching the configured project identity; found {candidates.Length}.");
+        }
+        return candidates.SingleOrDefault();
+    }
+
+    private static string[] FindIdentityMatchingPrimaryCandidates(
+        string root,
+        string pattern,
+        bool requireNoExtension,
+        IReadOnlyCollection<string> expected,
+        bool recursive)
+    {
+        return Directory.EnumerateFiles(root, pattern, recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)
+            .Where(path => !requireNoExtension || string.IsNullOrWhiteSpace(Path.GetExtension(path)))
+            .Where(path =>
+            {
+                FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(path);
+                string[] identities = ResolvePortableExecutableIdentityCandidates(
+                    versionInfo.ProductName,
+                    versionInfo.InternalName,
+                    versionInfo.OriginalFilename,
+                    path);
+                return identities.Any(identity => expected.Contains(
+                    NormalizePortableExecutableIdentity(identity),
+                    StringComparer.OrdinalIgnoreCase));
+            })
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private DotNetPublishServicePackageResult TryCreateServicePackage(

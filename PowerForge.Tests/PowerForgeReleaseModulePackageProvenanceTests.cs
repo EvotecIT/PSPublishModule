@@ -38,6 +38,46 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
     }
 
     [Fact]
+    public void CreateDotNetArtefactEntries_DirectSignedPublishIncludesInventoryEvidence()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string executablePath = Path.Combine(root, "Example.exe");
+            string inventoryPath = executablePath + PowerForgePortablePayloadInventory.DirectInventorySuffix;
+            string signaturePath = executablePath + PowerForgePortablePayloadInventory.DirectSignatureSuffix;
+            File.WriteAllText(executablePath, "signed executable");
+            File.WriteAllText(inventoryPath, "inventory");
+            File.WriteAllText(signaturePath, "signature");
+
+            PowerForgeReleaseAssetEntry[] entries = PowerForgeReleaseService.CreateDotNetArtefactEntries(
+                new DotNetPublishArtefactResult
+                {
+                    Target = "Example",
+                    ExePath = executablePath,
+                    Runtime = "win-x64",
+                    Framework = "net10.0",
+                    SignedFiles = 1,
+                    EvidencePaths = new[] { inventoryPath, signaturePath }
+                },
+                new DotNetPublishPlan
+                {
+                    Targets = [new DotNetPublishTargetPlan { Name = "Example", Version = "2.3.4" }]
+                },
+                sharedReleaseVersion: null).ToArray();
+
+            Assert.Equal(3, entries.Length);
+            Assert.Contains(entries, entry => entry.Path == executablePath && entry.IsFinalPackageOutput);
+            Assert.Contains(entries, entry => entry.Path == inventoryPath && entry.Category == PowerForgeReleaseAssetCategory.Metadata);
+            Assert.Contains(entries, entry => entry.Path == signaturePath && entry.Category == PowerForgeReleaseAssetCategory.Metadata);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void CreateDotNetStorePackageEntries_UsesMatchingTargetVersion()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -88,6 +128,42 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
 
             Assert.True(entry.IsFinalPackageOutput);
             Assert.Equal("1.2.3", entry.Version);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void CreateModuleAssetEntries_IncludesSigningEvidenceBoundToSiblingArchiveVersion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string archivePath = Path.Combine(root, "ExampleModule.zip");
+        string evidencePath = archivePath + ".signing.json";
+        try
+        {
+            using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry manifest = archive.CreateEntry("ExampleModule/ExampleModule.psd1");
+                using (var writer = new StreamWriter(manifest.Open()))
+                    writer.Write("@{ ModuleVersion = '1.2.3'; RootModule = 'ExampleModule.psm1' }");
+                archive.CreateEntry("ExampleModule/ExampleModule.psm1");
+            }
+            File.WriteAllText(evidencePath, "{}");
+
+            PowerForgeReleaseAssetEntry[] entries = PowerForgeReleaseService.CreateModuleAssetEntries(
+                root,
+                new PowerForgeModuleReleasePlanSummary
+                {
+                    ModuleName = "ExampleModule",
+                    ModuleVersion = "1.2.3",
+                    ManifestPath = Path.Combine(root, "ExampleModule.psd1")
+                }).ToArray();
+
+            Assert.Contains(entries, entry => entry.Path == archivePath);
+            Assert.Contains(entries, entry => entry.Path == evidencePath);
         }
         finally
         {

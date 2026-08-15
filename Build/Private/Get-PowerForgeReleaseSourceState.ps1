@@ -1,0 +1,145 @@
+function Get-PowerForgeReleaseSourceState {
+    <#
+    .SYNOPSIS
+    Reads tracked and untracked release-input changes from a Git checkout.
+    .PARAMETER RepositoryRoot
+    Repository checkout to inspect.
+    .PARAMETER GeneratedProvenancePath
+    Exact generated provenance files excluded from untracked release-source state.
+    .PARAMETER ReceiptPath
+    Resolved public-release receipt path. An untracked receipt is excluded only when it is under the dedicated release-receipts directory.
+    .PARAMETER GeneratedConfigurationPath
+    Deterministic effective-configuration output created by the public-release wrapper after this preflight. Prior untracked outputs in the same reserved namespace are also excluded.
+    .PARAMETER ExplicitInputPath
+    Release/build inputs that must be tracked even when a Git ignore rule would otherwise hide them.
+    .NOTES
+    The exact untracked public-release receipt and deterministic authorized wrapper configurations are excluded. Tracked changes remain release inputs.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $RepositoryRoot,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [string[]] $GeneratedProvenancePath,
+
+        [Parameter(Mandatory)]
+        [string] $ReceiptPath,
+
+        [string] $GeneratedConfigurationPath,
+
+        [string[]] $ExplicitInputPath = @()
+    )
+
+    $root = [IO.Path]::GetFullPath($RepositoryRoot)
+    $rootWithSeparator = $root.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $rootUri = [Uri] $rootWithSeparator
+    $relativeProvenance = @($GeneratedProvenancePath | ForEach-Object {
+        $provenance = [IO.Path]::GetFullPath($_)
+        $provenanceUri = [Uri] $provenance
+        if (-not $rootUri.IsBaseOf($provenanceUri)) {
+            throw 'Generated release provenance must stay under the release checkout.'
+        }
+        [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($provenanceUri).ToString()).Replace('\', '/')
+    })
+    $receipt = [IO.Path]::GetFullPath($ReceiptPath)
+    $receiptUri = [Uri] $receipt
+    $relativeReceipt = $null
+    if ($rootUri.IsBaseOf($receiptUri)) {
+        $receiptRoot = [IO.Path]::GetFullPath((Join-Path $root 'release-receipts'))
+        $receiptRootUri = [Uri] ($receiptRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar)
+        if (-not $receiptRootUri.IsBaseOf($receiptUri)) {
+            throw 'An in-checkout release receipt must stay under the dedicated release-receipts directory.'
+        }
+        $relativeReceipt = [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($receiptUri).ToString()).Replace('\', '/')
+    }
+
+    $relativeGeneratedConfiguration = $null
+    $relativeGeneratedConfigurationDirectory = $null
+    if (-not [string]::IsNullOrWhiteSpace($GeneratedConfigurationPath)) {
+        $generatedConfiguration = [IO.Path]::GetFullPath($GeneratedConfigurationPath)
+        $generatedConfigurationUri = [Uri] $generatedConfiguration
+        if (-not $rootUri.IsBaseOf($generatedConfigurationUri)) {
+            throw 'Generated authorized release configuration must stay under the release checkout.'
+        }
+        if ([IO.Path]::GetFileName($generatedConfiguration) -notmatch '^\.release\.authorized\.\d+\.\d+\.\d+\.[0-9a-fA-F]{40}\.json$') {
+            throw 'Generated authorized release configuration must use the deterministic .release.authorized.<version>.<commit>.json name.'
+        }
+        $relativeGeneratedConfiguration = [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($generatedConfigurationUri).ToString()).Replace('\', '/')
+        $relativeGeneratedConfigurationDirectory = [IO.Path]::GetDirectoryName($relativeGeneratedConfiguration).Replace('\', '/')
+    }
+
+    $trackedChanges = @(& git -C $root status --porcelain=v1 --untracked-files=no -- .)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Unable to inspect tracked release inputs.'
+    }
+    $untrackedPathspecs = [Collections.Generic.List[string]]::new()
+    $untrackedPathspecs.Add('.')
+    foreach ($relativePath in $relativeProvenance) {
+        $untrackedPathspecs.Add(":(exclude,literal)$relativePath")
+    }
+    if (-not [string]::IsNullOrWhiteSpace($relativeReceipt)) {
+        $untrackedPathspecs.Add(":(exclude,top,literal)$relativeReceipt")
+    }
+    $untrackedInputs = @(& git -C $root ls-files --others --exclude-standard -- @untrackedPathspecs)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Unable to inspect untracked release inputs.'
+    }
+    $untrackedOrIgnoredExplicitInputs = @($ExplicitInputPath | ForEach-Object {
+        $inputPath = [IO.Path]::GetFullPath($_)
+        $inputUri = [Uri] $inputPath
+        if ($rootUri.IsBaseOf($inputUri)) {
+            $relativeInput = [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($inputUri).ToString()).Replace('\', '/')
+            $candidatePath = $inputPath
+            $hasReparsePoint = $false
+            while (-not [string]::Equals(
+                    $candidatePath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar),
+                    $root.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                try {
+                    $attributes = [IO.File]::GetAttributes($candidatePath)
+                    if (($attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                        $hasReparsePoint = $true
+                        break
+                    }
+                } catch {
+                    $hasReparsePoint = $true
+                    break
+                }
+                $parentPath = [IO.Path]::GetDirectoryName($candidatePath)
+                if ([string]::IsNullOrWhiteSpace($parentPath) -or
+                    [string]::Equals($parentPath, $candidatePath, [StringComparison]::OrdinalIgnoreCase)) {
+                    $hasReparsePoint = $true
+                    break
+                }
+                $candidatePath = $parentPath
+            }
+            & git -C $root ls-files --error-unmatch -- ":(literal)$relativeInput" *> $null
+            if ($hasReparsePoint -or $LASTEXITCODE -ne 0) {
+                $relativeInput
+            }
+        } else {
+            $inputPath
+        }
+    })
+    if (-not [string]::IsNullOrWhiteSpace($relativeGeneratedConfiguration)) {
+        $untrackedInputs = @($untrackedInputs | Where-Object {
+            $candidate = ([string] $_).Replace('\', '/')
+            $candidateDirectory = [IO.Path]::GetDirectoryName($candidate).Replace('\', '/')
+            $candidateName = [IO.Path]::GetFileName($candidate)
+            -not ($candidateDirectory -ieq $relativeGeneratedConfigurationDirectory -and
+                $candidateName -match '^\.release\.authorized\.\d+\.\d+\.\d+\.[0-9a-fA-F]{40}\.json$')
+        })
+    }
+    $changes = @(
+        $trackedChanges
+        $untrackedInputs | ForEach-Object { "?? $_" }
+        $untrackedOrIgnoredExplicitInputs | ForEach-Object { "?? $_" }
+    )
+
+    [pscustomobject]@{
+        SourceDirty = $changes.Count -gt 0
+        Changes     = [string[]] $changes
+    }
+}

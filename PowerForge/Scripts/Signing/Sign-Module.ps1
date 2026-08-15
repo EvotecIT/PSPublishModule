@@ -12,13 +12,11 @@
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-
 function DecodeLines([string]$b64) {
   if ([string]::IsNullOrWhiteSpace($b64)) { return @() }
   $text = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64))
   return $text -split "`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() }
 }
-
 function Test-CodeSigningCertificate([object]$certificate) {
   if ($null -eq $certificate -or -not $certificate.HasPrivateKey) { return $false }
 
@@ -44,7 +42,6 @@ function Get-CodeSigningCertificateByThumbprint([string]$thumbprint) {
 
   return $null
 }
-
 function Test-ExcludedPackagePath([string]$relativePath, [string[]]$exclusions) {
   if ([string]::IsNullOrWhiteSpace($relativePath) -or -not $exclusions -or $exclusions.Count -eq 0) {
     return $false
@@ -75,7 +72,6 @@ function Test-ExcludedPackagePath([string]$relativePath, [string[]]$exclusions) 
 
   return $false
 }
-
 function Get-SigningPrecheckDisposition([string]$status, [bool]$overwrite) {
   if ($status -eq 'Valid') {
     if ($overwrite) { return 'Target' }
@@ -105,7 +101,9 @@ function EmitSummary(
   [int]$signingException,
   [string]$certThumbprint,
   [object[]]$failedFiles,
-  [object[]]$failedFilePaths
+  [object[]]$failedFilePaths,
+  [object[]]$verifiedFilePaths,
+  [object[]]$preservedThirdPartySignatures
 ) {
   $summary = [ordered]@{
     totalMatched            = $totalMatched
@@ -122,6 +120,8 @@ function EmitSummary(
     certificateThumbprint   = $certThumbprint
     failedFiles             = @($failedFiles | Select-Object -First 25)
     failedFilePaths         = @($failedFilePaths)
+    verifiedFilePaths       = @($verifiedFilePaths)
+    preservedThirdPartySignatures = @($preservedThirdPartySignatures)
   }
 
   $json = $summary | ConvertTo-Json -Compress -Depth 6
@@ -275,6 +275,7 @@ try {
   $alreadyOther = 0
   $preStatus = @{}
   $preDisposition = @{}
+  $preservedThirdPartySignatures = New-Object 'System.Collections.Generic.List[object]'
   $attempted = 0
   $signedNew = 0
   $resigned = 0
@@ -319,7 +320,21 @@ try {
             $tp = [string]$sig.SignerCertificate.Thumbprint
           }
           if (-not [string]::IsNullOrWhiteSpace($tp)) { $tp = ($tp -replace '\s','').ToUpperInvariant() }
-          if (-not [string]::IsNullOrWhiteSpace($tp) -and $tp -eq $thisTp) { $alreadyByThis++ } else { $alreadyOther++ }
+          if (-not [string]::IsNullOrWhiteSpace($tp) -and $tp -eq $thisTp) {
+            $alreadyByThis++
+          } elseif (-not $overwrite) {
+            if ($null -eq $sig.SignerCertificate -or [string]::IsNullOrWhiteSpace($tp)) {
+              $preDisposition[$f] = 'Fail'
+              $precheckFailures[$f] = 'valid third-party signature did not expose a signer identity'
+              continue
+            }
+            $alreadyOther++
+            $preservedThirdPartySignatures.Add([ordered]@{
+              filePath = $f
+              subject = [string]$sig.SignerCertificate.Subject
+              thumbprint = $tp
+            }) | Out-Null
+          }
         } elseif ($preDisposition[$f] -eq 'Fail') {
           $precheckFailures[$f] = "precheck returned status $status"
         }
@@ -405,7 +420,25 @@ try {
         $preStatus[$f] = $status
         $preDisposition[$f] = Get-SigningPrecheckDisposition -status $status -overwrite $overwrite
         if ($status -eq 'Valid') {
-          $alreadyOther++
+          $signerCertificate = $sig.SignerCertificate
+          if ($null -eq $signerCertificate) { $signerCertificate = $sig.Certificate }
+          $tp = if ($null -ne $signerCertificate) { [string]$signerCertificate.Thumbprint } else { $null }
+          if (-not [string]::IsNullOrWhiteSpace($tp)) { $tp = ($tp -replace '\s','').ToUpperInvariant() }
+          if (-not [string]::IsNullOrWhiteSpace($tp) -and $tp -eq $thisTp) {
+            $alreadyByThis++
+          } elseif (-not $overwrite) {
+            if ($null -eq $signerCertificate -or [string]::IsNullOrWhiteSpace($tp)) {
+              $preDisposition[$f] = 'Fail'
+              $precheckFailures[$f] = 'valid third-party signature did not expose a signer identity'
+              continue
+            }
+            $alreadyOther++
+            $preservedThirdPartySignatures.Add([ordered]@{
+              filePath = $f
+              subject = [string]$signerCertificate.Subject
+              thumbprint = $tp
+            }) | Out-Null
+          }
         } elseif ($preDisposition[$f] -eq 'Fail') {
           $precheckFailures[$f] = "precheck returned status $status"
         }
@@ -473,7 +506,9 @@ try {
     -signingException $signingException `
     -certThumbprint $thisTp `
     -failedFiles @($failedFiles) `
-    -failedFilePaths @($failedFilePaths)
+    -failedFilePaths @($failedFilePaths) `
+    -verifiedFilePaths @($all | Where-Object { -not $failedFilePaths.Contains($_) }) `
+    -preservedThirdPartySignatures $preservedThirdPartySignatures.ToArray()
 
   if ($failed -gt 0) { exit 2 } else { exit 0 }
 } catch {

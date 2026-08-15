@@ -169,6 +169,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 ZipPath = t.Publish.ZipPath,
                 ZipNameTemplate = t.Publish.ZipNameTemplate,
                 RenameTo = t.Publish.RenameTo,
+                ExecutableIdentity = t.Publish.ExecutableIdentity,
                 ReadyToRun = t.Publish.ReadyToRun,
                 MsBuildProperties = t.Publish.MsBuildProperties is null
                     ? null
@@ -194,6 +195,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 Version = CsprojVersionEditor.TryGetVersion(resolvedProjectPath, out var projectVersion)
                     ? projectVersion
                     : null,
+                ExecutableIdentities = ResolvePortableExecutableIdentities(
+                    resolvedProjectPath,
+                    t.Publish.ExecutableIdentity),
                 Publish = publish,
                 Combinations = combos
             });
@@ -545,9 +549,20 @@ public sealed partial class DotNetPublishPipelineRunner
 
         steps.Add(new DotNetPublishStep { Key = "manifest", Kind = DotNetPublishStepKind.Manifest, Title = "Write manifest" });
 
-        return new DotNetPublishPlan
+        string sourceRevision = ReadGitText(projectRoot, "rev-parse HEAD")?.Trim()
+            ?? Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim()
+            ?? string.Empty;
+        if ((sourceRevision.Length != 40 && sourceRevision.Length != 64) ||
+            sourceRevision.Any(character => !Uri.IsHexDigit(character)))
+            sourceRevision = string.Empty;
+
+        var plan = new DotNetPublishPlan
         {
             ProjectRoot = projectRoot,
+            ConfigurationInputPaths = !string.IsNullOrWhiteSpace(configPath) && File.Exists(configPath)
+                ? new[] { Path.GetFullPath(configPath) }
+                : Array.Empty<string>(),
+            SourceRevision = sourceRevision,
             AllowOutputOutsideProjectRoot = spec.DotNet.AllowOutputOutsideProjectRoot,
             AllowManifestOutsideProjectRoot = spec.DotNet.AllowManifestOutsideProjectRoot,
             LockedOutputGuard = spec.DotNet.LockedOutputGuard,
@@ -574,6 +589,65 @@ public sealed partial class DotNetPublishPipelineRunner
             Outputs = outputs,
             Steps = steps.ToArray()
         };
+        ValidateGeneratedOutputOwnership(plan);
+        return plan;
+    }
+
+    private static void ValidateGeneratedOutputOwnership(DotNetPublishPlan plan)
+    {
+        string[] sourceInputs = (plan.ConfigurationInputPaths ?? Array.Empty<string>())
+            .Concat((plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>()).Select(target => target.ProjectPath))
+            .Concat(string.IsNullOrWhiteSpace(plan.SolutionPath) ? Array.Empty<string>() : new[] { plan.SolutionPath! })
+            .Concat(EnumerateBundleSourceInputs(plan))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
+        var generatedDirectories = new List<(string Path, string Name)>();
+        foreach (DotNetPublishTargetPlan target in plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+        {
+            foreach (DotNetPublishTargetCombination combination in target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+            {
+                var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["target"] = target.Name,
+                    ["rid"] = combination.Runtime,
+                    ["framework"] = combination.Framework,
+                    ["style"] = combination.Style.ToString(),
+                    ["configuration"] = plan.Configuration
+                };
+                string outputTemplate = string.IsNullOrWhiteSpace(target.Publish.OutputPath)
+                    ? Path.Combine("Artifacts", "DotNetPublish", "{target}", "{rid}", "{framework}", "{style}")
+                    : target.Publish.OutputPath!;
+                generatedDirectories.Add((
+                    ResolvePath(plan.ProjectRoot, ApplyTemplate(outputTemplate, tokens)),
+                    $"Target '{target.Name}' output path"));
+            }
+        }
+        foreach (DotNetPublishStep step in plan.Steps ?? Array.Empty<DotNetPublishStep>())
+        {
+            if (!string.IsNullOrWhiteSpace(step.BundleOutputPath))
+                generatedDirectories.Add((step.BundleOutputPath!, $"Bundle '{step.BundleId}' output path"));
+            if (!string.IsNullOrWhiteSpace(step.StagingPath))
+                generatedDirectories.Add((step.StagingPath!, $"Installer '{step.InstallerId}' staging path"));
+            if (!string.IsNullOrWhiteSpace(step.StorePackageOutputPath))
+                generatedDirectories.Add((step.StorePackageOutputPath!, $"Store package '{step.StorePackageId}' output path"));
+        }
+
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        foreach ((string generatedPath, string name) in generatedDirectories)
+        {
+            string output = Path.GetFullPath(generatedPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string? coveredInput = sourceInputs.FirstOrDefault(input =>
+                string.Equals(output, input, comparison) ||
+                input.StartsWith(output + Path.DirectorySeparatorChar, comparison));
+            if (coveredInput is not null)
+            {
+                throw new InvalidOperationException(
+                    $"{name} cannot contain source input '{coveredInput}'. Configure a dedicated generated-output directory.");
+            }
+        }
     }
 
     internal static DotNetPublishSpec ResolveProfile(DotNetPublishSpec spec)
@@ -1469,6 +1543,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     ZipPath = t.Publish?.ZipPath,
                     ZipNameTemplate = t.Publish?.ZipNameTemplate,
                     RenameTo = t.Publish?.RenameTo,
+                    ExecutableIdentity = t.Publish?.ExecutableIdentity,
                     ReadyToRun = t.Publish?.ReadyToRun,
                     MsBuildProperties = t.Publish?.MsBuildProperties is null
                         ? null
