@@ -181,6 +181,11 @@ and removed paths are purged. Up to 500 changed URL paths are sent in batches of
 100, matching Cloudflare's per-request URL limit. A missing, unreadable, or
 different-site baseline, or a larger diff, safely falls back to a hostname
 purge. The new baseline is saved only after deployment and purge succeed.
+The manifest also fingerprints the effective managed cache policy. Changing a
+cache-affecting setting such as `Cloudflare.Cache.EdgeTtlSeconds` therefore
+forces a hostname purge even when every deployed file is byte-for-byte
+unchanged. A baseline created before policy fingerprints existed also receives
+the same safe one-time fallback.
 Managed cache-rule expressions match both `GET` and Cloudflare's internal
 `PURGE` evaluation, as required for reliable URL invalidation.
 Action dry-runs calculate and report the same bounded decision but neither send
@@ -189,7 +194,11 @@ The Pages job records a private, site-scoped deployment-order receipt before
 the policy job starts. Retrying only an older policy job after a newer
 deployment skips the stale policy, purge, and baseline update; deliberately
 rerunning the older Pages deployment writes the newest receipt and remains
-supported, diffing back to that deployed artifact.
+supported, diffing back to that deployed artifact. If a Pages deployment
+succeeds but its later policy or purge step does not, the next run detects the
+intervening deployment receipt relative to the baseline's workflow run and uses
+a hostname purge instead of comparing against a non-adjacent baseline. This
+remains safe when deployment and policy jobs from different runs overlap.
 
 Incremental purge targets the canonical URLs emitted by the deployment. It is
 therefore intended for static sites whose query parameters do not select a
@@ -197,6 +206,10 @@ different representation. Cloudflare's default cache key includes the query
 string, and a canonical URL purge does not enumerate arbitrary cached query
 variants. Keep `PurgeMode` set to `hostname` for a site that intentionally
 caches query-dependent responses.
+The reusable managed-incremental action derives its hostname and base path from
+the same `site.json` `BaseUrl` used to build the manifest. It rejects the
+action's `hostname` and `base-path` overrides in this mode so purge targets
+cannot silently diverge from the policy application target.
 
 ## Purge and verify after deployment
 

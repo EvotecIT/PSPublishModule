@@ -37,6 +37,8 @@ internal static class CloudflareIncrementalCachePurger
             current = CloudflareDeploymentManifestStore.LoadRequired(currentManifestPath);
             if (!current.BaseUrl.Equals(normalizedBaseUrl, StringComparison.Ordinal))
                 return Failure($"Current deployment manifest BaseUrl '{current.BaseUrl}' does not match configured site BaseUrl '{normalizedBaseUrl}'.");
+            if (!CloudflareDeploymentManifestStore.IsValidPolicyFingerprint(current.CachePolicyFingerprint))
+                return Failure("Current deployment manifest has no valid cache-policy fingerprint.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or ArgumentException)
         {
@@ -46,7 +48,12 @@ internal static class CloudflareIncrementalCachePurger
         if (!TryLoadPrevious(previousManifestPath, normalizedBaseUrl, out var previous, out var fallbackReason))
             return PurgeHostnameFallback(zoneId, apiToken, normalizedBaseUrl, dryRun, fallbackReason, logger, httpClient);
 
-        var previousFiles = previous!.Files.ToDictionary(entry => entry.Path, StringComparer.Ordinal);
+        if (!CloudflareDeploymentManifestStore.IsValidPolicyFingerprint(previous!.CachePolicyFingerprint))
+            return PurgeHostnameFallback(zoneId, apiToken, normalizedBaseUrl, dryRun, "the previous deployment manifest has no cache-policy fingerprint", logger, httpClient);
+        if (!current.CachePolicyFingerprint.Equals(previous.CachePolicyFingerprint, StringComparison.OrdinalIgnoreCase))
+            return PurgeHostnameFallback(zoneId, apiToken, normalizedBaseUrl, dryRun, "the managed cache policy changed", logger, httpClient);
+
+        var previousFiles = previous.Files.ToDictionary(entry => entry.Path, StringComparer.Ordinal);
         var currentFiles = current.Files.ToDictionary(entry => entry.Path, StringComparer.Ordinal);
         var changedPaths = previousFiles.Keys
             .Concat(currentFiles.Keys)

@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using PowerForge.Web;
 using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
@@ -34,6 +35,7 @@ public sealed class CloudflareIncrementalCachePurgeTests
             Assert.Equal(4, first.ArtifactFileCount);
             Assert.Equal(6, first.UrlPathCount);
             Assert.Equal("https://example.test/project/", first.BaseUrl);
+            Assert.Equal(64, first.CachePolicyFingerprint.Length);
             Assert.Equal(File.ReadAllBytes(firstPath), File.ReadAllBytes(secondPath));
             Assert.Equal(first.ContentBytes, second.ContentBytes);
 
@@ -236,6 +238,79 @@ public sealed class CloudflareIncrementalCachePurgeTests
     }
 
     [Fact]
+    public void IncrementalPurge_ShouldUseHostnameFallbackWhenCachePolicyChanges()
+    {
+        var root = NewTempDirectory();
+        try
+        {
+            var entries = new[] { Entry(string.Empty, 'a'), Entry("index.html", 'a') };
+            var previousPolicy = CloudflareDeploymentManifestStore.ComputeCachePolicyFingerprint("https://example.test/", null, new CloudflareSitePolicySpec
+            {
+                Cache = new CloudflareCacheSpec { EdgeTtlSeconds = 7200 }
+            });
+            var currentPolicy = CloudflareDeploymentManifestStore.ComputeCachePolicyFingerprint("https://example.test/", null, new CloudflareSitePolicySpec
+            {
+                Cache = new CloudflareCacheSpec { EdgeTtlSeconds = 604800 }
+            });
+            var previousPath = WriteManifest(root, "previous.json", entries, cachePolicyFingerprint: previousPolicy);
+            var currentPath = WriteManifest(root, "current.json", entries, cachePolicyFingerprint: currentPolicy);
+            var handler = new RecordingHandler(SuccessResponse());
+            using var client = NewClient(handler);
+
+            var result = CloudflareIncrementalCachePurger.Purge(
+                ZoneId,
+                "secret-token",
+                "https://example.test/",
+                currentPath,
+                previousPath,
+                dryRun: false,
+                logger: null,
+                client);
+
+            Assert.True(result.Success, result.Message);
+            Assert.True(result.UsedFallback);
+            Assert.Contains("cache policy changed", result.FallbackReason, StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(JsonNode.Parse(Assert.Single(handler.Bodies))!["hosts"]);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void IncrementalPurge_ShouldUseHostnameFallbackForLegacyBaselineWithoutPolicyFingerprint()
+    {
+        var root = NewTempDirectory();
+        try
+        {
+            var entries = new[] { Entry("index.html", 'a') };
+            var previousPath = WriteManifest(root, "previous.json", entries, cachePolicyFingerprint: string.Empty);
+            var currentPath = WriteManifest(root, "current.json", entries);
+            var handler = new RecordingHandler(SuccessResponse());
+            using var client = NewClient(handler);
+
+            var result = CloudflareIncrementalCachePurger.Purge(
+                ZoneId,
+                "secret-token",
+                "https://example.test/",
+                currentPath,
+                previousPath,
+                dryRun: false,
+                logger: null,
+                client);
+
+            Assert.True(result.Success, result.Message);
+            Assert.True(result.UsedFallback);
+            Assert.Contains("no cache-policy fingerprint", result.FallbackReason, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void IncrementalPurge_ShouldRejectUnsafeCurrentManifestWithoutPurging()
     {
         var root = NewTempDirectory();
@@ -425,6 +500,9 @@ public sealed class CloudflareIncrementalCachePurgeTests
         Assert.Contains("deployment-id: ${{ needs.build.outputs.source_sha }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("github-token: ${{ github.token }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("Resolve-PowerForgeRepositoryArtifact.ps1", action, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_REFERENCE_RUN_ID", action, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_CLOUDFLARE_CONTINUITY_GAP", action, StringComparison.Ordinal);
+        Assert.Contains("does not support hostname or base-path overrides", action, StringComparison.Ordinal);
         Assert.Contains("github-token: ${{ inputs.github-token }}", action, StringComparison.Ordinal);
         Assert.Contains("repository: ${{ github.repository }}", action, StringComparison.Ordinal);
         Assert.Contains("run-id: ${{ steps.locate_manifest.outputs.run_id }}", action, StringComparison.Ordinal);
@@ -508,6 +586,74 @@ public sealed class CloudflareIncrementalCachePurgeTests
 
             Assert.Equal("true", result["found"]);
             Assert.Equal("202", result["run_id"]);
+            Assert.Equal("2", result["artifact_id"]);
+            Assert.Equal("2026-08-14T10:00:00.0000000+00:00", result["created_at"]);
+            Assert.Equal("false", result["gap"]);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RepositoryArtifactLookup_ShouldDetectInterveningDeploymentReceipt()
+    {
+        if (!CommandExists("pwsh"))
+            return;
+
+        var root = NewTempDirectory();
+        try
+        {
+            const string artifactName = "powerforge-cloudflare-deployment-v2-42-site";
+            var responsePath = Path.Combine(root, "response.json");
+            File.WriteAllText(responsePath,
+                $$"""
+                {
+                  "total_count": 3,
+                  "artifacts": [
+                    {
+                      "id": 30,
+                      "name": "{{artifactName}}",
+                      "expired": false,
+                      "created_at": "2026-08-14T12:00:00Z",
+                      "workflow_run": { "id": 300, "head_branch": "main" }
+                    },
+                    {
+                      "id": 20,
+                      "name": "{{artifactName}}",
+                      "expired": false,
+                      "created_at": "2026-08-14T11:00:00Z",
+                      "workflow_run": { "id": 200, "head_branch": "main" }
+                    },
+                    {
+                      "id": 10,
+                      "name": "{{artifactName}}",
+                      "expired": false,
+                      "created_at": "2026-08-14T09:00:00Z",
+                      "workflow_run": { "id": 100, "head_branch": "main" }
+                    }
+                  ]
+                }
+                """);
+
+            var result = RunRepositoryArtifactLookup(
+                root,
+                responsePath,
+                artifactName,
+                referenceRunId: 100,
+                excludeRunId: 300);
+
+            Assert.Equal("300", result["run_id"]);
+            Assert.Equal("true", result["gap"]);
+
+            var missingReference = RunRepositoryArtifactLookup(
+                root,
+                responsePath,
+                artifactName,
+                referenceRunId: 999,
+                excludeRunId: 300);
+            Assert.Equal("true", missingReference["gap"]);
         }
         finally
         {
@@ -556,6 +702,11 @@ public sealed class CloudflareIncrementalCachePurgeTests
             var redeployed = RunBaselineOrder(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 100, deploymentRunAttempt: 2);
             Assert.Equal("false", redeployed["stale"]);
             Assert.Equal("true", redeployed["use_previous"]);
+
+            var deploymentGap = RunBaselineOrder(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 100, deploymentRunAttempt: 2, continuityGap: true);
+            Assert.Equal("false", deploymentGap["stale"]);
+            Assert.Equal("false", deploymentGap["use_previous"]);
+            Assert.Contains("intervening", deploymentGap["reason"], StringComparison.OrdinalIgnoreCase);
 
             File.Delete(baselineState);
             File.WriteAllText(deploymentReceipt,
@@ -612,11 +763,16 @@ public sealed class CloudflareIncrementalCachePurgeTests
         string root,
         string name,
         CloudflareDeploymentManifestEntry[] entries,
-        bool validate = true)
+        bool validate = true,
+        string? cachePolicyFingerprint = null)
     {
         var manifest = new CloudflareDeploymentManifest
         {
             BaseUrl = "https://example.test/",
+            CachePolicyFingerprint = cachePolicyFingerprint ?? CloudflareDeploymentManifestStore.ComputeCachePolicyFingerprint("https://example.test/", null, new CloudflareSitePolicySpec
+            {
+                Cache = new CloudflareCacheSpec()
+            }),
             Files = entries
         };
         if (validate)
@@ -676,9 +832,10 @@ public sealed class CloudflareIncrementalCachePurgeTests
         string baselineState,
         string deploymentReceipt,
         long deploymentRunId,
-        int deploymentRunAttempt)
+        int deploymentRunAttempt,
+        bool continuityGap = false)
     {
-        var result = RunBaselineOrderProcess(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId, deploymentRunAttempt);
+        var result = RunBaselineOrderProcess(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId, deploymentRunAttempt, continuityGap);
         Assert.True(result.ExitCode == 0, $"Baseline-order validation failed ({result.ExitCode}). stdout: {result.StandardOutput} stderr: {result.StandardError}");
 
         return File.ReadAllLines(result.OutputPath)
@@ -692,7 +849,8 @@ public sealed class CloudflareIncrementalCachePurgeTests
         string baselineState,
         string deploymentReceipt,
         long deploymentRunId,
-        int deploymentRunAttempt)
+        int deploymentRunAttempt,
+        bool continuityGap = false)
     {
         var outputPath = Path.Combine(root, $"output-{Guid.NewGuid():N}.txt");
         var startInfo = new ProcessStartInfo("pwsh")
@@ -710,6 +868,7 @@ public sealed class CloudflareIncrementalCachePurgeTests
         startInfo.Environment["POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST"] = previousManifest;
         startInfo.Environment["POWERFORGE_CLOUDFLARE_BASELINE_STATE"] = baselineState;
         startInfo.Environment["POWERFORGE_CLOUDFLARE_DEPLOYMENT_RECEIPT"] = deploymentReceipt;
+        startInfo.Environment["POWERFORGE_CLOUDFLARE_CONTINUITY_GAP"] = continuityGap.ToString().ToLowerInvariant();
         startInfo.Environment["POWERFORGE_DEPLOYMENT_RUN_ID"] = deploymentRunId.ToString(System.Globalization.CultureInfo.InvariantCulture);
         startInfo.Environment["POWERFORGE_DEPLOYMENT_RUN_ATTEMPT"] = deploymentRunAttempt.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -720,7 +879,12 @@ public sealed class CloudflareIncrementalCachePurgeTests
         return (process.ExitCode, standardOutput, standardError, outputPath);
     }
 
-    private static Dictionary<string, string> RunRepositoryArtifactLookup(string root, string responsePath, string artifactName)
+    private static Dictionary<string, string> RunRepositoryArtifactLookup(
+        string root,
+        string responsePath,
+        string artifactName,
+        long? referenceRunId = null,
+        long? excludeRunId = null)
     {
         var outputPath = Path.Combine(root, $"artifact-output-{Guid.NewGuid():N}.txt");
         var wrapperPath = Path.Combine(root, $"artifact-wrapper-{Guid.NewGuid():N}.ps1");
@@ -751,6 +915,8 @@ public sealed class CloudflareIncrementalCachePurgeTests
         startInfo.Environment["POWERFORGE_GITHUB_API_URL"] = "https://api.github.test";
         startInfo.Environment["POWERFORGE_GITHUB_REPOSITORY"] = "EvotecIT/Example";
         startInfo.Environment["POWERFORGE_GITHUB_TOKEN"] = "test-token";
+        startInfo.Environment["POWERFORGE_REFERENCE_RUN_ID"] = referenceRunId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+        startInfo.Environment["POWERFORGE_EXCLUDE_RUN_ID"] = excludeRunId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
         startInfo.Environment["POWERFORGE_TEST_RESPONSE"] = responsePath;
         startInfo.Environment["POWERFORGE_TEST_SCRIPT"] = RepoPath(".github", "actions", "powerforge-cloudflare-site-policy", "Resolve-PowerForgeRepositoryArtifact.ps1");
 

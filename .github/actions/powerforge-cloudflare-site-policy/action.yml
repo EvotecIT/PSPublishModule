@@ -84,6 +84,8 @@ runs:
         POWERFORGE_MANAGE_INCREMENTAL_PURGE: ${{ inputs.manage-incremental-purge }}
         POWERFORGE_DEPLOYMENT_ID: ${{ inputs.deployment-id }}
         POWERFORGE_CLOUDFLARE_SITE_CONFIG: ${{ inputs.site-config }}
+        POWERFORGE_CLOUDFLARE_HOSTNAME_OVERRIDE: ${{ inputs.hostname }}
+        POWERFORGE_CLOUDFLARE_BASE_PATH_OVERRIDE: ${{ inputs.base-path }}
         POWERFORGE_GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
         POWERFORGE_GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
@@ -103,6 +105,10 @@ runs:
         $enabled = ($env:POWERFORGE_MANAGE_INCREMENTAL_PURGE -eq 'true' -and [string]$site.Cloudflare.PurgeMode -ceq 'incremental')
         if ($enabled -and [string]::IsNullOrWhiteSpace($env:POWERFORGE_GITHUB_TOKEN)) {
           throw 'Incremental purge requires github-token with Actions read permission.'
+        }
+        if ($enabled -and (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_HOSTNAME_OVERRIDE) -or
+                          -not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_BASE_PATH_OVERRIDE))) {
+          throw 'Managed incremental purge does not support hostname or base-path overrides; configure the canonical BaseUrl in site-config.'
         }
         $relativeConfig = [IO.Path]::GetRelativePath($workspace, $siteConfig).Replace([IO.Path]::DirectorySeparatorChar, '/')
         $scopeBytes = [Text.Encoding]::UTF8.GetBytes("$($env:POWERFORGE_GITHUB_REPOSITORY_ID)|$relativeConfig")
@@ -157,6 +163,8 @@ runs:
         POWERFORGE_GITHUB_API_URL: ${{ github.api_url }}
         POWERFORGE_GITHUB_REPOSITORY: ${{ github.repository }}
         POWERFORGE_GITHUB_TOKEN: ${{ inputs.github-token }}
+        POWERFORGE_REFERENCE_RUN_ID: ${{ steps.locate_manifest.outputs.run_id }}
+        POWERFORGE_EXCLUDE_RUN_ID: ${{ inputs.deployment-run-id || github.run_id }}
       run: '& "$env:GITHUB_ACTION_PATH/Resolve-PowerForgeRepositoryArtifact.ps1"'
 
     - name: Download latest GitHub Pages deployment receipt
@@ -177,6 +185,7 @@ runs:
         POWERFORGE_CLOUDFLARE_BASELINE_STATE: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline/state.json
         POWERFORGE_CLOUDFLARE_DEPLOYMENT_RECEIPT: ${{ runner.temp }}/powerforge-cloudflare-deployment-receipt/state.json
         POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline/manifest.json
+        POWERFORGE_CLOUDFLARE_CONTINUITY_GAP: ${{ steps.locate_receipt.outputs.gap }}
         POWERFORGE_DEPLOYMENT_RUN_ATTEMPT: ${{ inputs.deployment-run-attempt || github.run_attempt }}
         POWERFORGE_DEPLOYMENT_RUN_ID: ${{ inputs.deployment-run-id || github.run_id }}
       run: '& "$env:GITHUB_ACTION_PATH/Resolve-PowerForgeCloudflareBaselineOrder.ps1"'

@@ -39,7 +39,12 @@ internal static partial class WebCliCommandHandlers
         CloudflareDeploymentManifestCreateResult result;
         try
         {
-            result = CloudflareDeploymentManifestStore.CreateFromTar(artifactPath, siteProfile.BaseUrl, outputPath);
+            result = CloudflareDeploymentManifestStore.CreateFromTar(
+                artifactPath,
+                siteProfile.BaseUrl,
+                outputPath,
+                siteProfile.VerifyPaths,
+                siteProfile.Cloudflare);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
         {

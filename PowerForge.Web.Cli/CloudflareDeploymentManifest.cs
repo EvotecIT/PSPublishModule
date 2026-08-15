@@ -1,6 +1,7 @@
 using System.Formats.Tar;
 using System.Security.Cryptography;
 using System.Text.Json;
+using PowerForge.Web;
 
 namespace PowerForge.Web.Cli;
 
@@ -9,6 +10,7 @@ internal sealed class CloudflareDeploymentManifest
     public int SchemaVersion { get; set; } = CloudflareDeploymentManifestStore.SchemaVersion;
     public string HashAlgorithm { get; set; } = CloudflareDeploymentManifestStore.HashAlgorithm;
     public string BaseUrl { get; set; } = string.Empty;
+    public string CachePolicyFingerprint { get; set; } = string.Empty;
     public CloudflareDeploymentManifestEntry[] Files { get; set; } = Array.Empty<CloudflareDeploymentManifestEntry>();
 }
 
@@ -23,6 +25,7 @@ internal sealed class CloudflareDeploymentManifestCreateResult
 {
     public string ManifestPath { get; set; } = string.Empty;
     public string BaseUrl { get; set; } = string.Empty;
+    public string CachePolicyFingerprint { get; set; } = string.Empty;
     public int ArtifactFileCount { get; set; }
     public int UrlPathCount { get; set; }
     public long ContentBytes { get; set; }
@@ -40,7 +43,9 @@ internal static class CloudflareDeploymentManifestStore
     internal static CloudflareDeploymentManifestCreateResult CreateFromTar(
         string artifactPath,
         string baseUrl,
-        string outputPath)
+        string outputPath,
+        IReadOnlyCollection<string>? htmlPaths = null,
+        CloudflareSitePolicySpec? cloudflare = null)
     {
         var resolvedArtifact = Path.GetFullPath(artifactPath ?? string.Empty);
         if (!File.Exists(resolvedArtifact))
@@ -51,6 +56,7 @@ internal static class CloudflareDeploymentManifestStore
             throw new InvalidOperationException("Deployment manifest output must differ from the deployment artifact path.");
 
         var normalizedBaseUrl = NormalizeBaseUrl(baseUrl);
+        var cachePolicyFingerprint = ComputeCachePolicyFingerprint(normalizedBaseUrl, htmlPaths, cloudflare);
         var entries = new Dictionary<string, CloudflareDeploymentManifestEntry>(StringComparer.Ordinal);
         var artifactFileCount = 0;
         long contentBytes = 0;
@@ -105,6 +111,7 @@ internal static class CloudflareDeploymentManifestStore
         var manifest = new CloudflareDeploymentManifest
         {
             BaseUrl = normalizedBaseUrl,
+            CachePolicyFingerprint = cachePolicyFingerprint,
             Files = entries.Values.OrderBy(value => value.Path, StringComparer.Ordinal).ToArray()
         };
 
@@ -138,6 +145,7 @@ internal static class CloudflareDeploymentManifestStore
         {
             ManifestPath = resolvedOutput,
             BaseUrl = normalizedBaseUrl,
+            CachePolicyFingerprint = manifest.CachePolicyFingerprint,
             ArtifactFileCount = artifactFileCount,
             UrlPathCount = manifest.Files.Length,
             ContentBytes = contentBytes,
@@ -173,6 +181,8 @@ internal static class CloudflareDeploymentManifestStore
         if (string.IsNullOrWhiteSpace(manifest.HashAlgorithm) ||
             !manifest.HashAlgorithm.Equals(HashAlgorithm, StringComparison.Ordinal))
             throw new InvalidDataException($"Unsupported deployment manifest hash algorithm '{manifest.HashAlgorithm}'. Expected {HashAlgorithm}.");
+        if (!string.IsNullOrEmpty(manifest.CachePolicyFingerprint) && !IsValidPolicyFingerprint(manifest.CachePolicyFingerprint))
+            throw new InvalidDataException("Deployment manifest has an invalid cache-policy fingerprint.");
 
         manifest.BaseUrl = NormalizeBaseUrl(manifest.BaseUrl);
         if (manifest.Files is null || manifest.Files.Length > MaxManifestEntries)
@@ -227,6 +237,29 @@ internal static class CloudflareDeploymentManifestStore
         };
         return builder.Uri.AbsoluteUri;
     }
+
+    internal static string ComputeCachePolicyFingerprint(
+        string baseUrl,
+        IReadOnlyCollection<string>? htmlPaths,
+        CloudflareSitePolicySpec? cloudflare)
+    {
+        // Hash the effective managed rules with a stable description name so any cache-affecting
+        // configuration or engine change invalidates objects created under the previous policy.
+        var normalizedBaseUrl = NormalizeBaseUrl(baseUrl);
+        var uri = new Uri(normalizedBaseUrl, UriKind.Absolute);
+        var rules = CloudflareCachePolicyBuilder.BuildManagedRules(
+            uri.Host,
+            "cache-fingerprint",
+            htmlPaths,
+            uri.AbsolutePath,
+            cloudflare?.Cache);
+        return Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(rules))).ToLowerInvariant();
+    }
+
+    internal static bool IsValidPolicyFingerprint(string? fingerprint) =>
+        !string.IsNullOrWhiteSpace(fingerprint) &&
+        fingerprint.Length == 64 &&
+        fingerprint.All(Uri.IsHexDigit);
 
     private static string NormalizeArchivePath(string rawPath)
     {

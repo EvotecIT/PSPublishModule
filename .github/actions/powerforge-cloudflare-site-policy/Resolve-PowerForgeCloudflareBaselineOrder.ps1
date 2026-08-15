@@ -37,6 +37,10 @@ $deploymentRunAttempt = Get-PositiveInt64 -Name 'deployment-run-attempt' -Value 
 $deploymentReceipt = [IO.Path]::GetFullPath($env:POWERFORGE_CLOUDFLARE_DEPLOYMENT_RECEIPT)
 $previousManifest = [IO.Path]::GetFullPath($env:POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST)
 $baselineState = [IO.Path]::GetFullPath($env:POWERFORGE_CLOUDFLARE_BASELINE_STATE)
+$continuityGap = [string] $env:POWERFORGE_CLOUDFLARE_CONTINUITY_GAP
+if ($continuityGap -notin @('true', 'false')) {
+    throw 'deployment continuity-gap state must be true or false.'
+}
 if (-not (Test-Path -LiteralPath $deploymentReceipt -PathType Leaf)) {
     throw 'The latest GitHub Pages deployment-order receipt is unavailable.'
 }
@@ -59,6 +63,11 @@ if ($latestRunId -lt $deploymentRunId -or ($latestRunId -eq $deploymentRunId -an
 if ($latestRunId -gt $deploymentRunId -or ($latestRunId -eq $deploymentRunId -and $latestRunAttempt -gt $deploymentRunAttempt)) {
     Write-Warning "Skipping stale Cloudflare policy job for deployment run $deploymentRunId attempt $deploymentRunAttempt because the latest Pages deployment is run $latestRunId attempt $latestRunAttempt."
     Write-Decision -Stale $true -UsePrevious $false -Reason 'a different GitHub Pages deployment is currently active'
+    exit 0
+}
+
+if ($continuityGap -eq 'true') {
+    Write-Decision -Stale $false -UsePrevious $false -Reason 'an intervening GitHub Pages deployment has no successful purge baseline'
     exit 0
 }
 
