@@ -52,7 +52,11 @@ try {
     throw "The latest GitHub Pages deployment-order receipt is invalid: $($_.Exception.Message)"
 }
 
-if ($latestRunId -ne $deploymentRunId -or $latestRunAttempt -ne $deploymentRunAttempt) {
+if ($latestRunId -lt $deploymentRunId -or ($latestRunId -eq $deploymentRunId -and $latestRunAttempt -lt $deploymentRunAttempt)) {
+    throw "The latest GitHub Pages deployment-order receipt predates the current deployment run $deploymentRunId attempt $deploymentRunAttempt. Repository artifact state may not be current."
+}
+
+if ($latestRunId -gt $deploymentRunId -or ($latestRunId -eq $deploymentRunId -and $latestRunAttempt -gt $deploymentRunAttempt)) {
     Write-Warning "Skipping stale Cloudflare policy job for deployment run $deploymentRunId attempt $deploymentRunAttempt because the latest Pages deployment is run $latestRunId attempt $latestRunAttempt."
     Write-Decision -Stale $true -UsePrevious $false -Reason 'a different GitHub Pages deployment is currently active'
     exit 0

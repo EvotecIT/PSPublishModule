@@ -416,19 +416,31 @@ public sealed class CloudflareIncrementalCachePurgeTests
         Assert.Contains("manifest-artifact-name: ${{ needs.build.outputs.cloudflare_cache_manifest_artifact_name }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("deployment-run-id: ${{ needs.deploy.outputs.run_id }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("deployment-run-attempt: ${{ needs.deploy.outputs.run_attempt }}", deployWorkflow, StringComparison.Ordinal);
-        Assert.Contains("Cache GitHub Pages deployment receipt", deployWorkflow, StringComparison.Ordinal);
-        Assert.Contains("powerforge-cloudflare-deployment-v1-${{ github.repository_id }}-${{ needs.build.outputs.cloudflare_cache_manifest_scope }}", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Upload GitHub Pages deployment receipt", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge-cloudflare-deployment-v2-${{ github.repository_id }}-${{ needs.build.outputs.cloudflare_cache_manifest_scope }}", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("retention-days: 7", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("overwrite: true", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("actions: write", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("manage-incremental-purge: \"true\"", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("deployment-id: ${{ needs.build.outputs.source_sha }}", deployWorkflow, StringComparison.Ordinal);
-        Assert.Contains("actions/cache/restore@", action, StringComparison.Ordinal);
-        Assert.Contains("actions/cache/save@", action, StringComparison.Ordinal);
-        Assert.Contains("${{ github.run_id }}-${{ github.run_attempt }}", action, StringComparison.Ordinal);
+        Assert.Contains("github-token: ${{ github.token }}", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Resolve-PowerForgeRepositoryArtifact.ps1", action, StringComparison.Ordinal);
+        Assert.Contains("github-token: ${{ inputs.github-token }}", action, StringComparison.Ordinal);
+        Assert.Contains("repository: ${{ github.repository }}", action, StringComparison.Ordinal);
+        Assert.Contains("run-id: ${{ steps.locate_manifest.outputs.run_id }}", action, StringComparison.Ordinal);
+        Assert.Contains("run-id: ${{ steps.locate_receipt.outputs.run_id }}", action, StringComparison.Ordinal);
+        Assert.Contains("powerforge-cloudflare-manifest-v2-", action, StringComparison.Ordinal);
+        Assert.Contains("powerforge-cloudflare-deployment-v2-", action, StringComparison.Ordinal);
+        Assert.Contains("retention-days: 7", action, StringComparison.Ordinal);
+        Assert.Contains("overwrite: true", action, StringComparison.Ordinal);
+        Assert.DoesNotContain("actions/cache/", action, StringComparison.Ordinal);
+        Assert.DoesNotContain("actions/cache/", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_CLOUDFLARE_DRY_RUN: ${{ inputs.dry-run }}", action, StringComparison.Ordinal);
         Assert.Contains("$arguments += '--dry-run'", ReadRepoFile(".github", "actions", "powerforge-cloudflare-site-policy", "Invoke-PowerForgeCloudflareIncrementalPurge.ps1"), StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_CLOUDFLARE_USE_PREVIOUS", action, StringComparison.Ordinal);
         Assert.Contains("Resolve-PowerForgeCloudflareBaselineOrder.ps1", action, StringComparison.Ordinal);
-        Assert.Contains("Restore latest GitHub Pages deployment receipt", action, StringComparison.Ordinal);
+        Assert.Contains("Locate latest GitHub Pages deployment receipt", action, StringComparison.Ordinal);
+        Assert.Contains("Download latest GitHub Pages deployment receipt", action, StringComparison.Ordinal);
         Assert.Contains("steps.baseline_order.outputs.stale != 'true'", action, StringComparison.Ordinal);
         Assert.Contains("inputs.dry-run != 'true'", action, StringComparison.Ordinal);
         Assert.Contains("retention-days: 1", runWorkflow, StringComparison.Ordinal);
@@ -441,7 +453,66 @@ public sealed class CloudflareIncrementalCachePurgeTests
             runWorkflow.IndexOf("Upload Pages artifact", StringComparison.Ordinal));
         Assert.True(
             action.IndexOf("Purge changed Cloudflare URLs", StringComparison.Ordinal) <
-            action.IndexOf("Cache deployed manifest baseline", StringComparison.Ordinal));
+            action.IndexOf("Upload deployed manifest baseline", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void RepositoryArtifactLookup_ShouldSelectLatestNonExpiredArtifactAcrossBranches()
+    {
+        if (!CommandExists("pwsh"))
+            return;
+
+        var root = NewTempDirectory();
+        try
+        {
+            const string artifactName = "powerforge-cloudflare-manifest-v2-42-site";
+            var responsePath = Path.Combine(root, "response.json");
+            File.WriteAllText(responsePath,
+                $$"""
+                {
+                  "total_count": 4,
+                  "artifacts": [
+                    {
+                      "id": 4,
+                      "name": "different-artifact",
+                      "expired": false,
+                      "created_at": "2026-08-14T12:00:00Z",
+                      "workflow_run": { "id": 404, "head_branch": "main" }
+                    },
+                    {
+                      "id": 3,
+                      "name": "{{artifactName}}",
+                      "expired": true,
+                      "created_at": "2026-08-14T11:00:00Z",
+                      "workflow_run": { "id": 303, "head_branch": "main" }
+                    },
+                    {
+                      "id": 1,
+                      "name": "{{artifactName}}",
+                      "expired": false,
+                      "created_at": "2026-08-14T09:00:00Z",
+                      "workflow_run": { "id": 101, "head_branch": "feature/cache" }
+                    },
+                    {
+                      "id": 2,
+                      "name": "{{artifactName}}",
+                      "expired": false,
+                      "created_at": "2026-08-14T10:00:00Z",
+                      "workflow_run": { "id": 202, "head_branch": "main" }
+                    }
+                  ]
+                }
+                """);
+
+            var result = RunRepositoryArtifactLookup(root, responsePath, artifactName);
+
+            Assert.Equal("true", result["found"]);
+            Assert.Equal("202", result["run_id"]);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]
@@ -469,6 +540,14 @@ public sealed class CloudflareIncrementalCachePurgeTests
             var stale = RunBaselineOrder(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 100, deploymentRunAttempt: 1);
             Assert.Equal("true", stale["stale"]);
             Assert.Equal("false", stale["use_previous"]);
+
+            File.WriteAllText(deploymentReceipt,
+                """
+                { "schemaVersion": 1, "deploymentRunId": "100", "deploymentRunAttempt": 1 }
+                """);
+            var laggingReceipt = RunBaselineOrderProcess(root, previousManifest, baselineState, deploymentReceipt, deploymentRunId: 200, deploymentRunAttempt: 1);
+            Assert.NotEqual(0, laggingReceipt.ExitCode);
+            Assert.Contains("predates", laggingReceipt.StandardError, StringComparison.OrdinalIgnoreCase);
 
             File.WriteAllText(deploymentReceipt,
                 """
@@ -639,6 +718,51 @@ public sealed class CloudflareIncrementalCachePurgeTests
         var standardError = process.StandardError.ReadToEnd();
         process.WaitForExit();
         return (process.ExitCode, standardOutput, standardError, outputPath);
+    }
+
+    private static Dictionary<string, string> RunRepositoryArtifactLookup(string root, string responsePath, string artifactName)
+    {
+        var outputPath = Path.Combine(root, $"artifact-output-{Guid.NewGuid():N}.txt");
+        var wrapperPath = Path.Combine(root, $"artifact-wrapper-{Guid.NewGuid():N}.ps1");
+        File.WriteAllText(wrapperPath,
+            """
+            $ErrorActionPreference = 'Stop'
+            $global:PowerForgeTestArtifactResponse = Get-Content -LiteralPath $env:POWERFORGE_TEST_RESPONSE -Raw | ConvertFrom-Json
+            function global:Invoke-RestMethod {
+                param($Method, $Uri, $Headers)
+                return $global:PowerForgeTestArtifactResponse
+            }
+            & $env:POWERFORGE_TEST_SCRIPT
+            """);
+
+        var startInfo = new ProcessStartInfo("pwsh")
+        {
+            WorkingDirectory = root,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add("-NoLogo");
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-File");
+        startInfo.ArgumentList.Add(wrapperPath);
+        startInfo.Environment["GITHUB_OUTPUT"] = outputPath;
+        startInfo.Environment["POWERFORGE_ARTIFACT_NAME"] = artifactName;
+        startInfo.Environment["POWERFORGE_GITHUB_API_URL"] = "https://api.github.test";
+        startInfo.Environment["POWERFORGE_GITHUB_REPOSITORY"] = "EvotecIT/Example";
+        startInfo.Environment["POWERFORGE_GITHUB_TOKEN"] = "test-token";
+        startInfo.Environment["POWERFORGE_TEST_RESPONSE"] = responsePath;
+        startInfo.Environment["POWERFORGE_TEST_SCRIPT"] = RepoPath(".github", "actions", "powerforge-cloudflare-site-policy", "Resolve-PowerForgeRepositoryArtifact.ps1");
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Unable to start repository-artifact validation.");
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, $"Repository-artifact validation failed ({process.ExitCode}). stdout: {standardOutput} stderr: {standardError}");
+
+        return File.ReadAllLines(outputPath)
+            .Select(line => line.Split('=', 2))
+            .ToDictionary(parts => parts[0], parts => parts[1], StringComparer.Ordinal);
     }
 
     private static bool CommandExists(string command)

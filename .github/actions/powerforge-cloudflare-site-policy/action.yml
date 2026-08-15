@@ -52,6 +52,10 @@ inputs:
     description: Invocation-scoped private deployment-manifest artifact produced by the website build.
     required: false
     default: "powerforge-cloudflare-cache-manifest"
+  github-token:
+    description: Caller repository token with Actions read permission for repository-wide deployment state artifact lookup and download.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -81,6 +85,7 @@ runs:
         POWERFORGE_DEPLOYMENT_ID: ${{ inputs.deployment-id }}
         POWERFORGE_CLOUDFLARE_SITE_CONFIG: ${{ inputs.site-config }}
         POWERFORGE_GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+        POWERFORGE_GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
         $ErrorActionPreference = 'Stop'
         $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([IO.Path]::DirectorySeparatorChar)
@@ -96,6 +101,9 @@ runs:
           throw 'manage-incremental-purge must be true or false.'
         }
         $enabled = ($env:POWERFORGE_MANAGE_INCREMENTAL_PURGE -eq 'true' -and [string]$site.Cloudflare.PurgeMode -ceq 'incremental')
+        if ($enabled -and [string]::IsNullOrWhiteSpace($env:POWERFORGE_GITHUB_TOKEN)) {
+          throw 'Incremental purge requires github-token with Actions read permission.'
+        }
         $relativeConfig = [IO.Path]::GetRelativePath($workspace, $siteConfig).Replace([IO.Path]::DirectorySeparatorChar, '/')
         $scopeBytes = [Text.Encoding]::UTF8.GetBytes("$($env:POWERFORGE_GITHUB_REPOSITORY_ID)|$relativeConfig")
         $scope = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($scopeBytes)).ToLowerInvariant()
@@ -109,6 +117,8 @@ runs:
         "enabled=$($enabled.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         "scope=$scope" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         "deployment=$($deployment.ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "baseline_artifact=powerforge-cloudflare-manifest-v2-$($env:POWERFORGE_GITHUB_REPOSITORY_ID)-$scope" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "receipt_artifact=powerforge-cloudflare-deployment-v2-$($env:POWERFORGE_GITHUB_REPOSITORY_ID)-$scope" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
     - name: Download current deployment manifest
       if: ${{ steps.incremental.outputs.enabled == 'true' }}
@@ -117,24 +127,47 @@ runs:
         name: ${{ inputs.manifest-artifact-name }}
         path: ${{ runner.temp }}/powerforge-cloudflare-cache-current
 
-    - name: Restore last deployed manifest
+    - name: Locate last deployed manifest
       if: ${{ steps.incremental.outputs.enabled == 'true' }}
-      id: restore_manifest
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline
-        key: powerforge-cloudflare-manifest-v1-${{ github.repository_id }}-${{ steps.incremental.outputs.scope }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ steps.incremental.outputs.deployment }}
-        restore-keys: |
-          powerforge-cloudflare-manifest-v1-${{ github.repository_id }}-${{ steps.incremental.outputs.scope }}-
+      id: locate_manifest
+      shell: pwsh
+      env:
+        POWERFORGE_ARTIFACT_NAME: ${{ steps.incremental.outputs.baseline_artifact }}
+        POWERFORGE_GITHUB_API_URL: ${{ github.api_url }}
+        POWERFORGE_GITHUB_REPOSITORY: ${{ github.repository }}
+        POWERFORGE_GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: '& "$env:GITHUB_ACTION_PATH/Resolve-PowerForgeRepositoryArtifact.ps1"'
 
-    - name: Restore latest GitHub Pages deployment receipt
-      if: ${{ steps.incremental.outputs.enabled == 'true' }}
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    - name: Download last deployed manifest
+      if: ${{ steps.incremental.outputs.enabled == 'true' && steps.locate_manifest.outputs.found == 'true' }}
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
+        name: ${{ steps.incremental.outputs.baseline_artifact }}
+        path: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline
+        github-token: ${{ inputs.github-token }}
+        repository: ${{ github.repository }}
+        run-id: ${{ steps.locate_manifest.outputs.run_id }}
+
+    - name: Locate latest GitHub Pages deployment receipt
+      if: ${{ steps.incremental.outputs.enabled == 'true' }}
+      id: locate_receipt
+      shell: pwsh
+      env:
+        POWERFORGE_ARTIFACT_NAME: ${{ steps.incremental.outputs.receipt_artifact }}
+        POWERFORGE_GITHUB_API_URL: ${{ github.api_url }}
+        POWERFORGE_GITHUB_REPOSITORY: ${{ github.repository }}
+        POWERFORGE_GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: '& "$env:GITHUB_ACTION_PATH/Resolve-PowerForgeRepositoryArtifact.ps1"'
+
+    - name: Download latest GitHub Pages deployment receipt
+      if: ${{ steps.incremental.outputs.enabled == 'true' && steps.locate_receipt.outputs.found == 'true' }}
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: ${{ steps.incremental.outputs.receipt_artifact }}
         path: ${{ runner.temp }}/powerforge-cloudflare-deployment-receipt
-        key: powerforge-cloudflare-deployment-v1-${{ github.repository_id }}-${{ steps.incremental.outputs.scope }}-resolve-${{ github.run_id }}-${{ github.run_attempt }}
-        restore-keys: |
-          powerforge-cloudflare-deployment-v1-${{ github.repository_id }}-${{ steps.incremental.outputs.scope }}-
+        github-token: ${{ inputs.github-token }}
+        repository: ${{ github.repository }}
+        run-id: ${{ steps.locate_receipt.outputs.run_id }}
 
     - name: Resolve deployment baseline order
       if: ${{ steps.incremental.outputs.enabled == 'true' }}
@@ -193,9 +226,11 @@ runs:
           deploymentRunAttempt = [int] $env:POWERFORGE_DEPLOYMENT_RUN_ATTEMPT
         } | ConvertTo-Json -Compress | Set-Content -LiteralPath $env:POWERFORGE_CLOUDFLARE_BASELINE_STATE -Encoding utf8
 
-    - name: Cache deployed manifest baseline
+    - name: Upload deployed manifest baseline
       if: ${{ steps.incremental.outputs.enabled == 'true' && steps.baseline_order.outputs.stale != 'true' && inputs.dry-run != 'true' }}
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
+        name: ${{ steps.incremental.outputs.baseline_artifact }}
         path: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline
-        key: powerforge-cloudflare-manifest-v1-${{ github.repository_id }}-${{ steps.incremental.outputs.scope }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ steps.incremental.outputs.deployment }}
+        retention-days: 7
+        overwrite: true

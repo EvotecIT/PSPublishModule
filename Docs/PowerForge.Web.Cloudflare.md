@@ -165,10 +165,14 @@ When `PurgeMode` is `incremental`, the reusable deployment workflow creates a
 private manifest from the exact Pages `artifact.tar`. It reads the tar
 sequentially and hashes each deployed file without reopening thousands of files
 from the generated output tree. The manifest is uploaded as a one-day workflow
-artifact, compared with the last successfully purged baseline, and then stored
-in the repository's GitHub Actions cache. It is not published as part of the
-website. Artifact names are unique to each reusable-workflow invocation so one
-caller run can deploy multiple sites or matrix entries without collisions.
+artifact and compared with the last successfully purged baseline. Successful
+baselines and deployment-order receipts are private, site-scoped repository
+artifacts, so deployments from different branches share the same continuity
+state. They are retained for seven days and are never published with the website;
+after a longer idle period, the next deployment safely uses a hostname purge.
+Current-manifest artifact names remain unique to each reusable-workflow
+invocation so one caller run can deploy multiple sites or matrix entries without
+collisions.
 
 Lowercase `index.html` files map to both their physical URL and clean directory
 URL, so changing `docs/index.html` invalidates both `docs/index.html` and

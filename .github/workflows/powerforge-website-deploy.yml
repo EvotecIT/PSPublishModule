@@ -312,12 +312,14 @@ jobs:
             deploymentRunAttempt = [int] '${{ github.run_attempt }}'
           } | ConvertTo-Json -Compress | Set-Content -LiteralPath $env:POWERFORGE_DEPLOYMENT_RECEIPT -Encoding utf8
 
-      - name: Cache GitHub Pages deployment receipt
+      - name: Upload GitHub Pages deployment receipt
         if: ${{ inputs.manage_cloudflare_site_policy && (steps.deployment.outcome == 'success' || steps.deployment_retry.outcome == 'success') }}
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
+          name: powerforge-cloudflare-deployment-v2-${{ github.repository_id }}-${{ needs.build.outputs.cloudflare_cache_manifest_scope }}
           path: ${{ runner.temp }}/powerforge-cloudflare-deployment-receipt
-          key: powerforge-cloudflare-deployment-v1-${{ github.repository_id }}-${{ needs.build.outputs.cloudflare_cache_manifest_scope }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7
+          overwrite: true
 
 
   cloudflare-site-policy:
@@ -357,6 +359,7 @@ jobs:
           deployment-run-id: ${{ needs.deploy.outputs.run_id }}
           deployment-run-attempt: ${{ needs.deploy.outputs.run_attempt }}
           manifest-artifact-name: ${{ needs.build.outputs.cloudflare_cache_manifest_artifact_name }}
+          github-token: ${{ github.token }}
 
   deploy-linux:
     if: ${{ inputs.deployment_target == 'linux' }}
