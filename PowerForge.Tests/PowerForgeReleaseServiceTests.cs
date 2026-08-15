@@ -4894,6 +4894,77 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_LegacyToolPlan_rejects_dirty_source_before_stamping_exact_commit()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Source { }");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var commit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
+            File.WriteAllText(Path.Combine(root, "Injected.cs"), "internal sealed class Injected { }");
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => new PowerForgeToolReleasePlan
+                {
+                    ProjectRoot = root,
+                    Targets =
+                    [
+                        new PowerForgeToolReleaseTargetPlan
+                        {
+                            Name = "PowerForge",
+                            Version = "3.0.110",
+                            Combinations =
+                            [
+                                new PowerForgeToolReleaseCombinationPlan
+                                {
+                                    Runtime = "osx-arm64",
+                                    Framework = "net10.0",
+                                    Flavor = PowerForgeToolReleaseFlavor.SingleContained
+                                }
+                            ]
+                        }
+                    ]
+                },
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run in plan mode."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not run."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var error = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Outputs = new PowerForgeReleaseOutputsOptions
+                    {
+                        PowerForgeToolManifestPath = "PowerForge-tool-manifest.json"
+                    },
+                    Tools = new PowerForgeToolReleaseSpec(),
+                    GitHub = new PowerForgeReleaseGitHubOptions { Commitish = commit }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ToolsOnly = true,
+                    PlanOnly = true,
+                    ReleaseVersion = "3.0.110"
+                }));
+
+            Assert.Contains("clean", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_PublishesDotNetPublishAssetsToGitHub_PrefersResolvedPackageVersionOverProjectVersion()
     {
         var root = CreateSandbox();

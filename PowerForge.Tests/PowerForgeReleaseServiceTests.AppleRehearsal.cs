@@ -161,6 +161,31 @@ public sealed partial class PowerForgeReleaseServiceTests
         Assert.Null(evidence);
     }
 
+    [Fact]
+    public void ResolveAppleRehearsalArtifactEvidence_suppresses_success_after_post_export_failure()
+    {
+        var upload = new AppleAppArchiveUploadResult
+        {
+            ExportArtifactPath = "/private/rehearsal/CasaRay.ipa",
+            RehearsalArtifactSha256 = new string('a', 64),
+            RehearsalArtifactSha256Kind = "file-content",
+            ProcessResult = new ProcessRunResult(
+                0,
+                "export-ok",
+                string.Empty,
+                "xcodebuild",
+                TimeSpan.FromSeconds(1),
+                false)
+        };
+
+        var evidence = PowerForgeReleaseService.ResolveAppleRehearsalArtifactEvidence(
+            rehearse: true,
+            targetSucceeded: false,
+            upload);
+
+        Assert.Null(evidence);
+    }
+
     private sealed class AppleRehearsalProgress : IPowerForgeReleaseProgressReporterV2
     {
         internal List<string> Events { get; } = new();

@@ -175,6 +175,12 @@ public sealed partial class PowerForgeReleaseServiceTests
                 stream.Write(executableBytes, 0, executableBytes.Length);
             }
             File.WriteAllText(installer, "param()");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var commit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
                 executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not run."),
@@ -237,7 +243,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         Owner = "EvotecIT",
                         Repository = "PSPublishModule",
-                        Commitish = "0123456789abcdef0123456789abcdef01234567",
+                        Commitish = commit,
                         TagTemplate = "v{Version}"
                     }
                 },
@@ -256,7 +262,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal(2, json.GetProperty("schemaVersion").GetInt32());
             Assert.Equal("3.0.110", json.GetProperty("version").GetString());
             Assert.Equal("v3.0.110", json.GetProperty("releaseTag").GetString());
-            Assert.Equal("0123456789abcdef0123456789abcdef01234567", json.GetProperty("commit").GetString());
+            Assert.Equal(commit, json.GetProperty("commit").GetString());
             var asset = json.GetProperty("assets").GetProperty("osx-arm64");
             Assert.Equal(Path.GetFileName(zip), asset.GetProperty("name").GetString());
             Assert.Equal(

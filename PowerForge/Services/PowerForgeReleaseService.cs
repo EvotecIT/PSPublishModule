@@ -705,6 +705,12 @@ internal sealed partial class PowerForgeReleaseService
                         legacyToolTargets,
                         () => _planTools(spec.Tools!, configPath, request));
                     result.ToolPlan = toolPlan;
+                    if (!string.IsNullOrWhiteSpace(spec.Outputs?.PowerForgeToolManifestPath) &&
+                        ResolveSelectedToolOutputs(request).Contains(PowerForgeReleaseToolOutputKind.Tool) &&
+                        IsStandalonePowerForgeToolSelected(result))
+                    {
+                        VerifySharedReleaseSourceCommit(toolPlan.ProjectRoot, spec.GitHub?.Commitish);
+                    }
 
                     if (!request.PlanOnly && !request.ValidateOnly)
                     {

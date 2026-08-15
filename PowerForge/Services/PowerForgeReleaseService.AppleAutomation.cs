@@ -617,8 +617,8 @@ internal sealed partial class PowerForgeReleaseService
                 ArchiveCreated = result?.Archive?.Succeeded == true,
                 ProjectGenerated = result?.ProjectGenerated == true,
                 UploadPerformed = !plan.Rehearse && result?.Upload?.Succeeded == true,
-                ExportRehearsed = plan.Rehearse && result?.Upload?.Succeeded == true,
-                RehearsalArtifactPath = !plan.Rehearse || string.IsNullOrWhiteSpace(result?.Upload?.ExportArtifactPath)
+                ExportRehearsed = rehearsalArtifact is not null,
+                RehearsalArtifactPath = rehearsalArtifact is null || string.IsNullOrWhiteSpace(result?.Upload?.ExportArtifactPath)
                     ? null
                     : FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, result!.Upload!.ExportArtifactPath!).Replace('\\', '/'),
                 RehearsalArtifactSha256 = rehearsalArtifact?.Sha256,

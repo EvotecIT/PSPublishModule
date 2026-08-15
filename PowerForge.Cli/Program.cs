@@ -46,12 +46,12 @@ internal static partial class Program
 
     var filteredArgs = StripGlobalArgs(args);
 
-    if (filteredArgs.Length > 0 && filteredArgs[0].Equals("--version", StringComparison.OrdinalIgnoreCase))
+    if (IsVersionInvocation(args))
     {
         var version = typeof(Program).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
             .InformationalVersion ?? typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown";
-        if (IsJsonOutput(filteredArgs))
+        if (IsJsonOutput(args))
         {
             WriteJson(new CliJsonEnvelope
             {

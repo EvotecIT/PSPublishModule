@@ -194,6 +194,37 @@ internal static partial class Program
         return list.ToArray();
     }
 
+    static bool IsVersionInvocation(string[] args)
+    {
+        if (args is null || args.Length == 0) return false;
+
+        var remaining = new List<string>(args.Length);
+        for (var i = 0; i < args.Length; i++)
+        {
+            var argument = args[i];
+            if (IsGlobalArg(argument) ||
+                argument.Equals("--output-json", StringComparison.OrdinalIgnoreCase) ||
+                argument.Equals("--json", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (argument.Equals("--view", StringComparison.OrdinalIgnoreCase) ||
+                argument.Equals("--output", StringComparison.OrdinalIgnoreCase))
+            {
+                if (++i < args.Length)
+                    continue;
+
+                return false;
+            }
+
+            remaining.Add(argument);
+        }
+
+        return remaining.Count == 1 &&
+               remaining[0].Equals("--version", StringComparison.OrdinalIgnoreCase);
+    }
+
     static bool IsGlobalArg(string arg)
     {
         if (string.IsNullOrWhiteSpace(arg)) return false;
