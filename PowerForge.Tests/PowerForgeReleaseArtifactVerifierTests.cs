@@ -29,6 +29,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         Assert.DoesNotContain(result.EvidenceFiles, item => item.Role == "provenance");
         Assert.Contains(result.EvidenceFiles, item => item.Role == "configuration" && item.Path == fixture.ConfigurationPath);
         Assert.Contains(result.EvidenceFiles, item => item.Role == "sbom" && item.Path == fixture.SbomPath);
+        Assert.Contains(result.EvidenceFiles, item => item.Role == "sbom-signature" && item.Path == fixture.SbomSignaturePath);
     }
 
     [Fact]
@@ -168,6 +169,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         Assert.Contains(result.EvidenceFiles, evidence => evidence.Role == "sbom");
     }
 
+    [Fact]
+    public void Verify_PortableCliRejectsReplacedSbomAndCatalogSignedByDifferentPublisher()
+    {
+        using var fixture = new PortableFixture();
+        fixture.WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", fixture.ComputeDigest(fixture.ArchivePath));
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier(sbomSignerThumbprint: VendorThumbprint).Verify(fixture.CreateRequest()));
+
+        Assert.Contains("admitted artifact publisher", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -193,12 +207,15 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             Directory.CreateDirectory(Root);
             ChecksumsPath = Path.Combine(Root, "SHA256SUMS.txt");
             SbomPath = Path.Combine(Root, "sample.cdx.json");
+            SbomSignaturePath = SbomPath + ".p7s";
             File.WriteAllText(SbomPath, "{}");
+            File.WriteAllBytes(SbomSignaturePath, new byte[] { 2 });
         }
 
         internal string Root { get; }
         internal string ChecksumsPath { get; }
         internal string SbomPath { get; }
+        internal string SbomSignaturePath { get; }
 
         internal string ComputeDigest(string path)
         {
@@ -209,7 +226,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 
         internal void WriteChecksums(params string[] paths)
         {
-            string[] allPaths = paths.Concat(new[] { SbomPath }).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            string[] allPaths = paths
+                .Concat(new[] { SbomPath, SbomSignaturePath })
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
             File.WriteAllLines(ChecksumsPath, allPaths.Select(path =>
                 $"{ComputeDigest(path)} *{Path.GetRelativePath(Root, path).Replace('\\', '/')}"));
         }
@@ -256,7 +276,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 
         internal PowerForgeReleaseArtifactVerifier CreateVerifier(
             string signerThumbprint = Thumbprint,
-            string? inventorySignerThumbprint = null) =>
+            string? inventorySignerThumbprint = null,
+            string? sbomSignerThumbprint = null) =>
             new(
                 path => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
                     true,
@@ -265,9 +286,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     signerThumbprint),
                 _ => "1.2.3+" + SourceRevision,
                 _ => "Sample.CLI",
-                (_, _) => new PowerForgePayloadInventorySignature(
+                (_, signature) => new PowerForgePayloadInventorySignature(
                     "CN=Publisher",
-                    inventorySignerThumbprint ?? signerThumbprint));
+                    signature.Length > 0 && signature[0] == 2
+                        ? sbomSignerThumbprint ?? signerThumbprint
+                        : inventorySignerThumbprint ?? signerThumbprint));
 
         public void Dispose()
         {

@@ -22,6 +22,158 @@ public sealed partial class DotNetPublishPipelineRunner
         "ProjectReference"
     ];
 
+    internal static string[] EnumerateBundleSourceInputs(DotNetPublishPlan? plan)
+    {
+        if (plan is null || string.IsNullOrWhiteSpace(plan.ProjectRoot))
+            return Array.Empty<string>();
+
+        var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var inputs = new HashSet<string>(comparison);
+        foreach (DotNetPublishBundlePlan bundle in plan.Bundles ?? Array.Empty<DotNetPublishBundlePlan>())
+        {
+            if (bundle is null)
+                continue;
+
+            foreach (DotNetPublishBundleScriptPlan script in bundle.Scripts ?? Array.Empty<DotNetPublishBundleScriptPlan>())
+            {
+                if (script is not null && !string.IsNullOrWhiteSpace(script.Path))
+                    AddBundleSourceInput(
+                        inputs,
+                        ResolvePath(plan.ProjectRoot, script.Path),
+                        required: true);
+            }
+
+            DotNetPublishStep[] steps = (plan.Steps ?? Array.Empty<DotNetPublishStep>())
+                .Where(step => step is not null &&
+                               step.Kind == DotNetPublishStepKind.Bundle &&
+                               string.Equals(step.BundleId, bundle.Id, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (steps.Length == 0)
+            {
+                DotNetPublishTargetPlan? sourceTarget = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+                    .FirstOrDefault(target => string.Equals(
+                        target.Name,
+                        bundle.PrepareFromTarget,
+                        StringComparison.OrdinalIgnoreCase));
+                steps = (sourceTarget?.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+                    .Where(combination => BundleMatchesCombo(bundle, combination))
+                    .Select(combination => new DotNetPublishStep
+                    {
+                        Kind = DotNetPublishStepKind.Bundle,
+                        BundleId = bundle.Id,
+                        TargetName = bundle.PrepareFromTarget,
+                        Framework = combination.Framework,
+                        Runtime = combination.Runtime,
+                        Style = combination.Style
+                    })
+                    .ToArray();
+            }
+
+            foreach (DotNetPublishStep step in steps)
+            {
+                Dictionary<string, string> tokens = BuildBundleSourceInputTokens(plan, bundle, step);
+                foreach (DotNetPublishBundleCopyItemPlan item in bundle.CopyItems ?? Array.Empty<DotNetPublishBundleCopyItemPlan>())
+                {
+                    if (item is null || string.IsNullOrWhiteSpace(item.SourcePath))
+                        continue;
+                    AddBundleSourceInput(
+                        inputs,
+                        ResolvePath(plan.ProjectRoot, ApplyTemplate(item.SourcePath, tokens)),
+                        item.Required);
+                }
+                foreach (DotNetPublishBundleModuleIncludePlan module in bundle.ModuleIncludes ?? Array.Empty<DotNetPublishBundleModuleIncludePlan>())
+                {
+                    if (module is null || string.IsNullOrWhiteSpace(module.SourcePath))
+                        continue;
+                    Dictionary<string, string> moduleTokens = tokens.ToDictionary(
+                        entry => entry.Key,
+                        entry => entry.Value,
+                        StringComparer.OrdinalIgnoreCase);
+                    moduleTokens["moduleName"] = module.ModuleName;
+                    AddBundleSourceInput(
+                        inputs,
+                        ResolvePath(plan.ProjectRoot, ApplyTemplate(module.SourcePath, moduleTokens)),
+                        module.Required);
+                }
+                foreach (DotNetPublishBundleGeneratedScriptPlan generated in bundle.GeneratedScripts ?? Array.Empty<DotNetPublishBundleGeneratedScriptPlan>())
+                {
+                    if (generated is null || string.IsNullOrWhiteSpace(generated.TemplatePath))
+                        continue;
+                    AddBundleSourceInput(
+                        inputs,
+                        ResolvePath(plan.ProjectRoot, ApplyTemplate(generated.TemplatePath!, tokens)),
+                        required: true);
+                }
+            }
+        }
+
+        return inputs.OrderBy(path => path, comparison).ToArray();
+    }
+
+    private static Dictionary<string, string> BuildBundleSourceInputTokens(
+        DotNetPublishPlan plan,
+        DotNetPublishBundlePlan bundle,
+        DotNetPublishStep step)
+    {
+        string targetName = string.IsNullOrWhiteSpace(step.TargetName)
+            ? bundle.PrepareFromTarget
+            : step.TargetName!;
+        DotNetPublishTargetPlan? sourceTarget = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .FirstOrDefault(target => string.Equals(
+                target.Name,
+                bundle.PrepareFromTarget,
+                StringComparison.OrdinalIgnoreCase));
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["bundle"] = bundle.Id,
+            ["target"] = targetName,
+            ["rid"] = step.Runtime ?? string.Empty,
+            ["framework"] = step.Framework ?? string.Empty,
+            ["style"] = step.Style?.ToString() ?? string.Empty,
+            ["configuration"] = plan.Configuration,
+            ["projectRoot"] = plan.ProjectRoot,
+            ["output"] = step.BundleOutputPath ?? string.Empty,
+            ["zip"] = step.BundleZipPath ?? string.Empty,
+            ["keepSymbols"] = (sourceTarget?.Publish?.KeepSymbols ?? false).ToString(),
+            ["keepDocs"] = (sourceTarget?.Publish?.KeepDocs ?? false).ToString(),
+            ["signEnabled"] = (sourceTarget?.Publish?.Sign?.Enabled ?? false).ToString()
+        };
+        string sourceOutputTemplate = string.IsNullOrWhiteSpace(sourceTarget?.Publish?.OutputPath)
+            ? Path.Combine("Artifacts", "DotNetPublish", "{target}", "{rid}", "{framework}", "{style}")
+            : sourceTarget!.Publish.OutputPath!;
+        tokens["sourceOutput"] = ResolvePath(plan.ProjectRoot, ApplyTemplate(sourceOutputTemplate, tokens));
+        tokens["primaryOutput"] = string.IsNullOrWhiteSpace(tokens["output"]) ||
+                                  string.IsNullOrWhiteSpace(bundle.PrimarySubdirectory)
+            ? tokens["output"]
+            : ResolvePath(tokens["output"], bundle.PrimarySubdirectory!);
+        return tokens;
+    }
+
+    private static void AddBundleSourceInput(HashSet<string> inputs, string path, bool required)
+    {
+        string fullPath = Path.GetFullPath(path);
+        if (File.Exists(fullPath))
+        {
+            inputs.Add(fullPath);
+            return;
+        }
+        if (Directory.Exists(fullPath))
+        {
+            try
+            {
+                foreach (string file in Directory.EnumerateFiles(fullPath, "*", SearchOption.AllDirectories))
+                    inputs.Add(Path.GetFullPath(file));
+            }
+            catch
+            {
+                inputs.Add(Path.Combine(fullPath, ".powerforge-provenance-unreadable"));
+            }
+            return;
+        }
+        if (required)
+            inputs.Add(fullPath);
+    }
+
     private static bool TryEvaluateDotNetBuildInputs(
         IEnumerable<string>? projectPaths,
         string? configuration,

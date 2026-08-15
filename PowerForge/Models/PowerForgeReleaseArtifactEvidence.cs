@@ -92,7 +92,10 @@ public sealed class PowerForgeReleaseArtifactVerificationRequest
     /// <summary>Optional signing enable override used by the portable build.</summary>
     public bool? EnableSigning { get; set; }
 
-    /// <summary>Optional checksum-cataloged CycloneDX or SPDX SBOM sidecars.</summary>
+    /// <summary>
+    /// Optional checksum-cataloged CycloneDX or SPDX SBOM sidecars. Each SBOM requires a detached CMS
+    /// signature at <c>&lt;sbom-path&gt;.p7s</c> from the exact publisher certificate admitted for the artifact.
+    /// </summary>
     public string[] SbomPaths { get; set; } = Array.Empty<string>();
 }
 

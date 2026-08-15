@@ -145,7 +145,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             request.SbomPaths,
             artifactId,
             version,
-            artifactDigest);
+            artifactDigest,
+            signer);
 
         return new PowerForgeReleaseArtifactEvidence
         {

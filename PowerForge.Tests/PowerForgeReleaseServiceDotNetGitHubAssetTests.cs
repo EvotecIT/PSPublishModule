@@ -197,6 +197,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Theory]
     [InlineData(DotNetPublishArtefactCategory.Publish, DotNetPublishStyle.FrameworkDependent, "Sample.dll")]
     [InlineData(DotNetPublishArtefactCategory.Publish, DotNetPublishStyle.PortableCompat, "appsettings.json")]
+    [InlineData(DotNetPublishArtefactCategory.Publish, DotNetPublishStyle.PortableCompat, "settings.xml")]
     [InlineData(DotNetPublishArtefactCategory.Bundle, DotNetPublishStyle.PortableCompat, "runtime-data.json")]
     public void TryBuildDotNetGitHubRunnableAssets_DirectMultiFileOutputRequiresArchive(
         DotNetPublishArtefactCategory category,

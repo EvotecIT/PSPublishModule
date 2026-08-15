@@ -148,6 +148,9 @@ public sealed partial class DotNetPublishPipelineRunner
         var untrackedOutput = ReadGitText(gitRoot!, "ls-files --others --exclude-standard -z");
         var statusChangedDuringVerification = hasWriterContext
             && !string.Equals(trackedStatus, finalTrackedStatus, StringComparison.Ordinal);
+        string[] bundleSourceInputs = EnumerateBundleSourceInputs(buildPlan);
+        IEnumerable<string> allExplicitInputPaths = (explicitInputPaths ?? Array.Empty<string>())
+            .Concat(bundleSourceInputs);
         bool? dirty = trackedStatus is null || untrackedOutput is null
             ? null
             : statusChangedDuringVerification
@@ -164,7 +167,7 @@ public sealed partial class DotNetPublishPipelineRunner
               || HasUntrackedOrIgnoredExplicitInputs(
                   projectRoot,
                   gitRoot!,
-                  explicitInputPaths,
+                  allExplicitInputPaths,
                   trustedExternalInputPaths)
               || HasIgnoredBuildInputs(
                   projectRoot,

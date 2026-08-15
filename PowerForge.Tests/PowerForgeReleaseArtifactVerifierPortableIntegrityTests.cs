@@ -65,7 +65,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 fixture.ChecksumsPath,
                 fixture.ManifestPath,
                 fixture.ConfigurationPath,
-                fixture.SbomPath
+                fixture.SbomPath,
+                fixture.SbomSignaturePath
             };
             foreach (string source in releaseAssets)
             {

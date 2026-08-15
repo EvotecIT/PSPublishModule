@@ -149,7 +149,7 @@ internal sealed partial class PowerForgeReleaseService
         string[] requiredCompanions = Directory.EnumerateFiles(outputDirectory, "*", SearchOption.AllDirectories)
             .Select(Path.GetFullPath)
             .Where(path => !string.Equals(path, primaryPath, pathComparison))
-            .Where(path => !IsOptionalDirectAssetDiagnostic(path))
+            .Where(path => !IsOptionalDirectAssetDiagnostic(primaryPath, path))
             .ToArray();
         if (requiredCompanions.Length == 0)
             return true;
@@ -160,11 +160,19 @@ internal sealed partial class PowerForgeReleaseService
         return false;
     }
 
-    private static bool IsOptionalDirectAssetDiagnostic(string path)
+    private static bool IsOptionalDirectAssetDiagnostic(string primaryPath, string path)
     {
         string extension = Path.GetExtension(path);
-        return extension.Equals(".pdb", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".xml", StringComparison.OrdinalIgnoreCase);
+        if (!extension.Equals(".pdb", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".xml", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return string.Equals(
+            Path.GetFileNameWithoutExtension(path),
+            Path.GetFileNameWithoutExtension(primaryPath),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private static List<string> StageCollidingDotNetGitHubAssets(

@@ -58,7 +58,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         IEnumerable<string>? sbomPaths,
         string artifactId,
         string artifactVersion,
-        string artifactDigest)
+        string artifactDigest,
+        VerifiedSignature publisherSigner)
     {
         var evidence = new List<PowerForgeReleaseEvidenceFile>
         {
@@ -96,9 +97,39 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         foreach (string configuredPath in sbomPaths ?? Array.Empty<string>())
         {
             string path = ResolveRequestFile(projectRoot, configuredPath, "SBOM path");
+            string signaturePath = ResolveRequestFile(projectRoot, path + ".p7s", "SBOM detached signature path");
             string digest = VerifyChecksummedFile(projectRoot, checksumsPath, path, "SBOM");
+            string signatureDigest = VerifyChecksummedFile(
+                projectRoot,
+                checksumsPath,
+                signaturePath,
+                "SBOM detached signature");
+            PowerForgePayloadInventorySignature signature;
+            try
+            {
+                signature = _verifyPortableInventory(
+                    File.ReadAllBytes(path),
+                    File.ReadAllBytes(signaturePath));
+            }
+            catch (CryptographicException exception)
+            {
+                throw Invalid($"SBOM '{Path.GetFileName(path)}' detached signature is not valid: {exception.Message}");
+            }
+            if (!string.Equals(
+                    DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(signature.Thumbprint),
+                    publisherSigner.Thumbprint,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw Invalid($"SBOM '{Path.GetFileName(path)}' detached signature does not use the admitted artifact publisher certificate.");
+            }
             ValidateSbom(path, artifactId, artifactVersion, artifactDigest);
             evidence.Add(new PowerForgeReleaseEvidenceFile { Role = "sbom", Path = path, Sha256 = digest });
+            evidence.Add(new PowerForgeReleaseEvidenceFile
+            {
+                Role = "sbom-signature",
+                Path = signaturePath,
+                Sha256 = signatureDigest
+            });
         }
         return evidence.ToArray();
     }
