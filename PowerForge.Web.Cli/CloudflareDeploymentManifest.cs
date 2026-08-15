@@ -58,8 +58,8 @@ internal static class CloudflareDeploymentManifestStore
         var normalizedBaseUrl = NormalizeBaseUrl(baseUrl);
         var cachePolicyFingerprint = ComputeCachePolicyFingerprint(normalizedBaseUrl, htmlPaths, cloudflare);
         var entries = new Dictionary<string, CloudflareDeploymentManifestEntry>(StringComparer.Ordinal);
-        var artifactFileCount = 0;
-        long contentBytes = 0;
+        var archiveFiles = new Dictionary<string, ArchiveFileFingerprint>(StringComparer.Ordinal);
+        var hardLinks = new Dictionary<string, string>(StringComparer.Ordinal);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         using (var artifact = new FileStream(
@@ -78,34 +78,50 @@ internal static class CloudflareDeploymentManifestStore
                 if (entry.EntryType == TarEntryType.Directory || IsTarMetadata(entry.EntryType))
                     continue;
 
+                var archivePath = NormalizeArchivePath(entry.Name);
+                if (entry.EntryType == TarEntryType.HardLink)
+                {
+                    var targetPath = NormalizeArchivePath(entry.LinkName);
+                    if (archiveFiles.ContainsKey(archivePath) || !hardLinks.TryAdd(archivePath, targetPath))
+                        throw new InvalidDataException($"Deployment artifact contains duplicate file path '{entry.Name}'.");
+                    continue;
+                }
+
                 if (entry.EntryType is not (TarEntryType.RegularFile or TarEntryType.V7RegularFile or TarEntryType.ContiguousFile))
                     throw new InvalidDataException($"Deployment artifact entry '{entry.Name}' has unsupported type '{entry.EntryType}'. Archive files with dereferenced links before creating the manifest.");
 
-                var archivePath = NormalizeArchivePath(entry.Name);
                 var hashBytes = entry.DataStream is null
                     ? entry.Length == 0
                         ? SHA256.HashData(Array.Empty<byte>())
                         : throw new InvalidDataException($"Deployment artifact entry '{entry.Name}' has no content stream for its declared {entry.Length} bytes.")
                     : sha256.ComputeHash(entry.DataStream);
                 var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
-                artifactFileCount++;
-                contentBytes = checked(contentBytes + entry.Length);
-
-                foreach (var urlPath in BuildUrlPaths(archivePath))
-                {
-                    var manifestEntry = new CloudflareDeploymentManifestEntry
-                    {
-                        Path = urlPath,
-                        Length = entry.Length,
-                        Sha256 = hash
-                    };
-                    if (!entries.TryAdd(urlPath, manifestEntry))
-                        throw new InvalidDataException($"Deployment artifact maps more than one file to URL path '{urlPath}'.");
-                }
-
-                if (entries.Count > MaxManifestEntries)
-                    throw new InvalidDataException($"Deployment manifest exceeds the {MaxManifestEntries} URL-path safety limit.");
+                if (hardLinks.ContainsKey(archivePath) || !archiveFiles.TryAdd(archivePath, new ArchiveFileFingerprint(entry.Length, hash)))
+                    throw new InvalidDataException($"Deployment artifact contains duplicate file path '{entry.Name}'.");
             }
+        }
+
+        foreach (var archivePath in hardLinks.Keys)
+            ResolveHardLink(archivePath, archiveFiles, hardLinks);
+
+        long contentBytes = 0;
+        foreach (var file in archiveFiles.OrderBy(item => item.Key, StringComparer.Ordinal))
+        {
+            contentBytes = checked(contentBytes + file.Value.Length);
+            foreach (var urlPath in BuildUrlPaths(file.Key))
+            {
+                var manifestEntry = new CloudflareDeploymentManifestEntry
+                {
+                    Path = urlPath,
+                    Length = file.Value.Length,
+                    Sha256 = file.Value.Sha256
+                };
+                if (!entries.TryAdd(urlPath, manifestEntry))
+                    throw new InvalidDataException($"Deployment artifact maps more than one file to URL path '{urlPath}'.");
+            }
+
+            if (entries.Count > MaxManifestEntries)
+                throw new InvalidDataException($"Deployment manifest exceeds the {MaxManifestEntries} URL-path safety limit.");
         }
 
         var manifest = new CloudflareDeploymentManifest
@@ -146,7 +162,7 @@ internal static class CloudflareDeploymentManifestStore
             ManifestPath = resolvedOutput,
             BaseUrl = normalizedBaseUrl,
             CachePolicyFingerprint = manifest.CachePolicyFingerprint,
-            ArtifactFileCount = artifactFileCount,
+            ArtifactFileCount = archiveFiles.Count,
             UrlPathCount = manifest.Files.Length,
             ContentBytes = contentBytes,
             ManifestBytes = new FileInfo(resolvedOutput).Length,
@@ -260,6 +276,34 @@ internal static class CloudflareDeploymentManifestStore
         !string.IsNullOrWhiteSpace(fingerprint) &&
         fingerprint.Length == 64 &&
         fingerprint.All(Uri.IsHexDigit);
+
+    private static ArchiveFileFingerprint ResolveHardLink(
+        string archivePath,
+        Dictionary<string, ArchiveFileFingerprint> archiveFiles,
+        IReadOnlyDictionary<string, string> hardLinks)
+    {
+        if (archiveFiles.TryGetValue(archivePath, out var existing))
+            return existing;
+
+        var chain = new List<string>();
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var current = archivePath;
+        while (!archiveFiles.TryGetValue(current, out existing))
+        {
+            if (!visited.Add(current))
+                throw new InvalidDataException($"Deployment artifact contains a hard-link cycle at '{current}'.");
+            if (!hardLinks.TryGetValue(current, out var targetPath))
+                throw new InvalidDataException($"Deployment artifact hard link '{archivePath}' targets unavailable file '{current}'.");
+            chain.Add(current);
+            current = targetPath;
+        }
+
+        for (var index = chain.Count - 1; index >= 0; index--)
+            archiveFiles.Add(chain[index], existing);
+        return existing;
+    }
+
+    private sealed record ArchiveFileFingerprint(long Length, string Sha256);
 
     private static string NormalizeArchivePath(string rawPath)
     {

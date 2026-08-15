@@ -48,6 +48,10 @@ inputs:
     description: Workflow attempt that performed the GitHub Pages deployment.
     required: false
     default: ""
+  deployment-job-id:
+    description: Exact Actions job/check-run identifier that performed this GitHub Pages deployment.
+    required: false
+    default: ""
   manifest-artifact-name:
     description: Invocation-scoped private deployment-manifest artifact produced by the website build.
     required: false
@@ -83,6 +87,7 @@ runs:
       env:
         POWERFORGE_MANAGE_INCREMENTAL_PURGE: ${{ inputs.manage-incremental-purge }}
         POWERFORGE_DEPLOYMENT_ID: ${{ inputs.deployment-id }}
+        POWERFORGE_DEPLOYMENT_JOB_ID: ${{ inputs.deployment-job-id }}
         POWERFORGE_CLOUDFLARE_SITE_CONFIG: ${{ inputs.site-config }}
         POWERFORGE_CLOUDFLARE_HOSTNAME_OVERRIDE: ${{ inputs.hostname }}
         POWERFORGE_CLOUDFLARE_BASE_PATH_OVERRIDE: ${{ inputs.base-path }}
@@ -105,6 +110,9 @@ runs:
         $enabled = ($env:POWERFORGE_MANAGE_INCREMENTAL_PURGE -eq 'true' -and [string]$site.Cloudflare.PurgeMode -ceq 'incremental')
         if ($enabled -and [string]::IsNullOrWhiteSpace($env:POWERFORGE_GITHUB_TOKEN)) {
           throw 'Incremental purge requires github-token with Actions read and Deployments read permission.'
+        }
+        if ($enabled -and $env:POWERFORGE_DEPLOYMENT_JOB_ID -notmatch '^[1-9][0-9]*$') {
+          throw 'Managed incremental purge requires the exact GitHub Pages deployment-job-id.'
         }
         if ($enabled -and (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_HOSTNAME_OVERRIDE) -or
                           -not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_BASE_PATH_OVERRIDE))) {
@@ -166,6 +174,7 @@ runs:
         POWERFORGE_GITHUB_TOKEN: ${{ inputs.github-token }}
         POWERFORGE_DEPLOYMENT_RUN_ATTEMPT: ${{ inputs.deployment-run-attempt || github.run_attempt }}
         POWERFORGE_DEPLOYMENT_RUN_ID: ${{ inputs.deployment-run-id || github.run_id }}
+        POWERFORGE_DEPLOYMENT_JOB_ID: ${{ inputs.deployment-job-id }}
       run: '& "$env:GITHUB_ACTION_PATH/Resolve-PowerForgeCloudflareBaselineOrder.ps1"'
 
     - name: Apply Cloudflare site policy
@@ -203,6 +212,7 @@ runs:
         POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline/manifest.json
         POWERFORGE_DEPLOYMENT_RUN_ATTEMPT: ${{ inputs.deployment-run-attempt || github.run_attempt }}
         POWERFORGE_DEPLOYMENT_RUN_ID: ${{ inputs.deployment-run-id || github.run_id }}
+        POWERFORGE_DEPLOYMENT_JOB_ID: ${{ inputs.deployment-job-id }}
       run: |
         $baselineDirectory = Split-Path -Parent $env:POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST
         New-Item -ItemType Directory -Path $baselineDirectory -Force | Out-Null
@@ -211,6 +221,7 @@ runs:
           schemaVersion = 1
           deploymentRunId = [string] $env:POWERFORGE_DEPLOYMENT_RUN_ID
           deploymentRunAttempt = [int] $env:POWERFORGE_DEPLOYMENT_RUN_ATTEMPT
+          deploymentJobId = [string] $env:POWERFORGE_DEPLOYMENT_JOB_ID
         } | ConvertTo-Json -Compress | Set-Content -LiteralPath $env:POWERFORGE_CLOUDFLARE_BASELINE_STATE -Encoding utf8
 
     - name: Upload deployed manifest baseline

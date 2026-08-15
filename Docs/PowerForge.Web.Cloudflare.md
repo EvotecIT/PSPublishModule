@@ -191,10 +191,11 @@ Managed cache-rule expressions match both `GET` and Cloudflare's internal
 Action dry-runs calculate and report the same bounded decision but neither send
 the purge request nor advance the last-successful deployment baseline.
 The policy job correlates GitHub's actual Pages deployment records with the
-exact Actions run attempt that produced the successful baseline. Retrying only
-an older policy job after a newer deployment skips the stale policy, purge, and
-baseline update; deliberately rerunning the older Pages deployment remains
-supported and is distinguished from the earlier attempt. If Pages succeeds but
+exact Actions run and deployment job check-run id that produced the successful
+baseline. This keeps separate reusable-site jobs in the same caller invocation
+distinct. Retrying only an older policy job after a newer deployment skips the
+stale policy, purge, and baseline update; deliberately rerunning the older Pages
+deployment remains supported and is distinguished from the earlier attempt. If Pages succeeds but
 the later policy or purge fails, the next run still sees that intervening Pages
 deployment and uses a hostname purge instead of comparing against a non-adjacent
 baseline. This remains safe when deployment and policy jobs from different runs

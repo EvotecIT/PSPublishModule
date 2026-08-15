@@ -46,41 +46,6 @@ function Invoke-GitHubGet {
     }
 }
 
-function Get-DeploymentJobWindow {
-    param([Parameter(Mandatory)][long] $RunId, [Parameter(Mandatory)][long] $RunAttempt)
-    $matches = [System.Collections.Generic.List[object]]::new()
-    $page = 1
-    do {
-        $uri = "$script:ApiUrl/repos/$script:Repository/actions/runs/$RunId/attempts/$RunAttempt/jobs?filter=all&per_page=100&page=$page"
-        $response = Invoke-GitHubGet -Uri $uri
-        $jobs = @($response.jobs)
-        foreach ($job in $jobs) {
-            $successfulDeployStep = @($job.steps | Where-Object {
-                [string]$_.conclusion -eq 'success' -and [string]$_.name -in @('Deploy to GitHub Pages', 'Retry GitHub Pages deployment')
-            }).Count -gt 0
-            if ($successfulDeployStep) {
-                $matches.Add([pscustomobject]@{
-                    JobId = Get-PositiveInt64 -Name 'deployment job id' -Value ([string]$job.id)
-                    StartedAt = Get-DateTimeOffset -Name 'deployment job start' -Value ([string]$job.started_at)
-                    CompletedAt = Get-DateTimeOffset -Name 'deployment job completion' -Value ([string]$job.completed_at)
-                })
-            }
-        }
-        $page++
-    } while ($jobs.Count -eq 100 -and $page -le 20)
-    if ($page -gt 20 -and $jobs.Count -eq 100) {
-        throw "GitHub Actions jobs for run $RunId attempt $RunAttempt exceeded the 2,000-job safety bound."
-    }
-    $window = $matches | Sort-Object -Property @(
-        @{ Expression = { $_.CompletedAt }; Descending = $true },
-        @{ Expression = { $_.JobId }; Descending = $true }
-    ) | Select-Object -First 1
-    if ($null -eq $window) {
-        throw "GitHub Actions run $RunId attempt $RunAttempt has no successful GitHub Pages deployment step."
-    }
-    $window
-}
-
 function Get-PagesDeployments {
     param([Parameter(Mandatory)][DateTimeOffset] $OldestRequired)
     $deployments = [System.Collections.Generic.List[object]]::new()
@@ -126,19 +91,19 @@ if ([string]::IsNullOrWhiteSpace($script:Token)) { throw 'Deployment ordering re
 
 $deploymentRunId = Get-PositiveInt64 -Name 'deployment-run-id' -Value $env:POWERFORGE_DEPLOYMENT_RUN_ID
 $deploymentRunAttempt = Get-PositiveInt64 -Name 'deployment-run-attempt' -Value $env:POWERFORGE_DEPLOYMENT_RUN_ATTEMPT
+$deploymentJobId = Get-PositiveInt64 -Name 'deployment-job-id' -Value $env:POWERFORGE_DEPLOYMENT_JOB_ID
 $previousManifest = [IO.Path]::GetFullPath($env:POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST)
 $baselineState = [IO.Path]::GetFullPath($env:POWERFORGE_CLOUDFLARE_BASELINE_STATE)
 $baselineArtifactRunIdText = [string]$env:POWERFORGE_BASELINE_ARTIFACT_RUN_ID
 
-$currentWindow = Get-DeploymentJobWindow -RunId $deploymentRunId -RunAttempt $deploymentRunAttempt
 $pagesDeployments = @(Get-PagesDeployments -OldestRequired ([DateTimeOffset]::UtcNow.AddDays(-8)))
-$currentAttemptDeployments = @($pagesDeployments | Where-Object { $_.RunId -eq $deploymentRunId -and $_.JobId -eq $currentWindow.JobId })
-$currentDeployment = $currentAttemptDeployments | Sort-Object -Property @(
+$currentJobDeployments = @($pagesDeployments | Where-Object { $_.RunId -eq $deploymentRunId -and $_.JobId -eq $deploymentJobId })
+$currentDeployment = $currentJobDeployments | Sort-Object -Property @(
     @{ Expression = { $_.DeployedAt }; Descending = $true },
     @{ Expression = { $_.DeploymentId }; Descending = $true }
 ) | Select-Object -First 1
 if ($null -eq $currentDeployment) {
-    throw "GitHub's deployment history does not yet identify Pages deployment run $deploymentRunId attempt $deploymentRunAttempt."
+    throw "GitHub's deployment history does not yet identify Pages deployment run $deploymentRunId attempt $deploymentRunAttempt job $deploymentJobId."
 }
 
 $latestDeployment = $pagesDeployments | Sort-Object -Property @(
@@ -147,7 +112,7 @@ $latestDeployment = $pagesDeployments | Sort-Object -Property @(
 ) | Select-Object -First 1
 if ($null -ne $latestDeployment -and $latestDeployment.DeploymentId -ne $currentDeployment.DeploymentId -and
     ($latestDeployment.DeployedAt -gt $currentDeployment.DeployedAt -or ($latestDeployment.DeployedAt -eq $currentDeployment.DeployedAt -and $latestDeployment.DeploymentId -gt $currentDeployment.DeploymentId))) {
-    Write-Warning "Skipping stale Cloudflare policy job for deployment run $deploymentRunId attempt $deploymentRunAttempt because a newer GitHub Pages deployment is active."
+    Write-Warning "Skipping stale Cloudflare policy job for deployment run $deploymentRunId attempt $deploymentRunAttempt job $deploymentJobId because a newer GitHub Pages deployment is active."
     Write-Decision -Stale $true -UsePrevious $false -Reason 'a different GitHub Pages deployment is currently active'
     exit 0
 }
@@ -166,6 +131,7 @@ try {
     if ([int]$state.schemaVersion -ne 1) { throw "unsupported schema version '$($state.schemaVersion)'" }
     $baselineRunId = Get-PositiveInt64 -Name 'baseline deployment run id' -Value ([string]$state.deploymentRunId)
     $baselineRunAttempt = Get-PositiveInt64 -Name 'baseline deployment run attempt' -Value ([string]$state.deploymentRunAttempt)
+    $baselineJobId = Get-PositiveInt64 -Name 'baseline deployment job id' -Value ([string]$state.deploymentJobId)
     $baselineArtifactRunId = Get-PositiveInt64 -Name 'baseline artifact run id' -Value $baselineArtifactRunIdText
 } catch {
     Write-Decision -Stale $false -UsePrevious $false -Reason 'the previous baseline deployment-order state is invalid'
@@ -176,14 +142,8 @@ if ($baselineArtifactRunId -ne $baselineRunId) {
     exit 0
 }
 
-try {
-    $baselineWindow = Get-DeploymentJobWindow -RunId $baselineRunId -RunAttempt $baselineRunAttempt
-} catch {
-    Write-Decision -Stale $false -UsePrevious $false -Reason 'the previous baseline deployment attempt is no longer verifiable'
-    exit 0
-}
-$baselineAttemptDeployments = @($pagesDeployments | Where-Object { $_.RunId -eq $baselineRunId -and $_.JobId -eq $baselineWindow.JobId })
-$baselineDeployment = $baselineAttemptDeployments | Sort-Object -Property @(
+$baselineJobDeployments = @($pagesDeployments | Where-Object { $_.RunId -eq $baselineRunId -and $_.JobId -eq $baselineJobId })
+$baselineDeployment = $baselineJobDeployments | Sort-Object -Property @(
     @{ Expression = { $_.DeployedAt }; Descending = $true },
     @{ Expression = { $_.DeploymentId }; Descending = $true }
 ) | Select-Object -First 1
@@ -195,8 +155,8 @@ if ($null -eq $baselineDeployment) {
 $intervening = @($pagesDeployments | Where-Object {
     $afterBaseline = $_.DeployedAt -gt $baselineDeployment.DeployedAt -or ($_.DeployedAt -eq $baselineDeployment.DeployedAt -and $_.DeploymentId -gt $baselineDeployment.DeploymentId)
     $beforeCurrent = $_.DeployedAt -lt $currentDeployment.DeployedAt -or ($_.DeployedAt -eq $currentDeployment.DeployedAt -and $_.DeploymentId -lt $currentDeployment.DeploymentId)
-    $belongsToCurrentAttempt = $currentAttemptDeployments.DeploymentId -contains $_.DeploymentId
-    $afterBaseline -and $beforeCurrent -and -not $belongsToCurrentAttempt
+    $belongsToCurrentJob = $currentJobDeployments.DeploymentId -contains $_.DeploymentId
+    $afterBaseline -and $beforeCurrent -and -not $belongsToCurrentJob
 })
 if ($intervening.Count -gt 0) {
     Write-Decision -Stale $false -UsePrevious $false -Reason 'an intervening GitHub Pages deployment has no successful purge baseline'
