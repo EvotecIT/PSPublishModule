@@ -155,12 +155,10 @@ public sealed partial class WebAgentContentSecurityScanner
         var downloadedPaths = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (Match download in SavedDownloadCommandRegex.Matches(normalized))
         {
-            var outputPath = FindDownloadedOutputPath(
-                download.Groups["downloader"].Value,
-                download.Groups["arguments"].Value);
-            if (outputPath is null)
-                continue;
-            downloadedPaths.TryAdd(NormalizeComparedPath(outputPath), download.Index);
+            foreach (var outputPath in FindDownloadedOutputPaths(
+                         download.Groups["downloader"].Value,
+                         download.Groups["arguments"].Value))
+                downloadedPaths.TryAdd(NormalizeComparedPath(outputPath), download.Index);
         }
 
         if (downloadedPaths.Count == 0)
@@ -214,26 +212,73 @@ public sealed partial class WebAgentContentSecurityScanner
         return normalized;
     }
 
-    private static string? FindDownloadedOutputPath(string downloader, string arguments)
+    private static IEnumerable<string> FindDownloadedOutputPaths(string downloader, string arguments)
     {
-        var pattern = NormalizeExecutable(downloader) switch
+        var executable = NormalizeExecutable(downloader);
+        var pattern = executable switch
         {
             "curl" => CurlOutputPathRegex,
             "wget" => WgetOutputPathRegex,
             _ => PowerShellOutputPathRegex
         };
         var match = pattern.Match(arguments);
-        var outputPath = match.Success ? match.Groups["path"].Value.Trim('"', '\'') : null;
-        if (!string.IsNullOrWhiteSpace(outputPath) && outputPath != "-")
-            return outputPath;
+        var explicitStandardOutput = false;
+        if (match.Success)
+        {
+            var outputPath = match.Groups["path"].Value.Trim('"', '\'');
+            if (!string.IsNullOrWhiteSpace(outputPath) && outputPath != "-")
+            {
+                yield return outputPath;
+                yield break;
+            }
+            explicitStandardOutput = outputPath == "-";
+        }
 
         foreach (var outputPattern in new[] { TeeOutputPathRegex, PowerShellPipelineOutputPathRegex, ShellOutputPathRegex })
         {
             match = outputPattern.Match(arguments);
             if (match.Success)
-                return match.Groups["path"].Value.Trim('"', '\'');
+            {
+                yield return match.Groups["path"].Value.Trim('"', '\'');
+                yield break;
+            }
         }
-        return null;
+        if (explicitStandardOutput)
+            yield break;
+
+        var tokens = Tokenize(arguments);
+        var usesRemoteName = executable == "wget" || executable == "curl" && tokens.Any(static token =>
+            token.Equals("--remote-name", StringComparison.OrdinalIgnoreCase) ||
+            token.Equals("--remote-name-all", StringComparison.OrdinalIgnoreCase) ||
+            token.StartsWith("-", StringComparison.Ordinal) && !token.StartsWith("--", StringComparison.Ordinal) && token[1..].Contains('O'));
+        if (!usesRemoteName)
+            yield break;
+
+        var outputDirectory = executable switch
+        {
+            "curl" => FindOptionValue(tokens, 0, "--output-dir"),
+            "wget" => FindOptionValue(tokens, 0, "-P", "--directory-prefix"),
+            _ => null
+        };
+
+        foreach (Match urlMatch in UrlRegex.Matches(arguments))
+        {
+            var candidate = urlMatch.Value.TrimEnd('.', ',', ';', ':', '!', '?');
+            if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri))
+                continue;
+            var rawPathEnd = candidate.IndexOfAny(['?', '#']);
+            var rawPath = rawPathEnd >= 0 ? candidate[..rawPathEnd] : candidate;
+            var rawFileName = rawPath[(rawPath.LastIndexOf('/') + 1)..];
+            var escapedPath = uri.GetComponents(UriComponents.Path, UriFormat.UriEscaped);
+            var normalizedFileName = escapedPath[(escapedPath.LastIndexOf('/') + 1)..];
+            foreach (var fileName in new[] { rawFileName, normalizedFileName }.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(fileName))
+                    yield return string.IsNullOrWhiteSpace(outputDirectory)
+                        ? fileName
+                        : NormalizeToken(outputDirectory).TrimEnd('/', '\\') + "/" + fileName;
+            }
+        }
     }
 
     private static void ExtractUrls(string content, ISet<Uri> urls)

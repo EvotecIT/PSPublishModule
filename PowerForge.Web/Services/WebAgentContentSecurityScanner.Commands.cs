@@ -46,11 +46,12 @@ public sealed partial class WebAgentContentSecurityScanner
                     "Package command operands must not use shell escape construction; spell the executable and package identifiers literally.");
                 continue;
             }
-            if (HasCommandScopedEnvironmentPrefix(content, match.Index))
+            if (HasCommandScopedEnvironmentPrefix(content, match.Index) ||
+                HasWorkingDirectoryWrapperPrefix(content, match.Index))
             {
                 AddFinding(findings, "error", "PFAGENT.PACKAGE.UNVERIFIABLE_ENVIRONMENT", path,
                     GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
-                    "Package commands with command-scoped environment assignments cannot be proven to use the canonical public registry.");
+                    "Package commands with command-scoped environment or working-directory wrappers cannot be proven to use the canonical public registry.");
                 continue;
             }
             var tokens = Tokenize(commandForValidation);
@@ -268,12 +269,34 @@ public sealed partial class WebAgentContentSecurityScanner
         int line,
         ICollection<WebAgentContentSecurityFinding> findings)
     {
+        if (SupportsNodeCallPayload(command))
+        {
+            var callPayloads = FindOptionValues(tokens, start, "-c", "--call");
+            foreach (var callPayload in callPayloads)
+            {
+                if (string.IsNullOrWhiteSpace(callPayload) ||
+                    CommandSegmentRegex.IsMatch(callPayload) ||
+                    ObfuscatedExecutableRegex.IsMatch(callPayload))
+                {
+                    AddUnverifiableOperand(command, path, line, findings, "nested package-manager call payload");
+                    return true;
+                }
+            }
+        }
+
         var delimiterIndex = Array.FindIndex(tokens, start, static token => token == "--");
         var payloadStart = delimiterIndex >= 0
             ? delimiterIndex + 1
             : FindNextOperand(tokens, start, command);
         return RejectPackageManagerInvocationAt(command, tokens, payloadStart, path, line, findings);
     }
+
+    private static bool SupportsNodeCallPayload(string command)
+        => command.Equals("npx", StringComparison.OrdinalIgnoreCase) ||
+           command.Equals("pnpx", StringComparison.OrdinalIgnoreCase) ||
+           command.Equals("bunx", StringComparison.OrdinalIgnoreCase) ||
+           command.Equals("npm exec", StringComparison.OrdinalIgnoreCase) ||
+           command.Equals("npm x", StringComparison.OrdinalIgnoreCase);
 
     private static bool RejectPackageManagerInvocationAt(
         string command,

@@ -22,6 +22,15 @@ public sealed partial class WebAgentContentSecurityScanner
                     $"Node package project-root option '{option}' can select uninspected registry configuration.");
                 return false;
             }
+            if (ecosystem == "npm" &&
+                (tokens[0] is "bun" or "bunx") &&
+                (option.Equals("-c", StringComparison.OrdinalIgnoreCase) ||
+                 option.Equals("--config", StringComparison.OrdinalIgnoreCase)))
+            {
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                    $"Bun configuration option '{option}' can select uninspected registry configuration; the configured value is redacted.");
+                return false;
+            }
             if (ecosystem == "packagist" &&
                 (option.Equals("-d", StringComparison.OrdinalIgnoreCase) ||
                  option.Equals("--working-dir", StringComparison.OrdinalIgnoreCase)))
@@ -103,7 +112,7 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("--directory", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--dir", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--cwd", StringComparison.OrdinalIgnoreCase) ||
-           option.Equals("-C", StringComparison.OrdinalIgnoreCase);
+           option.Equals("-C", StringComparison.Ordinal);
 
     private static bool IsPythonTransportTrustOption(string option)
         => option.Equals("--trusted-host", StringComparison.OrdinalIgnoreCase) ||

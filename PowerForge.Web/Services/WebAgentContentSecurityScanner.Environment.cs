@@ -131,4 +131,21 @@ public sealed partial class WebAgentContentSecurityScanner
         var prefix = ShellContinuationRegex.Replace(content[(start + 1)..commandIndex], " ");
         return CommandEnvironmentPrefixRegex.IsMatch(prefix);
     }
+
+    private static bool HasWorkingDirectoryWrapperPrefix(string content, int commandIndex)
+    {
+        var start = commandIndex - 1;
+        while (start >= 0 && content[start] is not (';' or '&' or '|' or '\r' or '\n'))
+            start--;
+        var tokens = Tokenize(content[(start + 1)..commandIndex]);
+        var envIndex = Array.FindIndex(tokens, static token => token.Equals("env", StringComparison.OrdinalIgnoreCase));
+        if (envIndex < 0)
+            return false;
+
+        return tokens.Skip(envIndex + 1).Any(static token =>
+            token.Equals("-C", StringComparison.Ordinal) ||
+            token.StartsWith("-C", StringComparison.Ordinal) && token.Length > 2 ||
+            token.Equals("--chdir", StringComparison.OrdinalIgnoreCase) ||
+            token.StartsWith("--chdir=", StringComparison.OrdinalIgnoreCase));
+    }
 }
