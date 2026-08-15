@@ -227,6 +227,51 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
     }
 
     [Fact]
+    public void Plan_SignedGitHubBinaryModuleRejectsIgnoredEvaluatedProjectInputOutsideModuleSource()
+    {
+        var repository = Directory.CreateDirectory(
+            Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            string moduleSource = Directory.CreateDirectory(Path.Combine(repository.FullName, "Module")).FullName;
+            string projectDirectory = Directory.CreateDirectory(Path.Combine(repository.FullName, "src", "Binary")).FullName;
+            string ignoredDirectory = Directory.CreateDirectory(Path.Combine(projectDirectory, "ignored")).FullName;
+            string projectPath = Path.Combine(projectDirectory, "Binary.csproj");
+            WriteMinimalModule(moduleSource, moduleName, "1.0.0");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+                  <ItemGroup><AdditionalFiles Include="ignored/rules.json" /></ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(repository.FullName, ".gitignore"), "src/Binary/ignored/\nArtifacts/\n");
+            RunGit(repository.FullName, "init", "--quiet");
+            RunGit(repository.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(repository.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(repository.FullName, "add", ".");
+            RunGit(repository.FullName, "commit", "--quiet", "-m", "fixture");
+            File.WriteAllText(Path.Combine(ignoredDirectory, "rules.json"), "{\"mutable\":true}");
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                moduleSource,
+                moduleName,
+                Path.Combine(repository.FullName, "Artifacts", "Packed"));
+            spec.Build.CsprojPath = projectPath;
+            spec.Build.Frameworks = new[] { "net10.0" };
+            EnableGitHubPublish(spec, moduleName);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                CreateRunner(new FakeHostedOperations()).Plan(spec));
+
+            Assert.Contains("resolved clean Git checkout", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { repository.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_SignedGitHubPackedArtifactRejectsPostPlanTrackedSourceMutation()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

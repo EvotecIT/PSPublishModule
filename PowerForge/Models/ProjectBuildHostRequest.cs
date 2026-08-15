@@ -7,6 +7,7 @@ public sealed class ProjectBuildHostRequest
 {
     internal IProjectBuildProgressReporter? Progress { get; set; }
     internal Action? RemotePublishAttempted { get; set; }
+    internal Action<DotNetRepositoryReleaseSpec>? BuildSpecPrepared { get; set; }
     internal bool CoordinatedReleaseCheckpointActive { get; set; }
     internal string? ReleaseVersionFloor { get; set; }
     internal string? ReleaseVersionFloorProject { get; set; }

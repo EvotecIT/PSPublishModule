@@ -160,6 +160,7 @@ public sealed class ProjectBuildHostService
                 PublishNuget = request.PublishNuget,
                 PublishGitHub = request.PublishGitHub
             });
+        request.BuildSpecPrepared?.Invoke(preparation.Spec);
 
         var workflow = new ProjectBuildWorkflowService(
             _logger,

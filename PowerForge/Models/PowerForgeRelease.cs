@@ -59,6 +59,8 @@ internal sealed class PowerForgeReleaseRequest
 
     internal DotNetPublishPlan? DotNetPublishPlan { get; set; }
 
+    internal DotNetRepositoryReleaseSpec? PackageBuildSpec { get; set; }
+
     public string ConfigPath { get; set; } = string.Empty;
 
     public bool PlanOnly { get; set; }

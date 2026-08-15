@@ -269,13 +269,6 @@ public sealed partial class DotNetPublishPipelineRunner
             "ls-files --others --ignored --exclude-standard -z");
         if (ignoredOutput is null)
             return true;
-        string[] ignoredPaths = ignoredOutput.Split(
-                new[] { '\0' },
-                StringSplitOptions.RemoveEmptyEntries)
-            .Select(path => path.Replace('\\', '/').TrimStart('/'))
-            .ToArray();
-        if (ignoredPaths.Length == 0)
-            return false;
         if (!TryEvaluateDotNetBuildInputs(
                 buildProjectPaths,
                 buildConfiguration,
@@ -290,6 +283,13 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return true;
         }
+        string[] ignoredPaths = ignoredOutput.Split(
+                new[] { '\0' },
+                StringSplitOptions.RemoveEmptyEntries)
+            .Select(path => path.Replace('\\', '/').TrimStart('/'))
+            .ToArray();
+        if (ignoredPaths.Length == 0)
+            return false;
         var gitRelativeBuildInputs = new HashSet<string>(
             buildInputs
                 .Select(path => ToGitRelativeExclusion(projectRoot, gitRoot, path))

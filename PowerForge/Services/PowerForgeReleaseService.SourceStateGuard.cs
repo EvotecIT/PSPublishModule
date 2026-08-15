@@ -55,6 +55,28 @@ internal sealed partial class PowerForgeReleaseService
                     path.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase)),
                 buildConfiguration: request.Configuration,
                 buildPlan: request.DotNetPublishPlan);
+        ValidateExpectedSourceSnapshot(source, expectedRevision);
+
+        if (request.PackageBuildSpec is not null)
+        {
+            string[] packageProjectPaths =
+                DotNetRepositoryReleaseService.ResolveSelectedProjectPaths(request.PackageBuildSpec);
+            DotNetPublishPipelineRunner.SourceProvenance packageSource =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    repositoryRoot,
+                    generatedPaths: request.GeneratedProvenancePaths,
+                    explicitInputPaths: (request.SourceInputPaths ?? Array.Empty<string>()).Concat(packageProjectPaths),
+                    buildProjectPaths: packageProjectPaths,
+                    buildConfiguration: request.PackageBuildSpec.Configuration);
+            ValidateExpectedSourceSnapshot(packageSource, expectedRevision);
+        }
+
+    }
+
+    private static void ValidateExpectedSourceSnapshot(
+        DotNetPublishPipelineRunner.SourceProvenance source,
+        string expectedRevision)
+    {
         if (string.IsNullOrWhiteSpace(source.Revision) ||
             !string.Equals(source.Revision, expectedRevision, StringComparison.OrdinalIgnoreCase))
         {

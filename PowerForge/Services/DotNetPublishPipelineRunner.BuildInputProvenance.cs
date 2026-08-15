@@ -27,7 +27,7 @@ public sealed partial class DotNetPublishPipelineRunner
         "ProjectReference"
     ];
 
-    private static SourceProvenance ReadPortableInventorySourceProvenance(
+    internal static SourceProvenance ReadPortableInventorySourceProvenance(
         DotNetPublishPlan plan,
         string outputDirectory)
     {
@@ -41,7 +41,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 Array.Empty<DotNetPublishStorePackageResult>(),
                 Array.Empty<DotNetPublishMsiBuildResult>())
             .Concat(new[] { outputDirectory });
-        return ReadSourceProvenance(
+        SourceProvenance provenance = ReadSourceProvenance(
             plan.ProjectRoot,
             generatedPaths,
             (plan.ConfigurationInputPaths ?? Array.Empty<string>()).Concat(projectPaths),
@@ -49,6 +49,14 @@ public sealed partial class DotNetPublishPipelineRunner
             buildProjectPaths: projectPaths,
             buildConfiguration: plan.Configuration,
             buildPlan: plan);
+        if (string.IsNullOrWhiteSpace(provenance.Revision) ||
+            !string.Equals(provenance.Revision, plan.SourceRevision, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Release source revision changed after planning; expected '{plan.SourceRevision ?? "unknown"}', " +
+                $"received '{provenance.Revision ?? "unknown"}'.");
+        }
+        return provenance;
     }
 
     internal static string[] EnumerateBundleSourceInputs(DotNetPublishPlan? plan)

@@ -981,6 +981,86 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void ReadSourceProvenance_RejectsOutsideBuildProjectWhenIgnoredSetIsEmpty()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        string outside = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            File.WriteAllText(Path.Combine(root, "tracked.txt"), "tracked");
+            RunGit(root, "add tracked.txt");
+            RunGit(root, "commit -m \"tracked source\"");
+            string projectPath = Path.Combine(outside, "Outside.csproj");
+            File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: new[] { projectPath },
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+            if (Directory.Exists(outside))
+            {
+                foreach (FileInfo file in new DirectoryInfo(outside).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(outside, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ReadPortableInventorySourceProvenance_RejectsCleanRevisionChangedAfterPlanning()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            File.WriteAllText(Path.Combine(root, "source.txt"), "first");
+            RunGit(root, "add source.txt");
+            RunGit(root, "commit -m \"first source\"");
+            string plannedRevision = RunGit(root, "rev-parse HEAD").Trim();
+            File.WriteAllText(Path.Combine(root, "source.txt"), "second");
+            RunGit(root, "add source.txt");
+            RunGit(root, "commit -m \"second source\"");
+            string outputDirectory = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "app")).FullName;
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                SourceRevision = plannedRevision
+            };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                DotNetPublishPipelineRunner.ReadPortableInventorySourceProvenance(plan, outputDirectory));
+
+            Assert.Contains("changed after planning", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void RunBuildInputEvaluationProcess_DrainsBothStreamsAndEnforcesTimeout()
     {
         string fileName;

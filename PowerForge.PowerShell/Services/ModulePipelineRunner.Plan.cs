@@ -1072,7 +1072,11 @@ public sealed partial class ModulePipelineRunner
                 DotNetPublishPipelineRunner.ReadSourceProvenance(
                     plan.ProjectRoot,
                     generatedPaths: generatedProvenancePaths,
-                    explicitInputPaths: plan.SourceInputPaths);
+                    explicitInputPaths: plan.SourceInputPaths,
+                    buildProjectPaths: string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath)
+                        ? Array.Empty<string>()
+                        : new[] { plan.BuildSpec.CsprojPath! },
+                    buildConfiguration: plan.BuildSpec.Configuration);
             if (string.IsNullOrWhiteSpace(provenance.Revision) || provenance.Dirty is not false)
             {
                 throw new InvalidOperationException(
@@ -1177,7 +1181,11 @@ public sealed partial class ModulePipelineRunner
                 plan.ProjectRoot,
                 generatedPaths: generatedPaths,
                 explicitInputPaths: currentInputs,
-                trackedGeneratedPaths: trackedGeneratedOutputPaths);
+                trackedGeneratedPaths: trackedGeneratedOutputPaths,
+                buildProjectPaths: string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath)
+                    ? Array.Empty<string>()
+                    : new[] { plan.BuildSpec.CsprojPath! },
+                buildConfiguration: plan.BuildSpec.Configuration);
         if (string.IsNullOrWhiteSpace(current.Revision) ||
             !string.Equals(current.Revision, plan.SourceRevision, StringComparison.OrdinalIgnoreCase) ||
             current.Dirty is not false)

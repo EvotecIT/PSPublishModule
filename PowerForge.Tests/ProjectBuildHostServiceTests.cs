@@ -33,6 +33,7 @@ public sealed class ProjectBuildHostServiceTests
             publishGitHub: null,
             validateGitHubPreflight: null);
 
+        DotNetRepositoryReleaseSpec? prepared = null;
         var result = service.Execute(new ProjectBuildHostRequest {
             ConfigPath = configPath,
             PlanOutputPath = planPath,
@@ -41,12 +42,14 @@ public sealed class ProjectBuildHostServiceTests
             UpdateVersions = false,
             Build = false,
             PublishNuget = false,
-            PublishGitHub = false
+            PublishGitHub = false,
+            BuildSpecPrepared = spec => prepared = spec
         });
 
         Assert.True(result.Success);
         Assert.NotNull(captured);
         Assert.True(captured!.WhatIf);
+        Assert.Same(captured, prepared);
         Assert.False(captured.Pack);
         Assert.False(captured.Publish);
         Assert.Equal(planPath, result.PlanOutputPath);

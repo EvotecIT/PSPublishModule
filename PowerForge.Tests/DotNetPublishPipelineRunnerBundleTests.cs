@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -474,6 +475,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
         var root = CreateTempRoot();
         try
         {
+            string sourceRevision = InitializeGitRepository(root);
             string publishDir = Directory.CreateDirectory(Path.Combine(root, "publish", "app")).FullName;
             string executable = Path.Combine(publishDir, "PowerForge.Tests.dll");
             File.Copy(typeof(DotNetPublishPipelineRunnerBundleTests).Assembly.Location, executable);
@@ -489,7 +491,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             var plan = new DotNetPublishPlan
             {
                 ProjectRoot = root,
-                SourceRevision = new string('a', 40),
+                SourceRevision = sourceRevision,
                 Targets =
                 [
                     new DotNetPublishTargetPlan
@@ -577,6 +579,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
         var root = CreateTempRoot();
         try
         {
+            string sourceRevision = InitializeGitRepository(root);
             string publishDir = Directory.CreateDirectory(Path.Combine(root, "publish", "app")).FullName;
             string executable = Path.Combine(publishDir, "PowerForge.Tests.dll");
             File.Copy(typeof(DotNetPublishPipelineRunnerBundleTests).Assembly.Location, executable);
@@ -590,7 +593,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             var plan = new DotNetPublishPlan
             {
                 ProjectRoot = root,
-                SourceRevision = new string('a', 40),
+                SourceRevision = sourceRevision,
                 Targets =
                 [
                     new DotNetPublishTargetPlan
@@ -945,6 +948,37 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
+    }
+
+    private static string InitializeGitRepository(string root)
+    {
+        RunGit(root, "init", "--quiet");
+        RunGit(root, "config", "user.name", "PowerForge Tests");
+        RunGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+        File.WriteAllText(Path.Combine(root, "source.txt"), "tracked source");
+        RunGit(root, "add", "source.txt");
+        RunGit(root, "commit", "--quiet", "-m", "Tracked source");
+        return RunGit(root, "rev-parse", "HEAD").Trim();
+    }
+
+    private static string RunGit(string workingDirectory, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (string argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+        using Process process = Process.Start(startInfo)!;
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)} failed: {error}");
+        return output;
     }
 
     private sealed class BundleProcessRunner : IProcessRunner
