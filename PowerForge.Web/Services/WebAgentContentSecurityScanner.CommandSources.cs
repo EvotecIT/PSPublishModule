@@ -1,7 +1,44 @@
+using System.Text.RegularExpressions;
+
 namespace PowerForge.Web;
 
 public sealed partial class WebAgentContentSecurityScanner
 {
+    private const string PowerShellPackageSourceDefaultKeyPattern =
+        @"['""][^'""\r\n]{0,160}:(?:Repo(?:sitory)?|Sou(?:rce)?|Provider(?:Name)?|Proxy(?:Credential)?)['""]";
+    private const string PowerShellDefaultParameterValuesReferencePattern =
+        @"\$(?:(?:global|script|local|private):)?PSDefaultParameterValues";
+    private static readonly Regex PowerShellIndexedPackageSourceDefaultRegex = new(
+        PowerShellDefaultParameterValuesReferencePattern + @"\s*(?:\[\s*" + PowerShellPackageSourceDefaultKeyPattern +
+        @"\s*\]\s*=|\.(?:Add|Set_Item)\s*\(\s*" + PowerShellPackageSourceDefaultKeyPattern + @")",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex PowerShellBulkPackageSourceDefaultRegex = new(
+        @"(?:" + PowerShellDefaultParameterValuesReferencePattern + @"\s*=|\b(?:Set|New)-Variable\b[^\r\n]{0,160}\bPSDefaultParameterValues\b|\b(?:Set|New)-Item\b[^\r\n]{0,160}\bVariable:[\\/]?(?:(?:global|script|local|private):)?PSDefaultParameterValues\b)[\s\S]{0,1024}?" +
+        PowerShellPackageSourceDefaultKeyPattern,
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static void ScanPowerShellPackageSourceDefaults(
+        string content,
+        string path,
+        int lineOffset,
+        bool countLogicalLines,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        foreach (var pattern in new[]
+                 {
+                     PowerShellIndexedPackageSourceDefaultRegex,
+                     PowerShellBulkPackageSourceDefaultRegex
+                 })
+        {
+            foreach (Match match in pattern.Matches(content))
+            {
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path,
+                    GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                    "PowerShell default parameter values cannot override package repositories, sources, providers, or proxies; configured values are redacted.");
+            }
+        }
+    }
+
     private static bool ValidatePackageSourceOptions(
         string ecosystem,
         string[] tokens,

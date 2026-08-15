@@ -153,12 +153,55 @@ public sealed partial class WebAgentContentSecurityScanner
         return CommandEnvironmentPrefixRegex.IsMatch(prefix);
     }
 
-    private static bool HasWorkingDirectoryWrapperPrefix(string content, int commandIndex)
+    private static bool HasExecutionContextWrapperPrefix(string content, int commandIndex)
     {
         var start = commandIndex - 1;
-        while (start >= 0 && content[start] is not (';' or '&' or '|' or '\r' or '\n'))
+        while (start >= 0)
+        {
+            if (content[start] is ';' or '&' or '|')
+                break;
+            if (content[start] is '\r' or '\n')
+            {
+                var previous = start - 1;
+                if (content[start] == '\n' && previous >= 0 && content[previous] == '\r')
+                    previous--;
+                while (previous >= 0 && content[previous] is ' ' or '\t')
+                    previous--;
+                if (previous < 0 || content[previous] is not ('\\' or '`' or '^'))
+                    break;
+                start = previous - 1;
+                continue;
+            }
             start--;
-        var tokens = Tokenize(content[(start + 1)..commandIndex]);
+        }
+        var tokens = Tokenize(ShellContinuationRegex.Replace(content[(start + 1)..commandIndex], " "));
+
+        if (tokens.Any(static token =>
+            {
+                var executable = Path.GetFileNameWithoutExtension(NormalizeToken(token).Replace('\\', '/'));
+                return executable.Equals("sudo", StringComparison.OrdinalIgnoreCase) ||
+                       executable.Equals("doas", StringComparison.OrdinalIgnoreCase) ||
+                       executable.Equals("pkexec", StringComparison.OrdinalIgnoreCase) ||
+                       executable.Equals("runuser", StringComparison.OrdinalIgnoreCase) ||
+                       executable.Equals("runas", StringComparison.OrdinalIgnoreCase) ||
+                       executable.Equals("su", StringComparison.OrdinalIgnoreCase) ||
+                       executable.Equals("gosu", StringComparison.OrdinalIgnoreCase) ||
+                       executable.Equals("su-exec", StringComparison.OrdinalIgnoreCase);
+            }))
+            return true;
+
+        var startProcessIndex = Array.FindIndex(tokens, static token =>
+        {
+            var executable = Path.GetFileNameWithoutExtension(NormalizeToken(token).Replace('\\', '/'));
+            return executable.Equals("start-process", StringComparison.OrdinalIgnoreCase) ||
+                   executable.Equals("saps", StringComparison.OrdinalIgnoreCase);
+        });
+        if (startProcessIndex >= 0 && tokens.Skip(startProcessIndex + 1).Any(static token =>
+                token.Equals("RunAs", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("-Verb:RunAs", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("-Verb=RunAs", StringComparison.OrdinalIgnoreCase)))
+            return true;
+
         var envIndex = Array.FindIndex(tokens, static token => token.Equals("env", StringComparison.OrdinalIgnoreCase));
         if (envIndex >= 0 && tokens.Skip(envIndex + 1).Any(static token =>
             token.Equals("-C", StringComparison.Ordinal) ||

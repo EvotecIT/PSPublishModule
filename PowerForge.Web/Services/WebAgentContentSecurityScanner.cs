@@ -125,6 +125,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
             foreach (var segment in segments)
             {
                 ScanPackageSourceEnvironmentOverrides(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings);
+                ScanPowerShellPackageSourceDefaults(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings);
                 ScanRuntimeInjectionEnvironmentOverrides(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings);
                 ScanCommandResolutionEnvironmentOverrides(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings);
                 ScanPackageConfigurationWrites(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);

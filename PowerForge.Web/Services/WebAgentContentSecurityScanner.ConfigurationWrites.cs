@@ -17,6 +17,10 @@ public sealed partial class WebAgentContentSecurityScanner
         @"\b(?:WriteAllText|WriteAllBytes|AppendAllText|AppendAllLines)\s*\([^\r\n)]*" +
         PackageConfigurationPathPattern + @"(?=['""\s,)]|$)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex InlineScriptPackageConfigurationRegex = new(
+        @"\b(?:python(?:\d+(?:\.\d+)*)?|py|node|ruby|perl|php|pwsh|powershell)(?:\.exe)?\b[^\r\n]{0,160}?(?:-c|-e|--eval|-r|-Command)\b[^\r\n]{0,1024}?" +
+        PackageConfigurationPathPattern + @"(?=['""\s,);]|$)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static void ScanPackageConfigurationWrites(
         string content,
@@ -30,7 +34,8 @@ public sealed partial class WebAgentContentSecurityScanner
                  {
                      PackageConfigurationRedirectRegex,
                      PackageConfigurationWriterRegex,
-                     PackageConfigurationFileApiRegex
+                     PackageConfigurationFileApiRegex,
+                     InlineScriptPackageConfigurationRegex
                  })
         {
             foreach (Match match in pattern.Matches(normalized))

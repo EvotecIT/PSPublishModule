@@ -39,6 +39,19 @@ public sealed partial class WebAgentContentSecurityScanner
         {
             var matchedCommand = match.Groups["command"].Value;
             var commandForValidation = StripShellComment(matchedCommand);
+            if (HasCommandScopedEnvironmentPrefix(content, match.Index) ||
+                HasExecutionContextWrapperPrefix(content, match.Index) ||
+                flowState?.WorkingDirectoryChanged == true ||
+                workingDirectoryChange.Success && workingDirectoryChange.Index < match.Index ||
+                flowState?.RemoteExecutionContextChanged == true ||
+                remoteExecutionContextChange.Success && remoteExecutionContextChange.Index < match.Index ||
+                HasRemoteExecutionWrapperPrefix(content, match.Index))
+            {
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.UNVERIFIABLE_ENVIRONMENT", path,
+                    GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                    "Package commands with identity, environment, working-directory, or remote-execution wrappers cannot be proven to use the canonical public registry.");
+                continue;
+            }
             if (IsUntrustedExecutableReference(content, match.Index) ||
                 HasShellQuoteConcatenation(commandForValidation) ||
                 ShellTokenConstructionRegex.IsMatch(commandForValidation) ||
@@ -54,19 +67,6 @@ public sealed partial class WebAgentContentSecurityScanner
                 AddFinding(findings, "error", "PFAGENT.PACKAGE.UNVERIFIABLE_OPERAND", path,
                     GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
                     "Package commands invoked through data-appending wrappers can receive unchecked package operands from standard input.");
-                continue;
-            }
-            if (HasCommandScopedEnvironmentPrefix(content, match.Index) ||
-                HasWorkingDirectoryWrapperPrefix(content, match.Index) ||
-                flowState?.WorkingDirectoryChanged == true ||
-                workingDirectoryChange.Success && workingDirectoryChange.Index < match.Index ||
-                flowState?.RemoteExecutionContextChanged == true ||
-                remoteExecutionContextChange.Success && remoteExecutionContextChange.Index < match.Index ||
-                HasRemoteExecutionWrapperPrefix(content, match.Index))
-            {
-                AddFinding(findings, "error", "PFAGENT.PACKAGE.UNVERIFIABLE_ENVIRONMENT", path,
-                    GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
-                    "Package commands with command-scoped environment or working-directory wrappers cannot be proven to use the canonical public registry.");
                 continue;
             }
             var tokens = Tokenize(commandForValidation);
