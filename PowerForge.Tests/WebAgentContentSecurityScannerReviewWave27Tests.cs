@@ -154,7 +154,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
     {
         using var handler = new RegistryHandler(_ => throw new InvalidOperationException("Registry must not be called."));
         using var scanner = new WebAgentContentSecurityScanner(new HttpClient(handler));
-        var root = CreateArtifact("llms.txt", "composer require vendor/package:dev-main#5e0e031 --no-update");
+        var root = CreateArtifact("llms.txt", "composer require vendor/package:dev-main#5e0e031 --no-update --no-plugins --no-scripts");
 
         try
         {

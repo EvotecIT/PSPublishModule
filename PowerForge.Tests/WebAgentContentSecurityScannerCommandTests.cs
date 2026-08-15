@@ -632,7 +632,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
         using var handler = new RegistryHandler(_ => JsonResponse("""{"packages":{"vendor/package":[{"version":"1.0.0"}]}}"""));
         using var client = new HttpClient(handler);
         using var scanner = new WebAgentContentSecurityScanner(client);
-        var root = CreateArtifact("llms.txt", "composer require vendor/package=1.0.0");
+        var root = CreateArtifact("llms.txt", "composer require vendor/package=1.0.0 --no-update --no-plugins --no-scripts");
 
         try
         {

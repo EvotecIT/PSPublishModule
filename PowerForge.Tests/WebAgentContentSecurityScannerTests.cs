@@ -203,7 +203,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
             python -P -m pip install sample-pypi==3.0.0
             cargo add sample-crate@4.0.0
             gem install sample-gem --version 5.0.0
-            composer require vendor/package:6.0.0
+            composer require vendor/package:6.0.0 --no-update --no-plugins --no-scripts
             Install-Module SampleModule -RequiredVersion 7.0.0
             """);
 

@@ -43,6 +43,12 @@ public sealed partial class WebAgentContentSecurityScanner
             AddUnverifiableOperand("composer install", path, line, findings, "lockfile dependency set");
             return;
         }
+        if (verb == "require" && !HasAllFlags(tokens, "--no-update", "--no-plugins", "--no-scripts"))
+        {
+            AddUnverifiableOperand("composer require", path, line, findings,
+                "project dependency graph, plugins, and lifecycle scripts; use --no-update --no-plugins --no-scripts");
+            return;
+        }
         AddMultipleOperands("packagist", "composer require", tokens, verbIndex + 1, path, line, references, findings);
     }
 
@@ -80,8 +86,17 @@ public sealed partial class WebAgentContentSecurityScanner
             AddUnverifiableOperand("bundle update", path, line, findings, "project dependency set");
             return;
         }
+        if (verb == "add" && !HasAllFlags(tokens, "--skip-install"))
+        {
+            AddUnverifiableOperand("bundle add", path, line, findings,
+                "project dependency graph and lifecycle scripts; use --skip-install");
+            return;
+        }
         AddMultipleOperands("rubygems", "bundle add", tokens, verbIndex + 1, path, line, references, findings);
     }
+
+    private static bool HasAllFlags(string[] tokens, params string[] requiredFlags)
+        => requiredFlags.All(required => tokens.Any(token => token.Equals(required, StringComparison.OrdinalIgnoreCase)));
 
     private static string? NormalizeComposerVerb(string value)
     {

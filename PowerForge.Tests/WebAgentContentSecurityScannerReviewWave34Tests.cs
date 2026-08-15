@@ -71,7 +71,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
     {
         using var handler = new RegistryHandler(_ => JsonResponse("""{"version":"1.0.0"}"""));
         using var scanner = new WebAgentContentSecurityScanner(new HttpClient(handler));
-        var root = CreateArtifact("llms.txt", "bundler add safe-gem --version 1.0.0");
+        var root = CreateArtifact("llms.txt", "bundler add safe-gem --version 1.0.0 --skip-install");
         try
         {
             var result = scanner.Scan(new WebAgentContentSecurityOptions { SiteRoot = root, Files = ["llms.txt"] });

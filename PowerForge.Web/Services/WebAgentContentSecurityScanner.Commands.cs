@@ -5,7 +5,7 @@ namespace PowerForge.Web;
 public sealed partial class WebAgentContentSecurityScanner
 {
     private static readonly Regex CommandSegmentRegex = new(
-        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|nuget(?:\.exe|\.cmd)?(?=\s+(?:install|restore|update|sources?)\b)|Install-Package|Update-Package|Install-Module|Save-Module|Install-Script|Update-Script|Save-Script|Install-PSResource|Save-PSResource|Update-Module|Update-PSResource|Install-PackageProvider|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|poetry(?=\s+(?:add|install|sync|update|remove|lock|run|build|self|plugin|source|config|python)\b)|cargo|gem|composer|bundler|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
+        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|nuget(?:\.exe|\.cmd)?(?=\s+(?:install|restore|update|sources?)\b)|Install-Package|Update-Package|Save-Package|Install-Module|Save-Module|Install-Script|Update-Script|Save-Script|Install-PSResource|Save-PSResource|Update-Module|Update-PSResource|Install-PackageProvider|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|poetry(?=\s+(?:add|install|sync|update|remove|lock|run|build|self|plugin|source|config|python)\b)|cargo|gem|composer|bundler|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ShellTokenConstructionRegex = new(
         @"[\x5C`](?!\r?\n)[^\r\n]",
@@ -132,6 +132,7 @@ public sealed partial class WebAgentContentSecurityScanner
                     break;
                 case "install-package":
                 case "update-package":
+                case "save-package":
                     ParsePowerShellNuGet(tokens, path, line, commandReferences, findings);
                     break;
                 case "corepack":
@@ -239,7 +240,7 @@ public sealed partial class WebAgentContentSecurityScanner
     }
 
     private static bool IsSupportedPackageExecutable(string executable)
-        => executable is "dotnet" or "dnx" or "install-package" or "update-package" or "install-module" or "install-psresource" or
+        => executable is "dotnet" or "dnx" or "install-package" or "update-package" or "save-package" or "install-module" or "install-psresource" or
             "update-module" or "update-psresource" or "save-module" or "install-script" or "update-script" or "save-script" or
             "save-psresource" or "install-packageprovider" or "nuget" or
             "register-psrepository" or "set-psrepository" or "register-psresourcerepository" or

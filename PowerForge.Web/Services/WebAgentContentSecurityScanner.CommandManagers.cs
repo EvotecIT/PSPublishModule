@@ -153,6 +153,19 @@ public sealed partial class WebAgentContentSecurityScanner
         ICollection<WebAgentPackageReference> references,
         ICollection<WebAgentContentSecurityFinding> findings)
     {
+        if (tokens[0].Equals("save-package", StringComparison.OrdinalIgnoreCase) &&
+            tokens.Any(static token =>
+                token.Equals("-InputObject", StringComparison.OrdinalIgnoreCase) ||
+                token.StartsWith("-InputObject:", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("-IncludeDependencies", StringComparison.OrdinalIgnoreCase) ||
+                token.StartsWith("-IncludeDependencies:", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("-ForceBootstrap", StringComparison.OrdinalIgnoreCase) ||
+                token.StartsWith("-ForceBootstrap:", StringComparison.OrdinalIgnoreCase)))
+        {
+            AddUnverifiableOperand("Save-Package", path, line, findings,
+                "pipeline-provided, transitive, or provider-bootstrap dependency set");
+            return;
+        }
         if (!ValidatePackageSourceOptions("nuget", tokens, path, line, findings))
             return;
         var provider = FindOptionValue(tokens, 1, "-ProviderName");
@@ -161,6 +174,25 @@ public sealed partial class WebAgentContentSecurityScanner
             AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
                 "PackageManagement commands must select '-ProviderName NuGet' explicitly; alternate or implicit providers cannot be verified against nuget.org.");
             return;
+        }
+        if (tokens[0].Equals("save-package", StringComparison.OrdinalIgnoreCase))
+        {
+            var source = FindOptionValue(tokens, 1, "-Source", "--source", "-s");
+            if (source is null)
+            {
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path, line,
+                    "Save-Package must select nuget.org explicitly; registered machine sources cannot be proven to be canonical.");
+                return;
+            }
+
+            var outputPath = FindOptionValue(tokens, 1, "-Path", "-LiteralPath");
+            if (string.IsNullOrWhiteSpace(outputPath) ||
+                NormalizeToken(outputPath).Contains("://", StringComparison.Ordinal))
+            {
+                AddUnverifiableOperand("Save-Package", path, line, findings,
+                    "literal local output path");
+                return;
+            }
         }
         var nameIndex = Array.FindIndex(tokens, 1, token =>
             token.Equals("-Name", StringComparison.OrdinalIgnoreCase) ||

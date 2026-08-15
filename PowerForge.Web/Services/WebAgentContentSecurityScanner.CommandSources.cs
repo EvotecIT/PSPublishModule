@@ -131,7 +131,7 @@ public sealed partial class WebAgentContentSecurityScanner
     }
 
     private static bool IsPowerShellPackageCommand(string executable)
-        => executable is "install-package" or "update-package" or "install-module" or "save-module" or
+        => executable is "install-package" or "update-package" or "save-package" or "install-module" or "save-module" or
             "install-script" or "update-script" or "save-script" or "install-psresource" or
             "save-psresource" or "update-module" or "update-psresource";
 

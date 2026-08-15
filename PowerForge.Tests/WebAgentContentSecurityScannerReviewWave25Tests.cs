@@ -33,11 +33,11 @@ public sealed partial class WebAgentContentSecurityScannerTests
     }
 
     [Theory]
-    [InlineData("composer require ext-json")]
-    [InlineData("composer require ext-mbstring:*")]
-    [InlineData("composer require php:^8.2")]
-    [InlineData("composer require composer-runtime-api:^2.2")]
-    [InlineData("composer require lib-openssl")]
+    [InlineData("composer require ext-json --no-update --no-plugins --no-scripts")]
+    [InlineData("composer require ext-mbstring:* --no-update --no-plugins --no-scripts")]
+    [InlineData("composer require php:^8.2 --no-update --no-plugins --no-scripts")]
+    [InlineData("composer require composer-runtime-api:^2.2 --no-update --no-plugins --no-scripts")]
+    [InlineData("composer require lib-openssl --no-update --no-plugins --no-scripts")]
     public void Scan_AllowsComposerPlatformRequirements(string command)
     {
         using var handler = new RegistryHandler(_ => throw new InvalidOperationException("Registry must not be called."));

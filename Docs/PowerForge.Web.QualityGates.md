@@ -120,6 +120,14 @@ both `--ignore-scripts` and `--package-lock-only` with npm. Local
 lifecycle scripts, so the scanner rejects them rather than verifying only the
 package named on the command line.
 
+The same project-isolation rule applies to other mutating clients. Composer
+`require` must use `--no-update --no-plugins --no-scripts`, and Bundler `add`
+must use `--skip-install`; otherwise an existing project can introduce
+uninspected dependencies or executable hooks. PackageManagement `Save-Package`
+is audited as a NuGet download and must name an exact version, select the NuGet
+provider, and use the canonical source. Pipeline inputs, transitive dependency
+downloads, and provider bootstrapping are rejected.
+
 External-host verification is optional because it adds network-dependent checks.
 Trusted domains can be excluded with `agentTrustedDomains`. Keep it disabled in
 offline builds, or enable it in a dedicated connected CI job. Package references,

@@ -99,7 +99,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
     }
 
     [Theory]
-    [InlineData("bundle add safe-gem", "rubygems")]
+    [InlineData("bundle add safe-gem --version 1.0.0 --skip-install", "rubygems")]
     [InlineData("npm init safe-starter", "npm")]
     [InlineData("npm create safe-starter", "npm")]
     public void Scan_VerifiesPackageExecutingCommandAliases(string command, string ecosystem)

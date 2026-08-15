@@ -105,7 +105,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
     {
         using var handler = new RegistryHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
         using var scanner = new WebAgentContentSecurityScanner(new HttpClient(handler));
-        var root = CreateArtifact("llms.txt", $"composer {verb} attacker/nonexistent-package:1.0.0");
+        var root = CreateArtifact("llms.txt", $"composer {verb} attacker/nonexistent-package:1.0.0 --no-update --no-plugins --no-scripts");
         try
         {
             var result = scanner.Scan(new WebAgentContentSecurityOptions { SiteRoot = root, Files = ["llms.txt"] });
@@ -127,7 +127,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
     {
         using var handler = new RegistryHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
         using var scanner = new WebAgentContentSecurityScanner(new HttpClient(handler));
-        var root = CreateArtifact("llms.txt", $"bundle {verb} nonexistent-gem --version 1.0.0");
+        var root = CreateArtifact("llms.txt", $"bundle {verb} nonexistent-gem --version 1.0.0 --skip-install");
         try
         {
             var result = scanner.Scan(new WebAgentContentSecurityOptions { SiteRoot = root, Files = ["llms.txt"] });

@@ -75,6 +75,9 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("-Credential", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-Proxy", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-ProxyCredential", StringComparison.OrdinalIgnoreCase) ||
+           (IsSavePackageOptionContext(optionContext) &&
+            (option.Equals("-Path", StringComparison.OrdinalIgnoreCase) ||
+             option.Equals("-LiteralPath", StringComparison.OrdinalIgnoreCase))) ||
            option.Equals("-Destination", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-DestinationPath", StringComparison.OrdinalIgnoreCase);
 
@@ -138,6 +141,7 @@ public sealed partial class WebAgentContentSecurityScanner
            option.Equals("--system-site-packages", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--no-document", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("--no-interaction", StringComparison.OrdinalIgnoreCase) ||
+           (IsBundleOptionContext(optionContext) && option.Equals("--skip-install", StringComparison.OrdinalIgnoreCase)) ||
            option.Equals("--update-with-all-dependencies", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-W", StringComparison.OrdinalIgnoreCase) ||
            option.Equals("-AllowClobber", StringComparison.OrdinalIgnoreCase) ||
@@ -151,6 +155,12 @@ public sealed partial class WebAgentContentSecurityScanner
 
     private static bool IsComposerOptionContext(string? optionContext)
         => optionContext?.Split(' ', 2)[0].ToLowerInvariant() is "composer" or "packagist";
+
+    private static bool IsBundleOptionContext(string? optionContext)
+        => optionContext?.Split(' ', 2)[0].ToLowerInvariant() is "bundle" or "rubygems";
+
+    private static bool IsSavePackageOptionContext(string? optionContext)
+        => optionContext?.Split(' ', 2)[0].Equals("save-package", StringComparison.OrdinalIgnoreCase) == true;
 
     private static bool IsPythonOptionContext(string? optionContext)
         => optionContext?.Split(' ', 2)[0].ToLowerInvariant() is
