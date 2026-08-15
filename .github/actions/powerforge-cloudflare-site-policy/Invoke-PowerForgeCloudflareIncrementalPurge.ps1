@@ -19,6 +19,9 @@ if ($env:POWERFORGE_CLOUDFLARE_DRY_RUN -notin @('true', 'false')) {
 if ($env:POWERFORGE_CLOUDFLARE_USE_PREVIOUS -notin @('true', 'false')) {
     throw 'use-previous must be true or false.'
 }
+if ($env:POWERFORGE_CLOUDFLARE_FORCE_HOSTNAME_FALLBACK -notin @('true', 'false')) {
+    throw 'force-hostname-fallback must be true or false.'
+}
 
 $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([IO.Path]::DirectorySeparatorChar)
 $workspacePrefix = $workspace + [IO.Path]::DirectorySeparatorChar
@@ -56,6 +59,9 @@ if ($env:POWERFORGE_CLOUDFLARE_USE_PREVIOUS -eq 'true' -and
 }
 if ($env:POWERFORGE_CLOUDFLARE_DRY_RUN -eq 'true') {
     $arguments += '--dry-run'
+}
+if ($env:POWERFORGE_CLOUDFLARE_FORCE_HOSTNAME_FALLBACK -eq 'true') {
+    $arguments += '--force-hostname-fallback'
 }
 
 dotnet @arguments

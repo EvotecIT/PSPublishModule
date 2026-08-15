@@ -179,6 +179,7 @@ runs:
 
     - name: Apply Cloudflare site policy
       if: ${{ steps.incremental.outputs.enabled != 'true' || steps.baseline_order.outputs.stale != 'true' }}
+      id: site_policy
       shell: pwsh
       env:
         POWERFORGE_CLOUDFLARE_API_TOKEN: ${{ inputs.api-token }}
@@ -197,6 +198,7 @@ runs:
         POWERFORGE_CLOUDFLARE_API_TOKEN: ${{ inputs.api-token }}
         POWERFORGE_CLOUDFLARE_CURRENT_MANIFEST: ${{ runner.temp }}/powerforge-cloudflare-cache-current/manifest.json
         POWERFORGE_CLOUDFLARE_DRY_RUN: ${{ inputs.dry-run }}
+        POWERFORGE_CLOUDFLARE_FORCE_HOSTNAME_FALLBACK: ${{ steps.site_policy.outputs.changes_required || 'false' }}
         POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST: ${{ runner.temp }}/powerforge-cloudflare-cache-baseline/manifest.json
         POWERFORGE_CLOUDFLARE_SITE_CONFIG: ${{ inputs.site-config }}
         POWERFORGE_CLOUDFLARE_USE_PREVIOUS: ${{ steps.baseline_order.outputs.use_previous }}

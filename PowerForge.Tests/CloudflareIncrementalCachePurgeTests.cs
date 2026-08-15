@@ -661,12 +661,13 @@ public sealed partial class CloudflareIncrementalCachePurgeTests
         string name,
         CloudflareDeploymentManifestEntry[] entries,
         bool validate = true,
-        string? cachePolicyFingerprint = null)
+        string? cachePolicyFingerprint = null,
+        string baseUrl = "https://example.test/")
     {
         var manifest = new CloudflareDeploymentManifest
         {
-            BaseUrl = "https://example.test/",
-            CachePolicyFingerprint = cachePolicyFingerprint ?? CloudflareDeploymentManifestStore.ComputeCachePolicyFingerprint("https://example.test/", null, new CloudflareSitePolicySpec
+            BaseUrl = baseUrl,
+            CachePolicyFingerprint = cachePolicyFingerprint ?? CloudflareDeploymentManifestStore.ComputeCachePolicyFingerprint(baseUrl, null, new CloudflareSitePolicySpec
             {
                 Cache = new CloudflareCacheSpec()
             }),

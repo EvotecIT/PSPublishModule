@@ -27,7 +27,8 @@ internal static class CloudflareIncrementalCachePurger
         string? previousManifestPath,
         bool dryRun,
         WebConsoleLogger? logger,
-        HttpClient? httpClient = null)
+        HttpClient? httpClient = null,
+        string? forcedHostnameFallbackReason = null)
     {
         CloudflareDeploymentManifest current;
         string normalizedBaseUrl;
@@ -45,13 +46,27 @@ internal static class CloudflareIncrementalCachePurger
             return Failure($"Current deployment manifest is invalid: {ex.Message}");
         }
 
-        if (!TryLoadPrevious(previousManifestPath, normalizedBaseUrl, out var previous, out var fallbackReason))
-            return PurgeHostnameFallback(zoneId, apiToken, normalizedBaseUrl, dryRun, fallbackReason, logger, httpClient);
+        var previousAvailable = TryLoadPrevious(previousManifestPath, out var previous, out var fallbackReason);
+        var fallbackBaseUrls = new[] { normalizedBaseUrl, previous?.BaseUrl };
+        if (!string.IsNullOrWhiteSpace(forcedHostnameFallbackReason))
+            return PurgeHostnameFallback(zoneId, apiToken, fallbackBaseUrls, dryRun, forcedHostnameFallbackReason.Trim(), logger, httpClient);
+        if (!previousAvailable)
+            return PurgeHostnameFallback(zoneId, apiToken, fallbackBaseUrls, dryRun, fallbackReason, logger, httpClient);
 
-        if (!CloudflareDeploymentManifestStore.IsValidPolicyFingerprint(previous!.CachePolicyFingerprint))
-            return PurgeHostnameFallback(zoneId, apiToken, normalizedBaseUrl, dryRun, "the previous deployment manifest has no cache-policy fingerprint", logger, httpClient);
+        if (!previous!.BaseUrl.Equals(normalizedBaseUrl, StringComparison.Ordinal))
+            return PurgeHostnameFallback(
+                zoneId,
+                apiToken,
+                fallbackBaseUrls,
+                dryRun,
+                $"previous manifest BaseUrl '{previous.BaseUrl}' does not match '{normalizedBaseUrl}'",
+                logger,
+                httpClient);
+
+        if (!CloudflareDeploymentManifestStore.IsValidPolicyFingerprint(previous.CachePolicyFingerprint))
+            return PurgeHostnameFallback(zoneId, apiToken, fallbackBaseUrls, dryRun, "the previous deployment manifest has no cache-policy fingerprint", logger, httpClient);
         if (!current.CachePolicyFingerprint.Equals(previous.CachePolicyFingerprint, StringComparison.OrdinalIgnoreCase))
-            return PurgeHostnameFallback(zoneId, apiToken, normalizedBaseUrl, dryRun, "the managed cache policy changed", logger, httpClient);
+            return PurgeHostnameFallback(zoneId, apiToken, fallbackBaseUrls, dryRun, "the managed cache policy changed", logger, httpClient);
 
         var previousFiles = previous.Files.ToDictionary(entry => entry.Path, StringComparer.Ordinal);
         var currentFiles = current.Files.ToDictionary(entry => entry.Path, StringComparer.Ordinal);
@@ -80,7 +95,7 @@ internal static class CloudflareIncrementalCachePurger
             return PurgeHostnameFallback(
                 zoneId,
                 apiToken,
-                normalizedBaseUrl,
+                fallbackBaseUrls,
                 dryRun,
                 $"incremental diff contains {changedPaths.Length} URL paths, exceeding the {MaxIncrementalTargets} target safety limit",
                 logger,
@@ -142,7 +157,6 @@ internal static class CloudflareIncrementalCachePurger
 
     private static bool TryLoadPrevious(
         string? previousManifestPath,
-        string normalizedBaseUrl,
         out CloudflareDeploymentManifest? previous,
         out string fallbackReason)
     {
@@ -162,13 +176,6 @@ internal static class CloudflareIncrementalCachePurger
             }
 
             previous = CloudflareDeploymentManifestStore.LoadRequired(previousManifestPath);
-            if (!previous.BaseUrl.Equals(normalizedBaseUrl, StringComparison.Ordinal))
-            {
-                fallbackReason = $"previous manifest BaseUrl '{previous.BaseUrl}' does not match '{normalizedBaseUrl}'";
-                previous = null;
-                return false;
-            }
-
             fallbackReason = string.Empty;
             return true;
         }
@@ -183,18 +190,22 @@ internal static class CloudflareIncrementalCachePurger
     private static CloudflareIncrementalPurgeResult PurgeHostnameFallback(
         string zoneId,
         string apiToken,
-        string normalizedBaseUrl,
+        IEnumerable<string?> baseUrls,
         bool dryRun,
         string reason,
         WebConsoleLogger? logger,
         HttpClient? httpClient)
     {
-        var hostname = new Uri(normalizedBaseUrl).Host;
+        var hostnames = baseUrls
+            .Where(baseUrl => !string.IsNullOrWhiteSpace(baseUrl))
+            .Select(baseUrl => new Uri(CloudflareDeploymentManifestStore.NormalizeBaseUrl(baseUrl!)).Host)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var (ok, message) = CloudflareCachePurger.Purge(
             zoneId,
             apiToken,
             CloudflareCachePurgeMode.Hostname,
-            [hostname],
+            hostnames,
             dryRun,
             logger,
             httpClient);
@@ -205,7 +216,7 @@ internal static class CloudflareIncrementalCachePurger
                 ? $"Incremental purge used hostname fallback because {reason}. {message}"
                 : $"Incremental purge hostname fallback failed because {reason}. {message}",
             ActualMode = CloudflareCachePurgeMode.Hostname,
-            TargetCount = 1,
+            TargetCount = hostnames.Length,
             RequestCount = ok && !dryRun ? 1 : 0,
             UsedFallback = true,
             FallbackReason = reason

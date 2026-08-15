@@ -186,6 +186,13 @@ cache-affecting setting such as `Cloudflare.Cache.EdgeTtlSeconds` therefore
 forces a hostname purge even when every deployed file is byte-for-byte
 unchanged. A baseline created before policy fingerprints existed also receives
 the same safe one-time fallback.
+If the live managed site policy drifted, policy reconciliation forces the same
+hostname fallback even when the desired manifest fingerprint and deployed files
+are unchanged. This removes objects created under the drifted cache settings.
+When a site keeps the same deployment scope but changes `BaseUrl`, the fallback
+purges both the previous and current hostnames before advancing the baseline.
+Cloudflare must accept both hostnames for the configured zone; otherwise the
+purge fails closed so the old hostname is not silently abandoned.
 Managed cache-rule expressions match both `GET` and Cloudflare's internal
 `PURGE` evaluation, as required for reliable URL invalidation.
 Action dry-runs calculate and report the same bounded decision but neither send

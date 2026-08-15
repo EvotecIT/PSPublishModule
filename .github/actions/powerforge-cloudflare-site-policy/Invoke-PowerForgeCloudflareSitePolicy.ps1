@@ -24,6 +24,9 @@ if ($env:POWERFORGE_CLOUDFLARE_ZONE_ID -notmatch '^[a-fA-F0-9]{32}$') {
 if ($env:POWERFORGE_CLOUDFLARE_DRY_RUN -notin @('true', 'false')) {
     throw 'dry-run must be true or false.'
 }
+if ([string]::IsNullOrWhiteSpace($env:GITHUB_OUTPUT)) {
+    throw 'GITHUB_OUTPUT is required.'
+}
 
 $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([IO.Path]::DirectorySeparatorChar)
 $workspacePrefix = $workspace + [IO.Path]::DirectorySeparatorChar
@@ -61,6 +64,19 @@ if (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_BASE_PATH)) {
 if ($env:POWERFORGE_CLOUDFLARE_DRY_RUN -eq 'true') {
     $arguments += '--dry-run'
 }
+$arguments += @('--output', 'json')
 
-dotnet @arguments
+$jsonOutput = @(dotnet @arguments)
 Assert-LastExitCode -Operation 'Applying Cloudflare site policy'
+$jsonText = $jsonOutput -join [Environment]::NewLine
+try {
+    $result = $jsonText | ConvertFrom-Json
+    if ($result.success -ne $true -or $null -eq $result.result.changesRequired) {
+        throw 'The site-policy result did not contain the required reconciliation state.'
+    }
+} catch {
+    throw "Applying Cloudflare site policy returned invalid JSON output: $($_.Exception.Message)"
+}
+Write-Host ([string]$result.result.message)
+"changes_required=$(([bool]$result.result.changesRequired).ToString().ToLowerInvariant())" |
+    Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append

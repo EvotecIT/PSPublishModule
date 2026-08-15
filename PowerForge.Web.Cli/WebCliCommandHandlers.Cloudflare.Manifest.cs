@@ -96,6 +96,8 @@ internal static partial class WebCliCommandHandlers
                                    TryGetOptionValue(subArgs, "--previous-manifest-path") ??
                                    TryGetOptionValue(subArgs, "--previousManifest") ??
                                    TryGetOptionValue(subArgs, "--previousManifestPath");
+        var forceHostnameFallback = HasOption(subArgs, "--force-hostname-fallback") ||
+                                    HasOption(subArgs, "--forceHostnameFallback");
 
         var result = CloudflareIncrementalCachePurger.Purge(
             zoneId,
@@ -104,7 +106,8 @@ internal static partial class WebCliCommandHandlers
             currentManifestPath,
             previousManifestPath,
             dryRun,
-            logger);
+            logger,
+            forcedHostnameFallbackReason: forceHostnameFallback ? "the managed site policy was reconciled" : null);
 
         if (outputJson)
         {
