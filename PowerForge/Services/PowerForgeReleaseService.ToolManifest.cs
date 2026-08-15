@@ -95,6 +95,12 @@ internal sealed partial class PowerForgeReleaseService
         var repository = spec.GitHub?.Repository?.Trim();
         if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repository))
             throw new InvalidOperationException("PowerForge tool lock manifest requires unified GitHub owner and repository.");
+        var repositoryId = owner + "/" + repository;
+        if (!IsSupportedPowerForgeToolManifestRepository(repositoryId))
+        {
+            throw new InvalidOperationException(
+                $"PowerForge tool lock manifest repository '{repositoryId}' contains characters the installer cannot consume.");
+        }
         var tagTemplate = string.IsNullOrWhiteSpace(spec.GitHub?.TagTemplate) ? "v{Version}" : spec.GitHub!.TagTemplate!;
         if (!IsDeterministicPowerForgeToolManifestTagTemplate(tagTemplate))
         {
@@ -111,20 +117,30 @@ internal sealed partial class PowerForgeReleaseService
         }
         var assets = artifacts.ToDictionary(
             static artifact => artifact.Runtime!,
-            artifact => new
+            artifact =>
             {
-                name = Path.GetFileName(artifact.Path),
-                sha256 = ComputeSha256(artifact.Path),
-                executableSha256 = ComputePowerForgeExecutableSha256(artifact.Path, artifact.Runtime!)
+                var assetName = Path.GetFileName(artifact.Path);
+                if (!IsSupportedPowerForgeToolManifestArchiveName(assetName))
+                {
+                    throw new InvalidOperationException(
+                        $"PowerForge tool lock manifest archive name '{assetName}' contains characters the installer cannot consume.");
+                }
+                return new
+                {
+                    name = assetName,
+                    sha256 = ComputeSha256(artifact.Path),
+                    executableSha256 = ComputePowerForgeExecutableSha256(artifact.Path, artifact.Runtime!)
+                };
             },
             StringComparer.OrdinalIgnoreCase);
+        var commit = NormalizePowerForgeToolManifestCommit(spec.GitHub?.Commitish);
         var document = new
         {
             schemaVersion = 2,
-            repository = owner + "/" + repository,
+            repository = repositoryId,
             version,
             releaseTag,
-            commit = spec.GitHub?.Commitish,
+            commit,
             assets
         };
 
@@ -175,6 +191,27 @@ internal sealed partial class PowerForgeReleaseService
     internal static bool IsSupportedPowerForgeToolManifestReleaseTag(string? releaseTag)
         => !string.IsNullOrWhiteSpace(releaseTag) &&
            Regex.IsMatch(releaseTag, "^[A-Za-z0-9][A-Za-z0-9._-]*$", RegexOptions.CultureInvariant);
+
+    internal static bool IsSupportedPowerForgeToolManifestRepository(string? repository)
+        => !string.IsNullOrWhiteSpace(repository) &&
+           Regex.IsMatch(repository, "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", RegexOptions.CultureInvariant);
+
+    internal static bool IsSupportedPowerForgeToolManifestArchiveName(string? archiveName)
+        => !string.IsNullOrWhiteSpace(archiveName) &&
+           Regex.IsMatch(archiveName, "^[A-Za-z0-9][A-Za-z0-9._-]*\\.zip$", RegexOptions.CultureInvariant);
+
+    internal static string? NormalizePowerForgeToolManifestCommit(string? commit)
+    {
+        var normalized = commit?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            return null;
+        if (!Regex.IsMatch(normalized, "^[A-Fa-f0-9]{40}$", RegexOptions.CultureInvariant))
+        {
+            throw new InvalidOperationException(
+                "PowerForge tool lock manifest commit must be an exact 40-character Git SHA.");
+        }
+        return normalized!.ToLowerInvariant();
+    }
 
     private static string ComputePowerForgeExecutableSha256(string archivePath, string runtime)
     {

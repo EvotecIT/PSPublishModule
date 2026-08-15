@@ -554,6 +554,38 @@ public sealed partial class PowerForgeReleaseServiceTests
     public void ToolManifest_accepts_only_installer_safe_release_tags(string? releaseTag, bool expected)
         => Assert.Equal(expected, PowerForgeReleaseService.IsSupportedPowerForgeToolManifestReleaseTag(releaseTag));
 
+    [Theory]
+    [InlineData("EvotecIT/PSPublishModule", true)]
+    [InlineData("evotec.it/PowerForge_repo", true)]
+    [InlineData("EvotecIT/Power Forge", false)]
+    [InlineData("EvotecIT/PowerForge/CLI", false)]
+    [InlineData("", false)]
+    public void ToolManifest_accepts_only_installer_safe_repositories(string? repository, bool expected)
+        => Assert.Equal(expected, PowerForgeReleaseService.IsSupportedPowerForgeToolManifestRepository(repository));
+
+    [Theory]
+    [InlineData("PowerForge-3.0.110-win-x64.zip", true)]
+    [InlineData("PowerForge 3.0.110 win-x64.zip", false)]
+    [InlineData("PowerForge-3.0.110-win-x64.tar.gz", false)]
+    [InlineData("../PowerForge.zip", false)]
+    [InlineData("", false)]
+    public void ToolManifest_accepts_only_installer_safe_archive_names(string? archiveName, bool expected)
+        => Assert.Equal(expected, PowerForgeReleaseService.IsSupportedPowerForgeToolManifestArchiveName(archiveName));
+
+    [Fact]
+    public void ToolManifest_normalizes_exact_commit_and_rejects_symbolic_commitish()
+    {
+        Assert.Equal(
+            "abcdef0123456789abcdef0123456789abcdef01",
+            PowerForgeReleaseService.NormalizePowerForgeToolManifestCommit(
+                "  ABCDEF0123456789ABCDEF0123456789ABCDEF01  "));
+        Assert.Null(PowerForgeReleaseService.NormalizePowerForgeToolManifestCommit(" "));
+        Assert.Throws<InvalidOperationException>(
+            () => PowerForgeReleaseService.NormalizePowerForgeToolManifestCommit("main"));
+        Assert.Throws<InvalidOperationException>(
+            () => PowerForgeReleaseService.NormalizePowerForgeToolManifestCommit("abcdef0"));
+    }
+
     private static PowerForgeReleaseService CreateService(
         Func<PowerForgeReleaseRequest, PowerForgeToolReleasePlan> planTools)
         => new(
