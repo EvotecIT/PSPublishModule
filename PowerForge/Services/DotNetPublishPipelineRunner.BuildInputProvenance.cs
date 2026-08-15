@@ -540,6 +540,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                 out string? hintPath))
                         {
                             inputs.Add(hintPath!);
+                            sourceInputs.Add(hintPath!);
                         }
 
                         if (!item.TryGetProperty("FullPath", out JsonElement fullPathElement) ||

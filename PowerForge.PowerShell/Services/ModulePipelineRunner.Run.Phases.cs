@@ -711,7 +711,7 @@ public sealed partial class ModulePipelineRunner
                 session.Start(step);
                 try
                 {
-                    state.ArtefactResults.Add(builder.Build(
+                    ArtefactBuildResult result = builder.Build(
                         segment: artefact,
                         projectRoot: plan.ProjectRoot,
                         stagingPath: buildResult.StagingPath,
@@ -724,7 +724,9 @@ public sealed partial class ModulePipelineRunner
                         includeScriptFolders: !state.PackageWithoutScriptFolders,
                         finalizePackedArtefact: plan.SignModule
                             ? context => FinalizeSignedPackedArtefact(plan, state, context)
-                            : null));
+                            : null);
+                    state.ArtefactResults.Add(result);
+                    CaptureFinalizedPackedArtefactIntegrity(plan, state, result);
                     session.Done(step);
                 }
                 catch (Exception ex)
@@ -735,11 +737,13 @@ public sealed partial class ModulePipelineRunner
             }
         }
         ExecuteActions(ModulePipelineActionStage.AfterArtefacts, plan, session, state);
+        ValidateFinalizedPackedArtefactIntegrity(state);
 
         ExecutePackageBuildsAfterModule(plan, session, state);
         ValidateRequestedReleaseVersion(plan, state);
 
         ExecuteActions(ModulePipelineActionStage.BeforePublish, plan, session, state);
+        ValidateFinalizedPackedArtefactIntegrity(state);
         ExecutePublishOperations(plan, session, buildResult, state);
         ExecuteActions(ModulePipelineActionStage.AfterPublish, plan, session, state);
 

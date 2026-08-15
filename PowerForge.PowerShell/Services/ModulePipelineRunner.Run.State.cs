@@ -34,6 +34,7 @@ public sealed partial class ModulePipelineRunner
         public ModuleTypeAcceleratorSurfaceReport? TypeAcceleratorSurfaceReport { get; set; }
         public BuildDiagnostic[] AutomaticBinaryConflictDiagnostics { get; set; } = Array.Empty<BuildDiagnostic>();
         public List<ArtefactBuildResult> ArtefactResults { get; } = new();
+        public Dictionary<string, string> FinalizedPackedArtefactHashes { get; } = new(System.StringComparer.OrdinalIgnoreCase);
         public List<ModulePublishResult> PublishResults { get; } = new();
         public List<ProjectBuildHostExecutionResult> ProjectBuildResults { get; } = new();
         public Dictionary<object, ProjectBuildHostExecutionResult> PackageBuildResultsBySegment { get; } = new();
