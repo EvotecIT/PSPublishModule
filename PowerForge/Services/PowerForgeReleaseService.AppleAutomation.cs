@@ -115,6 +115,21 @@ internal sealed partial class PowerForgeReleaseService
                     (options.TestFlightBetaGroupIds?.Length ?? 0) > 0 ||
                     (options.TestFlightBetaGroupNames?.Length ?? 0) > 0;
                 break;
+            case PowerForgeAppleReleaseAction.Ship:
+                options.Archive = true;
+                options.Upload = true;
+                options.PrepareDistribution = true;
+                options.SelectBuildForDistribution = true;
+                options.SyncMetadata = HasConfiguredPath(options.MetadataConfigPath, options.MetadataConfigPaths);
+                options.SyncAppInfo = HasConfiguredPath(options.AppInfoConfigPath, options.AppInfoConfigPaths);
+                options.SyncScreenshots = !request.AppleShipReuseRemoteScreenshots;
+                options.CheckReleaseReadiness = true;
+                options.CheckGovernance = hasGovernanceConfig;
+                options.DistributeTestFlight =
+                    (options.TestFlightBetaGroupIds?.Length ?? 0) > 0 ||
+                    (options.TestFlightBetaGroupNames?.Length ?? 0) > 0;
+                options.SubmitForReview = true;
+                break;
             case PowerForgeAppleReleaseAction.SubmitTestFlightReview:
                 options.SubmitTestFlightBetaReview = true;
                 break;
@@ -139,6 +154,7 @@ internal sealed partial class PowerForgeReleaseService
              (options.SyncScreenshots && options.ReplaceScreenshots))) ||
            action == PowerForgeAppleReleaseAction.SubmitTestFlightReview ||
            action == PowerForgeAppleReleaseAction.Advance ||
+           action == PowerForgeAppleReleaseAction.Ship ||
            action == PowerForgeAppleReleaseAction.Version ||
            action == PowerForgeAppleReleaseAction.SubmitAppReview ||
            action == PowerForgeAppleReleaseAction.Release ||
@@ -151,7 +167,8 @@ internal sealed partial class PowerForgeReleaseService
     private static bool IsUploadAction(PowerForgeAppleReleaseAction action)
         => action == PowerForgeAppleReleaseAction.Upload ||
            action == PowerForgeAppleReleaseAction.UploadExisting ||
-           action == PowerForgeAppleReleaseAction.Advance;
+           action == PowerForgeAppleReleaseAction.Advance ||
+           action == PowerForgeAppleReleaseAction.Ship;
 
     private static bool IsUploadExecution(PowerForgeAppleReleasePlan plan)
         => IsUploadAction(plan.Action) ||
@@ -190,6 +207,7 @@ internal sealed partial class PowerForgeReleaseService
             PowerForgeAppleReleaseAction.Status or
             PowerForgeAppleReleaseAction.Doctor => UsesAppStoreConnect(app),
             PowerForgeAppleReleaseAction.TestFlight => UsesTestFlight(app),
+            PowerForgeAppleReleaseAction.Ship => IsAppleShipTarget(app),
             PowerForgeAppleReleaseAction.SubmitTestFlightReview => UsesExternalTestFlight(app),
             PowerForgeAppleReleaseAction.Prepare or
             PowerForgeAppleReleaseAction.Screenshots or
@@ -208,6 +226,7 @@ internal sealed partial class PowerForgeReleaseService
             PowerForgeAppleReleaseAction.Screenshots or
             PowerForgeAppleReleaseAction.TestFlight or
             PowerForgeAppleReleaseAction.Advance or
+            PowerForgeAppleReleaseAction.Ship or
             PowerForgeAppleReleaseAction.SubmitTestFlightReview or
             PowerForgeAppleReleaseAction.SubmitAppReview or
             PowerForgeAppleReleaseAction.Release;
@@ -215,6 +234,7 @@ internal sealed partial class PowerForgeReleaseService
     private static bool RequiresAppleReleaseIdentity(PowerForgeAppleReleasePlan plan)
         => plan.Action == PowerForgeAppleReleaseAction.Status ||
            plan.Action == PowerForgeAppleReleaseAction.Doctor ||
+           plan.Action == PowerForgeAppleReleaseAction.Ship ||
            IsUploadExecution(plan) ||
            plan.PrepareDistribution ||
            plan.SyncScreenshots ||
@@ -418,9 +438,12 @@ internal sealed partial class PowerForgeReleaseService
         var remoteAction = plan.Action != PowerForgeAppleReleaseAction.Archive &&
                            plan.Action != PowerForgeAppleReleaseAction.Rehearse &&
                            plan.Action != PowerForgeAppleReleaseAction.Version &&
-                           plan.Action != PowerForgeAppleReleaseAction.Cleanup;
+                           plan.Action != PowerForgeAppleReleaseAction.Cleanup &&
+                           plan.ShipPhase != PowerForgeAppleShipPhase.VersionCheckpoint;
         var refreshSuccessfulMutation = HasAppleReleaseStateMutation(plan);
-        foreach (var app in plan.Apps.Where(UsesAppStoreConnect))
+        foreach (var app in plan.Apps.Where(app =>
+                     UsesAppStoreConnect(app) &&
+                     ShouldExecuteAppleTarget(plan.Action, app)))
         {
             if (!resultByName.TryGetValue(app.Name, out var result))
                 continue;
@@ -588,6 +611,8 @@ internal sealed partial class PowerForgeReleaseService
                 ParentTarget = app.ParentTarget,
                 Capabilities = app.Capabilities,
                 TestFlightPolicy = app.TestFlightPolicy,
+                ShipToTestFlight = app.ShipToTestFlight,
+                ShipToAppStoreReview = app.ShipToAppStoreReview,
                 AppId = app.AppStoreConnectAppId,
                 AppIdDiscovered = app.AppStoreConnectAppIdDiscovered,
                 Version = state?.VersionString ?? values.MarketingVersion,
@@ -670,7 +695,9 @@ internal sealed partial class PowerForgeReleaseService
             AttemptId = attemptId,
             Action = plan.Action,
             SourceCommit = plan.SourceCommit,
+            PlanSha256 = plan.ApprovedPlanSha256,
             AdoptExistingBuild = plan.AdoptExistingBuild,
+            ShipPhase = plan.ShipPhase,
             PlanOnly = false,
             OperationPhase = "Completed",
             CheckedAt = DateTimeOffset.UtcNow,
@@ -683,7 +710,7 @@ internal sealed partial class PowerForgeReleaseService
                     ? null
                     : string.Join(" ", doctorErrors.Select(static diagnostic => diagnostic.Summary)),
             ReceiptPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, plan.ReceiptPath).Replace('\\', '/'),
-            Versioning = versioning,
+            Versioning = versioning ?? plan.ApprovedVersioning,
             Targets = targets,
             Cleanup = cleanup,
             Diagnostics = targets.SelectMany(static target => target.Diagnostics).ToArray(),

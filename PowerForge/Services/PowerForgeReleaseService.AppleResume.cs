@@ -80,7 +80,7 @@ internal sealed partial class PowerForgeReleaseService
                         "uniquely matching build to become visible, then deliberately adopt it with --apple-adopt-existing-build " +
                         "--confirm-apple-action.");
                 }
-                EnsureExplicitAppleRecoveryAdoption(plan, app, "an attested upload that is not yet visible as a build");
+                EnsureExplicitAppleRecoveryAdoption(plan, app, "an attested upload that is not yet visible as a build", attestation);
                 if (plan.Automation.WaitForProcessing)
                     state = WaitForAppleBuild(plan, app, state, attestation.Target.BuildUploadId);
                 else
@@ -106,7 +106,7 @@ internal sealed partial class PowerForgeReleaseService
                 state);
         }
 
-        if (!plan.AdoptExistingBuild)
+        if (!plan.AdoptExistingBuild && !IsApprovedAppleShipResume(plan, attestation))
         {
             var evidence = attestation is null
                 ? "no immutable local upload receipt can independently authorize it"
@@ -145,9 +145,10 @@ internal sealed partial class PowerForgeReleaseService
     private static void EnsureExplicitAppleRecoveryAdoption(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app,
-        string recoveredOperation)
+        string recoveredOperation,
+        AppleUploadAttestation? attestation = null)
     {
-        if (plan.AdoptExistingBuild)
+        if (plan.AdoptExistingBuild || IsApprovedAppleShipResume(plan, attestation))
             return;
 
         throw new InvalidOperationException(
@@ -155,6 +156,19 @@ internal sealed partial class PowerForgeReleaseService
             "Verify the remote operation and exact source/archive evidence, then rerun with --apple-adopt-existing-build " +
             "--confirm-apple-action, or disable resume and start a new version/build.");
     }
+
+    private static bool IsApprovedAppleShipResume(
+        PowerForgeAppleReleasePlan plan,
+        AppleUploadAttestation? attestation)
+        => plan.Action == PowerForgeAppleReleaseAction.Ship &&
+           plan.ShipPhase == PowerForgeAppleShipPhase.Release &&
+           !string.IsNullOrWhiteSpace(plan.ApprovedPlanSha256) &&
+           attestation?.Receipt.Action == PowerForgeAppleReleaseAction.Ship &&
+           attestation.Receipt.ShipPhase == PowerForgeAppleShipPhase.Release &&
+           string.Equals(
+               attestation.Receipt.PlanSha256,
+               plan.ApprovedPlanSha256,
+               StringComparison.OrdinalIgnoreCase);
 
     private void EnsureAppleBuildUploadIsNotTerminal(
         PowerForgeAppleReleasePlan plan,

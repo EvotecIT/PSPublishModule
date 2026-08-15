@@ -27,7 +27,8 @@ public sealed class AppStoreConnectAppInfoMetadataSyncService
     }
 
     /// <summary>
-    /// Applies localized metadata to the editable App Information localization for an app.
+    /// Applies localized metadata to the editable App Information localization for an app,
+    /// or proves that every locked resource already matches without issuing a mutation.
     /// </summary>
     public async Task<AppStoreConnectAppInfoMetadataSyncResult> SyncAsync(
         AppStoreConnectAppInfoMetadataSyncRequest request,
@@ -41,33 +42,36 @@ public sealed class AppStoreConnectAppInfoMetadataSyncService
         if (string.IsNullOrWhiteSpace(spec.Locale))
             throw new ArgumentException("Spec.Locale is required.", nameof(request));
 
-        var appInfo = await ResolveAppInfoAsync(spec, cancellationToken).ConfigureAwait(false);
-        var localization = (await _client.GetAppInfoLocalizationsAsync(
-            appInfo.Id,
-            spec.Locale,
-            limit: 10,
-            cancellationToken).ConfigureAwait(false)).FirstOrDefault()
-            ?? throw new InvalidOperationException($"App Information localization '{spec.Locale}' was not found for resource '{appInfo.Id}'.");
+        var appInfos = await _client.GetAppInfosAsync(spec.AppId, limit: 50, cancellationToken).ConfigureAwait(false);
+        var appInfo = ResolveAppInfo(spec, appInfos);
+        var localizations = await LoadAppInfoLocalizationsAsync(spec, appInfos, cancellationToken).ConfigureAwait(false);
+        AssertLockedAppInfoConverged(spec, appInfos, localizations);
+        if (appInfo is null)
+            return CreateConvergedResult(appInfos, localizations);
 
-        var updated = await _client.UpdateAppInfoLocalizationAsync(
-            localization.Id,
-            spec.Metadata,
-            cancellationToken).ConfigureAwait(false);
+        var localization = localizations[appInfo.Id];
+
+        var updatedFields = GetChangedFields(localization, spec.Metadata);
+        var updated = updatedFields.Length == 0
+            ? localization
+            : await _client.UpdateAppInfoLocalizationAsync(
+                localization.Id,
+                spec.Metadata,
+                cancellationToken).ConfigureAwait(false);
 
         return new AppStoreConnectAppInfoMetadataSyncResult
         {
             AppInfo = appInfo,
             Before = localization,
             After = updated,
-            UpdatedFields = AppStoreConnectClient.GetSuppliedAppInfoLocalizationFields(spec.Metadata)
+            UpdatedFields = updatedFields
         };
     }
 
-    private async Task<AppStoreConnectAppInformationInfo> ResolveAppInfoAsync(
+    private static AppStoreConnectAppInformationInfo? ResolveAppInfo(
         AppStoreConnectAppInfoMetadataSpec spec,
-        CancellationToken cancellationToken)
+        AppStoreConnectAppInformationInfo[] appInfos)
     {
-        var appInfos = await _client.GetAppInfosAsync(spec.AppId, limit: 50, cancellationToken).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(spec.AppInfoId))
         {
             var requestedAppInfoId = spec.AppInfoId!.Trim();
@@ -81,11 +85,94 @@ public sealed class AppStoreConnectAppInfoMetadataSyncService
         if (appInfos.Length == 1 && string.IsNullOrWhiteSpace(GetState(appInfos[0])))
             return appInfos[0];
 
+        return null;
+    }
+
+    private async Task<Dictionary<string, AppStoreConnectAppInfoLocalizationInfo>> LoadAppInfoLocalizationsAsync(
+        AppStoreConnectAppInfoMetadataSpec spec,
+        AppStoreConnectAppInformationInfo[] appInfos,
+        CancellationToken cancellationToken)
+    {
+        var localizations = new Dictionary<string, AppStoreConnectAppInfoLocalizationInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (var appInfo in appInfos)
+        {
+            var localization = (await _client.GetAppInfoLocalizationsAsync(
+                    appInfo.Id,
+                    spec.Locale,
+                    limit: 10,
+                    cancellationToken)
+                .ConfigureAwait(false))
+                .FirstOrDefault();
+            if (localization is null)
+            {
+                throw new InvalidOperationException(
+                    $"App Information localization '{spec.Locale}' was not found for resource '{appInfo.Id}'.");
+            }
+            localizations.Add(appInfo.Id, localization);
+        }
+        return localizations;
+    }
+
+    private static void AssertLockedAppInfoConverged(
+        AppStoreConnectAppInfoMetadataSpec spec,
+        AppStoreConnectAppInformationInfo[] appInfos,
+        IReadOnlyDictionary<string, AppStoreConnectAppInfoLocalizationInfo> localizations)
+    {
+        if (appInfos.Length == 0)
+            throw CreateNoEditableAppInfoException(spec.AppId, appInfos);
+
+        var mismatched = appInfos
+            .Where(appInfo => !IsEditable(appInfo))
+            .Where(appInfo => GetChangedFields(localizations[appInfo.Id], spec.Metadata).Length > 0)
+            .ToArray();
+        if (mismatched.Length > 0)
+            throw CreateNoEditableAppInfoException(spec.AppId, appInfos);
+    }
+
+    private static AppStoreConnectAppInfoMetadataSyncResult CreateConvergedResult(
+        AppStoreConnectAppInformationInfo[] appInfos,
+        IReadOnlyDictionary<string, AppStoreConnectAppInfoLocalizationInfo> localizations)
+    {
+        var retained = appInfos[0];
+        var localization = localizations[retained.Id];
+        return new AppStoreConnectAppInfoMetadataSyncResult
+        {
+            AppInfo = retained,
+            Before = localization,
+            After = localization,
+            UpdatedFields = Array.Empty<string>()
+        };
+    }
+
+    private static InvalidOperationException CreateNoEditableAppInfoException(
+        string appId,
+        AppStoreConnectAppInformationInfo[] appInfos)
+    {
+
         var states = appInfos.Length == 0
             ? "none"
             : string.Join(", ", appInfos.Select(info => GetState(info) ?? "unknown"));
-        throw new InvalidOperationException(
-            $"No editable App Information resource was found for app '{spec.AppId}'. Current states: {states}. Create a new App Store version or provide AppInfoId explicitly.");
+        return new InvalidOperationException(
+            $"App Information metadata cannot converge for app '{appId}' because one or more locked resources do not already match the requested metadata. Current states: {states}. Align the locked resources before applying shared App Information changes.");
+    }
+
+    private static string[] GetChangedFields(
+        AppStoreConnectAppInfoLocalizationInfo current,
+        AppStoreConnectAppInfoLocalizationUpdate desired)
+    {
+        var changed = new List<string>();
+        AddChanged(changed, "name", desired.Name, current.Name);
+        AddChanged(changed, "subtitle", desired.Subtitle, current.Subtitle);
+        AddChanged(changed, "privacyPolicyUrl", desired.PrivacyPolicyUrl, current.PrivacyPolicyUrl);
+        AddChanged(changed, "privacyChoicesUrl", desired.PrivacyChoicesUrl, current.PrivacyChoicesUrl);
+        AddChanged(changed, "privacyPolicyText", desired.PrivacyPolicyText, current.PrivacyPolicyText);
+        return changed.ToArray();
+    }
+
+    private static void AddChanged(List<string> changed, string field, string? desired, string? current)
+    {
+        if (desired is not null && !string.Equals(desired, current, StringComparison.Ordinal))
+            changed.Add(field);
     }
 
     private static bool IsEditable(AppStoreConnectAppInformationInfo appInfo)

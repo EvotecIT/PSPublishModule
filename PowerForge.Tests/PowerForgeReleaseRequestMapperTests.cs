@@ -92,6 +92,9 @@ public sealed class PowerForgeReleaseRequestMapperTests
                 AppleMarketingVersion = "1.6",
                 AppleSourceCommit = "0123456789abcdef0123456789abcdef01234567",
                 AppleExpectedPlanSha256 = "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+                AppleShipTestFlightTargets = ["CasaRay iOS", "CasaRay Mac"],
+                AppleShipAppStoreTargets = ["CasaRay iOS"],
+                AppleShipReuseRemoteScreenshots = false,
                 AppleActionConfirmed = true,
                 AppleAdoptExistingBuild = true,
                 AppleResume = false,
@@ -106,6 +109,9 @@ public sealed class PowerForgeReleaseRequestMapperTests
         Assert.Equal("0123456789abcdef0123456789abcdef01234567", request.AppleSourceCommit);
         Assert.True(request.RequireImmutableAppleSourceSnapshot);
         Assert.Equal("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd", request.AppleExpectedPlanSha256);
+        Assert.Equal(["CasaRay iOS", "CasaRay Mac"], request.AppleShipTestFlightTargets);
+        Assert.Equal(["CasaRay iOS"], request.AppleShipAppStoreTargets);
+        Assert.False(request.AppleShipReuseRemoteScreenshots);
         Assert.True(request.AppleActionConfirmed);
         Assert.True(request.AppleAdoptExistingBuild);
         Assert.False(request.AppleResume);

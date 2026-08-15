@@ -96,7 +96,7 @@ public sealed class AppStoreConnectAppInfoMetadataSyncRequest
 /// </summary>
 public sealed class AppStoreConnectAppInfoMetadataSyncResult
 {
-    /// <summary>Matched editable App Information resource.</summary>
+    /// <summary>Matched editable resource, or one locked resource retained after convergence was proven.</summary>
     public AppStoreConnectAppInformationInfo AppInfo { get; set; } = new();
 
     /// <summary>Localization before the metadata update.</summary>

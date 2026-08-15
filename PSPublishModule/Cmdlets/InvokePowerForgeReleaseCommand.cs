@@ -266,6 +266,18 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     public string? AppleExpectedPlanSha256 { get; set; }
 
+    /// <summary>Apple target names or schemes that should receive the Ship build through internal TestFlight.</summary>
+    [Parameter]
+    public string[]? AppleShipTestFlightTarget { get; set; }
+
+    /// <summary>Apple target names or schemes that should be submitted to App Store Review by Ship.</summary>
+    [Parameter]
+    public string[]? AppleShipAppStoreTarget { get; set; }
+
+    /// <summary>Publishes reviewed local screenshot bytes during Ship instead of reusing complete remote screenshots.</summary>
+    [Parameter]
+    public SwitchParameter AppleShipSyncScreenshots { get; set; }
+
     /// <summary>
     /// Explicitly confirms a risky Apple screenshot replacement, review submission, or public release action.
     /// </summary>
@@ -817,6 +829,9 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             AppleMarketingVersion = NormalizeNullable(AppleVersion),
             AppleSourceCommit = NormalizeNullable(AppleSourceCommit),
             AppleExpectedPlanSha256 = NormalizeNullable(AppleExpectedPlanSha256),
+            AppleShipTestFlightTargets = NormalizeStrings(AppleShipTestFlightTarget),
+            AppleShipAppStoreTargets = NormalizeStrings(AppleShipAppStoreTarget),
+            AppleShipReuseRemoteScreenshots = !AppleShipSyncScreenshots.IsPresent,
             AppleActionConfirmed = ConfirmAppleAction.IsPresent,
             AppleAdoptExistingBuild = AdoptExistingAppleBuild.IsPresent,
             AppleResume = ResolveMutuallyExclusiveFlag(

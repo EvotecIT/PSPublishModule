@@ -49,6 +49,11 @@ internal static class PowerForgeReleaseRequestMapper
         request.RequireImmutableAppleSourceSnapshot = request.RequireImmutableAppleSourceSnapshot ||
                                                       !string.IsNullOrWhiteSpace(request.AppleSourceCommit);
         request.AppleExpectedPlanSha256 = ChooseString(request.AppleExpectedPlanSha256, options.AppleExpectedPlanSha256);
+        if (options.AppleShipTestFlightTargets.Length > 0)
+            request.AppleShipTestFlightTargets = NormalizeStrings(options.AppleShipTestFlightTargets);
+        if (options.AppleShipAppStoreTargets.Length > 0)
+            request.AppleShipAppStoreTargets = NormalizeStrings(options.AppleShipAppStoreTargets);
+        request.AppleShipReuseRemoteScreenshots = options.AppleShipReuseRemoteScreenshots;
 
         request.SkipWorkspaceValidation = request.SkipWorkspaceValidation || options.SkipWorkspaceValidation;
         request.SkipRestore = request.SkipRestore || options.SkipRestore;
@@ -218,6 +223,9 @@ internal static class PowerForgeReleaseRequestMapper
             AppleSourceCommit = source.AppleSourceCommit,
             RequireImmutableAppleSourceSnapshot = source.RequireImmutableAppleSourceSnapshot,
             AppleExpectedPlanSha256 = source.AppleExpectedPlanSha256,
+            AppleShipTestFlightTargets = source.AppleShipTestFlightTargets.ToArray(),
+            AppleShipAppStoreTargets = source.AppleShipAppStoreTargets.ToArray(),
+            AppleShipReuseRemoteScreenshots = source.AppleShipReuseRemoteScreenshots,
             AppleActionConfirmed = source.AppleActionConfirmed,
             AppleAdoptExistingBuild = source.AppleAdoptExistingBuild,
             AppleResume = source.AppleResume,
@@ -233,4 +241,11 @@ internal static class PowerForgeReleaseRequestMapper
 
     private static bool? ChooseBool(bool? currentValue, bool? overrideValue)
         => overrideValue.HasValue ? overrideValue : currentValue;
+
+    private static string[] NormalizeStrings(IEnumerable<string>? values)
+        => (values ?? Array.Empty<string>())
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 }

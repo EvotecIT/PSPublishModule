@@ -15,6 +15,12 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException(
                 "Destructive App Store screenshot replacement requires the SHA-256 from a reviewed exact Apple plan.");
         }
+        if (plan.Action == PowerForgeAppleReleaseAction.Ship &&
+            string.IsNullOrWhiteSpace(expectedPlanSha256))
+        {
+            throw new InvalidOperationException(
+                "Apple Ship execution requires --apple-expected-plan-sha256 from the reviewed exact Ship plan.");
+        }
         if (string.IsNullOrWhiteSpace(expectedPlanSha256) &&
             plan.Action != PowerForgeAppleReleaseAction.Version)
         {
@@ -41,6 +47,8 @@ internal sealed partial class PowerForgeReleaseService
                 "Apple state or release inputs changed after plan approval. Review a new exact plan before allowing mutation.");
         }
 
+        plan.ApprovedPlanSha256 = current.PlanSha256;
+        plan.ApprovedVersioning = current.Versioning;
         CaptureApprovedMutationInputContents(plan);
         return current;
     }
@@ -69,7 +77,8 @@ internal sealed partial class PowerForgeReleaseService
             if (!string.IsNullOrWhiteSpace(plan.GovernanceConfigPath)) paths.Add(plan.GovernanceConfigPath!);
             paths.AddRange(plan.GovernanceConfigPaths);
         }
-        if (plan.Action == PowerForgeAppleReleaseAction.Version && !string.IsNullOrWhiteSpace(plan.VersionSourcePath))
+        if ((plan.Action == PowerForgeAppleReleaseAction.Version || plan.Action == PowerForgeAppleReleaseAction.Ship) &&
+            !string.IsNullOrWhiteSpace(plan.VersionSourcePath))
             paths.Add(plan.VersionSourcePath!);
 
         var pathComparer = Path.DirectorySeparatorChar == '\\'
@@ -118,8 +127,15 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
         PowerForgeAppleVersionReceipt? versioning = null;
-        if (plan.Action == PowerForgeAppleReleaseAction.Version)
+        if (plan.Action == PowerForgeAppleReleaseAction.Version ||
+            plan.Action == PowerForgeAppleReleaseAction.Ship)
             versioning = PlanAppleVersion(plan, whatIf: true);
+        if (plan.Action == PowerForgeAppleReleaseAction.Ship)
+        {
+            plan.ShipPhase = versioning?.Changed == true
+                ? PowerForgeAppleShipPhase.VersionCheckpoint
+                : PowerForgeAppleShipPhase.Release;
+        }
 
         var screenshotSpecs = ((plan.SyncScreenshots && plan.ReplaceScreenshots) ||
                                plan.CheckReleaseReadiness ||
@@ -139,11 +155,17 @@ internal sealed partial class PowerForgeReleaseService
             Success = true,
             ReceiptPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, plan.PlanReceiptPath).Replace('\\', '/'),
             AdoptExistingBuild = plan.AdoptExistingBuild,
+            ShipPhase = plan.ShipPhase,
             MutationInputsSha256 = mutationInputs.Sha256,
             MutationInputFiles = mutationInputs.Files,
             Versioning = versioning,
             Targets = targets,
-            NextActions = new[] { $"Run Apple action '{plan.Action}' without --plan after reviewing this plan receipt." }
+            NextActions = plan.ShipPhase == PowerForgeAppleShipPhase.VersionCheckpoint
+                ? new[]
+                {
+                    "Confirm this Ship plan to update the checked-in Apple version source, then review and merge that source change before rerunning the same Ship intent."
+                }
+                : new[] { $"Run Apple action '{plan.Action}' without --plan after reviewing this plan receipt." }
         };
         receipt.PlanSha256 = ComputeApplePlanSha256(receipt);
 
@@ -174,6 +196,8 @@ internal sealed partial class PowerForgeReleaseService
             ParentTarget = app.ParentTarget,
             Capabilities = app.Capabilities,
             TestFlightPolicy = app.TestFlightPolicy,
+            ShipToTestFlight = app.ShipToTestFlight,
+            ShipToAppStoreReview = app.ShipToAppStoreReview,
             AppId = app.AppStoreConnectAppId,
             AppIdDiscovered = app.AppStoreConnectAppIdDiscovered,
             Version = versioning?.MarketingVersion ?? app.MarketingVersion,
@@ -187,7 +211,8 @@ internal sealed partial class PowerForgeReleaseService
                 : null,
             SkippedSteps = new[] { "plan-only" }
         };
-        if (!RequiresObservedApplePlanState(plan, app))
+        if (plan.ShipPhase == PowerForgeAppleShipPhase.VersionCheckpoint ||
+            !RequiresObservedApplePlanState(plan, app))
         {
             return target;
         }
@@ -221,8 +246,12 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         var bindScreenshotInventory = plan.SyncScreenshots && plan.ReplaceScreenshots;
-        var checkReadiness = plan.CheckReleaseReadiness ||
-                             (plan.SubmitForReview && !plan.SkipReviewReadinessCheck);
+        var checkReadiness = (plan.CheckReleaseReadiness ||
+                              (plan.SubmitForReview && !plan.SkipReviewReadinessCheck)) &&
+                             ShouldRunAppleShipAppStoreStep(plan, app) &&
+                             (plan.Action != PowerForgeAppleReleaseAction.Ship ||
+                              target.BuildSelected == true &&
+                              string.Equals(target.BuildProcessingState, "VALID", StringComparison.OrdinalIgnoreCase));
         if (bindScreenshotInventory || checkReadiness)
         {
             var values = ResolveAppleDistributionValues(app, versionUpdate: null);
@@ -293,7 +322,8 @@ internal sealed partial class PowerForgeReleaseService
             PowerForgeAppleReleaseAction.Release or
             PowerForgeAppleReleaseAction.Prepare or
             PowerForgeAppleReleaseAction.TestFlight or
-            PowerForgeAppleReleaseAction.Advance)
+            PowerForgeAppleReleaseAction.Advance or
+            PowerForgeAppleReleaseAction.Ship)
         {
             return true;
         }
@@ -307,7 +337,11 @@ internal sealed partial class PowerForgeReleaseService
     }
 
     private static bool RequiresSelectedApplePlanBuild(PowerForgeAppleReleasePlan plan)
-        => plan.Action is PowerForgeAppleReleaseAction.SubmitTestFlightReview or
+    {
+        if (plan.Action == PowerForgeAppleReleaseAction.Ship)
+            return false;
+
+        return plan.Action is PowerForgeAppleReleaseAction.SubmitTestFlightReview or
                PowerForgeAppleReleaseAction.SubmitAppReview or
                PowerForgeAppleReleaseAction.TestFlight or
                PowerForgeAppleReleaseAction.Release ||
@@ -316,29 +350,6 @@ internal sealed partial class PowerForgeReleaseService
            plan.SubmitTestFlightBetaReview ||
            plan.SubmitForReview ||
            plan.ReleaseApprovedVersion;
-
-    private static string ComputeApplePlanSha256(PowerForgeAppleReleaseReceipt receipt)
-    {
-        var canonical = new
-        {
-            receipt.SchemaVersion,
-            receipt.Action,
-            receipt.SourceCommit,
-            receipt.PlanOnly,
-            receipt.AdoptExistingBuild,
-            receipt.MutationInputsSha256,
-            MutationInputFiles = receipt.MutationInputFiles
-                .OrderBy(static value => value.Key, StringComparer.Ordinal)
-                .ToArray(),
-            receipt.Success,
-            receipt.ErrorMessage,
-            receipt.Versioning,
-            receipt.Targets,
-            receipt.Cleanup,
-            receipt.Diagnostics,
-            receipt.NextActions
-        };
-        return ComputeStableSha256(canonical);
     }
 
     private (Dictionary<string, string> Files, string Sha256) CreateAppleMutationInputEvidence(
@@ -371,7 +382,8 @@ internal sealed partial class PowerForgeReleaseService
                 configuredInputs.Add(plan.GovernanceConfigPath!);
             configuredInputs.AddRange(plan.GovernanceConfigPaths);
         }
-        if (plan.Action == PowerForgeAppleReleaseAction.Version && !string.IsNullOrWhiteSpace(plan.VersionSourcePath))
+        if ((plan.Action == PowerForgeAppleReleaseAction.Version || plan.Action == PowerForgeAppleReleaseAction.Ship) &&
+            !string.IsNullOrWhiteSpace(plan.VersionSourcePath))
             configuredInputs.Add(plan.VersionSourcePath!);
         var effectiveInputs = configuredInputs
             .Distinct(Path.DirectorySeparatorChar == '\\'
@@ -433,6 +445,10 @@ internal sealed partial class PowerForgeReleaseService
             plan.UploadSymbols,
             plan.GenerateAppStoreInformation,
             plan.SigningStyle,
+            plan.ShipPhase,
+            plan.ShipReuseRemoteScreenshots,
+            ShipTestFlightTargets = plan.ShipTestFlightTargets.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+            ShipAppStoreTargets = plan.ShipAppStoreTargets.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
             XcodeTargets = plan.Apps
                 .OrderBy(static app => app.Name, StringComparer.Ordinal)
                 .Select(app => new
@@ -446,6 +462,8 @@ internal sealed partial class PowerForgeReleaseService
                     app.RegenerateProject,
                     app.XcodeGenExecutable,
                     app.ProjectGenerationTimeoutSeconds,
+                    app.ShipToTestFlight,
+                    app.ShipToAppStoreReview,
                     ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/'),
                     ExportPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ExportPath).Replace('\\', '/'),
                     RequiredEmbeddedBundleIds = app.RequiredEmbeddedBundleIds.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
@@ -582,7 +600,7 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleVersionReceipt approved)
     {
         if (string.IsNullOrWhiteSpace(plan.VersionSourcePath))
-            throw new InvalidOperationException("Apple version source path is required for Version.");
+            throw new InvalidOperationException($"Apple version source path is required for {plan.Action}.");
         var source = new AppleReleaseVersionSourceService();
         var approvedContent = ReadApprovedMutationInputText(plan, plan.VersionSourcePath!);
         var versioning = source.Update(
@@ -640,9 +658,9 @@ internal sealed partial class PowerForgeReleaseService
     private PowerForgeAppleVersionReceipt PlanAppleVersion(PowerForgeAppleReleasePlan plan, bool whatIf)
     {
         if (string.IsNullOrWhiteSpace(plan.VersionSourcePath))
-            throw new InvalidOperationException("Apple version source path is required for Version.");
+            throw new InvalidOperationException($"Apple version source path is required for {plan.Action}.");
         if (string.IsNullOrWhiteSpace(plan.RequestedMarketingVersion))
-            throw new InvalidOperationException("Requested Apple marketing version is required for Version.");
+            throw new InvalidOperationException($"Requested Apple marketing version is required for {plan.Action}.");
 
         var source = new AppleReleaseVersionSourceService();
         var approvedContent = ReadApprovedMutationInputText(plan, plan.VersionSourcePath!);
@@ -652,6 +670,9 @@ internal sealed partial class PowerForgeReleaseService
 
         var storeApps = plan.Apps.Where(UsesAppStoreConnect).ToArray();
         var requested = plan.RequestedMarketingVersion!.Trim();
+        var resumed = ResolveApprovedAppleShipVersion(plan, current, requested);
+        if (resumed is not null)
+            return resumed;
         var isPattern = requested.IndexOf("X", StringComparison.OrdinalIgnoreCase) >= 0;
         var highestRemote = 0L;
         AppleReleaseMarketingVersionResolution? resolution = null;

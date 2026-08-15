@@ -39,6 +39,14 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
 
     internal string RootPath { get; }
 
+    internal static void ValidateCurrentSourceIfRequired(PowerForgeAppleReleasePlan plan)
+    {
+        if (!plan.RequireImmutableSourceSnapshot || string.IsNullOrWhiteSpace(plan.SourceCommit))
+            return;
+
+        ValidateCurrentSource(plan);
+    }
+
     internal static AppleReleaseSourceSnapshot? CreateIfRequired(PowerForgeAppleReleasePlan plan)
     {
         if (!plan.RequireImmutableSourceSnapshot || string.IsNullOrWhiteSpace(plan.SourceCommit))

@@ -262,6 +262,7 @@ Use the same entry point for each transition:
 | `Screenshots` | Validates and syncs configured screenshot sets as a separate, deliberate transition. |
 | `TestFlight` | Assigns the processed build to configured groups and testers. |
 | `Advance` | Resumes versioning, archive, upload, preparation, metadata, readiness, configured TestFlight distribution, and screenshots only when `SyncScreenshots` is explicitly enabled; then stops before any review or public-release action. |
+| `Ship` | Runs one resumable intent across versioning, upload, internal TestFlight, preparation, and App Review for explicitly selected targets. It reuses remote screenshots by default and stops at a reviewed source-version checkpoint when needed. |
 | `SubmitTestFlightReview` | Submits external TestFlight distribution for Beta App Review. |
 | `SubmitAppReview` | Submits a ready App Store version for App Review. |
 | `Release` | Publishes a version waiting for developer release. |
@@ -332,6 +333,51 @@ uses a separate plan receipt, checks the exact version/build remotely, and stops
 `SubmitTestFlightReview`, `SubmitAppReview`, or `Release`.
 Screenshot replacement is opt-in during `Advance`. Keep `SyncScreenshots=false` when the
 protected `powerforge-apple-screenshots.yml` lane owns capture, approval, and immediate sync.
+
+### Ship an Apple release with one intent
+
+Use `Ship` for the normal end-to-end path. Declare where each configured target
+should go; PowerForge owns the required sequence and binds the complete intent to
+one reviewable plan hash. A target may appear in both sets when it should be sent
+to internal TestFlight and App Review.
+
+```text
+# iOS App Review plus internal TestFlight; Mac internal TestFlight only
+powerforge apple-release Ship --config powerforge.release.json --apple-version 1.X --apple-source-commit <exact-commit> \
+  --apple-testflight-target "CasaRay iOS,CasaRay Mac" \
+  --apple-app-store-target "CasaRay iOS" --plan --summary --output json
+
+powerforge apple-release Ship --config powerforge.release.json --apple-version 1.X --apple-source-commit <exact-commit> \
+  --apple-testflight-target "CasaRay iOS,CasaRay Mac" \
+  --apple-app-store-target "CasaRay iOS" \
+  --apple-expected-plan-sha256 <reviewed-plan-sha256> \
+  --confirm-apple-action --summary --output json
+```
+
+The same command supports iOS-only, Mac-only, or both platforms in internal
+TestFlight. PowerForge never adds groups or testers that are not already configured,
+requires each selected target to declare `TestFlightPolicy: Internal`, and an
+internal-TestFlight-only target does not receive an App Store version or review
+submission.
+
+Remote App Store screenshots are reused by default. Add
+`--apple-sync-screenshots` only when reviewed local screenshot inputs should replace
+the remote sets.
+
+When the selected marketing version/build is not yet present in the checked-in
+version source, the first plan has `shipPhase: VersionCheckpoint`. Confirming it
+changes only the version source and regenerates configured Xcode projects; it does
+not archive, upload, or mutate App Store Connect. Review and merge that source change,
+then rerun the identical intent from the exact merged commit. The new plan has
+`shipPhase: Release` and can be confirmed to resume the remaining steps.
+If that confirmed run is interrupted after an upload, rerun the exact confirmed
+command with the same plan hash. PowerForge uses its exact-source, route, and upload
+attestations to skip completed uploads; it never silently adopts an unrelated build.
+
+The compiled PowerShell surface exposes the same intent through
+`Invoke-PowerForgeRelease -AppleAction Ship`,
+`-AppleShipTestFlightTarget`, `-AppleShipAppStoreTarget`, and the opt-in
+`-AppleShipSyncScreenshots` switch.
 
 ### Receipts and recovery
 
