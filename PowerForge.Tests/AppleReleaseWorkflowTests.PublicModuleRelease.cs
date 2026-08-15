@@ -8,6 +8,7 @@ public sealed partial class AppleReleaseWorkflowTests
         var root = FindRepoRoot();
         var workflow = Read(root, ".github", "workflows", "pspublishmodule-public-release.yml");
         var script = Read(root, "Build", "Invoke-PowerForgePublicRelease.ps1");
+        var sourceState = Read(root, "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1");
         var evidenceWorkspace = Read(root, "Build", "Private", "New-PowerForgeReleaseEvidenceWorkspace.ps1");
         var releaseConfig = Read(root, "Build", "release.json");
         var moduleConfig = Read(root, "powerforge.json");
@@ -22,7 +23,8 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("-or -not $certificate.HasPrivateKey", script, StringComparison.Ordinal);
         Assert.Contains("$certificate.NotAfter -le [DateTime]::UtcNow.AddDays(7)", script, StringComparison.Ordinal);
         Assert.Contains("The release checkout must start clean", script, StringComparison.Ordinal);
-        Assert.Contains("status --porcelain --untracked-files=all", script, StringComparison.Ordinal);
+        Assert.Contains("status --porcelain=v1 --untracked-files=no", sourceState, StringComparison.Ordinal);
+        Assert.Contains("ls-files --others --exclude-standard", sourceState, StringComparison.Ordinal);
         Assert.Contains("[IO.Path]::GetTempPath()", script, StringComparison.Ordinal);
         Assert.Contains("Assert-PowerForgeCommittedReleaseVersion", script, StringComparison.Ordinal);
         Assert.Contains("Set-PowerForgeAuthorizedReleaseVersion", script, StringComparison.Ordinal);
