@@ -325,14 +325,17 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         return output.ToArray();
     }
 
-    private static byte[] ReadBoundedFileBytes(string path, string label)
+    private static byte[] ReadBoundedFileBytes(
+        string path,
+        string label,
+        long maximumBytes = MaxArchiveMetadataBytes)
     {
         var info = new FileInfo(path);
-        if (info.Length < 0 || info.Length > MaxArchiveMetadataBytes)
-            throw Invalid($"{label} exceeds the {MaxArchiveMetadataBytes} byte metadata limit.");
+        if (info.Length < 0 || info.Length > maximumBytes)
+            throw Invalid($"{label} exceeds the {maximumBytes} byte limit.");
         using FileStream input = File.OpenRead(path);
         using var output = new MemoryStream((int)info.Length);
-        CopyBounded(input, output, MaxArchiveMetadataBytes, label);
+        CopyBounded(input, output, maximumBytes, label);
         return output.ToArray();
     }
 

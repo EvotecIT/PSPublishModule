@@ -417,6 +417,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
                 string portableVersion = FirstText(versionInfo.ProductVersion, versionInfo.FileVersion);
                 SourceProvenance provenance = ReadPortableInventorySourceProvenance(plan, outputDir);
+                (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
+                    outputDir,
+                    executable,
+                    target.Publish.Zip);
+                PowerForgePortablePayloadInventoryCms.EnsureEvidencePathsAvailable(inventoryPath, signaturePath);
                 PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
                     outputDir,
                     target.Name,
@@ -431,16 +436,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     sourceDirty: provenance.Dirty is not false,
                     includeCompleteOutput: target.Publish.Zip);
                 byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
-                string inventoryPath = target.Publish.Zip
-                    ? Path.Combine(outputDir, PowerForgePortablePayloadInventory.InventoryFileName)
-                    : executable + PowerForgePortablePayloadInventory.DirectInventorySuffix;
-                string signaturePath = target.Publish.Zip
-                    ? Path.Combine(outputDir, PowerForgePortablePayloadInventory.SignatureFileName)
-                    : executable + PowerForgePortablePayloadInventory.DirectSignatureSuffix;
-                File.WriteAllBytes(inventoryPath, inventoryBytes);
-                File.WriteAllBytes(
+                byte[] signatureBytes = _signPortableInventory(
+                    inventoryBytes,
+                    ResolvePortableInventorySigningOptions(signedFilePaths, target.Publish.Sign));
+                PowerForgePortablePayloadInventoryCms.WriteEvidenceFiles(
+                    inventoryPath,
+                    inventoryBytes,
                     signaturePath,
-                    _signPortableInventory(inventoryBytes, ResolvePortableInventorySigningOptions(signedFilePaths, target.Publish.Sign)));
+                    signatureBytes);
             }
         }
 

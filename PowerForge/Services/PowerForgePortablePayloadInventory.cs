@@ -50,6 +50,67 @@ internal sealed class PowerForgePayloadInventorySignature
 
 internal static class PowerForgePortablePayloadInventoryCms
 {
+    internal static (string InventoryPath, string SignaturePath) ResolveEvidencePaths(
+        string outputDirectory,
+        string executablePath,
+        bool archivePayload)
+        => archivePayload
+            ? (
+                Path.Combine(outputDirectory, PowerForgePortablePayloadInventory.InventoryFileName),
+                Path.Combine(outputDirectory, PowerForgePortablePayloadInventory.SignatureFileName))
+            : (
+                executablePath + PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                executablePath + PowerForgePortablePayloadInventory.DirectSignatureSuffix);
+
+    internal static void EnsureEvidencePathsAvailable(string inventoryPath, string signaturePath)
+    {
+        foreach (string path in new[] { inventoryPath, signaturePath })
+        {
+            if (File.Exists(path) || Directory.Exists(path))
+            {
+                throw new InvalidOperationException(
+                    $"Portable payload contains reserved release-inventory metadata path '{path}'.");
+            }
+        }
+    }
+
+    internal static void WriteEvidenceFiles(
+        string inventoryPath,
+        byte[] inventoryBytes,
+        string signaturePath,
+        byte[] signatureBytes)
+    {
+        bool inventoryCreated = false;
+        bool signatureCreated = false;
+        try
+        {
+            using (var inventory = new FileStream(inventoryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                inventoryCreated = true;
+                inventory.Write(inventoryBytes, 0, inventoryBytes.Length);
+            }
+            using (var signature = new FileStream(signaturePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                signatureCreated = true;
+                signature.Write(signatureBytes, 0, signatureBytes.Length);
+            }
+        }
+        catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
+        {
+            if (inventoryCreated)
+            {
+                try { File.Delete(inventoryPath); } catch { }
+            }
+            if (signatureCreated)
+            {
+                try { File.Delete(signaturePath); } catch { }
+            }
+            throw new InvalidOperationException(
+                "Portable release-inventory evidence path appeared while evidence was being created.",
+                exception);
+        }
+    }
+
     internal static byte[] Sign(byte[] content, DotNetPublishSignOptions options)
     {
         X509Certificate2 certificate = FindSigningCertificate(options);

@@ -139,6 +139,70 @@ public sealed partial class DotNetPublishPipelineRunner
         return inputs.OrderBy(path => path, comparison).ToArray();
     }
 
+    internal static string[] EnumerateCommandHookSourceInputs(DotNetPublishPlan? plan)
+    {
+        if (plan is null || string.IsNullOrWhiteSpace(plan.ProjectRoot))
+            return Array.Empty<string>();
+
+        var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var inputs = new HashSet<string>(comparison);
+        foreach (DotNetPublishStep step in (plan.Steps ?? Array.Empty<DotNetPublishStep>())
+                     .Where(step => step is not null && step.Kind == DotNetPublishStepKind.CommandHook))
+        {
+            var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["hook"] = step.HookId ?? string.Empty,
+                ["phase"] = step.HookPhase?.ToString() ?? string.Empty,
+                ["target"] = step.TargetName ?? string.Empty,
+                ["rid"] = step.Runtime ?? string.Empty,
+                ["framework"] = step.Framework ?? string.Empty,
+                ["style"] = step.Style?.ToString() ?? string.Empty,
+                ["bundle"] = step.BundleId ?? string.Empty,
+                ["configuration"] = plan.Configuration,
+                ["projectRoot"] = plan.ProjectRoot
+            };
+            string command = ApplyTemplate(step.HookCommand ?? string.Empty, tokens);
+            string commandPath = ResolveHookCommandPath(plan.ProjectRoot, command);
+            AddCommandHookSourceInput(
+                inputs,
+                Path.IsPathRooted(commandPath) ? commandPath : Path.Combine(plan.ProjectRoot, commandPath));
+
+            string workingDirectory = string.IsNullOrWhiteSpace(step.HookWorkingDirectory)
+                ? plan.ProjectRoot
+                : ResolvePath(plan.ProjectRoot, ApplyTemplate(step.HookWorkingDirectory!, tokens));
+            foreach (string argument in step.HookArguments ?? Array.Empty<string>())
+            {
+                string candidate = TrimMatchingQuotes(ApplyTemplate(argument ?? string.Empty, tokens).Trim());
+                int assignment = candidate.IndexOf('=');
+                if (assignment >= 0 && assignment < candidate.Length - 1)
+                    candidate = TrimMatchingQuotes(candidate.Substring(assignment + 1).Trim());
+                if (string.IsNullOrWhiteSpace(candidate))
+                    continue;
+                AddCommandHookSourceInput(
+                    inputs,
+                    Path.IsPathRooted(candidate) ? candidate : Path.Combine(workingDirectory, candidate));
+            }
+        }
+
+        return inputs.OrderBy(path => path, comparison).ToArray();
+    }
+
+    private static void AddCommandHookSourceInput(HashSet<string> inputs, string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return;
+        try
+        {
+            string path = Path.GetFullPath(candidate);
+            if (File.Exists(path))
+                inputs.Add(path);
+        }
+        catch
+        {
+            // Runtime command validation owns malformed command text. Provenance stays fail closed for files it can resolve.
+        }
+    }
+
     private static Dictionary<string, string> BuildBundleSourceInputTokens(
         DotNetPublishPlan plan,
         DotNetPublishBundlePlan bundle,

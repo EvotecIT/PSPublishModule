@@ -10,6 +10,8 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class PowerForgeReleaseArtifactVerifier
 {
+    private const long MaxSbomBytes = 64L * 1024L * 1024L;
+    private const long MaxSbomSignatureBytes = 4L * 1024L * 1024L;
     private readonly Func<string, DotNetPublishReleaseArtifactVerifier.AuthenticodeResult> _verifyAuthenticode;
     private readonly Func<string, string> _readPortableVersion;
     private readonly Func<string, string> _readPortableIdentity;
@@ -104,12 +106,15 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 checksumsPath,
                 signaturePath,
                 "SBOM detached signature");
+            byte[] sbomBytes = ReadBoundedFileBytes(path, "SBOM", MaxSbomBytes);
+            byte[] signatureBytes = ReadBoundedFileBytes(
+                signaturePath,
+                "SBOM detached signature",
+                MaxSbomSignatureBytes);
             PowerForgePayloadInventorySignature signature;
             try
             {
-                signature = _verifyPortableInventory(
-                    File.ReadAllBytes(path),
-                    File.ReadAllBytes(signaturePath));
+                signature = _verifyPortableInventory(sbomBytes, signatureBytes);
             }
             catch (CryptographicException exception)
             {
@@ -122,7 +127,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             {
                 throw Invalid($"SBOM '{Path.GetFileName(path)}' detached signature does not use the admitted artifact publisher certificate.");
             }
-            ValidateSbom(path, artifactId, artifactVersion, artifactDigest);
+            ValidateSbom(path, sbomBytes, artifactId, artifactVersion, artifactDigest);
             evidence.Add(new PowerForgeReleaseEvidenceFile { Role = "sbom", Path = path, Sha256 = digest });
             evidence.Add(new PowerForgeReleaseEvidenceFile
             {

@@ -149,8 +149,10 @@ public sealed partial class DotNetPublishPipelineRunner
         var statusChangedDuringVerification = hasWriterContext
             && !string.Equals(trackedStatus, finalTrackedStatus, StringComparison.Ordinal);
         string[] bundleSourceInputs = EnumerateBundleSourceInputs(buildPlan);
+        string[] commandHookSourceInputs = EnumerateCommandHookSourceInputs(buildPlan);
         IEnumerable<string> allExplicitInputPaths = (explicitInputPaths ?? Array.Empty<string>())
-            .Concat(bundleSourceInputs);
+            .Concat(bundleSourceInputs)
+            .Concat(commandHookSourceInputs);
         bool generatedOutputOverlapsInput = HasGeneratedOutputInputOverlap(
             projectRoot,
             generatedPaths,

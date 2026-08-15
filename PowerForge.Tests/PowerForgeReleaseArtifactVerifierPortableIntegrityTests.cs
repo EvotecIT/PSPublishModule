@@ -4,6 +4,55 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseArtifactVerifierTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PortableInventory_RejectsApplicationPayloadAtReservedEvidencePath(bool archivePayload)
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string executable = Path.Combine(root, "Sample.CLI.exe");
+            File.WriteAllText(executable, "signed payload");
+            (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
+                root,
+                executable,
+                archivePayload);
+            File.WriteAllText(inventoryPath, "application-owned payload");
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                PowerForgePortablePayloadInventoryCms.EnsureEvidencePathsAvailable(inventoryPath, signaturePath));
+
+            Assert.Contains("reserved release-inventory", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("application-owned payload", File.ReadAllText(inventoryPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, 68157440L)]
+    [InlineData(true, 5242880L)]
+    public void Verify_PortableCliRejectsOversizedSbomEvidenceBeforeBuffering(bool signature, long bytes)
+    {
+        using var fixture = new PortableFixture();
+        string path = signature ? fixture.SbomSignaturePath : fixture.SbomPath;
+        using (FileStream stream = new(path, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            stream.SetLength(bytes);
+            stream.Position = 0;
+            stream.WriteByte(2);
+        }
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("byte limit", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Verify_PortableCliStreamsLargeArchiveMember()
     {

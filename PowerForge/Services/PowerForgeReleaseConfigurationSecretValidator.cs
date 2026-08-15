@@ -61,7 +61,9 @@ internal static class PowerForgeReleaseConfigurationSecretValidator
                 foreach (JsonProperty property in element.EnumerateObject())
                 {
                     string propertyPath = path + "." + property.Name;
-                    if (InlineSecretPropertyNames.Contains(property.Name) &&
+                    bool sensitiveHookEnvironment = IsHookEnvironmentPath(path) &&
+                                                    IsSensitiveEnvironmentVariableName(property.Name);
+                    if ((InlineSecretPropertyNames.Contains(property.Name) || sensitiveHookEnvironment) &&
                         property.Value.ValueKind == JsonValueKind.String &&
                         !string.IsNullOrWhiteSpace(property.Value.GetString()))
                     {
@@ -96,5 +98,37 @@ internal static class PowerForgeReleaseConfigurationSecretValidator
             property.Value.ValueKind == JsonValueKind.String &&
             !string.IsNullOrWhiteSpace(property.Value.GetString()));
         return secret && literalValue;
+    }
+
+    private static bool IsHookEnvironmentPath(string path)
+        => path.EndsWith(".Environment", StringComparison.OrdinalIgnoreCase) &&
+           path.IndexOf(".Hooks[", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    private static bool IsSensitiveEnvironmentVariableName(string name)
+    {
+        string normalized = new string((name ?? string.Empty)
+                .Trim()
+                .Select(character => char.IsLetterOrDigit(character)
+                    ? char.ToUpperInvariant(character)
+                    : '_')
+                .ToArray())
+            .Trim('_');
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+
+        string[] suffixes =
+        [
+            "TOKEN",
+            "PASSWORD",
+            "SECRET",
+            "API_KEY",
+            "ACCESS_KEY",
+            "PRIVATE_KEY",
+            "CONNECTION_STRING",
+            "CREDENTIAL"
+        ];
+        return suffixes.Any(suffix =>
+            normalized.Equals(suffix, StringComparison.OrdinalIgnoreCase) ||
+            normalized.EndsWith("_" + suffix, StringComparison.OrdinalIgnoreCase));
     }
 }

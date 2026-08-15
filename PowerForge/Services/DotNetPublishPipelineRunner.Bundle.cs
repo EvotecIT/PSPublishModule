@@ -172,6 +172,11 @@ public sealed partial class DotNetPublishPipelineRunner
 
             string portableVersion = FirstText(versionInfo.ProductVersion, versionInfo.FileVersion);
             SourceProvenance provenance = ReadPortableInventorySourceProvenance(plan, outputDir);
+            (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
+                outputDir,
+                primaryExecutable,
+                bundle.Zip);
+            PowerForgePortablePayloadInventoryCms.EnsureEvidencePathsAvailable(inventoryPath, signaturePath);
             PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
                     outputDir,
                     sourceTargetPlan.Name,
@@ -187,18 +192,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     sourceDirty: provenance.Dirty is not false,
                     includeCompleteOutput: bundle.Zip);
             byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
-            string inventoryPath = bundle.Zip
-                ? Path.Combine(outputDir, PowerForgePortablePayloadInventory.InventoryFileName)
-                : primaryExecutable + PowerForgePortablePayloadInventory.DirectInventorySuffix;
-            string signaturePath = bundle.Zip
-                ? Path.Combine(outputDir, PowerForgePortablePayloadInventory.SignatureFileName)
-                : primaryExecutable + PowerForgePortablePayloadInventory.DirectSignatureSuffix;
-            File.WriteAllBytes(inventoryPath, inventoryBytes);
-            File.WriteAllBytes(
+            byte[] signatureBytes = _signPortableInventory(
+                inventoryBytes,
+                ResolvePortableInventorySigningOptions(signedFilePaths, sign));
+            PowerForgePortablePayloadInventoryCms.WriteEvidenceFiles(
+                inventoryPath,
+                inventoryBytes,
                 signaturePath,
-                _signPortableInventory(
-                    inventoryBytes,
-                    ResolvePortableInventorySigningOptions(signedFilePaths, sign)));
+                signatureBytes);
         }
 
         string? zipPath = null;

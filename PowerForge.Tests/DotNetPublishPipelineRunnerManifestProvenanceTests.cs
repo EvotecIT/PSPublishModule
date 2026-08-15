@@ -828,7 +828,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 </Project>
                 """);
             File.WriteAllText(Path.Combine(root, "Program.cs"), "internal static class Program { }");
-            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\nrid.custom\nsingle.custom\nproperty.custom\nenvironment.custom\nanalyzer.editorconfig\nanalyzer.globalconfig\nignored/\nassets/bin/\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\nrid.custom\nsingle.custom\nproperty.custom\nenvironment.custom\nanalyzer.editorconfig\nanalyzer.globalconfig\nignored/\nhooks/\nassets/bin/\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
             RunGit(root, "add Sample.csproj Program.cs .gitignore");
             RunGit(root, "commit -m \"tracked source\"");
 
@@ -926,6 +926,25 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             artefacts[0].PublishDir = outputDirectory;
             artefacts[0].OutputDir = outputDirectory;
             File.Delete(ignoredReference);
+
+            string hookDirectory = Directory.CreateDirectory(Path.Combine(root, "hooks")).FullName;
+            string hookScript = Path.Combine(hookDirectory, "generate.ps1");
+            File.WriteAllText(hookScript, "Set-Content -LiteralPath output.txt -Value generated");
+            plan.Steps =
+            [
+                new DotNetPublishStep
+                {
+                    Kind = DotNetPublishStepKind.CommandHook,
+                    HookId = "generate",
+                    HookPhase = DotNetPublishCommandHookPhase.BeforeTargetPublish,
+                    HookCommand = "hooks/{hook}.ps1"
+                }
+            ];
+            InvokeWriteManifests(plan, artefacts);
+            using (JsonDocument hookDirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+                Assert.True(hookDirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+            plan.Steps = Array.Empty<DotNetPublishStep>();
+            File.Delete(hookScript);
 
             File.WriteAllText(Path.Combine(root, "payload.custom"), "published payload");
             InvokeWriteManifests(plan, artefacts);

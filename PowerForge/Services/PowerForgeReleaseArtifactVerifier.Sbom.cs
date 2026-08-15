@@ -6,11 +6,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 {
     private static void ValidateSbom(
         string path,
+        byte[] content,
         string artifactId,
         string artifactVersion,
         string artifactDigest)
     {
-        using JsonDocument document = ReadJson(path, "SBOM");
+        using JsonDocument document = ParseSbomJson(content);
         JsonElement root = document.RootElement;
         if (root.ValueKind != JsonValueKind.Object)
             throw Invalid($"SBOM '{Path.GetFileName(path)}' is not a recognizable CycloneDX or SPDX JSON document.");
@@ -63,6 +64,22 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         }
 
         throw Invalid($"SBOM '{Path.GetFileName(path)}' is not a recognizable CycloneDX or SPDX JSON document.");
+    }
+
+    private static JsonDocument ParseSbomJson(byte[] content)
+    {
+        try
+        {
+            return JsonDocument.Parse(content, new JsonDocumentOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling = JsonCommentHandling.Skip
+            });
+        }
+        catch (JsonException exception)
+        {
+            throw Invalid($"SBOM is not valid JSON: {exception.Message}");
+        }
     }
 
     private static IEnumerable<JsonElement> EnumerateCycloneDxComponents(JsonElement root)
