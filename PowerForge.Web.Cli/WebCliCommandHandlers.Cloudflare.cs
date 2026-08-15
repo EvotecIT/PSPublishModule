@@ -461,7 +461,7 @@ internal static partial class WebCliCommandHandlers
             purgeTargets = Array.Empty<string>();
         }
 
-        var (ok, message) = CloudflareCachePurger.Purge(
+        var (ok, message, _) = CloudflareCachePurger.Purge(
             zoneId: zoneId,
             apiToken: token,
             mode: purgeMode,

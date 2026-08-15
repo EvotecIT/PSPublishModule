@@ -167,7 +167,7 @@ internal static partial class WebPipelineRunner
         IReadOnlyList<string> targets,
         WebPipelineStepResult stepResult)
     {
-        var (ok, message) = CloudflareCachePurger.Purge(
+        var (ok, message, _) = CloudflareCachePurger.Purge(
             zoneId: zoneId,
             apiToken: token,
             mode: purgeMode,

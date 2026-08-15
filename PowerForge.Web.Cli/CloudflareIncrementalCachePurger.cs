@@ -123,7 +123,7 @@ internal static class CloudflareIncrementalCachePurger
             var plannedBatchCount = (urls.Length + FileTargetsPerRequest - 1) / FileTargetsPerRequest;
             foreach (var batch in urls.Chunk(FileTargetsPerRequest))
             {
-                var (ok, message) = CloudflareCachePurger.Purge(
+                var (ok, message, requestAttempted) = CloudflareCachePurger.Purge(
                     zoneId,
                     apiToken,
                     CloudflareCachePurgeMode.Files,
@@ -131,10 +131,10 @@ internal static class CloudflareIncrementalCachePurger
                     dryRun,
                     logger,
                     httpClient);
-                if (!ok)
-                    return Failure($"Incremental Cloudflare purge stopped after {requestCount} successful batch(es): {message}", urls.Length, requestCount);
-                if (!dryRun)
+                if (requestAttempted)
                     requestCount++;
+                if (!ok)
+                    return Failure($"Incremental Cloudflare purge stopped after {requestCount} request attempt(s): {message}", urls.Length, requestCount);
             }
 
             return new CloudflareIncrementalPurgeResult
@@ -201,7 +201,7 @@ internal static class CloudflareIncrementalCachePurger
             .Select(baseUrl => new Uri(CloudflareDeploymentManifestStore.NormalizeBaseUrl(baseUrl!)).Host)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var (ok, message) = CloudflareCachePurger.Purge(
+        var (ok, message, requestAttempted) = CloudflareCachePurger.Purge(
             zoneId,
             apiToken,
             CloudflareCachePurgeMode.Hostname,
@@ -217,7 +217,7 @@ internal static class CloudflareIncrementalCachePurger
                 : $"Incremental purge hostname fallback failed because {reason}. {message}",
             ActualMode = CloudflareCachePurgeMode.Hostname,
             TargetCount = hostnames.Length,
-            RequestCount = ok && !dryRun ? 1 : 0,
+            RequestCount = requestAttempted ? 1 : 0,
             UsedFallback = true,
             FallbackReason = reason
         };
