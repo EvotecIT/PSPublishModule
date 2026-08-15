@@ -20,7 +20,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         ExpectedPortable expected = ReadExpectedPortable(configurationPath, artifactId, request);
 
         VerifyChecksummedFile(projectRoot, checksumsPath, manifestPath, "PowerForge manifest");
-        using JsonDocument manifest = ReadJson(manifestPath, "PowerForge manifest");
+        using JsonDocument manifest = ReadJson(manifestPath, "PowerForge manifest", MaxManifestBytes);
         if (manifest.RootElement.ValueKind != JsonValueKind.Array)
             throw Invalid("PowerForge manifest must contain a JSON array.");
 

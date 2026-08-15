@@ -10,6 +10,7 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class PowerForgeReleaseArtifactVerifier
 {
+    private const long MaxManifestBytes = 16L * 1024L * 1024L;
     private const long MaxSbomBytes = 64L * 1024L * 1024L;
     private const long MaxSbomSignatureBytes = 4L * 1024L * 1024L;
     private readonly Func<string, DotNetPublishReleaseArtifactVerifier.AuthenticodeResult> _verifyAuthenticode;
@@ -342,11 +343,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             : NormalizeModuleVersion(text.Substring(0, separator), text.Substring(separator + 1));
     }
 
-    private static JsonDocument ReadJson(string path, string label)
+    private static JsonDocument ReadJson(string path, string label, long maximumBytes)
     {
         try
         {
-            return JsonDocument.Parse(File.ReadAllText(path), new JsonDocumentOptions
+            return JsonDocument.Parse(ReadBoundedFileBytes(path, label, maximumBytes), new JsonDocumentOptions
             {
                 AllowTrailingCommas = true,
                 CommentHandling = JsonCommentHandling.Skip

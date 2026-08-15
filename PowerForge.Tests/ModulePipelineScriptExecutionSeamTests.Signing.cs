@@ -319,6 +319,64 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Plan_SignedGitHubPackedArtifactBindsEnabledIgnoredLifecycleScript(bool enabled)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            File.WriteAllText(Path.Combine(root.FullName, ".gitignore"), "Build/\nArtefacts/\n");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            string actionDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Build")).FullName;
+            File.WriteAllText(Path.Combine(actionDirectory, "Invoke-ReleaseAction.ps1"), "# mutable ignored action");
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            spec.Build.ExcludeDirectories = (spec.Build.ExcludeDirectories ?? Array.Empty<string>())
+                .Concat(new[] { "Build" })
+                .ToArray();
+            EnableGitHubPublish(spec, moduleName);
+            spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
+            {
+                new ConfigurationActionSegment
+                {
+                    Configuration = new ModulePipelineActionConfiguration
+                    {
+                        Enabled = enabled,
+                        Name = "ignored release action",
+                        At = ModulePipelineActionStage.BeforeArtefacts,
+                        FilePath = Path.Combine("Build", "Invoke-ReleaseAction.ps1")
+                    }
+                }
+            }).ToArray();
+
+            if (enabled)
+            {
+                InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                    CreateRunner(new FakeHostedOperations()).Plan(spec));
+                Assert.Contains("resolved clean Git checkout", exception.Message, StringComparison.OrdinalIgnoreCase);
+            }
+            else
+            {
+                ModulePipelinePlan plan = CreateRunner(new FakeHostedOperations()).Plan(spec);
+                Assert.True(plan.GenerateReleaseProvenance);
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void Plan_SignedGitHubBinaryModuleRejectsIgnoredEvaluatedProjectInputOutsideModuleSource()
     {

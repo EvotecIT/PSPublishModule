@@ -54,6 +54,25 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsOversizedManifestBeforeParsing()
+    {
+        using var fixture = new PortableFixture();
+        using (FileStream stream = new(fixture.ManifestPath, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            stream.SetLength((16L * 1024L * 1024L) + 1L);
+            stream.Position = 0;
+            stream.WriteByte((byte)'[');
+        }
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("PowerForge manifest exceeds", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("byte limit", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliStreamsLargeArchiveMember()
     {
         using var fixture = new PortableFixture();

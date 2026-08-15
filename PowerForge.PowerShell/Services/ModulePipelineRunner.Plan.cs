@@ -1065,9 +1065,10 @@ public sealed partial class ModulePipelineRunner
         if (plan.GenerateReleaseProvenance)
         {
             string[] generatedProvenancePaths = GetGeneratedReleaseProvenancePaths(plan.ProjectRoot);
+            string[] lifecycleActionInputs = CollectReleaseActionInputPaths(plan.ProjectRoot, plan.Actions);
             plan.SourceInputPaths = CollectReleaseSourceInputPaths(
                 plan.BuildSpec,
-                spec.SourceInputPaths,
+                (spec.SourceInputPaths ?? Array.Empty<string>()).Concat(lifecycleActionInputs),
                 generatedProvenancePaths);
             DotNetPublishPipelineRunner.SourceProvenance provenance =
                 DotNetPublishPipelineRunner.ReadSourceProvenance(
@@ -1160,6 +1161,21 @@ public sealed partial class ModulePipelineRunner
             }
         }
         return inputs.OrderBy(static path => path, comparer).ToArray();
+    }
+
+    private static string[] CollectReleaseActionInputPaths(
+        string projectRoot,
+        IEnumerable<ConfigurationActionSegment>? actions)
+    {
+        var comparer = Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        return (actions ?? Array.Empty<ConfigurationActionSegment>())
+            .Where(static action =>
+                action?.Configuration is { Enabled: true } configuration &&
+                !string.IsNullOrWhiteSpace(configuration.FilePath))
+            .Select(action => ResolvePath(projectRoot, action.Configuration.FilePath!))
+            .Distinct(comparer)
+            .OrderBy(static path => path, comparer)
+            .ToArray();
     }
 
     private static void ValidateReleaseSourceUnchanged(
