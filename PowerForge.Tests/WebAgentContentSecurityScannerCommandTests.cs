@@ -442,7 +442,6 @@ public sealed partial class WebAgentContentSecurityScannerTests
     [InlineData("yarn dlx sample-tool@1.0.0", "npm")]
     [InlineData("dnx Sample.Tool@1.0.0", "nuget")]
     [InlineData("dotnet new install Sample.Tool@1.0.0", "nuget")]
-    [InlineData("npm link sample-tool@1.0.0", "npm")]
     [InlineData("pipx upgrade sample-tool==1.0.0", "pypi")]
     [InlineData("pipx reinstall sample-tool==1.0.0", "pypi")]
     public void Scan_CoversPackageRunnerFamilies(string command, string ecosystem)

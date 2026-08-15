@@ -592,6 +592,12 @@ public sealed partial class WebAgentContentSecurityScanner
             return -1;
         for (var index = 1; index < moduleIndex; index++)
         {
+            if (tokens[index].Equals("-c", StringComparison.Ordinal) ||
+                tokens[index].StartsWith("-c", StringComparison.Ordinal) && tokens[index].Length > 2)
+            {
+                AddUnverifiableOperand(tokens[0], path, line, findings, "inline Python execution mode");
+                return -1;
+            }
             if (Regex.IsMatch(tokens[index], @"^-\d+(?:\.\d+)?$", RegexOptions.CultureInvariant))
                 continue;
             if (tokens[index].StartsWith("-", StringComparison.Ordinal) && TrySkipOption(tokens, ref index))

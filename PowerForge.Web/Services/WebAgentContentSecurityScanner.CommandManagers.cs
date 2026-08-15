@@ -230,8 +230,8 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         if (verb == "link")
         {
-            AddMultipleOperands("npm", tokens[0] + " " + tokens[verbIndex], tokens, verbIndex + 1,
-                path, line, references, findings);
+            AddUnverifiableOperand(tokens[0] + " " + tokens[verbIndex], path, line, findings,
+                "local or globally linked dependency set");
             return;
         }
         if (tokens[0].Equals("yarn", StringComparison.OrdinalIgnoreCase) && verb is "exec" or "x")

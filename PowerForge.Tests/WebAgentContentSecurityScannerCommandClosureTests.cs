@@ -180,9 +180,6 @@ public sealed partial class WebAgentContentSecurityScannerTests
     [InlineData("bun x safe-package@1.0.0", "npm")]
     [InlineData("gem ins safe-gem --version 1.0.0", "rubygems")]
     [InlineData("gem updat safe-gem --version 1.0.0", "rubygems")]
-    [InlineData("gem exec safe-gem --version 1.0.0", "rubygems")]
-    [InlineData("gem exe --gem safe-gem --version 1.0.0 safe-command", "rubygems")]
-    [InlineData("gem exec -g safe-gem --version 1.0.0 safe-command", "rubygems")]
     public void Scan_VerifiesLauncherAndCommandAliases(string command, string ecosystem)
     {
         using var handler = new RegistryHandler(_ => ecosystem switch

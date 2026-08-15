@@ -137,18 +137,8 @@ public sealed partial class WebAgentContentSecurityScanner
             tokens[verbIndex].Equals("ex", StringComparison.OrdinalIgnoreCase) ||
             tokens[verbIndex].Equals("exe", StringComparison.OrdinalIgnoreCase))
         {
-            var selectedGems = FindOptionValues(tokens, verbIndex + 1, "--gem", "-g");
-            if (selectedGems.Count > 1 || selectedGems.Any(string.IsNullOrWhiteSpace))
-            {
-                AddUnverifiableOperand("gem exec", path, line, findings, "ambiguous --gem package selection");
-                return;
-            }
-            if (selectedGems.Count == 1)
-            {
-                AddToken("rubygems", "gem exec", selectedGems[0], FindVersionOption(tokens, 0), path, line, references, findings);
-                return;
-            }
-            AddRunnerOperand("rubygems", "gem exec", tokens, verbIndex + 1, path, line, references, findings);
+            AddUnverifiableOperand("gem " + tokens[verbIndex], path, line, findings,
+                "executable command payload");
             return;
         }
         if (tokens[verbIndex].Equals("pristine", StringComparison.OrdinalIgnoreCase) ||

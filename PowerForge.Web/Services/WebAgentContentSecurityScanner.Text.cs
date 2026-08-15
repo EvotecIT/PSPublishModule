@@ -122,7 +122,8 @@ public sealed partial class WebAgentContentSecurityScanner
         string path,
         List<WebAgentContentSecurityFinding> findings,
         int lineOffset = 0,
-        bool countLogicalLines = true)
+        bool countLogicalLines = true,
+        RemoteExecutionFlowState? flowState = null)
     {
         var normalized = ShellContinuationRegex.Replace(content, static match => new string(' ', match.Length));
         foreach (var pattern in new[]
@@ -141,7 +142,8 @@ public sealed partial class WebAgentContentSecurityScanner
             }
         }
 
-        ScanSavedDownloadExecution(normalized, content, path, findings, lineOffset, countLogicalLines);
+        ScanSavedDownloadExecution(normalized, content, path, findings, lineOffset, countLogicalLines,
+            flowState ?? new RemoteExecutionFlowState());
     }
 
     private static void ScanSavedDownloadExecution(
@@ -150,33 +152,38 @@ public sealed partial class WebAgentContentSecurityScanner
         string path,
         List<WebAgentContentSecurityFinding> findings,
         int lineOffset,
-        bool countLogicalLines)
+        bool countLogicalLines,
+        RemoteExecutionFlowState flowState)
     {
-        var downloadedPaths = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var positionOffset = flowState.NextPosition;
+        flowState.NextPosition = checked(positionOffset + normalized.Length + 1L);
         foreach (Match download in SavedDownloadCommandRegex.Matches(normalized))
         {
             foreach (var outputPath in FindDownloadedOutputPaths(
                          download.Groups["downloader"].Value,
                          download.Groups["arguments"].Value))
-                downloadedPaths.TryAdd(NormalizeComparedPath(outputPath), download.Index);
+                flowState.DownloadedPaths.TryAdd(
+                    NormalizeComparedPath(outputPath),
+                    new SavedDownload(
+                        positionOffset + download.Index,
+                        GetReportedLine(original, download.Index, lineOffset, countLogicalLines)));
         }
 
-        if (downloadedPaths.Count == 0)
+        if (flowState.DownloadedPaths.Count == 0)
             return;
 
-        var reportedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (Match interpreter in InterpreterCommandRegex.Matches(normalized))
         {
             foreach (var token in Tokenize(interpreter.Groups["arguments"].Value))
             {
                 var candidate = NormalizeComparedPath(token);
-                if (!downloadedPaths.TryGetValue(candidate, out var downloadIndex) ||
-                    downloadIndex >= interpreter.Index ||
-                    !reportedPaths.Add(candidate))
+                if (!flowState.DownloadedPaths.TryGetValue(candidate, out var download) ||
+                    download.Position >= positionOffset + interpreter.Index ||
+                    !flowState.ReportedPaths.Add(candidate))
                     continue;
 
                 AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path,
-                    GetReportedLine(original, downloadIndex, lineOffset, countLogicalLines),
+                    download.Line,
                     "Downloaded content is saved and then passed to an interpreter. Prefer a pinned, integrity-checked artifact and a separate execution step.");
                 break;
             }
@@ -185,16 +192,25 @@ public sealed partial class WebAgentContentSecurityScanner
         foreach (var candidate in EnumerateDirectlyExecutedPaths(normalized))
         {
             var normalizedPath = NormalizeComparedPath(candidate.Path);
-            if (!downloadedPaths.TryGetValue(normalizedPath, out var downloadIndex) ||
-                downloadIndex >= candidate.Index ||
-                !reportedPaths.Add(normalizedPath))
+            if (!flowState.DownloadedPaths.TryGetValue(normalizedPath, out var download) ||
+                download.Position >= positionOffset + candidate.Index ||
+                !flowState.ReportedPaths.Add(normalizedPath))
                 continue;
 
             AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path,
-                GetReportedLine(original, downloadIndex, lineOffset, countLogicalLines),
+                download.Line,
                 "A downloaded artifact is executed directly. Prefer a pinned, integrity-checked artifact and a separate execution step.");
         }
     }
+
+    private sealed class RemoteExecutionFlowState
+    {
+        public long NextPosition { get; set; }
+        public Dictionary<string, SavedDownload> DownloadedPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> ReportedPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private readonly record struct SavedDownload(long Position, int Line);
 
     private static IEnumerable<(string Path, int Index)> EnumerateDirectlyExecutedPaths(string content)
     {

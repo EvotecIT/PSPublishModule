@@ -120,6 +120,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
 
             artifactCount++;
             var segments = ExtractTextSegments(content, Path.GetExtension(fullPath), configuredPath, findings);
+            var remoteExecutionFlow = new RemoteExecutionFlowState();
             foreach (var segment in segments)
             {
                 ScanPackageSourceEnvironmentOverrides(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings);
@@ -130,7 +131,8 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                 ScanInvisibleUnicode(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
                 if (options.CheckPromptInjection)
                     ScanPromptInjection(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
-                ScanRemoteExecution(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines);
+                ScanRemoteExecution(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines,
+                    segment.ParticipatesInOrderedCommandFlow ? remoteExecutionFlow : null);
                 packages.AddRange(ExtractPackageReferences(
                     segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings));
                 ExtractUrls(segment.Text, urls);
@@ -291,7 +293,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
         List<WebAgentContentSecurityFinding> findings)
     {
         if (!extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
-            return new[] { new TextSegment(content, 0, true) };
+            return new[] { new TextSegment(content, 0, true, true) };
 
         var segments = new List<TextSegment>();
         try
@@ -314,7 +316,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                         physicalLineOffset++;
                 }
                 scannedThrough = tokenStart;
-                segments.Add(new TextSegment(value, physicalLineOffset, false));
+                segments.Add(new TextSegment(value, physicalLineOffset, false, reader.TokenType == JsonTokenType.String));
             }
         }
         catch (JsonException ex)
@@ -359,7 +361,11 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
     private static string PackageIdentityKey(WebAgentPackageReference package)
         => string.Create(CultureInfo.InvariantCulture, $"{package.Ecosystem}|{package.Id}|{package.Version}");
 
-    private sealed record TextSegment(string Text, int LineOffset, bool CountLogicalLines);
+    private sealed record TextSegment(
+        string Text,
+        int LineOffset,
+        bool CountLogicalLines,
+        bool ParticipatesInOrderedCommandFlow);
 
     private sealed class ArtifactTooLargeException(long observedBytes, long maximumBytes) : IOException
     {
