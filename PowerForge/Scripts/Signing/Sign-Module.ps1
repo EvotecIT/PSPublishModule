@@ -19,6 +19,32 @@ function DecodeLines([string]$b64) {
   return $text -split "`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() }
 }
 
+function Test-CodeSigningCertificate([object]$certificate) {
+  if ($null -eq $certificate -or -not $certificate.HasPrivateKey) { return $false }
+
+  $hasEnhancedKeyUsageRestriction = $false
+  foreach ($extension in @($certificate.Extensions)) {
+    if ($null -eq $extension -or $null -eq $extension.PSObject.Properties['EnhancedKeyUsages']) { continue }
+    $usages = @($extension.EnhancedKeyUsages)
+    if ($usages.Count -eq 0) { continue }
+    $hasEnhancedKeyUsageRestriction = $true
+    foreach ($usage in $usages) {
+      if ([string]$usage.Value -eq '1.3.6.1.5.5.7.3.3') { return $true }
+    }
+  }
+
+  return -not $hasEnhancedKeyUsageRestriction
+}
+
+function Get-CodeSigningCertificateByThumbprint([string]$thumbprint) {
+  foreach ($storeRoot in @('Cert:\CurrentUser\My', 'Cert:\LocalMachine\My')) {
+    $candidate = Get-Item -LiteralPath ("{0}\{1}" -f $storeRoot, $thumbprint) -ErrorAction SilentlyContinue
+    if (Test-CodeSigningCertificate -certificate $candidate) { return $candidate }
+  }
+
+  return $null
+}
+
 function Test-ExcludedPackagePath([string]$relativePath, [string[]]$exclusions) {
   if ([string]::IsNullOrWhiteSpace($relativePath) -or -not $exclusions -or $exclusions.Count -eq 0) {
     return $false
@@ -180,14 +206,7 @@ try {
     $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($pfxFull, $PfxPassword, $flags)
   } elseif (-not [string]::IsNullOrWhiteSpace($Thumbprint)) {
     $tp = ($Thumbprint -replace '\s','').ToUpperInvariant()
-    $cert = Get-ChildItem -Path Cert:\CurrentUser\My -CodeSigningCert -ErrorAction SilentlyContinue |
-      Where-Object { ($_.Thumbprint -replace '\s','').ToUpperInvariant() -eq $tp } |
-      Select-Object -First 1
-    if (-not $cert) {
-      $cert = Get-ChildItem -Path Cert:\LocalMachine\My -CodeSigningCert -ErrorAction SilentlyContinue |
-        Where-Object { ($_.Thumbprint -replace '\s','').ToUpperInvariant() -eq $tp } |
-        Select-Object -First 1
-    }
+    $cert = Get-CodeSigningCertificateByThumbprint -thumbprint $tp
   }
 
   if (-not $cert) {

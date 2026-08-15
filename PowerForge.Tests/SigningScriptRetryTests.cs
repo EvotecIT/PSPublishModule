@@ -66,10 +66,52 @@ public sealed class SigningScriptRetryTests
             StringComparison.Ordinal));
     }
 
-    private static (ModuleSigningResult Summary, int SigningCallCount, string[] PackageFilePaths)
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void CertificateLookupFallsBackToLocalMachineWhenCurrentUserCopyIsUnsuitable(
+        bool currentUserHasPrivateKey,
+        bool currentUserHasCodeSigningEku)
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return;
+
+        var evidence = RunSigningProviderFailureHarness(
+            includePrecheckFailure: false,
+            includeNonCompatibilitySigningFailure: false,
+            currentUserHasPrivateKey,
+            currentUserHasCodeSigningEku,
+            currentUserHasEkuRestriction: true);
+
+        Assert.Equal(2, evidence.CertificateLookupPaths.Length);
+        Assert.Contains("Cert:\\CurrentUser\\My", evidence.CertificateLookupPaths[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Cert:\\LocalMachine\\My", evidence.CertificateLookupPaths[1], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CertificateLookupAcceptsCurrentUserCopyWithoutEkuRestriction()
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return;
+
+        var evidence = RunSigningProviderFailureHarness(
+            includePrecheckFailure: false,
+            includeNonCompatibilitySigningFailure: false,
+            currentUserHasPrivateKey: true,
+            currentUserHasCodeSigningEku: false,
+            currentUserHasEkuRestriction: false);
+
+        var lookupPath = Assert.Single(evidence.CertificateLookupPaths);
+        Assert.Contains("Cert:\\CurrentUser\\My", lookupPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static (ModuleSigningResult Summary, int SigningCallCount, string[] PackageFilePaths, string[] CertificateLookupPaths)
         RunSigningProviderFailureHarness(
             bool includePrecheckFailure,
-            bool includeNonCompatibilitySigningFailure)
+            bool includeNonCompatibilitySigningFailure,
+            bool currentUserHasPrivateKey = true,
+            bool currentUserHasCodeSigningEku = true,
+            bool currentUserHasEkuRestriction = true)
     {
         var rootPath = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -77,6 +119,7 @@ public sealed class SigningScriptRetryTests
             Guid.NewGuid().ToString("N"))).FullName;
         var packageFileListPath = Path.Combine(rootPath, "package-files.txt");
         var callLogPath = Path.Combine(rootPath, "signing-calls.txt");
+        var certificateLookupLogPath = Path.Combine(rootPath, "certificate-lookups.txt");
         try
         {
             var packageFilePaths = Enumerable.Range(1, 12)
@@ -94,16 +137,34 @@ public sealed class SigningScriptRetryTests
                 $rootPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(rootPath))}}'))
                 $packageFileListPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(packageFileListPath))}}'))
                 $callLogPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(callLogPath))}}'))
+                $certificateLookupLogPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(certificateLookupLogPath))}}'))
                 $precheckFailurePath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(precheckFailurePath))}}'))
                 $includeNonCompatibilitySigningFailure = [Convert]::ToBoolean('{{includeNonCompatibilitySigningFailure}}')
+                $currentUserHasPrivateKey = [Convert]::ToBoolean('{{currentUserHasPrivateKey}}')
+                $currentUserHasCodeSigningEku = [Convert]::ToBoolean('{{currentUserHasCodeSigningEku}}')
+                $currentUserHasEkuRestriction = [Convert]::ToBoolean('{{currentUserHasEkuRestriction}}')
                 $script:firstSigningCall = $true
-                function Get-ChildItem {
+                function Get-Item {
                   [CmdletBinding()]
-                  param([string]$Path, [switch]$CodeSigningCert)
+                  param([string]$LiteralPath)
+                  [IO.File]::AppendAllText($certificateLookupLogPath, $LiteralPath + [Environment]::NewLine)
+                  $isCurrentUser = $LiteralPath -like 'Cert:\CurrentUser\My\*'
                   [pscustomobject]@{
                     Thumbprint = '0123456789ABCDEF'
                     NotBefore = [DateTime]::Now.AddDays(-1)
                     NotAfter = [DateTime]::Now.AddDays(1)
+                    HasPrivateKey = if ($isCurrentUser) { $currentUserHasPrivateKey } else { $true }
+                    Extensions = if ($isCurrentUser -and -not $currentUserHasEkuRestriction) {
+                      @()
+                    } else {
+                      @([pscustomobject]@{
+                        EnhancedKeyUsages = if (-not $isCurrentUser -or $currentUserHasCodeSigningEku) {
+                          @([pscustomobject]@{ Value = '1.3.6.1.5.5.7.3.3' })
+                        } else {
+                          @([pscustomobject]@{ Value = '1.3.6.1.5.5.7.3.1' })
+                        }
+                      })
+                    }
                   }
                 }
                 function Get-AuthenticodeSignature {
@@ -153,7 +214,11 @@ public sealed class SigningScriptRetryTests
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             Assert.NotNull(summary);
-            return (summary!, File.ReadAllText(callLogPath).Length, packageFilePaths);
+            return (
+                summary!,
+                File.ReadAllText(callLogPath).Length,
+                packageFilePaths,
+                File.ReadAllLines(certificateLookupLogPath));
         }
         finally
         {
