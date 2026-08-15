@@ -113,6 +113,13 @@ ecosystem. PowerForge therefore makes owner claims only from the generated
 NuGet/PowerShell Gallery catalog and treats other ecosystems as existence and
 version checks.
 
+The command scanner accepts Node package installation only when it is isolated
+from the current project graph: use a global npm, pnpm, or Bun install, or use
+both `--ignore-scripts` and `--package-lock-only` with npm. Local
+`install`/`add`/`update` commands can consume an existing manifest and run its
+lifecycle scripts, so the scanner rejects them rather than verifying only the
+package named on the command line.
+
 External-host verification is optional because it adds network-dependent checks.
 Trusted domains can be excluded with `agentTrustedDomains`. Keep it disabled in
 offline builds, or enable it in a dedicated connected CI job. Package references,

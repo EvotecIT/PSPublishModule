@@ -26,13 +26,14 @@ public sealed partial class WebAgentContentSecurityScanner
         {
             foreach (var (source, destination) in EnumerateFileTransformPaths(transform.Groups["arguments"].Value))
             {
-                var normalizedSource = NormalizeComparedPath(source);
                 var transformPosition = positionOffset + transform.Index;
+                var normalizedSource = ResolveComparedPathAt(source, transformPosition, flowState);
                 if (!flowState.DownloadedPaths.TryGetValue(normalizedSource, out var download) ||
                     download.Position >= transformPosition)
                     continue;
 
-                foreach (var candidate in ResolveFileTransformDestinations(normalizedSource, destination))
+                var normalizedDestination = ResolveComparedPathAt(destination, transformPosition, flowState);
+                foreach (var candidate in ResolveFileTransformDestinations(normalizedSource, normalizedDestination))
                     flowState.DownloadedPaths.TryAdd(candidate, download);
             }
         }
@@ -83,7 +84,7 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         foreach (var token in Tokenize(arguments))
         {
-            var candidate = NormalizeComparedPath(token);
+            var candidate = ResolveComparedPathAt(token, readerPosition, flowState);
             if (!flowState.DownloadedPaths.TryGetValue(candidate, out var download) ||
                 download.Position >= readerPosition ||
                 !flowState.ReportedPaths.Add(candidate))

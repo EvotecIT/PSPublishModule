@@ -171,13 +171,14 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         var positionOffset = flowState.NextPosition;
         flowState.NextPosition = checked(positionOffset + normalized.Length + 1L);
+        TrackWorkingDirectoryChanges(normalized, positionOffset, flowState);
         foreach (Match download in SavedDownloadCommandRegex.Matches(normalized))
         {
             foreach (var outputPath in FindDownloadedOutputPaths(
                          download.Groups["downloader"].Value,
                          download.Groups["arguments"].Value))
                 flowState.DownloadedPaths.TryAdd(
-                    NormalizeComparedPath(outputPath),
+                    ResolveComparedPathAt(outputPath, positionOffset + download.Index, flowState),
                     new SavedDownload(
                         positionOffset + download.Index,
                         GetReportedLine(original, download.Index, lineOffset, countLogicalLines)));
@@ -237,9 +238,13 @@ public sealed partial class WebAgentContentSecurityScanner
         public Dictionary<string, SavedDownload> UntrustedDirectoryPrefixes { get; } = new(StringComparer.OrdinalIgnoreCase);
         public List<SavedDownload> UnknownExtractedContent { get; } = [];
         public HashSet<string> ReportedPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<WorkingDirectorySnapshot> WorkingDirectories { get; } = [];
+        public Stack<string> WorkingDirectoryStack { get; } = new();
+        public string CurrentWorkingDirectory { get; set; } = string.Empty;
     }
 
     private readonly record struct SavedDownload(long Position, int Line);
+    private readonly record struct WorkingDirectorySnapshot(long Position, string Path);
 
     private static IEnumerable<(string Path, int Index)> EnumerateDirectlyExecutedPaths(string content)
     {

@@ -379,6 +379,10 @@ public sealed partial class WebAgentContentSecurityScanner
 
     private static bool VersionsEqual(string ecosystem, string? registryVersion, string? expectedVersion)
     {
+        if (ecosystem.Equals("nuget", StringComparison.OrdinalIgnoreCase) &&
+            WebPackageVersionIdentity.NuGetVersionsEqual(registryVersion, expectedVersion))
+            return true;
+
         if (!ecosystem.Equals("pypi", StringComparison.OrdinalIgnoreCase) ||
             !TryNormalizePep440Version(registryVersion, out var registry) ||
             !TryNormalizePep440Version(expectedVersion, out var expected))

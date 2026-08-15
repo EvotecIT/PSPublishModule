@@ -296,6 +296,39 @@ public sealed partial class WebAgentContentSecurityScanner
         for (var runtimeIndex = 0; runtimeIndex < tokens.Length; runtimeIndex++)
         {
             var executable = Path.GetFileNameWithoutExtension(NormalizeToken(tokens[runtimeIndex]).Replace('\\', '/'));
+            if (executable.Equals("sh", StringComparison.OrdinalIgnoreCase) ||
+                executable.Equals("bash", StringComparison.OrdinalIgnoreCase) ||
+                executable.Equals("zsh", StringComparison.OrdinalIgnoreCase) ||
+                executable.Equals("dash", StringComparison.OrdinalIgnoreCase) ||
+                executable.Equals("ash", StringComparison.OrdinalIgnoreCase) ||
+                executable.Equals("ksh", StringComparison.OrdinalIgnoreCase) ||
+                executable.Equals("fish", StringComparison.OrdinalIgnoreCase) ||
+                executable.Equals("csh", StringComparison.OrdinalIgnoreCase) ||
+                executable.Equals("tcsh", StringComparison.OrdinalIgnoreCase))
+            {
+                if (tokens.Skip(runtimeIndex + 1).Any(static token =>
+                        token.Equals("-c", StringComparison.Ordinal) ||
+                        token.StartsWith("-c", StringComparison.Ordinal) && token.Length > 2))
+                    return true;
+                continue;
+            }
+
+            if (executable.Equals("pwsh", StringComparison.OrdinalIgnoreCase) ||
+                executable.Equals("powershell", StringComparison.OrdinalIgnoreCase))
+            {
+                if (tokens.Skip(runtimeIndex + 1).Any(static token =>
+                        token.Equals("-c", StringComparison.OrdinalIgnoreCase) ||
+                        token.Equals("-Command", StringComparison.OrdinalIgnoreCase) ||
+                        token.StartsWith("-Command:", StringComparison.OrdinalIgnoreCase) ||
+                        token.StartsWith("-Command=", StringComparison.OrdinalIgnoreCase)))
+                    return true;
+                continue;
+            }
+
+            if (executable.Equals("cmd", StringComparison.OrdinalIgnoreCase) &&
+                tokens.Skip(runtimeIndex + 1).Any(static token => token.Equals("/c", StringComparison.OrdinalIgnoreCase)))
+                return true;
+
             if (executable.Equals("ruby", StringComparison.OrdinalIgnoreCase) ||
                 executable.Equals("jruby", StringComparison.OrdinalIgnoreCase) ||
                 executable.Equals("truffleruby", StringComparison.OrdinalIgnoreCase))

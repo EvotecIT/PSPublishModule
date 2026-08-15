@@ -4,6 +4,7 @@ namespace PowerForge.Web;
 
 public sealed partial class WebAgentContentSecurityScanner
 {
+    private const string UnknownWorkingDirectory = "<unknown-working-directory>";
     private static readonly Regex LaunchWrapperInvocationRegex = new(
         @"\b(?<launcher>exec|nohup|setsid|timeout|nice|ionice|chrt|stdbuf|taskset|time)\b(?<arguments>[^\r\n;&|]*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -13,6 +14,65 @@ public sealed partial class WebAgentContentSecurityScanner
     private static readonly Regex RemoteCloneCommandRegex = new(
         @"(?:^|&&|;|(?<!&)&(?!&)|\r?\n)\s*(?:(?<command>git)(?:\.exe)?(?:\s+(?:-c|-C|--git-dir|--work-tree|--namespace)(?:=|\s+)(?:""[^""]+""|'[^']+'|[^\s;&|]+))*\s+clone|(?<command>gh|glab|hub)(?:\.exe)?\s+(?:repo\s+)?clone|(?<command>hg)(?:\.exe)?\s+clone|(?<command>svn)(?:\.exe)?\s+(?:checkout|co|export))\b(?<arguments>[^\r\n;&|]*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline);
+    private static readonly Regex WorkingDirectoryCommandRegex = new(
+        @"(?:^|&&|;|(?<!&)&(?!&)|\r?\n)\s*(?:(?:sudo|command)\s+)?(?<command>cd|chdir|pushd|popd|Set-Location|Push-Location|Pop-Location|sl)\b(?<arguments>[^\r\n;&|]*)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline);
+
+    private static void TrackWorkingDirectoryChanges(
+        string content,
+        long positionOffset,
+        RemoteExecutionFlowState flowState)
+    {
+        var current = flowState.CurrentWorkingDirectory;
+        foreach (Match match in WorkingDirectoryCommandRegex.Matches(content))
+        {
+            var command = match.Groups["command"].Value.ToLowerInvariant();
+            var position = positionOffset + match.Index;
+            if (command is "popd" or "pop-location")
+            {
+                current = flowState.WorkingDirectoryStack.Count > 0
+                    ? flowState.WorkingDirectoryStack.Pop()
+                    : UnknownWorkingDirectory;
+            }
+            else
+            {
+                var target = FindWorkingDirectoryTarget(Tokenize(match.Groups["arguments"].Value));
+                if (string.IsNullOrWhiteSpace(target) || target == "-" ||
+                    ShellExpansionRegex.IsMatch(target) || target.StartsWith("~", StringComparison.Ordinal))
+                    current = UnknownWorkingDirectory;
+                else
+                {
+                    if (command is "pushd" or "push-location")
+                        flowState.WorkingDirectoryStack.Push(current);
+                    current = ResolveComparedPath(current, target);
+                }
+            }
+
+            flowState.WorkingDirectories.Add(new WorkingDirectorySnapshot(position, current));
+        }
+        flowState.CurrentWorkingDirectory = current;
+    }
+
+    private static string? FindWorkingDirectoryTarget(string[] tokens)
+    {
+        for (var index = 0; index < tokens.Length; index++)
+        {
+            var token = tokens[index];
+            if (token.Equals("/d", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (token == "--")
+                return index + 1 < tokens.Length ? tokens[index + 1] : null;
+            if (token.Equals("-Path", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("-LiteralPath", StringComparison.OrdinalIgnoreCase))
+                return index + 1 < tokens.Length ? tokens[index + 1] : null;
+            if (token.StartsWith("-Path:", StringComparison.OrdinalIgnoreCase) ||
+                token.StartsWith("-LiteralPath:", StringComparison.OrdinalIgnoreCase))
+                return token[(token.IndexOf(':') + 1)..];
+            if (!token.StartsWith("-", StringComparison.Ordinal))
+                return token;
+        }
+        return null;
+    }
 
     private static IEnumerable<(string Path, int Index)> EnumerateLaunchWrapperPaths(string content)
     {
@@ -70,7 +130,7 @@ public sealed partial class WebAgentContentSecurityScanner
 
             var extractionPosition = positionOffset + match.Index;
             var archive = tokens
-                .Select(NormalizeComparedPath)
+                .Select(path => ResolveComparedPathAt(path, extractionPosition, flowState))
                 .Select(path => flowState.DownloadedPaths.TryGetValue(path, out var origin)
                     ? (Found: true, Origin: origin)
                     : (Found: false, Origin: default(SavedDownload)))
@@ -79,8 +139,9 @@ public sealed partial class WebAgentContentSecurityScanner
                 continue;
 
             var destination = FindArchiveDestination(command, tokens);
-            var normalizedDestination = NormalizeComparedPath(destination ?? string.Empty).TrimEnd('/');
-            if (string.IsNullOrWhiteSpace(normalizedDestination) || normalizedDestination == ".")
+            var normalizedDestination = ResolveComparedPathAt(destination ?? string.Empty, extractionPosition, flowState).TrimEnd('/');
+            if (string.IsNullOrWhiteSpace(normalizedDestination) || normalizedDestination == "." ||
+                normalizedDestination.StartsWith(UnknownWorkingDirectory, StringComparison.Ordinal))
             {
                 if (!flowState.UnknownExtractedContent.Any(origin => origin.Position == extractionPosition))
                     flowState.UnknownExtractedContent.Add(new SavedDownload(extractionPosition, archive.Origin.Line));
@@ -150,8 +211,10 @@ public sealed partial class WebAgentContentSecurityScanner
                 continue;
 
             var destination = operands.Length > 1 ? operands[1] : DeriveRepositoryDirectory(operands[0]);
-            var normalizedDestination = NormalizeComparedPath(destination).TrimEnd('/');
-            if (string.IsNullOrWhiteSpace(normalizedDestination) || normalizedDestination == ".")
+            var clonePosition = positionOffset + match.Index;
+            var normalizedDestination = ResolveComparedPathAt(destination, clonePosition, flowState).TrimEnd('/');
+            if (string.IsNullOrWhiteSpace(normalizedDestination) || normalizedDestination == "." ||
+                normalizedDestination.StartsWith(UnknownWorkingDirectory, StringComparison.Ordinal))
             {
                 flowState.UnknownExtractedContent.Add(
                     new SavedDownload(
@@ -226,7 +289,22 @@ public sealed partial class WebAgentContentSecurityScanner
         out SavedDownload origin,
         out string reportKey)
     {
-        var candidate = NormalizeComparedPath(rawCandidate);
+        var candidate = ResolveComparedPathAt(rawCandidate, executionPosition, flowState);
+        if (candidate.StartsWith(UnknownWorkingDirectory, StringComparison.Ordinal) &&
+            IsLikelyLocalExecutionPath(rawCandidate))
+        {
+            var uncertainOrigin = flowState.UntrustedDirectoryPrefixes.Values
+                .Concat(flowState.UnknownExtractedContent)
+                .Where(candidateOrigin => candidateOrigin.Position < executionPosition)
+                .OrderBy(candidateOrigin => candidateOrigin.Position)
+                .FirstOrDefault();
+            if (uncertainOrigin != default)
+            {
+                origin = uncertainOrigin;
+                reportKey = "unknown-directory:" + executionPosition + ":" + NormalizeComparedPath(rawCandidate);
+                return true;
+            }
+        }
         if (flowState.DownloadedPaths.TryGetValue(candidate, out origin) && origin.Position < executionPosition)
         {
             reportKey = candidate;
@@ -258,6 +336,65 @@ public sealed partial class WebAgentContentSecurityScanner
         origin = default;
         reportKey = string.Empty;
         return false;
+    }
+
+    private static string ResolveComparedPathAt(
+        string candidate,
+        long position,
+        RemoteExecutionFlowState flowState)
+    {
+        var workingDirectory = flowState.WorkingDirectories
+            .LastOrDefault(snapshot => snapshot.Position < position)
+            .Path;
+        return ResolveComparedPath(workingDirectory, candidate);
+    }
+
+    private static string ResolveComparedPath(string workingDirectory, string candidate)
+    {
+        var normalized = NormalizeComparedPath(candidate);
+        if (string.IsNullOrEmpty(normalized))
+            return normalized;
+        if (normalized.StartsWith("/", StringComparison.Ordinal) ||
+            normalized.StartsWith("//", StringComparison.Ordinal) ||
+            Regex.IsMatch(normalized, @"^[A-Za-z]:/", RegexOptions.CultureInvariant))
+            return CollapseComparedPath(normalized);
+        if (string.IsNullOrWhiteSpace(workingDirectory))
+            return CollapseComparedPath(normalized);
+        if (workingDirectory == UnknownWorkingDirectory)
+            return UnknownWorkingDirectory + "/" + normalized;
+        return CollapseComparedPath(workingDirectory.TrimEnd('/') + "/" + normalized);
+    }
+
+    private static string CollapseComparedPath(string path)
+    {
+        var normalized = path.Replace('\\', '/');
+        var rooted = normalized.StartsWith("/", StringComparison.Ordinal);
+        var prefix = Regex.Match(normalized, @"^[A-Za-z]:", RegexOptions.CultureInvariant).Value;
+        if (prefix.Length > 0)
+            normalized = normalized[prefix.Length..].TrimStart('/');
+        else if (rooted)
+            normalized = normalized.TrimStart('/');
+
+        var segments = new List<string>();
+        foreach (var segment in normalized.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".")
+                continue;
+            if (segment == "..")
+            {
+                if (segments.Count > 0 && segments[^1] != "..")
+                    segments.RemoveAt(segments.Count - 1);
+                else if (!rooted && prefix.Length == 0)
+                    segments.Add(segment);
+                continue;
+            }
+            segments.Add(segment);
+        }
+
+        var collapsed = string.Join('/', segments);
+        if (prefix.Length > 0)
+            return prefix + "/" + collapsed;
+        return rooted ? "/" + collapsed : collapsed;
     }
 
     private static bool IsLikelyLocalExecutionPath(string candidate)

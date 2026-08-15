@@ -11,7 +11,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
     [InlineData("dotnet.exe tool install Sample.Tool --version 1.0.0", "nuget")]
     [InlineData("python.exe -P -m pip install sample-tool==1.0.0", "pypi")]
     [InlineData("pip.exe install sample-tool==1.0.0", "pypi")]
-    [InlineData("npm.cmd install sample-tool@1.0.0", "npm")]
+    [InlineData("npm.cmd install --global sample-tool@1.0.0", "npm")]
     [InlineData("python3.12.exe -P -m pip install sample-tool==1.0.0", "pypi")]
     [InlineData("pip3.12 install sample-tool==1.0.0", "pypi")]
     public void Scan_NormalizesWindowsExecutableSuffixes(string command, string ecosystem)
@@ -50,7 +50,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
         using var handler = new RegistryHandler(_ => throw new InvalidOperationException("Registry must not be called."));
         using var client = new HttpClient(handler);
         using var scanner = new WebAgentContentSecurityScanner(client);
-        var root = CreateArtifact("llms.txt", "npm install first-package second-package");
+        var root = CreateArtifact("llms.txt", "npm install --global first-package second-package");
 
         try
         {

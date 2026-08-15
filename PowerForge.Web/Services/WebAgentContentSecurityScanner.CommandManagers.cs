@@ -207,8 +207,18 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         if (verb == "update")
         {
+            var findingCount = findings.Count;
             AddMultipleOperands("npm", $"{tokens[0]} {tokens[verbIndex]}", tokens, verbIndex + 1,
                 path, line, references, findings);
+            if (findings.Count > findingCount)
+                return;
+            if (!IsNodeInstallIsolatedFromProject(tokens))
+            {
+                references.Clear();
+                AddUnverifiableOperand(tokens[0] + " " + tokens[verbIndex], path, line, findings,
+                    "project dependency graph and lifecycle scripts");
+                return;
+            }
             return;
         }
         if (verb == "audit")
@@ -273,7 +283,35 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         if (verb is not ("install" or "add"))
             return;
+        var installFindingCount = findings.Count;
         AddMultipleOperands("npm", $"{tokens[0]} {tokens[verbIndex]}", tokens, verbIndex + 1, path, line, references, findings);
+        if (findings.Count > installFindingCount)
+            return;
+        if (!IsNodeInstallIsolatedFromProject(tokens))
+        {
+            references.Clear();
+            AddUnverifiableOperand(tokens[0] + " " + tokens[verbIndex], path, line, findings,
+                "project dependency graph and lifecycle scripts");
+            return;
+        }
+    }
+
+    private static bool IsNodeInstallIsolatedFromProject(string[] tokens)
+    {
+        var executable = tokens[0].ToLowerInvariant();
+        if (tokens.Any(static token => token.Equals("--workspace", StringComparison.OrdinalIgnoreCase) ||
+                                       token.StartsWith("--workspace=", StringComparison.OrdinalIgnoreCase) ||
+                                       token.Equals("--workspaces", StringComparison.OrdinalIgnoreCase) ||
+                                       token.Equals("--include-workspace-root", StringComparison.OrdinalIgnoreCase)))
+            return false;
+        if (executable is "npm" or "pnpm" or "bun" &&
+            tokens.Any(static token => token.Equals("--global", StringComparison.OrdinalIgnoreCase) ||
+                                       token.Equals("-g", StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        return executable == "npm" &&
+               tokens.Any(static token => token.Equals("--ignore-scripts", StringComparison.OrdinalIgnoreCase)) &&
+               tokens.Any(static token => token.Equals("--package-lock-only", StringComparison.OrdinalIgnoreCase));
     }
 
     private static void ParseCargo(

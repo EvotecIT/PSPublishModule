@@ -66,12 +66,12 @@ public sealed partial class WebAgentContentSecurityScannerTests
     }
 
     [Theory]
-    [InlineData("npm install safe-package@1.0.0 -s attacker-package@1.0.0", 2)]
-    [InlineData("npm -s install attacker-package@1.0.0", 1)]
-    [InlineData("npm install-test attacker-package@1.0.0", 1)]
-    [InlineData("npm it attacker-package@1.0.0", 1)]
-    [InlineData("npm update attacker-package@1.0.0", 1)]
-    [InlineData("npm up attacker-package@1.0.0", 1)]
+    [InlineData("npm install --global safe-package@1.0.0 -s attacker-package@1.0.0", 2)]
+    [InlineData("npm -s install --global attacker-package@1.0.0", 1)]
+    [InlineData("npm install-test --global attacker-package@1.0.0", 1)]
+    [InlineData("npm it --global attacker-package@1.0.0", 1)]
+    [InlineData("npm update --global attacker-package@1.0.0", 1)]
+    [InlineData("npm up --global attacker-package@1.0.0", 1)]
     public void Scan_VerifiesNpmInstallAndUpdateOperands(string command, int expectedReferences)
     {
         using var handler = new RegistryHandler(_ =>

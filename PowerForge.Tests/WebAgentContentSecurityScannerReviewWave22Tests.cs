@@ -89,7 +89,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
     {
         using var handler = new RegistryHandler(_ => JsonResponse("""{"versions":{"1.0.0":{}}}"""));
         using var scanner = new WebAgentContentSecurityScanner(new HttpClient(handler));
-        var root = CreateArtifact("llms.txt", "npm install safe-package@1.0.0 # example 'not'a package operand");
+        var root = CreateArtifact("llms.txt", "npm install --global safe-package@1.0.0 # example 'not'a package operand");
         try
         {
             var result = scanner.Scan(new WebAgentContentSecurityOptions { SiteRoot = root, Files = ["llms.txt"] });

@@ -112,7 +112,9 @@ internal sealed class WebPublicationCatalog
 
         return section.Packages.TryGetValue(packageId, out var package) &&
                HasExactOwnedRegistryVersion(ecosystem, expectedVersion) &&
-               VersionsEqual(package.Version, expectedVersion) &&
+               (isPowerShellGallery
+                   ? VersionsEqual(package.Version, expectedVersion)
+                   : WebPackageVersionIdentity.NuGetVersionsEqual(package.Version, expectedVersion)) &&
                (!isPowerShellGallery || PackageHasOwner(package.Owners, expectedOwner.Trim()));
     }
 

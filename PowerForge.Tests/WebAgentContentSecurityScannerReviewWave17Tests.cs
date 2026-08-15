@@ -7,7 +7,6 @@ public sealed partial class WebAgentContentSecurityScannerTests
 {
     [Theory]
     [InlineData("python -P -m pip.__main__ install safe-package==1.2.3", "pypi")]
-    [InlineData("yarnpkg add safe-package@1.2.3", "npm")]
     [InlineData("Install-Package -Source nuget.org -Name Safe.Package -ProviderName NuGet -RequiredVersion 1.2.3", "nuget")]
     [InlineData("Install-Package -Id Safe.Package -ProviderName NuGet -Version 1.2.3", "nuget")]
     [InlineData("Update-Package -Id Safe.Package -ProviderName NuGet -Version 1.2.3", "nuget")]
@@ -67,7 +66,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
     {
         using var handler = new RegistryHandler(_ => throw new InvalidOperationException("Registry must not be called."));
         using var scanner = new WebAgentContentSecurityScanner(new HttpClient(handler));
-        var root = CreateArtifact("llms.txt", assignment + "\nyarn add safe-package@1.2.3");
+        var root = CreateArtifact("llms.txt", assignment + "\nnpm install --global safe-package@1.2.3");
 
         try
         {
