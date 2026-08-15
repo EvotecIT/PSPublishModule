@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using PowerForge.Web;
 using PowerForge.Web.Cli;
@@ -6,6 +7,26 @@ namespace PowerForge.Tests;
 
 public sealed class WebLlmsPublicationCatalogTests
 {
+    [Fact]
+    public void VerifiedCatalog_AcceptsUtf8BomFromExistingCatalogs()
+    {
+        using var fixture = new PublicationFixture();
+        var project = fixture.WriteProject("Published.Package");
+        var catalog = fixture.WriteCatalog("Evotec", ["Published.Package"]);
+        File.WriteAllText(catalog, File.ReadAllText(catalog), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+        var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            ProjectFile = project,
+            InstallCommandPolicy = WebLlmsInstallCommandPolicy.VerifiedCatalog,
+            PublicationCatalogPath = catalog,
+            NuGetOwner = "Evotec"
+        });
+
+        Assert.Equal(1, result.InstallCommandCount);
+    }
+
     [Fact]
     public void VerifiedCatalog_EmitsNuGetCommandForPackageOwnedByExpectedProfile()
     {

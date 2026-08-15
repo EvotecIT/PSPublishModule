@@ -83,7 +83,10 @@ public static partial class WebEcosystemStatsGenerator
         var outputDir = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrWhiteSpace(outputDir))
             Directory.CreateDirectory(outputDir);
-        File.WriteAllText(outputPath, JsonSerializer.Serialize(document, WebJson.Options), Encoding.UTF8);
+        File.WriteAllText(
+            outputPath,
+            JsonSerializer.Serialize(document, WebJson.Options),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
         return new WebEcosystemStatsResult
         {

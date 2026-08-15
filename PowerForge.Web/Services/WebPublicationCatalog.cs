@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -75,7 +76,11 @@ internal sealed class WebPublicationCatalog
             }
             memory.Write(buffer[..read]);
         }
-        return memory.ToArray();
+        var bytes = memory.ToArray();
+        var preamble = Encoding.UTF8.Preamble;
+        return bytes.AsSpan().StartsWith(preamble)
+            ? bytes.AsMemory(preamble.Length)
+            : bytes;
     }
 
     public bool ContainsExactOwnedPackage(
