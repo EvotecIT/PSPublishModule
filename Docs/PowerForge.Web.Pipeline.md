@@ -956,6 +956,12 @@ Runs static (and optional rendered) checks against generated HTML.
   "renderedMaxPages": 10,
   "renderedInclude": "index.html,docs/**,benchmarks/**",
   "renderedExclude": "api/**,docs/api/**",
+  "checkAgentContentSecurity": true,
+  "agentContentFiles": ["llms.txt", "llms-full.txt", "llms.json"],
+  "agentPublicationCatalog": "./data/ecosystem/stats.json",
+  "agentPublicationCatalogMaxAgeHours": 48,
+  "agentNuGetOwner": "ExampleOwner",
+  "agentPowerShellGalleryOwner": "ExampleOwner",
   "summary": true
 }
 ```
@@ -988,6 +994,15 @@ Notes:
 - `renderedServe`, `renderedHost`, `renderedPort` control the temporary local server used for rendered checks.
 - `renderedEnsureInstalled` auto-installs Playwright browsers before rendered checks (defaults to `true` in CLI/pipeline when `rendered` is enabled).
 - `scopeFromBuildUpdated`: when enabled, and `include` is not set, limits the audit to the HTML files updated by the most recent `build` step (when `siteRoot` matches build `out`). In `powerforge-web pipeline --fast` this is enabled by default; set to `false` to force full-site audit even in fast mode.
+- `checkAgentContentSecurity` scans the final machine-facing artifacts rather than source templates. It detects invisible Unicode controls, high-confidence agent instruction overrides, remote-script execution patterns, and package installation commands.
+- `agentContentFiles` defaults to `llms.txt`, `llms-full.txt`, and `llms.json`. Every configured file must exist, remain within `siteRoot`, be valid UTF-8, and stay below `agentMaxArtifactBytes`.
+- `agentPublicationCatalog` supplies owner-scoped NuGet and PowerShell Gallery evidence. When `agentNuGetOwner` or `agentPowerShellGalleryOwner` is set, all extracted packages from that ecosystem require a three-part exact version and an owner/catalog match by default; PowerShell Gallery modules must also carry matching per-module `Owners` evidence rather than author metadata alone.
+- `agentRequireOwnerVerification` accepts `ecosystem:pattern` selectors. `agentRegistryVerifiedPackages` accepts exact or wildcard third-party exceptions that may use public-registry verification instead of owner verification.
+- `agentVerifyPackages` defaults to `true`. Supported public registries are NuGet, PowerShell Gallery, npm, PyPI, crates.io, RubyGems, and Packagist. Constraints and tags verify package existence; exact pins verify the requested version.
+- Node `install`, `add`, and `update` commands must be isolated from a project dependency graph. Global npm/pnpm/Bun installs are supported; npm lockfile-only resolution is supported when both `--ignore-scripts` and `--package-lock-only` are present. Other local Node installs fail closed because an existing manifest can add dependencies and lifecycle scripts that are not visible on the command line.
+- `agentVerifyExternalHosts` is optional and defaults to `false`. When enabled, `agentTrustedDomains` excludes owned or intentional dependencies from resolution and selected dangling-service checks.
+- Network work is fail-closed and bounded: `agentMaxPackageReferences` defaults to 100, and `agentMaxExternalHosts` limits both unique hostnames and unique origins (scheme, host, and port) to 100 by default. `agentMaxRegistryResponseBytes` defaults to 2 MiB of decompressed content, and `agentMaxNetworkDurationSeconds` defaults to 120 seconds for the complete scan. Security-enabled audit steps are intentionally not served from pipeline cache because catalog freshness and registry/DNS evidence must be reevaluated.
+- Scanner findings use audit category `agent-content`, flow into baseline/SARIF output, and never cause PowerForge to install a package or execute a discovered command.
 CLI note:
 - Use `--rendered-no-install` to skip auto-install (for CI environments with preinstalled browsers).
 

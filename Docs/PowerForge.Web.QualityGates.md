@@ -55,6 +55,12 @@ Example `pipeline.json`:
       "sarif": true,
       "baseline": "./.powerforge/audit-baseline.json",
       "failOnNewIssues": true,
+      "checkAgentContentSecurity": true,
+      "agentContentFiles": ["llms.txt", "llms-full.txt", "llms.json"],
+      "agentPublicationCatalog": "./data/ecosystem/stats.json",
+      "agentPublicationCatalogMaxAgeHours": 48,
+      "agentNuGetOwner": "ExampleOwner",
+      "agentPowerShellGalleryOwner": "ExampleOwner",
       "maxTotalFiles": 2000,
       "failOnCategories": "budget",
       "failOnIssueCodes": "media-img-dimensions,heading-order,head-render-blocking"
@@ -76,6 +82,70 @@ Notes:
 - `markdown-fix` now auto-normalizes multiline media opening tags (`img`, `iframe`, `video`, `audio`, `source`, `picture`) outside code fences.
 - CI pattern: add a dry-run `markdown-fix` step with `failOnChanges:true` and write `reportPath`/`summaryPath` artifacts for fast remediation.
 - Keep CI builds clean (`clean:true`). After removing routes or changing synced surfaces, run a clean local build before inspecting `_site`; incremental dev builds can leave stale HTML that no longer corresponds to source content.
+
+## Machine-Facing Artifact Security
+
+Enable `checkAgentContentSecurity` on the final `audit` step that reads the built
+site. The scanner reads configured artifacts as strict UTF-8, never executes
+their commands, and reports findings through the normal audit, baseline, JSON,
+and SARIF surfaces.
+
+The scanner:
+
+- detects invisible bidirectional, tag, and zero-width Unicode controls;
+- warns on high-confidence prompt overrides and downloaded scripts piped into an interpreter;
+- extracts NuGet, PowerShell Gallery, npm, PyPI, crates.io, RubyGems, and Packagist install commands;
+- verifies package existence and exact versions against public registries;
+- rejects package commands that redirect resolution to non-canonical feeds, repositories, indexes, or config files;
+- can require three-part exact-version NuGet and PowerShell Gallery commands to match an owner-scoped publication catalog, including per-module PowerShell Gallery `Owners` evidence;
+- can optionally resolve external hosts and detect selected dangling-service fingerprints without fetching unique report paths.
+
+Owner verification is fail-closed. When `agentNuGetOwner` or
+`agentPowerShellGalleryOwner` is set, its ecosystem defaults to owner
+verification for every extracted package. The command must pin an exact version,
+the catalog owner must match, and the same package/version must be present in the
+catalog. Use `agentRequireOwnerVerification` to narrow that scope. Use
+`agentRegistryVerifiedPackages` only for explicit third-party exceptions; those
+packages still have to exist at their public registry.
+
+Public registry APIs do not expose a consistent ownership contract for every
+ecosystem. PowerForge therefore makes owner claims only from the generated
+NuGet/PowerShell Gallery catalog and treats other ecosystems as existence and
+version checks.
+
+The command scanner accepts Node package installation only when it is isolated
+from the current project graph: use a global npm, pnpm, or Bun install, or use
+both `--ignore-scripts` and `--package-lock-only` with npm. Local
+`install`/`add`/`update` commands can consume an existing manifest and run its
+lifecycle scripts, so the scanner rejects them rather than verifying only the
+package named on the command line.
+
+The same project-isolation rule applies to other mutating clients. Composer
+`require` must use `--no-update --no-plugins --no-scripts`, and Bundler `add`
+must use `--skip-install`; otherwise an existing project can introduce
+uninspected dependencies or executable hooks. PackageManagement `Save-Package`
+is audited as a NuGet download and must name an exact version, select the NuGet
+provider, and use the canonical source. Pipeline inputs, transitive dependency
+downloads, and provider bootstrapping are rejected.
+
+External-host verification is optional because it adds network-dependent checks.
+Trusted domains can be excluded with `agentTrustedDomains`. Keep it disabled in
+offline builds, or enable it in a dedicated connected CI job. Package references,
+hosts, decompressed registry responses, and total network time all have conservative
+configurable limits; an exceeded limit fails before additional network work.
+
+Direct CLI example:
+
+```powershell
+powerforge-web audit --site-root .\_site `
+  --agent-content-security `
+  --agent-content-file llms.txt,llms-full.txt,llms.json `
+  --agent-publication-catalog .\data\ecosystem\stats.json `
+  --agent-publication-catalog-max-age-hours 48 `
+  --agent-nuget-owner ExampleOwner `
+  --agent-powershell-gallery-owner ExampleOwner `
+  --sarif
+```
 
 ## Creating/Updating Baselines
 
@@ -115,6 +185,7 @@ When enabled, the step fails fast unless these checks are explicitly set in the 
 - `checkHeadingOrder`
 - `checkLinkPurposeConsistency`
 - `checkMediaEmbeds`
+- `checkAgentContentSecurity` (`audit` only)
 
 Example:
 ```json
@@ -127,6 +198,7 @@ Example:
   "checkRenderBlockingResources": true,
   "checkHeadingOrder": true,
   "checkLinkPurposeConsistency": true,
-  "checkMediaEmbeds": true
+  "checkMediaEmbeds": true,
+  "checkAgentContentSecurity": true
 }
 ```

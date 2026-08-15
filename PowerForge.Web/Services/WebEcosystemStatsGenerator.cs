@@ -342,10 +342,19 @@ public static partial class WebEcosystemStatsGenerator
     {
         var skip = 0;
         var pageSize = 100;
+        const int maximumPages = 100;
+        var pagesRead = 0;
+        var pageFingerprints = new HashSet<string>(StringComparer.Ordinal);
 
         while (modules.Count < maxItems)
         {
-            var take = Math.Min(pageSize, maxItems - modules.Count);
+            if (pagesRead >= maximumPages)
+            {
+                warnings.Add($"PowerShell Gallery pagination stopped after {maximumPages} pages; owner-filtered results may be incomplete.");
+                break;
+            }
+
+            var take = pageSize;
             var encodedFilter = Uri.EscapeDataString(filterExpression);
             var url = $"{PowerShellGalleryApiBase}?$filter={encodedFilter}&$orderby=DownloadCount%20desc&$top={take}&$skip={skip}";
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -358,9 +367,17 @@ public static partial class WebEcosystemStatsGenerator
             if (document is null)
                 break;
 
-            var entries = ParsePowerShellGalleryModules(document, requiredOwner);
-            if (entries.Count == 0)
+            var rawEntryCount = CountPowerShellGalleryEntries(document);
+            if (rawEntryCount == 0)
                 break;
+            pagesRead++;
+            var pageFingerprint = GetPowerShellGalleryPageFingerprint(document);
+            if (!pageFingerprints.Add(pageFingerprint))
+            {
+                warnings.Add("PowerShell Gallery pagination stopped after a repeated page; owner-filtered results may be incomplete.");
+                break;
+            }
+            var entries = ParsePowerShellGalleryModules(document, requiredOwner);
 
             foreach (var module in entries)
             {
@@ -376,10 +393,17 @@ public static partial class WebEcosystemStatsGenerator
                     break;
             }
 
-            skip += take;
-            if (entries.Count < take)
+            skip += rawEntryCount;
+            if (rawEntryCount < take)
                 break;
         }
+    }
+
+    private static string GetPowerShellGalleryPageFingerprint(XDocument document)
+    {
+        var atomNs = XNamespace.Get("http://www.w3.org/2005/Atom");
+        return string.Join('\n', (document.Root?.Elements(atomNs + "entry") ?? Enumerable.Empty<XElement>())
+            .Select(static entry => entry.ToString(SaveOptions.DisableFormatting)));
     }
 
     private static XDocument? LoadXmlSafe(Stream stream, List<string> warnings)
@@ -422,7 +446,7 @@ public static partial class WebEcosystemStatsGenerator
 
             var authors = properties.Element(dataNs + "Authors")?.Value?.Trim();
             var owners = properties.Element(dataNs + "Owners")?.Value?.Trim();
-            if (!MatchesPowerShellGalleryOwner(requiredOwner, owners, authors))
+            if (!MatchesPowerShellGalleryOwner(requiredOwner, owners))
                 continue;
 
             var version = properties.Element(dataNs + "Version")?.Value?.Trim();
@@ -445,27 +469,20 @@ public static partial class WebEcosystemStatsGenerator
         return modules;
     }
 
-    private static bool MatchesPowerShellGalleryOwner(string? requiredOwner, string? owners, string? authors)
+    private static int CountPowerShellGalleryEntries(XDocument document)
+    {
+        var atomNs = XNamespace.Get("http://www.w3.org/2005/Atom");
+        return document.Root?.Elements(atomNs + "entry").Count() ?? 0;
+    }
+
+    private static bool MatchesPowerShellGalleryOwner(string? requiredOwner, string? owners)
     {
         if (string.IsNullOrWhiteSpace(requiredOwner))
             return true;
 
-        var required = NormalizeIdentity(requiredOwner);
-        if (string.IsNullOrWhiteSpace(required))
-            return true;
-
-        var candidates = SplitOwnerOrAuthorValues(owners)
-            .Concat(SplitOwnerOrAuthorValues(authors));
-        foreach (var candidate in candidates)
-        {
-            var normalized = NormalizeIdentity(candidate);
-            if (string.IsNullOrWhiteSpace(normalized))
-                continue;
-            if (string.Equals(normalized, required, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        return false;
+        var required = requiredOwner.Trim();
+        return WebPackageOwnerIdentity.Split(owners)
+            .Any(candidate => candidate.Equals(required, StringComparison.OrdinalIgnoreCase));
     }
 
     private static List<string> BuildPowerShellGalleryAuthorCandidates(string? owner, string? author)
@@ -513,20 +530,6 @@ public static partial class WebEcosystemStatsGenerator
         if (parts.Length == 0)
             return normalized;
         return parts[0].Length >= 3 ? parts[0] : normalized;
-    }
-
-    private static IEnumerable<string> SplitOwnerOrAuthorValues(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            yield break;
-
-        var parts = value.Split(new[] { ',', ';', '|', '/' }, StringSplitOptions.RemoveEmptyEntries);
-        foreach (var part in parts)
-        {
-            var trimmed = part.Trim();
-            if (!string.IsNullOrWhiteSpace(trimmed))
-                yield return trimmed;
-        }
     }
 
     private static string NormalizeIdentity(string value)

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -153,6 +154,10 @@ public static partial class WebSiteAuditor
         var renderedConsoleWarningCount = 0;
         var renderedFailedRequestCount = 0;
         var renderedContrastIssueCount = 0;
+        var agentArtifactCount = 0;
+        var agentPackageReferenceCount = 0;
+        var agentVerifiedPackageCount = 0;
+        var agentExternalHostCount = 0;
         var requiredNavLinks = options.NavRequiredLinks
             .Where(link => !string.IsNullOrWhiteSpace(link))
             .Select(NormalizeNavHref)
@@ -709,6 +714,30 @@ public static partial class WebSiteAuditor
             }
         }
 
+        if (options.AgentContentSecurity is not null)
+        {
+            using var agentScanner = new WebAgentContentSecurityScanner();
+            var agentResult = agentScanner.Scan(options.AgentContentSecurity, siteRoot);
+            agentArtifactCount = agentResult.ArtifactCount;
+            agentPackageReferenceCount = agentResult.PackageReferenceCount;
+            agentVerifiedPackageCount = agentResult.VerifiedPackageCount;
+            agentExternalHostCount = agentResult.ExternalHostCount;
+            foreach (var finding in agentResult.Findings)
+            {
+                var message = finding.Line.HasValue
+                    ? $"[{finding.Code}] line {finding.Line.Value}: {finding.Message}"
+                    : $"[{finding.Code}] {finding.Message}";
+                AddIssue(
+                    finding.Severity,
+                    "agent-content",
+                    finding.Path,
+                    message,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{finding.Code}|{finding.Line?.ToString(CultureInfo.InvariantCulture) ?? "-"}|{finding.Message}"));
+            }
+        }
+
         if (baselineIssueKeys is not null)
         {
             foreach (var issue in issues)
@@ -832,6 +861,10 @@ public static partial class WebSiteAuditor
             RenderedConsoleWarningCount = renderedConsoleWarningCount,
             RenderedFailedRequestCount = renderedFailedRequestCount,
             RenderedContrastIssueCount = renderedContrastIssueCount,
+            AgentArtifactCount = agentArtifactCount,
+            AgentPackageReferenceCount = agentPackageReferenceCount,
+            AgentVerifiedPackageCount = agentVerifiedPackageCount,
+            AgentExternalHostCount = agentExternalHostCount,
             ErrorCount = errorCount,
             WarningCount = warningCount,
             NewIssueCount = newIssueCount,
@@ -872,6 +905,10 @@ public static partial class WebSiteAuditor
                 RenderedConsoleWarningCount = result.RenderedConsoleWarningCount,
                 RenderedFailedRequestCount = result.RenderedFailedRequestCount,
                 RenderedContrastIssueCount = result.RenderedContrastIssueCount,
+                AgentArtifactCount = result.AgentArtifactCount,
+                AgentPackageReferenceCount = result.AgentPackageReferenceCount,
+                AgentVerifiedPackageCount = result.AgentVerifiedPackageCount,
+                AgentExternalHostCount = result.AgentExternalHostCount,
                 ErrorCount = result.ErrorCount,
                 WarningCount = result.WarningCount,
                 NewIssueCount = result.NewIssueCount,

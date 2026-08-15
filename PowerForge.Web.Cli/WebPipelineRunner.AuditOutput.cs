@@ -74,6 +74,8 @@ internal static partial class WebPipelineRunner
             parts.Add($"verify {verify.Errors.Length}e/{verify.Warnings.Length}w");
         if (audit is not null)
             parts.Add($"audit {audit.ErrorCount}e/{audit.WarningCount}w");
+        if (audit is not null && audit.AgentArtifactCount > 0)
+            parts.Add($"agent {audit.AgentVerifiedPackageCount}/{audit.AgentPackageReferenceCount} packages verified");
         if (audit is not null && !string.IsNullOrWhiteSpace(audit.SummaryPath))
             parts.Add("summary");
         if (audit is not null && !string.IsNullOrWhiteSpace(audit.SarifPath))

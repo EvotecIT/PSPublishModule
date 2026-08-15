@@ -57,6 +57,29 @@ Notes:
 | --- | --- |
 | `PFWEB.GITSYNC.SECURITY` | Inline token detected in `git-sync` config; prefer `tokenEnv` + CI secrets. |
 
+## Agent Content Audit Codes
+
+These identifiers are emitted directly by the optional final-artifact scanner.
+Within a site audit they are retained in the normalized issue rule/hint under
+category `agent-content`, so the findings flow through baseline, summary, and
+SARIF output.
+
+| Code / Prefix | Meaning |
+| --- | --- |
+| `PFAGENT.ARTIFACT` | A configured machine-facing artifact is missing, oversized, or invalid JSON. |
+| `PFAGENT.TEXT` | Invalid UTF-8, invisible Unicode controls, or a high-confidence prompt directive. |
+| `PFAGENT.COMMAND.REMOTE_EXECUTION` | Downloaded content reaches a shell or interpreter directly or through intermediate pipeline stages. |
+| `PFAGENT.COMMAND.RUNTIME_INJECTION` | A runtime startup-hook or module-path environment variable can execute or redirect code before a package command. |
+| `PFAGENT.PACKAGE.INVALID_ID` | A package identifier uses an invalid registry shape or non-ASCII lookalike characters. |
+| `PFAGENT.PACKAGE.OBFUSCATED_COMMAND` | Shell escaping, variable expansion, path qualification, or quote concatenation hides a supported package-manager executable. |
+| `PFAGENT.PACKAGE.UNVERIFIABLE_*` | A command or dependency set cannot be reduced to static package identifiers and canonical sources. |
+| `PFAGENT.PACKAGE.NOT_FOUND` | The referenced package is not registered. |
+| `PFAGENT.PACKAGE.VERSION_NOT_FOUND` | The referenced exact version is not registered. |
+| `PFAGENT.PACKAGE.UNTRUSTED_SOURCE` | A command, environment value, or direct package-manager configuration write can override the canonical public registry. |
+| `PFAGENT.PACKAGE.OWNER_*` | Required owner-scoped publication proof is absent or mismatched. |
+| `PFAGENT.PACKAGE.REGISTRY_*` | Registry verification timed out, was unavailable, or returned malformed data. |
+| `PFAGENT.HOST` | An optional external-host check found an unresolved, non-public, or dangling-service destination. |
+
 ## Suppression Examples
 
 `site.json`:

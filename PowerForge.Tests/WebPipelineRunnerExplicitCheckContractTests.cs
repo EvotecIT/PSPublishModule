@@ -34,6 +34,7 @@ public class WebPipelineRunnerExplicitCheckContractTests
             Assert.False(result.Steps[0].Success);
             Assert.Contains("requireExplicitChecks", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("checkNetworkHints", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("checkAgentContentSecurity", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -64,7 +65,8 @@ public class WebPipelineRunnerExplicitCheckContractTests
                       "checkRenderBlockingResources": true,
                       "checkHeadingOrder": true,
                       "checkLinkPurposeConsistency": true,
-                      "checkMediaEmbeds": true
+                      "checkMediaEmbeds": true,
+                      "checkAgentContentSecurity": false
                     }
                   ]
                 }
@@ -104,7 +106,8 @@ public class WebPipelineRunnerExplicitCheckContractTests
                       "checkRenderBlockingResources": true,
                       "checkHeadingOrder": true,
                       "checkLinkPurposeConsistency": true,
-                      "checkMediaEmbeds": true
+                      "checkMediaEmbeds": true,
+                      "check-agent-content-security": false
                     }
                   ]
                 }
