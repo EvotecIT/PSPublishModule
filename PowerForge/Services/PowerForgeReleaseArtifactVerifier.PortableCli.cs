@@ -119,6 +119,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         }
         else
         {
+            ValidateRequestedDirectPortableSignaturePaths(
+                request.SignaturePaths,
+                projectRoot,
+                artifactPath,
+                expected.AllowOutsideProjectRoot);
             VerifiedSignature directSigner = VerifySignature(
                 artifactPath,
                 expected.SignerThumbprint,
@@ -538,6 +543,28 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         {
             throw Invalid(
                 "Requested portable signature paths do not match the publisher-signed payload inventory.");
+        }
+    }
+
+    private static void ValidateRequestedDirectPortableSignaturePaths(
+        IEnumerable<string>? requestedValues,
+        string projectRoot,
+        string artifactPath,
+        bool allowOutsideProjectRoot)
+    {
+        string[] requested = (requestedValues ?? Array.Empty<string>()).ToArray();
+        if (requested.Length == 0)
+            return;
+
+        string[] paths = ResolvePortableSignaturePaths(
+            projectRoot,
+            requested,
+            allowOutsideProjectRoot,
+            "signature path");
+        if (paths.Length != 1 || !PathsEqual(paths[0], artifactPath))
+        {
+            throw Invalid(
+                "Requested portable signature paths must identify exactly the verified direct executable.");
         }
     }
 

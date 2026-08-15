@@ -135,6 +135,21 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach (DotNetPublishStep step in steps)
             {
                 Dictionary<string, string> tokens = BuildBundleSourceInputTokens(plan, bundle, step);
+                foreach (DotNetPublishBundleScriptPlan script in bundle.Scripts ?? Array.Empty<DotNetPublishBundleScriptPlan>())
+                {
+                    if (script is null)
+                        continue;
+                    string workingDirectory = string.IsNullOrWhiteSpace(script.WorkingDirectory)
+                        ? plan.ProjectRoot
+                        : ResolvePath(plan.ProjectRoot, ApplyTemplate(script.WorkingDirectory!, tokens));
+                    foreach (string argument in script.Arguments ?? Array.Empty<string>())
+                    {
+                        AddFileBackedCommandValueSourceInput(
+                            inputs,
+                            ApplyTemplate(argument ?? string.Empty, tokens),
+                            workingDirectory);
+                    }
+                }
                 foreach (DotNetPublishBundleCopyItemPlan item in bundle.CopyItems ?? Array.Empty<DotNetPublishBundleCopyItemPlan>())
                 {
                     if (item is null || string.IsNullOrWhiteSpace(item.SourcePath))
@@ -206,19 +221,37 @@ public sealed partial class DotNetPublishPipelineRunner
                 : ResolvePath(plan.ProjectRoot, ApplyTemplate(step.HookWorkingDirectory!, tokens));
             foreach (string argument in step.HookArguments ?? Array.Empty<string>())
             {
-                string candidate = TrimMatchingQuotes(ApplyTemplate(argument ?? string.Empty, tokens).Trim());
-                int assignment = candidate.IndexOf('=');
-                if (assignment >= 0 && assignment < candidate.Length - 1)
-                    candidate = TrimMatchingQuotes(candidate.Substring(assignment + 1).Trim());
-                if (string.IsNullOrWhiteSpace(candidate))
-                    continue;
-                AddCommandHookSourceInput(
+                AddFileBackedCommandValueSourceInput(
                     inputs,
-                    Path.IsPathRooted(candidate) ? candidate : Path.Combine(workingDirectory, candidate));
+                    ApplyTemplate(argument ?? string.Empty, tokens),
+                    workingDirectory);
+            }
+            foreach (string value in (step.HookEnvironment ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)).Values)
+            {
+                AddFileBackedCommandValueSourceInput(
+                    inputs,
+                    ApplyTemplate(value ?? string.Empty, tokens),
+                    workingDirectory);
             }
         }
 
         return inputs.OrderBy(path => path, comparison).ToArray();
+    }
+
+    private static void AddFileBackedCommandValueSourceInput(
+        HashSet<string> inputs,
+        string? value,
+        string workingDirectory)
+    {
+        string candidate = TrimMatchingQuotes((value ?? string.Empty).Trim());
+        int assignment = candidate.IndexOf('=');
+        if (assignment >= 0 && assignment < candidate.Length - 1)
+            candidate = TrimMatchingQuotes(candidate.Substring(assignment + 1).Trim());
+        if (string.IsNullOrWhiteSpace(candidate))
+            return;
+        AddCommandHookSourceInput(
+            inputs,
+            Path.IsPathRooted(candidate) ? candidate : Path.Combine(workingDirectory, candidate));
     }
 
     private static void AddCommandHookSourceInput(HashSet<string> inputs, string? candidate)

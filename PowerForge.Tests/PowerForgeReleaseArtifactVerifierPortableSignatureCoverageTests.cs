@@ -122,4 +122,38 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         Assert.Equal("valid", evidence.SignatureStatus);
         Assert.Single(evidence.Signatures);
     }
+
+    [Fact]
+    public void Verify_PortableCliAcceptsDirectExecutableAsRequestedSignaturePath()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureDirectPackaging();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = fixture.ExecutablePath;
+        request.SignaturePaths = new[] { fixture.ExecutablePath };
+        request.SbomPaths = Array.Empty<string>();
+
+        PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal("valid", evidence.SignatureStatus);
+        Assert.Single(evidence.Signatures);
+    }
+
+    [Fact]
+    public void Verify_PortableCliRejectsRequestedSignaturePathOtherThanDirectExecutable()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureDirectPackaging();
+        string unrelatedPath = Path.Combine(fixture.Root, "unrelated.exe");
+        File.WriteAllText(unrelatedPath, "unrelated signed file");
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = fixture.ExecutablePath;
+        request.SignaturePaths = new[] { unrelatedPath };
+        request.SbomPaths = Array.Empty<string>();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("verified direct executable", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

@@ -11,6 +11,101 @@ namespace PowerForge.Tests;
 public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
+    public void EnumerateBundleSourceInputs_IncludesFileValuedScriptArguments()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string workingDirectory = Directory.CreateDirectory(Path.Combine(root, "ignored")).FullName;
+            string inputPath = Path.Combine(workingDirectory, "bundle-input.json");
+            string scriptPath = Path.Combine(root, "prepare.ps1");
+            File.WriteAllText(inputPath, "{}");
+            File.WriteAllText(scriptPath, "param($InputPath)");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Bundles =
+                [
+                    new DotNetPublishBundlePlan
+                    {
+                        Id = "bundle",
+                        PrepareFromTarget = "Sample",
+                        Scripts =
+                        [
+                            new DotNetPublishBundleScriptPlan
+                            {
+                                Path = scriptPath,
+                                WorkingDirectory = "ignored",
+                                Arguments = ["--input=bundle-input.json"]
+                            }
+                        ]
+                    }
+                ],
+                Steps =
+                [
+                    new DotNetPublishStep
+                    {
+                        Kind = DotNetPublishStepKind.Bundle,
+                        BundleId = "bundle",
+                        TargetName = "Sample",
+                        Framework = "net10.0",
+                        Runtime = "win-x64",
+                        Style = DotNetPublishStyle.PortableCompat
+                    }
+                ]
+            };
+
+            string[] inputs = DotNetPublishPipelineRunner.EnumerateBundleSourceInputs(plan);
+
+            Assert.Contains(inputPath, inputs, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void EnumerateCommandHookSourceInputs_IncludesFileValuedEnvironmentEntries()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string workingDirectory = Directory.CreateDirectory(Path.Combine(root, "ignored")).FullName;
+            string inputPath = Path.Combine(workingDirectory, "hook-input.json");
+            string commandPath = Path.Combine(root, "hook.ps1");
+            File.WriteAllText(inputPath, "{}");
+            File.WriteAllText(commandPath, "param()");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Steps =
+                [
+                    new DotNetPublishStep
+                    {
+                        Kind = DotNetPublishStepKind.CommandHook,
+                        HookId = "prepare",
+                        HookCommand = commandPath,
+                        HookWorkingDirectory = "ignored",
+                        HookEnvironment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["POWERFORGE_INPUT"] = "hook-input.json"
+                        }
+                    }
+                ]
+            };
+
+            string[] inputs = DotNetPublishPipelineRunner.EnumerateCommandHookSourceInputs(plan);
+
+            Assert.Contains(inputPath, inputs, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void WriteManifests_RecordsCommittedSourceRevisionAndDirtyState()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
