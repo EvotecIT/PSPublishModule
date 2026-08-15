@@ -271,14 +271,16 @@ public sealed class SigningScriptRetryTests
                 $scriptText = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(script))}}'))
                 $rootPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(rootPath))}}'))
                 $packageFileListPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(packageFileListPath))}}'))
-                function Get-ChildItem {
+                function Get-Item {
                   [CmdletBinding()]
-                  param([string]$Path, [switch]$CodeSigningCert)
+                  param([string]$LiteralPath)
                   [pscustomobject]@{
                     Thumbprint = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB'
                     Subject = 'CN=Publisher'
                     NotBefore = [DateTime]::Now.AddDays(-1)
                     NotAfter = [DateTime]::Now.AddDays(1)
+                    HasPrivateKey = $true
+                    Extensions = @()
                   }
                 }
                 function Get-AuthenticodeSignature {
