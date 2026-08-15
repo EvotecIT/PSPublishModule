@@ -287,6 +287,12 @@ public sealed partial class PowerForgeReleaseServiceTests
                 using var stream = entry.Open();
                 stream.Write(executableBytes, 0, executableBytes.Length);
             }
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var sourceCommit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
 
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
@@ -342,7 +348,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         Owner = "EvotecIT",
                         Repository = "PSPublishModule",
-                        Commitish = "0123456789abcdef0123456789abcdef01234567",
+                        Commitish = sourceCommit,
                         TagTemplate = "v{Version}"
                     }
                 },
@@ -366,6 +372,27 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             TryDelete(root);
         }
+    }
+
+    [Fact]
+    public void ValidatePowerForgeToolManifestStaging_rejects_tool_archive_renaming()
+    {
+        var spec = new PowerForgeReleaseSpec
+        {
+            Outputs = new PowerForgeReleaseOutputsOptions
+            {
+                PowerForgeToolManifestPath = "PowerForge-tool-manifest.json",
+                Staging = new PowerForgeReleaseStagingOptions
+                {
+                    ToolsNameTemplate = "renamed-{FileName}"
+                }
+            }
+        };
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ValidatePowerForgeToolManifestStaging(spec));
+
+        Assert.Contains("exact published tool archive", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -3267,8 +3267,47 @@ internal sealed partial class PowerForgeReleaseService
         if (string.IsNullOrWhiteSpace(sharedReleaseVersion))
             return;
 
-        foreach (var entry in BuildSharedReleaseVersionProperties(sharedReleaseVersion!, sourceCommit))
+        var verifiedSourceCommit = VerifySharedReleaseSourceCommit(plan.ProjectRoot, sourceCommit);
+        foreach (var entry in BuildSharedReleaseVersionProperties(sharedReleaseVersion!, verifiedSourceCommit))
             plan.MsBuildProperties[entry.Key] = entry.Value;
+    }
+
+    internal static string? VerifySharedReleaseSourceCommit(string projectRoot, string? configuredCommit)
+    {
+        var expectedCommit = configuredCommit?.Trim();
+        if (string.IsNullOrWhiteSpace(expectedCommit) ||
+            !Regex.IsMatch(expectedCommit!, "^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(projectRoot) || !Directory.Exists(projectRoot))
+        {
+            throw new InvalidOperationException(
+                "An exact GitHub.Commitish requires the DotNet publish project root to be an existing Git checkout.");
+        }
+
+        var git = GitClient.CreateTrustedSystemClient(defaultTimeout: TimeSpan.FromMinutes(2));
+        var result = git.RunRawAsync(projectRoot, ["rev-parse", "HEAD"], TimeSpan.FromMinutes(2))
+            .GetAwaiter()
+            .GetResult();
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(
+                "Unable to bind GitHub.Commitish to the DotNet publish checkout. " +
+                (string.IsNullOrWhiteSpace(result.StdErr) ? "git rev-parse HEAD failed." : result.StdErr.Trim()));
+        }
+
+        var observedCommit = result.StdOut.Trim();
+        if (!Regex.IsMatch(observedCommit, "^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant))
+            throw new InvalidOperationException("The DotNet publish checkout did not report an exact 40-character Git commit SHA.");
+        if (!string.Equals(expectedCommit, observedCommit, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"GitHub.Commitish '{expectedCommit}' does not match the DotNet publish checkout HEAD '{observedCommit}'.");
+        }
+
+        return observedCommit.ToLowerInvariant();
     }
 
     private static Dictionary<string, string> BuildSharedReleaseVersionProperties(

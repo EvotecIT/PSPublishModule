@@ -498,7 +498,8 @@ internal sealed partial class PowerForgeReleaseService
             var skippedIndependentRelease = result?.SkippedSteps.Contains(
                 "independentRelease",
                 StringComparer.OrdinalIgnoreCase) == true;
-            if (!skippedIndependentRelease && plan.Action == PowerForgeAppleReleaseAction.Archive)
+            if (!skippedIndependentRelease &&
+                plan.Action is PowerForgeAppleReleaseAction.Archive or PowerForgeAppleReleaseAction.Rehearse)
             {
                 try
                 {

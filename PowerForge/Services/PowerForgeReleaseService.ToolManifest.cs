@@ -29,11 +29,22 @@ internal sealed partial class PowerForgeReleaseService
             standaloneToolOutputSelected &&
             IsStandalonePowerForgeToolSelected(result))
         {
+            ValidatePowerForgeToolManifestStaging(spec);
             var manifestPath = ResolveOutputPath(configDirectory, toolManifestPath!);
             WritePowerForgeToolLockManifest(spec, producedAssets, sharedReleaseVersion, manifestPath);
             paths.Add(manifestPath);
         }
         return paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    internal static void ValidatePowerForgeToolManifestStaging(PowerForgeReleaseSpec spec)
+    {
+        if (!string.IsNullOrWhiteSpace(spec.Outputs?.Staging?.ToolsNameTemplate))
+        {
+            throw new InvalidOperationException(
+                "PowerForgeToolManifestPath cannot be combined with Outputs.Staging.ToolsNameTemplate because " +
+                "the installer manifest must name the exact published tool archive.");
+        }
     }
 
     private static bool IsStandalonePowerForgeToolSelected(PowerForgeReleaseResult result)

@@ -4717,7 +4717,14 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_PlanOnly_EmbedsExactReleaseCommitInToolInformationalVersion()
     {
-        const string commit = "0123456789abcdef0123456789abcdef01234567";
+        var root = CreateSandbox();
+        File.WriteAllText(Path.Combine(root, "source.txt"), "exact source");
+        RunSnapshotGit(root, "init", "--quiet");
+        RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+        RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+        RunSnapshotGit(root, "add", ".");
+        RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+        var commit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
         var service = new PowerForgeReleaseService(
             new NullLogger(),
             executePackages: (_, _, _) =>
@@ -4739,28 +4746,61 @@ public sealed partial class PowerForgeReleaseServiceTests
             loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
             planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
             {
-                ProjectRoot = Path.GetTempPath(),
+                ProjectRoot = root,
                 Configuration = "Release"
             },
             runDotNetTools: _ => throw new InvalidOperationException("DotNet publish should not run."),
             publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
 
-        var result = service.Execute(
-            new PowerForgeReleaseSpec
-            {
-                Packages = new ProjectBuildConfiguration { GitHubPrimaryProject = "PowerForge" },
-                Tools = new PowerForgeToolReleaseSpec { DotNetPublish = new DotNetPublishSpec() },
-                GitHub = new PowerForgeReleaseGitHubOptions { Commitish = commit }
-            },
-            new PowerForgeReleaseRequest
-            {
-                ConfigPath = Path.Combine(Path.GetTempPath(), "release.json"),
-                PlanOnly = true
-            });
+        try
+        {
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Packages = new ProjectBuildConfiguration { GitHubPrimaryProject = "PowerForge" },
+                    Tools = new PowerForgeToolReleaseSpec { DotNetPublish = new DotNetPublishSpec() },
+                    GitHub = new PowerForgeReleaseGitHubOptions { Commitish = commit }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    PlanOnly = true
+                });
 
-        Assert.True(result.Success);
-        Assert.Equal("3.0.110+" + commit, result.DotNetToolPlan!.MsBuildProperties["InformationalVersion"]);
-        Assert.Equal("false", result.DotNetToolPlan.MsBuildProperties["IncludeSourceRevisionInInformationalVersion"]);
+            Assert.True(result.Success);
+            Assert.Equal("3.0.110+" + commit, result.DotNetToolPlan!.MsBuildProperties["InformationalVersion"]);
+            Assert.Equal("false", result.DotNetToolPlan.MsBuildProperties["IncludeSourceRevisionInInformationalVersion"]);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void VerifySharedReleaseSourceCommit_rejects_a_configured_commit_from_another_checkout()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "source.txt"), "exact source");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.VerifySharedReleaseSourceCommit(
+                    root,
+                    "0123456789abcdef0123456789abcdef01234567"));
+
+            Assert.Contains("does not match", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
     }
 
     [Fact]

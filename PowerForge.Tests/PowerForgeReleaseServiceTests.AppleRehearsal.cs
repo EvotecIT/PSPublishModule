@@ -86,6 +86,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(target.ArchiveCreated);
             Assert.True(target.ExportRehearsed);
             Assert.False(target.UploadPerformed);
+            Assert.Equal("1.7", target.Version);
+            Assert.Equal("16", target.Build);
             Assert.EndsWith(artifactName, target.RehearsalArtifactPath, StringComparison.Ordinal);
             var rehearsalArtifactPath = Path.Combine(
                 root,
