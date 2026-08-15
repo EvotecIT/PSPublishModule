@@ -174,7 +174,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string checksumsPath,
         string artifactPath,
         string artifactDigest,
-        VerifiedSignature artifactSigner)
+        VerifiedSignature artifactSigner,
+        bool allowSubjectMatchedCertificateRotation)
     {
         string inventoryPath = artifactPath + PowerForgePortablePayloadInventory.DirectInventorySuffix;
         string signaturePath = artifactPath + PowerForgePortablePayloadInventory.DirectSignatureSuffix;
@@ -199,10 +200,25 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         {
             throw Invalid($"Direct portable inventory signature is not valid: {exception.Message}");
         }
-        if (!string.Equals(
-                inventorySigner.Thumbprint,
-                artifactSigner.Thumbprint,
-                StringComparison.OrdinalIgnoreCase))
+        if (allowSubjectMatchedCertificateRotation)
+        {
+            if (!inventorySigner.CertificateTrusted)
+            {
+                throw Invalid(
+                    "Direct portable inventory signature does not have a trusted code-signing certificate chain.");
+            }
+            if (!DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(
+                    inventorySigner.Subject,
+                    artifactSigner.Subject))
+            {
+                throw Invalid(
+                    "Direct portable inventory signature does not match the Authenticode publisher subject.");
+            }
+        }
+        else if (!string.Equals(
+                     inventorySigner.Thumbprint,
+                     artifactSigner.Thumbprint,
+                     StringComparison.OrdinalIgnoreCase))
         {
             throw Invalid("Direct portable inventory signature does not use the Authenticode publisher certificate.");
         }

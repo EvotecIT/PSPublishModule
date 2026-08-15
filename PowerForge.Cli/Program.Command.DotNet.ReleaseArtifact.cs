@@ -13,6 +13,14 @@ internal static partial class Program
 
         var commandArgs = args.Skip(1).ToArray();
         var outputJson = IsJsonOutput(commandArgs);
+        if (commandArgs.Any(value => value.Equals("--checksums-signature", StringComparison.OrdinalIgnoreCase)))
+        {
+            return WriteGeneralReleaseArtifactError(
+                outputJson,
+                logger,
+                2,
+                "--checksums-signature is not supported by release artifact verification.");
+        }
         var kind = TryGetOptionValue(commandArgs, "--kind");
         if (!string.IsNullOrWhiteSpace(kind))
             return CommandGeneralReleaseArtifactVerification(commandArgs, kind!, outputJson, logger);

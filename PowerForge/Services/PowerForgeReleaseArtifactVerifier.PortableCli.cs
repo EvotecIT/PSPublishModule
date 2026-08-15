@@ -170,7 +170,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 checksumsPath,
                 artifactPath,
                 artifactDigest,
-                directSigner);
+                directSigner,
+                expected.Sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning);
             PowerForgePortablePayloadInventory inventory = direct.Inventory;
             directInventoryEvidence = direct.Evidence;
             if (!string.Equals(inventory.ArtifactId, artifactId, StringComparison.OrdinalIgnoreCase) ||

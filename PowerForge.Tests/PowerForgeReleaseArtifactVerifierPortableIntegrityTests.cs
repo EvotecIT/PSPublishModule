@@ -408,6 +408,49 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliAcceptsAzureCertificateRotationForDirectInventory()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureSubjectNameSigning(azureArtifactSigning: true);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = fixture.ExecutablePath;
+        request.SignThumbprint = null;
+        request.SignSubjectName = "CN=Publisher";
+        request.SignaturePaths = Array.Empty<string>();
+        request.SbomPaths = Array.Empty<string>();
+
+        PowerForgeReleaseArtifactEvidence result = fixture
+            .CreateVerifier(Thumbprint, VendorThumbprint)
+            .Verify(request);
+
+        Assert.Equal("valid", result.SignatureStatus);
+        Assert.Single(result.Signatures);
+        Assert.Equal(Thumbprint, result.SignerThumbprint);
+    }
+
+    [Fact]
+    public void Verify_PortableCliRejectsUntrustedDirectInventoryCertificateDuringAzureRotation()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureSubjectNameSigning(azureArtifactSigning: true);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = fixture.ExecutablePath;
+        request.SignThumbprint = null;
+        request.SignSubjectName = "CN=Publisher";
+        request.SignaturePaths = Array.Empty<string>();
+        request.SbomPaths = Array.Empty<string>();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() => fixture
+            .CreateVerifier(
+                Thumbprint,
+                VendorThumbprint,
+                inventoryCertificateTrusted: false)
+            .Verify(request));
+
+        Assert.Contains("trusted code-signing certificate chain", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliAcceptsAzureCertificateRotationAcrossPayloadFiles()
     {
         using var fixture = new PortableFixture();

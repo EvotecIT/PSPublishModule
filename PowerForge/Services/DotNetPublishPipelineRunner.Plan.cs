@@ -620,6 +620,21 @@ public sealed partial class DotNetPublishPipelineRunner
                 string outputTemplate = string.IsNullOrWhiteSpace(target.Publish.OutputPath)
                     ? Path.Combine("Artifacts", "DotNetPublish", "{target}", "{rid}", "{framework}", "{style}")
                     : target.Publish.OutputPath!;
+                string? releaseVersion = ResolvePublishReleaseVersion(
+                    plan,
+                    target.Name,
+                    combination.Framework,
+                    combination.Runtime,
+                    combination.Style);
+                if (outputTemplate.IndexOf("{version}", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    if (string.IsNullOrWhiteSpace(releaseVersion))
+                    {
+                        throw new InvalidOperationException(
+                            $"Target '{target.Name}' output path uses '{{version}}', but no active publish version plan resolved a value.");
+                    }
+                    tokens["version"] = releaseVersion!;
+                }
                 generatedDirectories.Add((
                     ResolvePath(plan.ProjectRoot, ApplyTemplate(outputTemplate, tokens)),
                     $"Target '{target.Name}' output path"));

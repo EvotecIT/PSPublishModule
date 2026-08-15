@@ -234,6 +234,22 @@ public sealed class PowerForgeCliDotNetPublishTests
     }
 
     [Fact]
+    public async Task ReleaseArtifactVerify_RejectsUnsupportedChecksumSignatureOption()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var (exitCode, stdout, stderr) = await RunCliAsync(
+            repoRoot,
+            $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --checksums-signature checksums.p7s --output json");
+
+        Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+        using JsonDocument document = JsonDocument.Parse(stdout);
+        Assert.Contains(
+            "not supported",
+            document.RootElement.GetProperty("error").GetString(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ReleaseArtifactVerify_PortableCliKindUsesGeneralEvidenceContract()
     {
         var repoRoot = FindRepositoryRoot();
