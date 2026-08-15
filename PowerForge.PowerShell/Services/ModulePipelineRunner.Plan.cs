@@ -1066,9 +1066,17 @@ public sealed partial class ModulePipelineRunner
         {
             string[] generatedProvenancePaths = GetGeneratedReleaseProvenancePaths(plan.ProjectRoot);
             string[] lifecycleActionInputs = CollectReleaseActionInputPaths(plan.ProjectRoot, plan.Actions);
+            string[] artefactMappingInputs = CollectReleaseArtefactInputPaths(
+                plan.ProjectRoot,
+                plan.ModuleName,
+                plan.ResolvedVersion,
+                plan.PreRelease,
+                plan.Artefacts);
             plan.SourceInputPaths = CollectReleaseSourceInputPaths(
                 plan.BuildSpec,
-                (spec.SourceInputPaths ?? Array.Empty<string>()).Concat(lifecycleActionInputs),
+                (spec.SourceInputPaths ?? Array.Empty<string>())
+                    .Concat(lifecycleActionInputs)
+                    .Concat(artefactMappingInputs),
                 generatedProvenancePaths);
             DotNetPublishPipelineRunner.SourceProvenance provenance =
                 DotNetPublishPipelineRunner.ReadSourceProvenance(
@@ -1176,6 +1184,76 @@ public sealed partial class ModulePipelineRunner
             .Distinct(comparer)
             .OrderBy(static path => path, comparer)
             .ToArray();
+    }
+
+    private static string[] CollectReleaseArtefactInputPaths(
+        string projectRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease,
+        IEnumerable<ConfigurationArtefactSegment>? artefacts)
+    {
+        var comparer = Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var inputs = new HashSet<string>(comparer);
+        foreach (ConfigurationArtefactSegment artefact in artefacts ?? Array.Empty<ConfigurationArtefactSegment>())
+        {
+            ArtefactConfiguration? configuration = artefact?.Configuration;
+            if (configuration?.Enabled != true)
+                continue;
+
+            foreach (ArtefactCopyMapping mapping in configuration.FilesOutput ?? Array.Empty<ArtefactCopyMapping>())
+            {
+                if (mapping is null)
+                    continue;
+                inputs.Add(ResolveArtefactInputPath(mapping.Source, projectRoot, moduleName, moduleVersion, preRelease));
+            }
+
+            foreach (ArtefactCopyMapping mapping in configuration.DirectoryOutput ?? Array.Empty<ArtefactCopyMapping>())
+            {
+                if (mapping is null)
+                    continue;
+                string source = ResolveArtefactInputPath(mapping.Source, projectRoot, moduleName, moduleVersion, preRelease);
+                if (!Directory.Exists(source))
+                    throw new DirectoryNotFoundException($"Directory not found: {source}");
+
+                var pending = new Stack<string>();
+                pending.Push(source);
+                while (pending.Count > 0)
+                {
+                    string directory = pending.Pop();
+                    if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Signed GitHub module release artefact source directory '{directory}' cannot be a reparse point.");
+                    }
+                    foreach (string file in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
+                        inputs.Add(Path.GetFullPath(file));
+                    foreach (string child in Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly))
+                        pending.Push(child);
+                }
+            }
+        }
+
+        return inputs.OrderBy(static path => path, comparer).ToArray();
+    }
+
+    private static string ResolveArtefactInputPath(
+        string value,
+        string projectRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+    {
+        string raw = ModulePathTokenFormatter.ReplacePathTokens(
+                value ?? string.Empty,
+                moduleName,
+                moduleVersion,
+                preRelease)
+            .Trim()
+            .Trim('"');
+        if (string.IsNullOrWhiteSpace(raw))
+            throw new ArgumentException("Copy mapping source path is empty.", nameof(value));
+        return Path.GetFullPath(Path.IsPathRooted(raw) ? raw : Path.Combine(projectRoot, raw));
     }
 
     private static void ValidateReleaseSourceUnchanged(

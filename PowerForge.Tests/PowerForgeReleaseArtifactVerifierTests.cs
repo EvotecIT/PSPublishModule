@@ -143,6 +143,26 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsOversizedReferencedConfigurationBeforeParsing()
+    {
+        using var fixture = new PortableFixture();
+        string referencedConfiguration = fixture.WriteReferencedConfiguration();
+        using (FileStream stream = new(referencedConfiguration, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            stream.SetLength(DotNetPublishReleaseArtifactVerifier.MaxConfigurationBytes + 1L);
+            stream.Position = 0;
+            stream.WriteByte((byte)'{');
+        }
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("Referenced PowerForge dotnet-publish configuration exceeds", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("byte limit", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsConfigurationChangedAfterChecksumCatalogWasWritten()
     {
         using var fixture = new PortableFixture();

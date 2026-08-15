@@ -26,6 +26,19 @@ public sealed partial class DotNetPublishReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_RejectsOversizedManifestBeforeParsing()
+    {
+        using var fixture = new ReleaseFixture();
+        fixture.WriteOversizedManifest();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("PowerForge manifest exceeds", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("byte limit", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_RejectsBareCommonNameAsOutOfBandPublisherTrust()
     {
         using var fixture = new ReleaseFixture();
@@ -829,6 +842,17 @@ public sealed partial class DotNetPublishReleaseArtifactVerifierTests
                     }
                 }
             })));
+            RefreshChecksums(["Artifacts/Test-1.2.3.msi"]);
+        }
+
+        internal void WriteOversizedManifest()
+        {
+            using (FileStream stream = new(ManifestPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                stream.SetLength(DotNetPublishReleaseArtifactVerifier.MaxManifestBytes + 1L);
+                stream.Position = 0;
+                stream.WriteByte((byte)'[');
+            }
             RefreshChecksums(["Artifacts/Test-1.2.3.msi"]);
         }
 

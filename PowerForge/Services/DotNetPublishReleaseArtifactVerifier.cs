@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -11,6 +12,8 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class DotNetPublishReleaseArtifactVerifier
 {
+    internal const long MaxManifestBytes = 16L * 1024L * 1024L;
+    internal const long MaxConfigurationBytes = 16L * 1024L * 1024L;
     private static readonly JsonSerializerOptions ConfigurationJsonOptions = CreateConfigurationJsonOptions();
     private readonly Func<string, DotNetPublishMsiPackageMetadata> _readPackage;
     private readonly Func<string, AuthenticodeResult> _verifyAuthenticode;
@@ -48,7 +51,9 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         if (!ChecksumContains(checksumsPath, manifestRelativePath, manifestDigest))
             throw Invalid("PowerForge manifest SHA-256 does not match the checksum manifest.");
 
-        using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath), new JsonDocumentOptions
+        using var manifest = JsonDocument.Parse(
+            ReadBoundedText(manifestPath, "PowerForge manifest", MaxManifestBytes),
+            new JsonDocumentOptions
         {
             AllowTrailingCommas = true,
             CommentHandling = JsonCommentHandling.Skip
@@ -288,7 +293,7 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
     internal static DotNetPublishConfiguredSpec ReadConfiguredPublishSpecWithInputs(string configurationPath)
     {
         configurationPath = RequireFile(configurationPath, nameof(configurationPath));
-        var json = File.ReadAllText(configurationPath);
+        var json = ReadBoundedText(configurationPath, "PowerForge release configuration", MaxConfigurationBytes);
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions
         {
             CommentHandling = JsonCommentHandling.Skip,
@@ -322,7 +327,10 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
                 ? configuredPath
                 : Path.Combine(root, configuredPath));
             path = RequireFile(path, "Tools.DotNetPublishConfigPath");
-            var externalJson = File.ReadAllText(path);
+            var externalJson = ReadBoundedText(
+                path,
+                "Referenced PowerForge dotnet-publish configuration",
+                MaxConfigurationBytes);
             configuration = JsonSerializer.Deserialize<DotNetPublishSpec>(externalJson, ConfigurationJsonOptions)
                 ?? throw Invalid("Referenced PowerForge dotnet-publish configuration could not be deserialized.");
             inputPaths.Add(path);
@@ -331,6 +339,31 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         if (!string.IsNullOrWhiteSpace(tools.DotNetPublishProfile))
             configuration.Profile = tools.DotNetPublishProfile!.Trim();
         return new DotNetPublishConfiguredSpec(configuration, inputPaths.ToArray());
+    }
+
+    private static string ReadBoundedText(string path, string label, long maximumBytes)
+    {
+        using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        if (input.Length > maximumBytes)
+            throw Invalid($"{label} exceeds the {maximumBytes} byte limit.");
+
+        using var bytes = new MemoryStream((int)input.Length);
+        var buffer = new byte[81920];
+        long total = 0;
+        while (true)
+        {
+            int read = input.Read(buffer, 0, buffer.Length);
+            if (read == 0)
+                break;
+            total = checked(total + read);
+            if (total > maximumBytes)
+                throw Invalid($"{label} exceeds the {maximumBytes} byte limit.");
+            bytes.Write(buffer, 0, read);
+        }
+
+        bytes.Position = 0;
+        using var reader = new StreamReader(bytes, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
     }
 
     private static void ValidatePackage(

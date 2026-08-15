@@ -74,6 +74,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("{\"VirusTotal\":{\"ApiKey\":\"secret\"}}", "$.VirusTotal.ApiKey")]
     [InlineData("{\"Packages\":{\"PublishApiKey\":\"secret\"}}", "$.Packages.PublishApiKey")]
     [InlineData("{\"Tools\":{\"DotNetPublish\":{\"DotNet\":{\"EnvironmentVariables\":{\"PRIVATE_TOKEN\":{\"Value\":\"secret\",\"Secret\":true}}}}}}", "$.Tools.DotNetPublish.DotNet.EnvironmentVariables.PRIVATE_TOKEN.Value")]
+    [InlineData("{\"Tools\":{\"DotNetPublish\":{\"DotNet\":{\"EnvironmentVariables\":{\"GITHUB_TOKEN\":{\"Value\":\"secret\"}}}}}}", "$.Tools.DotNetPublish.DotNet.EnvironmentVariables.GITHUB_TOKEN.Value")]
     [InlineData("{\"Tools\":{\"DotNetPublish\":{\"Hooks\":[{\"Id\":\"publish\",\"Command\":\"pwsh\",\"Environment\":{\"GITHUB_TOKEN\":\"secret\"}}]}}}", "$.Tools.DotNetPublish.Hooks[0].Environment.GITHUB_TOKEN")]
     [InlineData("{\"Tools\":{\"DotNetPublish\":{\"Hooks\":[{\"Id\":\"publish\",\"Command\":\"pwsh\",\"Environment\":{\"NUGET_API_KEY\":\"secret\"}}]}}}", "$.Tools.DotNetPublish.Hooks[0].Environment.NUGET_API_KEY")]
     [InlineData("{\"Tools\":{\"DotNetPublish\":{\"Hooks\":[{\"Id\":\"publish\",\"Command\":\"pwsh\",\"Environment\":{\"SIGNING_PASSWORD\":\"secret\"}}]}}}", "$.Tools.DotNetPublish.Hooks[0].Environment.SIGNING_PASSWORD")]

@@ -1102,7 +1102,6 @@ internal sealed partial class PowerForgeReleaseService
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
         if (File.Exists(configPath))
             PowerForgeReleaseConfigurationSecretValidator.ValidateJson(File.ReadAllText(configPath));
-        PowerForgeReleaseConfigurationSecretValidator.Validate(spec);
         if (!string.IsNullOrWhiteSpace(request.EffectiveConfigurationPath))
         {
             string effectiveConfigurationPath = Path.GetFullPath(

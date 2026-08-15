@@ -73,6 +73,43 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsOversizedConfigurationBeforeParsing()
+    {
+        using var fixture = new PortableFixture();
+        using (FileStream stream = new(fixture.ConfigurationPath, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            stream.SetLength(DotNetPublishReleaseArtifactVerifier.MaxConfigurationBytes + 1L);
+            stream.Position = 0;
+            stream.WriteByte((byte)'{');
+        }
+        fixture.WriteChecksums();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("configuration exceeds", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("byte limit", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateArchiveEntries_RejectsEntryCountBeforeIndexing()
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new System.IO.Compression.ZipArchive(stream, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        {
+            writer.CreateEntry("one.txt");
+            writer.CreateEntry("two.txt");
+        }
+        stream.Position = 0;
+        using var archive = new System.IO.Compression.ZipArchive(stream, System.IO.Compression.ZipArchiveMode.Read);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            PowerForgeReleaseArtifactVerifier.ValidateArchiveEntries(archive, maximumEntries: 1));
+
+        Assert.Contains("entry limit", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliStreamsLargeArchiveMember()
     {
         using var fixture = new PortableFixture();

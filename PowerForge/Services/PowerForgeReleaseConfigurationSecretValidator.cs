@@ -61,13 +61,17 @@ internal static class PowerForgeReleaseConfigurationSecretValidator
                 foreach (JsonProperty property in element.EnumerateObject())
                 {
                     string propertyPath = path + "." + property.Name;
-                    bool sensitiveHookEnvironment = IsHookEnvironmentPath(path) &&
-                                                    IsSensitiveEnvironmentVariableName(property.Name);
-                    if ((InlineSecretPropertyNames.Contains(property.Name) || sensitiveHookEnvironment) &&
+                    bool sensitiveEnvironmentVariable = IsEnvironmentDictionaryPath(path) &&
+                                                        IsSensitiveEnvironmentVariableName(property.Name);
+                    if (InlineSecretPropertyNames.Contains(property.Name) &&
                         property.Value.ValueKind == JsonValueKind.String &&
                         !string.IsNullOrWhiteSpace(property.Value.GetString()))
                     {
                         violations.Add(propertyPath);
+                    }
+                    else if (sensitiveEnvironmentVariable && TryGetInlineEnvironmentValuePath(property, propertyPath, out string? valuePath))
+                    {
+                        violations.Add(valuePath!);
                     }
 
                     ValidateElement(property.Value, propertyPath, violations);
@@ -100,9 +104,36 @@ internal static class PowerForgeReleaseConfigurationSecretValidator
         return secret && literalValue;
     }
 
-    private static bool IsHookEnvironmentPath(string path)
-        => path.EndsWith(".Environment", StringComparison.OrdinalIgnoreCase) &&
-           path.IndexOf(".Hooks[", StringComparison.OrdinalIgnoreCase) >= 0;
+    private static bool IsEnvironmentDictionaryPath(string path)
+        => path.EndsWith(".Environment", StringComparison.OrdinalIgnoreCase) ||
+           path.EndsWith(".EnvironmentVariables", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryGetInlineEnvironmentValuePath(
+        JsonProperty property,
+        string propertyPath,
+        out string? valuePath)
+    {
+        valuePath = null;
+        if (property.Value.ValueKind == JsonValueKind.String)
+        {
+            if (string.IsNullOrWhiteSpace(property.Value.GetString()))
+                return false;
+
+            valuePath = propertyPath;
+            return true;
+        }
+
+        if (property.Value.ValueKind != JsonValueKind.Object ||
+            !property.Value.TryGetProperty("Value", out JsonElement value) ||
+            value.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(value.GetString()))
+        {
+            return false;
+        }
+
+        valuePath = propertyPath + ".Value";
+        return true;
+    }
 
     private static bool IsSensitiveEnvironmentVariableName(string name)
     {

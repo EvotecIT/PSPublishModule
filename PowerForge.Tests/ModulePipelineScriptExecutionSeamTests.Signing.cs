@@ -377,6 +377,53 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Plan_SignedGitHubPackedArtifactBindsIgnoredArtefactCopyMapping(bool directoryMapping)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            File.WriteAllText(Path.Combine(root.FullName, ".gitignore"), "generated/\nArtefacts/\n");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            string generatedDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "generated")).FullName;
+            string generatedFile = Path.Combine(generatedDirectory, "payload.json");
+            File.WriteAllText(generatedFile, "{\"mutable\":true}");
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            EnableGitHubPublish(spec, moduleName);
+            ConfigurationArtefactSegment artefact = Assert.IsType<ConfigurationArtefactSegment>(
+                spec.Segments.Single(segment => segment is ConfigurationArtefactSegment));
+            var mapping = new ArtefactCopyMapping
+            {
+                Source = directoryMapping ? "generated" : Path.Combine("generated", "payload.json"),
+                Destination = directoryMapping ? "generated" : Path.Combine("generated", "payload.json")
+            };
+            if (directoryMapping)
+                artefact.Configuration.DirectoryOutput = new[] { mapping };
+            else
+                artefact.Configuration.FilesOutput = new[] { mapping };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                CreateRunner(new FakeHostedOperations()).Plan(spec));
+
+            Assert.Contains("resolved clean Git checkout", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void Plan_SignedGitHubBinaryModuleRejectsIgnoredEvaluatedProjectInputOutsideModuleSource()
     {

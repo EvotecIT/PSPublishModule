@@ -9,6 +9,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     private const long MaxArchiveMetadataBytes = 4L * 1024L * 1024L;
     private const long MaxModuleSignedEntryBytes = 512L * 1024L * 1024L;
     private const long MaxModuleSignedEntriesBytes = 2L * 1024L * 1024L * 1024L;
+    internal const int MaxArchiveEntries = 65536;
 
     internal static void ValidateModuleArchiveBounds(
         IReadOnlyDictionary<string, ZipArchiveEntry> entries,
@@ -288,12 +289,21 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         internal string ExecutableIdentity { get; }
     }
 
-    private static Dictionary<string, ZipArchiveEntry> ValidateArchiveEntries(ZipArchive archive)
+    internal static Dictionary<string, ZipArchiveEntry> ValidateArchiveEntries(
+        ZipArchive archive,
+        int maximumEntries = MaxArchiveEntries)
     {
+        if (maximumEntries < 1)
+            throw new ArgumentOutOfRangeException(nameof(maximumEntries));
+
         var entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.Ordinal);
         var duplicateGuard = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int count = 0;
         foreach (ZipArchiveEntry entry in archive.Entries)
         {
+            count++;
+            if (count > maximumEntries)
+                throw Invalid($"Release archive exceeds the {maximumEntries} entry limit.");
             string normalized = NormalizeArchivePath(entry.FullName);
             if (!duplicateGuard.Add(normalized))
                 throw Invalid($"Release archive contains duplicate entry '{normalized}'.");
