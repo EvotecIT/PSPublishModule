@@ -21,6 +21,8 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("-or -not $certificate.HasPrivateKey", script, StringComparison.Ordinal);
         Assert.Contains("$certificate.NotAfter -le [DateTime]::UtcNow.AddDays(7)", script, StringComparison.Ordinal);
         Assert.Contains("The release checkout must start clean", script, StringComparison.Ordinal);
+        Assert.Contains("status --porcelain --untracked-files=all", script, StringComparison.Ordinal);
+        Assert.Contains("[IO.Path]::GetTempPath()", script, StringComparison.Ordinal);
         Assert.Contains("Assert-PowerForgeCommittedReleaseVersion", script, StringComparison.Ordinal);
         Assert.Contains("Set-PowerForgeAuthorizedReleaseVersion", script, StringComparison.Ordinal);
         Assert.Contains("-DisableVersionUpdates:($Operation -eq 'Publish')", script, StringComparison.Ordinal);

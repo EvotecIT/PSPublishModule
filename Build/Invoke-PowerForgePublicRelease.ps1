@@ -24,11 +24,10 @@ Set-StrictMode -Version Latest
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 if ([string]::IsNullOrWhiteSpace($ReceiptPath)) {
-    $ReceiptPath = Join-Path $repositoryRoot 'release-receipts\powerforge-public-release.json'
+    $ReceiptPath = Join-Path ([IO.Path]::GetTempPath()) 'PowerForge.PublicRelease\powerforge-public-release.json'
 }
 $ReceiptPath = [IO.Path]::GetFullPath($ReceiptPath)
 $receiptDirectory = Split-Path -Parent $ReceiptPath
-New-Item -ItemType Directory -Path $receiptDirectory -Force | Out-Null
 
 $releaseStage = 'Preflight'
 $actualCommit = $null
@@ -37,15 +36,6 @@ $effectiveConfigPath = $null
 $releaseRecovery = $null
 $moduleProvenancePath = $null
 $moduleProvenanceCreated = $false
-[pscustomobject]@{
-    Success       = $false
-    Status        = 'Running'
-    Stage         = $releaseStage
-    Operation     = $Operation
-    Version       = $Version
-    ExpectedCommit = $ExpectedCommit
-    StartedAtUtc  = [DateTime]::UtcNow
-} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ReceiptPath -Encoding utf8
 
 try {
     if (-not $IsWindows) {
@@ -62,13 +52,15 @@ try {
         throw "Expected release commit '$ExpectedCommit', received '$actualCommit'."
     }
 
-    $trackedChanges = @(& git -C $repositoryRoot status --porcelain --untracked-files=no)
+    $checkoutChanges = @(& git -C $repositoryRoot status --porcelain --untracked-files=all)
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to inspect the release checkout.'
     }
-    if ($trackedChanges.Count -gt 0) {
-        throw "The release checkout must start clean. Tracked changes: $($trackedChanges -join ', ')"
+    if ($checkoutChanges.Count -gt 0) {
+        throw "The release checkout must start clean with no tracked or untracked changes: $($checkoutChanges -join ', ')"
     }
+
+    New-Item -ItemType Directory -Path $receiptDirectory -Force | Out-Null
 
     $releaseConfig = Get-Content -Raw -LiteralPath $ConfigPath | ConvertFrom-Json -Depth 100
     $moduleConfigPath = Join-Path $repositoryRoot 'powerforge.json'
@@ -210,6 +202,7 @@ try {
     if ($null -ne $outputTail -and $outputTail.Length -gt 20000) {
         $outputTail = $outputTail.Substring($outputTail.Length - 20000)
     }
+    New-Item -ItemType Directory -Path $receiptDirectory -Force | Out-Null
     [pscustomobject]@{
         Success        = $false
         Status         = 'Failed'
