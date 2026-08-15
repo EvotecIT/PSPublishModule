@@ -28,9 +28,12 @@ public sealed partial class WebAgentContentSecurityScanner
         string path,
         int lineOffset,
         bool countLogicalLines,
-        List<WebAgentContentSecurityFinding> findings)
+        List<WebAgentContentSecurityFinding> findings,
+        PackageExecutionFlowState? flowState = null)
     {
         var references = new List<WebAgentPackageReference>();
+        var workingDirectoryChange = PersistentWorkingDirectoryChangeRegex.Match(content);
+        var remoteExecutionContextChange = PersistentRemoteExecutionContextRegex.Match(content);
         ScanObfuscatedPackageExecutables(content, path, lineOffset, countLogicalLines, findings);
         foreach (Match match in CommandSegmentRegex.Matches(content))
         {
@@ -54,7 +57,12 @@ public sealed partial class WebAgentContentSecurityScanner
                 continue;
             }
             if (HasCommandScopedEnvironmentPrefix(content, match.Index) ||
-                HasWorkingDirectoryWrapperPrefix(content, match.Index))
+                HasWorkingDirectoryWrapperPrefix(content, match.Index) ||
+                flowState?.WorkingDirectoryChanged == true ||
+                workingDirectoryChange.Success && workingDirectoryChange.Index < match.Index ||
+                flowState?.RemoteExecutionContextChanged == true ||
+                remoteExecutionContextChange.Success && remoteExecutionContextChange.Index < match.Index ||
+                HasRemoteExecutionWrapperPrefix(content, match.Index))
             {
                 AddFinding(findings, "error", "PFAGENT.PACKAGE.UNVERIFIABLE_ENVIRONMENT", path,
                     GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
@@ -163,6 +171,12 @@ public sealed partial class WebAgentContentSecurityScanner
             if (findings.Count == findingCountBefore && findings.Count < MaximumFindingCount)
                 references.AddRange(commandReferences);
         }
+
+        if (flowState is not null && workingDirectoryChange.Success)
+            flowState.WorkingDirectoryChanged = true;
+        if (flowState is not null && remoteExecutionContextChange.Success)
+            flowState.RemoteExecutionContextChanged = true;
+
         return references;
     }
 

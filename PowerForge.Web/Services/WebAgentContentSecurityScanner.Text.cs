@@ -21,6 +21,9 @@ public sealed partial class WebAgentContentSecurityScanner
     private static readonly Regex RemoteExecutionPipelineRegex = new(
         @"\b(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b[^\r\n|;&]*(?:\|[^\r\n|;&]*)*\|\s*(?:sudo\s+)?(?:(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:env|command)(?:\s+(?:-[^\s]+|[A-Za-z_][A-Za-z0-9_]*=[^\s]+))*\s+)?(?:(?:busybox|toybox)(?:\.exe)?\s+)?(?:(?:[A-Za-z]:)?[\\/][^\s|;&]*[\\/])?(?:sh|bash|zsh|dash|ash|ksh|fish|csh|tcsh|pwsh|powershell|iex|Invoke-Expression|cmd|python(?:\d+(?:\.\d+)*)?|py|ruby|perl|node|php)(?:\.exe)?\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex RemoteExecutionPrivilegedPipelineRegex = new(
+        @"\b(?:curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b[^\r\n;&]*(?:\|[^\r\n;&]*)*\|\s*sudo\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SavedDownloadCommandRegex = new(
         @"\b(?<downloader>curl(?:\.exe)?|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b(?<arguments>(?:(?!&&|;|\r?\n).)*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -138,7 +141,8 @@ public sealed partial class WebAgentContentSecurityScanner
         }
         foreach (var pattern in new[]
                  {
-                     RemoteExecutionPipelineRegex,
+                      RemoteExecutionPipelineRegex,
+                      RemoteExecutionPrivilegedPipelineRegex,
                      RemoteExecutionPowerShellExpressionRegex,
                      RemoteExecutionShellExpressionRegex,
                      RemoteExecutionScriptBlockRegex,
@@ -178,6 +182,8 @@ public sealed partial class WebAgentContentSecurityScanner
                         positionOffset + download.Index,
                         GetReportedLine(original, download.Index, lineOffset, countLogicalLines)));
         }
+
+        PropagateDownloadedPathsThroughFileTransforms(normalized, positionOffset, flowState);
 
         if (flowState.DownloadedPaths.Count == 0)
             return;

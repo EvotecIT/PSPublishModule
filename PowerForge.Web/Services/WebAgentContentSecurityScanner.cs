@@ -121,6 +121,7 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
             artifactCount++;
             var segments = ExtractTextSegments(content, Path.GetExtension(fullPath), configuredPath, findings);
             var remoteExecutionFlow = new RemoteExecutionFlowState();
+            var packageExecutionFlow = new PackageExecutionFlowState();
             foreach (var segment in segments)
             {
                 ScanPackageSourceEnvironmentOverrides(segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings);
@@ -134,7 +135,8 @@ public sealed partial class WebAgentContentSecurityScanner : IDisposable
                 ScanRemoteExecution(segment.Text, configuredPath, findings, segment.LineOffset, segment.CountLogicalLines,
                     segment.ParticipatesInOrderedCommandFlow ? remoteExecutionFlow : null);
                 packages.AddRange(ExtractPackageReferences(
-                    segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings));
+                    segment.Text, configuredPath, segment.LineOffset, segment.CountLogicalLines, findings,
+                    segment.ParticipatesInOrderedCommandFlow ? packageExecutionFlow : null));
                 ExtractUrls(segment.Text, urls);
             }
         }
