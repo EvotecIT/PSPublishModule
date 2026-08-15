@@ -36,6 +36,9 @@ public sealed partial class WebEcosystemStatsGeneratorTests
             Assert.Empty(result.Warnings);
             Assert.True(File.Exists(outPath));
 
+            var outputBytes = File.ReadAllBytes(outPath);
+            Assert.False(outputBytes.AsSpan().StartsWith(Encoding.UTF8.Preamble));
+
             using var document = JsonDocument.Parse(File.ReadAllText(outPath));
             var rootElement = document.RootElement;
             var summary = rootElement.GetProperty("summary");
