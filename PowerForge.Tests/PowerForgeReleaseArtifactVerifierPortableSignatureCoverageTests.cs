@@ -72,6 +72,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsDllOmittedFromConfiguredSigningCoverage()
+    {
+        using var fixture = new PortableFixture();
+        string dependencyPath = fixture.AddSignedDependency();
+        fixture.EnableDllSigning(dependencyPath, signedFileCount: 1, omitDependencyFromManifest: true);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("requires DLL signing", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsInvalidSignatureOnAdditionalConfiguredFile()
     {
         using var fixture = new PortableFixture();
@@ -98,7 +111,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     {
         using var fixture = new PortableFixture();
         string dependencyPath = fixture.AddSignedDependency();
-        fixture.EnableDllSigning(dependencyPath);
+        fixture.EnableDllSigning(dependencyPath, zip: false);
         PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
         request.ArtifactPath = fixture.ExecutablePath;
         request.SignaturePaths = Array.Empty<string>();

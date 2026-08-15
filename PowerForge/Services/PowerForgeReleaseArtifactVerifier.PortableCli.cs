@@ -59,6 +59,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string manifestExecutable = ReadString(entry, "ExePath");
         string artifactPath = ResolveRequestFile(projectRoot, request.ArtifactPath, nameof(request.ArtifactPath));
         bool artifactIsArchive = IsZipArchive(artifactPath);
+        if (artifactIsArchive != expected.Zip)
+        {
+            throw Invalid(
+                $"Requested portable artifact packaging does not match the configured " +
+                $"{(expected.Bundle is null ? "publish target" : "bundle")} ZIP policy.");
+        }
         if (artifactIsArchive)
         {
             if (!string.Equals(Path.GetFileName(manifestArchive), Path.GetFileName(artifactPath), StringComparison.OrdinalIgnoreCase))
@@ -96,6 +102,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 expectedRevision);
             if (archive.Inventory.SignedFilePaths.Length != signedFileCount)
                 throw Invalid("PowerForge manifest signed-file count does not match the publisher-signed payload inventory.");
+            ValidateConfiguredDllSignatureCoverage(archive.Inventory, expected.Sign);
             ValidateRequestedPortableSignaturePaths(
                 request.SignaturePaths,
                 projectRoot,
@@ -261,6 +268,22 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         DotNetPublishTarget target = targets[0];
         if (target.Kind != DotNetPublishTargetKind.Unknown && target.Kind != DotNetPublishTargetKind.Cli)
             throw Invalid($"PowerForge configuration target kind '{target.Kind}' is not a CLI release target.");
+        DotNetPublishBundle? bundle = null;
+        if (!string.IsNullOrWhiteSpace(request.BundleId))
+        {
+            DotNetPublishBundle[] bundles = (configuration.Bundles ?? Array.Empty<DotNetPublishBundle>())
+                .Where(candidate =>
+                    string.Equals(candidate.Id, request.BundleId!.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(candidate.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (bundles.Length != 1)
+            {
+                throw Invalid(
+                    $"PowerForge configuration must define exactly one bundle '{request.BundleId!.Trim()}' " +
+                    $"prepared from publish target '{targetName}'.");
+            }
+            bundle = bundles[0];
+        }
         DotNetPublishSignOptions? sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
             configuration.SigningProfiles,
             string.IsNullOrWhiteSpace(request.SignProfile) ? target.Publish.SignProfile : request.SignProfile,
@@ -295,6 +318,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         return new ExpectedPortable(
             configuration,
             target,
+            bundle,
             configured.InputPaths,
             executableIdentities,
             sign,
@@ -383,6 +407,45 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if ((include.Length > 0 && !include.Any(rule => RuleMatches(target.Name, runtime, framework, style, rule))) ||
             exclude.Any(rule => RuleMatches(target.Name, runtime, framework, style, rule)))
             throw Invalid("PowerForge manifest portable dimensions are excluded by the configured publish matrix.");
+
+        DotNetPublishBundle? bundle = expected.Bundle;
+        if (bundle is null)
+            return;
+        string[] bundleFrameworks = NormalizeConfiguredStrings(bundle.Frameworks);
+        string[] bundleRuntimes = NormalizeConfiguredStrings(bundle.Runtimes);
+        DotNetPublishStyle[] bundleStyles = (bundle.Styles ?? Array.Empty<DotNetPublishStyle>())
+            .Distinct()
+            .ToArray();
+        if ((bundleFrameworks.Length > 0 && !bundleFrameworks.Contains(framework, StringComparer.OrdinalIgnoreCase)) ||
+            (bundleRuntimes.Length > 0 && !bundleRuntimes.Contains(runtime, StringComparer.OrdinalIgnoreCase)) ||
+            (bundleStyles.Length > 0 && !bundleStyles.Any(value =>
+                string.Equals(value.ToString(), style, StringComparison.OrdinalIgnoreCase))))
+        {
+            throw Invalid("PowerForge manifest portable dimensions do not match the configured bundle selectors.");
+        }
+    }
+
+    private static void ValidateConfiguredDllSignatureCoverage(
+        PowerForgePortablePayloadInventory inventory,
+        DotNetPublishSignOptions sign)
+    {
+        if (!sign.IncludeDlls)
+            return;
+
+        var signedPaths = new HashSet<string>(
+            (inventory.SignedFilePaths ?? Array.Empty<string>()).Select(NormalizeArchivePath),
+            StringComparer.Ordinal);
+        string[] unsignedDlls = (inventory.Entries ?? Array.Empty<PowerForgePortablePayloadEntry>())
+            .Select(entry => NormalizeArchivePath(entry.Path))
+            .Where(path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            .Where(path => !signedPaths.Contains(path))
+            .ToArray();
+        if (unsignedDlls.Length > 0)
+        {
+            throw Invalid(
+                "PowerForge configuration requires DLL signing, but the publisher-signed payload inventory " +
+                "does not include every DLL entry in its signed-file selection.");
+        }
     }
 
     private static string[] EnumeratePortableSigningFiles(string outputDirectory, DotNetPublishSignOptions sign)

@@ -51,6 +51,63 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsBundleAbsentFromConfiguration()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureBundle("package", configureBundle: false);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.BundleId = "package";
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("must define exactly one bundle", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_PortableCliRejectsBundleOutsideConfiguredMatrixSelectors()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureBundle("package", bundleRuntime: "linux-x64");
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.BundleId = "package";
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("bundle selectors", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_PortableCliRejectsBundlePackagingThatDiffersFromConfiguration()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureBundle("package", bundleZip: false);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.BundleId = "package";
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("ZIP policy", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_PortableCliRejectsArtifactPackagingThatDiffersFromConfiguration()
+    {
+        using var fixture = new PortableFixture();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = fixture.ExecutablePath;
+        request.SignaturePaths = Array.Empty<string>();
+        request.SbomPaths = Array.Empty<string>();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("ZIP policy", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliAcceptsGlobalMatrixDimensionDefaults()
     {
         using var fixture = new PortableFixture();
@@ -329,6 +386,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                             Framework = "net10.0",
                             Runtimes = new[] { "win-x64" },
                             Style = "PortableCompat",
+                            Zip = true,
                             Sign = new { Enabled = true, Thumbprint }
                         }
                     }
@@ -482,7 +540,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         internal void EnableDllSigning(
             string dependencyPath,
             int signedFileCount = 2,
-            bool omitDependencyFromManifest = false)
+            bool omitDependencyFromManifest = false,
+            bool zip = true)
         {
             WritePortableInventory(omitDependencyFromManifest
                 ? new[] { ExecutablePath }
@@ -504,6 +563,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                             Framework = "net10.0",
                             Runtimes = new[] { "win-x64" },
                             Style = "PortableCompat",
+                            Zip = zip,
                             Sign = new { Enabled = true, IncludeDlls = true, Thumbprint }
                         }
                     }
@@ -586,6 +646,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                         Kind = "Cli",
                         Publish = new
                         {
+                            Zip = true,
                             Sign = new { Enabled = true, Thumbprint }
                         }
                     }
@@ -612,6 +673,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                             Framework = "net10.0",
                             Runtimes = new[] { "win-x64" },
                             Style = "PortableCompat",
+                            Zip = true,
                             RenameTo = alias + ".exe",
                             Sign = new { Enabled = true, Thumbprint }
                         }
@@ -649,7 +711,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             base.WriteChecksums(ManifestPath, ConfigurationPath, ProjectPath, ExecutablePath, ArchivePath);
         }
 
-        internal void ConfigureBundle(string bundleId)
+        internal void ConfigureBundle(
+            string bundleId,
+            bool configureBundle = true,
+            string bundleRuntime = "win-x64",
+            bool bundleZip = true)
         {
             WritePortableInventory(new[] { ExecutablePath }, bundleId: bundleId);
             WriteArchiveFromOutput();
@@ -673,6 +739,43 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     SourceDirty = false
                 }
             }));
+            if (configureBundle)
+            {
+                File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
+                {
+                    SchemaVersion = 1,
+                    DotNet = new { AllowOutputOutsideProjectRoot = false },
+                    Targets = new[]
+                    {
+                        new
+                        {
+                            Name = "Sample.CLI",
+                            ProjectPath = Path.GetFileName(ProjectPath),
+                            Kind = "Cli",
+                            Publish = new
+                            {
+                                Framework = "net10.0",
+                                Runtimes = new[] { "win-x64" },
+                                Style = "PortableCompat",
+                                Zip = false,
+                                Sign = new { Enabled = true, Thumbprint }
+                            }
+                        }
+                    },
+                    Bundles = new[]
+                    {
+                        new
+                        {
+                            Id = bundleId,
+                            PrepareFromTarget = "Sample.CLI",
+                            Runtimes = new[] { bundleRuntime },
+                            Frameworks = new[] { "net10.0" },
+                            Styles = new[] { "PortableCompat" },
+                            Zip = bundleZip
+                        }
+                    }
+                }));
+            }
             WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
             base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath);
         }
@@ -695,6 +798,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                             Framework = "net10.0",
                             Runtimes = new[] { "win-x64" },
                             Style = "PortableCompat",
+                            Zip = true,
                             Sign = new { Enabled = true, SubjectName = "Publisher" }
                         }
                     }
@@ -737,6 +841,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                             Framework = "net10.0",
                             Runtimes = new[] { "win-x64" },
                             Style = "PortableCompat",
+                            Zip = true,
                             Sign = new { Enabled = true, Thumbprint }
                         }
                     }

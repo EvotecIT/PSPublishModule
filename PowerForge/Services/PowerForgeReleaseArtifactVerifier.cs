@@ -453,6 +453,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         internal ExpectedPortable(
             DotNetPublishSpec configuration,
             DotNetPublishTarget target,
+            DotNetPublishBundle? bundle,
             string[] configurationPaths,
             string[] executableIdentities,
             DotNetPublishSignOptions sign,
@@ -462,6 +463,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         {
             Configuration = configuration;
             Target = target;
+            Bundle = bundle;
             ConfigurationPaths = configurationPaths;
             ExecutableIdentities = executableIdentities;
             Sign = sign;
@@ -472,6 +474,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
         internal DotNetPublishSpec Configuration { get; }
         internal DotNetPublishTarget Target { get; }
+        internal DotNetPublishBundle? Bundle { get; }
+        internal bool Zip => Bundle?.Zip ?? Target.Publish!.Zip;
         internal string[] ConfigurationPaths { get; }
         internal string[] ExecutableIdentities { get; }
         internal DotNetPublishSignOptions Sign { get; }

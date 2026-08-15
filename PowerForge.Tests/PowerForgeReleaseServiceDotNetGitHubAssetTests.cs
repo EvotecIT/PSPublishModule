@@ -36,6 +36,39 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void CreateConfigurationAssetEntries_IncludesPortableOrdinaryConfigurationInputs()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string configDirectory = Directory.CreateDirectory(Path.Combine(root, "Build")).FullName;
+            string releaseConfig = Path.Combine(root, "release.json");
+            string publishConfig = Path.Combine(configDirectory, "dotnetpublish.json");
+            string checksums = Path.Combine(root, "Artifacts", "SHA256SUMS.txt");
+            Directory.CreateDirectory(Path.GetDirectoryName(checksums)!);
+            File.WriteAllText(releaseConfig, "{ \"Tools\": { \"DotNetPublishConfigPath\": \"Build/dotnetpublish.json\" } }");
+            File.WriteAllText(publishConfig, "{ \"Targets\": [] }");
+            var plan = new DotNetPublishPlan
+            {
+                ConfigurationInputPaths = new[] { releaseConfig, publishConfig }
+            };
+
+            PowerForgeReleaseAssetEntry[] assets = PowerForgeReleaseService.CreateConfigurationAssetEntries(
+                plan,
+                checksums).ToArray();
+
+            Assert.Equal(2, assets.Length);
+            Assert.All(assets, asset => Assert.Equal(PowerForgeReleaseAssetCategory.Metadata, asset.Category));
+            Assert.Contains(assets, asset => Path.GetFileName(asset.Path) == "release.json");
+            Assert.Contains(assets, asset => Path.GetFileName(asset.Path).StartsWith(".release.dotnetpublish.", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

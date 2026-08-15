@@ -159,6 +159,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         string[] signedFilePaths = Array.Empty<string>();
+        string[] evidencePaths = Array.Empty<string>();
         string? primaryExecutable = null;
         if (sign?.Enabled == true)
         {
@@ -212,6 +213,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 inventoryBytes,
                 signaturePath,
                 signatureBytes);
+            if (!bundle.Zip)
+                evidencePaths = new[] { inventoryPath, signaturePath };
         }
 
         string? zipPath = null;
@@ -241,7 +244,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ExePath = primaryExecutable,
             ExeBytes = primaryExecutable is null ? null : new FileInfo(primaryExecutable).Length,
             SignedFiles = signedFilePaths.Length,
-            SignedFilePaths = signedFilePaths
+            SignedFilePaths = signedFilePaths,
+            EvidencePaths = evidencePaths
         };
     }
 

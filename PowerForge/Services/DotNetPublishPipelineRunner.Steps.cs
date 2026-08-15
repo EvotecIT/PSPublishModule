@@ -324,6 +324,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!plan.AllowOutputOutsideProjectRoot)
             EnsurePathWithinRoot(plan.ProjectRoot, outputDir, $"Target '{target.Name}' output path");
 
+        string[] evidencePaths = Array.Empty<string>();
         if (target.Publish.Sign?.Enabled == true)
             _ = ReadPortableInventorySourceProvenance(plan, outputDir);
 
@@ -447,6 +448,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     inventoryBytes,
                     signaturePath,
                     signatureBytes);
+                if (!target.Publish.Zip)
+                    evidencePaths = new[] { inventoryPath, signaturePath };
             }
         }
 
@@ -484,7 +487,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ServicePackage = servicePackage,
             StateTransfer = stateTransfer,
             SignedFiles = signedFilePaths.Length,
-            SignedFilePaths = signedFilePaths
+            SignedFilePaths = signedFilePaths,
+            EvidencePaths = evidencePaths
         };
     }
 

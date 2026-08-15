@@ -122,11 +122,23 @@ internal sealed partial class PowerForgeReleaseService
             : Path.Combine(directory, reference));
     }
 
-    private static IEnumerable<PowerForgeReleaseAssetEntry> CreateGeneratedConfigurationAssetEntries(
-        DotNetPublishPlan? plan)
+    internal static IEnumerable<PowerForgeReleaseAssetEntry> CreateConfigurationAssetEntries(
+        DotNetPublishPlan? plan,
+        string? checksumsPath)
     {
         DotNetPublishPipelineRunner.ValidateGeneratedConfigurationInputs(plan);
-        foreach (string path in plan?.GeneratedConfigurationInputPaths ?? Array.Empty<string>())
+        if (plan is null)
+            yield break;
+
+        string stagingDirectory = !string.IsNullOrWhiteSpace(checksumsPath)
+            ? Path.Combine(
+                Path.GetDirectoryName(Path.GetFullPath(checksumsPath!))!,
+                "release.configuration-assets")
+            : Path.Combine(
+                Path.GetTempPath(),
+                "PowerForge.ReleaseConfigurationAssets",
+                Guid.NewGuid().ToString("N"));
+        foreach (string path in GetDotNetGitHubConfigurationAssets(plan, stagingDirectory))
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
                 continue;

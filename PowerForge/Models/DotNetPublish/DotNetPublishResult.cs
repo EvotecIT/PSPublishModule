@@ -166,6 +166,9 @@ public sealed class DotNetPublishArtefactResult
     /// <summary>Exact publish output files selected and successfully admitted by the signing step.</summary>
     public string[] SignedFilePaths { get; set; } = Array.Empty<string>();
 
+    /// <summary>Publisher-signed release evidence files emitted alongside a direct artifact.</summary>
+    public string[] EvidencePaths { get; set; } = Array.Empty<string>();
+
     /// <summary>
     /// Returns a concise artifact summary suitable for PowerShell collection display.
     /// </summary>

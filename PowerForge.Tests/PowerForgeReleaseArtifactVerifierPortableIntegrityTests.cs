@@ -162,6 +162,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     public void Verify_PortableCliDirectExecutableRemainsVerifiableAfterFreshDownload(bool configureExplicitIdentity)
     {
         using var fixture = new PortableFixture();
+        fixture.ConfigureDirectPackaging();
         if (configureExplicitIdentity)
             fixture.ConfigureExplicitExecutableIdentity();
         string downloadRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -279,6 +280,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         string style)
     {
         using var fixture = new PortableFixture();
+        fixture.ConfigureDirectPackaging();
         fixture.SetDirectInventoryDimensions(runtime, framework, style);
         PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
         request.ArtifactPath = fixture.ExecutablePath;
@@ -337,6 +339,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     public void Verify_PortableCliRejectsUnrelatedDirectExecutableSubstitution()
     {
         using var fixture = new PortableFixture();
+        fixture.ConfigureDirectPackaging();
         string unrelatedDirectory = Directory.CreateDirectory(Path.Combine(fixture.Root, "substitution")).FullName;
         string unrelated = Path.Combine(unrelatedDirectory, "Sample.CLI.exe");
         File.WriteAllText(unrelated, "signed unrelated payload");
@@ -442,7 +445,35 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                             Framework = "net10.0",
                             Runtimes = new[] { "win-x64" },
                             Style = "PortableCompat",
+                            Zip = false,
                             ExecutableIdentity = "Sample.CLI",
+                            Sign = new { Enabled = true, Thumbprint }
+                        }
+                    }
+                }
+            }));
+            WriteChecksums();
+        }
+
+        internal void ConfigureDirectPackaging()
+        {
+            File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
+            {
+                SchemaVersion = 1,
+                DotNet = new { AllowOutputOutsideProjectRoot = false },
+                Targets = new[]
+                {
+                    new
+                    {
+                        Name = "Sample.CLI",
+                        ProjectPath = Path.GetFileName(ProjectPath),
+                        Kind = "Cli",
+                        Publish = new
+                        {
+                            Framework = "net10.0",
+                            Runtimes = new[] { "win-x64" },
+                            Style = "PortableCompat",
+                            Zip = false,
                             Sign = new { Enabled = true, Thumbprint }
                         }
                     }

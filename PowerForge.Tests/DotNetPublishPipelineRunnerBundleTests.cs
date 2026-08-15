@@ -673,6 +673,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             string signaturePath = result.ExePath + PowerForgePortablePayloadInventory.DirectSignatureSuffix;
             Assert.True(File.Exists(inventoryPath));
             Assert.True(File.Exists(signaturePath));
+            Assert.Equal(new[] { inventoryPath, signaturePath }, result.EvidencePaths);
             PowerForgePortablePayloadInventory inventory = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(
                 File.ReadAllBytes(inventoryPath))!;
             Assert.Equal(4, inventory.SchemaVersion);

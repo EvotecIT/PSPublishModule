@@ -4917,7 +4917,9 @@ internal sealed partial class PowerForgeReleaseService
                 IsFinalPackageOutput = false
             }));
 
-        assets.AddRange(CreateGeneratedConfigurationAssetEntries(dotNetPlan));
+        assets.AddRange(CreateConfigurationAssetEntries(
+            dotNetPlan,
+            result.DotNetTools?.ChecksumsPath));
 
         return assets.ToArray();
     }
