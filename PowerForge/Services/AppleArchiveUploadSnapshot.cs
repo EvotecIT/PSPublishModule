@@ -65,7 +65,7 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             "private Apple upload archive snapshot",
             "xcodebuild exportArchive",
             "Discard the upload/export result and inspect remote state before retrying.",
-            ignoredMutation: IsExpectedXcodeExportScratchMutation);
+            ignoredMutation: IsExpectedXcodeExportMutation);
 
     internal void ValidateUnchanged(string expectedSha256)
     {
@@ -113,11 +113,29 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             new HashSet<string>(identities.Keys, GetPathComparer(archivePath)));
     }
 
-    private bool IsExpectedXcodeExportScratchMutation(FileSystemEventArgs args)
+    internal bool IsExpectedXcodeExportMutation(FileSystemEventArgs args)
     {
         if (args is RenamedEventArgs)
             return false;
-        return IsExpectedXcodeExportScratchPath(args.FullPath);
+
+        var path = Path.GetFullPath(args.FullPath);
+        var archiveInfoPlist = Path.Combine(ArchivePath, "Info.plist");
+        if (args.ChangeType == WatcherChangeTypes.Changed &&
+            path.Equals(
+                archiveInfoPlist,
+                Path.DirectorySeparatorChar == '\\'
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal) &&
+            _identity.ApprovedFiles.Contains("Info.plist"))
+        {
+            // xcodebuild exportArchive emits a Changed notification while reading the
+            // approved top-level archive manifest. The complete content and physical
+            // mutation identities are revalidated after export, so a real write,
+            // replacement, or transient hard-link alias still fails closed.
+            return true;
+        }
+
+        return IsExpectedXcodeExportScratchPath(path);
     }
 
     private bool IsExpectedXcodeExportScratchPath(string path)
