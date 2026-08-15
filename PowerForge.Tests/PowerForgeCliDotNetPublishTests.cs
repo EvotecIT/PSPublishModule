@@ -6,6 +6,29 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeCliDotNetPublishTests
 {
     [Fact]
+    public async Task Version_CliAcceptsOutputSelectionBeforeVersionFlag()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var cliPath = Path.Combine(
+            repoRoot,
+            "PowerForge.Cli",
+            "bin",
+            "Release",
+            "net10.0",
+            "PowerForge.Cli.dll");
+        var (exitCode, stdout, stderr) = await RunCliAsync(
+            repoRoot,
+            $"\"{cliPath}\" --output json --version");
+
+        Assert.True(exitCode == 0, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+        using var document = JsonDocument.Parse(stdout);
+        Assert.True(document.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal("version", document.RootElement.GetProperty("command").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(
+            document.RootElement.GetProperty("result").GetProperty("version").GetString()));
+    }
+
+    [Fact]
     public async Task ReleaseArtifactVerify_MissingEvidenceReturnsStructuredFailure()
     {
         var repoRoot = FindRepositoryRoot();

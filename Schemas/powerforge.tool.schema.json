@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "version", "assets"],
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "enum": [1, 2] },
     "repository": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
@@ -20,6 +20,10 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
     },
+    "commit": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{40}$"
+    },
     "assets": {
       "type": "object",
       "minProperties": 1,
@@ -30,10 +34,31 @@
           "additionalProperties": false,
           "required": ["sha256"],
           "properties": {
-            "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
+            "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.zip$" },
+            "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+            "executableSha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
           }
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "schemaVersion": { "const": 2 } },
+        "required": ["schemaVersion"]
+      },
+      "then": {
+        "properties": {
+          "assets": {
+            "patternProperties": {
+              "^(osx|linux|win)-(arm64|x64)$": {
+                "required": ["sha256", "executableSha256"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

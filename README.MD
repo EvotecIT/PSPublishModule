@@ -93,6 +93,20 @@ dotnet tool install --global PowerForge.Build
 dotnet tool install --global PowerForge.Web.Build
 ```
 
+For an exact standalone `powerforge` binary from a GitHub release, download the
+installer and tool manifest from the same `v<version>` release. The installer selects
+the current OS/architecture asset, verifies its SHA-256, checks the embedded version
+and release commit, and reuses the verified cache on later runs:
+
+```powershell
+$version = '3.0.110'
+$release = "https://github.com/EvotecIT/PSPublishModule/releases/download/v$version"
+Invoke-WebRequest "$release/Install-PowerForgeTool.ps1" -OutFile ./Install-PowerForgeTool.ps1
+Invoke-WebRequest "$release/PowerForge-tool-manifest.json" -OutFile ./PowerForge-tool-manifest.json
+$installed = ./Install-PowerForgeTool.ps1 -ManifestPath ./PowerForge-tool-manifest.json
+& $installed.ToolPath --version
+```
+
 Update later with:
 
 ```powershell
@@ -615,8 +629,9 @@ Publish the complete repository release:
 
 The publish gate builds the PowerShell module and PowerForge packages, publishes the NuGet and PowerShell Gallery
 artifacts, creates the coordinated module GitHub release, and publishes the configured Windows, Linux, Intel macOS,
-and Apple-silicon macOS CLI archives. The publish shortcut enables module signing with the certificate declared in
-`powerforge.json`; use `-ModuleNoSign` only for an intentional unsigned release.
+and Apple-silicon macOS CLI archives. The GitHub release also carries the canonical installer and the generated
+runtime/checksum/commit manifest used by exact CLI consumers. The publish shortcut enables module signing with the
+certificate declared in `powerforge.json`; use `-ModuleNoSign` only for an intentional unsigned release.
 
 Run the unified release plan:
 

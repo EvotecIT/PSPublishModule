@@ -73,7 +73,7 @@
         "ProjectPath": "PowerForge.Cli/PowerForge.Cli.csproj",
         "OutputName": "PowerForge",
         "CommandAlias": "powerforge",
-        "Runtimes": [ "win-x64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64" ],
+        "Runtimes": [ "win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64" ],
         "Frameworks": [ "net10.0" ],
         "Flavor": "SingleContained",
         "ArtifactRootPath": "Artifacts/PowerForge",
@@ -106,6 +106,12 @@
       "TagTemplate": "{Target}-v{Version}",
       "ReleaseNameTemplate": "{Target} {Version}"
     }
+  },
+  "Outputs": {
+    "PowerForgeToolManifestPath": "../Artefacts/ProjectBuild/PowerForge-tool-manifest.json",
+    "AdditionalAssetPaths": [
+      "Install-PowerForgeTool.ps1"
+    ]
   },
   "GitHub": {
     "Publish": true,

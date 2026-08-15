@@ -4,7 +4,7 @@ using PowerForge.Cli;
 internal static partial class Program
 {
     private const string AppleReleaseUsage =
-        "Usage: powerforge apple-release <Status|Doctor|Version|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup> " +
+        "Usage: powerforge apple-release <Status|Doctor|Version|Archive|Rehearse|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup> " +
         "[--config <release.json>] [--plan] [--validate] [--confirm-apple-action] " +
         "[--apple-version <marketing-version-or-X-pattern>] [--apple-source-commit <sha>] [--apple-expected-plan-sha256 <sha256>] " +
         "[--apple-adopt-existing-build] " +

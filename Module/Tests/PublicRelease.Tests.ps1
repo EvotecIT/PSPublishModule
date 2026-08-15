@@ -1,5 +1,50 @@
 Set-StrictMode -Version Latest
 
+Describe 'Standalone PowerForge installer host compatibility' {
+    BeforeAll {
+        $script:RepositoryRoot = [IO.Path]::GetFullPath(
+            (Join-Path $PSScriptRoot '..\..'))
+        $script:ToolInstallerPath = [IO.Path]::GetFullPath(
+            (Join-Path $PSScriptRoot '..\..\Build\Install-PowerForgeTool.ps1'))
+    }
+
+    It 'parses without errors in the current PowerShell host' {
+        $tokens = $null
+        $errors = $null
+        [System.Management.Automation.Language.Parser]::ParseFile(
+            $script:ToolInstallerPath,
+            [ref] $tokens,
+            [ref] $errors) | Out-Null
+
+        @($errors).Count | Should -Be 0
+    }
+
+    It 'uses the shared Windows PowerShell 5.1 and PowerShell 7 surface' {
+        $content = Get-Content -Raw -LiteralPath $script:ToolInstallerPath
+        $content | Should -Not -Match 'ConvertFrom-Json\s+-Depth'
+        $content | Should -Not -Match '\$(?:IsWindows|IsMacOS|IsLinux)\b'
+        $content | Should -Match '\$PSVersionTable\.PSEdition'
+    }
+
+    It 'publishes a native standalone CLI asset for every installer host RID' {
+        $releaseConfig = Get-Content -Raw -LiteralPath (
+            Join-Path $script:RepositoryRoot 'Build\release.json') | ConvertFrom-Json
+        $powerForgeTarget = @($releaseConfig.Tools.Targets) |
+            Where-Object Name -EQ 'PowerForge' |
+            Select-Object -First 1
+
+        $powerForgeTarget | Should -Not -BeNullOrEmpty
+        @($powerForgeTarget.Runtimes) | Should -Be @(
+            'win-x64',
+            'win-arm64',
+            'linux-x64',
+            'linux-arm64',
+            'osx-x64',
+            'osx-arm64'
+        )
+    }
+}
+
 Describe 'Public release committed version validation' {
     BeforeAll {
         $script:RepositoryRoot = [IO.Path]::GetFullPath(

@@ -48,7 +48,10 @@ public enum PowerForgeAppleReleaseAction
     Release,
 
     /// <summary>Remove release artifacts only from the configured Apple artifact roots.</summary>
-    Cleanup
+    Cleanup,
+
+    /// <summary>Create signed archives and complete local export validation without uploading or notarizing them.</summary>
+    Rehearse
 }
 
 /// <summary>
@@ -326,6 +329,18 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
     public bool ProjectGenerated { get; set; }
 
     public bool UploadPerformed { get; set; }
+
+    /// <summary>True when a local export completed without an upload or notarization submission.</summary>
+    public bool ExportRehearsed { get; set; }
+
+    /// <summary>Project-relative locally exported artifact path produced by Rehearse.</summary>
+    public string? RehearsalArtifactPath { get; set; }
+
+    /// <summary>SHA-256 of the locally exported artifact produced by Rehearse.</summary>
+    public string? RehearsalArtifactSha256 { get; set; }
+
+    /// <summary>Hash contract used by RehearsalArtifactSha256: file-content or filesystem-identity-v2.</summary>
+    public string? RehearsalArtifactSha256Kind { get; set; }
 
     /// <summary>Project-relative archive path used for an upload attempt.</summary>
     public string? ArchivePath { get; set; }

@@ -650,7 +650,7 @@ internal sealed partial class PowerForgeReleaseService
                         request,
                         dotNetTargets,
                         () => _planDotNetTools(dotNetSpecForTools, dotNetSourcePathForTools, request, selectedToolOutputs));
-                    ApplySharedReleaseVersion(dotNetPlan, sharedReleaseVersion);
+                    ApplySharedReleaseVersion(dotNetPlan, sharedReleaseVersion, spec.GitHub?.Commitish, configPath);
                     ApplyDotNetPublishSkipFlags(dotNetPlan, request.SkipRestore, request.SkipBuild);
                     result.DotNetToolPlan = dotNetPlan;
 
@@ -705,6 +705,12 @@ internal sealed partial class PowerForgeReleaseService
                         legacyToolTargets,
                         () => _planTools(spec.Tools!, configPath, request));
                     result.ToolPlan = toolPlan;
+                    if (!string.IsNullOrWhiteSpace(spec.Outputs?.PowerForgeToolManifestPath) &&
+                        ResolveSelectedToolOutputs(request).Contains(PowerForgeReleaseToolOutputKind.Tool) &&
+                        IsStandalonePowerForgeToolSelected(result))
+                    {
+                        VerifySharedReleaseSourceCommit(toolPlan.ProjectRoot, spec.GitHub?.Commitish, configPath);
+                    }
 
                     if (!request.PlanOnly && !request.ValidateOnly)
                     {
@@ -788,6 +794,26 @@ internal sealed partial class PowerForgeReleaseService
                 !request.ValidateOnly &&
                 (!request.CheckpointAppleApps || applePlan.Archive))
             {
+                request.Progress?.PhaseStarted(
+                    PowerForgeReleaseProgressPhase.AppleApps,
+                    applePlan.Apps.Length,
+                    $"{applePlan.Action}: {applePlan.Apps.Length} Apple target(s)");
+                if (request.Progress is IPowerForgeReleaseProgressReporterV2 detailedAppleProgress)
+                {
+                    detailedAppleProgress.ItemsPlanned(
+                        PowerForgeReleaseProgressPhase.AppleApps,
+                        applePlan.Apps.Select((app, index) => new PowerForgeReleaseProgressItem
+                        {
+                            Phase = PowerForgeReleaseProgressPhase.AppleApps,
+                            Key = "apple:" + app.Name,
+                            Title = app.Name,
+                            Kind = applePlan.Action.ToString(),
+                            Target = app.Platform.ToString(),
+                            CounterLabel = "Target",
+                            Position = index + 1,
+                            Total = applePlan.Apps.Length
+                        }).ToArray());
+                }
                 using var operationLock = AppleReleaseOperationLock.Acquire(applePlan.LockPath, applePlan.Action);
                 var cleanup = new PowerForgeAppleReleaseCleanupReceipt();
                 PowerForgeAppleAppReleaseResult[] appleResults;
@@ -855,6 +881,7 @@ internal sealed partial class PowerForgeReleaseService
 
                 if (result.AppleReceipt is { Success: false } failedReceipt)
                 {
+                    request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.AppleApps, failedReceipt.ErrorMessage);
                     result.Success = false;
                     result.ErrorMessage = failedReceipt.ErrorMessage ?? "Apple release diagnostics failed.";
                     return result;
@@ -863,10 +890,14 @@ internal sealed partial class PowerForgeReleaseService
                 var failure = appleResults.FirstOrDefault(entry => !entry.Success);
                 if (failure is not null)
                 {
+                    request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.AppleApps, failure.ErrorMessage);
                     result.Success = false;
                     result.ErrorMessage = failure.ErrorMessage ?? $"Apple app release failed for '{failure.Plan.Name}'.";
                     return result;
                 }
+                request.Progress?.PhaseCompleted(
+                    PowerForgeReleaseProgressPhase.AppleApps,
+                    $"{applePlan.Action} completed for {applePlan.Apps.Length} target(s)");
             }
         }
 
@@ -1860,6 +1891,7 @@ internal sealed partial class PowerForgeReleaseService
 
         var plan = new PowerForgeAppleReleasePlan
         {
+            Progress = request.Progress as IPowerForgeReleaseProgressReporterV2,
             ProjectRoot = projectRoot,
             Configuration = configuration,
             Action = request.AppleAction,
@@ -1884,6 +1916,7 @@ internal sealed partial class PowerForgeReleaseService
             AdoptExistingBuild = request.AppleAdoptExistingBuild,
             Archive = options.Archive,
             Upload = options.Upload,
+            Rehearse = request.AppleAction == PowerForgeAppleReleaseAction.Rehearse,
             SyncScreenshots = options.SyncScreenshots,
             ScreenshotConfigPath = screenshotConfigPath,
             ScreenshotConfigPaths = screenshotConfigPaths,
@@ -2302,6 +2335,7 @@ internal sealed partial class PowerForgeReleaseService
 
                 if (plan.Archive && !resumedUpload)
                 {
+                    ReportAppleProgress(plan, app, PowerForgeReleaseProgressItemState.Started, "Preparing exact-source archive");
                     var directArchive = app.DistributionRoute == AppleDistributionRoute.DirectNotarized;
                     using var sourceMutationMonitor = sourceSnapshot?.MonitorChanges();
                     var archive = _archiveAppleApp(new AppleAppArchiveRequest
@@ -2317,6 +2351,11 @@ internal sealed partial class PowerForgeReleaseService
                         XcodeBuildExecutable = plan.XcodeBuildExecutable,
                         RequireExactPackageSnapshot = sourceSnapshot is not null,
                         AllowProvisioningUpdates = plan.AllowProvisioningUpdates,
+                        Progress = detail => ReportAppleProgress(
+                            plan,
+                            app,
+                            PowerForgeReleaseProgressItemState.Started,
+                            detail),
                         AppStoreConnectApiKeyPath = directArchive ? null : plan.AppStoreConnectApiKeyPath,
                         AppStoreConnectApiKeyId = directArchive ? null : plan.AppStoreConnectApiKeyId,
                         AppStoreConnectApiIssuerId = directArchive ? null : plan.AppStoreConnectApiIssuerId
@@ -2338,15 +2377,21 @@ internal sealed partial class PowerForgeReleaseService
                     archive.ArchivePath = app.ArchivePath;
                 }
 
-            if (plan.Upload && result.Success && !resumedUpload)
+            if ((plan.Upload || plan.Rehearse) && result.Success && !resumedUpload)
             {
+                ReportAppleProgress(
+                    plan,
+                    app,
+                    PowerForgeReleaseProgressItemState.Started,
+                    plan.Rehearse ? "Archive complete; validating local export" : "Archive complete; starting distribution export");
                 CaptureAppleArchiveSha256(result, app);
                 var approvedArchiveSha256 = result.ArchiveSha256;
                 var direct = app.DistributionRoute == AppleDistributionRoute.DirectNotarized;
+                var localExportOnly = plan.Rehearse || direct;
                 using var uploadSnapshot = string.IsNullOrWhiteSpace(approvedArchiveSha256)
                     ? null
                     : AppleArchiveUploadSnapshot.Create(approvedArchiveInputPath, approvedArchiveSha256!);
-                using var directExportSnapshot = direct ? AppleDirectExportSnapshot.Create() : null;
+                using var directExportSnapshot = localExportOnly ? AppleDirectExportSnapshot.Create() : null;
                 using var uploadMutationMonitor = uploadSnapshot is null
                     ? null
                     : uploadSnapshot.MonitorChanges();
@@ -2364,7 +2409,7 @@ internal sealed partial class PowerForgeReleaseService
                         XcodeBuildExecutable = plan.XcodeBuildExecutable,
                         RequireTrustedSystemTools = !string.IsNullOrWhiteSpace(plan.SourceCommit),
                         SigningStyle = plan.SigningStyle,
-                        Destination = direct ? "export" : "upload",
+                        Destination = localExportOnly ? "export" : "upload",
                         Method = direct ? plan.DirectDistribution.ExportMethod : "app-store-connect",
                         ManageAppVersionAndBuildNumber = plan.ManageAppVersionAndBuildNumber,
                         UploadSymbols = plan.UploadSymbols,
@@ -2373,7 +2418,7 @@ internal sealed partial class PowerForgeReleaseService
                         AppStoreConnectApiKeyId = direct ? null : plan.AppStoreConnectApiKeyId,
                         AppStoreConnectApiIssuerId = direct ? null : plan.AppStoreConnectApiIssuerId,
                         AllowProvisioningUpdates = plan.AllowProvisioningUpdates,
-                        RemoteMutationStarted = () => uploadRemoteMutationStarted = true
+                        RemoteMutationStarted = plan.Rehearse ? null : () => uploadRemoteMutationStarted = true
                     });
                 }
                 catch (Exception ex) when (!direct && uploadRemoteMutationStarted)
@@ -2395,7 +2440,7 @@ internal sealed partial class PowerForgeReleaseService
                 }
                 upload.ArchivePath = app.ArchivePath;
                 result.Upload = upload;
-                if (!direct && upload.Succeeded)
+                if (!direct && !plan.Rehearse && upload.Succeeded)
                 {
                     try
                     {
@@ -2409,7 +2454,7 @@ internal sealed partial class PowerForgeReleaseService
                             ex);
                     }
                 }
-                else if (!direct && uploadRemoteMutationStarted)
+                else if (!direct && !plan.Rehearse && uploadRemoteMutationStarted)
                 {
                     try
                     {
@@ -2427,7 +2472,7 @@ internal sealed partial class PowerForgeReleaseService
                             ex);
                     }
                 }
-                if (direct && upload.Succeeded)
+                if (localExportOnly && upload.Succeeded)
                     directExportSnapshot!.BindProducedArtifact(upload.ExportArtifactPath, upload.ExportArtifactSha256);
                 uploadMutationMonitor?.ValidateNoChanges();
                 if (uploadSnapshot is not null)
@@ -2440,12 +2485,14 @@ internal sealed partial class PowerForgeReleaseService
                 }
                 VerifyAppleArchiveUnchangedAfterUpload(app, result);
 
-                if (direct)
+                if (localExportOnly)
                 {
                     var published = directExportSnapshot!.Publish(app.ExportPath);
                     upload.ExportPath = published.ExportPath;
                     upload.ExportArtifactPath = published.ArtifactPath;
                     upload.ExportArtifactSha256 = published.ArtifactSha256;
+                    upload.RehearsalArtifactSha256 = published.RehearsalArtifactSha256;
+                    upload.RehearsalArtifactSha256Kind = published.RehearsalArtifactSha256Kind;
                     upload.ExportOptionsPlistPath = MapDirectExportOutputPath(
                         directExportSnapshot.ExportPath,
                         published.ExportPath,
@@ -2454,14 +2501,17 @@ internal sealed partial class PowerForgeReleaseService
                         directExportSnapshot.ExportPath,
                         published.ExportPath,
                         upload.DistributionLogPath);
-                    result.Notarization = NotarizeDirectAppleExport(
-                        plan,
-                        app,
-                        published.ArtifactPath,
-                        expectedArtifactSha256: published.ArtifactSha256);
-                    WriteAppleNotarizationAttestation(plan, app, result);
-                    if (!result.Notarization.Succeeded)
-                        throw CreateAppleNotarizationFailure(app, result.Notarization);
+                    if (!plan.Rehearse)
+                    {
+                        result.Notarization = NotarizeDirectAppleExport(
+                            plan,
+                            app,
+                            published.ArtifactPath,
+                            expectedArtifactSha256: published.ArtifactSha256);
+                        WriteAppleNotarizationAttestation(plan, app, result);
+                        if (!result.Notarization.Succeeded)
+                            throw CreateAppleNotarizationFailure(app, result.Notarization);
+                    }
                     directExportSnapshot.CommitPublication();
                 }
                 else
@@ -2610,9 +2660,11 @@ internal sealed partial class PowerForgeReleaseService
                 });
             }
 
+            ReportAppleProgress(plan, app, PowerForgeReleaseProgressItemState.Completed, "Apple target completed");
             }
             catch (Exception exception)
             {
+                ReportAppleProgress(plan, app, PowerForgeReleaseProgressItemState.Failed, exception.Message);
                 result.Success = false;
                 result.ErrorMessage = exception.Message;
                 if (exception is AppleBuildProcessingException processing)
@@ -3211,25 +3263,25 @@ internal sealed partial class PowerForgeReleaseService
         return string.IsNullOrWhiteSpace(moduleVersion) ? null : moduleVersion;
     }
 
-    private static void ApplySharedReleaseVersion(DotNetPublishPlan plan, string? sharedReleaseVersion)
+    private static Dictionary<string, string> BuildSharedReleaseVersionProperties(
+        string sharedReleaseVersion,
+        string? sourceCommit)
     {
-        if (plan is null)
-            throw new ArgumentNullException(nameof(plan));
-        if (string.IsNullOrWhiteSpace(sharedReleaseVersion))
-            return;
-
-        foreach (var entry in BuildSharedReleaseVersionProperties(sharedReleaseVersion!))
-            plan.MsBuildProperties[entry.Key] = entry.Value;
-    }
-
-    private static Dictionary<string, string> BuildSharedReleaseVersionProperties(string sharedReleaseVersion)
-    {
+        var trimmedSourceCommit = sourceCommit?.Trim();
+        var exactSourceCommit = !string.IsNullOrWhiteSpace(trimmedSourceCommit) &&
+                                Regex.IsMatch(trimmedSourceCommit!, "^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant)
+            ? trimmedSourceCommit!.ToLowerInvariant()
+            : null;
         var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["Version"] = sharedReleaseVersion,
             ["PackageVersion"] = sharedReleaseVersion,
-            ["InformationalVersion"] = sharedReleaseVersion
+            ["InformationalVersion"] = exactSourceCommit is null
+                ? sharedReleaseVersion
+                : sharedReleaseVersion + "+" + exactSourceCommit
         };
+        if (exactSourceCommit is not null)
+            properties["IncludeSourceRevisionInInformationalVersion"] = "false";
 
         var numericVersion = NormalizeSharedReleaseAssemblyVersion(sharedReleaseVersion);
         if (!string.IsNullOrWhiteSpace(numericVersion))
@@ -3274,7 +3326,18 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeReleaseResult result,
         string? sharedReleaseVersion)
     {
-        var assetEntries = CollectReleaseAssetEntries(result, result.DotNetToolPlan, sharedReleaseVersion)
+        var producedAssetEntries = CollectReleaseAssetEntries(result, result.DotNetToolPlan, sharedReleaseVersion)
+            .GroupBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToArray();
+        var additionalAssetPaths = ResolveAdditionalReleaseAssetPaths(
+            spec,
+            configDirectory,
+            result,
+            sharedReleaseVersion,
+            producedAssetEntries,
+            ResolveSelectedToolOutputs(request).Contains(PowerForgeReleaseToolOutputKind.Tool));
+        var assetEntries = CollectReleaseAssetEntries(result, result.DotNetToolPlan, sharedReleaseVersion, additionalAssetPaths)
             .GroupBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToArray();
@@ -4660,7 +4723,8 @@ internal sealed partial class PowerForgeReleaseService
     private static PowerForgeReleaseAssetEntry[] CollectReleaseAssetEntries(
         PowerForgeReleaseResult result,
         DotNetPublishPlan? dotNetPlan,
-        string? sharedReleaseVersion)
+        string? sharedReleaseVersion,
+        IReadOnlyCollection<string>? additionalAssetPaths = null)
     {
         var assets = new List<PowerForgeReleaseAssetEntry>();
 
@@ -4723,6 +4787,17 @@ internal sealed partial class PowerForgeReleaseService
                 Path = path!,
                 Category = PowerForgeReleaseAssetCategory.Metadata,
                 Source = "DotNetPublish"
+            }));
+
+        assets.AddRange(
+            (additionalAssetPaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Select(path => new PowerForgeReleaseAssetEntry
+            {
+                Path = path,
+                Category = PowerForgeReleaseAssetCategory.Metadata,
+                Source = "ReleaseOutputs",
+                IsFinalPackageOutput = false
             }));
 
         return assets.ToArray();

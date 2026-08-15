@@ -104,6 +104,23 @@ internal sealed partial class PowerForgeReleaseService
         return ShouldRunSectionForTargets(selectedTargets, toolMatches, true, appleMatches);
     }
 
+    internal static bool ShouldRunAppleAppsForProgress(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request)
+    {
+        if (spec.AppleApps is null ||
+            request.SkipAppleApps ||
+            request.ModuleOnly ||
+            request.PackagesOnly ||
+            request.ToolsOnly)
+        {
+            return false;
+        }
+
+        var selectedTargets = NormalizeStrings(request.Targets);
+        return selectedTargets.Length == 0 || ResolveAppleTargetMatches(spec.AppleApps, selectedTargets).Length > 0;
+    }
+
     private static PowerForgeReleaseAssetEntry[] CollectVirusTotalReleaseAssetEntries(
         PowerForgeReleaseResult result)
     {

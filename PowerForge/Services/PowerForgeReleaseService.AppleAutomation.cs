@@ -2,6 +2,31 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    private static void ReportAppleProgress(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        PowerForgeReleaseProgressItemState state,
+        string detail)
+    {
+        if (plan.Progress is null)
+            return;
+        var position = Array.IndexOf(plan.Apps, app) + 1;
+        plan.Progress.ItemUpdated(
+            new PowerForgeReleaseProgressItem
+            {
+                Phase = PowerForgeReleaseProgressPhase.AppleApps,
+                Key = "apple:" + app.Name,
+                Title = app.Name,
+                Kind = plan.Action.ToString(),
+                Target = app.Platform.ToString(),
+                CounterLabel = "Target",
+                Position = position,
+                Total = plan.Apps.Length
+            },
+            state,
+            detail);
+    }
+
     private static void ApplyAppleAction(
         PowerForgeAppleReleaseOptions? options,
         PowerForgeReleaseRequest request)
@@ -48,6 +73,9 @@ internal sealed partial class PowerForgeReleaseService
                 options.CheckGovernance = hasGovernanceConfig;
                 break;
             case PowerForgeAppleReleaseAction.Archive:
+                options.Archive = true;
+                break;
+            case PowerForgeAppleReleaseAction.Rehearse:
                 options.Archive = true;
                 break;
             case PowerForgeAppleReleaseAction.Upload:
@@ -173,6 +201,7 @@ internal sealed partial class PowerForgeReleaseService
 
     private static bool IsNamedAppleMutationAction(PowerForgeAppleReleaseAction action)
         => action is PowerForgeAppleReleaseAction.Archive or
+            PowerForgeAppleReleaseAction.Rehearse or
             PowerForgeAppleReleaseAction.Upload or
             PowerForgeAppleReleaseAction.UploadExisting or
             PowerForgeAppleReleaseAction.Prepare or
@@ -387,6 +416,7 @@ internal sealed partial class PowerForgeReleaseService
         var attemptId = Guid.NewGuid().ToString("N");
         var resultByName = results.ToDictionary(static result => result.Plan.Name, StringComparer.OrdinalIgnoreCase);
         var remoteAction = plan.Action != PowerForgeAppleReleaseAction.Archive &&
+                           plan.Action != PowerForgeAppleReleaseAction.Rehearse &&
                            plan.Action != PowerForgeAppleReleaseAction.Version &&
                            plan.Action != PowerForgeAppleReleaseAction.Cleanup;
         var refreshSuccessfulMutation = HasAppleReleaseStateMutation(plan);
@@ -468,7 +498,8 @@ internal sealed partial class PowerForgeReleaseService
             var skippedIndependentRelease = result?.SkippedSteps.Contains(
                 "independentRelease",
                 StringComparer.OrdinalIgnoreCase) == true;
-            if (!skippedIndependentRelease && plan.Action == PowerForgeAppleReleaseAction.Archive)
+            if (!skippedIndependentRelease &&
+                plan.Action is PowerForgeAppleReleaseAction.Archive or PowerForgeAppleReleaseAction.Rehearse)
             {
                 try
                 {
@@ -536,6 +567,10 @@ internal sealed partial class PowerForgeReleaseService
                 .Concat(diagnostics.Select(static diagnostic => diagnostic.Action))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+            var rehearsalArtifact = ResolveAppleRehearsalArtifactEvidence(
+                plan.Rehearse,
+                result?.Success == true,
+                result?.Upload);
             return new PowerForgeAppleReleaseTargetReceipt
             {
                 Name = app.Name,
@@ -581,16 +616,22 @@ internal sealed partial class PowerForgeReleaseService
                 Governance = result?.Governance,
                 ArchiveCreated = result?.Archive?.Succeeded == true,
                 ProjectGenerated = result?.ProjectGenerated == true,
-                UploadPerformed = result?.Upload?.Succeeded == true,
+                UploadPerformed = !plan.Rehearse && result?.Upload?.Succeeded == true,
+                ExportRehearsed = rehearsalArtifact is not null,
+                RehearsalArtifactPath = rehearsalArtifact is null || string.IsNullOrWhiteSpace(result?.Upload?.ExportArtifactPath)
+                    ? null
+                    : FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, result!.Upload!.ExportArtifactPath!).Replace('\\', '/'),
+                RehearsalArtifactSha256 = rehearsalArtifact?.Sha256,
+                RehearsalArtifactSha256Kind = rehearsalArtifact?.Kind,
                 ArchivePath = !string.IsNullOrWhiteSpace(result?.ArchiveSha256) ||
                               !string.IsNullOrWhiteSpace(result?.ResumedUploadAttestation?.ArchiveSha256)
                     ? FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/')
                     : null,
                 ArchiveSha256 = result?.ArchiveSha256 ?? result?.ResumedUploadAttestation?.ArchiveSha256,
-                UploadAttestationAttemptId = result?.Upload?.Succeeded == true
+                UploadAttestationAttemptId = !plan.Rehearse && result?.Upload?.Succeeded == true
                     ? result.UploadAttestationAttemptId
                     : result?.ResumedUploadAttestationAttemptId,
-                UploadExecutionSha256 = result?.Upload?.Succeeded == true || result?.ResumedUploadAttestation is not null
+                UploadExecutionSha256 = (!plan.Rehearse && result?.Upload?.Succeeded == true) || result?.ResumedUploadAttestation is not null
                     ? ComputeAppleUploadExecutionSha256(plan, app)
                     : null,
                 DirectArtifactPath = string.IsNullOrWhiteSpace(result?.Notarization?.ArtifactPath)
@@ -656,6 +697,60 @@ internal sealed partial class PowerForgeReleaseService
             _appleReceiptStore.WriteAttempt(plan, receipt);
         return receipt;
     }
+
+    private static string? ComputeAppleRehearsalArtifactSha256(string? artifactPath)
+    {
+        if (string.IsNullOrWhiteSpace(artifactPath))
+            return null;
+
+        return File.Exists(artifactPath!)
+            ? AppleNotarizationService.ComputeFileSha256(artifactPath!)
+            : AppleNotarizationService.ComputeArtifactSha256(artifactPath!);
+    }
+
+    private static string? GetAppleRehearsalArtifactSha256Kind(string? artifactPath)
+    {
+        if (string.IsNullOrWhiteSpace(artifactPath))
+            return null;
+        if (File.Exists(artifactPath))
+            return "file-content";
+        return Directory.Exists(artifactPath) ? "filesystem-identity-v2" : null;
+    }
+
+    internal static AppleRehearsalArtifactEvidence ValidateAppleRehearsalArtifactEvidence(
+        AppleAppArchiveUploadResult upload)
+    {
+        if (string.IsNullOrWhiteSpace(upload.ExportArtifactPath) ||
+            string.IsNullOrWhiteSpace(upload.RehearsalArtifactSha256) ||
+            string.IsNullOrWhiteSpace(upload.RehearsalArtifactSha256Kind))
+        {
+            throw new InvalidOperationException(
+                "A successful Apple rehearsal export must retain producer-bound artifact hash evidence.");
+        }
+
+        var actualKind = GetAppleRehearsalArtifactSha256Kind(upload.ExportArtifactPath);
+        var actualSha256 = ComputeAppleRehearsalArtifactSha256(upload.ExportArtifactPath);
+        if (!string.Equals(actualKind, upload.RehearsalArtifactSha256Kind, StringComparison.Ordinal) ||
+            !string.Equals(actualSha256, upload.RehearsalArtifactSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The published Apple rehearsal export changed before its receipt was written. " +
+                $"Expected '{upload.RehearsalArtifactSha256}' ({upload.RehearsalArtifactSha256Kind}), " +
+                $"received '{actualSha256 ?? "<missing>"}' ({actualKind ?? "<missing>"}).");
+        }
+
+        return new AppleRehearsalArtifactEvidence(
+            upload.RehearsalArtifactSha256!,
+            upload.RehearsalArtifactSha256Kind!);
+    }
+
+    internal static AppleRehearsalArtifactEvidence? ResolveAppleRehearsalArtifactEvidence(
+        bool rehearse,
+        bool targetSucceeded,
+        AppleAppArchiveUploadResult? upload)
+        => rehearse && targetSucceeded && upload?.Succeeded == true
+            ? ValidateAppleRehearsalArtifactEvidence(upload)
+            : null;
 
     private static bool HasAppleRemoteMutation(PowerForgeAppleReleasePlan plan)
         => plan.PrepareDistribution ||

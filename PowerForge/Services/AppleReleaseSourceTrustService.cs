@@ -27,6 +27,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private readonly HashSet<string> _remotePackagesUnderValidation = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _validatedRemotePackages = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _validatedTrackedFileBlobs = new(GetPathComparer());
     private readonly HashSet<string> _validatedSourceIncludeFiles = new(GetPathComparer());
     private readonly HashSet<string> _validatedAssemblerInputFiles = new(GetPathComparer());
     private readonly HashSet<string> _validatedSourceSemanticInputs = new(StringComparer.Ordinal);
@@ -163,6 +164,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     {
         _remotePackagesUnderValidation.Clear();
         _validatedRemotePackages.Clear();
+        _validatedTrackedFileBlobs.Clear();
         _validatedSourceIncludeFiles.Clear();
         _validatedAssemblerInputFiles.Clear();
         _validatedSourceSemanticInputs.Clear();
@@ -532,7 +534,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     private static string[] ResolveSynchronizedRoots(IEnumerable<string> metadataPaths)
         => ResolveObjectAwareSynchronizedRoots(metadataPaths);
 
-    private void EnsureTrackedFile(
+    internal void EnsureTrackedFile(
         string repositoryRoot,
         string path,
         string name,
@@ -547,6 +549,27 @@ internal sealed partial class AppleReleaseSourceTrustService
         if (!File.Exists(candidate))
             throw new FileNotFoundException($"{name} was not found: {candidate}", candidate);
         EnsureNoLinkedTraversal(repositoryRoot, candidate, name);
+
+        if (capturedWorktreeBlob is null &&
+            capturedWorktreeBytes is null &&
+            _validatedTrackedFileBlobs.TryGetValue(candidate, out var validatedWorktreeBlob))
+        {
+            var currentWorktreeBlob = ComputeRawGitBlobId(repositoryRoot, candidate);
+            if (!currentWorktreeBlob.Equals(validatedWorktreeBlob, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"{name} changed after it was validated against the exact source commit: " +
+                    FrameworkCompatibility.GetRelativePath(repositoryRoot, candidate).Replace('\\', '/'));
+            }
+            ValidateSourceLevelIncludes(
+                repositoryRoot,
+                candidate,
+                validateSwiftDeterminism,
+                currentWorktreeBlob,
+                effectiveSourceExtension,
+                assemblerWorkingDirectory);
+            return;
+        }
 
         var relative = FrameworkCompatibility.GetRelativePath(repositoryRoot, candidate).Replace('\\', '/');
         var tracked = RunGitAllowFailure(repositoryRoot, "ls-files", "-v", "--error-unmatch", "--", relative);
@@ -574,6 +597,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (!expectedBlob.Equals(filteredWorktreeBlob, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"{name} differs from the exact source commit: {relative}");
         }
+        _validatedTrackedFileBlobs[candidate] = worktreeBlob;
         ValidateSourceLevelIncludes(
             repositoryRoot,
             candidate,

@@ -3,16 +3,53 @@ namespace PowerForge;
 internal sealed partial class AppleReleaseSourceTrustService
 {
     private void EnsureNoCustomGitFilter(string repositoryRoot, string relativePath, string name)
+        => EnsureNoCustomGitFilters(repositoryRoot, new[] { relativePath }, name);
+
+    internal void EnsureNoCustomGitFilters(
+        string repositoryRoot,
+        IReadOnlyCollection<string> relativePaths,
+        string name)
     {
-        var attributes = RunGit(repositoryRoot, "check-attr", "-z", "filter", "--", relativePath)
-            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
-        var value = attributes.Length >= 3 ? attributes[2] : "unspecified";
-        if (!value.Equals("unspecified", StringComparison.Ordinal) &&
-            !value.Equals("unset", StringComparison.Ordinal))
+        const int maximumPathsPerInvocation = 256;
+        var paths = relativePaths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(GetPathComparer())
+            .ToArray();
+        for (var offset = 0; offset < paths.Length; offset += maximumPathsPerInvocation)
         {
-            throw new InvalidOperationException(
-                $"{name} uses custom Git filter '{value}' and cannot be attested to the exact source commit: {relativePath}. " +
-                "Exact Apple source inputs may use Git text/EOL normalization but not repository-configuration-dependent clean or smudge filters.");
+            var batch = paths.Skip(offset).Take(maximumPathsPerInvocation).ToArray();
+            var arguments = new List<string> { "check-attr", "-z", "filter", "--" };
+            arguments.AddRange(batch);
+            var attributes = RunGit(repositoryRoot, arguments.ToArray())
+                .StdOut.Split(new[] { '\0' }, StringSplitOptions.None);
+            var valueCount = attributes.Length > 0 && attributes[attributes.Length - 1].Length == 0
+                ? attributes.Length - 1
+                : attributes.Length;
+            if (valueCount != batch.Length * 3)
+            {
+                throw new InvalidOperationException(
+                    $"{name} Git filter attributes could not be parsed safely for {batch.Length} exact-source input(s).");
+            }
+
+            for (var index = 0; index < valueCount; index += 3)
+            {
+                var path = attributes[index];
+                var attribute = attributes[index + 1];
+                var value = attributes[index + 2];
+                if (!attribute.Equals("filter", StringComparison.Ordinal) ||
+                    !batch.Contains(path, GetPathComparer()))
+                {
+                    throw new InvalidOperationException(
+                        $"{name} Git filter attributes returned an unexpected exact-source path: {path}.");
+                }
+                if (!value.Equals("unspecified", StringComparison.Ordinal) &&
+                    !value.Equals("unset", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"{name} uses custom Git filter '{value}' and cannot be attested to the exact source commit: {path}. " +
+                        "Exact Apple source inputs may use Git text/EOL normalization but not repository-configuration-dependent clean or smudge filters.");
+                }
+            }
         }
     }
 

@@ -324,6 +324,12 @@
       "properties": {
         "ManifestJsonPath": { "type": [ "string", "null" ] },
         "ChecksumsPath": { "type": [ "string", "null" ] },
+        "PowerForgeToolManifestPath": { "type": [ "string", "null" ] },
+        "AdditionalAssetPaths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        },
         "Staging": {
           "type": "object",
           "additionalProperties": false,

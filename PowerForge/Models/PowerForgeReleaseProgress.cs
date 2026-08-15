@@ -4,17 +4,19 @@ namespace PowerForge;
 public enum PowerForgeReleaseProgressPhase
 {
     /// <summary>Package planning and shared release version resolution.</summary>
-    Versioning,
+    Versioning = 0,
     /// <summary>PowerShell module build and publish lane.</summary>
-    Module,
+    Module = 1,
     /// <summary>NuGet project build and publish lane.</summary>
-    Packages,
+    Packages = 2,
     /// <summary>Portable executable, installer, and store packaging lane.</summary>
-    Tools,
+    Tools = 3,
     /// <summary>Unified GitHub release and asset upload lane.</summary>
-    GitHub,
+    GitHub = 4,
     /// <summary>Opt-in VirusTotal Monitor publisher registration lane.</summary>
-    VirusTotal
+    VirusTotal = 5,
+    /// <summary>Apple exact-source validation, archive, export, and release automation lane.</summary>
+    AppleApps = 6
 }
 
 /// <summary>Receives structured high-level progress for a unified release.</summary>

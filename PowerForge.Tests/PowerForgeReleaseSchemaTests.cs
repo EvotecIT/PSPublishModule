@@ -6,6 +6,37 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeReleaseSchemaTests
 {
     [Theory]
+    [InlineData(1, false, true)]
+    [InlineData(1, true, true)]
+    [InlineData(2, false, false)]
+    [InlineData(2, true, true)]
+    public void Tool_lock_schema_preserves_v1_and_requires_executable_digest_for_v2(
+        int schemaVersion,
+        bool includeExecutableDigest,
+        bool expectedValid)
+    {
+        var schema = JsonSchema.FromText(File.ReadAllText(GetSchemaPath("powerforge.tool.schema.json")));
+        var executableDigest = includeExecutableDigest
+            ? ", \"executableSha256\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\""
+            : string.Empty;
+        var document = JsonNode.Parse($$"""
+            {
+              "schemaVersion": {{schemaVersion}},
+              "version": "3.0.110",
+              "assets": {
+                "osx-arm64": {
+                  "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"{{executableDigest}}
+                }
+              }
+            }
+            """)!;
+
+        var result = schema.Evaluate(document, new EvaluationOptions { OutputFormat = OutputFormat.List });
+
+        Assert.Equal(expectedValid, result.IsValid);
+    }
+
+    [Theory]
     [InlineData("""{ "Module": { "ConfigPath": "powerforge.json", "ScriptPath": null } }""", true)]
     [InlineData("""{ "Module": { "ConfigPath": null, "ScriptPath": "Build/Build-Module.ps1" } }""", true)]
     [InlineData("""{ "Module": { "ConfigPath": "powerforge.json", "ScriptPath": "Build/Build-Module.ps1" } }""", false)]

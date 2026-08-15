@@ -255,6 +255,7 @@ Use the same entry point for each transition:
 | `Doctor` | Reads release state plus local topology, embedded-product evidence, metadata ownership, App Review details, age rating, pricing, availability, accessibility, encryption, monetization, webhook coverage, and TestFlight feedback. It does not mutate Apple state. |
 | `Version` | Updates the configured XcodeGen version source and chooses one build number above both local state and every configured App Store Connect platform. |
 | `Archive` | Creates signed archives without uploading. |
+| `Rehearse` | Creates signed archives and completes the local Xcode export for each selected target without uploading, querying App Store Connect, or submitting notarization. |
 | `Upload` | Archives, uploads, waits for processing, and resumes an exact remote build only when an immutable receipt binds it to the same source commit and archive SHA-256. |
 | `UploadExisting` | Uploads existing archives and uses the same provenance-bound resume and wait behavior. |
 | `Prepare` | Creates/updates versions, metadata, app information, build selection, and readiness. |
@@ -272,6 +273,27 @@ Plan a mutating action before running it:
 powerforge apple-release Upload --config powerforge.release.json --plan
 powerforge apple-release Upload --config powerforge.release.json --summary --output json
 ```
+
+Use `Rehearse` before a release when signing, package resolution, archive integrity,
+and export need production-shaped proof without App Store upload or notarization submission:
+
+```text
+powerforge apple-release Rehearse --config powerforge.release.json --plan --summary --output json
+powerforge apple-release Rehearse --config powerforge.release.json --summary --output json
+```
+
+The rehearsal receipt records each local export artifact and SHA-256 with
+`uploadPerformed: false`. `rehearsalArtifactSha256Kind: file-content` identifies
+IPA, PKG, DMG, and other file hashes that can be verified with tools such as
+`shasum -a 256`; an exported `.app` directory uses the domain-separated
+`filesystem-identity-v2` tree contract instead. App Store targets use an App Store export, while direct
+macOS targets use their configured Developer ID export method but stop before
+notarization submission.
+
+`Rehearse` is not an offline action. When `AllowProvisioningUpdates` is enabled,
+Xcode may contact Apple Developer signing services and update provisioning state.
+It does not query App Store Connect release state, upload a build, submit for
+notarization, or change App Store/TestFlight distribution state.
 
 For a routine release, use the same X-pattern semantics as the rest of
 PSPublishModule. For example, configure `MarketingVersionPattern: 1.X` and let
@@ -602,20 +624,32 @@ tool lock when a repository prefers downloading a published standalone asset:
 ```json
 {
   "$schema": "https://schemas.evotec.xyz/powerforge.tool.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "repository": "EvotecIT/PSPublishModule",
-  "version": "3.0.80",
-  "releaseTag": "PowerForge-v3.0.80",
+  "version": "3.0.110",
+  "releaseTag": "v3.0.110",
+  "commit": "<40-character-release-commit>",
   "assets": {
     "osx-arm64": {
-      "sha256": "<64-character release asset digest>"
+      "name": "PowerForge-3.0.110-net10.0-osx-arm64-SingleContained.zip",
+      "sha256": "<64-character release asset digest>",
+      "executableSha256": "<64-character executable digest>"
     }
   }
 }
 ```
 
-`releaseTag` is optional for compatibility and otherwise defaults to `v<version>`.
-Set it when the standalone CLI is published independently from the full module release.
+`releaseTag` and each asset `name` are optional when they follow the standard
+`v<version>` and PowerForge archive names. `commit` binds the installed binary's
+informational version to the exact public release source. The public PowerForge release
+generates this schema-version-2 manifest from the archives it actually built; consumers
+should copy that generated manifest instead of calculating checksums by hand. Existing
+schema-version-1 locks remain installable. When an older lock does not contain
+`executableSha256`, the installer verifies and extracts the release archive on every
+invocation before executing it; verified cache reuse requires schema version 2.
+Standalone locks support `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`,
+`osx-x64`, and `osx-arm64`. Their release tag must be deterministic; clock-based tag
+placeholders are rejected because the manifest and GitHub publication are separate steps.
 
 The reusable workflow boundary mirrors the human approval boundary:
 
