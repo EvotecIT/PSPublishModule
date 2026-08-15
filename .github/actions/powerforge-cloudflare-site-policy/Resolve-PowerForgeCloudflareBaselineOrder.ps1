@@ -53,11 +53,12 @@ function Get-PagesDeployments {
     $historyComplete = $false
     do {
         $uri = "$script:ApiUrl/repos/$script:Repository/deployments?environment=github-pages&per_page=100&page=$page"
-        $current = @(Invoke-GitHubGet -Uri $uri)
+        [object[]] $current = Invoke-GitHubGet -Uri $uri
         foreach ($deployment in $current) {
             $deploymentId = Get-PositiveInt64 -Name 'deployment id' -Value ([string]$deployment.id)
             $statusesUri = "$script:ApiUrl/repos/$script:Repository/deployments/$deploymentId/statuses?per_page=100"
-            $status = @(Invoke-GitHubGet -Uri $statusesUri) | Where-Object {
+            [object[]] $statuses = Invoke-GitHubGet -Uri $statusesUri
+            $status = $statuses | Where-Object {
                 [string]$_.state -eq 'success' -and [string]$_.environment_url -match '^https?://' -and [string]$_.log_url -match '/actions/runs/(?<run>[0-9]+)/job/(?<job>[0-9]+)'
             } | Sort-Object -Property @{ Expression = { [DateTimeOffset]$_.created_at }; Descending = $true } | Select-Object -First 1
             if ($null -ne $status) {
@@ -78,7 +79,9 @@ function Get-PagesDeployments {
     if (-not $historyComplete) {
         throw 'GitHub Pages deployment history exceeded the 2,000-deployment safety bound.'
     }
-    @($deployments)
+    foreach ($deployment in $deployments) {
+        $deployment
+    }
 }
 
 if ([string]::IsNullOrWhiteSpace($env:GITHUB_OUTPUT)) { throw 'GITHUB_OUTPUT is required.' }
