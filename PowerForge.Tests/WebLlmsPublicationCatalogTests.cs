@@ -8,6 +8,40 @@ namespace PowerForge.Tests;
 public sealed class WebLlmsPublicationCatalogTests
 {
     [Fact]
+    public void VerifiedCatalog_MultiPackageMarkdownPassesFinalArtifactAudit()
+    {
+        using var fixture = new PublicationFixture();
+        var firstProject = fixture.WriteProject("Published.First");
+        var secondProject = fixture.WriteProject("Published.Second");
+        var catalog = fixture.WriteCatalog("Evotec", ["Published.First", "Published.Second"]);
+
+        var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root,
+            PackageFiles = [firstProject, secondProject],
+            InstallCommandPolicy = WebLlmsInstallCommandPolicy.VerifiedCatalog,
+            PublicationCatalogPath = catalog,
+            NuGetOwner = "Evotec"
+        });
+
+        Assert.Equal(2, result.InstallCommandCount);
+        var llmsText = File.ReadAllText(result.LlmsTxtPath);
+        Assert.Contains("`dotnet add package Published.First --version 1.2.3` — source version `1.2.3`", llmsText, StringComparison.Ordinal);
+
+        using var scanner = new WebAgentContentSecurityScanner();
+        var scan = scanner.Scan(new WebAgentContentSecurityOptions
+        {
+            SiteRoot = fixture.Root,
+            Files = ["llms.txt", "llms-full.txt", "llms.json"],
+            PublicationCatalogPath = catalog,
+            NuGetOwner = "Evotec",
+            RequireOwnerVerification = ["nuget:*"]
+        });
+        Assert.True(scan.Success, string.Join(" | ", scan.Findings.Select(static finding => finding.Message)));
+        Assert.Equal(2, scan.VerifiedPackageCount);
+    }
+
+    [Fact]
     public void VerifiedCatalog_AcceptsUtf8BomFromExistingCatalogs()
     {
         using var fixture = new PublicationFixture();
