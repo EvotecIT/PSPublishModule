@@ -481,7 +481,7 @@ public static partial class WebEcosystemStatsGenerator
             return true;
 
         var required = requiredOwner.Trim();
-        return SplitOwnerOrAuthorValues(owners)
+        return WebPackageOwnerIdentity.Split(owners)
             .Any(candidate => candidate.Equals(required, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -530,20 +530,6 @@ public static partial class WebEcosystemStatsGenerator
         if (parts.Length == 0)
             return normalized;
         return parts[0].Length >= 3 ? parts[0] : normalized;
-    }
-
-    private static IEnumerable<string> SplitOwnerOrAuthorValues(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            yield break;
-
-        var parts = value.Split(new[] { ',', ';', '|', '/' }, StringSplitOptions.RemoveEmptyEntries);
-        foreach (var part in parts)
-        {
-            var trimmed = part.Trim();
-            if (!string.IsNullOrWhiteSpace(trimmed))
-                yield return trimmed;
-        }
     }
 
     private static string NormalizeIdentity(string value)

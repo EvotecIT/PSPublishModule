@@ -235,6 +235,8 @@ public sealed partial class WebAgentContentSecurityScanner
             yield return (match.Groups["command"].Value, match.Index);
         foreach (Match match in SavedArtifactDotSourceRegex.Matches(content))
             yield return (match.Groups["path"].Value, match.Index);
+        foreach (var candidate in EnumerateStartProcessPaths(content))
+            yield return candidate;
     }
 
     private static string NormalizeComparedPath(string value)

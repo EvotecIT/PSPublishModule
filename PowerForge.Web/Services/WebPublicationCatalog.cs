@@ -215,8 +215,7 @@ internal sealed class WebPublicationCatalog
     }
 
     private static bool PackageHasOwner(string? owners, string expectedOwner)
-        => (owners ?? string.Empty)
-            .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        => WebPackageOwnerIdentity.Split(owners)
             .Any(owner => owner.Equals(expectedOwner, StringComparison.OrdinalIgnoreCase));
 
     private sealed record CatalogSection(string? Owner, IReadOnlyDictionary<string, CatalogPackage> Packages);

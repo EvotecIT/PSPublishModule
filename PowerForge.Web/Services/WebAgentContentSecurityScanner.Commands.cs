@@ -38,6 +38,7 @@ public sealed partial class WebAgentContentSecurityScanner
         var workingDirectoryChange = PersistentWorkingDirectoryChangeRegex.Match(content);
         var remoteExecutionContextChange = PersistentRemoteExecutionContextRegex.Match(content);
         ScanObfuscatedPackageExecutables(content, path, lineOffset, countLogicalLines, findings);
+        ScanDynamicExecutableInvocations(content, path, lineOffset, countLogicalLines, findings);
         foreach (Match match in CommandSegmentRegex.Matches(content))
         {
             var matchedCommand = match.Groups["command"].Value;
