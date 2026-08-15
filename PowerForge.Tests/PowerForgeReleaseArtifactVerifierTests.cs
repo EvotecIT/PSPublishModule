@@ -927,7 +927,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         internal void ConfigureSubjectNameSigning(
             bool azureArtifactSigning = false,
             bool includeDlls = false,
-            bool zip = true)
+            bool zip = true,
+            bool rewritePortableEvidence = true)
         {
             File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
             {
@@ -964,17 +965,20 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     }
                 }
             }));
-            string[] signedPaths = includeDlls
-                ? Directory.EnumerateFiles(OutputDirectory, "*", SearchOption.AllDirectories)
-                    .Where(path => path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
-                                   path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-                    .ToArray()
-                : new[] { ExecutablePath };
-            WritePortableInventory(signedPaths);
-            if (!zip)
-                WriteDirectInventory();
-            WriteArchiveFromOutput();
-            WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
+            if (rewritePortableEvidence)
+            {
+                string[] signedPaths = includeDlls
+                    ? Directory.EnumerateFiles(OutputDirectory, "*", SearchOption.AllDirectories)
+                        .Where(path => path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                                       path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                        .ToArray()
+                    : new[] { ExecutablePath };
+                WritePortableInventory(signedPaths);
+                if (!zip)
+                    WriteDirectInventory();
+                WriteArchiveFromOutput();
+                WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
+            }
             WriteChecksums();
         }
 

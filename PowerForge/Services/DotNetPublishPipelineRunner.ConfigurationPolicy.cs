@@ -23,6 +23,7 @@ public sealed partial class DotNetPublishPipelineRunner
             BundleId = string.IsNullOrWhiteSpace(bundleId) ? null : bundleId!.Trim(),
             Zip = zip,
             SigningEnabled = sign.Enabled,
+            Provider = sign.Provider.ToString(),
             sign.IncludeDlls
         });
         using JsonDocument document = JsonDocument.Parse(serialized);

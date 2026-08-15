@@ -408,6 +408,24 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsSigningProviderChangedAfterInventoryWasSigned()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureSubjectNameSigning();
+        fixture.ConfigureSubjectNameSigning(
+            azureArtifactSigning: true,
+            rewritePortableEvidence: false);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = "CN=Publisher";
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("configuration policy", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliAcceptsAzureCertificateRotationForDirectInventory()
     {
         using var fixture = new PortableFixture();
