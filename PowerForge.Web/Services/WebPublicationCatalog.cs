@@ -7,6 +7,9 @@ namespace PowerForge.Web;
 /// <summary>Owner-scoped package publication evidence shared by generation and final-artifact auditing.</summary>
 internal sealed class WebPublicationCatalog
 {
+    /// <summary>Maximum accepted UTF-8 catalog payload size.</summary>
+    internal const int MaximumCatalogBytes = 5 * 1024 * 1024;
+
     private readonly CatalogSection? _nuGet;
     private readonly CatalogSection? _powerShellGallery;
     private readonly string[] _warnings;
@@ -33,7 +36,7 @@ internal sealed class WebPublicationCatalog
         JsonDocument document;
         try
         {
-            document = JsonDocument.Parse(File.ReadAllText(path));
+            document = JsonDocument.Parse(ReadBoundedCatalog(path));
         }
         catch (JsonException ex)
         {
@@ -52,6 +55,27 @@ internal sealed class WebPublicationCatalog
                 ReadWarnings(root, contextLabel),
                 contextLabel);
         }
+    }
+
+    private static ReadOnlyMemory<byte> ReadBoundedCatalog(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 8192,
+            FileOptions.SequentialScan);
+        using var memory = new MemoryStream();
+        Span<byte> buffer = stackalloc byte[8192];
+        while (true)
+        {
+            var read = stream.Read(buffer);
+            if (read == 0)
+                break;
+            if (memory.Length + read > MaximumCatalogBytes)
+            {
+                throw new InvalidDataException(
+                    $"Configured publication catalog exceeds the {MaximumCatalogBytes}-byte safety limit: {path}");
+            }
+            memory.Write(buffer[..read]);
+        }
+        return memory.ToArray();
     }
 
     public bool ContainsExactOwnedPackage(

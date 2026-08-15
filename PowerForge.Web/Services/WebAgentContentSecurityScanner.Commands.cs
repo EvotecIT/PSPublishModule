@@ -5,7 +5,7 @@ namespace PowerForge.Web;
 public sealed partial class WebAgentContentSecurityScanner
 {
     private static readonly Regex CommandSegmentRegex = new(
-        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|nuget(?:\.exe|\.cmd)?(?=\s+(?:install|restore|update)\b)|Install-Package|Update-Package|Install-Module|Save-Module|Install-Script|Update-Script|Save-Script|Install-PSResource|Save-PSResource|Update-Module|Update-PSResource|Install-PackageProvider|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|poetry(?=\s+(?:add|install|sync|update|remove|lock|run|build|self|plugin|source|config|python)\b)|cargo|gem|composer|bundler|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
+        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|nuget(?:\.exe|\.cmd)?(?=\s+(?:install|restore|update|sources?)\b)|Install-Package|Update-Package|Install-Module|Save-Module|Install-Script|Update-Script|Save-Script|Install-PSResource|Save-PSResource|Update-Module|Update-PSResource|Install-PackageProvider|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|poetry(?=\s+(?:add|install|sync|update|remove|lock|run|build|self|plugin|source|config|python)\b)|cargo|gem|composer|bundler|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ShellTokenConstructionRegex = new(
         @"[\x5C`](?!\r?\n)[^\r\n]",
@@ -13,6 +13,9 @@ public sealed partial class WebAgentContentSecurityScanner
     private static readonly Regex ShellContinuationTokenConstructionRegex = new(
         @"(?<=\S)[\x5C`\^]\r?\n(?=\S)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex ShellExpansionRegex = new(
+        @"(?:\$\(|[<>]\(|\$\{|\$env:|%[A-Za-z_][A-Za-z0-9_]*%|\$[A-Za-z_][A-Za-z0-9_]*)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ObfuscatedExecutableRegex = new(
         @"(?<![A-Za-z0-9_.-])(?<command>(?:[A-Za-z0-9_.-]+[\x5C`\^][A-Za-z0-9_.\x5C`\^-]+|[A-Za-z0-9_.-]+(?:['""][A-Za-z0-9_.-]*['""][A-Za-z0-9_.-]*)+))(?=\s|$)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline);
@@ -39,6 +42,13 @@ public sealed partial class WebAgentContentSecurityScanner
         {
             var matchedCommand = match.Groups["command"].Value;
             var commandForValidation = StripShellComment(matchedCommand);
+            if (IsUntrustedExecutableReference(content, match.Index))
+            {
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND", path,
+                    GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                    "Package command operands must not use shell escape construction; spell the executable and package identifiers literally.");
+                continue;
+            }
             if (HasCommandScopedEnvironmentPrefix(content, match.Index) ||
                 HasExecutionContextWrapperPrefix(content, match.Index) ||
                 flowState?.WorkingDirectoryChanged == true ||
@@ -52,8 +62,7 @@ public sealed partial class WebAgentContentSecurityScanner
                     "Package commands with identity, environment, working-directory, or remote-execution wrappers cannot be proven to use the canonical public registry.");
                 continue;
             }
-            if (IsUntrustedExecutableReference(content, match.Index) ||
-                HasShellQuoteConcatenation(commandForValidation) ||
+            if (HasShellQuoteConcatenation(commandForValidation) ||
                 ShellTokenConstructionRegex.IsMatch(commandForValidation) ||
                 ShellContinuationTokenConstructionRegex.IsMatch(commandForValidation))
             {
@@ -168,6 +177,9 @@ public sealed partial class WebAgentContentSecurityScanner
                     ParseBundle(tokens, path, line, commandReferences, findings);
                     break;
             }
+            if (findings.Count == findingCountBefore && HasShellExpansionInOptionValue(tokens))
+                AddFinding(findings, "error", "PFAGENT.PACKAGE.OBFUSCATED_COMMAND", path, line,
+                    "Package command option values must be literal and must not use shell expansion.");
             if (findings.Count == findingCountBefore && findings.Count < MaximumFindingCount)
                 references.AddRange(commandReferences);
         }
@@ -178,6 +190,27 @@ public sealed partial class WebAgentContentSecurityScanner
             flowState.RemoteExecutionContextChanged = true;
 
         return references;
+    }
+
+    private static bool HasShellExpansionInOptionValue(string[] tokens)
+    {
+        for (var index = 1; index < tokens.Length; index++)
+        {
+            var option = tokens[index];
+            if (!option.StartsWith("-", StringComparison.Ordinal))
+                continue;
+
+            var equals = option.IndexOf('=');
+            if (equals > 0 && ShellExpansionRegex.IsMatch(option[(equals + 1)..]))
+                return true;
+
+            var optionIndex = index;
+            if (TrySkipOption(tokens, ref optionIndex, tokens[0]) && optionIndex > index &&
+                ShellExpansionRegex.IsMatch(tokens[optionIndex]))
+                return true;
+            index = optionIndex;
+        }
+        return false;
     }
 
     private static void ScanObfuscatedPackageExecutables(

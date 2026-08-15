@@ -155,24 +155,25 @@ public sealed partial class WebAgentContentSecurityScanner
 
     private static bool HasExecutionContextWrapperPrefix(string content, int commandIndex)
     {
-        var start = commandIndex - 1;
-        while (start >= 0)
+        var scanStart = FindLogicalCommandStart(content, commandIndex);
+        var start = scanStart - 1;
+        var singleQuoted = false;
+        var doubleQuoted = false;
+        for (var index = scanStart; index < commandIndex; index++)
         {
-            if (content[start] is ';' or '&' or '|')
-                break;
-            if (content[start] is '\r' or '\n')
+            var current = content[index];
+            if (current == '\'' && !doubleQuoted)
             {
-                var previous = start - 1;
-                if (content[start] == '\n' && previous >= 0 && content[previous] == '\r')
-                    previous--;
-                while (previous >= 0 && content[previous] is ' ' or '\t')
-                    previous--;
-                if (previous < 0 || content[previous] is not ('\\' or '`' or '^'))
-                    break;
-                start = previous - 1;
+                singleQuoted = !singleQuoted;
                 continue;
             }
-            start--;
+            if (current == '"' && !singleQuoted)
+            {
+                doubleQuoted = !doubleQuoted;
+                continue;
+            }
+            if (!singleQuoted && !doubleQuoted && current is ';' or '&' or '|')
+                start = index;
         }
         var tokens = Tokenize(ShellContinuationRegex.Replace(content[(start + 1)..commandIndex], " "));
 
@@ -225,6 +226,27 @@ public sealed partial class WebAgentContentSecurityScanner
             token.StartsWith("--chroot=", StringComparison.OrdinalIgnoreCase));
     }
 
+    private static int FindLogicalCommandStart(string content, int commandIndex)
+    {
+        var start = commandIndex;
+        while (start > 0)
+        {
+            var newline = content.LastIndexOfAny(['\r', '\n'], start - 1);
+            if (newline < 0)
+                return 0;
+
+            var previous = newline - 1;
+            if (content[newline] == '\n' && previous >= 0 && content[previous] == '\r')
+                previous--;
+            while (previous >= 0 && content[previous] is ' ' or '\t')
+                previous--;
+            if (previous < 0 || content[previous] is not ('\\' or '`' or '^'))
+                return newline + 1;
+            start = previous;
+        }
+        return 0;
+    }
+
     private static bool HasDataAppendingWrapperPrefix(string content, int commandIndex)
     {
         var start = commandIndex - 1;
@@ -271,27 +293,35 @@ public sealed partial class WebAgentContentSecurityScanner
 
     private static bool HasUnsafeRuntimeLauncherPrefix(string[] tokens)
     {
-        var rubyIndex = Array.FindIndex(tokens, static token =>
+        for (var runtimeIndex = 0; runtimeIndex < tokens.Length; runtimeIndex++)
         {
-            var executable = Path.GetFileNameWithoutExtension(NormalizeToken(token).Replace('\\', '/'));
-            return executable.Equals("ruby", StringComparison.OrdinalIgnoreCase) ||
-                   executable.Equals("jruby", StringComparison.OrdinalIgnoreCase) ||
-                   executable.Equals("truffleruby", StringComparison.OrdinalIgnoreCase);
-        });
-        if (rubyIndex < 0)
-            return false;
+            var executable = Path.GetFileNameWithoutExtension(NormalizeToken(tokens[runtimeIndex]).Replace('\\', '/'));
+            if (executable.Equals("ruby", StringComparison.OrdinalIgnoreCase) ||
+                executable.Equals("jruby", StringComparison.OrdinalIgnoreCase) ||
+                executable.Equals("truffleruby", StringComparison.OrdinalIgnoreCase))
+            {
+                if (tokens.Skip(runtimeIndex + 1).Any(static token =>
+                        token.Equals("-S", StringComparison.Ordinal) ||
+                        token.Equals("-e", StringComparison.Ordinal) ||
+                        token.Equals("--eval", StringComparison.OrdinalIgnoreCase) ||
+                        token.Equals("-r", StringComparison.Ordinal) ||
+                        token.StartsWith("-r", StringComparison.Ordinal) && token.Length > 2 ||
+                        token.Equals("--require", StringComparison.OrdinalIgnoreCase) ||
+                        token.StartsWith("--require=", StringComparison.OrdinalIgnoreCase) ||
+                        token.Equals("-I", StringComparison.Ordinal) ||
+                        token.StartsWith("-I", StringComparison.Ordinal) && token.Length > 2 ||
+                        token.Equals("--include", StringComparison.OrdinalIgnoreCase) ||
+                        token.StartsWith("--include=", StringComparison.OrdinalIgnoreCase) ||
+                        !token.StartsWith("-", StringComparison.Ordinal)))
+                    return true;
+                continue;
+            }
 
-        return tokens.Skip(rubyIndex + 1).Any(static token =>
-            token.Equals("-S", StringComparison.Ordinal) ||
-            token.Equals("-e", StringComparison.Ordinal) ||
-            token.Equals("--eval", StringComparison.OrdinalIgnoreCase) ||
-            token.Equals("-r", StringComparison.Ordinal) ||
-            token.StartsWith("-r", StringComparison.Ordinal) && token.Length > 2 ||
-            token.Equals("--require", StringComparison.OrdinalIgnoreCase) ||
-            token.StartsWith("--require=", StringComparison.OrdinalIgnoreCase) ||
-            token.Equals("-I", StringComparison.Ordinal) ||
-            token.StartsWith("-I", StringComparison.Ordinal) && token.Length > 2 ||
-            token.Equals("--include", StringComparison.OrdinalIgnoreCase) ||
-            token.StartsWith("--include=", StringComparison.OrdinalIgnoreCase));
+            if (executable.Equals("perl", StringComparison.OrdinalIgnoreCase) ||
+                executable.Equals("node", StringComparison.OrdinalIgnoreCase) ||
+                executable.Equals("php", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 }

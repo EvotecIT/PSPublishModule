@@ -223,6 +223,7 @@ public sealed partial class WebAgentContentSecurityScanner
             executable == "gem" && verb == "sources" ||
             executable == "composer" && verb is "config" or "repository" or "repo" ||
             executable == "bundle" && verb == "config" ||
+            executable == "nuget" && verb is "source" or "sources" ||
             executable is "npm" or "pnpm" or "yarn" or "bun" && NormalizeNodeVerb(verb ?? string.Empty) is "config" or "set" ||
             executable is "pip" or "pip3" && verb == "config" ||
             executable is "python" or "python3" or "py" && tokens.Length > 3 &&
@@ -400,20 +401,6 @@ public sealed partial class WebAgentContentSecurityScanner
         if (normalized.EndsWith(".exe", StringComparison.Ordinal) ||
             normalized.EndsWith(".cmd", StringComparison.Ordinal))
             normalized = Path.GetFileNameWithoutExtension(normalized);
-        var launcherName = Path.GetFileName(normalized.Replace('\\', '/'));
-        normalized = launcherName switch
-        {
-            "npm-cli.js" => "npm",
-            "npx-cli.js" => "npx",
-            "pnpm.cjs" => "pnpm",
-            "pnpx.cjs" => "pnpx",
-            "yarn.js" => "yarn",
-            "yarnpkg.js" => "yarn",
-            "corepack.js" => "corepack",
-            "corepack.cjs" => "corepack",
-            "composer.phar" => "composer",
-            _ => normalized
-        };
         if (normalized == "yarnpkg")
             return "yarn";
         if (normalized == "bundler")
