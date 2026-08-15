@@ -62,7 +62,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string artifactId,
         string artifactVersion,
         string artifactDigest,
-        IReadOnlyList<VerifiedSignature> publisherSigners)
+        IReadOnlyList<VerifiedSignature> publisherSigners,
+        bool allowTrustedPublisherRotation = false)
     {
         var evidence = new List<PowerForgeReleaseEvidenceFile>
         {
@@ -127,8 +128,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             }
             string signatureThumbprint = DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(signature.Thumbprint);
             if (!publisherSigners.Any(signer =>
-                    string.Equals(signatureThumbprint, signer.Thumbprint, StringComparison.OrdinalIgnoreCase) &&
-                    DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(signature.Subject, signer.Subject)))
+                    DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(signature.Subject, signer.Subject) &&
+                    (allowTrustedPublisherRotation ||
+                     string.Equals(signatureThumbprint, signer.Thumbprint, StringComparison.OrdinalIgnoreCase))))
             {
                 throw Invalid($"SBOM '{Path.GetFileName(path)}' detached signature does not use the admitted artifact publisher certificate.");
             }

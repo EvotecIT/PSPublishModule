@@ -97,7 +97,8 @@ public sealed class PowerForgeReleaseArtifactVerificationRequest
 
     /// <summary>
     /// Optional checksum-cataloged CycloneDX or SPDX SBOM sidecars. Each SBOM requires a detached CMS
-    /// signature at <c>&lt;sbom-path&gt;.p7s</c> from the exact publisher certificate admitted for the artifact.
+    /// signature at <c>&lt;sbom-path&gt;.p7s</c> from the admitted publisher. Certificate-store signing requires
+    /// the exact certificate; Azure Artifact Signing permits a trusted same-subject rotated certificate.
     /// </summary>
     public string[] SbomPaths { get; set; } = Array.Empty<string>();
 }

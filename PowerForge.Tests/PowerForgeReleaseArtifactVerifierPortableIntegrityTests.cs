@@ -411,7 +411,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     public void Verify_PortableCliAcceptsAzureCertificateRotationForDirectInventory()
     {
         using var fixture = new PortableFixture();
-        fixture.ConfigureSubjectNameSigning(azureArtifactSigning: true);
+        fixture.ConfigureSubjectNameSigning(azureArtifactSigning: true, zip: false);
         PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
         request.ArtifactPath = fixture.ExecutablePath;
         request.SignThumbprint = null;
@@ -432,7 +432,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     public void Verify_PortableCliRejectsUntrustedDirectInventoryCertificateDuringAzureRotation()
     {
         using var fixture = new PortableFixture();
-        fixture.ConfigureSubjectNameSigning(azureArtifactSigning: true);
+        fixture.ConfigureSubjectNameSigning(azureArtifactSigning: true, zip: false);
         PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
         request.ArtifactPath = fixture.ExecutablePath;
         request.SignThumbprint = null;
@@ -550,8 +550,27 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     public void Verify_PortableCliRecoversMatrixNamedDirectExecutableFromCustomOutputPath()
     {
         using var fixture = new PortableFixture();
+        fixture.ConfigureDirectPackaging();
         string relocatedExecutable = fixture.WriteRelocatedMatrixNamedDirectExecutableFromCustomOutputPath();
         PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = string.Empty;
+        request.SignaturePaths = Array.Empty<string>();
+        request.SbomPaths = Array.Empty<string>();
+
+        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal(Path.GetFullPath(relocatedExecutable), result.ArtifactPath);
+    }
+
+    [Fact]
+    public void Verify_PortableCliRecoversMatrixNamedDirectBundleFromCustomOutputPath()
+    {
+        using var fixture = new PortableFixture();
+        const string bundleId = "package";
+        fixture.ConfigureBundle(bundleId, bundleZip: false);
+        string relocatedExecutable = fixture.WriteRelocatedMatrixNamedDirectBundleFromCustomOutputPath(bundleId);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.BundleId = bundleId;
         request.ArtifactPath = string.Empty;
         request.SignaturePaths = Array.Empty<string>();
         request.SbomPaths = Array.Empty<string>();
@@ -565,6 +584,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     public void Verify_PortableCliRejectsExplicitDirectExecutableFromDifferentMatrixEntry()
     {
         using var fixture = new PortableFixture();
+        fixture.ConfigureDirectPackaging();
         string differentMatrixExecutable = fixture.WriteRelocatedDirectExecutableForDifferentMatrixEntry();
         PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
         request.ArtifactPath = differentMatrixExecutable;
@@ -734,6 +754,55 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 new
                 {
                     Category = "Publish",
+                    Target = "Sample.CLI",
+                    Kind = "Cli",
+                    Runtime = "win-x64",
+                    Framework = "net10.0",
+                    Style = "PortableCompat",
+                    OutputDir = Path.GetDirectoryName(retiredExecutable)!,
+                    ZipPath = string.Empty,
+                    ExePath = retiredExecutable,
+                    SignedFiles = 1,
+                    SignedFilePaths = new[] { retiredExecutable },
+                    SourceRevision,
+                    SourceDirty = false
+                }
+            }));
+            base.WriteChecksums(
+                ManifestPath,
+                ConfigurationPath,
+                relocatedExecutable,
+                relocatedInventory,
+                relocatedSignature);
+            return relocatedExecutable;
+        }
+
+        internal string WriteRelocatedMatrixNamedDirectBundleFromCustomOutputPath(string bundleId)
+        {
+            WriteDirectInventory(bundleId: bundleId);
+            string aliasName = DotNetPublishReleaseAssetNaming.CreateDirectMatrixAssetName(
+                "Sample.CLI",
+                "net10.0",
+                "win-x64",
+                "PortableCompat",
+                DotNetPublishArtefactCategory.Bundle,
+                bundleId,
+                ExecutablePath);
+            string relocatedDirectory = Directory.CreateDirectory(Path.Combine(Root, "release-assets")).FullName;
+            string relocatedExecutable = Path.Combine(relocatedDirectory, aliasName);
+            File.Copy(ExecutablePath, relocatedExecutable, overwrite: true);
+            string relocatedInventory = relocatedExecutable + PowerForgePortablePayloadInventory.DirectInventorySuffix;
+            string relocatedSignature = relocatedExecutable + PowerForgePortablePayloadInventory.DirectSignatureSuffix;
+            File.Copy(DirectInventoryPath, relocatedInventory, overwrite: true);
+            File.Copy(DirectSignaturePath, relocatedSignature, overwrite: true);
+            File.Delete(ExecutablePath);
+            string retiredExecutable = Path.Combine("custom-output", Path.GetFileName(ExecutablePath));
+            File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    Category = "Bundle",
+                    BundleId = bundleId,
                     Target = "Sample.CLI",
                     Kind = "Cli",
                     Runtime = "win-x64",

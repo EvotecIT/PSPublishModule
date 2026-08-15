@@ -233,7 +233,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             artifactId,
             version,
             artifactDigest,
-            signatures)
+            signatures,
+            allowTrustedPublisherRotation:
+                expected.Sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning)
             .Concat(directInventoryEvidence)
             .ToArray();
 
@@ -326,16 +328,20 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         }
 
         string fileName = Path.GetFileName(normalized);
-        string? matrixAssetName = directEntry.HasValue
-            ? DotNetPublishReleaseAssetNaming.CreateDirectMatrixAssetName(
+        string? matrixAssetName = null;
+        if (directEntry.HasValue)
+        {
+            string directBundleId = ReadString(directEntry.Value, "BundleId");
+            bool isBundle = Is(directEntry.Value, "Category", "Bundle");
+            matrixAssetName = DotNetPublishReleaseAssetNaming.CreateDirectMatrixAssetName(
                 ReadString(directEntry.Value, "Target"),
                 ReadString(directEntry.Value, "Framework"),
                 ReadString(directEntry.Value, "Runtime"),
                 ReadString(directEntry.Value, "Style"),
-                DotNetPublishArtefactCategory.Publish,
-                bundleId: null,
-                manifestValue)
-            : null;
+                isBundle ? DotNetPublishArtefactCategory.Bundle : DotNetPublishArtefactCategory.Publish,
+                isBundle && !string.IsNullOrWhiteSpace(directBundleId) ? directBundleId : null,
+                manifestValue);
+        }
         string? requiredRecoverySuffix = directEntry.HasValue
             ? TryBuildPortableManifestExecutableRecoverySuffix(directEntry.Value, manifestValue)
             : null;

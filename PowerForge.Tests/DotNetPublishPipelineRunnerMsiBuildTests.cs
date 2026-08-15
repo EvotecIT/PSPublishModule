@@ -991,8 +991,24 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var second = CreateReleaseGroupInstaller("agent.msi", "AgentFiles");
             first.Versioning!.ReleaseGroup = null;
             second.Versioning!.ReleaseGroup = null;
+            second.PrepareFromTarget = "agent";
             first.Versioning.StatePath = "Build/versioning/Product.state.json";
             second.Versioning.StatePath = "Build/versioning/product.state.json";
+            spec.Targets =
+            [
+                spec.Targets[0],
+                new DotNetPublishTarget
+                {
+                    Name = "agent",
+                    ProjectPath = app,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net10.0",
+                        Runtimes = new[] { "win-x64" },
+                        UseStaging = false
+                    }
+                }
+            ];
             spec.Installers = new[] { first, second };
 
             var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
@@ -1751,7 +1767,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
-    public void BuildPublishMsBuildProperties_ThrowsWhenApplyToPublishInstallersResolveDifferentVersions()
+    public void Plan_ThrowsWhenApplyToPublishInstallersResolveDifferentVersions()
     {
         var root = CreateTempRoot();
         try
@@ -1793,18 +1809,10 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 }
             };
 
-            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
-            var target = Assert.Single(plan.Targets);
-
             var ex = Assert.Throws<InvalidOperationException>(() =>
-                DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
-                    plan,
-                    target,
-                    "net10.0",
-                    "win-x64",
-                    DotNetPublishStyle.PortableCompat));
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
 
-            Assert.Contains("resolved publish property 'Version'", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("resolved conflicting release versions", ex.Message, StringComparison.Ordinal);
         }
         finally
         {
