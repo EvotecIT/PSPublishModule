@@ -184,19 +184,26 @@ public sealed partial class WebAgentContentSecurityScanner
         }
 
         PropagateDownloadedPathsThroughFileTransforms(normalized, positionOffset, flowState);
+        TrackDownloadedArchiveExtractions(normalized, positionOffset, flowState);
+        TrackRemoteRepositoryClones(normalized, original, lineOffset, countLogicalLines, positionOffset, flowState);
         ScanDownloadedReaderPipelines(normalized, path, findings, positionOffset, flowState);
 
-        if (flowState.DownloadedPaths.Count == 0)
+        if (flowState.DownloadedPaths.Count == 0 &&
+            flowState.UntrustedDirectoryPrefixes.Count == 0 &&
+            flowState.UnknownExtractedContent.Count == 0)
             return;
 
         foreach (Match interpreter in InterpreterCommandRegex.Matches(normalized))
         {
             foreach (var token in Tokenize(interpreter.Groups["arguments"].Value))
             {
-                var candidate = NormalizeComparedPath(token);
-                if (!flowState.DownloadedPaths.TryGetValue(candidate, out var download) ||
-                    download.Position >= positionOffset + interpreter.Index ||
-                    !flowState.ReportedPaths.Add(candidate))
+                if (!TryResolveUntrustedExecutionOrigin(
+                        token,
+                        positionOffset + interpreter.Index,
+                        flowState,
+                        out var download,
+                        out var reportKey) ||
+                    !flowState.ReportedPaths.Add(reportKey))
                     continue;
 
                 AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path,
@@ -208,10 +215,13 @@ public sealed partial class WebAgentContentSecurityScanner
 
         foreach (var candidate in EnumerateDirectlyExecutedPaths(normalized))
         {
-            var normalizedPath = NormalizeComparedPath(candidate.Path);
-            if (!flowState.DownloadedPaths.TryGetValue(normalizedPath, out var download) ||
-                download.Position >= positionOffset + candidate.Index ||
-                !flowState.ReportedPaths.Add(normalizedPath))
+            if (!TryResolveUntrustedExecutionOrigin(
+                    candidate.Path,
+                    positionOffset + candidate.Index,
+                    flowState,
+                    out var download,
+                    out var reportKey) ||
+                !flowState.ReportedPaths.Add(reportKey))
                 continue;
 
             AddFinding(findings, "error", "PFAGENT.COMMAND.REMOTE_EXECUTION", path,
@@ -224,6 +234,8 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         public long NextPosition { get; set; }
         public Dictionary<string, SavedDownload> DownloadedPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, SavedDownload> UntrustedDirectoryPrefixes { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<SavedDownload> UnknownExtractedContent { get; } = [];
         public HashSet<string> ReportedPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
@@ -236,6 +248,8 @@ public sealed partial class WebAgentContentSecurityScanner
         foreach (Match match in SavedArtifactDotSourceRegex.Matches(content))
             yield return (match.Groups["path"].Value, match.Index);
         foreach (var candidate in EnumerateStartProcessPaths(content))
+            yield return candidate;
+        foreach (var candidate in EnumerateLaunchWrapperPaths(content))
             yield return candidate;
     }
 

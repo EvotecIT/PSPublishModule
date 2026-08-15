@@ -97,7 +97,7 @@ public sealed partial class WebAgentContentSecurityScanner
                 }
                 if (tokens[verbIndex].Equals("run", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (RejectUvRunPackageManagerPayload(tokens, verbIndex + 1, path, line, findings))
+                    if (RejectUvRunPayload(tokens, verbIndex + 1, path, line, findings))
                         return;
                     var requirementInput = FindOptionValue(tokens, verbIndex + 1, "--with-requirements", "--with-editable");
                     if (requirementInput is not null)
@@ -185,7 +185,7 @@ public sealed partial class WebAgentContentSecurityScanner
         => module.ToLowerInvariant() is "build" or "installer" or "setuptools" or "wheel" or
             "hatch" or "hatchling" or "flit" or "flit_core" or "poetry" or "ensurepip" or "easy_install";
 
-    private static bool RejectUvRunPackageManagerPayload(
+    private static bool RejectUvRunPayload(
         string[] tokens,
         int start,
         string path,
@@ -198,7 +198,10 @@ public sealed partial class WebAgentContentSecurityScanner
             if (token == "--")
             {
                 index++;
-                return RejectPackageManagerInvocationAt("uv run", tokens, index, path, line, findings);
+                if (index >= tokens.Length)
+                    return false;
+                AddUnverifiableOperand("uv run", path, line, findings, "arbitrary command payload");
+                return true;
             }
             if (token.Equals("--with", StringComparison.OrdinalIgnoreCase) ||
                 token.Equals("--with-requirements", StringComparison.OrdinalIgnoreCase) ||
@@ -220,7 +223,8 @@ public sealed partial class WebAgentContentSecurityScanner
                 continue;
             if (token.StartsWith("-", StringComparison.Ordinal))
                 continue;
-            return RejectPackageManagerInvocationAt("uv run", tokens, index, path, line, findings);
+            AddUnverifiableOperand("uv run", path, line, findings, "arbitrary command payload");
+            return true;
         }
         return false;
     }

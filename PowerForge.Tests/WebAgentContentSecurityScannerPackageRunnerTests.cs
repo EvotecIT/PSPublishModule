@@ -102,7 +102,6 @@ public sealed partial class WebAgentContentSecurityScannerTests
     [InlineData("bundle add safe-gem", "rubygems")]
     [InlineData("npm init safe-starter", "npm")]
     [InlineData("npm create safe-starter", "npm")]
-    [InlineData("uv run --with safe-package python script.py", "pypi")]
     public void Scan_VerifiesPackageExecutingCommandAliases(string command, string ecosystem)
     {
         using var handler = new RegistryHandler(_ => ecosystem switch
