@@ -24,6 +24,11 @@ public sealed partial class WebAgentContentSecurityScanner
             if (moduleIndex < 0 || moduleIndex + 1 >= tokens.Length)
                 return;
             var module = tokens[moduleIndex + 1];
+            if (IsPythonPipxModule(module))
+            {
+                ParsePipx(tokens, moduleIndex + 2, $"{tokens[0]} -m pipx", path, line, references, findings);
+                return;
+            }
             if (IsPythonPackagingModule(module))
             {
                 AddUnverifiableOperand($"{tokens[0]} -m {module}", path, line, findings,
@@ -108,38 +113,7 @@ public sealed partial class WebAgentContentSecurityScanner
             return;
         }
         if (command == "pipx")
-        {
-            if (FindOptionValue(tokens, 1, "--pip-args", "--preinstall") is not null)
-            {
-                AddUnverifiableOperand("pipx", path, line, findings, "auxiliary dependency or pip argument input");
-                return;
-            }
-            var verbIndex = FindKnownVerbIndex(tokens, 1,
-                new[] { "install", "run", "runpip", "inject", "upgrade", "upgrade-all", "reinstall", "reinstall-all" },
-                "pipx", path, line, findings);
-            if (verbIndex < 0)
-                return;
-            if (tokens[verbIndex].Equals("upgrade-all", StringComparison.OrdinalIgnoreCase) ||
-                tokens[verbIndex].Equals("reinstall-all", StringComparison.OrdinalIgnoreCase))
-            {
-                AddUnverifiableOperand("pipx " + tokens[verbIndex], path, line, findings, "installed application package set");
-                return;
-            }
-            if (tokens[verbIndex].Equals("runpip", StringComparison.OrdinalIgnoreCase))
-            {
-                AddUnverifiableOperand("pipx runpip", path, line, findings, "forwarded pip command");
-                return;
-            }
-            if (!tokens[verbIndex].Equals("inject", StringComparison.OrdinalIgnoreCase))
-            {
-                AddRunnerOperand("pypi", "pipx " + tokens[verbIndex], tokens, verbIndex + 1, path, line, references, findings);
-                return;
-            }
-
-            var environmentIndex = FindNextOperand(tokens, verbIndex + 1);
-            AddMultipleOperands("pypi", "pipx inject", tokens, environmentIndex < 0 ? tokens.Length : environmentIndex + 1,
-                path, line, references, findings);
-        }
+            ParsePipx(tokens, 1, "pipx", path, line, references, findings);
     }
 
     private static bool ContainsPythonSetupScript(IEnumerable<string> tokens)
@@ -149,6 +123,51 @@ public sealed partial class WebAgentContentSecurityScanner
     private static bool IsPythonPipModule(string module)
         => module.Equals("pip", StringComparison.OrdinalIgnoreCase) ||
            module.Equals("pip.__main__", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPythonPipxModule(string module)
+        => module.Equals("pipx", StringComparison.OrdinalIgnoreCase) ||
+           module.Equals("pipx.__main__", StringComparison.OrdinalIgnoreCase);
+
+    private static void ParsePipx(
+        string[] tokens,
+        int start,
+        string command,
+        string path,
+        int line,
+        ICollection<WebAgentPackageReference> references,
+        ICollection<WebAgentContentSecurityFinding> findings)
+    {
+        if (FindOptionValue(tokens, start, "--pip-args", "--preinstall") is not null)
+        {
+            AddUnverifiableOperand(command, path, line, findings, "auxiliary dependency or pip argument input");
+            return;
+        }
+        var verbIndex = FindKnownVerbIndex(tokens, start,
+            new[] { "install", "run", "runpip", "inject", "upgrade", "upgrade-all", "reinstall", "reinstall-all" },
+            command, path, line, findings);
+        if (verbIndex < 0)
+            return;
+        if (tokens[verbIndex].Equals("upgrade-all", StringComparison.OrdinalIgnoreCase) ||
+            tokens[verbIndex].Equals("reinstall-all", StringComparison.OrdinalIgnoreCase))
+        {
+            AddUnverifiableOperand(command + " " + tokens[verbIndex], path, line, findings, "installed application package set");
+            return;
+        }
+        if (tokens[verbIndex].Equals("runpip", StringComparison.OrdinalIgnoreCase))
+        {
+            AddUnverifiableOperand(command + " runpip", path, line, findings, "forwarded pip command");
+            return;
+        }
+        if (!tokens[verbIndex].Equals("inject", StringComparison.OrdinalIgnoreCase))
+        {
+            AddRunnerOperand("pypi", command + " " + tokens[verbIndex], tokens, verbIndex + 1, path, line, references, findings);
+            return;
+        }
+
+        var environmentIndex = FindNextOperand(tokens, verbIndex + 1);
+        AddMultipleOperands("pypi", command + " inject", tokens, environmentIndex < 0 ? tokens.Length : environmentIndex + 1,
+            path, line, references, findings);
+    }
 
     private static bool IsPythonPackagingModule(string module)
         => module.ToLowerInvariant() is "build" or "installer" or "setuptools" or "wheel" or

@@ -18,6 +18,12 @@ public sealed partial class WebAgentContentSecurityScanner
     private static readonly Regex RuntimeInjectionEnvironmentRegex = new(
         $@"(?<![A-Za-z0-9_])(?:\$env:)?{RuntimeInjectionEnvironmentNamePattern}\s*=",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex PackageSourceEnvironmentUtilityWriteRegex = new(
+        BuildShellEnvironmentUtilityWritePattern(PackageSourceEnvironmentNamePattern),
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex RuntimeInjectionEnvironmentUtilityWriteRegex = new(
+        BuildShellEnvironmentUtilityWritePattern(RuntimeInjectionEnvironmentNamePattern),
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex PowerShellPackageSourceEnvironmentWriteRegex = new(
         BuildPowerShellEnvironmentWritePattern(PackageSourceEnvironmentNamePattern),
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -31,7 +37,7 @@ public sealed partial class WebAgentContentSecurityScanner
         BuildPowerShellEnvironmentWritePattern(CommandResolutionEnvironmentNamePattern),
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex CommandResolutionUtilityWriteRegex = new(
-        $@"(?:\bsetx(?:\.exe)?\s+['""]?(?<name>{CommandResolutionEnvironmentNamePattern})\b|\bset\s+(?:-[A-Za-z]+\s+)+(?<fishName>{CommandResolutionEnvironmentNamePattern})\b|\b(?:declare|typeset)\s+(?:-[A-Za-z]+\s+)+(?<declaredName>{CommandResolutionEnvironmentNamePattern})\s*=|\bsetenv\s+(?<cshName>{CommandResolutionEnvironmentNamePattern})\b)",
+        $@"(?:{BuildShellEnvironmentUtilityWritePattern(CommandResolutionEnvironmentNamePattern)}|\b(?:declare|typeset)\s+(?:-[A-Za-z]+\s+)+{CommandResolutionEnvironmentNamePattern}\s*=)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static void ScanPackageSourceEnvironmentOverrides(
@@ -53,6 +59,12 @@ public sealed partial class WebAgentContentSecurityScanner
                 GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
                 "PowerShell environment-provider writes cannot change package sources in machine-facing installation instructions.");
         }
+        foreach (Match match in PackageSourceEnvironmentUtilityWriteRegex.Matches(content))
+        {
+            AddFinding(findings, "error", "PFAGENT.PACKAGE.UNTRUSTED_SOURCE", path,
+                GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                "Shell environment commands cannot change package sources in machine-facing installation instructions.");
+        }
     }
 
     private static void ScanRuntimeInjectionEnvironmentOverrides(
@@ -73,6 +85,12 @@ public sealed partial class WebAgentContentSecurityScanner
             AddFinding(findings, "error", "PFAGENT.COMMAND.RUNTIME_INJECTION", path,
                 GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
                 "PowerShell environment-provider writes cannot configure runtime injection in machine-facing instructions.");
+        }
+        foreach (Match match in RuntimeInjectionEnvironmentUtilityWriteRegex.Matches(content))
+        {
+            AddFinding(findings, "error", "PFAGENT.COMMAND.RUNTIME_INJECTION", path,
+                GetReportedLine(content, match.Index, lineOffset, countLogicalLines),
+                "Shell environment commands cannot configure runtime injection in machine-facing instructions.");
         }
     }
 
@@ -107,6 +125,9 @@ public sealed partial class WebAgentContentSecurityScanner
     private static string BuildPowerShellEnvironmentWritePattern(string namePattern)
         => $@"(?:\b(?:Set-Item|New-Item|Set-Content|si|ni)\b[^\r\n;|]{{0,160}}?(?:-Path\s+|-LiteralPath\s+)?[""']?Env:[\\/]?{namePattern}\b|\[\s*(?:System\.)?Environment\s*\]::SetEnvironmentVariable\s*\(\s*[""']{namePattern}[""'])";
 
+    private static string BuildShellEnvironmentUtilityWritePattern(string namePattern)
+        => $@"(?:\bsetx(?:\.exe)?\s+['""]?{namePattern}\b|\bset\s+(?:-[A-Za-z]+\s+)+{namePattern}\b|\bsetenv\s+{namePattern}\b)";
+
     private static bool HasCommandScopedEnvironmentPrefix(string content, int commandIndex)
     {
         var start = commandIndex - 1;
@@ -139,13 +160,22 @@ public sealed partial class WebAgentContentSecurityScanner
             start--;
         var tokens = Tokenize(content[(start + 1)..commandIndex]);
         var envIndex = Array.FindIndex(tokens, static token => token.Equals("env", StringComparison.OrdinalIgnoreCase));
-        if (envIndex < 0)
-            return false;
-
-        return tokens.Skip(envIndex + 1).Any(static token =>
+        if (envIndex >= 0 && tokens.Skip(envIndex + 1).Any(static token =>
             token.Equals("-C", StringComparison.Ordinal) ||
             token.StartsWith("-C", StringComparison.Ordinal) && token.Length > 2 ||
             token.Equals("--chdir", StringComparison.OrdinalIgnoreCase) ||
-            token.StartsWith("--chdir=", StringComparison.OrdinalIgnoreCase));
+            token.StartsWith("--chdir=", StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        var sudoIndex = Array.FindIndex(tokens, static token => token.Equals("sudo", StringComparison.OrdinalIgnoreCase));
+        return sudoIndex >= 0 && tokens.Skip(sudoIndex + 1).Any(static token =>
+            token.Equals("-D", StringComparison.Ordinal) ||
+            token.StartsWith("-D", StringComparison.Ordinal) && token.Length > 2 ||
+            token.Equals("-R", StringComparison.Ordinal) ||
+            token.StartsWith("-R", StringComparison.Ordinal) && token.Length > 2 ||
+            token.Equals("--chdir", StringComparison.OrdinalIgnoreCase) ||
+            token.StartsWith("--chdir=", StringComparison.OrdinalIgnoreCase) ||
+            token.Equals("--chroot", StringComparison.OrdinalIgnoreCase) ||
+            token.StartsWith("--chroot=", StringComparison.OrdinalIgnoreCase));
     }
 }

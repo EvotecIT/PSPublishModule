@@ -5,7 +5,7 @@ namespace PowerForge.Web;
 public sealed partial class WebAgentContentSecurityScanner
 {
     private static readonly Regex CommandSegmentRegex = new(
-        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|nuget(?=\s+(?:install|restore|update)\b)|Install-Package|Update-Package|Install-Module|Save-Module|Install-Script|Update-Script|Save-Script|Install-PSResource|Save-PSResource|Update-Module|Update-PSResource|Install-PackageProvider|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|poetry(?=\s+(?:add|install|sync|update|remove|lock|run|build|self|plugin|source|config|python)\b)|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
+        @"(?<![A-Za-z0-9_.-])(?<command>(?:dotnet|dnx|nuget(?:\.exe|\.cmd)?(?=\s+(?:install|restore|update)\b)|Install-Package|Update-Package|Install-Module|Save-Module|Install-Script|Update-Script|Save-Script|Install-PSResource|Save-PSResource|Update-Module|Update-PSResource|Install-PackageProvider|Register-PSRepository|Set-PSRepository|Register-PSResourceRepository|Set-PSResourceRepository|corepack|npm|npx|pnpx|pnpm|yarnpkg|yarn|bun|bunx|python(?:\d+(?:\.\d+)*)?|py|pip(?:\d+(?:\.\d+)*)?|uv|uvx|pipx|poetry(?=\s+(?:add|install|sync|update|remove|lock|run|build|self|plugin|source|config|python)\b)|cargo|gem|composer|bundle)\b(?:[^\x5C`\^\r\n;&|]|[\x5C`\^]\r?\n|[\x5C`\^][^\r\n])*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ShellTokenConstructionRegex = new(
         @"[\x5C`](?!\r?\n)[^\r\n]",
