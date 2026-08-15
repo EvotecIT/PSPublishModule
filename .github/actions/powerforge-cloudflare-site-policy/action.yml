@@ -81,11 +81,22 @@ runs:
       with:
         global-json-file: ${{ github.action_path }}/../../../global.json
 
+    - name: Build PowerForge Web CLI
+      shell: pwsh
+      env:
+        POWERFORGE_CLOUDFLARE_CLI_PROJECT: ${{ github.action_path }}/../../../PowerForge.Web.Cli/PowerForge.Web.Cli.csproj
+      run: |
+        dotnet build $env:POWERFORGE_CLOUDFLARE_CLI_PROJECT --configuration Release --framework net10.0 --nologo --verbosity minimal
+        if ($LASTEXITCODE -ne 0) {
+          throw "Building the PowerForge Web CLI failed with exit code $LASTEXITCODE."
+        }
+
     - name: Resolve incremental purge state
       id: incremental
       shell: pwsh
       env:
         POWERFORGE_MANAGE_INCREMENTAL_PURGE: ${{ inputs.manage-incremental-purge }}
+        POWERFORGE_CLOUDFLARE_CLI_PROJECT: ${{ github.action_path }}/../../../PowerForge.Web.Cli/PowerForge.Web.Cli.csproj
         POWERFORGE_DEPLOYMENT_ID: ${{ inputs.deployment-id }}
         POWERFORGE_DEPLOYMENT_JOB_ID: ${{ inputs.deployment-job-id }}
         POWERFORGE_CLOUDFLARE_SITE_CONFIG: ${{ inputs.site-config }}
@@ -103,11 +114,22 @@ runs:
           throw 'site-config must identify a file inside the caller repository.'
         }
 
-        $site = Get-Content -LiteralPath $siteConfig -Raw | ConvertFrom-Json
         if ($env:POWERFORGE_MANAGE_INCREMENTAL_PURGE -notin @('true', 'false')) {
           throw 'manage-incremental-purge must be true or false.'
         }
-        $enabled = ($env:POWERFORGE_MANAGE_INCREMENTAL_PURGE -eq 'true' -and [string]$site.Cloudflare.PurgeMode -ceq 'incremental')
+        $jsonOutput = @(dotnet run --no-build --no-restore --configuration Release --framework net10.0 --project $env:POWERFORGE_CLOUDFLARE_CLI_PROJECT -- cloudflare inspect --site-config $siteConfig --output json)
+        if ($LASTEXITCODE -ne 0) {
+          throw "Resolving the inherited Cloudflare site profile failed with exit code $LASTEXITCODE."
+        }
+        try {
+          $profile = ($jsonOutput -join [Environment]::NewLine) | ConvertFrom-Json
+          if ($profile.success -ne $true -or [string]::IsNullOrWhiteSpace([string]$profile.result.purgeMode)) {
+            throw 'The Cloudflare profile result did not contain purgeMode.'
+          }
+        } catch {
+          throw "Resolving the inherited Cloudflare site profile returned invalid JSON: $($_.Exception.Message)"
+        }
+        $enabled = ($env:POWERFORGE_MANAGE_INCREMENTAL_PURGE -eq 'true' -and [string]$profile.result.purgeMode -ceq 'incremental')
         if ($enabled -and [string]::IsNullOrWhiteSpace($env:POWERFORGE_GITHUB_TOKEN)) {
           throw 'Incremental purge requires github-token with Actions read and Deployments read permission.'
         }
@@ -196,6 +218,7 @@ runs:
       shell: pwsh
       env:
         POWERFORGE_CLOUDFLARE_API_TOKEN: ${{ inputs.api-token }}
+        POWERFORGE_CLOUDFLARE_BASELINE_REASON: ${{ steps.baseline_order.outputs.reason }}
         POWERFORGE_CLOUDFLARE_CURRENT_MANIFEST: ${{ runner.temp }}/powerforge-cloudflare-cache-current/manifest.json
         POWERFORGE_CLOUDFLARE_DRY_RUN: ${{ inputs.dry-run }}
         POWERFORGE_CLOUDFLARE_FORCE_HOSTNAME_FALLBACK: ${{ steps.site_policy.outputs.changes_required || 'false' }}

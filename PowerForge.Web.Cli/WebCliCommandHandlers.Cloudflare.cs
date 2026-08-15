@@ -30,6 +30,9 @@ internal static partial class WebCliCommandHandlers
         if (verb.Equals("manifest", StringComparison.OrdinalIgnoreCase))
             return HandleCloudflareManifest(subArgs, outputJson, logger, outputSchemaVersion);
 
+        if (verb.Equals("inspect", StringComparison.OrdinalIgnoreCase))
+            return HandleCloudflareInspect(subArgs, outputJson, logger, outputSchemaVersion);
+
         if (verb.Equals("dns-record", StringComparison.OrdinalIgnoreCase) ||
             verb.Equals("dns", StringComparison.OrdinalIgnoreCase))
         {
@@ -69,8 +72,45 @@ internal static partial class WebCliCommandHandlers
             return HandleCloudflareCachePolicy(subArgs, outputJson, logger, outputSchemaVersion);
         }
 
-        return Fail($"Unknown cloudflare verb '{verb}'. Supported: purge, verify, manifest, site-policy, cache-policy, dns-record.", outputJson, logger, "web.cloudflare");
+        return Fail($"Unknown cloudflare verb '{verb}'. Supported: purge, verify, inspect, manifest, site-policy, cache-policy, dns-record.", outputJson, logger, "web.cloudflare");
     }
+
+    private static int HandleCloudflareInspect(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
+    {
+        const string command = "web.cloudflare.inspect";
+        if (!TryLoadCloudflareSiteProfile(subArgs, outputJson, logger, command, out var siteProfile, out var loadError))
+            return loadError;
+        if (siteProfile is null)
+            return Fail("cloudflare inspect requires --site-config.", outputJson, logger, command);
+
+        var result = BuildCloudflareInspectResult(siteProfile);
+        if (outputJson)
+        {
+            WebCliJsonWriter.Write(new WebCliJsonEnvelope
+            {
+                SchemaVersion = outputSchemaVersion,
+                Command = command,
+                Success = true,
+                ExitCode = 0,
+                Result = result
+            });
+        }
+        else
+        {
+            logger.Info($"Cloudflare profile: baseUrl={siteProfile.BaseUrl}, purgeMode={siteProfile.Cloudflare?.PurgeMode ?? "files"}.");
+        }
+
+        return 0;
+    }
+
+    /// <summary>Builds the machine-readable effective Cloudflare profile used by reusable workflows.</summary>
+    internal static JsonElement BuildCloudflareInspectResult(CloudflareSiteRouteProfile siteProfile) =>
+        JsonSerializer.SerializeToElement(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["siteConfig"] = siteProfile.SiteConfigPath,
+            ["baseUrl"] = siteProfile.BaseUrl,
+            ["purgeMode"] = siteProfile.Cloudflare?.PurgeMode ?? "files"
+        }, WebCliJson.Options);
 
     private static int HandleCloudflareDnsRecord(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {

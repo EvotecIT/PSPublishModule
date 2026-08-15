@@ -80,6 +80,90 @@ public sealed partial class CloudflareIncrementalCachePurgeTests
     }
 
     [Fact]
+    public void IncrementalPurge_ShouldRetainPreviousHostnameWhenDeploymentContinuityIsUnproven()
+    {
+        var root = NewTempDirectory();
+        try
+        {
+            var entries = new[] { Entry(string.Empty, 'a'), Entry("index.html", 'a') };
+            var previousPath = WriteManifest(root, "previous.json", entries, baseUrl: "https://old.example.test/");
+            var currentPath = WriteManifest(root, "current.json", entries, baseUrl: "https://new.example.test/");
+            var handler = new RecordingHandler(SuccessResponse());
+            using var client = NewClient(handler);
+
+            var result = CloudflareIncrementalCachePurger.Purge(
+                ZoneId,
+                "secret-token",
+                "https://new.example.test/",
+                currentPath,
+                previousPath,
+                dryRun: false,
+                logger: null,
+                client,
+                forcedHostnameFallbackReason: "an intervening deployment could not be correlated");
+
+            Assert.True(result.Success, result.Message);
+            Assert.True(result.UsedFallback);
+            Assert.Contains("intervening deployment", result.FallbackReason, StringComparison.OrdinalIgnoreCase);
+            var hosts = JsonNode.Parse(Assert.Single(handler.Bodies))!["hosts"]!.AsArray()
+                .Select(node => node!.GetValue<string>())
+                .ToArray();
+            Assert.Equal(["new.example.test", "old.example.test"], hosts);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void CloudflareInspect_ShouldResolveIncrementalModeThroughSiteInheritance()
+    {
+        var root = NewTempDirectory();
+        try
+        {
+            var baseConfig = Path.Combine(root, "base.json");
+            var siteConfig = Path.Combine(root, "site.json");
+            File.WriteAllText(baseConfig,
+                """
+                {
+                  "Name": "Inherited Cloudflare profile",
+                  "BaseUrl": "https://example.test/",
+                  "Cloudflare": {
+                    "PurgeMode": "incremental",
+                    "Cache": { "EdgeTtlSeconds": 604800 }
+                  }
+                }
+                """);
+            File.WriteAllText(siteConfig,
+                """
+                {
+                  "extends": "./base.json",
+                  "Name": "Child site"
+                }
+                """);
+
+            var profile = CloudflareRouteProfileResolver.Load(siteConfig);
+            var result = WebCliCommandHandlers.BuildCloudflareInspectResult(profile);
+            var exitCode = WebCliCommandHandlers.HandleSubCommand(
+                "cloudflare",
+                ["inspect", "--site-config", siteConfig],
+                outputJson: false,
+                new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+
+            Assert.Equal(0, exitCode);
+            Assert.Equal("https://example.test/", result.GetProperty("baseUrl").GetString());
+            Assert.Equal("incremental", result.GetProperty("purgeMode").GetString());
+            Assert.Equal(Path.GetFullPath(siteConfig), result.GetProperty("siteConfig").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void CompositeAction_ShouldForceHostnameFallbackWhenSitePolicyRequiresChanges()
     {
         var action = ReadRepoFile(".github", "actions", "powerforge-cloudflare-site-policy", "action.yml");
@@ -90,7 +174,22 @@ public sealed partial class CloudflareIncrementalCachePurgeTests
         Assert.Contains("steps.site_policy.outputs.changes_required", action, StringComparison.Ordinal);
         Assert.Contains("result.result.changesRequired", policyScript, StringComparison.Ordinal);
         Assert.Contains("changes_required=", policyScript, StringComparison.Ordinal);
-        Assert.Contains("--force-hostname-fallback", purgeScript, StringComparison.Ordinal);
+        Assert.Contains("--force-hostname-fallback-reason", purgeScript, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_CLOUDFLARE_BASELINE_REASON: ${{ steps.baseline_order.outputs.reason }}", action, StringComparison.Ordinal);
+        Assert.Contains("cloudflare inspect", action, StringComparison.Ordinal);
+        Assert.DoesNotContain("site.Cloudflare.PurgeMode", action, StringComparison.Ordinal);
+        Assert.Contains("$previousManifestAvailable", purgeScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("POWERFORGE_CLOUDFLARE_USE_PREVIOUS -eq 'true'", purgeScript, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReusableWebsiteWorkflow_ShouldResolveInheritedIncrementalMode()
+    {
+        var workflow = ReadRepoFile(".github", "workflows", "powerforge-website-run.yml");
+
+        Assert.Contains("cloudflare inspect", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("site.Cloudflare.PurgeMode", workflow, StringComparison.Ordinal);
+        Assert.Contains("profile.result.purgeMode", workflow, StringComparison.Ordinal);
     }
 
     [Fact]

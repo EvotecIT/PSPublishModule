@@ -53,15 +53,23 @@ $arguments = @(
 )
 
 $previousManifest = [IO.Path]::GetFullPath($env:POWERFORGE_CLOUDFLARE_PREVIOUS_MANIFEST)
-if ($env:POWERFORGE_CLOUDFLARE_USE_PREVIOUS -eq 'true' -and
-    (Test-Path -LiteralPath $previousManifest -PathType Leaf)) {
+$previousManifestAvailable = Test-Path -LiteralPath $previousManifest -PathType Leaf
+if ($previousManifestAvailable) {
     $arguments += @('--previous-manifest', $previousManifest)
 }
 if ($env:POWERFORGE_CLOUDFLARE_DRY_RUN -eq 'true') {
     $arguments += '--dry-run'
 }
+$fallbackReasons = [Collections.Generic.List[string]]::new()
 if ($env:POWERFORGE_CLOUDFLARE_FORCE_HOSTNAME_FALLBACK -eq 'true') {
-    $arguments += '--force-hostname-fallback'
+    $fallbackReasons.Add('the managed site policy was reconciled')
+}
+if ($env:POWERFORGE_CLOUDFLARE_USE_PREVIOUS -eq 'false' -and $previousManifestAvailable) {
+    $baselineReason = ([string]$env:POWERFORGE_CLOUDFLARE_BASELINE_REASON).Trim()
+    $fallbackReasons.Add($(if ($baselineReason) { $baselineReason } else { 'deployment continuity could not be proven' }))
+}
+if ($fallbackReasons.Count -gt 0) {
+    $arguments += @('--force-hostname-fallback-reason', ($fallbackReasons -join '; '))
 }
 
 dotnet @arguments

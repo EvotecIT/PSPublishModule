@@ -37,11 +37,10 @@ if (-not $siteConfig.StartsWith($workspacePrefix, [StringComparison]::Ordinal) -
 }
 
 $engineRoot = [IO.Path]::GetFullPath((Join-Path $env:GITHUB_ACTION_PATH '../../..'))
-$project = Join-Path $engineRoot 'PowerForge.Web.Cli/PowerForge.Web.Cli.csproj'
 $cli = Join-Path $engineRoot 'PowerForge.Web.Cli/bin/Release/net10.0/PowerForge.Web.Cli.dll'
-
-dotnet build $project --configuration Release --framework net10.0 --nologo --verbosity minimal
-Assert-LastExitCode -Operation 'Building PowerForge.Web CLI'
+if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
+    throw "Built PowerForge.Web CLI was not found: $cli"
+}
 
 $arguments = @(
     $cli,

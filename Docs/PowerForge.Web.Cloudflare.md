@@ -170,6 +170,9 @@ baselines are private, site-scoped repository artifacts, so deployments from
 different branches share the same continuity state. They are retained for seven
 days and are never published with the website;
 after a longer idle period, the next deployment safely uses a hostname purge.
+Purge-mode detection loads the effective site specification, including
+`extends`, so an inherited `Cloudflare.PurgeMode` has the same behavior as a
+value declared directly in the child configuration.
 Current-manifest artifact names remain unique to each reusable-workflow
 invocation so one caller run can deploy multiple sites or matrix entries without
 collisions.
@@ -205,10 +208,13 @@ stale policy, purge, and baseline update; deliberately rerunning the older Pages
 deployment remains supported and is distinguished from the earlier attempt. If Pages succeeds but
 the later policy or purge fails, the next run still sees that intervening Pages
 deployment and uses a hostname purge instead of comparing against a non-adjacent
-baseline. This remains safe when deployment and policy jobs from different runs
-overlap and does not depend on a post-deployment receipt upload. The caller token
-must grant `actions: read` and `deployments: read`; the reusable workflow declares
-both permissions.
+baseline. The last successful baseline remains available in this case only to
+discover a previous hostname; it is never used for a file diff. A hostname
+migration therefore invalidates both the old and current host even when an
+intervening deployment prevents incremental comparison. This remains safe when
+deployment and policy jobs from different runs overlap and does not depend on a
+post-deployment receipt upload. The caller token must grant `actions: read` and
+`deployments: read`; the reusable workflow declares both permissions.
 
 Incremental purge targets the canonical URLs emitted by the deployment. It is
 therefore intended for static sites whose query parameters do not select a

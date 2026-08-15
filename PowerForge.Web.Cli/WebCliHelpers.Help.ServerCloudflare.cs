@@ -15,8 +15,9 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web server scaffold --domain <domain> --repository <owner/repo> --repository-ref <sha> --engine-ref <sha> --host <host> --backup-repository <owner/repo> --backup-recipient <age1...> [--acme-account-id <id>] [--branch <name>] [--website-root <dir>] [--ssh-port <n>] [--site-id <id>] [--smoke-paths <paths>] [--recovery-watch-path <glob>] [--private-repository] [--www] [--cloudflare] [--out <dir>] [--force] [--output json]");
         Console.WriteLine("  powerforge-web server bootstrap-plan --manifest <serverrecovery.json> [--out <dir>] [--output json]");
         Console.WriteLine("  powerforge-web server restore-secrets-plan --manifest <serverrecovery.json> [--out <dir>] [--archive <encrypted-secrets.tar.gz.age>] [--output json]");
-        Console.WriteLine("  powerforge-web cloudflare purge --zone-id <id> [--token <token> | --token-env <env>] [--current-manifest <path> --previous-manifest <path>] [--force-hostname-fallback]");
+        Console.WriteLine("  powerforge-web cloudflare purge --zone-id <id> [--token <token> | --token-env <env>] [--current-manifest <path> --previous-manifest <path>] [--force-hostname-fallback | --force-hostname-fallback-reason <reason>]");
         Console.WriteLine("  powerforge-web cloudflare manifest create --site-config <site.json> --artifact <artifact.tar> --out <manifest.json>");
+        Console.WriteLine("  powerforge-web cloudflare inspect --site-config <site.json> [--output json]");
         Console.WriteLine("                     [--purge-mode <files|incremental|hostname|everything>] [--hostname <host>]");
         Console.WriteLine("                     [--purge-everything] [--site-config <site.json>] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>] [--dry-run]");
         Console.WriteLine("  powerforge-web cloudflare verify [--site-config <site.json>] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>]");

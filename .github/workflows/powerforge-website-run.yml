@@ -484,6 +484,7 @@ jobs:
         id: cloudflare_incremental
         shell: pwsh
         env:
+          POWERFORGE_CLOUDFLARE_CLI_PROJECT: ${{ github.workspace }}/.powerforge-runner/PowerForge.Web.Cli/PowerForge.Web.Cli.csproj
           POWERFORGE_GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
           POWERFORGE_SITE_CONFIG: ${{ format('./{0}/site.json', inputs.website_root) }}
         run: |
@@ -496,8 +497,19 @@ jobs:
             throw 'Site configuration must identify a file inside the caller repository.'
           }
 
-          $site = Get-Content -LiteralPath $siteConfig -Raw | ConvertFrom-Json
-          $enabled = ([string]$site.Cloudflare.PurgeMode -ceq 'incremental')
+          $jsonOutput = @(dotnet run --no-build --no-restore --framework net10.0 --project $env:POWERFORGE_CLOUDFLARE_CLI_PROJECT -- cloudflare inspect --site-config $siteConfig --output json)
+          if ($LASTEXITCODE -ne 0) {
+            throw "Resolving the inherited Cloudflare site profile failed with exit code $LASTEXITCODE."
+          }
+          try {
+            $profile = ($jsonOutput -join [Environment]::NewLine) | ConvertFrom-Json
+            if ($profile.success -ne $true -or [string]::IsNullOrWhiteSpace([string]$profile.result.purgeMode)) {
+              throw 'The Cloudflare profile result did not contain purgeMode.'
+            }
+          } catch {
+            throw "Resolving the inherited Cloudflare site profile returned invalid JSON: $($_.Exception.Message)"
+          }
+          $enabled = ([string]$profile.result.purgeMode -ceq 'incremental')
           $relativeConfig = [IO.Path]::GetRelativePath($workspace, $siteConfig).Replace([IO.Path]::DirectorySeparatorChar, '/')
           $scopeBytes = [Text.Encoding]::UTF8.GetBytes("$($env:POWERFORGE_GITHUB_REPOSITORY_ID)|$relativeConfig")
           $scope = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($scopeBytes)).ToLowerInvariant()
