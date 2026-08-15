@@ -297,6 +297,95 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_TargetOverridePrunesExcludedCompanionVersionTargets()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string appPath = Path.Combine(root, "App.csproj");
+            string portablePath = Path.Combine(root, "Portable.csproj");
+            File.WriteAllText(appPath, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+            File.WriteAllText(portablePath, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+            DotNetPublishInstaller installer = new()
+            {
+                Id = "app.msi",
+                PrepareFromTarget = "App",
+                Authoring = new PowerForgeInstallerDefinition
+                {
+                    Product =
+                    {
+                        Name = "App",
+                        Manufacturer = "Evotec",
+                        Version = "1.0.0",
+                        UpgradeCode = "{13f69244-93ee-4df9-baf6-ec7afc7ebd32}"
+                    },
+                    CompanyFolderName = "Evotec",
+                    InstallDirectoryName = "App",
+                    PayloadComponentGroupId = "AppFiles"
+                },
+                Versioning = new DotNetPublishMsiVersionOptions
+                {
+                    Enabled = true,
+                    ApplyToPublish = true,
+                    Monotonic = false,
+                    AdditionalPublishTargets = new[] { "Portable" }
+                }
+            };
+
+            PowerForgeReleaseResult result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec
+                        {
+                            DotNet = new DotNetPublishDotNetOptions { ProjectRoot = "." },
+                            Targets = new[]
+                            {
+                                new DotNetPublishTarget
+                                {
+                                    Name = "App",
+                                    ProjectPath = "App.csproj",
+                                    Publish = new DotNetPublishPublishOptions
+                                    {
+                                        Framework = "net10.0",
+                                        Runtimes = new[] { "win-x64" }
+                                    }
+                                },
+                                new DotNetPublishTarget
+                                {
+                                    Name = "Portable",
+                                    ProjectPath = "Portable.csproj",
+                                    Publish = new DotNetPublishPublishOptions
+                                    {
+                                        Framework = "net10.0",
+                                        Runtimes = new[] { "win-x64" }
+                                    }
+                                }
+                            },
+                            Installers = new[] { installer }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    PlanOnly = true,
+                    ToolsOnly = true,
+                    Targets = new[] { "App" }
+                });
+
+            Assert.True(result.Success);
+            Assert.Equal("App", Assert.Single(result.DotNetToolPlan!.Targets).Name);
+            Assert.Empty(Assert.Single(result.DotNetToolPlan.Installers).Versioning!.AdditionalPublishTargets);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ConfigurationOverride_AppliesToPackagesAndDotNetTools()
     {
         var root = CreateSandbox();

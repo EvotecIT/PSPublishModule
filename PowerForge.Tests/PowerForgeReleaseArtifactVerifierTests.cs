@@ -51,6 +51,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliDefaultsArtifactToSelectedManifestArchive()
+    {
+        using var fixture = new PortableFixture();
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = string.Empty;
+
+        PowerForgeReleaseArtifactEvidence result = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal(Path.GetFullPath(fixture.ArchivePath), result.ArtifactPath);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsBundleAbsentFromConfiguration()
     {
         using var fixture = new PortableFixture();
@@ -301,6 +313,22 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         Assert.Contains("admitted artifact publisher", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Verify_PortableCliAcceptsTrustedSamePublisherSbomCertificateRotationForAzureSigning()
+    {
+        using var fixture = new PortableFixture();
+        fixture.ConfigureSubjectNameSigning(azureArtifactSigning: true);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignThumbprint = null;
+        request.SignSubjectName = "CN=Publisher";
+
+        PowerForgeReleaseArtifactEvidence evidence = fixture
+            .CreateVerifier(sbomSignerThumbprint: VendorThumbprint)
+            .Verify(request);
+
+        Assert.Contains(evidence.EvidenceFiles, item => item.Role == "sbom-signature");
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -396,20 +424,26 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         internal PowerForgeReleaseArtifactVerifier CreateVerifier(
             string signerThumbprint = Thumbprint,
             string? inventorySignerThumbprint = null,
-            string? sbomSignerThumbprint = null) =>
+            Func<string, string>? signerThumbprintSelector = null,
+            bool inventoryCertificateTrusted = true,
+            string? sbomSignerThumbprint = null,
+            string? inventorySignerSubject = null) =>
             new(
                 path => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(
                     true,
                     0,
                     "CN=Publisher",
-                    signerThumbprint),
+                    signerThumbprintSelector?.Invoke(path) ?? signerThumbprint),
                 _ => "1.2.3+" + SourceRevision,
                 _ => "Sample.CLI",
-                (_, signature) => new PowerForgePayloadInventorySignature(
-                    "CN=Publisher",
+                verifyPortableInventory: (_, signature) => new PowerForgePayloadInventorySignature(
+                    signature.Length > 0 && signature[0] == 2
+                        ? "CN=Publisher"
+                        : inventorySignerSubject ?? "CN=Publisher",
                     signature.Length > 0 && signature[0] == 2
                         ? sbomSignerThumbprint ?? signerThumbprint
-                        : inventorySignerThumbprint ?? signerThumbprint));
+                        : inventorySignerThumbprint ?? signerThumbprint,
+                    inventoryCertificateTrusted));
 
         public void Dispose()
         {
@@ -544,7 +578,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             string runtime = "win-x64",
             string framework = "net10.0",
             string style = "PortableCompat",
-            bool sourceDirty = false)
+            bool sourceDirty = false,
+            string? bundleId = null)
         {
             PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
                 OutputDirectory,
@@ -553,11 +588,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 framework,
                 style,
                 SourceRevision,
-                ReadConfigurationPolicySha256(),
+                ReadConfigurationPolicySha256(bundleId),
                 ExecutablePath,
                 "Sample.CLI",
                 "1.2.3+" + SourceRevision,
                 new[] { ExecutablePath },
+                bundleId,
                 sourceDirty: sourceDirty,
                 includeCompleteOutput: false);
             File.WriteAllBytes(DirectInventoryPath, PowerForgePortablePayloadInventoryCms.Serialize(inventory));
@@ -891,7 +927,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath);
         }
 
-        internal void ConfigureSubjectNameSigning()
+        internal void ConfigureSubjectNameSigning(
+            bool azureArtifactSigning = false,
+            bool includeDlls = false,
+            bool zip = true,
+            bool rewritePortableEvidence = true)
         {
             File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
             {
@@ -909,14 +949,39 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                             Framework = "net10.0",
                             Runtimes = new[] { "win-x64" },
                             Style = "PortableCompat",
-                            Zip = true,
-                            Sign = new { Enabled = true, SubjectName = "Publisher" }
+                            Zip = zip,
+                            Sign = new
+                            {
+                                Enabled = true,
+                                IncludeDlls = includeDlls,
+                                Provider = azureArtifactSigning ? "AzureArtifactSigning" : "CertificateStore",
+                                SubjectName = "Publisher",
+                                AzureArtifactSigning = azureArtifactSigning ? new
+                                {
+                                    Endpoint = "https://weu.codesigning.azure.net/",
+                                    AccountName = "Signing",
+                                    CertificateProfileName = "Publisher",
+                                    DlibPath = "Azure.CodeSigning.Dlib.dll"
+                                } : null
+                            }
                         }
                     }
                 }
             }));
-            WritePortableInventory(new[] { ExecutablePath });
-            WriteArchiveFromOutput();
+            if (rewritePortableEvidence)
+            {
+                string[] signedPaths = includeDlls
+                    ? Directory.EnumerateFiles(OutputDirectory, "*", SearchOption.AllDirectories)
+                        .Where(path => path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                                       path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                        .ToArray()
+                    : new[] { ExecutablePath };
+                WritePortableInventory(signedPaths);
+                if (!zip)
+                    WriteDirectInventory();
+                WriteArchiveFromOutput();
+                WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
+            }
             WriteChecksums();
         }
 

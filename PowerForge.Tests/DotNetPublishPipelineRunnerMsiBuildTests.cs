@@ -578,6 +578,211 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void Plan_ReleaseGroupAppliesResolvedVersionToCompanionPortableTarget()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string app = CreateProject(root, "App/App.csproj");
+            string portable = CreateProject(root, "Portable/Portable.csproj");
+            DotNetPublishSpec spec = CreateBaseSpec(root, app);
+            spec.Targets[0].Publish.Style = DotNetPublishStyle.PortableCompat;
+            spec.Targets = spec.Targets.Concat(new[]
+            {
+                new DotNetPublishTarget
+                {
+                    Name = "portable",
+                    ProjectPath = portable,
+                    Kind = DotNetPublishTargetKind.Cli,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net8.0",
+                        Runtimes = new[] { "win-arm64" },
+                        Style = DotNetPublishStyle.PortableCompat,
+                        UseStaging = false
+                    }
+                }
+            }).ToArray();
+            DotNetPublishInstaller installer = CreateReleaseGroupInstaller("monitoring.msi", "MonitoringFiles");
+            installer.Versioning!.AdditionalPublishTargets = new[] { "portable" };
+            spec.Installers = new[] { installer };
+
+            DotNetPublishPlan plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            DotNetPublishTargetPlan portablePlan = Assert.Single(plan.Targets, target => target.Name == "portable");
+            Dictionary<string, string> properties = DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
+                plan,
+                portablePlan,
+                "net8.0",
+                "win-arm64",
+                DotNetPublishStyle.PortableCompat);
+
+            Assert.Equal(2, plan.MsiVersions.Count);
+            Assert.Equal(plan.MsiVersions.Values.First().Version, properties["Version"]);
+            Assert.Equal(plan.MsiVersions.Values.First().AssemblyVersion, properties["AssemblyVersion"]);
+            Assert.Equal(
+                plan.MsiVersions.Values.First().Version,
+                DotNetPublishPipelineRunner.ResolvePublishReleaseVersion(
+                    plan,
+                    "portable",
+                    "net8.0",
+                    "win-arm64",
+                    DotNetPublishStyle.PortableCompat));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_ProfileMayExcludeAValidCompanionPortableTarget()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string app = CreateProject(root, "App/App.csproj");
+            string portable = CreateProject(root, "Portable/Portable.csproj");
+            DotNetPublishSpec spec = CreateBaseSpec(root, app);
+            spec.Targets = spec.Targets.Concat(new[]
+            {
+                new DotNetPublishTarget
+                {
+                    Name = "portable",
+                    ProjectPath = portable,
+                    Kind = DotNetPublishTargetKind.Cli,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net8.0",
+                        Runtimes = new[] { "win-x64" },
+                        Style = DotNetPublishStyle.PortableCompat,
+                        UseStaging = false
+                    }
+                }
+            }).ToArray();
+            spec.Profiles = new[]
+            {
+                new DotNetPublishProfile
+                {
+                    Name = "monitoring",
+                    Default = true,
+                    Targets = new[] { "app" }
+                }
+            };
+            DotNetPublishInstaller installer = CreateReleaseGroupInstaller("monitoring.msi", "MonitoringFiles");
+            installer.Versioning!.AdditionalPublishTargets = new[] { "portable" };
+            spec.Installers = new[] { installer };
+
+            DotNetPublishPlan plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+
+            Assert.Equal("app", Assert.Single(plan.Targets).Name);
+            Assert.Empty(Assert.Single(plan.Installers).Versioning!.AdditionalPublishTargets);
+            Assert.Single(plan.MsiVersions);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_RejectsConflictingCompanionVersionsAcrossInstallers()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string app = CreateProject(root, "App/App.csproj");
+            string portable = CreateProject(root, "Portable/Portable.csproj");
+            DotNetPublishSpec spec = CreateBaseSpec(root, app);
+            spec.Targets = spec.Targets.Concat(new[]
+            {
+                new DotNetPublishTarget
+                {
+                    Name = "portable",
+                    ProjectPath = portable,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net8.0",
+                        Runtimes = new[] { "win-x64" },
+                        Style = DotNetPublishStyle.PortableCompat,
+                        UseStaging = false
+                    }
+                }
+            }).ToArray();
+            DotNetPublishInstaller first = CreateReleaseGroupInstaller("first.msi", "FirstFiles");
+            DotNetPublishInstaller second = CreateReleaseGroupInstaller("second.msi", "SecondFiles");
+            foreach (DotNetPublishInstaller installer in new[] { first, second })
+            {
+                installer.Versioning!.ReleaseGroup = null;
+                installer.Versioning.Monotonic = false;
+                installer.Versioning.AdditionalPublishTargets = new[] { "portable" };
+            }
+            first.Versioning!.Major = 1;
+            second.Versioning!.Major = 2;
+            spec.Installers = new[] { first, second };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+
+            Assert.Contains("conflicting release versions", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_RejectsConflictingCompanionAndPrimaryInstallerVersions()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string app = CreateProject(root, "App/App.csproj");
+            string portable = CreateProject(root, "Portable/Portable.csproj");
+            DotNetPublishSpec spec = CreateBaseSpec(root, app);
+            spec.Targets = spec.Targets.Concat(new[]
+            {
+                new DotNetPublishTarget
+                {
+                    Name = "portable",
+                    ProjectPath = portable,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net8.0",
+                        Runtimes = new[] { "win-x64" },
+                        Style = DotNetPublishStyle.PortableCompat,
+                        UseStaging = false
+                    }
+                }
+            }).ToArray();
+
+            DotNetPublishInstaller companionOwner = CreateReleaseGroupInstaller("app.msi", "AppFiles");
+            companionOwner.Versioning!.ReleaseGroup = null;
+            companionOwner.Versioning.Monotonic = false;
+            companionOwner.Versioning.Major = 1;
+            companionOwner.Versioning.AdditionalPublishTargets = new[] { "portable" };
+
+            DotNetPublishInstaller primaryOwner = CreateReleaseGroupInstaller("portable.msi", "PortableFiles");
+            primaryOwner.PrepareFromTarget = "portable";
+            primaryOwner.Versioning!.ReleaseGroup = null;
+            primaryOwner.Versioning.Monotonic = false;
+            primaryOwner.Versioning.Major = 2;
+            primaryOwner.Versioning.StatePath = "Build/versioning/portable.state.json";
+            spec.Installers = new[] { companionOwner, primaryOwner };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+
+            Assert.Contains("conflicting release versions", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("primary installer", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_ReleaseGroupRejectsDifferentVersionAuthorities()
     {
         var root = CreateTempRoot();
@@ -786,8 +991,24 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var second = CreateReleaseGroupInstaller("agent.msi", "AgentFiles");
             first.Versioning!.ReleaseGroup = null;
             second.Versioning!.ReleaseGroup = null;
+            second.PrepareFromTarget = "agent";
             first.Versioning.StatePath = "Build/versioning/Product.state.json";
             second.Versioning.StatePath = "Build/versioning/product.state.json";
+            spec.Targets =
+            [
+                spec.Targets[0],
+                new DotNetPublishTarget
+                {
+                    Name = "agent",
+                    ProjectPath = app,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net10.0",
+                        Runtimes = new[] { "win-x64" },
+                        UseStaging = false
+                    }
+                }
+            ];
             spec.Installers = new[] { first, second };
 
             var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
@@ -1546,7 +1767,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
-    public void BuildPublishMsBuildProperties_ThrowsWhenApplyToPublishInstallersResolveDifferentVersions()
+    public void Plan_ThrowsWhenApplyToPublishInstallersResolveDifferentVersions()
     {
         var root = CreateTempRoot();
         try
@@ -1588,18 +1809,10 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 }
             };
 
-            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
-            var target = Assert.Single(plan.Targets);
-
             var ex = Assert.Throws<InvalidOperationException>(() =>
-                DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
-                    plan,
-                    target,
-                    "net10.0",
-                    "win-x64",
-                    DotNetPublishStyle.PortableCompat));
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
 
-            Assert.Contains("resolved publish property 'Version'", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("resolved conflicting release versions", ex.Message, StringComparison.Ordinal);
         }
         finally
         {

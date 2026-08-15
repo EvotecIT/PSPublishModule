@@ -775,6 +775,13 @@ public sealed class DotNetPublishMsiVersionOptions
     public string[] PublishProperties { get; set; } = Array.Empty<string>();
 
     /// <summary>
+    /// Optional additional publish targets that receive the same resolved release version.
+    /// This lets a release group version an installer and companion portable application atomically.
+    /// The version-owning installer target must be selected in the same run.
+    /// </summary>
+    public string[] AdditionalPublishTargets { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Maximum allowed patch segment. Default: 65535.
     /// </summary>
     public int PatchCap { get; set; } = 65535;

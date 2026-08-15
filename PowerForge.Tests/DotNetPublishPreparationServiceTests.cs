@@ -47,10 +47,30 @@ public sealed class DotNetPublishPreparationServiceTests
   "installers": [
     {
       "id": "AppInstaller",
-      "prepareFromTarget": "App"
+      "prepareFromTarget": " App "
     },
     {
       "id": "ToolInstaller",
+      "prepareFromTarget": "Tool"
+    }
+  ],
+  "bundles": [
+    {
+      "id": "AppBundle",
+      "prepareFromTarget": " App "
+    },
+    {
+      "id": "ToolBundle",
+      "prepareFromTarget": "Tool"
+    }
+  ],
+  "storePackages": [
+    {
+      "id": "AppStore",
+      "prepareFromTarget": " App "
+    },
+    {
+      "id": "ToolStore",
       "prepareFromTarget": "Tool"
     }
   ]
@@ -94,10 +114,109 @@ public sealed class DotNetPublishPreparationServiceTests
             Assert.Equal("Artifacts/Portable/{target}/{rid}", context.Spec.Targets[0].Publish.OutputPath);
             Assert.Equal("true", context.Spec.DotNet.MsBuildProperties!["UseLocalHtmlForgeX"]);
             Assert.Empty(context.Spec.Installers);
+            Assert.Equal("AppBundle", Assert.Single(context.Spec.Bundles).Id);
+            Assert.Equal("AppStore", Assert.Single(context.Spec.StorePackages).Id);
             Assert.False(context.Spec.DotNet.Restore);
             Assert.False(context.Spec.DotNet.Build);
             Assert.True(context.Spec.DotNet.NoRestoreInPublish);
             Assert.True(context.Spec.DotNet.NoBuildInPublish);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_target_override_removes_unselected_companion_targets()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-companion-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var configPath = Path.Combine(root.FullName, "publish.json");
+            File.WriteAllText(configPath, """
+{
+  "dotNet": { "projectRoot": "." },
+  "targets": [
+    { "name": "App", "projectPath": "src/App/App.csproj" },
+    { "name": "Portable", "projectPath": "src/Portable/Portable.csproj" }
+  ],
+  "installers": [
+    {
+      "id": "AppInstaller",
+      "prepareFromTarget": "App",
+      "versioning": {
+        "enabled": false,
+        "additionalPublishTargets": [ " Portable " ]
+      }
+    }
+  ]
+}
+""");
+
+            var request = new DotNetPublishPreparationRequest
+            {
+                ParameterSetName = "Config",
+                CurrentPath = root.FullName,
+                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                ConfigPath = configPath,
+                Target = new[] { "App" }
+            };
+
+            var context = new DotNetPublishPreparationService(new NullLogger()).Prepare(request);
+
+            Assert.Equal("App", Assert.Single(context.Spec.Targets).Name);
+            Assert.Empty(Assert.Single(context.Spec.Installers).Versioning!.AdditionalPublishTargets);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_target_override_rejects_unknown_companion_before_pruning()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-unknown-companion-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var configPath = Path.Combine(root.FullName, "publish.json");
+            File.WriteAllText(configPath, """
+{
+  "dotNet": { "projectRoot": "." },
+  "targets": [
+    { "name": "App", "projectPath": "src/App/App.csproj" },
+    { "name": "Portable", "projectPath": "src/Portable/Portable.csproj" }
+  ],
+  "installers": [
+    {
+      "id": "AppInstaller",
+      "prepareFromTarget": "App",
+      "versioning": {
+        "enabled": true,
+        "applyToPublish": true,
+        "additionalPublishTargets": [ "Portable", "Missing" ]
+      }
+    }
+  ]
+}
+""");
+
+            var request = new DotNetPublishPreparationRequest
+            {
+                ParameterSetName = "Config",
+                CurrentPath = root.FullName,
+                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                ConfigPath = configPath,
+                Target = new[] { "App" }
+            };
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+                new DotNetPublishPreparationService(new NullLogger()).Prepare(request));
+
+            Assert.Contains("Missing", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

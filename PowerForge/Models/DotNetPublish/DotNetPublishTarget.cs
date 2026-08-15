@@ -180,6 +180,12 @@ public sealed class DotNetPublishStyleOverride
 /// </summary>
 public sealed class DotNetPublishSignOptions
 {
+    /// <summary>Signing provider. Local certificate-store signing remains the default.</summary>
+    public DotNetPublishSigningProvider Provider { get; set; } = DotNetPublishSigningProvider.CertificateStore;
+
+    /// <summary>Azure Artifact Signing settings used only when <see cref="Provider"/> selects it.</summary>
+    public DotNetPublishAzureArtifactSigningOptions? AzureArtifactSigning { get; set; }
+
     /// <summary>Enables Authenticode signing of executables under the output folder.</summary>
     public bool Enabled { get; set; }
 
@@ -232,6 +238,12 @@ public sealed class DotNetPublishSignOptions
 /// </summary>
 public sealed class DotNetPublishSignPatch
 {
+    /// <summary>Optional signing provider override.</summary>
+    public DotNetPublishSigningProvider? Provider { get; set; }
+
+    /// <summary>Optional Azure Artifact Signing settings replacement.</summary>
+    public DotNetPublishAzureArtifactSigningOptions? AzureArtifactSigning { get; set; }
+
     /// <summary>Optional enable/disable override.</summary>
     public bool? Enabled { get; set; }
 
@@ -273,6 +285,28 @@ public sealed class DotNetPublishSignPatch
 
     /// <summary>Optional key container override.</summary>
     public string? KeyContainer { get; set; }
+}
+
+/// <summary>Configuration for the Azure Artifact Signing SignTool integration.</summary>
+public sealed class DotNetPublishAzureArtifactSigningOptions
+{
+    /// <summary>Artifact Signing account endpoint, for example <c>https://wus.codesigning.azure.net/</c>.</summary>
+    public string? Endpoint { get; set; }
+
+    /// <summary>Artifact Signing account name.</summary>
+    public string? AccountName { get; set; }
+
+    /// <summary>Certificate profile name within the account.</summary>
+    public string? CertificateProfileName { get; set; }
+
+    /// <summary>Path to the Azure.CodeSigning.Dlib.dll SignTool integration library.</summary>
+    public string? DlibPath { get; set; }
+
+    /// <summary>Optional correlation identifier recorded by Artifact Signing.</summary>
+    public string? CorrelationId { get; set; }
+
+    /// <summary>Optional DefaultAzureCredential implementations to exclude.</summary>
+    public string[]? ExcludeCredentials { get; set; }
 }
 
 /// <summary>

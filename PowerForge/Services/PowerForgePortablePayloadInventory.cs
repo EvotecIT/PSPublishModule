@@ -1,3 +1,4 @@
+using System.Formats.Asn1;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
@@ -40,18 +41,30 @@ internal sealed class PowerForgePortablePayloadEntry
 
 internal sealed class PowerForgePayloadInventorySignature
 {
-    internal PowerForgePayloadInventorySignature(string subject, string thumbprint)
+    internal PowerForgePayloadInventorySignature(
+        string subject,
+        string thumbprint,
+        bool certificateTrusted)
     {
         Subject = subject;
         Thumbprint = thumbprint;
+        CertificateTrusted = certificateTrusted;
     }
 
     internal string Subject { get; }
     internal string Thumbprint { get; }
+    internal bool CertificateTrusted { get; }
 }
 
 internal static class PowerForgePortablePayloadInventoryCms
 {
+    private const string Pkcs7DataContentTypeOid = "1.2.840.113549.1.7.1";
+    private const string CodeSigningEkuOid = "1.3.6.1.5.5.7.3.3";
+    private const string TimestampingEkuOid = "1.3.6.1.5.5.7.3.8";
+    private const string MicrosoftRfc3161TimestampOid = "1.3.6.1.4.1.311.3.3.1";
+    private const string SignatureTimestampTokenOid = "1.2.840.113549.1.9.16.2.14";
+    private const string Rfc3161TimestampTokenContentTypeOid = "1.2.840.113549.1.9.16.1.4";
+
     internal static (string InventoryPath, string SignaturePath) ResolveEvidencePaths(
         string outputDirectory,
         string executablePath,
@@ -112,7 +125,6 @@ internal static class PowerForgePortablePayloadInventoryCms
                 exception);
         }
     }
-
     internal static byte[] Sign(byte[] content, DotNetPublishSignOptions options)
     {
         X509Certificate2 certificate = FindSigningCertificate(options);
@@ -125,13 +137,233 @@ internal static class PowerForgePortablePayloadInventoryCms
     {
         var cms = new SignedCms(new ContentInfo(content), detached: true);
         cms.Decode(signature);
+        if (!string.Equals(cms.ContentInfo.ContentType.Value, Pkcs7DataContentTypeOid, StringComparison.Ordinal))
+            throw new InvalidDataException("Portable payload inventory signature must use the PKCS#7 data content type.");
         cms.CheckSignature(verifySignatureOnly: true);
         if (cms.SignerInfos.Count != 1 || cms.SignerInfos[0].Certificate is null)
             throw new InvalidDataException("Portable payload inventory must have exactly one certificate-backed signature.");
         X509Certificate2 certificate = cms.SignerInfos[0].Certificate!;
         return new PowerForgePayloadInventorySignature(
             certificate.Subject,
-            DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(certificate.Thumbprint));
+            DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(certificate.Thumbprint),
+            ValidateCertificateTrust(cms, cms.SignerInfos[0], certificate));
+    }
+
+    private static bool ValidateCertificateTrust(
+        SignedCms cms,
+        SignerInfo signerInfo,
+        X509Certificate2 signerCertificate)
+    {
+        DateTime verificationTime = DateTime.UtcNow;
+        X509Certificate2Collection extraStore = cms.Certificates;
+        if (TryGetTrustedTimestamp(signerInfo, cms.Certificates, out DateTime timestamp, out X509Certificate2Collection timestampCertificates))
+        {
+            verificationTime = timestamp;
+            foreach (X509Certificate2 certificate in timestampCertificates)
+                extraStore.Add(certificate);
+        }
+
+        return BuildTrustedChain(
+            signerCertificate,
+            extraStore,
+            verificationTime,
+            CodeSigningEkuOid);
+    }
+
+    private static bool TryGetTrustedTimestamp(
+        SignerInfo signerInfo,
+        X509Certificate2Collection extraCandidates,
+        out DateTime timestamp,
+        out X509Certificate2Collection timestampCertificates)
+    {
+        timestamp = default;
+        timestampCertificates = new X509Certificate2Collection();
+        foreach (CryptographicAttributeObject attribute in signerInfo.UnsignedAttributes)
+        {
+            if (!string.Equals(attribute.Oid?.Value, MicrosoftRfc3161TimestampOid, StringComparison.Ordinal) &&
+                !string.Equals(attribute.Oid?.Value, SignatureTimestampTokenOid, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            foreach (AsnEncodedData value in attribute.Values)
+            {
+#if NET472
+                if (!TryDecodeTimestampForSignerInfo(
+                        value.RawData,
+                        signerInfo,
+                        out DateTime candidateTime,
+                        out X509Certificate2? timestampSigner,
+                        out X509Certificate2Collection candidateCertificates) ||
+                    timestampSigner is null ||
+                    !BuildTrustedChain(
+                        timestampSigner,
+                        candidateCertificates,
+                        candidateTime,
+                        TimestampingEkuOid))
+                {
+                    continue;
+                }
+
+                timestamp = candidateTime;
+                timestampCertificates = candidateCertificates;
+                return true;
+#else
+                if (!Rfc3161TimestampToken.TryDecode(value.RawData, out Rfc3161TimestampToken? token, out int bytesConsumed) ||
+                    token is null ||
+                    bytesConsumed != value.RawData.Length ||
+                    !token.VerifySignatureForSignerInfo(signerInfo, out X509Certificate2? timestampSigner, extraCandidates) ||
+                    timestampSigner is null)
+                {
+                    continue;
+                }
+
+                SignedCms timestampCms = token.AsSignedCms();
+                timestampCertificates = timestampCms.Certificates;
+                DateTime candidateTime = token.TokenInfo.Timestamp.UtcDateTime;
+                if (!BuildTrustedChain(
+                        timestampSigner,
+                        timestampCertificates,
+                        candidateTime,
+                        TimestampingEkuOid))
+                {
+                    continue;
+                }
+
+                timestamp = candidateTime;
+                return true;
+#endif
+            }
+        }
+
+        return false;
+    }
+
+    internal static bool TryDecodeTimestampForSignerInfo(
+        byte[] encodedTimestamp,
+        SignerInfo signerInfo,
+        out DateTime timestamp,
+        out X509Certificate2? timestampSigner,
+        out X509Certificate2Collection timestampCertificates)
+    {
+        timestamp = default;
+        timestampSigner = null;
+        timestampCertificates = new X509Certificate2Collection();
+
+        try
+        {
+            var timestampCms = new SignedCms();
+            timestampCms.Decode(encodedTimestamp);
+            if (!string.Equals(
+                    timestampCms.ContentInfo.ContentType.Value,
+                    Rfc3161TimestampTokenContentTypeOid,
+                    StringComparison.Ordinal) ||
+                timestampCms.SignerInfos.Count != 1 ||
+                timestampCms.SignerInfos[0].Certificate is null)
+            {
+                return false;
+            }
+
+            timestampCms.CheckSignature(verifySignatureOnly: true);
+            if (!TryReadTimestampInfo(
+                    timestampCms.ContentInfo.Content,
+                    out DateTime candidateTime,
+                    out string digestOid,
+                    out byte[] expectedDigest))
+            {
+                return false;
+            }
+
+            byte[] actualDigest = ComputeDigest(digestOid, signerInfo.GetSignature());
+            if (!FixedTimeEquals(actualDigest, expectedDigest))
+                return false;
+
+            timestamp = candidateTime;
+            timestampSigner = timestampCms.SignerInfos[0].Certificate;
+            timestampCertificates = timestampCms.Certificates;
+            return true;
+        }
+        catch (CryptographicException)
+        {
+            return false;
+        }
+        catch (AsnContentException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryReadTimestampInfo(
+        byte[] encodedTimestampInfo,
+        out DateTime timestamp,
+        out string digestOid,
+        out byte[] digest)
+    {
+        timestamp = default;
+        digestOid = string.Empty;
+        digest = Array.Empty<byte>();
+
+        var reader = new AsnReader(encodedTimestampInfo, AsnEncodingRules.DER);
+        AsnReader sequence = reader.ReadSequence();
+        _ = sequence.ReadInteger();
+        _ = sequence.ReadObjectIdentifier();
+        AsnReader messageImprint = sequence.ReadSequence();
+        AsnReader algorithm = messageImprint.ReadSequence();
+        digestOid = algorithm.ReadObjectIdentifier();
+        if (algorithm.HasData)
+            _ = algorithm.ReadEncodedValue();
+        if (algorithm.HasData)
+            return false;
+        digest = messageImprint.ReadOctetString();
+        if (messageImprint.HasData)
+            return false;
+        _ = sequence.ReadInteger();
+        timestamp = sequence.ReadGeneralizedTime().UtcDateTime;
+        return !reader.HasData && digest.Length > 0;
+    }
+
+    private static byte[] ComputeDigest(string digestOid, byte[] content)
+    {
+        using HashAlgorithm algorithm = digestOid switch
+        {
+            "1.3.14.3.2.26" => SHA1.Create(),
+            "2.16.840.1.101.3.4.2.1" => SHA256.Create(),
+            "2.16.840.1.101.3.4.2.2" => SHA384.Create(),
+            "2.16.840.1.101.3.4.2.3" => SHA512.Create(),
+            _ => throw new CryptographicException($"Unsupported RFC 3161 digest algorithm '{digestOid}'.")
+        };
+        return algorithm.ComputeHash(content);
+    }
+
+    private static bool FixedTimeEquals(byte[] left, byte[] right)
+    {
+        if (left.Length != right.Length)
+            return false;
+
+        int difference = 0;
+        for (int index = 0; index < left.Length; index++)
+            difference |= left[index] ^ right[index];
+        return difference == 0;
+    }
+
+    private static bool BuildTrustedChain(
+        X509Certificate2 certificate,
+        X509Certificate2Collection extraStore,
+        DateTime verificationTime,
+        string applicationPolicyOid)
+    {
+        using var chain = new X509Chain();
+        chain.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
+        chain.ChainPolicy.RevocationFlag = X509RevocationFlag.ExcludeRoot;
+        chain.ChainPolicy.VerificationTime = verificationTime;
+        chain.ChainPolicy.ApplicationPolicy.Add(new Oid(applicationPolicyOid));
+        foreach (X509Certificate2 candidate in extraStore)
+        {
+            if (!string.Equals(candidate.Thumbprint, certificate.Thumbprint, StringComparison.OrdinalIgnoreCase))
+                chain.ChainPolicy.ExtraStore.Add(candidate);
+        }
+        return chain.Build(certificate);
     }
 
     internal static PowerForgePortablePayloadInventory Create(

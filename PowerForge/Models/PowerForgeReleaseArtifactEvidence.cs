@@ -26,7 +26,10 @@ public sealed class PowerForgeReleaseArtifactVerificationRequest
     /// <summary>Repository root used to resolve checksum-relative paths.</summary>
     public string ProjectRoot { get; set; } = string.Empty;
 
-    /// <summary>Path to the artifact being admitted to the release set.</summary>
+    /// <summary>
+    /// Path to the artifact being admitted to the release set. Portable CLI verification defaults to
+    /// the uniquely selected manifest archive or executable when omitted.
+    /// </summary>
     public string ArtifactPath { get; set; } = string.Empty;
 
     /// <summary>Path to the PowerForge SHA-256 checksum catalog.</summary>
@@ -94,7 +97,8 @@ public sealed class PowerForgeReleaseArtifactVerificationRequest
 
     /// <summary>
     /// Optional checksum-cataloged CycloneDX or SPDX SBOM sidecars. Each SBOM requires a detached CMS
-    /// signature at <c>&lt;sbom-path&gt;.p7s</c> from the exact publisher certificate admitted for the artifact.
+    /// signature at <c>&lt;sbom-path&gt;.p7s</c> from the admitted publisher. Certificate-store signing requires
+    /// the exact certificate; Azure Artifact Signing permits a trusted same-subject rotated certificate.
     /// </summary>
     public string[] SbomPaths { get; set; } = Array.Empty<string>();
 }
@@ -157,7 +161,11 @@ public sealed class PowerForgeReleaseArtifactEvidence
     /// <summary>Subject shared by the verified Authenticode signatures.</summary>
     public string SignerSubject { get; set; } = string.Empty;
 
-    /// <summary>Normalized thumbprint shared by the verified Authenticode signatures.</summary>
+    /// <summary>
+    /// Normalized thumbprint shared by the verified Authenticode signatures, or empty when
+    /// subject-trusted signatures use multiple rotated leaf certificates. See <see cref="Signatures"/>
+    /// for the per-file signer set.
+    /// </summary>
     public string SignerThumbprint { get; set; } = string.Empty;
 
     /// <summary>Authenticode verification status. Successful evidence always reports <c>valid</c>.</summary>

@@ -13,6 +13,14 @@ internal static partial class Program
 
         var commandArgs = args.Skip(1).ToArray();
         var outputJson = IsJsonOutput(commandArgs);
+        if (commandArgs.Any(value => value.Equals("--checksums-signature", StringComparison.OrdinalIgnoreCase)))
+        {
+            return WriteGeneralReleaseArtifactError(
+                outputJson,
+                logger,
+                2,
+                "--checksums-signature is not supported by release artifact verification.");
+        }
         var kind = TryGetOptionValue(commandArgs, "--kind");
         if (!string.IsNullOrWhiteSpace(kind))
             return CommandGeneralReleaseArtifactVerification(commandArgs, kind!, outputJson, logger);
@@ -165,14 +173,14 @@ internal static partial class Program
         var disableSigning = commandArgs.Any(value => value.Equals("--no-sign", StringComparison.OrdinalIgnoreCase));
         bool missingGeneralEvidence = string.IsNullOrWhiteSpace(projectRoot) ||
             string.IsNullOrWhiteSpace(artifactId) ||
-            string.IsNullOrWhiteSpace(artifactPath) ||
             string.IsNullOrWhiteSpace(checksumsPath) ||
             string.IsNullOrWhiteSpace(sourceRevision) ||
             (kind == PowerForgeReleaseArtifactKind.PortableCli &&
              (string.IsNullOrWhiteSpace(manifestPath) ||
               string.IsNullOrWhiteSpace(configurationPath))) ||
             (kind == PowerForgeReleaseArtifactKind.PowerShellModule &&
-             string.IsNullOrWhiteSpace(signingEvidencePath));
+             (string.IsNullOrWhiteSpace(artifactPath) ||
+              string.IsNullOrWhiteSpace(signingEvidencePath)));
         if (missingGeneralEvidence ||
             (!string.IsNullOrWhiteSpace(sourceRevision) && !IsFullGitObjectId(sourceRevision)) ||
             (string.IsNullOrWhiteSpace(signThumbprint) && string.IsNullOrWhiteSpace(signSubjectName)) ||
@@ -194,7 +202,7 @@ internal static partial class Program
                         : kind == PowerForgeReleaseArtifactKind.PortableCli &&
                           string.IsNullOrWhiteSpace(signThumbprint) && string.IsNullOrWhiteSpace(signSubjectName)
                             ? "Portable verification requires --sign-thumbprint or --sign-subject-name from a trusted channel."
-                        : "Kind, artifact ID, project root, artifact, checksums, source revision, portable manifest/config, and module signing evidence are required for their respective artifact kinds.");
+                            : "Kind, artifact ID, project root, checksums, source revision, portable manifest/config, and module artifact/signing evidence are required for their respective artifact kinds.");
         }
         if (!OperatingSystem.IsWindows())
         {

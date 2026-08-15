@@ -31,6 +31,195 @@ public sealed class PowerForgeCliDotNetPublishTests
     }
 
     [Fact]
+    public async Task DotNetPublish_TargetOverrideRejectsUnknownCompanionTargetBeforePruning()
+    {
+        string repoRoot = FindRepositoryRoot();
+        string tempRoot = CreateTempDirectory();
+        try
+        {
+            string configPath = Path.Combine(tempRoot, "powerforge.dotnetpublish.json");
+            var spec = new DotNetPublishSpec
+            {
+                Targets =
+                [
+                    new DotNetPublishTarget { Name = "monitoring" },
+                    new DotNetPublishTarget { Name = "portable" }
+                ],
+                Installers =
+                [
+                    new DotNetPublishInstaller
+                    {
+                        Id = "monitoring-msi",
+                        PrepareFromTarget = "monitoring",
+                        Versioning = new DotNetPublishMsiVersionOptions
+                        {
+                            Enabled = true,
+                            ApplyToPublish = true,
+                            AdditionalPublishTargets = ["portable", "misspelled"]
+                        }
+                    }
+                ]
+            };
+            File.WriteAllText(configPath, JsonSerializer.Serialize(spec));
+
+            var (exitCode, stdout, stderr) = await RunCliAsync(
+                repoRoot,
+                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet publish --config \"{configPath}\" --target monitoring --validate --output json");
+
+            Assert.NotEqual(0, exitCode);
+            Assert.Contains("misspelled", stdout + stderr, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task DotNetPublish_TargetOverrideIgnoresUnknownCompanionForInactiveVersioning(
+        bool enabled,
+        bool applyToPublish)
+    {
+        string repoRoot = FindRepositoryRoot();
+        string tempRoot = CreateTempDirectory();
+        try
+        {
+            string configPath = Path.Combine(tempRoot, "powerforge.dotnetpublish.json");
+            var publish = new DotNetPublishPublishOptions
+            {
+                Framework = "net10.0",
+                Runtimes = ["win-x64"],
+                UseStaging = false,
+                Zip = false
+            };
+            var spec = new DotNetPublishSpec
+            {
+                DotNet = new DotNetPublishDotNetOptions
+                {
+                    ProjectRoot = repoRoot,
+                    Restore = false,
+                    Build = false,
+                    Runtimes = ["win-x64"]
+                },
+                Targets =
+                [
+                    new DotNetPublishTarget
+                    {
+                        Name = "monitoring",
+                        ProjectPath = "PowerForge.Cli/PowerForge.Cli.csproj",
+                        Publish = publish
+                    }
+                ],
+                Installers =
+                [
+                    new DotNetPublishInstaller
+                    {
+                        Id = "monitoring-msi",
+                        PrepareFromTarget = "monitoring",
+                        Versioning = new DotNetPublishMsiVersionOptions
+                        {
+                            Enabled = enabled,
+                            ApplyToPublish = applyToPublish,
+                            AdditionalPublishTargets = ["retired-portable"]
+                        }
+                    }
+                ]
+            };
+            File.WriteAllText(configPath, JsonSerializer.Serialize(spec));
+
+            var (exitCode, stdout, stderr) = await RunCliAsync(
+                repoRoot,
+                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet publish --config \"{configPath}\" --target monitoring --plan --output json");
+
+            Assert.True(exitCode == 0, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+            using JsonDocument document = JsonDocument.Parse(stdout);
+            JsonElement installer = Assert.Single(document.RootElement
+                .GetProperty("spec")
+                .GetProperty("installers")
+                .EnumerateArray());
+            Assert.Empty(installer.GetProperty("versioning").GetProperty("additionalPublishTargets").EnumerateArray());
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DotNetPublish_TargetOverrideRemovesDependentOutputsForExcludedTargets()
+    {
+        string repoRoot = FindRepositoryRoot();
+        string tempRoot = CreateTempDirectory();
+        try
+        {
+            string configPath = Path.Combine(tempRoot, "powerforge.dotnetpublish.json");
+            var publish = new DotNetPublishPublishOptions
+            {
+                Framework = "net10.0",
+                Runtimes = ["win-x64"],
+                UseStaging = false,
+                Zip = false
+            };
+            var spec = new DotNetPublishSpec
+            {
+                DotNet = new DotNetPublishDotNetOptions
+                {
+                    ProjectRoot = repoRoot,
+                    Restore = false,
+                    Build = false,
+                    Runtimes = ["win-x64"]
+                },
+                Targets =
+                [
+                    new DotNetPublishTarget { Name = "monitoring", ProjectPath = "PowerForge.Cli/PowerForge.Cli.csproj", Publish = publish },
+                    new DotNetPublishTarget { Name = "portable", ProjectPath = "PowerForge.Cli/PowerForge.Cli.csproj", Publish = publish },
+                    new DotNetPublishTarget { Name = "agent", ProjectPath = "PowerForge.Cli/PowerForge.Cli.csproj", Publish = publish }
+                ],
+                Bundles = [new DotNetPublishBundle { Id = "agent-bundle", PrepareFromTarget = "agent" }],
+                Installers =
+                [
+                    new DotNetPublishInstaller
+                    {
+                        Id = "monitoring-msi",
+                        PrepareFromTarget = "monitoring",
+                        Versioning = new DotNetPublishMsiVersionOptions
+                        {
+                            Enabled = false,
+                            AdditionalPublishTargets = ["portable"]
+                        }
+                    },
+                    new DotNetPublishInstaller { Id = "agent-msi", PrepareFromTarget = "agent" }
+                ],
+                StorePackages = [new DotNetPublishStorePackage { Id = "agent-store", PrepareFromTarget = "agent" }]
+            };
+            File.WriteAllText(configPath, JsonSerializer.Serialize(spec));
+
+            var (exitCode, stdout, stderr) = await RunCliAsync(
+                repoRoot,
+                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet publish --config \"{configPath}\" --target monitoring --plan --output json");
+
+            Assert.True(exitCode == 0, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+            using JsonDocument document = JsonDocument.Parse(stdout);
+            JsonElement effectiveSpec = document.RootElement.GetProperty("spec");
+            Assert.Single(effectiveSpec.GetProperty("targets").EnumerateArray());
+            Assert.Empty(effectiveSpec.GetProperty("bundles").EnumerateArray());
+            JsonElement installer = Assert.Single(effectiveSpec.GetProperty("installers").EnumerateArray());
+            Assert.Equal("monitoring-msi", installer.GetProperty("id").GetString());
+            Assert.Empty(installer.GetProperty("versioning").GetProperty("additionalPublishTargets").EnumerateArray());
+            Assert.Empty(effectiveSpec.GetProperty("storePackages").EnumerateArray());
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ReleaseArtifactVerify_MissingEvidenceReturnsStructuredFailure()
     {
         var repoRoot = FindRepositoryRoot();
@@ -42,6 +231,22 @@ public sealed class PowerForgeCliDotNetPublishTests
         using var document = JsonDocument.Parse(stdout);
         Assert.False(document.RootElement.GetProperty("success").GetBoolean());
         Assert.Equal("dotnet.release-artifact.verify", document.RootElement.GetProperty("command").GetString());
+    }
+
+    [Fact]
+    public async Task ReleaseArtifactVerify_RejectsUnsupportedChecksumSignatureOption()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var (exitCode, stdout, stderr) = await RunCliAsync(
+            repoRoot,
+            $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --checksums-signature checksums.p7s --output json");
+
+        Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+        using JsonDocument document = JsonDocument.Parse(stdout);
+        Assert.Contains(
+            "not supported",
+            document.RootElement.GetProperty("error").GetString(),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

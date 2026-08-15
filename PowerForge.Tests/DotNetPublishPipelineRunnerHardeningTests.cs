@@ -92,6 +92,69 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void Plan_RejectsVersionTokenWithoutActivePublishVersionPlan()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var csproj = CreateProjectFile(root, "App.csproj");
+            var spec = CreateBaseSpec(root, csproj);
+            spec.Targets[0].Publish.OutputPath = "{version}";
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Plan(spec, null));
+
+            Assert.Contains("no active publish version plan", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_ResolvesVersionTokenFromActivePublishVersionPlan()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var csproj = CreateProjectFile(root, "App.csproj");
+            var spec = CreateBaseSpec(root, csproj);
+            spec.Targets[0].Publish.OutputPath = Path.Combine("Artifacts", "{version}");
+            spec.Installers = new[]
+            {
+                new DotNetPublishInstaller
+                {
+                    Id = "app.msi",
+                    PrepareFromTarget = "app",
+                    InstallerProjectPath = csproj,
+                    Versioning = new DotNetPublishMsiVersionOptions
+                    {
+                        Enabled = true,
+                        ApplyToPublish = true,
+                        Monotonic = false,
+                        FloorDateUtc = "2026-01-01"
+                    }
+                }
+            };
+
+            DotNetPublishPlan plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            string? version = DotNetPublishPipelineRunner.ResolvePublishReleaseVersion(
+                plan,
+                "app",
+                "net10.0",
+                "win-x64",
+                DotNetPublishStyle.Portable);
+
+            Assert.False(string.IsNullOrWhiteSpace(version));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_DeniesManifestPathOutsideProjectRoot_ByDefault()
     {
         var root = CreateTempRoot();

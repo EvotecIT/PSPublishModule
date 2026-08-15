@@ -33,7 +33,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     private PortableArchiveVerification VerifyPortableArchiveInventory(
         string archivePath,
         string? expectedThumbprint,
-        string? expectedSubject)
+        string? expectedSubject,
+        bool allowSubjectMatchedCertificateRotation)
     {
         using ZipArchive archive = ZipFile.OpenRead(archivePath);
         Dictionary<string, ZipArchiveEntry> entries = ValidateArchiveEntries(archive);
@@ -143,8 +144,17 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             TryDeleteDirectory(tempRoot);
         }
 
-        VerifiedSignature payloadSigner = RequireOneSigner(signatures);
-        if (!string.Equals(
+        VerifiedSignature payloadSigner = allowSubjectMatchedCertificateRotation
+            ? RequireOnePublisherSubject(signatures)
+            : RequireOneSigner(signatures);
+        if (allowSubjectMatchedCertificateRotation)
+        {
+            ValidateRotatedInventoryPublisher(
+                inventorySignature,
+                payloadSigner.Subject,
+                "Portable payload inventory");
+        }
+        else if (!string.Equals(
                 inventorySignature.Thumbprint,
                 payloadSigner.Thumbprint,
                 StringComparison.OrdinalIgnoreCase))
@@ -166,7 +176,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string checksumsPath,
         string artifactPath,
         string artifactDigest,
-        VerifiedSignature artifactSigner)
+        VerifiedSignature artifactSigner,
+        bool allowSubjectMatchedCertificateRotation)
     {
         string inventoryPath = artifactPath + PowerForgePortablePayloadInventory.DirectInventorySuffix;
         string signaturePath = artifactPath + PowerForgePortablePayloadInventory.DirectSignatureSuffix;
@@ -191,10 +202,17 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         {
             throw Invalid($"Direct portable inventory signature is not valid: {exception.Message}");
         }
-        if (!string.Equals(
-                inventorySigner.Thumbprint,
-                artifactSigner.Thumbprint,
-                StringComparison.OrdinalIgnoreCase))
+        if (allowSubjectMatchedCertificateRotation)
+        {
+            ValidateRotatedInventoryPublisher(
+                inventorySigner,
+                artifactSigner.Subject,
+                "Direct portable inventory");
+        }
+        else if (!string.Equals(
+                     inventorySigner.Thumbprint,
+                     artifactSigner.Thumbprint,
+                     StringComparison.OrdinalIgnoreCase))
         {
             throw Invalid("Direct portable inventory signature does not use the Authenticode publisher certificate.");
         }
@@ -252,6 +270,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             });
     }
 
+    internal static void ValidateRotatedInventoryPublisher(
+        PowerForgePayloadInventorySignature inventorySigner,
+        string payloadSignerSubject,
+        string label)
+    {
+        if (!inventorySigner.CertificateTrusted)
+            throw Invalid($"{label} signature does not have a trusted code-signing certificate chain.");
+        if (!DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(
+                inventorySigner.Subject,
+                payloadSignerSubject))
+            throw Invalid($"{label} signature does not match the Authenticode publisher subject.");
+    }
+
     private sealed class PortableDirectVerification
     {
         internal PortableDirectVerification(
@@ -264,6 +295,19 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
         internal PowerForgePortablePayloadInventory Inventory { get; }
         internal PowerForgeReleaseEvidenceFile[] Evidence { get; }
+    }
+
+    private static VerifiedSignature RequireOnePublisherSubject(IReadOnlyList<VerifiedSignature> signatures)
+    {
+        if (signatures.Count == 0)
+            throw Invalid("At least one valid release signature is required.");
+        VerifiedSignature first = signatures[0];
+        if (signatures.Any(signature =>
+                !DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(signature.Subject, first.Subject)))
+        {
+            throw Invalid("All release signature evidence must use one trusted publisher subject.");
+        }
+        return first;
     }
 
     private sealed class PortableArchiveVerification

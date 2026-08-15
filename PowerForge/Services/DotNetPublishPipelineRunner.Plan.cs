@@ -175,7 +175,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     ? null
                     : new Dictionary<string, string>(t.Publish.MsBuildProperties, StringComparer.OrdinalIgnoreCase),
                 StyleOverrides = CloneStyleOverrides(t.Publish.StyleOverrides),
-                Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+                Sign = ResolvePlanSigningOptions(
+                    projectRoot,
                     spec.SigningProfiles,
                     t.Publish.SignProfile,
                     t.Publish.Sign,
@@ -619,6 +620,21 @@ public sealed partial class DotNetPublishPipelineRunner
                 string outputTemplate = string.IsNullOrWhiteSpace(target.Publish.OutputPath)
                     ? Path.Combine("Artifacts", "DotNetPublish", "{target}", "{rid}", "{framework}", "{style}")
                     : target.Publish.OutputPath!;
+                string? releaseVersion = ResolvePublishReleaseVersion(
+                    plan,
+                    target.Name,
+                    combination.Framework,
+                    combination.Runtime,
+                    combination.Style);
+                if (outputTemplate.IndexOf("{version}", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    if (string.IsNullOrWhiteSpace(releaseVersion))
+                    {
+                        throw new InvalidOperationException(
+                            $"Target '{target.Name}' output path uses '{{version}}', but no active publish version plan resolved a value.");
+                    }
+                    tokens["version"] = releaseVersion!;
+                }
                 generatedDirectories.Add((
                     ResolvePath(plan.ProjectRoot, ApplyTemplate(outputTemplate, tokens)),
                     $"Target '{target.Name}' output path"));
@@ -692,6 +708,21 @@ public sealed partial class DotNetPublishPipelineRunner
             selectedTargets.Select(t => t.Name),
             StringComparer.OrdinalIgnoreCase);
 
+        var allTargetNames = new HashSet<string>(
+            (spec.Targets ?? Array.Empty<DotNetPublishTarget>())
+                .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Name))
+                .Select(t => t.Name.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+        ValidateAdditionalPublishTargetNames(spec.Installers, allTargetNames, nameof(spec));
+
+        var selectedInstallers = CloneInstallers(spec.Installers ?? Array.Empty<DotNetPublishInstaller>())
+            .Where(i =>
+                string.IsNullOrWhiteSpace(i.PrepareFromTarget)
+                || selectedTargetNames.Contains(i.PrepareFromTarget.Trim()))
+            .ToArray();
+        foreach (var installer in selectedInstallers)
+            RetainSelectedAdditionalPublishTargets(installer.Versioning, selectedTargetNames);
+
         var runtimes = (profile.Runtimes ?? Array.Empty<string>())
             .Where(r => !string.IsNullOrWhiteSpace(r))
             .Select(r => r.Trim())
@@ -745,11 +776,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     string.IsNullOrWhiteSpace(b.PrepareFromTarget)
                     || selectedTargetNames.Contains(b.PrepareFromTarget.Trim()))
                 .ToArray(),
-            Installers = CloneInstallers(spec.Installers)
-                .Where(i =>
-                    string.IsNullOrWhiteSpace(i.PrepareFromTarget)
-                    || selectedTargetNames.Contains(i.PrepareFromTarget.Trim()))
-                .ToArray(),
+            Installers = selectedInstallers,
             StorePackages = CloneStorePackages(spec.StorePackages)
                 .Where(i =>
                     string.IsNullOrWhiteSpace(i.PrepareFromTarget)
@@ -762,6 +789,50 @@ public sealed partial class DotNetPublishPipelineRunner
             Targets = selectedTargets,
             Outputs = CloneOutputs(spec.Outputs)
         };
+    }
+
+    internal static void RetainSelectedAdditionalPublishTargets(
+        DotNetPublishMsiVersionOptions? versioning,
+        ISet<string> selectedTargetNames)
+    {
+        if (versioning is null)
+            return;
+        if (selectedTargetNames is null)
+            throw new ArgumentNullException(nameof(selectedTargetNames));
+
+        versioning.AdditionalPublishTargets = (versioning.AdditionalPublishTargets ?? Array.Empty<string>())
+            .Where(name => !string.IsNullOrWhiteSpace(name) && selectedTargetNames.Contains(name.Trim()))
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    internal static void ValidateAdditionalPublishTargetNames(
+        IEnumerable<DotNetPublishInstaller>? installers,
+        ISet<string> allTargetNames,
+        string parameterName)
+    {
+        if (allTargetNames is null)
+            throw new ArgumentNullException(nameof(allTargetNames));
+
+        foreach (var installer in installers ?? Array.Empty<DotNetPublishInstaller>())
+        {
+            if (installer?.Versioning is not { Enabled: true, ApplyToPublish: true })
+                continue;
+
+            string[] missingAdditionalTargets = (installer.Versioning.AdditionalPublishTargets ?? Array.Empty<string>())
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name.Trim())
+                .Where(name => !allTargetNames.Contains(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (missingAdditionalTargets.Length > 0)
+            {
+                throw new ArgumentException(
+                    $"Installer '{installer.Id}' references unknown additional publish target(s): {string.Join(", ", missingAdditionalTargets)}.",
+                    parameterName);
+            }
+        }
     }
 
     private static DotNetPublishDotNetOptions CloneDotNet(DotNetPublishDotNetOptions dotNet)
@@ -1461,6 +1532,7 @@ public sealed partial class DotNetPublishPipelineRunner
             PropertyName = versioning.PropertyName,
             ApplyToPublish = versioning.ApplyToPublish,
             PublishProperties = versioning.PublishProperties?.ToArray() ?? Array.Empty<string>(),
+            AdditionalPublishTargets = versioning.AdditionalPublishTargets?.ToArray() ?? Array.Empty<string>(),
             PatchCap = versioning.PatchCap,
             AllowOutputOverwrite = versioning.AllowOutputOverwrite
         };
@@ -1999,7 +2071,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     OutputPath = generated.OutputPath.Trim(),
                     Tokens = CloneDictionary(generated.Tokens) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
                     Overwrite = generated.Overwrite,
-                    Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+                    Sign = ResolvePlanSigningOptions(
+                        projectRoot,
                         signingProfiles,
                         generated.SignProfile,
                         generated.Sign,
@@ -2051,7 +2124,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 ModuleIncludes = moduleIncludePlans.ToArray(),
                 GeneratedScripts = generatedScriptPlans.ToArray(),
                 Scripts = scriptPlans.ToArray(),
-                PostProcess = NormalizeBundlePostProcess(id, bundle.PostProcess, signingProfiles)
+                PostProcess = NormalizeBundlePostProcess(projectRoot, id, bundle.PostProcess, signingProfiles)
             });
         }
 
@@ -2212,8 +2285,148 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
+        AddAdditionalPublishTargetVersionPlans(versions, installers, targets);
         return versions;
     }
+
+    private static void AddAdditionalPublishTargetVersionPlans(
+        IDictionary<string, DotNetPublishMsiVersionPlan> versions,
+        IEnumerable<DotNetPublishInstallerPlan> installers,
+        IEnumerable<DotNetPublishTargetPlan>? targets)
+    {
+        DotNetPublishTargetPlan[] targetPlans = (targets ?? Array.Empty<DotNetPublishTargetPlan>()).ToArray();
+        DotNetPublishInstallerPlan[] installerPlans = (installers ?? Array.Empty<DotNetPublishInstallerPlan>()).ToArray();
+        var lookupPlan = new DotNetPublishPlan
+        {
+            MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>(versions, StringComparer.OrdinalIgnoreCase)
+        };
+        var companionVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>(StringComparer.OrdinalIgnoreCase);
+        foreach (DotNetPublishInstallerPlan installer in installerPlans)
+        {
+            DotNetPublishMsiVersionOptions? versioning = installer.Versioning;
+            if (versioning is not { Enabled: true, ApplyToPublish: true } ||
+                versioning.AdditionalPublishTargets.Length == 0)
+                continue;
+
+            foreach (string additionalTargetName in versioning.AdditionalPublishTargets)
+            {
+                DotNetPublishTargetPlan? sourceTarget = targetPlans.SingleOrDefault(target =>
+                    string.Equals(target.Name, installer.PrepareFromTarget, StringComparison.OrdinalIgnoreCase));
+                if (sourceTarget is null)
+                    throw new InvalidOperationException(
+                        $"Installer '{installer.Id}' cannot share its release version because source publish target '{installer.PrepareFromTarget}' was not found.");
+                DotNetPublishMsiVersionPlan[] sourcePlans = sourceTarget.Combinations
+                    .Select(combination => FindResolvedMsiVersion(
+                        lookupPlan,
+                        installer.Id,
+                        installer.PrepareFromTarget,
+                        combination.Framework,
+                        combination.Runtime,
+                        combination.Style))
+                    .Where(source => source is not null)
+                    .Select(source => source!)
+                    .ToArray();
+                if (sourcePlans.Length == 0)
+                    throw new InvalidOperationException(
+                        $"Installer '{installer.Id}' cannot share its release version because its source publish target did not resolve a version plan.");
+                DotNetPublishMsiVersionPlan source = sourcePlans[0];
+                string? sourceCoordinationKey = BuildMsiVersionCoordinationKey(source);
+                if (sourcePlans.Skip(1).Any(candidate =>
+                    !string.Equals(candidate.Version, source.Version, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(candidate.AssemblyVersion, source.AssemblyVersion, StringComparison.OrdinalIgnoreCase) ||
+                    !MsiVersionCoordinationKeyComparer.Instance.Equals(
+                        BuildMsiVersionCoordinationKey(candidate),
+                        sourceCoordinationKey)))
+                {
+                    throw new InvalidOperationException(
+                        $"Installer '{installer.Id}' source publish target resolves more than one release version or authority. " +
+                        "Use one canonical version authority before sharing the version with additional publish targets.");
+                }
+
+                DotNetPublishTargetPlan? additionalTarget = targetPlans.SingleOrDefault(target =>
+                    string.Equals(target.Name, additionalTargetName, StringComparison.OrdinalIgnoreCase));
+                if (additionalTarget is null)
+                    throw new InvalidOperationException(
+                        $"Installer '{installer.Id}' references unknown additional publish target '{additionalTargetName}'.");
+
+                foreach (DotNetPublishTargetCombination combination in additionalTarget.Combinations)
+                {
+                    DotNetPublishMsiVersionPlan[] primaryVersions = installerPlans
+                        .Where(owner => owner.Versioning is { Enabled: true, ApplyToPublish: true } &&
+                                        string.Equals(owner.PrepareFromTarget, additionalTarget.Name, StringComparison.OrdinalIgnoreCase))
+                        .Select(owner => FindResolvedMsiVersion(
+                            lookupPlan,
+                            owner.Id,
+                            additionalTarget.Name,
+                            combination.Framework,
+                            combination.Runtime,
+                            combination.Style))
+                        .Where(primary => primary is not null)
+                        .Select(primary => primary!)
+                        .ToArray();
+                    if (primaryVersions.Any(primary => !AreCompatibleMsiVersionPlans(primary, source)))
+                    {
+                        throw new InvalidOperationException(
+                            $"Additional publish target '{additionalTarget.Name}' resolved conflicting release versions or authorities between its primary installer and a companion installer.");
+                    }
+
+                    string companionKey = string.Join("|", new[]
+                    {
+                        additionalTarget.Name,
+                        combination.Framework,
+                        combination.Runtime,
+                        combination.Style.ToString()
+                    });
+                    if (companionVersions.TryGetValue(companionKey, out DotNetPublishMsiVersionPlan? companion) &&
+                        !AreCompatibleMsiVersionPlans(companion, source))
+                    {
+                        throw new InvalidOperationException(
+                            $"Additional publish target '{additionalTarget.Name}' resolved conflicting release versions or authorities across installers.");
+                    }
+                    companionVersions[companionKey] = source;
+
+                    string key = BuildMsiVersionKey(
+                        installer.Id,
+                        additionalTarget.Name,
+                        combination.Framework,
+                        combination.Runtime,
+                        combination.Style);
+                    if (versions.TryGetValue(key, out DotNetPublishMsiVersionPlan? existing) &&
+                        !string.Equals(existing.Version, source.Version, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException(
+                            $"Additional publish target '{additionalTarget.Name}' resolved conflicting release versions.");
+                    }
+
+                    versions[key] = CloneMsiVersionPlan(source);
+                }
+            }
+        }
+    }
+
+    private static bool AreCompatibleMsiVersionPlans(
+        DotNetPublishMsiVersionPlan first,
+        DotNetPublishMsiVersionPlan second)
+        => string.Equals(first.Version, second.Version, StringComparison.OrdinalIgnoreCase)
+           && string.Equals(first.AssemblyVersion, second.AssemblyVersion, StringComparison.OrdinalIgnoreCase)
+           && MsiVersionCoordinationKeyComparer.Instance.Equals(
+               BuildMsiVersionCoordinationKey(first),
+               BuildMsiVersionCoordinationKey(second));
+
+    private static DotNetPublishMsiVersionPlan CloneMsiVersionPlan(DotNetPublishMsiVersionPlan source) => new()
+    {
+        Version = source.Version,
+        VersionPropertyName = source.VersionPropertyName,
+        AssemblyVersion = source.AssemblyVersion,
+        Patch = source.Patch,
+        StatePath = source.StatePath,
+        Authority = source.Authority,
+        AuthorityKey = source.AuthorityKey,
+        GitRemote = source.GitRemote,
+        GitTagPrefix = source.GitTagPrefix,
+        AuthorityWorkingDirectory = source.AuthorityWorkingDirectory,
+        AllowOutputOverwrite = source.AllowOutputOverwrite
+    };
 
     private static MsiReleaseGroupCompatibility BuildMsiReleaseGroupCompatibility(
         DotNetPublishPlan plan,
@@ -2501,7 +2714,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 HarvestExcludePatterns = NormalizeStrings(installer.HarvestExcludePatterns),
                 Versioning = NormalizeInstallerVersioning(id, installer.Versioning),
                 MsBuildProperties = CloneDictionary(installer.MsBuildProperties),
-                Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+                Sign = ResolvePlanSigningOptions(
+                    projectRoot,
                     signingProfiles,
                     installer.SignProfile,
                     installer.Sign,
@@ -3193,11 +3407,13 @@ public sealed partial class DotNetPublishPipelineRunner
         else
             clone.PropertyName = clone.PropertyName!.Trim();
         clone.PublishProperties = NormalizeStrings(clone.PublishProperties);
+        clone.AdditionalPublishTargets = NormalizeStrings(clone.AdditionalPublishTargets);
 
         return clone;
     }
 
     private static DotNetPublishBundlePostProcessOptions? NormalizeBundlePostProcess(
+        string projectRoot,
         string bundleId,
         DotNetPublishBundlePostProcessOptions? options,
         IReadOnlyDictionary<string, DotNetPublishSignOptions>? signingProfiles)
@@ -3223,7 +3439,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
         clone.DeletePatterns = NormalizeStrings(clone.DeletePatterns);
         clone.SignPatterns = NormalizeStrings(clone.SignPatterns);
-        clone.Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+        clone.Sign = ResolvePlanSigningOptions(
+            projectRoot,
             signingProfiles,
             clone.SignProfile,
             clone.Sign,
@@ -3252,6 +3469,47 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return clone;
+    }
+
+    private static DotNetPublishSignOptions? ResolvePlanSigningOptions(
+        string projectRoot,
+        IReadOnlyDictionary<string, DotNetPublishSignOptions>? signingProfiles,
+        string? signProfile,
+        DotNetPublishSignOptions? inline,
+        DotNetPublishSignPatch? overrides,
+        string context)
+    {
+        var sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+            signingProfiles,
+            signProfile,
+            inline,
+            overrides,
+            context);
+        if (sign is not null
+            && !Enum.IsDefined(typeof(DotNetPublishSigningProvider), sign.Provider))
+        {
+            throw new ArgumentException(
+                $"Signing provider value '{(int)sign.Provider}' is not supported for {context}.",
+                nameof(inline));
+        }
+
+        if (sign?.Provider == DotNetPublishSigningProvider.AzureArtifactSigning
+            && sign.AzureArtifactSigning is not null
+            && !string.IsNullOrWhiteSpace(sign.AzureArtifactSigning.DlibPath))
+        {
+            string dlibPath = sign.AzureArtifactSigning.DlibPath!.Trim().Trim('"');
+            bool hasDirectory = !string.IsNullOrEmpty(Path.GetDirectoryName(dlibPath))
+                                || dlibPath.IndexOf(Path.DirectorySeparatorChar) >= 0
+                                || dlibPath.IndexOf(Path.AltDirectorySeparatorChar) >= 0;
+            sign.AzureArtifactSigning.DlibPath = !Path.IsPathRooted(dlibPath) && hasDirectory
+                ? ResolvePath(projectRoot, dlibPath)
+                : dlibPath;
+        }
+
+        if (sign is { Enabled: true, Provider: DotNetPublishSigningProvider.AzureArtifactSigning })
+            ValidateAzureArtifactSigningOptions(sign);
+
+        return sign;
     }
 
     private static DotNetPublishMsiClientLicenseOptions? NormalizeInstallerClientLicense(

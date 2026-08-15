@@ -512,7 +512,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     : new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
                 _ => "1.2.3.0",
                 null,
-                (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint));
+                (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint, certificateTrusted: true));
 
         internal PowerForgeReleaseArtifactVerifier CreateRootVendorAwareVerifier(string actualVendorThumbprint) =>
             new(
@@ -521,7 +521,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     : new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
                 _ => "1.2.3.0",
                 null,
-                (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint));
+                (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint, certificateTrusted: true));
 
         internal void WriteSigningEvidence(
             string? vendorThumbprint = null,

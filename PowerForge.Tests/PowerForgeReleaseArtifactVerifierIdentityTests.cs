@@ -17,7 +17,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 new string('D', 40)),
             _ => "1.2.3+" + SourceRevision,
             _ => "Sample.CLI",
-            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher Malware LLC", new string('D', 40)));
+            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher Malware LLC", new string('D', 40), certificateTrusted: true));
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() => verifier.Verify(request));
 
@@ -106,7 +106,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
             _ => "1.2.3-preview.1+actual." + SourceRevision,
             _ => "Sample.CLI",
-            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint));
+            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint, certificateTrusted: true));
 
         PowerForgeReleaseArtifactEvidence evidence = verifier.Verify(request);
 
@@ -123,7 +123,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
             _ => "1.2.3-preview.1+sha." + SourceRevision,
             _ => "Sample.CLI",
-            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint));
+            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint, certificateTrusted: true));
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() => verifier.Verify(request));
 
@@ -151,7 +151,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             _ => new DotNetPublishReleaseArtifactVerifier.AuthenticodeResult(true, 0, "CN=Publisher", Thumbprint),
             _ => "1.2.3+" + new string('c', 40),
             _ => "Sample.CLI",
-            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint));
+            (_, _) => new PowerForgePayloadInventorySignature("CN=Publisher", Thumbprint, certificateTrusted: true));
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
             verifier.Verify(fixture.CreateRequest()));

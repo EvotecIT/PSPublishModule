@@ -15,6 +15,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private readonly Func<string, bool> _hasAuthenticodeSignature;
     private readonly Func<string, DotNetPublishSignOptions, bool> _signatureMatchesPublisher;
     private readonly Func<byte[], DotNetPublishSignOptions, byte[]> _signPortableInventory;
+    private readonly Func<byte[], byte[], PowerForgePayloadInventorySignature> _verifyPortableInventory;
     private readonly Func<string, DotNetPublishReleaseArtifactVerifier.AuthenticodeResult> _readAuthenticodeSignature;
     private readonly AsyncLocal<CancellationToken> _cancellationToken = new();
 
@@ -32,13 +33,15 @@ public sealed partial class DotNetPublishPipelineRunner
         Func<string, bool>? hasAuthenticodeSignature = null,
         Func<byte[], DotNetPublishSignOptions, byte[]>? signPortableInventory = null,
         Func<string, DotNetPublishSignOptions, bool>? signatureMatchesPublisher = null,
-        Func<string, DotNetPublishReleaseArtifactVerifier.AuthenticodeResult>? readAuthenticodeSignature = null)
+        Func<string, DotNetPublishReleaseArtifactVerifier.AuthenticodeResult>? readAuthenticodeSignature = null,
+        Func<byte[], byte[], PowerForgePayloadInventorySignature>? verifyPortableInventory = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
         _hasAuthenticodeSignature = hasAuthenticodeSignature ?? WindowsAuthenticodeSignatureInspector.HasSignature;
         _signatureMatchesPublisher = signatureMatchesPublisher ?? SignatureMatchesPublisher;
-        _signPortableInventory = signPortableInventory ?? PowerForgePortablePayloadInventoryCms.Sign;
+        _signPortableInventory = signPortableInventory ?? SignPortableInventory;
+        _verifyPortableInventory = verifyPortableInventory ?? PowerForgePortablePayloadInventoryCms.Verify;
         _readAuthenticodeSignature = readAuthenticodeSignature ?? DotNetPublishReleaseArtifactVerifier.VerifyAuthenticode;
     }
 

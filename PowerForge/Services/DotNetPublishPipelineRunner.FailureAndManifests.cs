@@ -540,11 +540,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 Style = a.Style.ToString(),
                 PublishDir = a.PublishDir,
                 OutputDir = a.OutputDir,
-                ZipPath = EmptyToNull(a.ZipPath),
+                ZipPath = ToManifestOptionalPath(projectRoot, a.ZipPath),
                 OutputFiles = ToManifestOutputFiles(projectRoot, a.OutputFiles),
                 Files = a.Files,
                 TotalBytes = a.TotalBytes,
-                ExePath = EmptyToNull(a.ExePath),
+                ExePath = ToManifestOptionalPath(projectRoot, a.ExePath),
                 ExeBytes = a.ExeBytes,
                 Cleanup = HasCleanup(a.Cleanup) ? a.Cleanup : null,
                 ServicePackage = a.ServicePackage,
@@ -645,6 +645,16 @@ public sealed partial class DotNetPublishPipelineRunner
     private static string? EmptyToNull(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static string? ToManifestOptionalPath(string projectRoot, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        string path = value!;
+        return Path.IsPathRooted(path)
+            ? ToManifestRelativePath(projectRoot, path)
+            : path.Replace('\\', '/');
     }
 
     private static string[]? ToManifestOutputFiles(string projectRoot, IEnumerable<string>? files)

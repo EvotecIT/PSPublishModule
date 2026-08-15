@@ -431,7 +431,7 @@ internal static partial class Program
             ?? throw new InvalidOperationException("Failed to clone dotnet publish spec.");
     }
 
-    static void ApplyDotNetPublishSpecOverrides(
+    internal static void ApplyDotNetPublishSpecOverrides(
         DotNetPublishSpec spec,
         string[] overrideTargets,
         string[] overrideRids,
@@ -448,6 +448,14 @@ internal static partial class Program
 
         if (selectedTargetNames.Length > 0)
         {
+            var allTargetNames = new HashSet<string>(
+                targets.Where(target => !string.IsNullOrWhiteSpace(target.Name)).Select(target => target.Name.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            DotNetPublishPipelineRunner.ValidateAdditionalPublishTargetNames(
+                spec.Installers,
+                allTargetNames,
+                nameof(spec));
+
             var missing = selectedTargetNames
                 .Where(n => targets.All(t => !t.Name.Equals(n, StringComparison.OrdinalIgnoreCase)))
                 .ToArray();
@@ -464,6 +472,24 @@ internal static partial class Program
                     .Where(t => selectedTargetNames.Contains(t.Name, StringComparer.OrdinalIgnoreCase))
                     .ToArray();
                 targets = spec.Targets;
+                var selectedTargets = new HashSet<string>(selectedTargetNames, StringComparer.OrdinalIgnoreCase);
+                spec.Bundles = (spec.Bundles ?? Array.Empty<DotNetPublishBundle>())
+                    .Where(item =>
+                        string.IsNullOrWhiteSpace(item.PrepareFromTarget) ||
+                        selectedTargets.Contains(item.PrepareFromTarget.Trim()))
+                    .ToArray();
+                spec.Installers = (spec.Installers ?? Array.Empty<DotNetPublishInstaller>())
+                    .Where(item =>
+                        string.IsNullOrWhiteSpace(item.PrepareFromTarget) ||
+                        selectedTargets.Contains(item.PrepareFromTarget.Trim()))
+                    .ToArray();
+                foreach (var installer in spec.Installers)
+                    DotNetPublishPipelineRunner.RetainSelectedAdditionalPublishTargets(installer.Versioning, selectedTargets);
+                spec.StorePackages = (spec.StorePackages ?? Array.Empty<DotNetPublishStorePackage>())
+                    .Where(item =>
+                        string.IsNullOrWhiteSpace(item.PrepareFromTarget) ||
+                        selectedTargets.Contains(item.PrepareFromTarget.Trim()))
+                    .ToArray();
             }
         }
 
@@ -579,6 +605,8 @@ internal static partial class Program
                         && (string.IsNullOrWhiteSpace(i.PrepareFromTarget)
                             || selected.Contains(i.PrepareFromTarget)))
                     .ToArray();
+                foreach (var installer in plan.Installers)
+                    DotNetPublishPipelineRunner.RetainSelectedAdditionalPublishTargets(installer.Versioning, selected);
             }
             changed = true;
         }

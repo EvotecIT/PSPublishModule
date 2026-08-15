@@ -57,6 +57,8 @@ internal static class DotNetPublishSigningProfileResolver
         if (sign is null) return null;
         return new DotNetPublishSignOptions
         {
+            Provider = sign.Provider,
+            AzureArtifactSigning = CloneAzureArtifactSigningOptions(sign.AzureArtifactSigning),
             Enabled = sign.Enabled,
             IncludeDlls = sign.IncludeDlls,
             OverwriteSigned = sign.OverwriteSigned,
@@ -79,6 +81,8 @@ internal static class DotNetPublishSigningProfileResolver
         if (signOverrides is null) return null;
         return new DotNetPublishSignPatch
         {
+            Provider = signOverrides.Provider,
+            AzureArtifactSigning = CloneAzureArtifactSigningOptions(signOverrides.AzureArtifactSigning),
             Enabled = signOverrides.Enabled,
             IncludeDlls = signOverrides.IncludeDlls,
             OverwriteSigned = signOverrides.OverwriteSigned,
@@ -105,6 +109,22 @@ internal static class DotNetPublishSigningProfileResolver
 
         if (patch.Enabled.HasValue)
             sign.Enabled = patch.Enabled.Value;
+        if (patch.Provider.HasValue)
+        {
+            sign.Provider = patch.Provider.Value;
+            if (patch.Provider.Value == DotNetPublishSigningProvider.AzureArtifactSigning)
+            {
+                sign.Thumbprint = null;
+                sign.Csp = null;
+                sign.KeyContainer = null;
+            }
+            else
+            {
+                sign.AzureArtifactSigning = null;
+            }
+        }
+        if (patch.AzureArtifactSigning is not null)
+            sign.AzureArtifactSigning = CloneAzureArtifactSigningOptions(patch.AzureArtifactSigning);
         if (patch.IncludeDlls.HasValue)
             sign.IncludeDlls = patch.IncludeDlls.Value;
         if (patch.OverwriteSigned.HasValue)
@@ -131,5 +151,20 @@ internal static class DotNetPublishSigningProfileResolver
             sign.Csp = patch.Csp;
         if (patch.KeyContainer is not null)
             sign.KeyContainer = patch.KeyContainer;
+    }
+
+    private static DotNetPublishAzureArtifactSigningOptions? CloneAzureArtifactSigningOptions(
+        DotNetPublishAzureArtifactSigningOptions? options)
+    {
+        if (options is null) return null;
+        return new DotNetPublishAzureArtifactSigningOptions
+        {
+            Endpoint = options.Endpoint,
+            AccountName = options.AccountName,
+            CertificateProfileName = options.CertificateProfileName,
+            DlibPath = options.DlibPath,
+            CorrelationId = options.CorrelationId,
+            ExcludeCredentials = options.ExcludeCredentials?.ToArray()
+        };
     }
 }

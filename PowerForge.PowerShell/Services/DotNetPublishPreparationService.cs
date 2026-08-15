@@ -128,6 +128,13 @@ internal sealed class DotNetPublishPreparationService
         {
             var knownTargets = spec.Targets ?? Array.Empty<DotNetPublishTarget>();
             var selected = new HashSet<string>(overrideTargets, StringComparer.OrdinalIgnoreCase);
+            var allTargetNames = new HashSet<string>(
+                knownTargets.Where(target => !string.IsNullOrWhiteSpace(target.Name)).Select(target => target.Name.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            DotNetPublishPipelineRunner.ValidateAdditionalPublishTargetNames(
+                spec.Installers,
+                allTargetNames,
+                nameof(spec));
             var missing = selected
                 .Where(name => knownTargets.All(t => !string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase)))
                 .ToArray();
@@ -170,7 +177,29 @@ internal sealed class DotNetPublishPreparationService
                     .Where(i =>
                         i is not null
                         && (string.IsNullOrWhiteSpace(i.PrepareFromTarget)
-                            || selected.Contains(i.PrepareFromTarget)))
+                            || selected.Contains(i.PrepareFromTarget.Trim())))
+                    .ToArray();
+                foreach (var installer in spec.Installers)
+                    DotNetPublishPipelineRunner.RetainSelectedAdditionalPublishTargets(installer.Versioning, selected);
+            }
+
+            if (spec.Bundles is { Length: > 0 })
+            {
+                spec.Bundles = spec.Bundles
+                    .Where(item =>
+                        item is not null
+                        && (string.IsNullOrWhiteSpace(item.PrepareFromTarget)
+                            || selected.Contains(item.PrepareFromTarget.Trim())))
+                    .ToArray();
+            }
+
+            if (spec.StorePackages is { Length: > 0 })
+            {
+                spec.StorePackages = spec.StorePackages
+                    .Where(item =>
+                        item is not null
+                        && (string.IsNullOrWhiteSpace(item.PrepareFromTarget)
+                            || selected.Contains(item.PrepareFromTarget.Trim())))
                     .ToArray();
             }
         }

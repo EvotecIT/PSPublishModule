@@ -11,7 +11,7 @@ Creates signing options for DotNet publish targets and installers.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDotNetSign [-Enabled] [-IncludeDlls] [-OverwriteSigned] [-ToolPath <string>] [-OnMissingTool <DotNetPublishPolicyMode>] [-OnSignFailure <DotNetPublishPolicyMode>] [-Thumbprint <string>] [-SubjectName <string>] [-TimestampUrl <string>] [-Description <string>] [-Url <string>] [-Csp <string>] [-KeyContainer <string>] [<CommonParameters>]
+New-ConfigurationDotNetSign [-Provider <DotNetPublishSigningProvider>] [-AzureArtifactSigning <DotNetPublishAzureArtifactSigningOptions>] [-Enabled] [-IncludeDlls] [-OverwriteSigned] [-ToolPath <string>] [-OnMissingTool <DotNetPublishPolicyMode>] [-OnSignFailure <DotNetPublishPolicyMode>] [-Thumbprint <string>] [-SubjectName <string>] [-TimestampUrl <string>] [-Description <string>] [-Url <string>] [-Csp <string>] [-KeyContainer <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -25,7 +25,29 @@ New-ConfigurationDotNetSign -Enabled -Thumbprint '0123456789ABCDEF' -OnMissingTo
 ```
 
 
+### EXAMPLE 2
+```powershell
+New-ConfigurationDotNetSign -Enabled -Provider AzureArtifactSigning -SubjectName 'CN=Publisher' -AzureArtifactSigning $azureSigning
+```
+
+
 ## PARAMETERS
+
+### -AzureArtifactSigning
+Azure Artifact Signing settings used when Provider selects that provider.
+
+```yaml
+Type: DotNetPublishAzureArtifactSigningOptions
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
 ### -Csp
 Optional CSP name.
@@ -147,6 +169,22 @@ Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Provider
+Signing provider. Local certificate-store signing remains the default.
+
+```yaml
+Type: DotNetPublishSigningProvider
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: CertificateStore, AzureArtifactSigning
 
 Required: False
 Position: named

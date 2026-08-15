@@ -24,11 +24,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (manifest.RootElement.ValueKind != JsonValueKind.Array)
             throw Invalid("PowerForge manifest must contain a JSON array.");
 
-        JsonElement[] entries = manifest.RootElement.EnumerateArray()
+        JsonElement[] targetEntries = manifest.RootElement.EnumerateArray()
             .Where(entry => Is(entry, "Category", bundleId is null ? "Publish" : "Bundle") &&
                             Is(entry, "Target", target) &&
                             (bundleId is null || Is(entry, "BundleId", bundleId)))
             .ToArray();
+        JsonElement[] entries = targetEntries;
         entries = FilterEntries(entries, "Runtime", request.Runtime);
         entries = FilterEntries(entries, "Framework", request.Framework);
         entries = FilterEntries(entries, "Style", request.Style);
@@ -57,7 +58,26 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
         string manifestArchive = ReadString(entry, "ZipPath");
         string manifestExecutable = ReadString(entry, "ExePath");
-        string artifactPath = ResolveRequestFile(projectRoot, request.ArtifactPath, nameof(request.ArtifactPath));
+        string artifactSelection;
+        if (string.IsNullOrWhiteSpace(request.ArtifactPath))
+        {
+            string selectedManifestPath = !string.IsNullOrWhiteSpace(manifestArchive)
+                ? manifestArchive
+                : manifestExecutable;
+            artifactSelection = ResolvePortableManifestArtifactPath(
+                projectRoot,
+                checksumsPath,
+                selectedManifestPath,
+                expected.AllowOutsideProjectRoot,
+                string.IsNullOrWhiteSpace(manifestArchive) ? entry : null);
+        }
+        else
+        {
+            artifactSelection = request.ArtifactPath!;
+        }
+        string artifactPath = string.IsNullOrWhiteSpace(request.ArtifactPath)
+            ? ResolveManifestPath(projectRoot, artifactSelection, expected.AllowOutsideProjectRoot)
+            : ResolveRequestFile(projectRoot, artifactSelection, nameof(request.ArtifactPath));
         bool artifactIsArchive = IsZipArchive(artifactPath);
         if (artifactIsArchive != expected.Zip)
         {
@@ -70,7 +90,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             if (!string.Equals(Path.GetFileName(manifestArchive), Path.GetFileName(artifactPath), StringComparison.OrdinalIgnoreCase))
                 throw Invalid("Requested portable archive does not match the selected manifest entry.");
         }
-        else if (!DirectArtifactNameMatchesManifestEntry(entry, manifestExecutable, artifactPath, bundleId))
+        else if (!DirectArtifactNameMatchesManifestEntry(
+                     entry,
+                     manifestExecutable,
+                     artifactPath,
+                     bundleId,
+                     targetEntries.Length > 1))
         {
             throw Invalid("A direct portable artifact must have the release-asset identity of the manifest executable.");
         }
@@ -85,7 +110,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             PortableArchiveVerification archive = VerifyPortableArchiveInventory(
                 artifactPath,
                 expected.SignerThumbprint,
-                expected.SignerSubjectName);
+                expected.SignerSubjectName,
+                expected.Sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning);
             if (!string.Equals(archive.Inventory.ArtifactId, artifactId, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(archive.Inventory.Target, target, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(archive.Inventory.BundleId, bundleId, StringComparison.OrdinalIgnoreCase) ||
@@ -104,10 +130,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 throw Invalid("PowerForge manifest signed-file count does not match the publisher-signed payload inventory.");
             ValidatePortableConfigurationPolicy(archive.Inventory, expected);
             ValidateConfiguredPortableSignatureCoverage(archive.Inventory, expected.Sign);
+            string manifestExecutableForValidation = (request.SignaturePaths ?? Array.Empty<string>()).Any() && bundleId is null
+                ? ResolvePortableManifestArtifactPath(
+                    projectRoot,
+                    checksumsPath,
+                    manifestExecutable,
+                    expected.AllowOutsideProjectRoot,
+                    entry)
+                : manifestExecutable;
             ValidateRequestedPortableSignaturePaths(
                 request.SignaturePaths,
                 projectRoot,
-                manifestExecutable,
+                manifestExecutableForValidation,
                 expected.AllowOutsideProjectRoot,
                 archive.Inventory.SignedFilePaths);
             signatures = archive.Signatures;
@@ -136,7 +170,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 checksumsPath,
                 artifactPath,
                 artifactDigest,
-                directSigner);
+                directSigner,
+                expected.Sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning);
             PowerForgePortablePayloadInventory inventory = direct.Inventory;
             directInventoryEvidence = direct.Evidence;
             if (!string.Equals(inventory.ArtifactId, artifactId, StringComparison.OrdinalIgnoreCase) ||
@@ -170,7 +205,17 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             throw Invalid(
                 "Signed executable product or assembly identity does not match the configured publish project identity.");
         }
-        VerifiedSignature signer = RequireOneSigner(signatures);
+        VerifiedSignature signer = artifactIsArchive
+            && expected.Sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning
+                ? RequireOnePublisherSubject(signatures)
+                : RequireOneSigner(signatures);
+        string aggregateSignerThumbprint = signatures
+            .Select(signature => signature.Thumbprint)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(2)
+            .Count() == 1
+                ? signer.Thumbprint
+                : string.Empty;
         ValidatePortableSourceBinding(signedProductVersion, expectedRevision);
         string version = NormalizePortableVersion(signedProductVersion);
         ValidateExpectedPortableVersion(request.ExpectedVersion, version);
@@ -188,7 +233,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             artifactId,
             version,
             artifactDigest,
-            signer)
+            signatures,
+            allowTrustedPublisherRotation:
+                expected.Sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning)
             .Concat(directInventoryEvidence)
             .ToArray();
 
@@ -202,7 +249,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             Version = version,
             SourceRevision = sourceRevision.ToLowerInvariant(),
             SignerSubject = signer.Subject,
-            SignerThumbprint = signer.Thumbprint,
+            SignerThumbprint = aggregateSignerThumbprint,
             SignatureStatus = "valid",
             SignaturePaths = signatures.Select(signature => signature.DisplayPath).ToArray(),
             Signatures = signatures.Select(signature => new PowerForgeReleaseSignatureEvidence
@@ -220,14 +267,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         JsonElement entry,
         string manifestExecutable,
         string artifactPath,
-        string? bundleId)
+        string? bundleId,
+        bool requireMatrixIdentity)
     {
         string requestedName = Path.GetFileName(artifactPath);
         string originalName = Path.GetFileName(
             manifestExecutable.Replace('/', Path.DirectorySeparatorChar));
-        if (string.Equals(originalName, requestedName, StringComparison.OrdinalIgnoreCase))
-            return true;
-
         string matrixName = DotNetPublishReleaseAssetNaming.CreateDirectMatrixAssetName(
             ReadString(entry, "Target"),
             ReadString(entry, "Framework"),
@@ -236,7 +281,133 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             bundleId is null ? DotNetPublishArtefactCategory.Publish : DotNetPublishArtefactCategory.Bundle,
             bundleId,
             manifestExecutable);
-        return string.Equals(matrixName, requestedName, StringComparison.OrdinalIgnoreCase);
+        if (string.Equals(matrixName, requestedName, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (!string.Equals(originalName, requestedName, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!requireMatrixIdentity)
+            return true;
+
+        return PortablePathEndsWith(
+            artifactPath,
+            BuildPortableManifestExecutableRecoverySuffix(entry, manifestExecutable));
+    }
+
+    private static string ResolvePortableManifestArtifactPath(
+        string projectRoot,
+        string checksumsPath,
+        string manifestValue,
+        bool allowOutsideProjectRoot,
+        JsonElement? directEntry = null)
+    {
+        string normalized = DotNetPublishReleaseArtifactVerifier.RequireText(
+                manifestValue,
+                "manifest artifact path")
+            .Replace('/', Path.DirectorySeparatorChar);
+        if (!Path.IsPathRooted(normalized))
+        {
+            string currentPath = ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot);
+            if (File.Exists(currentPath))
+                return currentPath;
+        }
+        else
+        {
+            if (allowOutsideProjectRoot && File.Exists(normalized))
+                return ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot: true);
+
+            try
+            {
+                string currentPath = ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot: false);
+                if (File.Exists(currentPath))
+                    return currentPath;
+            }
+            catch (InvalidDataException)
+            {
+                // A rooted path from a different build checkout is recovered from the checksum catalog below.
+            }
+        }
+
+        string fileName = Path.GetFileName(normalized);
+        string? matrixAssetName = null;
+        if (directEntry.HasValue)
+        {
+            string directBundleId = ReadString(directEntry.Value, "BundleId");
+            bool isBundle = Is(directEntry.Value, "Category", "Bundle");
+            matrixAssetName = DotNetPublishReleaseAssetNaming.CreateDirectMatrixAssetName(
+                ReadString(directEntry.Value, "Target"),
+                ReadString(directEntry.Value, "Framework"),
+                ReadString(directEntry.Value, "Runtime"),
+                ReadString(directEntry.Value, "Style"),
+                isBundle ? DotNetPublishArtefactCategory.Bundle : DotNetPublishArtefactCategory.Publish,
+                isBundle && !string.IsNullOrWhiteSpace(directBundleId) ? directBundleId : null,
+                manifestValue);
+        }
+        string? requiredRecoverySuffix = directEntry.HasValue
+            ? TryBuildPortableManifestExecutableRecoverySuffix(directEntry.Value, manifestValue)
+            : null;
+        string[] candidateNames = new[] { fileName, matrixAssetName }
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(name => name!)
+            .ToArray();
+        string[] candidates = candidateNames
+            .SelectMany(name => DotNetPublishReleaseArtifactVerifier.FindChecksumPathsByFileName(checksumsPath, name))
+            .Select(path => ResolveManifestPath(projectRoot, path, allowOutsideProjectRoot))
+            .Where(File.Exists)
+            .Where(path => directEntry is null ||
+                           string.Equals(Path.GetFileName(path), matrixAssetName, StringComparison.OrdinalIgnoreCase) ||
+                           (!string.IsNullOrWhiteSpace(requiredRecoverySuffix) &&
+                            PortablePathEndsWith(path, requiredRecoverySuffix!)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (candidates.Length != 1)
+        {
+            string identityRequirement = string.IsNullOrWhiteSpace(requiredRecoverySuffix)
+                ? string.Empty
+                : " that preserves the selected runtime, framework, and style path identity";
+            throw Invalid(
+                $"Relocated PowerForge manifest artifact '{fileName}' must resolve to exactly one checksummed file{identityRequirement} in the current repository.");
+        }
+
+        return candidates[0];
+    }
+
+    private static string BuildPortableManifestExecutableRecoverySuffix(JsonElement entry, string manifestExecutable)
+    {
+        return TryBuildPortableManifestExecutableRecoverySuffix(entry, manifestExecutable)
+               ?? throw Invalid(
+                   "A relocated direct portable executable must preserve its runtime, framework, and style path identity.");
+    }
+
+    private static string? TryBuildPortableManifestExecutableRecoverySuffix(JsonElement entry, string manifestExecutable)
+    {
+        string normalized = DotNetPublishReleaseArtifactVerifier.RequireText(
+                manifestExecutable,
+                "manifest executable path")
+            .Replace('\\', '/');
+        string[] segments = normalized.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        string[] dimensions =
+        {
+            ReadString(entry, "Runtime"),
+            ReadString(entry, "Framework"),
+            ReadString(entry, "Style")
+        };
+        int[] dimensionIndexes = dimensions
+            .Select(dimension => Array.FindLastIndex(
+                segments,
+                segment => string.Equals(segment, dimension, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+        if (dimensionIndexes.Any(index => index < 0))
+            return null;
+
+        return string.Join("/", segments.Skip(dimensionIndexes.Min()));
+    }
+
+    private static bool PortablePathEndsWith(string path, string suffix)
+    {
+        string normalizedPath = Path.GetFullPath(path).Replace('\\', '/').TrimEnd('/');
+        string normalizedSuffix = suffix.Replace('\\', '/').Trim('/');
+        return normalizedPath.EndsWith("/" + normalizedSuffix, StringComparison.OrdinalIgnoreCase);
     }
 
     private static ExpectedPortable ReadExpectedPortable(
