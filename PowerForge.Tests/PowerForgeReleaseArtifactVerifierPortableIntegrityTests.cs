@@ -28,6 +28,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsDirtySourceStateBoundByPublisherInventory()
+    {
+        using var fixture = new PortableFixture();
+        fixture.SetArchiveInventorySourceDirty();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("dirty source checkout", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsExtraArchiveEntryOutsideTrustedOutputInventory()
     {
         using var fixture = new PortableFixture();
@@ -106,6 +118,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             string[] releaseAssets =
             {
                 fixture.ExecutablePath,
+                fixture.DirectInventoryPath,
+                fixture.DirectSignaturePath,
                 fixture.ChecksumsPath,
                 fixture.ManifestPath,
                 fixture.ConfigurationPath
@@ -152,9 +166,20 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             fixture.ExecutablePath);
         string aliasPath = Path.Combine(fixture.Root, aliasName);
         File.Copy(fixture.ExecutablePath, aliasPath);
+        File.Copy(
+            fixture.DirectInventoryPath,
+            aliasPath + PowerForgePortablePayloadInventory.DirectInventorySuffix);
+        File.Copy(
+            fixture.DirectSignaturePath,
+            aliasPath + PowerForgePortablePayloadInventory.DirectSignatureSuffix);
         File.AppendAllLines(
             fixture.ChecksumsPath,
-            new[] { $"{fixture.ComputeDigest(aliasPath)} *{aliasName}" });
+            new[]
+            {
+                $"{fixture.ComputeDigest(aliasPath)} *{aliasName}",
+                $"{fixture.ComputeDigest(aliasPath + PowerForgePortablePayloadInventory.DirectInventorySuffix)} *{aliasName}{PowerForgePortablePayloadInventory.DirectInventorySuffix}",
+                $"{fixture.ComputeDigest(aliasPath + PowerForgePortablePayloadInventory.DirectSignatureSuffix)} *{aliasName}{PowerForgePortablePayloadInventory.DirectSignatureSuffix}"
+            });
         string downloadRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         try
         {
@@ -162,6 +187,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             foreach (string source in new[]
                      {
                          aliasPath,
+                         aliasPath + PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                         aliasPath + PowerForgePortablePayloadInventory.DirectSignatureSuffix,
                          fixture.ChecksumsPath,
                          fixture.ManifestPath,
                          fixture.ConfigurationPath
@@ -188,6 +215,28 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         {
             if (Directory.Exists(downloadRoot)) Directory.Delete(downloadRoot, recursive: true);
         }
+    }
+
+    [Theory]
+    [InlineData("win-arm64", "net10.0", "PortableCompat")]
+    [InlineData("win-x64", "net8.0", "PortableCompat")]
+    [InlineData("win-x64", "net10.0", "SelfContained")]
+    public void Verify_PortableCliRejectsDirectArtifactWithDifferentPublisherSignedDimensions(
+        string runtime,
+        string framework,
+        string style)
+    {
+        using var fixture = new PortableFixture();
+        fixture.SetDirectInventoryDimensions(runtime, framework, style);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.ArtifactPath = fixture.ExecutablePath;
+        request.SignaturePaths = Array.Empty<string>();
+        request.SbomPaths = Array.Empty<string>();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(request));
+
+        Assert.Contains("publisher-signed direct portable dimensions", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -292,6 +341,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 
         internal void SetInventoryTarget(string target)
         {
+            WritePortableInventory(new[] { ExecutablePath });
             string inventoryPath = Path.Combine(OutputDirectory, PowerForgePortablePayloadInventory.InventoryFileName);
             PowerForgePortablePayloadInventory inventory = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(
                 File.ReadAllBytes(inventoryPath))!;
@@ -300,6 +350,25 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             File.WriteAllBytes(inventoryPath, PowerForgePortablePayloadInventoryCms.Serialize(inventory));
             WriteArchiveFromOutput();
             WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
+            WriteChecksums();
+        }
+
+        internal void SetArchiveInventorySourceDirty()
+        {
+            WritePortableInventory(new[] { ExecutablePath });
+            string inventoryPath = Path.Combine(OutputDirectory, PowerForgePortablePayloadInventory.InventoryFileName);
+            PowerForgePortablePayloadInventory inventory = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(
+                File.ReadAllBytes(inventoryPath))!;
+            inventory.SourceDirty = true;
+            File.WriteAllBytes(inventoryPath, PowerForgePortablePayloadInventoryCms.Serialize(inventory));
+            WriteArchiveFromOutput();
+            WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
+            WriteChecksums();
+        }
+
+        internal void SetDirectInventoryDimensions(string runtime, string framework, string style)
+        {
+            WriteDirectInventory(runtime, framework, style);
             WriteChecksums();
         }
 

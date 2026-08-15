@@ -395,7 +395,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (target.Publish.Sign?.Enabled == true)
         {
             signedFilePaths = TrySignOutput(outputDir, target.Publish.Sign);
-            if (signedFilePaths.Length > 0 && target.Publish.Zip)
+            if (signedFilePaths.Length > 0)
             {
                 string executable = ResolvePrimaryExecutable(outputDir, rid, target.ExecutableIdentities)
                     ?? throw new InvalidOperationException(
@@ -416,6 +416,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         "when the signed product identity is supplied by imported or generated build properties.");
                 }
                 string portableVersion = FirstText(versionInfo.ProductVersion, versionInfo.FileVersion);
+                SourceProvenance provenance = ReadPortableInventorySourceProvenance(plan, outputDir);
                 PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
                     outputDir,
                     target.Name,
@@ -426,11 +427,19 @@ public sealed partial class DotNetPublishPipelineRunner
                     executable,
                     executableIdentity,
                     portableVersion,
-                    signedFilePaths);
+                    signedFilePaths,
+                    sourceDirty: provenance.Dirty is not false,
+                    includeCompleteOutput: target.Publish.Zip);
                 byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
-                File.WriteAllBytes(Path.Combine(outputDir, PowerForgePortablePayloadInventory.InventoryFileName), inventoryBytes);
+                string inventoryPath = target.Publish.Zip
+                    ? Path.Combine(outputDir, PowerForgePortablePayloadInventory.InventoryFileName)
+                    : executable + PowerForgePortablePayloadInventory.DirectInventorySuffix;
+                string signaturePath = target.Publish.Zip
+                    ? Path.Combine(outputDir, PowerForgePortablePayloadInventory.SignatureFileName)
+                    : executable + PowerForgePortablePayloadInventory.DirectSignatureSuffix;
+                File.WriteAllBytes(inventoryPath, inventoryBytes);
                 File.WriteAllBytes(
-                    Path.Combine(outputDir, PowerForgePortablePayloadInventory.SignatureFileName),
+                    signaturePath,
                     _signPortableInventory(inventoryBytes, ResolvePortableInventorySigningOptions(signedFilePaths, target.Publish.Sign)));
             }
         }

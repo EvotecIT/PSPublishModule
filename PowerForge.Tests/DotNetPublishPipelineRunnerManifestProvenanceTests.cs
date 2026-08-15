@@ -794,7 +794,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void WriteManifests_IgnoredDefaultCompileInputMarksSourceDirty()
+    public void WriteManifests_IgnoredEvaluatedBuildInputMarksSourceDirty()
     {
         string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -815,11 +815,13 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                     <Content Include="property.custom" Condition="'$(CustomFlavor)' == 'Secure'" />
                     <Content Include="environment.custom" Condition="'$(POWERFORGE_TEST_INPUT)' == 'enabled'" />
                     <Content Include="assets/bin/payload.dat" />
+                    <EditorConfigFiles Include="analyzer.editorconfig" />
+                    <GlobalAnalyzerConfigFiles Include="analyzer.globalconfig" />
                   </ItemGroup>
                 </Project>
                 """);
             File.WriteAllText(Path.Combine(root, "Program.cs"), "internal static class Program { }");
-            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\nrid.custom\nsingle.custom\nproperty.custom\nenvironment.custom\nassets/bin/\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\nrid.custom\nsingle.custom\nproperty.custom\nenvironment.custom\nanalyzer.editorconfig\nanalyzer.globalconfig\nassets/bin/\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
             RunGit(root, "add Sample.csproj Program.cs .gitignore");
             RunGit(root, "commit -m \"tracked source\"");
 
@@ -892,6 +894,15 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             using (JsonDocument nestedBinDirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
                 Assert.True(nestedBinDirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
             File.Delete(nestedBinInput);
+
+            foreach (string analyzerInput in new[] { "analyzer.editorconfig", "analyzer.globalconfig" })
+            {
+                File.WriteAllText(Path.Combine(root, analyzerInput), "is_global = true");
+                InvokeWriteManifests(plan, artefacts);
+                using JsonDocument analyzerDirtyManifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+                Assert.True(analyzerDirtyManifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+                File.Delete(Path.Combine(root, analyzerInput));
+            }
 
             File.WriteAllText(Path.Combine(root, "payload.custom"), "published payload");
             InvokeWriteManifests(plan, artefacts);

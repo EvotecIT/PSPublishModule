@@ -68,8 +68,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         {
             throw Invalid($"Portable payload inventory is not valid JSON: {exception.Message}");
         }
-        if (inventory.SchemaVersion is not (2 or 3))
+        if (inventory.SchemaVersion != 4)
             throw Invalid("Portable payload inventory schema version is not supported.");
+        if (inventory.SourceDirty)
+            throw Invalid("Publisher-signed portable payload inventory was produced from a dirty source checkout.");
         var represented = new Dictionary<string, PowerForgePortablePayloadEntry>(StringComparer.Ordinal);
         foreach (PowerForgePortablePayloadEntry representedEntry in inventory.Entries ?? Array.Empty<PowerForgePortablePayloadEntry>())
         {
@@ -156,6 +158,111 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             signatures.ToArray(),
             signedVersion ?? throw Invalid("Portable payload inventory executable version is missing."),
             executableIdentity ?? throw Invalid("Portable payload inventory executable identity is missing."));
+    }
+
+    private PortableDirectVerification VerifyPortableDirectInventory(
+        string projectRoot,
+        string checksumsPath,
+        string artifactPath,
+        string artifactDigest,
+        VerifiedSignature artifactSigner)
+    {
+        string inventoryPath = artifactPath + PowerForgePortablePayloadInventory.DirectInventorySuffix;
+        string signaturePath = artifactPath + PowerForgePortablePayloadInventory.DirectSignatureSuffix;
+        string inventoryDigest = VerifyChecksummedFile(
+            projectRoot,
+            checksumsPath,
+            inventoryPath,
+            "direct portable inventory");
+        string signatureDigest = VerifyChecksummedFile(
+            projectRoot,
+            checksumsPath,
+            signaturePath,
+            "direct portable inventory signature");
+        byte[] inventoryBytes = ReadBoundedFileBytes(inventoryPath, "Direct portable inventory");
+        byte[] signatureBytes = ReadBoundedFileBytes(signaturePath, "Direct portable inventory signature");
+        PowerForgePayloadInventorySignature inventorySigner;
+        try
+        {
+            inventorySigner = _verifyPortableInventory(inventoryBytes, signatureBytes);
+        }
+        catch (Exception exception) when (exception is CryptographicException || exception is InvalidDataException)
+        {
+            throw Invalid($"Direct portable inventory signature is not valid: {exception.Message}");
+        }
+        if (!string.Equals(
+                inventorySigner.Thumbprint,
+                artifactSigner.Thumbprint,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw Invalid("Direct portable inventory signature does not use the Authenticode publisher certificate.");
+        }
+
+        PowerForgePortablePayloadInventory inventory;
+        try
+        {
+            inventory = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(inventoryBytes)
+                ?? throw Invalid("Direct portable inventory could not be deserialized.");
+        }
+        catch (JsonException exception)
+        {
+            throw Invalid($"Direct portable inventory is not valid JSON: {exception.Message}");
+        }
+        if (inventory.SchemaVersion != 4)
+            throw Invalid("Direct portable inventory schema version is not supported.");
+        if (inventory.SourceDirty)
+            throw Invalid("Publisher-signed direct portable inventory was produced from a dirty source checkout.");
+
+        PowerForgePortablePayloadEntry[] entries = inventory.Entries ?? Array.Empty<PowerForgePortablePayloadEntry>();
+        if (entries.Length != 1 ||
+            entries[0].Length != new FileInfo(artifactPath).Length ||
+            !string.Equals(entries[0].Sha256, artifactDigest, StringComparison.OrdinalIgnoreCase))
+        {
+            throw Invalid("Direct portable artifact does not match its publisher-signed payload inventory.");
+        }
+        string executablePath = NormalizeArchivePath(inventory.ExecutablePath);
+        string[] signedPaths = (inventory.SignedFilePaths ?? Array.Empty<string>())
+            .Select(NormalizeArchivePath)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (signedPaths.Length != 1 ||
+            !string.Equals(signedPaths[0], executablePath, StringComparison.Ordinal) ||
+            !string.Equals(NormalizeArchivePath(entries[0].Path), executablePath, StringComparison.Ordinal))
+        {
+            throw Invalid("Direct portable inventory must bind exactly its publisher-signed executable.");
+        }
+
+        return new PortableDirectVerification(
+            inventory,
+            new[]
+            {
+                new PowerForgeReleaseEvidenceFile
+                {
+                    Role = "portable-inventory",
+                    Path = inventoryPath,
+                    Sha256 = inventoryDigest
+                },
+                new PowerForgeReleaseEvidenceFile
+                {
+                    Role = "portable-inventory-signature",
+                    Path = signaturePath,
+                    Sha256 = signatureDigest
+                }
+            });
+    }
+
+    private sealed class PortableDirectVerification
+    {
+        internal PortableDirectVerification(
+            PowerForgePortablePayloadInventory inventory,
+            PowerForgeReleaseEvidenceFile[] evidence)
+        {
+            Inventory = inventory;
+            Evidence = evidence;
+        }
+
+        internal PowerForgePortablePayloadInventory Inventory { get; }
+        internal PowerForgeReleaseEvidenceFile[] Evidence { get; }
     }
 
     private sealed class PortableArchiveVerification

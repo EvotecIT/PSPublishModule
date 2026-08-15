@@ -12,6 +12,8 @@ public sealed partial class DotNetPublishPipelineRunner
         "EmbeddedResource",
         "AdditionalFiles",
         "Analyzer",
+        "EditorConfigFiles",
+        "GlobalAnalyzerConfigFiles",
         "ApplicationDefinition",
         "Page",
         "Resource",
@@ -21,6 +23,30 @@ public sealed partial class DotNetPublishPipelineRunner
         "None",
         "ProjectReference"
     ];
+
+    private static SourceProvenance ReadPortableInventorySourceProvenance(
+        DotNetPublishPlan plan,
+        string outputDirectory)
+    {
+        string[] projectPaths = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .Select(target => target.ProjectPath)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
+        IEnumerable<string> generatedPaths = EnumerateGeneratedProvenancePaths(
+                plan,
+                Array.Empty<DotNetPublishArtefactResult>(),
+                Array.Empty<DotNetPublishStorePackageResult>(),
+                Array.Empty<DotNetPublishMsiBuildResult>())
+            .Concat(new[] { outputDirectory });
+        return ReadSourceProvenance(
+            plan.ProjectRoot,
+            generatedPaths,
+            (plan.ConfigurationInputPaths ?? Array.Empty<string>()).Concat(projectPaths),
+            trustedExternalInputPaths: plan.GeneratedConfigurationInputPaths,
+            buildProjectPaths: projectPaths,
+            buildConfiguration: plan.Configuration,
+            buildPlan: plan);
+    }
 
     internal static string[] EnumerateBundleSourceInputs(DotNetPublishPlan? plan)
     {

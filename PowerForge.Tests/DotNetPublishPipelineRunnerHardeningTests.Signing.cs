@@ -146,6 +146,8 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             string nested = Directory.CreateDirectory(Path.Combine(outputDir, "nested")).FullName;
             File.WriteAllText(Path.Combine(nested, PowerForgePortablePayloadInventory.InventoryFileName), "payload metadata");
             File.WriteAllText(Path.Combine(nested, PowerForgePortablePayloadInventory.SignatureFileName), "payload signature");
+            File.WriteAllText(Path.Combine(nested, "payload" + PowerForgePortablePayloadInventory.DirectInventorySuffix), "direct payload metadata");
+            File.WriteAllText(Path.Combine(nested, "payload" + PowerForgePortablePayloadInventory.DirectSignatureSuffix), "direct payload signature");
             var requests = new List<ProcessRunRequest>();
             var processRunner = new StubProcessRunner(request =>
             {
@@ -185,7 +187,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                 "1.2.3",
                 signedFiles);
             Assert.Equal("app.exe", Assert.Single(inventory.SignedFilePaths));
-            Assert.Equal(3, inventory.SchemaVersion);
+            Assert.Equal(4, inventory.SchemaVersion);
             Assert.Equal("win-x64", inventory.Runtime);
             Assert.Equal("net10.0", inventory.Framework);
             Assert.Equal("PortableCompat", inventory.Style);
@@ -197,6 +199,14 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             Assert.Contains(inventory.Entries, entry => string.Equals(
                 entry.Path,
                 "nested/" + PowerForgePortablePayloadInventory.SignatureFileName,
+                StringComparison.Ordinal));
+            Assert.Contains(inventory.Entries, entry => string.Equals(
+                entry.Path,
+                "nested/payload" + PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                StringComparison.Ordinal));
+            Assert.Contains(inventory.Entries, entry => string.Equals(
+                entry.Path,
+                "nested/payload" + PowerForgePortablePayloadInventory.DirectSignatureSuffix,
                 StringComparison.Ordinal));
 
             InvalidOperationException foreignPrimary = Assert.Throws<InvalidOperationException>(() =>

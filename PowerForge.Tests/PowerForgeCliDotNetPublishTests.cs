@@ -145,7 +145,7 @@ public sealed class PowerForgeCliDotNetPublishTests
     }
 
     [Fact]
-    public async Task ReleaseArtifactVerify_RealSignedPortableCliReturnsStableJsonEvidenceShape()
+    public async Task ReleaseArtifactVerify_RealSignedPortableCliWithoutPublisherInventoryFailsClosed()
     {
         if (!OperatingSystem.IsWindows())
             return;
@@ -220,16 +220,15 @@ public sealed class PowerForgeCliDotNetPublishTests
                 repoRoot,
                 $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --artifact-id \"{artifactId}\" --project-root \"{tempRoot}\" --artifact \"{executablePath}\" --checksums \"{checksumsPath}\" --source-revision {sourceRevision} --manifest \"{manifestPath}\" --config \"{configurationPath}\" --rid win-x64 --framework net10.0 --style PortableCompat --sign-thumbprint {realSignature.Thumbprint} --output json");
 
-            Assert.True(exitCode == 0, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+            Assert.True(exitCode == 1, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
             using JsonDocument document = JsonDocument.Parse(stdout);
             JsonElement root = document.RootElement;
-            Assert.True(root.GetProperty("success").GetBoolean());
+            Assert.False(root.GetProperty("success").GetBoolean());
             Assert.Equal("dotnet.release-artifact.verify", root.GetProperty("command").GetString());
-            JsonElement result = root.GetProperty("result");
-            Assert.Equal("PortableCli", result.GetProperty("artifactKind").GetString());
-            Assert.Equal(artifactId, result.GetProperty("artifactId").GetString());
-            Assert.Equal("valid", result.GetProperty("signatureStatus").GetString());
-            Assert.Equal(realSignature.Subject, result.GetProperty("signerSubject").GetString());
+            Assert.Contains(
+                PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                root.GetProperty("error").GetString(),
+                StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

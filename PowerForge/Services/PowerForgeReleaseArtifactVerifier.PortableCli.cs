@@ -73,6 +73,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string signedProductVersion;
         string executableIdentity;
         string? inventoryVersion = null;
+        PowerForgeReleaseEvidenceFile[] directInventoryEvidence = Array.Empty<PowerForgeReleaseEvidenceFile>();
         if (artifactIsArchive)
         {
             PortableArchiveVerification archive = VerifyPortableArchiveInventory(
@@ -110,9 +111,41 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         }
         else
         {
-            signatures = new[] { VerifySignature(artifactPath, expected.SignerThumbprint, expected.SignerSubjectName) };
+            VerifiedSignature directSigner = VerifySignature(
+                artifactPath,
+                expected.SignerThumbprint,
+                expected.SignerSubjectName);
+            signatures = new[] { directSigner };
             signedProductVersion = _readPortableVersion(artifactPath);
             executableIdentity = _readPortableIdentity(artifactPath);
+            PortableDirectVerification direct = VerifyPortableDirectInventory(
+                projectRoot,
+                checksumsPath,
+                artifactPath,
+                artifactDigest,
+                directSigner);
+            PowerForgePortablePayloadInventory inventory = direct.Inventory;
+            directInventoryEvidence = direct.Evidence;
+            if (!string.Equals(inventory.ArtifactId, artifactId, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(inventory.Target, target, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(inventory.BundleId, bundleId, StringComparison.OrdinalIgnoreCase))
+            {
+                throw Invalid("Publisher-signed direct portable identity does not match the requested artifact target.");
+            }
+            if (!string.Equals(inventory.Runtime, ReadString(entry, "Runtime"), StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(inventory.Framework, ReadString(entry, "Framework"), StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(inventory.Style, ReadString(entry, "Style"), StringComparison.OrdinalIgnoreCase))
+            {
+                throw Invalid("Publisher-signed direct portable dimensions do not match the selected manifest entry.");
+            }
+            ValidateRevision(
+                DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(
+                    inventory.SourceRevision,
+                    "direct portable inventory source revision"),
+                expectedRevision);
+            if (!string.Equals(inventory.ExecutableIdentity, executableIdentity, StringComparison.OrdinalIgnoreCase))
+                throw Invalid("Signed executable identity does not match the publisher-signed direct portable inventory.");
+            inventoryVersion = inventory.Version;
         }
 
         if (expected.ExecutableIdentities.Length > 0 &&
@@ -146,7 +179,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             artifactId,
             version,
             artifactDigest,
-            signer);
+            signer)
+            .Concat(directInventoryEvidence)
+            .ToArray();
 
         return new PowerForgeReleaseArtifactEvidence
         {

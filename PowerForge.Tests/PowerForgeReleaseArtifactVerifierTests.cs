@@ -312,6 +312,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             ProjectPath = Path.Combine(Root, "Sample.CLI.csproj");
             File.WriteAllText(ProjectPath, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
             WriteArchive("signed payload");
+            WriteDirectInventory();
             File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
             {
                 SchemaVersion = 1,
@@ -362,6 +363,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         internal string ManifestPath { get; }
         internal string ConfigurationPath { get; }
         internal string ProjectPath { get; }
+        internal string DirectInventoryPath =>
+            ExecutablePath + PowerForgePortablePayloadInventory.DirectInventorySuffix;
+        internal string DirectSignaturePath =>
+            ExecutablePath + PowerForgePortablePayloadInventory.DirectSignatureSuffix;
 
         internal PowerForgeReleaseArtifactVerificationRequest CreateRequest() => new()
         {
@@ -413,6 +418,29 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 new byte[] { 1 });
         }
 
+        private void WriteDirectInventory(
+            string runtime = "win-x64",
+            string framework = "net10.0",
+            string style = "PortableCompat",
+            bool sourceDirty = false)
+        {
+            PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
+                OutputDirectory,
+                "Sample.CLI",
+                runtime,
+                framework,
+                style,
+                SourceRevision,
+                ExecutablePath,
+                "Sample.CLI",
+                "1.2.3+" + SourceRevision,
+                new[] { ExecutablePath },
+                sourceDirty: sourceDirty,
+                includeCompleteOutput: false);
+            File.WriteAllBytes(DirectInventoryPath, PowerForgePortablePayloadInventoryCms.Serialize(inventory));
+            File.WriteAllBytes(DirectSignaturePath, new byte[] { 1 });
+        }
+
         private void WriteArchiveFromOutput()
         {
             if (File.Exists(ArchivePath)) File.Delete(ArchivePath);
@@ -425,7 +453,13 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         }
 
         internal void WriteChecksums() =>
-            base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath);
+            base.WriteChecksums(
+                ManifestPath,
+                ConfigurationPath,
+                ExecutablePath,
+                ArchivePath,
+                DirectInventoryPath,
+                DirectSignaturePath);
 
         internal string AddSignedDependency()
         {
@@ -434,7 +468,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             WritePortableInventory(new[] { ExecutablePath });
             WriteArchiveFromOutput();
             WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
-            base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath, dependencyPath);
+            base.WriteChecksums(
+                ManifestPath,
+                ConfigurationPath,
+                ExecutablePath,
+                ArchivePath,
+                DirectInventoryPath,
+                DirectSignaturePath,
+                dependencyPath);
             return dependencyPath;
         }
 
@@ -490,7 +531,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 }
             }));
             WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
-            base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath, dependencyPath);
+            base.WriteChecksums(
+                ManifestPath,
+                ConfigurationPath,
+                ExecutablePath,
+                ArchivePath,
+                DirectInventoryPath,
+                DirectSignaturePath,
+                dependencyPath);
         }
 
         internal void SetPortableVersion(string version)
@@ -501,6 +549,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
 
         internal void SetInventoryDimensions(string runtime, string framework, string style)
         {
+            WritePortableInventory(new[] { ExecutablePath });
             string inventoryPath = Path.Combine(OutputDirectory, PowerForgePortablePayloadInventory.InventoryFileName);
             PowerForgePortablePayloadInventory inventory = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(
                 File.ReadAllBytes(inventoryPath))!;
@@ -588,6 +637,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     SourceDirty = false
                 }
             }));
+            WritePortableInventory(new[] { ExecutablePath });
             string inventoryPath = Path.Combine(OutputDirectory, PowerForgePortablePayloadInventory.InventoryFileName);
             PowerForgePortablePayloadInventory inventory = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(
                 File.ReadAllBytes(inventoryPath))!;

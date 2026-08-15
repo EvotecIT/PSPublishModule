@@ -72,7 +72,9 @@ internal sealed partial class PowerForgeReleaseService
             targetRunnableAssets,
             runnableAssets,
             checksumDirectory,
-            safeTarget);
+            safeTarget,
+            out List<string> directEvidenceAssets);
+        runnableAssets.AddRange(directEvidenceAssets);
         return true;
     }
 
@@ -162,6 +164,18 @@ internal sealed partial class PowerForgeReleaseService
 
     private static bool IsOptionalDirectAssetDiagnostic(string primaryPath, string path)
     {
+        if (string.Equals(
+                path,
+                primaryPath + PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(
+                path,
+                primaryPath + PowerForgePortablePayloadInventory.DirectSignatureSuffix,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
         string extension = Path.GetExtension(path);
         if (!extension.Equals(".pdb", StringComparison.OrdinalIgnoreCase) &&
             !extension.Equals(".xml", StringComparison.OrdinalIgnoreCase))
@@ -179,17 +193,16 @@ internal sealed partial class PowerForgeReleaseService
         IReadOnlyList<(DotNetPublishArtefactResult Artefact, string Path, bool Direct)> targetAssets,
         IReadOnlyList<string> runnableAssets,
         string checksumDirectory,
-        string safeTarget)
+        string safeTarget,
+        out List<string> directEvidenceAssets)
     {
+        directEvidenceAssets = new List<string>();
         var duplicateNames = new HashSet<string>(
             runnableAssets
                 .GroupBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
                 .Where(group => group.Count() > 1)
                 .Select(group => group.Key!),
             StringComparer.OrdinalIgnoreCase);
-        if (duplicateNames.Count == 0)
-            return runnableAssets.ToList();
-
         var replacements = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var stagedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string stagingDirectory = Path.Combine(checksumDirectory, safeTarget + ".release-assets");
@@ -213,6 +226,30 @@ internal sealed partial class PowerForgeReleaseService
             string stagedPath = Path.Combine(stagingDirectory, stagedName);
             File.Copy(entry.Path, stagedPath, overwrite: true);
             replacements[entry.Path] = stagedPath;
+        }
+
+        foreach (var entry in targetAssets.Where(entry => entry.Direct && entry.Artefact.SignedFiles > 0))
+        {
+            string finalExecutablePath = replacements.TryGetValue(entry.Path, out string? stagedPath)
+                ? stagedPath
+                : entry.Path;
+            foreach (string suffix in new[]
+                     {
+                         PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                         PowerForgePortablePayloadInventory.DirectSignatureSuffix
+                     })
+            {
+                string sourcePath = entry.Path + suffix;
+                if (!File.Exists(sourcePath))
+                {
+                    throw new InvalidOperationException(
+                        $"Signed direct release artifact '{Path.GetFileName(entry.Path)}' is missing publisher-signed matrix evidence '{Path.GetFileName(sourcePath)}'.");
+                }
+                string finalPath = finalExecutablePath + suffix;
+                if (!string.Equals(sourcePath, finalPath, StringComparison.OrdinalIgnoreCase))
+                    File.Copy(sourcePath, finalPath, overwrite: true);
+                directEvidenceAssets.Add(finalPath);
+            }
         }
 
         return runnableAssets

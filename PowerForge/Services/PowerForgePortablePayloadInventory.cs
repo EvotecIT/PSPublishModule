@@ -10,6 +10,8 @@ internal sealed class PowerForgePortablePayloadInventory
 {
     internal const string InventoryFileName = "PowerForge.ReleaseInventory.json";
     internal const string SignatureFileName = "PowerForge.ReleaseInventory.p7s";
+    internal const string DirectInventorySuffix = ".release-inventory.json";
+    internal const string DirectSignatureSuffix = ".release-inventory.p7s";
 
     public int SchemaVersion { get; set; }
     public string ArtifactId { get; set; } = string.Empty;
@@ -19,6 +21,7 @@ internal sealed class PowerForgePortablePayloadInventory
     public string Framework { get; set; } = string.Empty;
     public string Style { get; set; } = string.Empty;
     public string SourceRevision { get; set; } = string.Empty;
+    public bool SourceDirty { get; set; }
     public string Version { get; set; } = string.Empty;
     public string ExecutablePath { get; set; } = string.Empty;
     public string ExecutableIdentity { get; set; } = string.Empty;
@@ -79,10 +82,15 @@ internal static class PowerForgePortablePayloadInventoryCms
         string executableIdentity,
         string version,
         IEnumerable<string> signedFilePaths,
-        string? bundleId = null)
+        string? bundleId = null,
+        bool sourceDirty = false,
+        bool includeCompleteOutput = true)
     {
         string root = Path.GetFullPath(outputDirectory);
-        PowerForgePortablePayloadEntry[] entries = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+        IEnumerable<string> payloadPaths = includeCompleteOutput
+            ? Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            : new[] { executablePath };
+        PowerForgePortablePayloadEntry[] entries = payloadPaths
             .Where(path => !IsRootMetadataPath(NormalizeRelative(root, path)))
             .Select(path => new PowerForgePortablePayloadEntry
             {
@@ -105,7 +113,7 @@ internal static class PowerForgePortablePayloadInventoryCms
         }
         return new PowerForgePortablePayloadInventory
         {
-            SchemaVersion = 3,
+            SchemaVersion = 4,
             ArtifactId = artifactId,
             Target = artifactId,
             BundleId = string.IsNullOrWhiteSpace(bundleId) ? null : bundleId!.Trim(),
@@ -113,6 +121,7 @@ internal static class PowerForgePortablePayloadInventoryCms
             Framework = framework,
             Style = style,
             SourceRevision = sourceRevision.ToLowerInvariant(),
+            SourceDirty = sourceDirty,
             Version = version,
             ExecutablePath = normalizedExecutablePath,
             ExecutableIdentity = executableIdentity,

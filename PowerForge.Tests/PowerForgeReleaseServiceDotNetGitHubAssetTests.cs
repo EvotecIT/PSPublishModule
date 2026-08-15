@@ -194,6 +194,90 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void TryBuildDotNetGitHubRunnableAssets_SignedDirectMatrixStagesPublisherEvidenceWithEachAlias()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string firstDirectory = Directory.CreateDirectory(Path.Combine(root, "net8")).FullName;
+            string secondDirectory = Directory.CreateDirectory(Path.Combine(root, "net10")).FullName;
+            string first = Path.Combine(firstDirectory, "Sample.exe");
+            string second = Path.Combine(secondDirectory, "Sample.exe");
+            foreach (string executable in new[] { first, second })
+            {
+                File.WriteAllText(executable, Path.GetFileName(Path.GetDirectoryName(executable)));
+                File.WriteAllText(
+                    executable + PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                    "signed inventory");
+                File.WriteAllText(
+                    executable + PowerForgePortablePayloadInventory.DirectSignatureSuffix,
+                    "inventory signature");
+            }
+            var target = new DotNetPublishTargetPlan
+            {
+                Name = "Sample",
+                Publish = new DotNetPublishPublishOptions { Zip = false }
+            };
+            var plan = new DotNetPublishPlan { Targets = new[] { target } };
+            var result = new DotNetPublishResult
+            {
+                ChecksumsPath = Path.Combine(root, "SHA256SUMS.txt"),
+                Artefacts = new[]
+                {
+                    new DotNetPublishArtefactResult
+                    {
+                        Category = DotNetPublishArtefactCategory.Publish,
+                        Target = "Sample",
+                        Framework = "net8.0",
+                        Runtime = "win-x64",
+                        Style = DotNetPublishStyle.PortableCompat,
+                        OutputDir = firstDirectory,
+                        PublishDir = firstDirectory,
+                        ExePath = first,
+                        SignedFiles = 1
+                    },
+                    new DotNetPublishArtefactResult
+                    {
+                        Category = DotNetPublishArtefactCategory.Publish,
+                        Target = "Sample",
+                        Framework = "net10.0",
+                        Runtime = "win-x64",
+                        Style = DotNetPublishStyle.PortableCompat,
+                        OutputDir = secondDirectory,
+                        PublishDir = secondDirectory,
+                        ExePath = second,
+                        SignedFiles = 1
+                    }
+                }
+            };
+
+            bool success = PowerForgeReleaseService.TryBuildDotNetGitHubRunnableAssets(
+                plan,
+                target,
+                result,
+                out List<string> assets,
+                out _,
+                out _,
+                out string? error);
+
+            Assert.True(success, error);
+            Assert.Equal(6, assets.Count);
+            Assert.Equal(6, assets.Select(Path.GetFileName).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+            Assert.All(assets, path => Assert.Contains("Sample.release-assets", path, StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(2, assets.Count(path => path.EndsWith(PowerForgePortablePayloadInventory.DirectInventorySuffix, StringComparison.Ordinal)));
+            Assert.Equal(2, assets.Count(path => path.EndsWith(PowerForgePortablePayloadInventory.DirectSignatureSuffix, StringComparison.Ordinal)));
+            string catalog = ModulePublisher.WriteGitHubChecksumCatalog(
+                Path.Combine(root, "Sample.SHA256SUMS.txt"),
+                assets);
+            Assert.Equal(6, File.ReadAllLines(catalog).Length);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData(DotNetPublishArtefactCategory.Publish, DotNetPublishStyle.FrameworkDependent, "Sample.dll")]
     [InlineData(DotNetPublishArtefactCategory.Publish, DotNetPublishStyle.PortableCompat, "appsettings.json")]
