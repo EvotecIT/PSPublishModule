@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
@@ -22,6 +23,7 @@ internal sealed class PowerForgePortablePayloadInventory
     public string Style { get; set; } = string.Empty;
     public string SourceRevision { get; set; } = string.Empty;
     public bool SourceDirty { get; set; }
+    public string ConfigurationPolicySha256 { get; set; } = string.Empty;
     public string Version { get; set; } = string.Empty;
     public string ExecutablePath { get; set; } = string.Empty;
     public string ExecutableIdentity { get; set; } = string.Empty;
@@ -139,6 +141,7 @@ internal static class PowerForgePortablePayloadInventoryCms
         string framework,
         string style,
         string sourceRevision,
+        string configurationPolicySha256,
         string executablePath,
         string executableIdentity,
         string version,
@@ -161,6 +164,197 @@ internal static class PowerForgePortablePayloadInventoryCms
             })
             .OrderBy(entry => entry.Path, StringComparer.Ordinal)
             .ToArray();
+        return CreateCore(
+            root,
+            artifactId,
+            runtime,
+            framework,
+            style,
+            sourceRevision,
+            configurationPolicySha256,
+            executablePath,
+            executableIdentity,
+            version,
+            signedFilePaths,
+            entries,
+            bundleId,
+            sourceDirty);
+    }
+
+    internal static PowerForgePortablePayloadInventory CreateFromArchive(
+        string archivePath,
+        string outputDirectory,
+        string artifactId,
+        string runtime,
+        string framework,
+        string style,
+        string sourceRevision,
+        string configurationPolicySha256,
+        string executablePath,
+        string executableIdentity,
+        string version,
+        IEnumerable<string> signedFilePaths,
+        string? bundleId = null,
+        bool sourceDirty = false,
+        bool requireSignedDlls = false)
+    {
+        string root = Path.GetFullPath(outputDirectory);
+        var entries = new List<PowerForgePortablePayloadEntry>();
+        var archiveEntries = new Dictionary<string, ZipArchiveEntry>(StringComparer.Ordinal);
+        var duplicateGuard = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (ZipArchive archive = ZipFile.OpenRead(archivePath))
+        {
+            foreach (ZipArchiveEntry entry in archive.Entries)
+            {
+                string normalized = NormalizeArchivePath(entry.FullName);
+                if (!duplicateGuard.Add(normalized))
+                    throw new InvalidOperationException($"Portable archive contains duplicate entry '{normalized}'.");
+                if (normalized.Length == 0 ||
+                    entry.FullName.EndsWith("/", StringComparison.Ordinal) ||
+                    entry.FullName.EndsWith("\\", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                if (IsRootMetadataPath(normalized))
+                    continue;
+                if (string.Equals(normalized, PowerForgePortablePayloadInventory.InventoryFileName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(normalized, PowerForgePortablePayloadInventory.SignatureFileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"Portable archive contains non-canonical reserved release-inventory path '{normalized}'.");
+                }
+
+                string digest = ComputeSha256(entry);
+                entries.Add(new PowerForgePortablePayloadEntry
+                {
+                    Path = normalized,
+                    Length = entry.Length,
+                    Sha256 = digest.ToLowerInvariant()
+                });
+                archiveEntries.Add(normalized, entry);
+            }
+
+            string[] materializedSignedPaths = signedFilePaths.ToArray();
+            foreach (string signedPath in materializedSignedPaths)
+            {
+                string relativePath = NormalizeRelative(root, signedPath);
+                if (!archiveEntries.TryGetValue(relativePath, out ZipArchiveEntry? archiveEntry) ||
+                    archiveEntry.Length != new FileInfo(signedPath).Length ||
+                    !string.Equals(
+                        ComputeSha256(archiveEntry),
+                        DotNetPublishReleaseArtifactVerifier.ComputeSha256(signedPath),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"Portable archive signed entry '{relativePath}' changed after publisher signing.");
+                }
+            }
+
+            var signedArchivePaths = new HashSet<string>(
+                materializedSignedPaths.Select(path => NormalizeRelative(root, path)),
+                StringComparer.Ordinal);
+            string[] unsignedPortableBinaries = archiveEntries.Keys
+                .Where(path => path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                               (requireSignedDlls && path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
+                .Where(path => !signedArchivePaths.Contains(path))
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToArray();
+            if (unsignedPortableBinaries.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    "Portable archive contains executable payloads that were added or changed after publisher signing: " +
+                    string.Join(", ", unsignedPortableBinaries));
+            }
+
+            return CreateCore(
+                root,
+                artifactId,
+                runtime,
+                framework,
+                style,
+                sourceRevision,
+                configurationPolicySha256,
+                executablePath,
+                executableIdentity,
+                version,
+                materializedSignedPaths,
+                entries.OrderBy(entry => entry.Path, StringComparer.Ordinal).ToArray(),
+                bundleId,
+                sourceDirty);
+        }
+    }
+
+    internal static void RewriteArchiveEvidence(
+        string archivePath,
+        byte[] inventoryBytes,
+        byte[] signatureBytes)
+    {
+        using ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Update);
+        foreach (string reservedPath in new[]
+                 {
+                     PowerForgePortablePayloadInventory.InventoryFileName,
+                     PowerForgePortablePayloadInventory.SignatureFileName
+                 })
+        {
+            ZipArchiveEntry[] matches = archive.Entries
+                .Where(entry => string.Equals(entry.FullName, reservedPath, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (matches.Any(entry => !string.Equals(entry.FullName, reservedPath, StringComparison.Ordinal)) ||
+                matches.Length > 1)
+            {
+                throw new InvalidOperationException(
+                    $"Portable archive contains ambiguous reserved release-inventory path '{reservedPath}'.");
+            }
+            foreach (ZipArchiveEntry match in matches)
+                match.Delete();
+        }
+
+        WriteArchiveEntry(
+            archive,
+            PowerForgePortablePayloadInventory.InventoryFileName,
+            inventoryBytes);
+        WriteArchiveEntry(
+            archive,
+            PowerForgePortablePayloadInventory.SignatureFileName,
+            signatureBytes);
+    }
+
+    internal static void RewriteEvidenceFiles(
+        string inventoryPath,
+        byte[] inventoryBytes,
+        string signaturePath,
+        byte[] signatureBytes)
+    {
+        if (Directory.Exists(inventoryPath) || Directory.Exists(signaturePath))
+            throw new InvalidOperationException("Portable release-inventory evidence path is a directory.");
+        if (File.Exists(inventoryPath)) File.Delete(inventoryPath);
+        if (File.Exists(signaturePath)) File.Delete(signaturePath);
+        WriteEvidenceFiles(inventoryPath, inventoryBytes, signaturePath, signatureBytes);
+    }
+
+    private static PowerForgePortablePayloadInventory CreateCore(
+        string root,
+        string artifactId,
+        string runtime,
+        string framework,
+        string style,
+        string sourceRevision,
+        string configurationPolicySha256,
+        string executablePath,
+        string executableIdentity,
+        string version,
+        IEnumerable<string> signedFilePaths,
+        PowerForgePortablePayloadEntry[] entries,
+        string? bundleId,
+        bool sourceDirty)
+    {
+        if (configurationPolicySha256.Length != 64 ||
+            configurationPolicySha256.Any(character => !Uri.IsHexDigit(character)))
+        {
+            throw new InvalidOperationException(
+                "Portable payload inventory requires a canonical configuration policy SHA-256 digest.");
+        }
+
         string normalizedExecutablePath = NormalizeRelative(root, executablePath);
         string[] normalizedSignedPaths = signedFilePaths
             .Select(path => NormalizeRelative(root, path))
@@ -174,7 +368,7 @@ internal static class PowerForgePortablePayloadInventoryCms
         }
         return new PowerForgePortablePayloadInventory
         {
-            SchemaVersion = 4,
+            SchemaVersion = 5,
             ArtifactId = artifactId,
             Target = artifactId,
             BundleId = string.IsNullOrWhiteSpace(bundleId) ? null : bundleId!.Trim(),
@@ -183,6 +377,7 @@ internal static class PowerForgePortablePayloadInventoryCms
             Style = style,
             SourceRevision = sourceRevision.ToLowerInvariant(),
             SourceDirty = sourceDirty,
+            ConfigurationPolicySha256 = configurationPolicySha256.ToLowerInvariant(),
             Version = version,
             ExecutablePath = normalizedExecutablePath,
             ExecutableIdentity = executableIdentity,
@@ -200,6 +395,31 @@ internal static class PowerForgePortablePayloadInventoryCms
     private static bool IsRootMetadataPath(string relativePath) =>
         string.Equals(relativePath, PowerForgePortablePayloadInventory.InventoryFileName, StringComparison.Ordinal) ||
         string.Equals(relativePath, PowerForgePortablePayloadInventory.SignatureFileName, StringComparison.Ordinal);
+
+    private static string NormalizeArchivePath(string value)
+    {
+        string path = (value ?? string.Empty).Replace('\\', '/');
+        if (path.StartsWith("/", StringComparison.Ordinal) || Path.IsPathRooted(path))
+            throw new InvalidOperationException($"Portable archive contains unsafe entry '{path}'.");
+        string[] segments = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Any(segment => segment == "." || segment == ".."))
+            throw new InvalidOperationException($"Portable archive contains unsafe entry '{path}'.");
+        return string.Join("/", segments);
+    }
+
+    private static string ComputeSha256(ZipArchiveEntry entry)
+    {
+        using Stream input = entry.Open();
+        using SHA256 sha256 = SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(input)).Replace("-", string.Empty);
+    }
+
+    private static void WriteArchiveEntry(ZipArchive archive, string path, byte[] bytes)
+    {
+        ZipArchiveEntry entry = archive.CreateEntry(path, CompressionLevel.Optimal);
+        using Stream output = entry.Open();
+        output.Write(bytes, 0, bytes.Length);
+    }
 
     private static X509Certificate2 FindSigningCertificate(DotNetPublishSignOptions options)
     {

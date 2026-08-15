@@ -5621,10 +5621,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("nuget/" + Path.GetFileName(package), stagedPackage.RelativeStagePath!.Replace('\\', '/'));
 
             var checksumText = File.ReadAllText(Path.Combine(stageRoot, "SHA256SUMS.txt"));
-            Assert.Contains("nuget/" + Path.GetFileName(package), checksumText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("nuget/" + Path.GetFileName(symbolPackage), checksumText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("portable/" + Path.GetFileName(bundleZip), checksumText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("metadata/" + Path.GetFileName(authorizedConfig), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*" + Path.GetFileName(package), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*" + Path.GetFileName(symbolPackage), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*" + Path.GetFileName(bundleZip), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*" + Path.GetFileName(authorizedConfig), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("nuget/", checksumText.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(package.Replace('\\', '/'), checksumText, StringComparison.OrdinalIgnoreCase);
         }
         finally
@@ -5773,8 +5774,10 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Contains(stagedPortablePath, result.ReleaseAssets, StringComparer.OrdinalIgnoreCase);
 
             var checksumText = File.ReadAllText(Path.Combine(stageRoot, "SHA256SUMS.txt"));
-            Assert.Contains("NuGet/IntelligenceX.0.1.0.nupkg", checksumText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("GitHub/IntelligenceX.Chat.App-1.0.0-win-x64-portable.zip", checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*IntelligenceX.0.1.0.nupkg", checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*IntelligenceX.Chat.App-1.0.0-win-x64-portable.zip", checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("NuGet/", checksumText.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("GitHub/", checksumText.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("raw-portable.zip", checksumText, StringComparison.OrdinalIgnoreCase);
         }
         finally
@@ -6474,7 +6477,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.NotNull(result.ReleaseChecksumsPath);
             var releaseChecksums = result.ReleaseChecksumsPath;
             var checksumText = File.ReadAllText(releaseChecksums!);
-            Assert.Contains("Winget/", checksumText.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*" + Path.GetFileName(manifestPath), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Winget/", checksumText.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

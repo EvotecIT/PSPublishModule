@@ -197,6 +197,12 @@ public sealed partial class DotNetPublishPipelineRunner
                     framework,
                     style.Value.ToString(),
                     plan.SourceRevision,
+                    ComputePortableConfigurationPolicySha256(
+                        sourceTargetPlan.Name,
+                        sourceTargetPlan.Kind,
+                        bundleId,
+                        bundle.Zip,
+                        sign),
                     primaryExecutable,
                     executableIdentity,
                     portableVersion,

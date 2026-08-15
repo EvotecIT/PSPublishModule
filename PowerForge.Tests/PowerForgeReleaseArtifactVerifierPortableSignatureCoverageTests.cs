@@ -81,7 +81,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
             fixture.CreateVerifier().Verify(fixture.CreateRequest()));
 
-        Assert.Contains("requires DLL signing", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("every required executable or DLL", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

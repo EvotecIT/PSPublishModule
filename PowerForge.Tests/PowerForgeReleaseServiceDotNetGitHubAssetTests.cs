@@ -69,6 +69,67 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void WriteReleaseChecksums_UsesFlattenedGitHubAssetNamesForConfigurationEvidence()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string nested = Directory.CreateDirectory(Path.Combine(root, "release.configuration-assets")).FullName;
+            string configuration = Path.Combine(nested, "release.json");
+            string artifact = Path.Combine(root, "Sample.zip");
+            string checksums = Path.Combine(root, "SHA256SUMS.txt");
+            File.WriteAllText(configuration, "configuration");
+            File.WriteAllText(artifact, "artifact");
+            var result = new PowerForgeReleaseResult
+            {
+                ReleaseAssets = new[] { configuration, artifact }
+            };
+
+            PowerForgeReleaseService.WriteReleaseChecksums(result, checksums);
+
+            string[] lines = File.ReadAllLines(checksums);
+            Assert.Contains(lines, line => line.EndsWith(" *release.json", StringComparison.Ordinal));
+            Assert.Contains(lines, line => line.EndsWith(" *Sample.zip", StringComparison.Ordinal));
+            Assert.DoesNotContain(lines, line => line.Contains("release.configuration-assets/", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void WriteReleaseChecksums_RejectsDestinationThatCollidesWithReleaseInput(bool samePath)
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string assetDirectory = Directory.CreateDirectory(Path.Combine(root, "assets")).FullName;
+            string asset = Path.Combine(assetDirectory, "SHA256SUMS.txt");
+            string checksums = samePath ? asset : Path.Combine(root, "SHA256SUMS.txt");
+            File.WriteAllText(asset, "original asset");
+            var result = new PowerForgeReleaseResult { ReleaseAssets = new[] { asset } };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.WriteReleaseChecksums(result, checksums));
+
+            Assert.Contains(
+                samePath ? "collides" : "unique file names",
+                exception.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("original asset", File.ReadAllText(asset));
+            if (!samePath)
+                Assert.False(File.Exists(checksums));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

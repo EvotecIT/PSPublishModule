@@ -68,7 +68,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         {
             throw Invalid($"Portable payload inventory is not valid JSON: {exception.Message}");
         }
-        if (inventory.SchemaVersion != 4)
+        if (inventory.SchemaVersion != 5)
             throw Invalid("Portable payload inventory schema version is not supported.");
         if (inventory.SourceDirty)
             throw Invalid("Publisher-signed portable payload inventory was produced from a dirty source checkout.");
@@ -208,7 +208,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         {
             throw Invalid($"Direct portable inventory is not valid JSON: {exception.Message}");
         }
-        if (inventory.SchemaVersion != 4)
+        if (inventory.SchemaVersion != 5)
             throw Invalid("Direct portable inventory schema version is not supported.");
         if (inventory.SourceDirty)
             throw Invalid("Publisher-signed direct portable inventory was produced from a dirty source checkout.");

@@ -459,6 +459,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             DotNetPublishSignOptions sign,
             string? signerThumbprint,
             string? signerSubjectName,
+            string configurationPolicySha256,
             bool allowOutsideProjectRoot)
         {
             Configuration = configuration;
@@ -469,6 +470,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             Sign = sign;
             SignerThumbprint = signerThumbprint;
             SignerSubjectName = signerSubjectName;
+            ConfigurationPolicySha256 = configurationPolicySha256;
             AllowOutsideProjectRoot = allowOutsideProjectRoot;
         }
 
@@ -481,6 +483,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         internal DotNetPublishSignOptions Sign { get; }
         internal string? SignerThumbprint { get; }
         internal string? SignerSubjectName { get; }
+        internal string ConfigurationPolicySha256 { get; }
         internal bool AllowOutsideProjectRoot { get; }
     }
 

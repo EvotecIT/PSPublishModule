@@ -561,17 +561,72 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
 
             Assert.Equal(1, result.SignedFiles);
             Assert.True(File.Exists(result.ZipPath));
-            using var archive = ZipFile.OpenRead(result.ZipPath!);
-            ZipArchiveEntry inventoryEntry = Assert.Single(
-                archive.Entries,
-                entry => entry.FullName == PowerForgePortablePayloadInventory.InventoryFileName);
-            using Stream inventoryStream = inventoryEntry.Open();
-            PowerForgePortablePayloadInventory inventory = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(inventoryStream)!;
-            Assert.Equal(4, inventory.SchemaVersion);
-            Assert.Equal("app", inventory.Target);
-            Assert.Equal("package", inventory.BundleId);
-            Assert.Contains(inventory.Entries, entry => entry.Path == "runtime-data.json");
-            Assert.Contains(inventory.SignedFilePaths, path => path == "PowerForge.Tests.dll");
+            using (ZipArchive archive = ZipFile.OpenRead(result.ZipPath!))
+            {
+                ZipArchiveEntry inventoryEntry = Assert.Single(
+                    archive.Entries,
+                    entry => entry.FullName == PowerForgePortablePayloadInventory.InventoryFileName);
+                using Stream inventoryStream = inventoryEntry.Open();
+                PowerForgePortablePayloadInventory inventory = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(inventoryStream)!;
+                Assert.Equal(5, inventory.SchemaVersion);
+                Assert.Equal("app", inventory.Target);
+                Assert.Equal("package", inventory.BundleId);
+                Assert.Contains(inventory.Entries, entry => entry.Path == "runtime-data.json");
+                Assert.Contains(inventory.SignedFilePaths, path => path == "PowerForge.Tests.dll");
+            }
+
+            using (ZipArchive mutableArchive = ZipFile.Open(result.ZipPath!, ZipArchiveMode.Update))
+            {
+                ZipArchiveEntry hookOutput = mutableArchive.CreateEntry("after-hook.txt");
+                using StreamWriter writer = new(hookOutput.Open());
+                writer.Write("added after bundle creation");
+            }
+
+            runner.FinalizePortableEvidence(
+                plan,
+                new[]
+                {
+                    result,
+                    new DotNetPublishArtefactResult
+                    {
+                        Category = DotNetPublishArtefactCategory.Installer,
+                        OutputDir = publishDir,
+                        PublishDir = publishDir
+                    }
+                });
+
+            using (ZipArchive finalizedArchive = ZipFile.OpenRead(result.ZipPath!))
+            {
+                ZipArchiveEntry finalizedInventoryEntry = Assert.Single(
+                    finalizedArchive.Entries,
+                    entry => entry.FullName == PowerForgePortablePayloadInventory.InventoryFileName);
+                using Stream finalizedInventoryStream = finalizedInventoryEntry.Open();
+                PowerForgePortablePayloadInventory finalizedInventory =
+                    JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(finalizedInventoryStream)!;
+                Assert.Contains(finalizedInventory.Entries, entry => entry.Path == "after-hook.txt");
+            }
+
+            using (ZipArchive mutableArchive = ZipFile.Open(result.ZipPath!, ZipArchiveMode.Update))
+            {
+                ZipArchiveEntry unsignedExecutable = mutableArchive.CreateEntry("after-hook.exe");
+                using StreamWriter writer = new(unsignedExecutable.Open());
+                writer.Write("unsigned executable added after signing");
+            }
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                runner.FinalizePortableEvidence(
+                    plan,
+                    new[]
+                    {
+                        result,
+                        new DotNetPublishArtefactResult
+                        {
+                            Category = DotNetPublishArtefactCategory.Installer,
+                            OutputDir = publishDir,
+                            PublishDir = publishDir
+                        }
+                    }));
+            Assert.Contains("after publisher signing", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -676,7 +731,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             Assert.Equal(new[] { inventoryPath, signaturePath }, result.EvidencePaths);
             PowerForgePortablePayloadInventory inventory = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(
                 File.ReadAllBytes(inventoryPath))!;
-            Assert.Equal(4, inventory.SchemaVersion);
+            Assert.Equal(5, inventory.SchemaVersion);
             Assert.Equal("win-x64", inventory.Runtime);
             Assert.Equal("net10.0", inventory.Framework);
             Assert.Equal("PortableCompat", inventory.Style);

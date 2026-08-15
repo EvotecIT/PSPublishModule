@@ -5464,7 +5464,7 @@ internal sealed partial class PowerForgeReleaseService
         };
     }
 
-    private static void WriteReleaseChecksums(PowerForgeReleaseResult result, string checksumsPath)
+    internal static void WriteReleaseChecksums(PowerForgeReleaseResult result, string checksumsPath)
     {
         var checksumInputs = new List<string>(result.ReleaseAssets);
         if (!string.IsNullOrWhiteSpace(result.ReleaseManifestPath) && File.Exists(result.ReleaseManifestPath))
@@ -5476,12 +5476,33 @@ internal sealed partial class PowerForgeReleaseService
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        Directory.CreateDirectory(Path.GetDirectoryName(checksumsPath)!);
-        var relativeTo = Path.GetDirectoryName(checksumsPath)!;
-        var lines = uniqueChecksumInputs
-            .Select(path => $"{ComputeSha256(path!)} *{GetRelativePathCompat(relativeTo, path!).Replace('\\', '/')}")
+        string fullChecksumsPath = Path.GetFullPath(checksumsPath);
+        string? checksumInputCollision = uniqueChecksumInputs.FirstOrDefault(path =>
+            string.Equals(Path.GetFullPath(path), fullChecksumsPath, StringComparison.OrdinalIgnoreCase));
+        if (checksumInputCollision is not null)
+        {
+            throw new InvalidOperationException(
+                $"Unified release checksum destination collides with release input '{checksumInputCollision}'.");
+        }
+
+        string[] collidingAssetNames = uniqueChecksumInputs
+            .Concat(new[] { fullChecksumsPath })
+            .GroupBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key ?? string.Empty)
             .ToArray();
-        File.WriteAllLines(checksumsPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        if (collidingAssetNames.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "Unified GitHub release assets must have unique file names before checksums are written: " +
+                string.Join(", ", collidingAssetNames));
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(fullChecksumsPath)!);
+        var lines = uniqueChecksumInputs
+            .Select(path => $"{ComputeSha256(path!)} *{Path.GetFileName(path!)}")
+            .ToArray();
+        File.WriteAllLines(fullChecksumsPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
     private static object? BuildLegacyToolsManifestSection(PowerForgeToolReleaseResult? tools)

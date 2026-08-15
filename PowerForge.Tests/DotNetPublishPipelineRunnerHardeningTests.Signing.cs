@@ -182,12 +182,13 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                 "net10.0",
                 "PortableCompat",
                 new string('a', 40),
+                new string('b', 64),
                 executable,
                 "Sample",
                 "1.2.3",
                 signedFiles);
             Assert.Equal("app.exe", Assert.Single(inventory.SignedFilePaths));
-            Assert.Equal(4, inventory.SchemaVersion);
+            Assert.Equal(5, inventory.SchemaVersion);
             Assert.Equal("win-x64", inventory.Runtime);
             Assert.Equal("net10.0", inventory.Framework);
             Assert.Equal("PortableCompat", inventory.Style);
@@ -217,6 +218,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                     "net10.0",
                     "PortableCompat",
                     new string('a', 40),
+                    new string('b', 64),
                     executable,
                     "Sample",
                     "1.2.3",

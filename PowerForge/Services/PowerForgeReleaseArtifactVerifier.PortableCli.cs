@@ -102,7 +102,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 expectedRevision);
             if (archive.Inventory.SignedFilePaths.Length != signedFileCount)
                 throw Invalid("PowerForge manifest signed-file count does not match the publisher-signed payload inventory.");
-            ValidateConfiguredDllSignatureCoverage(archive.Inventory, expected.Sign);
+            ValidatePortableConfigurationPolicy(archive.Inventory, expected);
+            ValidateConfiguredPortableSignatureCoverage(archive.Inventory, expected.Sign);
             ValidateRequestedPortableSignaturePaths(
                 request.SignaturePaths,
                 projectRoot,
@@ -152,6 +153,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 expectedRevision);
             if (!string.Equals(inventory.ExecutableIdentity, executableIdentity, StringComparison.OrdinalIgnoreCase))
                 throw Invalid("Signed executable identity does not match the publisher-signed direct portable inventory.");
+            ValidatePortableConfigurationPolicy(inventory, expected);
             inventoryVersion = inventory.Version;
         }
 
@@ -310,6 +312,13 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         }
         if (sign is null || !sign.Enabled)
             throw Invalid("PowerForge portable signing must be enabled for a release artifact.");
+        string configurationPolicySha256 =
+            DotNetPublishPipelineRunner.ComputePortableConfigurationPolicySha256(
+                target.Name,
+                target.Kind,
+                bundle?.Id,
+                bundle?.Zip ?? target.Publish.Zip,
+                sign);
 
         string[] executableIdentities = ResolveConfiguredPortableExecutableIdentities(
             configuration,
@@ -324,6 +333,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             sign,
             trustedSignerThumbprint,
             trustedSignerSubject,
+            configurationPolicySha256,
             configuration.DotNet.AllowOutputOutsideProjectRoot);
     }
 
@@ -425,26 +435,39 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         }
     }
 
-    private static void ValidateConfiguredDllSignatureCoverage(
+    private static void ValidateConfiguredPortableSignatureCoverage(
         PowerForgePortablePayloadInventory inventory,
         DotNetPublishSignOptions sign)
     {
-        if (!sign.IncludeDlls)
-            return;
-
         var signedPaths = new HashSet<string>(
             (inventory.SignedFilePaths ?? Array.Empty<string>()).Select(NormalizeArchivePath),
             StringComparer.Ordinal);
-        string[] unsignedDlls = (inventory.Entries ?? Array.Empty<PowerForgePortablePayloadEntry>())
+        string[] unsignedPortableBinaries = (inventory.Entries ?? Array.Empty<PowerForgePortablePayloadEntry>())
             .Select(entry => NormalizeArchivePath(entry.Path))
-            .Where(path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            .Where(path => path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                           (sign.IncludeDlls && path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
             .Where(path => !signedPaths.Contains(path))
             .ToArray();
-        if (unsignedDlls.Length > 0)
+        if (unsignedPortableBinaries.Length > 0)
         {
             throw Invalid(
-                "PowerForge configuration requires DLL signing, but the publisher-signed payload inventory " +
-                "does not include every DLL entry in its signed-file selection.");
+                "The publisher-signed payload inventory does not include every required executable" +
+                (sign.IncludeDlls ? " or DLL" : string.Empty) +
+                " entry in its signed-file selection.");
+        }
+    }
+
+    private static void ValidatePortableConfigurationPolicy(
+        PowerForgePortablePayloadInventory inventory,
+        ExpectedPortable expected)
+    {
+        if (!string.Equals(
+                inventory.ConfigurationPolicySha256,
+                expected.ConfigurationPolicySha256,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw Invalid(
+                "Publisher-signed portable payload configuration policy does not match the supplied release configuration.");
         }
     }
 

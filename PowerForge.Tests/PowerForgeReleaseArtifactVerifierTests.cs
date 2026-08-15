@@ -168,6 +168,48 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
     }
 
     [Fact]
+    public void Verify_PortableCliRejectsReplaceableConfigurationThatWeakensSignedPolicy()
+    {
+        using var fixture = new PortableFixture();
+        string dependency = fixture.AddSignedDependency();
+        fixture.EnableDllSigning(dependency);
+        fixture.WeakenDllSigningPolicyAndRewriteChecksums(dependency);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("configuration policy", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Verify_PortableCliAcceptsPublisherSignedPolicyFromRequestedSigningProfile()
+    {
+        using var fixture = new PortableFixture();
+        string dependency = fixture.AddSignedDependency();
+        fixture.ConfigureSigningProfileOverride(dependency);
+        PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
+        request.SignProfile = "Strict";
+        request.SignaturePaths = Array.Empty<string>();
+
+        PowerForgeReleaseArtifactEvidence evidence = fixture.CreateVerifier().Verify(request);
+
+        Assert.Equal("valid", evidence.SignatureStatus);
+        Assert.Equal(2, evidence.Signatures.Count());
+    }
+
+    [Fact]
+    public void Verify_PortableCliRejectsUnsignedSecondaryExecutableFromPublisherSignedInventory()
+    {
+        using var fixture = new PortableFixture();
+        fixture.AddUnsignedExecutableToArchiveInventory();
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            fixture.CreateVerifier().Verify(fixture.CreateRequest()));
+
+        Assert.Contains("every required executable", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Verify_PortableCliRejectsLabelOnlyCycloneDxDocument()
     {
         using var fixture = new PortableFixture();
@@ -368,8 +410,6 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             ConfigurationPath = Path.Combine(Root, "powerforge.dotnetpublish.json");
             ProjectPath = Path.Combine(Root, "Sample.CLI.csproj");
             File.WriteAllText(ProjectPath, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
-            WriteArchive("signed payload");
-            WriteDirectInventory();
             File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
             {
                 SchemaVersion = 1,
@@ -392,6 +432,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     }
                 }
             }));
+            WriteArchive("signed payload");
+            WriteDirectInventory();
             File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
             {
                 new
@@ -454,7 +496,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         private void WritePortableInventory(
             IEnumerable<string> signedPaths,
             string version = "1.2.3+" + SourceRevision,
-            string? bundleId = null)
+            string? bundleId = null,
+            string? configurationPolicySha256 = null)
         {
             PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
                 OutputDirectory,
@@ -463,6 +506,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 "net10.0",
                 "PortableCompat",
                 SourceRevision,
+                configurationPolicySha256 ?? ReadConfigurationPolicySha256(bundleId),
                 ExecutablePath,
                 "Sample.CLI",
                 version,
@@ -489,6 +533,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 framework,
                 style,
                 SourceRevision,
+                ReadConfigurationPolicySha256(),
                 ExecutablePath,
                 "Sample.CLI",
                 "1.2.3+" + SourceRevision,
@@ -508,6 +553,30 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                 string relative = Path.GetRelativePath(OutputDirectory, path).Replace('\\', '/');
                 archive.CreateEntryFromFile(path, relative);
             }
+        }
+
+        private string ReadConfigurationPolicySha256(string? bundleId = null)
+        {
+            DotNetPublishConfiguredSpec configured =
+                DotNetPublishReleaseArtifactVerifier.ReadConfiguredPublishSpecWithInputs(ConfigurationPath);
+            DotNetPublishSpec resolved = DotNetPublishPipelineRunner.ResolveProfile(configured.Configuration);
+            DotNetPublishTarget target = Assert.Single(resolved.Targets);
+            DotNetPublishBundle? bundle = string.IsNullOrWhiteSpace(bundleId)
+                ? null
+                : resolved.Bundles.SingleOrDefault(candidate =>
+                    string.Equals(candidate.Id, bundleId, StringComparison.OrdinalIgnoreCase));
+            DotNetPublishSignOptions sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+                resolved.SigningProfiles,
+                target.Publish!.SignProfile,
+                target.Publish.Sign,
+                target.Publish.SignOverrides,
+                $"Target '{target.Name}'") ?? new DotNetPublishSignOptions();
+            return DotNetPublishPipelineRunner.ComputePortableConfigurationPolicySha256(
+                target.Name,
+                target.Kind,
+                bundleId,
+                bundle?.Zip ?? target.Publish.Zip,
+                sign);
         }
 
         internal void WriteChecksums() =>
@@ -537,16 +606,29 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             return dependencyPath;
         }
 
+        internal void AddUnsignedExecutableToArchiveInventory()
+        {
+            string secondaryExecutable = Path.Combine(OutputDirectory, "Secondary.exe");
+            File.WriteAllText(secondaryExecutable, "unsigned secondary executable");
+            WritePortableInventory(new[] { ExecutablePath });
+            WriteArchiveFromOutput();
+            WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
+            base.WriteChecksums(
+                ManifestPath,
+                ConfigurationPath,
+                ExecutablePath,
+                ArchivePath,
+                DirectInventoryPath,
+                DirectSignaturePath,
+                secondaryExecutable);
+        }
+
         internal void EnableDllSigning(
             string dependencyPath,
             int signedFileCount = 2,
             bool omitDependencyFromManifest = false,
             bool zip = true)
         {
-            WritePortableInventory(omitDependencyFromManifest
-                ? new[] { ExecutablePath }
-                : new[] { ExecutablePath, dependencyPath });
-            WriteArchiveFromOutput();
             File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
             {
                 SchemaVersion = 1,
@@ -569,6 +651,12 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     }
                 }
             }));
+            WritePortableInventory(omitDependencyFromManifest
+                ? new[] { ExecutablePath }
+                : new[] { ExecutablePath, dependencyPath });
+            if (!zip)
+                WriteDirectInventory();
+            WriteArchiveFromOutput();
             File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
             {
                 new
@@ -652,6 +740,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     }
                 }
             }));
+            WritePortableInventory(new[] { ExecutablePath });
+            WriteArchiveFromOutput();
+            WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
             WriteChecksums();
         }
 
@@ -717,8 +808,6 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             string bundleRuntime = "win-x64",
             bool bundleZip = true)
         {
-            WritePortableInventory(new[] { ExecutablePath }, bundleId: bundleId);
-            WriteArchiveFromOutput();
             File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
             {
                 new
@@ -776,6 +865,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     }
                 }));
             }
+            WritePortableInventory(new[] { ExecutablePath }, bundleId: bundleId);
+            WriteArchiveFromOutput();
             WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
             base.WriteChecksums(ManifestPath, ConfigurationPath, ExecutablePath, ArchivePath);
         }
@@ -804,7 +895,121 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     }
                 }
             }));
+            WritePortableInventory(new[] { ExecutablePath });
+            WriteArchiveFromOutput();
             WriteChecksums();
+        }
+
+        internal void WeakenDllSigningPolicyAndRewriteChecksums(string dependencyPath)
+        {
+            File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
+            {
+                SchemaVersion = 1,
+                DotNet = new { AllowOutputOutsideProjectRoot = false },
+                Targets = new[]
+                {
+                    new
+                    {
+                        Name = "Sample.CLI",
+                        ProjectPath = Path.GetFileName(ProjectPath),
+                        Kind = "Cli",
+                        Publish = new
+                        {
+                            Framework = "net10.0",
+                            Runtimes = new[] { "win-x64" },
+                            Style = "PortableCompat",
+                            Zip = true,
+                            Sign = new { Enabled = true, IncludeDlls = false, Thumbprint }
+                        }
+                    }
+                }
+            }));
+            base.WriteChecksums(
+                ManifestPath,
+                ConfigurationPath,
+                ExecutablePath,
+                ArchivePath,
+                DirectInventoryPath,
+                DirectSignaturePath,
+                dependencyPath);
+        }
+
+        internal void ConfigureSigningProfileOverride(string dependencyPath)
+        {
+            File.WriteAllText(ConfigurationPath, JsonSerializer.Serialize(new
+            {
+                SchemaVersion = 1,
+                DotNet = new { AllowOutputOutsideProjectRoot = false },
+                SigningProfiles = new Dictionary<string, object>
+                {
+                    ["Strict"] = new { Enabled = true, IncludeDlls = true, Thumbprint }
+                },
+                Targets = new[]
+                {
+                    new
+                    {
+                        Name = "Sample.CLI",
+                        ProjectPath = Path.GetFileName(ProjectPath),
+                        Kind = "Cli",
+                        Publish = new
+                        {
+                            Framework = "net10.0",
+                            Runtimes = new[] { "win-x64" },
+                            Style = "PortableCompat",
+                            Zip = true,
+                            Sign = new { Enabled = true, IncludeDlls = false, Thumbprint }
+                        }
+                    }
+                }
+            }));
+            DotNetPublishConfiguredSpec configured =
+                DotNetPublishReleaseArtifactVerifier.ReadConfiguredPublishSpecWithInputs(ConfigurationPath);
+            DotNetPublishSpec resolved = DotNetPublishPipelineRunner.ResolveProfile(configured.Configuration);
+            DotNetPublishTarget target = Assert.Single(resolved.Targets);
+            DotNetPublishSignOptions sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+                resolved.SigningProfiles,
+                "Strict",
+                sign: null,
+                target.Publish!.SignOverrides,
+                $"Target '{target.Name}'")!;
+            string policySha256 = DotNetPublishPipelineRunner.ComputePortableConfigurationPolicySha256(
+                target.Name,
+                target.Kind,
+                bundleId: null,
+                target.Publish.Zip,
+                sign);
+            WritePortableInventory(
+                new[] { ExecutablePath, dependencyPath },
+                configurationPolicySha256: policySha256);
+            WriteArchiveFromOutput();
+            File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    Category = "Publish",
+                    Target = "Sample.CLI",
+                    Kind = "Cli",
+                    Runtime = "win-x64",
+                    Framework = "net10.0",
+                    Style = "PortableCompat",
+                    OutputDir = OutputDirectory,
+                    ZipPath = ArchivePath,
+                    ExePath = ExecutablePath,
+                    SignedFiles = 2,
+                    SignedFilePaths = new[] { ExecutablePath, dependencyPath },
+                    SourceRevision,
+                    SourceDirty = false
+                }
+            }));
+            WriteBoundCycloneDxSbom("Sample.CLI", "1.2.3", ComputeDigest(ArchivePath));
+            base.WriteChecksums(
+                ManifestPath,
+                ConfigurationPath,
+                ExecutablePath,
+                ArchivePath,
+                DirectInventoryPath,
+                DirectSignaturePath,
+                dependencyPath);
         }
 
         internal string WriteReferencedConfiguration()

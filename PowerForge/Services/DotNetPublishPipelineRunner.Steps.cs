@@ -433,6 +433,12 @@ public sealed partial class DotNetPublishPipelineRunner
                     tfm,
                     style.ToString(),
                     plan.SourceRevision,
+                    ComputePortableConfigurationPolicySha256(
+                        target.Name,
+                        target.Kind,
+                        bundleId: null,
+                        target.Publish.Zip,
+                        target.Publish.Sign),
                     executable,
                     executableIdentity,
                     portableVersion,

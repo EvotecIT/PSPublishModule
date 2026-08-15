@@ -125,6 +125,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             break;
                         case DotNetPublishStepKind.Manifest:
                         {
+                            FinalizePortableEvidence(plan, artefacts);
                             (manifestJson, manifestText, checksumsPath) = WriteManifestsWithProvenance(
                                 plan,
                                 artefacts,

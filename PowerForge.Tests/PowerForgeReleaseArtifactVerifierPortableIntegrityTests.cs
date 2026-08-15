@@ -452,6 +452,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     }
                 }
             }));
+            WriteDirectInventory();
             WriteChecksums();
         }
 
@@ -479,6 +480,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
                     }
                 }
             }));
+            WriteDirectInventory();
             WriteChecksums();
         }
     }
