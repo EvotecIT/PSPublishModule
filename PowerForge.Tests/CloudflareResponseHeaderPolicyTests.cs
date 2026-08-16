@@ -497,6 +497,8 @@ public sealed class CloudflareResponseHeaderPolicyTests
         Assert.Contains("Invoke-PowerForgeCloudflareSitePolicy.ps1", action, StringComparison.Ordinal);
         Assert.Contains("--token-env', 'POWERFORGE_CLOUDFLARE_API_TOKEN'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("--token', $env:POWERFORGE_CLOUDFLARE_API_TOKEN", script, StringComparison.Ordinal);
+        Assert.Contains("$cliExitCode = $LASTEXITCODE", script, StringComparison.Ordinal);
+        Assert.Contains("Write-Host $jsonText", script, StringComparison.Ordinal);
         Assert.Contains("'site-policy'", script, StringComparison.Ordinal);
         Assert.True(script.Split('\n').Length < 100, "The action entrypoint should remain a bounded adapter over the CLI.");
     }
