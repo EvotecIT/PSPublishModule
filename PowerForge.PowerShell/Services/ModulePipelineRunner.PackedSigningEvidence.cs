@@ -43,12 +43,14 @@ public sealed partial class ModulePipelineRunner
             }
 
             string projectManifestPath = Path.Combine(plan.ProjectRoot, plan.ModuleName + ".psd1");
-            string? authorizedManifestSha256 = state.AuthorizedProjectManifestSha256;
-            if (string.IsNullOrWhiteSpace(authorizedManifestSha256) ||
+            string? authorizedProjectManifestSha256 = state.AuthorizedProjectManifestSha256;
+            string? authorizedStagingManifestSha256 = state.AuthorizedStagingManifestSha256;
+            if (string.IsNullOrWhiteSpace(authorizedProjectManifestSha256) ||
+                string.IsNullOrWhiteSpace(authorizedStagingManifestSha256) ||
                 !File.Exists(projectManifestPath) ||
                 (File.GetAttributes(projectManifestPath) & FileAttributes.ReparsePoint) != 0 ||
-                !string.Equals(ComputeFileSha256(projectManifestPath), authorizedManifestSha256, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(ComputeFileSha256(context.ManifestPath), authorizedManifestSha256, StringComparison.OrdinalIgnoreCase))
+                !string.Equals(ComputeFileSha256(projectManifestPath), authorizedProjectManifestSha256, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(ComputeFileSha256(context.ManifestPath), authorizedStagingManifestSha256, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
                     "The generated project manifest changed after its pipeline-owned synchronization or does not match the final packed module manifest.");
@@ -164,14 +166,18 @@ public sealed partial class ModulePipelineRunner
             return;
 
         string projectManifestPath = Path.Combine(plan.ProjectRoot, plan.ModuleName + ".psd1");
+        string stagingManifestPath = state.RequireBuildResult().ManifestPath;
         if (!File.Exists(projectManifestPath) ||
-            (File.GetAttributes(projectManifestPath) & FileAttributes.ReparsePoint) != 0)
+            (File.GetAttributes(projectManifestPath) & FileAttributes.ReparsePoint) != 0 ||
+            !File.Exists(stagingManifestPath) ||
+            (File.GetAttributes(stagingManifestPath) & FileAttributes.ReparsePoint) != 0)
         {
             throw new InvalidOperationException(
-                "The pipeline-owned project manifest synchronization did not produce a regular manifest file.");
+                "The pipeline-owned manifest synchronization did not produce regular project and staging manifest files.");
         }
 
         state.AuthorizedProjectManifestSha256 = ComputeFileSha256(projectManifestPath);
+        state.AuthorizedStagingManifestSha256 = ComputeFileSha256(stagingManifestPath);
     }
 
     private static string ComputeFileSha256(string path)
