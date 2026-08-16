@@ -420,6 +420,9 @@ Provides a way to configure publishing to PowerShell Gallery, GitHub, JFrog Arti
 ### [New-ConfigurationRelease](New-ConfigurationRelease.md)
 Creates repo-level release coordination settings for a module and package build.
 
+### [New-ConfigurationReleaseProtection](New-ConfigurationReleaseProtection.md)
+Creates opt-in source-state and provenance protections for module releases.
+
 ### [New-ConfigurationTest](New-ConfigurationTest.md)
 Configures running Pester tests as part of the build.
 

@@ -80,7 +80,9 @@ public sealed partial class ModulePipelineRunner
                 state.IsResumingSynchronizedRelease &&
                 WasSynchronizedReleaseOperationAttempted(state, operationKey);
             Action remotePublishAttempted = () => MarkSynchronizedReleaseOperationAttempted(state, operationKey);
-            if (!plan.GenerateReleaseProvenance && TryExecuteExistingProjectBuildPublish(
+            if (!plan.GenerateReleaseProvenance &&
+                !plan.RequireReleaseSourceUnchanged &&
+                TryExecuteExistingProjectBuildPublish(
                     plan,
                     session,
                     state,
@@ -119,7 +121,9 @@ public sealed partial class ModulePipelineRunner
                 state.IsResumingSynchronizedRelease &&
                 WasSynchronizedReleaseOperationAttempted(state, operationKey);
             Action remotePublishAttempted = () => MarkSynchronizedReleaseOperationAttempted(state, operationKey);
-            if (!plan.GenerateReleaseProvenance && TryExecuteExistingPackageBuildPublish(
+            if (!plan.GenerateReleaseProvenance &&
+                !plan.RequireReleaseSourceUnchanged &&
+                TryExecuteExistingPackageBuildPublish(
                     plan,
                     session,
                     state,
@@ -1100,10 +1104,10 @@ public sealed partial class ModulePipelineRunner
 
         internal void BeforeRemotePublish()
         {
-            if (_plan.GenerateReleaseProvenance)
+            if (_plan.RequireReleaseSourceUnchanged)
             {
                 if (_spec is null)
-                    throw new InvalidOperationException("Package source provenance was not prepared before publication.");
+                    throw new InvalidOperationException("Package source protection was not prepared before publication.");
                 ValidatePackageReleaseSourceUnchanged(_plan, _spec);
             }
             _downstream?.Invoke();

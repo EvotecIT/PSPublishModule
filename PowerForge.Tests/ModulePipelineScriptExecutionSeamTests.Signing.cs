@@ -7,7 +7,7 @@ namespace PowerForge.Tests;
 public sealed partial class ModulePipelineScriptExecutionSeamTests
 {
     [Fact]
-    public void Run_SignedPackedArtifactEmitsEvidenceFromFinalLayout()
+    public void Run_SignedPackedArtifactStripsPreexistingProvenanceWhenProtectionIsDisabled()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -37,15 +37,10 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             ModulePipelineResult result = runner.Run(spec, runner.Plan(spec));
 
             ArtefactBuildResult artefact = Assert.Single(result.ArtefactResults);
-            string evidencePath = Assert.Single(artefact.EvidencePaths);
-            Assert.True(File.Exists(evidencePath));
-            Assert.Equal(4, hostedOperations.SignCalls);
-            string reboundAttestation = Assert.Single(hostedOperations.LastPackageFilePaths);
-            Assert.EndsWith("PowerForge.ReleaseProvenance.psd1", reboundAttestation, StringComparison.OrdinalIgnoreCase);
-            Assert.True(hostedOperations.LastSigningOptions?.OverwriteSigned);
-            Assert.DoesNotContain("Modules", hostedOperations.LastExcludePatterns, StringComparer.OrdinalIgnoreCase);
+            Assert.Empty(artefact.EvidencePaths);
             using var archive = System.IO.Compression.ZipFile.OpenRead(artefact.OutputPath);
-            Assert.Contains(archive.Entries, entry => entry.FullName == "TestModule/PowerForge.ReleaseProvenance.psd1");
+            Assert.DoesNotContain(archive.Entries, entry => entry.FullName == "TestModule/PowerForge.ReleaseProvenance.psd1");
+            Assert.DoesNotContain(archive.Entries, entry => entry.FullName == "TestModule/PowerForge.ReleaseProvenance.json");
         }
         finally
         {
@@ -219,6 +214,157 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
     }
 
     [Fact]
+    public void Run_SignedUnifiedGitHubPackedArtifactLeavesReleaseProtectionOffByDefault()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            File.WriteAllText(Path.Combine(root.FullName, "PowerForge.ReleaseProvenance.json"), "{\"stale\":true}");
+            File.WriteAllText(Path.Combine(root.FullName, "PowerForge.ReleaseProvenance.psd1"), "@{ Stale = $true }");
+            var hostedOperations = new FakeHostedOperations { AutoSuccessfulSigningResult = true };
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            spec.UnifiedGitHubRelease = true;
+
+            ModulePipelinePlan plan = runner.Plan(spec);
+            ModulePipelineResult result = runner.Run(spec, plan);
+
+            Assert.False(plan.RequireCleanReleaseSource);
+            Assert.False(plan.RequireReleaseSourceUnchanged);
+            Assert.False(plan.GenerateReleaseProvenance);
+            ArtefactBuildResult artefact = Assert.Single(result.ArtefactResults);
+            Assert.Empty(artefact.EvidencePaths);
+            using var archive = System.IO.Compression.ZipFile.OpenRead(artefact.OutputPath);
+            Assert.DoesNotContain(archive.Entries, entry => entry.FullName.EndsWith("PowerForge.ReleaseProvenance.psd1", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(archive.Entries, entry => entry.FullName.EndsWith("PowerForge.ReleaseProvenance.json", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(ConfigurationGateMode.Manifest, false)]
+    [InlineData(ConfigurationGateMode.Documentation, false)]
+    [InlineData(ConfigurationGateMode.Build, false)]
+    [InlineData(ConfigurationGateMode.Publish, true)]
+    public void Plan_ProvenanceActivationFollowsReleaseGate(
+        ConfigurationGateMode gateMode,
+        bool expectedActive)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "remote", "add", "origin", "https://github.com/EvotecIT/TestModule.git");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            EnableGitHubPublish(spec, moduleName);
+            spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
+            {
+                new ConfigurationGateSegment
+                {
+                    Configuration = new GateConfiguration { Mode = gateMode }
+                }
+            }).ToArray();
+
+            ModulePipelinePlan plan = CreateRunner(new FakeHostedOperations()).Plan(spec);
+
+            Assert.Equal(expectedActive, plan.GenerateReleaseProvenance);
+            Assert.Equal(expectedActive, plan.RequireReleaseSourceUnchanged);
+            Assert.Equal(expectedActive, plan.RequireCleanReleaseSource);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Plan_ReleaseProtectionCanRequireCleanSourceWithoutProvenance()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            spec.Segments = spec.Segments
+                .Concat(new IConfigurationSegment[] { CreateReleaseProtection(requireCleanSource: true) })
+                .ToArray();
+
+            ModulePipelinePlan plan = CreateRunner(new FakeHostedOperations()).Plan(spec);
+
+            Assert.True(plan.RequireCleanReleaseSource);
+            Assert.False(plan.RequireReleaseSourceUnchanged);
+            Assert.False(plan.GenerateReleaseProvenance);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_ReleaseProtectionCanRequireUnchangedSourceWithoutProvenance()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            spec.Segments = spec.Segments
+                .Concat(new IConfigurationSegment[] { CreateReleaseProtection(requireSourceUnchanged: true) })
+                .ToArray();
+            var runner = CreateRunner(new FakeHostedOperations { AutoSuccessfulSigningResult = true });
+            ModulePipelinePlan plan = runner.Plan(spec);
+            File.AppendAllText(Path.Combine(root.FullName, moduleName + ".psm1"), Environment.NewLine + "# changed after planning");
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+
+            Assert.True(plan.RequireCleanReleaseSource);
+            Assert.True(plan.RequireReleaseSourceUnchanged);
+            Assert.False(plan.GenerateReleaseProvenance);
+            Assert.Contains("source changed after planning", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_SignedUnifiedGitHubPackedArtifactGeneratesReleaseEvidenceWithoutModulePublishSegment()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -243,6 +389,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
                 moduleName,
                 Path.Combine(root.FullName, "Artefacts", "Packed"));
             spec.UnifiedGitHubRelease = true;
+            EnableReleaseProvenance(spec);
 
             ModulePipelinePlan plan = runner.Plan(spec);
             ModulePipelineResult result = runner.Run(spec, plan);
@@ -732,6 +879,252 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         }
     }
 
+    [Fact]
+    public void Run_UnchangedSourceProtectionDoesNotReusePackageBuildBeforePublish()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string packageProject = Path.Combine(root.FullName, "Package.csproj");
+            string packageSource = Path.Combine(root.FullName, "Package.cs");
+            string packageOutput = Path.Combine(root.FullName, "Packages");
+            string packagePath = Path.Combine(packageOutput, "Package.1.0.0.nupkg");
+            string feedPath = Path.Combine(root.FullName, "Feed");
+            File.WriteAllText(packageProject, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(packageSource, "public static class PackageSource { }");
+            File.WriteAllText(Path.Combine(root.FullName, ".gitignore"), "Packages/\nFeed/\nArtefacts/\nbin/\nobj/\n");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            int executorCalls = 0;
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                new FakeHostedOperations(),
+                packageBuildExecutor: (request, _, configPath) =>
+                {
+                    executorCalls++;
+                    if (request.PublishNuget == true)
+                    {
+                        request.BuildSpecPrepared?.Invoke(new DotNetRepositoryReleaseSpec
+                        {
+                            RootPath = root.FullName,
+                            Configuration = "Release",
+                            OutputPath = packageOutput,
+                            Publish = true
+                        });
+                        request.RemotePublishAttempted?.Invoke();
+                    }
+
+                    Directory.CreateDirectory(packageOutput);
+                    File.WriteAllText(packagePath, "package");
+                    if (executorCalls == 1)
+                        File.AppendAllText(packageSource, Environment.NewLine + "// changed after package build");
+                    var release = new DotNetRepositoryReleaseResult { Success = true };
+                    release.Projects.Add(new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "Package",
+                        CsprojPath = packageProject,
+                        PackageId = "Package",
+                        IsPackable = true,
+                        Packages = new List<string> { packagePath }
+                    });
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        OutputPath = packageOutput,
+                        Result = new ProjectBuildResult { Success = true, Release = release }
+                    };
+                });
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    CreateReleaseProtection(requireSourceUnchanged: true),
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            RootPath = root.FullName,
+                            OutputPath = packageOutput,
+                            Build = true,
+                            PublishNuget = true,
+                            PublishSource = feedPath,
+                            PublishApiKey = "test-key"
+                        }
+                    }
+                }
+            };
+            ModulePipelinePlan plan = runner.Plan(spec);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+
+            Assert.Equal(2, executorCalls);
+            Assert.Contains("package source changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_UnchangedSourceProtectionRechecksBeforeModulePublish()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string packageProject = Path.Combine(root.FullName, "Package.csproj");
+            string packageSource = Path.Combine(root.FullName, "Package.cs");
+            File.WriteAllText(packageProject, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(packageSource, "public static class PackageSource { }");
+            File.WriteAllText(Path.Combine(root.FullName, ".gitignore"), "Packages/\nArtefacts/\nbin/\nobj/\n");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            var hostedOperations = new FakeHostedOperations { AutoSuccessfulPublishResult = true };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations,
+                packageBuildExecutor: (request, _, configPath) =>
+                {
+                    File.AppendAllText(packageSource, Environment.NewLine + "// changed after module build");
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = new DotNetRepositoryReleaseResult { Success = true }
+                        }
+                    };
+                });
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    CreateReleaseProtection(requireSourceUnchanged: true),
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            RootPath = root.FullName,
+                            Build = true,
+                            BuildBeforeModule = false
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Destination = PublishDestination.PowerShellGallery,
+                            Enabled = true,
+                            ApiKey = "test-key"
+                        }
+                    }
+                }
+            };
+            ModulePipelinePlan plan = runner.Plan(spec);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+
+            Assert.Equal(0, hostedOperations.PublishCalls);
+            Assert.Contains("source changed after planning", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_UnchangedSourceProtectionRechecksAtEachRemoteModuleMutationBoundary(
+        bool requiredModuleSideEffect)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            string sourcePath = Path.Combine(root.FullName, moduleName + ".psm1");
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            File.WriteAllText(Path.Combine(root.FullName, ".gitignore"), "Artefacts/\nbin/\nobj/\n");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            Action mutateSource = () => File.AppendAllText(
+                sourcePath,
+                Environment.NewLine + "# changed at remote mutation boundary");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                AutoSuccessfulPublishResult = true,
+                InvokeRemoteSideEffectObserved = requiredModuleSideEffect,
+                BeforeRemoteSideEffectObserved = requiredModuleSideEffect ? mutateSource : null,
+                BeforeRemotePublishAttempted = requiredModuleSideEffect ? null : mutateSource
+            };
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
+            {
+                CreateReleaseProtection(requireSourceUnchanged: true),
+                new ConfigurationPublishSegment
+                {
+                    Configuration = new PublishConfiguration
+                    {
+                        Destination = PublishDestination.PowerShellGallery,
+                        Enabled = true,
+                        ApiKey = "test-key"
+                    }
+                }
+            }).ToArray();
+            ModulePipelinePlan plan = runner.Plan(spec);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+
+            Assert.Contains("source changed after planning", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -1018,6 +1411,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
     {
         spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
         {
+            CreateReleaseProtection(generateProvenance: true),
             new ConfigurationPublishSegment
             {
                 Configuration = new PublishConfiguration
@@ -1031,6 +1425,27 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             }
         }).ToArray();
     }
+
+    private static void EnableReleaseProvenance(ModulePipelineSpec spec)
+    {
+        spec.Segments = spec.Segments
+            .Concat(new IConfigurationSegment[] { CreateReleaseProtection(generateProvenance: true) })
+            .ToArray();
+    }
+
+    private static ConfigurationReleaseProtectionSegment CreateReleaseProtection(
+        bool requireCleanSource = false,
+        bool requireSourceUnchanged = false,
+        bool generateProvenance = false)
+        => new()
+        {
+            Configuration = new ReleaseProtectionConfiguration
+            {
+                RequireCleanSource = requireCleanSource,
+                RequireSourceUnchanged = requireSourceUnchanged,
+                GenerateProvenance = generateProvenance
+            }
+        };
 
     [Fact]
     public void SignBuiltModuleOutput_UsesInjectedHostedOperations()

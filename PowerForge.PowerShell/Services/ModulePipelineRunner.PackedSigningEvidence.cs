@@ -13,6 +13,7 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state,
         PackedArtefactFinalizationContext context)
     {
+        PreparePackedReleaseProtection(plan, state, context);
         SigningOptionsConfiguration signing = plan.Signing ?? throw new InvalidOperationException(
             "Signing is enabled but no signing options were provided.");
         string manifestDirectory = Path.GetDirectoryName(context.ManifestPath)
@@ -32,6 +33,7 @@ public sealed partial class ModulePipelineRunner
         string sourceAttestationPath = Path.Combine(
             context.MainModulePath,
             PowerForgeModuleSourceAttestationWriter.FileName);
+        string projectManifestPath = Path.Combine(plan.ProjectRoot, plan.ModuleName + ".psd1");
         if (plan.GenerateReleaseProvenance)
         {
             if (string.IsNullOrWhiteSpace(plan.SourceRevision) ||
@@ -42,7 +44,6 @@ public sealed partial class ModulePipelineRunner
                     "Signed GitHub module release provenance was not resolved from a clean source checkout.");
             }
 
-            string projectManifestPath = Path.Combine(plan.ProjectRoot, plan.ModuleName + ".psd1");
             string? authorizedProjectManifestSha256 = state.AuthorizedProjectManifestSha256;
             string? authorizedStagingManifestSha256 = state.AuthorizedStagingManifestSha256;
             if (string.IsNullOrWhiteSpace(authorizedProjectManifestSha256) ||
@@ -55,21 +56,6 @@ public sealed partial class ModulePipelineRunner
                 throw new InvalidOperationException(
                     "The generated project manifest changed after its pipeline-owned synchronization or does not match the final packed module manifest.");
             }
-
-            string[] generatedOutputs = state.ArtefactResults
-                .SelectMany(static result =>
-                    new[] { result.OutputPath }.Concat(result.EvidencePaths ?? Array.Empty<string>()))
-                .Concat(new[]
-                {
-                    context.RootPath,
-                    context.OutputPath,
-                    plan.BuildSpec.StagingPath ?? string.Empty
-                })
-                .ToArray();
-            ValidateReleaseSourceUnchanged(
-                plan,
-                generatedOutputs,
-                new[] { projectManifestPath });
 
             PowerForgeModuleSourceAttestationWriter.WriteReleaseProvenance(
                 context.ManifestPath,
@@ -185,6 +171,58 @@ public sealed partial class ModulePipelineRunner
         using FileStream input = File.OpenRead(path);
         using SHA256 hash = SHA256.Create();
         return BitConverter.ToString(hash.ComputeHash(input)).Replace("-", string.Empty);
+    }
+
+    private IReadOnlyList<string> FinalizeUnsignedPackedArtefact(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state,
+        PackedArtefactFinalizationContext context)
+    {
+        PreparePackedReleaseProtection(plan, state, context);
+        return Array.Empty<string>();
+    }
+
+    private static void PreparePackedReleaseProtection(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state,
+        PackedArtefactFinalizationContext context)
+    {
+        if (!plan.GenerateReleaseProvenance)
+        {
+            DeleteDisabledReleaseProvenance(Path.Combine(
+                context.MainModulePath,
+                PowerForgeModuleSourceAttestationWriter.FileName));
+            DeleteDisabledReleaseProvenance(Path.Combine(
+                context.MainModulePath,
+                PublishedRegistryProvenanceValidator.ModuleProvenanceFileName));
+        }
+        if (!plan.RequireReleaseSourceUnchanged)
+            return;
+
+        string projectManifestPath = Path.Combine(plan.ProjectRoot, plan.ModuleName + ".psd1");
+        string[] generatedOutputs = state.ArtefactResults
+            .SelectMany(static result =>
+                new[] { result.OutputPath }.Concat(result.EvidencePaths ?? Array.Empty<string>()))
+            .Concat(new[]
+            {
+                context.RootPath,
+                context.OutputPath,
+                plan.BuildSpec.StagingPath ?? string.Empty
+            })
+            .ToArray();
+        ValidateReleaseSourceUnchanged(
+            plan,
+            generatedOutputs,
+            File.Exists(projectManifestPath) ? new[] { projectManifestPath } : Array.Empty<string>());
+    }
+
+    private static void DeleteDisabledReleaseProvenance(string path)
+    {
+        if (!File.Exists(path))
+            return;
+        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException("Disabled release provenance resolved to a reparse point inside package staging.");
+        File.Delete(path);
     }
 
     private static ModuleSigningResult AggregateSigningResults(

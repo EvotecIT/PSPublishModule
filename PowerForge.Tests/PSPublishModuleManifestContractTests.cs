@@ -27,7 +27,8 @@ public sealed class PSPublishModuleManifestContractTests
         "New-ConfigurationModuleBuildProfile",
         "New-ConfigurationPackageBuild",
         "New-ConfigurationProjectBuild",
-        "New-ConfigurationRelease"
+        "New-ConfigurationRelease",
+        "New-ConfigurationReleaseProtection"
     };
 
     private static readonly string[] ManagedModuleCmdlets =

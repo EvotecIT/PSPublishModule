@@ -268,6 +268,22 @@ public sealed class PowerForgeProjectCmdletTests
     }
 
     [Fact]
+    public void NewConfigurationReleaseProtection_EmitsOnlyRequestedOptInProtections()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationReleaseProtection")
+            .AddParameter("RequireSourceUnchanged");
+
+        var results = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        var segment = Assert.IsType<ConfigurationReleaseProtectionSegment>(Assert.Single(results).BaseObject);
+        Assert.False(segment.Configuration.RequireCleanSource);
+        Assert.True(segment.Configuration.RequireSourceUnchanged);
+        Assert.False(segment.Configuration.GenerateProvenance);
+    }
+
+    [Fact]
     public void NewConfigurationGate_EmitsSegment()
     {
         using var ps = CreatePowerShellWithModuleImported();

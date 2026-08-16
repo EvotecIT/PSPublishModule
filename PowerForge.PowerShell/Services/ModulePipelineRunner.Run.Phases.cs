@@ -722,9 +722,9 @@ public sealed partial class ModulePipelineRunner
                         information: plan.Information,
                         delivery: plan.Delivery,
                         includeScriptFolders: !state.PackageWithoutScriptFolders,
-                        finalizePackedArtefact: plan.SignModule
-                            ? context => FinalizeSignedPackedArtefact(plan, state, context)
-                            : null);
+                        finalizePackedArtefact: context => plan.SignModule
+                            ? FinalizeSignedPackedArtefact(plan, state, context)
+                            : FinalizeUnsignedPackedArtefact(plan, state, context));
                     state.ArtefactResults.Add(result);
                     CaptureFinalizedPackedArtefactIntegrity(plan, state, result);
                     session.Done(step);
