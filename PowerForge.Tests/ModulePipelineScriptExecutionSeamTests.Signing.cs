@@ -588,6 +588,59 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
     }
 
     [Fact]
+    public void Run_SignedGitHubPackedArtifactRejectsPostPlanFileAddedToMappedDirectory()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string mappedDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "ExternalAssets")).FullName;
+            File.WriteAllText(Path.Combine(mappedDirectory, "approved.json"), "{\"approved\":true}");
+            File.WriteAllText(Path.Combine(root.FullName, ".gitignore"), "ExternalAssets/generated.json\nArtefacts/\n");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                SigningCallStarted = call =>
+                {
+                    if (call == 1)
+                        File.WriteAllText(Path.Combine(mappedDirectory, "generated.json"), "{\"generated\":true}");
+                }
+            };
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            EnableGitHubPublish(spec, moduleName);
+            ConfigurationArtefactSegment artefact = Assert.IsType<ConfigurationArtefactSegment>(
+                spec.Segments.Single(segment => segment is ConfigurationArtefactSegment));
+            artefact.Configuration.DirectoryOutput =
+            [
+                new ArtefactCopyMapping
+                {
+                    Source = mappedDirectory,
+                    Destination = "ExternalAssets"
+                }
+            ];
+            ModulePipelinePlan plan = runner.Plan(spec);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+
+            Assert.Contains("source changed after planning", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_SignedGitHubModuleRejectsEmbeddedPackageSourceMutationBeforeRemotePublish()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

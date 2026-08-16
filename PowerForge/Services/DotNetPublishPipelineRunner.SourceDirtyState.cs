@@ -34,7 +34,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         foreach (string directory in projectDirectories)
             AddProjectDirectoryScopePath(scope, projectRoot, gitRoot, directory);
-        foreach (string path in sourceInputs)
+        foreach (string path in buildInputs)
             AddSourceDirtyScopePath(scope, projectRoot, gitRoot, path, directory: Directory.Exists(path));
         return scope;
     }
@@ -181,10 +181,11 @@ public sealed partial class DotNetPublishPipelineRunner
             string workingTreePath = Path.GetFullPath(Path.Combine(gitRoot, path.Replace('/', Path.DirectorySeparatorChar)));
             if (File.Exists(workingTreePath) || Directory.Exists(workingTreePath))
                 return false;
-            return ProjectDirectoryPaths.Any(directory =>
-                directory.Length == 0 ||
-                string.Equals(path, directory, comparison) ||
-                path.StartsWith(directory + "/", comparison));
+
+            // A deleted or renamed path cannot be re-evaluated from the current filesystem. Once a
+            // release has a scoped input closure, treat every missing changed path conservatively so
+            // linked sources and repository-level imports cannot disappear from that closure unnoticed.
+            return true;
         }
     }
 }
