@@ -132,13 +132,45 @@ public sealed class SigningScriptRetryTests
         Assert.Contains("Cert:\\CurrentUser\\My", lookupPath, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static (ModuleSigningResult Summary, int SigningCallCount, string[] PackageFilePaths, string[] CertificateLookupPaths)
+    [Theory]
+    [InlineData(0x00080000)]
+    [InlineData(0x00100000)]
+    [InlineData(0x00180000)]
+    public void CloudPlacementAttributesAreClearedBeforeSigning(int cloudAttribute)
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return;
+
+        FileAttributes stagedAttributes = FileAttributes.Archive | (FileAttributes)cloudAttribute;
+        var evidence = RunSigningProviderFailureHarness(
+            includePrecheckFailure: false,
+            includeNonCompatibilitySigningFailure: false,
+            signingSucceeds: true,
+            signingTargetAttributes: stagedAttributes);
+
+        Assert.Equal(12, evidence.Summary.SignedNew);
+        Assert.Equal(0, evidence.Summary.Failed);
+        Assert.All(evidence.SigningTargetAttributes, attributes =>
+        {
+            Assert.Equal(0, attributes & cloudAttribute);
+            Assert.NotEqual(0, attributes & (int)FileAttributes.Archive);
+        });
+    }
+
+    private static (
+        ModuleSigningResult Summary,
+        int SigningCallCount,
+        string[] PackageFilePaths,
+        string[] CertificateLookupPaths,
+        int[] SigningTargetAttributes)
         RunSigningProviderFailureHarness(
             bool includePrecheckFailure,
             bool includeNonCompatibilitySigningFailure,
             bool currentUserHasPrivateKey = true,
             bool currentUserHasCodeSigningEku = true,
-            bool currentUserHasEkuRestriction = true)
+            bool currentUserHasEkuRestriction = true,
+            bool signingSucceeds = false,
+            FileAttributes? signingTargetAttributes = null)
     {
         var rootPath = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -146,6 +178,7 @@ public sealed class SigningScriptRetryTests
             Guid.NewGuid().ToString("N"))).FullName;
         var packageFileListPath = Path.Combine(rootPath, "package-files.txt");
         var callLogPath = Path.Combine(rootPath, "signing-calls.txt");
+        var signingAttributeLogPath = Path.Combine(rootPath, "signing-attributes.txt");
         var certificateLookupLogPath = Path.Combine(rootPath, "certificate-lookups.txt");
         try
         {
@@ -153,7 +186,11 @@ public sealed class SigningScriptRetryTests
                 .Select(index => Path.Combine(rootPath, $"File{index:D2}.ps1"))
                 .ToArray();
             foreach (var path in packageFilePaths)
+            {
                 File.WriteAllText(path, "# test");
+                if (signingTargetAttributes.HasValue)
+                    File.SetAttributes(path, signingTargetAttributes.Value);
+            }
             File.WriteAllLines(packageFileListPath, packageFilePaths);
 
             var script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
@@ -164,12 +201,14 @@ public sealed class SigningScriptRetryTests
                 $rootPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(rootPath))}}'))
                 $packageFileListPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(packageFileListPath))}}'))
                 $callLogPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(callLogPath))}}'))
+                $signingAttributeLogPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(signingAttributeLogPath))}}'))
                 $certificateLookupLogPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(certificateLookupLogPath))}}'))
                 $precheckFailurePath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(precheckFailurePath))}}'))
                 $includeNonCompatibilitySigningFailure = [Convert]::ToBoolean('{{includeNonCompatibilitySigningFailure}}')
                 $currentUserHasPrivateKey = [Convert]::ToBoolean('{{currentUserHasPrivateKey}}')
                 $currentUserHasCodeSigningEku = [Convert]::ToBoolean('{{currentUserHasCodeSigningEku}}')
                 $currentUserHasEkuRestriction = [Convert]::ToBoolean('{{currentUserHasEkuRestriction}}')
+                $signingSucceeds = [Convert]::ToBoolean('{{signingSucceeds}}')
                 $script:firstSigningCall = $true
                 function Get-Item {
                   [CmdletBinding()]
@@ -211,6 +250,12 @@ public sealed class SigningScriptRetryTests
                     [switch]$Force
                   )
                   [IO.File]::AppendAllText($callLogPath, 'x')
+                  [IO.File]::AppendAllText(
+                    $signingAttributeLogPath,
+                    ([int][IO.File]::GetAttributes($FilePath)).ToString() + [Environment]::NewLine)
+                  if ($signingSucceeds) {
+                    return [pscustomobject]@{ Status = 'Valid'; StatusMessage = '' }
+                  }
                   if ($includeNonCompatibilitySigningFailure -and $script:firstSigningCall) {
                     $script:firstSigningCall = $false
                     return [pscustomobject]@{ Status = 'HashMismatch'; StatusMessage = 'file is not retryable' }
@@ -245,7 +290,10 @@ public sealed class SigningScriptRetryTests
                 summary!,
                 File.ReadAllText(callLogPath).Length,
                 packageFilePaths,
-                File.ReadAllLines(certificateLookupLogPath));
+                File.ReadAllLines(certificateLookupLogPath),
+                File.Exists(signingAttributeLogPath)
+                    ? File.ReadAllLines(signingAttributeLogPath).Select(int.Parse).ToArray()
+                    : Array.Empty<int>());
         }
         finally
         {
