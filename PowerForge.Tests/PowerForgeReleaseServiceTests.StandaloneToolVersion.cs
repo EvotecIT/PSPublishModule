@@ -402,6 +402,29 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void ValidatePowerForgeToolManifestStaging_requires_exact_commit_provenance()
+    {
+        var spec = new PowerForgeReleaseSpec
+        {
+            Outputs = new PowerForgeReleaseOutputsOptions
+            {
+                PowerForgeToolManifestPath = "PowerForge-tool-manifest.json"
+            },
+            GitHub = new PowerForgeReleaseGitHubOptions
+            {
+                Owner = "EvotecIT",
+                Repository = "PSPublishModule"
+            }
+        };
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ValidatePowerForgeToolManifestStaging(spec));
+
+        Assert.Contains("GitHub.Commitish", error.Message, StringComparison.Ordinal);
+        Assert.Contains("exact 40-character Git SHA", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Execute_DotNetPublishToolOutputExcludedSkipsConsumerToolManifest()
     {
         var root = CreateSandbox();
