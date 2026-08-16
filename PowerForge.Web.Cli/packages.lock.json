@@ -195,6 +195,22 @@
         "resolved": "7.6.0",
         "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
       },
+      "NuGet.Packaging": {
+        "type": "Transitive",
+        "resolved": "7.6.0",
+        "contentHash": "TDp+qHzRBy1zjwiJGCbfpdO0jMG5hH/bk7p1EABLKv9p5SIykDPGnbuYXm2iZO0QJ/H+hOI/vo5LfqM17Q+G0w==",
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.3",
+          "NuGet.Configuration": "7.6.0",
+          "NuGet.Versioning": "7.6.0",
+          "System.Security.Cryptography.Pkcs": "8.0.1"
+        }
+      },
+      "NuGet.Versioning": {
+        "type": "Transitive",
+        "resolved": "7.6.0",
+        "contentHash": "TpZxfOoQBQk/0r/2uc1A1qNYIKHkJGgOrWP+ax3nsNAUN/1BOQMDrgmGADogSA4hOXH1ZJiyeYg4Ca+vUW0sEg=="
+      },
       "NUglify": {
         "type": "Transitive",
         "resolved": "1.21.17",
@@ -360,6 +376,7 @@
         "type": "Project",
         "dependencies": {
           "NuGet.Configuration": "[7.6.0, )",
+          "NuGet.Packaging": "[7.6.0, )",
           "System.IO.Packaging": "[10.0.10, )",
           "System.Reflection.MetadataLoadContext": "[10.0.10, )",
           "System.Security.Cryptography.Pkcs": "[10.0.10, )",
@@ -374,7 +391,7 @@
           "HtmlTinkerX": "[2.2.2, )",
           "Magick.NET-Q8-AnyCPU": "[14.16.0, )",
           "OfficeIMO.Markdown": "[3.0.3, )",
-          "PowerForge": "[3.0.108, )",
+          "PowerForge": "[3.0.111, )",
           "Scriban": "[7.2.6, )",
           "YamlDotNet": "[18.1.0, )"
         }

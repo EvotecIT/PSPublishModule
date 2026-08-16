@@ -204,6 +204,8 @@ public sealed partial class DotNetPublishPipelineRunner
             => fileName.Equals("Directory.Build.props", StringComparison.OrdinalIgnoreCase) ||
                fileName.Equals("Directory.Build.targets", StringComparison.OrdinalIgnoreCase) ||
                fileName.Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase) ||
+               fileName.Equals("Directory.Build.rsp", StringComparison.OrdinalIgnoreCase) ||
+               fileName.Equals("MSBuild.rsp", StringComparison.OrdinalIgnoreCase) ||
                fileName.Equals("global.json", StringComparison.OrdinalIgnoreCase) ||
                fileName.Equals("NuGet.Config", StringComparison.OrdinalIgnoreCase);
     }
