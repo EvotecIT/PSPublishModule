@@ -1300,7 +1300,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(nuGetConfig, nuGetConfigContent);
             File.WriteAllText(
                 projectPath,
-                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile><RestorePackagesPath>../../.nuget/packages</RestorePackagesPath></PropertyGroup><ItemGroup><PackageReference Include=\"Local.Build.Inputs\" Version=\"1.0.0\" /></ItemGroup></Project>");
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile><RestorePackagesPath>../../.nuget/packages</RestorePackagesPath></PropertyGroup><ItemGroup><PackageReference Include=\"Local.Build.Inputs\" Version=\"1.0.0\" /></ItemGroup></Project>");
             File.WriteAllText(sourcePath, "internal static class Program { }");
             File.WriteAllText(buildScript, "param([string] $RunMode = 'Build')");
             File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n.nuget/\n");

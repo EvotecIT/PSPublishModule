@@ -463,99 +463,11 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             TryReadLockedPackageHashes(lockFilePath, out Dictionary<string, string> hashes);
-            AddAutoReferencedPackageHashes(properties, projectDirectory, hashes);
+            AddSdkManagedPackageHashes(properties, projectDirectory, allRoots, hashes);
             if (allRoots.Count == 0)
                 return null;
 
             return new VerifiedPackageInputCatalog(allRoots, hashes);
-        }
-
-        private static void AddAutoReferencedPackageHashes(
-            JsonElement properties,
-            string projectDirectory,
-            Dictionary<string, string> hashes)
-        {
-            string assetsPath = ReadEvaluatedPath(properties, "ProjectAssetsFile", projectDirectory)
-                ?? Path.Combine(projectDirectory, "obj", "project.assets.json");
-            try
-            {
-                using JsonDocument document = JsonDocument.Parse(File.ReadAllText(assetsPath));
-                var autoReferenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                if (document.RootElement.TryGetProperty("project", out JsonElement project) &&
-                    project.TryGetProperty("frameworks", out JsonElement frameworks) &&
-                    frameworks.ValueKind == JsonValueKind.Object)
-                {
-                    foreach (JsonProperty framework in frameworks.EnumerateObject())
-                    {
-                        if (!framework.Value.TryGetProperty("dependencies", out JsonElement dependencies) ||
-                            dependencies.ValueKind != JsonValueKind.Object)
-                        {
-                            continue;
-                        }
-                        foreach (JsonProperty dependency in dependencies.EnumerateObject())
-                        {
-                            if (dependency.Value.TryGetProperty("autoReferenced", out JsonElement value) &&
-                                value.ValueKind == JsonValueKind.True)
-                            {
-                                autoReferenced.Add(dependency.Name);
-                            }
-                        }
-
-                        if (framework.Value.TryGetProperty("downloadDependencies", out JsonElement downloads) &&
-                            downloads.ValueKind == JsonValueKind.Array)
-                        {
-                            foreach (JsonElement download in downloads.EnumerateArray())
-                            {
-                                if (download.TryGetProperty("name", out JsonElement name) &&
-                                    name.ValueKind == JsonValueKind.String &&
-                                    !string.IsNullOrWhiteSpace(name.GetString()))
-                                {
-                                    autoReferenced.Add(name.GetString()!);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (autoReferenced.Count == 0 ||
-                    !document.RootElement.TryGetProperty("libraries", out JsonElement libraries) ||
-                    libraries.ValueKind != JsonValueKind.Object)
-                {
-                    return;
-                }
-
-                foreach (JsonProperty library in libraries.EnumerateObject())
-                {
-                    int separator = library.Name.LastIndexOf('/');
-                    if (separator <= 0 || separator == library.Name.Length - 1)
-                        continue;
-                    string packageId = library.Name.Substring(0, separator);
-                    if (!autoReferenced.Contains(packageId) ||
-                        !library.Value.TryGetProperty("type", out JsonElement type) ||
-                        !string.Equals(type.GetString(), "package", StringComparison.OrdinalIgnoreCase) ||
-                        !library.Value.TryGetProperty("sha512", out JsonElement sha512) ||
-                        sha512.ValueKind != JsonValueKind.String)
-                    {
-                        continue;
-                    }
-
-                    string key = packageId + "|" + library.Name.Substring(separator + 1);
-                    string value = sha512.GetString() ?? string.Empty;
-                    if (hashes.TryGetValue(key, out string? existing) &&
-                        !string.Equals(existing, value, StringComparison.Ordinal))
-                    {
-                        hashes[key] = string.Empty;
-                    }
-                    else
-                    {
-                        hashes[key] = value;
-                    }
-                }
-            }
-            catch
-            {
-                // Only an exact auto-referenced package hash can extend the committed lock.
-            }
         }
 
         internal bool TryVerify(string path, out bool isPackageInput)
