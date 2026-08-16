@@ -853,10 +853,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 Path.IsPathRooted(value) ? value : Path.Combine(baseDirectory, value));
             if (File.Exists(fullPath))
             {
+                if (IsGeneratedBuildInfrastructurePath(fullPath, generatedBuildRoots))
+                    continue;
                 values.Add(fullPath);
                 if (sourceValues is not null &&
-                    !IsTrustedExternalBuildInfrastructurePath(fullPath) &&
-                    !IsGeneratedBuildInfrastructurePath(fullPath, generatedBuildRoots))
+                    !IsTrustedExternalBuildInfrastructurePath(fullPath))
                     sourceValues.Add(fullPath);
             }
         }

@@ -1238,6 +1238,50 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void ReadSourceProvenance_IgnoresGeneratedRestoreImportsAndDirtyOperatorFile()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string projectRoot = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string buildRoot = Directory.CreateDirectory(Path.Combine(root, "Build")).FullName;
+            string projectPath = Path.Combine(projectRoot, "Sample.csproj");
+            string sourcePath = Path.Combine(projectRoot, "Program.cs");
+            string buildScript = Path.Combine(buildRoot, "Build-Project.ps1");
+            File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(sourcePath, "internal static class Program { }");
+            File.WriteAllText(buildScript, "param([string] $RunMode = 'Build')");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            RunDotNet(root, $"restore \"{projectPath}\" --nologo");
+            Assert.True(File.Exists(Path.Combine(projectRoot, "obj", "Sample.csproj.nuget.g.props")));
+            File.WriteAllText(buildScript, "param([string] $RunMode = 'Publish')");
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+
+            Assert.False(provenance.Dirty);
+            Assert.Empty(provenance.DirtyPaths);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void ReadSourceProvenance_RejectsDirtyEvaluatedAnalyzerOutsideProjectDirectory()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
