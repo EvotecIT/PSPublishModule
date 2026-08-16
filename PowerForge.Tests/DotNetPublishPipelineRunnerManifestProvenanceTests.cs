@@ -929,7 +929,8 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 """);
             File.WriteAllText(Path.Combine(root, "Program.cs"), "internal static class Program { }");
             File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\nrid.custom\nsingle.custom\nproperty.custom\nenvironment.custom\nanalyzer.editorconfig\nanalyzer.globalconfig\nignored/\nhooks/\nassets/bin/\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
-            RunGit(root, "add Sample.csproj Program.cs .gitignore");
+            RunDotNet(root, $"restore \"{projectPath}\" --use-lock-file -r win-x64 -p:TargetFramework=net10.0");
+            RunGit(root, "add Sample.csproj Program.cs packages.lock.json .gitignore");
             RunGit(root, "commit -m \"tracked source\"");
 
             string outputDirectory = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "app")).FullName;
@@ -1191,7 +1192,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                     buildProjectPaths: [projectPath],
                     buildConfiguration: "Release");
 
-            Assert.False(operatorDirty.Dirty);
+            Assert.False(operatorDirty.Dirty, string.Join(Environment.NewLine, operatorDirty.DirtyReasons));
             Assert.Empty(operatorDirty.DirtyPaths);
 
             File.AppendAllText(sourcePath, Environment.NewLine + "// dirty source");
@@ -1273,6 +1274,14 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             string packageContent = Directory.CreateDirectory(
                 Path.Combine(packageSource, "contentFiles", "any", "any")).FullName;
             File.WriteAllText(Path.Combine(packageContent, "package-payload.txt"), "restored package content");
+            string packageAnalyzer = Directory.CreateDirectory(
+                Path.Combine(packageSource, "analyzers", "dotnet", "cs")).FullName;
+            File.WriteAllBytes(Path.Combine(packageAnalyzer, "Rules.dll"), [0x01, 0x02, 0x03]);
+            string packageBuild = Directory.CreateDirectory(
+                Path.Combine(packageSource, "buildTransitive")).FullName;
+            File.WriteAllText(
+                Path.Combine(packageBuild, "Local.Build.Inputs.props"),
+                "<Project><ItemGroup><Analyzer Include=\"$(MSBuildThisFileDirectory)..\\analyzers\\dotnet\\cs\\Rules.dll\" /></ItemGroup></Project>");
             ZipFile.CreateFromDirectory(
                 packageSource,
                 Path.Combine(packageFeed, "Local.Build.Inputs.1.0.0.nupkg"));
@@ -1309,6 +1318,11 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 path => path.Contains(
                     Path.Combine(".nuget", "packages", "local.build.inputs", "1.0.0"),
                     StringComparison.OrdinalIgnoreCase));
+            string restoredAnalyzer = Assert.Single(
+                Directory.EnumerateFiles(root, "Rules.dll", SearchOption.AllDirectories),
+                path => path.Contains(
+                    Path.Combine(".nuget", "packages", "local.build.inputs", "1.0.0"),
+                    StringComparison.OrdinalIgnoreCase));
             File.WriteAllText(buildScript, "param([string] $RunMode = 'Publish')");
 
             DotNetPublishPipelineRunner.SourceProvenance provenance =
@@ -1320,7 +1334,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             Assert.False(provenance.Dirty);
             Assert.Empty(provenance.DirtyPaths);
 
-            File.WriteAllText(restoredPayload, "tampered restored package content");
+            File.WriteAllBytes(restoredAnalyzer, [0x04, 0x05, 0x06]);
             DotNetPublishPipelineRunner.SourceProvenance tamperedPackage =
                 DotNetPublishPipelineRunner.ReadSourceProvenance(
                     root,
@@ -1331,7 +1345,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 tamperedPackage.DirtyReasons,
                 reason => reason.Contains("untrusted evaluated build input", StringComparison.OrdinalIgnoreCase));
 
-            File.WriteAllText(restoredPayload, "restored package content");
+            File.WriteAllBytes(restoredAnalyzer, [0x01, 0x02, 0x03]);
             File.AppendAllText(lockFile, Environment.NewLine);
             DotNetPublishPipelineRunner.SourceProvenance dirtyLockFile =
                 DotNetPublishPipelineRunner.ReadSourceProvenance(
@@ -1350,6 +1364,21 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                     buildConfiguration: "Release");
             Assert.True(dirtyNuGetConfig.Dirty);
             Assert.Contains("NuGet.Config", dirtyNuGetConfig.DirtyPaths, StringComparer.OrdinalIgnoreCase);
+
+            File.WriteAllText(nuGetConfig, nuGetConfigContent);
+            File.WriteAllText(buildScript, "param([string] $RunMode = 'Build')");
+            RunGit(root, "rm src/App/packages.lock.json");
+            RunGit(root, "commit -am \"remove dependency lock\"");
+            File.WriteAllText(buildScript, "param([string] $RunMode = 'Publish')");
+            DotNetPublishPipelineRunner.SourceProvenance missingLockFile =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+            Assert.True(missingLockFile.Dirty);
+            Assert.Contains(
+                missingLockFile.DirtyReasons,
+                reason => reason.Contains("untrusted evaluated build input", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -1434,6 +1463,96 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             Assert.True(provenance.Dirty);
             Assert.Contains("Directory.Build.props", provenance.DirtyPaths, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_RejectsDeletedConditionalSiblingImport()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string projectDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string buildDirectory = Directory.CreateDirectory(Path.Combine(root, "build")).FullName;
+            string projectPath = Path.Combine(projectDirectory, "App.csproj");
+            string conditionalImport = Path.Combine(buildDirectory, "Custom.targets");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <Import Project="../../build/Custom.targets" Condition="Exists('../../build/Custom.targets')" />
+                </Project>
+                """);
+            File.WriteAllText(conditionalImport, "<Project><PropertyGroup><DefineConstants>IMPORTED</DefineConstants></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(projectDirectory, "Program.cs"), "internal static class Program { }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            File.Delete(conditionalImport);
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+            Assert.Contains("build/Custom.targets", provenance.DirtyPaths, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_RejectsDirtyNestedMsBuildResponseFile()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string projectDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string buildDirectory = Directory.CreateDirectory(Path.Combine(root, "build")).FullName;
+            string projectPath = Path.Combine(projectDirectory, "App.csproj");
+            string nestedResponse = Path.Combine(buildDirectory, "common.rsp");
+            File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(projectDirectory, "Program.cs"), "internal static class Program { }");
+            File.WriteAllText(
+                Path.Combine(root, "Directory.Build.rsp"),
+                "@\"" + nestedResponse + "\"");
+            File.WriteAllText(nestedResponse, "-p:DefineConstants=APPROVED");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            File.WriteAllText(nestedResponse, "-p:DefineConstants=CHANGED");
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+            Assert.Contains("build/common.rsp", provenance.DirtyPaths, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
@@ -1959,10 +2078,10 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunGit(root, "init");
             RunGit(root, "config user.name \"PowerForge Tests\"");
             RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            RunDotNet(root, $"restore \"{parentProject}\" --use-lock-file -r win-x64");
             RunGit(root, "add .");
             RunGit(root, "commit -m \"tracked project graph\"");
             File.WriteAllText(Path.Combine(childDirectory, "net10-only.json"), "ignored selected-framework input");
-            RunDotNet(root, $"restore \"{parentProject}\" -r win-x64");
 
             string outputDirectory = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "app")).FullName;
             string executablePath = Path.Combine(outputDirectory, "app.exe");

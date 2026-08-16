@@ -1,7 +1,9 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Xml.Linq;
 using NuGet.Packaging;
+using NuGet.Packaging.Signing;
 
 namespace PowerForge;
 
@@ -10,9 +12,6 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryRefreshLockedRestoreOutputs(ProjectEvaluationRequest request)
     {
         string projectDirectory = Path.GetDirectoryName(request.ProjectPath)!;
-        if (!File.Exists(Path.Combine(projectDirectory, "packages.lock.json")))
-            return true;
-
         string temporaryLockFile = Path.Combine(
             Path.GetTempPath(),
             "powerforge-restore-lock-" + Guid.NewGuid().ToString("N") + ".json");
@@ -28,6 +27,21 @@ public sealed partial class DotNetPublishPipelineRunner
             "-p:RestoreLockedMode=false",
             "-p:NuGetLockFilePath=" + temporaryLockFile
         };
+        if (!string.IsNullOrWhiteSpace(request.TargetFramework))
+            arguments.Add("-p:TargetFramework=" + request.TargetFramework);
+        foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
+                     entry => entry.Key,
+                     StringComparer.OrdinalIgnoreCase))
+        {
+            if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
+                property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
+                property.Key.Equals("NuGetLockFilePath", StringComparison.OrdinalIgnoreCase) ||
+                property.Key.Equals("RestoreLockedMode", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            arguments.Add("-p:" + property.Key + "=" + property.Value);
+        }
 
         try
         {
@@ -74,7 +88,9 @@ public sealed partial class DotNetPublishPipelineRunner
             "global.json",
             "NuGet.Config",
             "nuget.config",
-            "packages.lock.json"
+            "packages.lock.json",
+            "Directory.Build.rsp",
+            "MSBuild.rsp"
         ];
 
         string current = Path.GetFullPath(projectDirectory);
@@ -84,7 +100,11 @@ public sealed partial class DotNetPublishPipelineRunner
         while (true)
         {
             foreach (string name in names)
-                AddBuildControlCandidate(Path.Combine(current, name), inputs, sourceInputs);
+                AddBuildControlCandidate(
+                    Path.Combine(current, name),
+                    inputs,
+                    sourceInputs,
+                    new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
 
             if (string.Equals(current, boundary, comparison))
                 break;
@@ -99,18 +119,140 @@ public sealed partial class DotNetPublishPipelineRunner
             "NuGetLockFilePath",
             projectDirectory);
         if (!string.IsNullOrWhiteSpace(evaluatedLockFile))
-            AddBuildControlCandidate(evaluatedLockFile!, inputs, sourceInputs);
+            AddBuildControlCandidate(
+                evaluatedLockFile!,
+                inputs,
+                sourceInputs,
+                new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
+
+        string? msBuildToolsPath = ReadEvaluatedPath(properties, "MSBuildToolsPath", projectDirectory);
+        if (!string.IsNullOrWhiteSpace(msBuildToolsPath))
+            AddBuildControlCandidate(
+                Path.Combine(msBuildToolsPath!, "MSBuild.rsp"),
+                inputs,
+                sourceInputs,
+                new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
     }
 
     private static void AddBuildControlCandidate(
         string path,
         HashSet<string> inputs,
-        HashSet<string> sourceInputs)
+        HashSet<string> sourceInputs,
+        HashSet<string> visitedResponseFiles)
     {
         string fullPath = Path.GetFullPath(path);
         inputs.Add(fullPath);
         if (File.Exists(fullPath))
+        {
             sourceInputs.Add(fullPath);
+            if (Path.GetExtension(fullPath).Equals(".rsp", StringComparison.OrdinalIgnoreCase) &&
+                visitedResponseFiles.Add(fullPath))
+            {
+                foreach (string line in File.ReadLines(fullPath))
+                {
+                    string value = line.Trim();
+                    if (!value.StartsWith("@", StringComparison.Ordinal) || value.Length == 1)
+                        continue;
+                    string nested = value.Substring(1).Trim().Trim('"');
+                    if (nested.Length == 0)
+                        continue;
+                    AddBuildControlCandidate(
+                        Path.IsPathRooted(nested)
+                            ? nested
+                            : Path.Combine(Path.GetDirectoryName(fullPath)!, nested),
+                        inputs,
+                        sourceInputs,
+                        visitedResponseFiles);
+                }
+            }
+        }
+    }
+
+    private static string[] ReadDeclaredBuildInputCandidates(
+        string projectPath,
+        IEnumerable<string> evaluatedImports)
+    {
+        var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var candidates = new HashSet<string>(comparison);
+        var pending = new Queue<string>();
+        var visited = new HashSet<string>(comparison);
+        pending.Enqueue(Path.GetFullPath(projectPath));
+        string projectDirectory = Path.GetDirectoryName(projectPath)!;
+        string? gitRoot = ReadGitText(projectDirectory, "rev-parse --show-toplevel");
+        foreach (string import in evaluatedImports)
+        {
+            if (!string.IsNullOrWhiteSpace(gitRoot) &&
+                ToGitRelativeExclusion(projectDirectory, gitRoot!, import) is not null)
+            {
+                pending.Enqueue(Path.GetFullPath(import));
+            }
+        }
+
+        while (pending.Count > 0)
+        {
+            string inputFile = pending.Dequeue();
+            if (!visited.Add(inputFile) || !File.Exists(inputFile))
+                continue;
+
+            try
+            {
+                XDocument document = XDocument.Load(inputFile, LoadOptions.None);
+                foreach (XElement element in document.Descendants())
+                {
+                    bool isImport = element.Name.LocalName.Equals("Import", StringComparison.OrdinalIgnoreCase);
+                    bool isAnalyzer = element.Name.LocalName.Equals("Analyzer", StringComparison.OrdinalIgnoreCase);
+                    if (!isImport && !isAnalyzer)
+                        continue;
+                    XAttribute? attribute = element.Attribute(isImport ? "Project" : "Include");
+                    foreach (string candidate in ResolveDeclaredBuildInputPaths(
+                                 attribute?.Value,
+                                 inputFile,
+                                 projectDirectory))
+                    {
+                        candidates.Add(candidate);
+                        if (isImport && File.Exists(candidate) &&
+                            !string.IsNullOrWhiteSpace(gitRoot) &&
+                            ToGitRelativeExclusion(projectDirectory, gitRoot!, candidate) is not null)
+                        {
+                            pending.Enqueue(candidate);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                candidates.Add(inputFile + ".powerforge-provenance-unreadable");
+            }
+        }
+
+        return candidates.ToArray();
+    }
+
+    private static IEnumerable<string> ResolveDeclaredBuildInputPaths(
+        string? value,
+        string declaringFile,
+        string projectDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            yield break;
+
+        string declaringDirectory = Path.GetDirectoryName(declaringFile)!;
+        foreach (string rawPath in value!.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            string candidate = rawPath.Trim()
+                .Replace("$(MSBuildThisFileDirectory)", declaringDirectory + Path.DirectorySeparatorChar)
+                .Replace("$(MSBuildProjectDirectory)", projectDirectory);
+            if (candidate.Contains("$(", StringComparison.Ordinal) ||
+                candidate.IndexOfAny(new[] { '*', '?' }) >= 0)
+            {
+                continue;
+            }
+
+            string fullPath = Path.GetFullPath(Path.IsPathRooted(candidate)
+                ? candidate
+                : Path.Combine(declaringDirectory, candidate));
+            yield return fullPath;
+        }
     }
 
     private static void AddPackageFoldersFromAssets(
@@ -302,10 +444,98 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Select(Path.GetFullPath)
                 .Where(root => !IsSameOrBelowBuildInputPath(projectDirectory, root))
                 .ToArray();
-            if (roots.Length == 0 || !TryReadLockedPackageHashes(lockFilePath, out Dictionary<string, string> hashes))
+            var allRoots = new HashSet<string>(roots, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            string? environmentPackages = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
+            if (!string.IsNullOrWhiteSpace(environmentPackages) && Directory.Exists(environmentPackages))
+                allRoots.Add(Path.GetFullPath(environmentPackages));
+            string? userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrWhiteSpace(userProfile))
+            {
+                string defaultPackages = Path.Combine(userProfile, ".nuget", "packages");
+                if (Directory.Exists(defaultPackages))
+                    allRoots.Add(Path.GetFullPath(defaultPackages));
+            }
+
+            TryReadLockedPackageHashes(lockFilePath, out Dictionary<string, string> hashes);
+            AddAutoReferencedPackageHashes(properties, projectDirectory, hashes);
+            if (allRoots.Count == 0)
                 return null;
 
-            return new VerifiedPackageInputCatalog(roots, hashes);
+            return new VerifiedPackageInputCatalog(allRoots, hashes);
+        }
+
+        private static void AddAutoReferencedPackageHashes(
+            JsonElement properties,
+            string projectDirectory,
+            Dictionary<string, string> hashes)
+        {
+            string assetsPath = ReadEvaluatedPath(properties, "ProjectAssetsFile", projectDirectory)
+                ?? Path.Combine(projectDirectory, "obj", "project.assets.json");
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(File.ReadAllText(assetsPath));
+                var autoReferenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (document.RootElement.TryGetProperty("project", out JsonElement project) &&
+                    project.TryGetProperty("frameworks", out JsonElement frameworks) &&
+                    frameworks.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (JsonProperty framework in frameworks.EnumerateObject())
+                    {
+                        if (!framework.Value.TryGetProperty("dependencies", out JsonElement dependencies) ||
+                            dependencies.ValueKind != JsonValueKind.Object)
+                        {
+                            continue;
+                        }
+                        foreach (JsonProperty dependency in dependencies.EnumerateObject())
+                        {
+                            if (dependency.Value.TryGetProperty("autoReferenced", out JsonElement value) &&
+                                value.ValueKind == JsonValueKind.True)
+                            {
+                                autoReferenced.Add(dependency.Name);
+                            }
+                        }
+                    }
+                }
+
+                if (autoReferenced.Count == 0 ||
+                    !document.RootElement.TryGetProperty("libraries", out JsonElement libraries) ||
+                    libraries.ValueKind != JsonValueKind.Object)
+                {
+                    return;
+                }
+
+                foreach (JsonProperty library in libraries.EnumerateObject())
+                {
+                    int separator = library.Name.LastIndexOf('/');
+                    if (separator <= 0 || separator == library.Name.Length - 1)
+                        continue;
+                    string packageId = library.Name.Substring(0, separator);
+                    if (!autoReferenced.Contains(packageId) ||
+                        !library.Value.TryGetProperty("type", out JsonElement type) ||
+                        !string.Equals(type.GetString(), "package", StringComparison.OrdinalIgnoreCase) ||
+                        !library.Value.TryGetProperty("sha512", out JsonElement sha512) ||
+                        sha512.ValueKind != JsonValueKind.String)
+                    {
+                        continue;
+                    }
+
+                    string key = packageId + "|" + library.Name.Substring(separator + 1);
+                    string value = sha512.GetString() ?? string.Empty;
+                    if (hashes.TryGetValue(key, out string? existing) &&
+                        !string.Equals(existing, value, StringComparison.Ordinal))
+                    {
+                        hashes[key] = string.Empty;
+                    }
+                    else
+                    {
+                        hashes[key] = value;
+                    }
+                }
+            }
+            catch
+            {
+                // Only an exact auto-referenced package hash can extend the committed lock.
+            }
         }
 
         internal bool TryVerify(string path, out bool isPackageInput)
@@ -469,9 +699,18 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 using (var packageReader = new PackageArchiveReader(path))
                 {
-                    string actualHash = packageReader.GetContentHash(
-                        CancellationToken.None,
-                        () => File.ReadAllText(path + ".sha512").Trim());
+                    PrimarySignature? signature = packageReader
+                        .GetPrimarySignatureAsync(CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                    if (signature is not null)
+                    {
+                        packageReader
+                            .ValidateIntegrityAsync(signature.SignatureContent, CancellationToken.None)
+                            .GetAwaiter()
+                            .GetResult();
+                    }
+                    string actualHash = packageReader.GetContentHash(CancellationToken.None);
                     if (!string.Equals(actualHash, expectedContentHash, StringComparison.Ordinal))
                         return null;
                 }

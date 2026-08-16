@@ -508,6 +508,8 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:TargetFramework",
             "-getProperty:TargetFrameworks",
             "-getProperty:MSBuildAllProjects",
+            "-getProperty:BaseOutputPath",
+            "-getProperty:OutputPath",
             "-getProperty:BaseIntermediateOutputPath",
             "-getProperty:MSBuildProjectExtensionsPath",
             "-getProperty:IntermediateOutputPath",
@@ -515,12 +517,16 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:NuGetPackageFolders",
             "-getProperty:ProjectAssetsFile",
             "-getProperty:NuGetLockFilePath",
+            "-getProperty:MSBuildToolsPath",
             "-p:Configuration=" + request.Configuration
         };
         foreach (string itemName in EvaluatedBuildItemNames)
             arguments.Add("-getItem:" + itemName);
         if (!string.IsNullOrWhiteSpace(request.TargetFramework))
+        {
+            arguments.Add("-target:ResolveReferences");
             arguments.Add("-p:TargetFramework=" + request.TargetFramework);
+        }
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
         {
             if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
@@ -562,6 +568,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
+                AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
+                AddPropertyPath(properties, "OutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "BaseIntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "MSBuildProjectExtensionsPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "IntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
@@ -592,6 +600,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!TryReadPreprocessedProjectImports(request, out string[] preprocessedImports))
                     return false;
                 importPaths.UnionWith(preprocessedImports);
+                importPaths.UnionWith(ReadDeclaredBuildInputCandidates(
+                    request.ProjectPath,
+                    importPaths));
                 foreach (string importPath in importPaths)
                 {
                     AddClassifiedEvaluatedInput(
@@ -638,6 +649,17 @@ public sealed partial class DotNetPublishPipelineRunner
                             {
                                 inputs.Add(fullPath);
                                 rawReferences.Add(fullPath);
+                            }
+                            else if ((itemName.Equals("ReferencePath", StringComparison.Ordinal) ||
+                                      itemName.Equals("ReferenceCopyLocalPaths", StringComparison.Ordinal)) &&
+                                     string.Equals(
+                                         ReadItemText(item, "ReferenceSourceTarget"),
+                                         "ProjectReference",
+                                         StringComparison.OrdinalIgnoreCase))
+                            {
+                                // The referenced project's evaluated sources are queued below; its compiled
+                                // output is generated state and cannot become a release source input.
+                                continue;
                             }
                             else if (!itemName.Equals("None", StringComparison.Ordinal) || IsOutputRelevantNoneItem(item))
                             {
