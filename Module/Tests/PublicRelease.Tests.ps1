@@ -26,6 +26,36 @@ Describe 'Standalone PowerForge installer host compatibility' {
         $content | Should -Match '\$PSVersionTable\.PSEdition'
     }
 
+    It 'rejects schema version 2 without exact commit provenance' {
+        $testRoot = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
+            $manifestPath = Join-Path $testRoot 'PowerForge-tool-manifest.json'
+            @'
+{
+  "schemaVersion": 2,
+  "version": "3.0.116",
+  "assets": {
+    "osx-arm64": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "executableSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  }
+}
+'@ | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+
+            {
+                & $script:ToolInstallerPath `
+                    -ManifestPath $manifestPath `
+                    -CacheRoot (Join-Path $testRoot 'cache')
+            } | Should -Throw '*schema version 2 requires an exact commit*'
+        } finally {
+            if (Test-Path -LiteralPath $testRoot) {
+                Remove-Item -LiteralPath $testRoot -Recurse -Force
+            }
+        }
+    }
+
     It 'publishes a native standalone CLI asset for every installer host RID' {
         $releaseConfig = Get-Content -Raw -LiteralPath (
             Join-Path $script:RepositoryRoot 'Build\release.json') | ConvertFrom-Json

@@ -6,22 +6,28 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeReleaseSchemaTests
 {
     [Theory]
-    [InlineData(1, false, true)]
-    [InlineData(1, true, true)]
-    [InlineData(2, false, false)]
-    [InlineData(2, true, true)]
-    public void Tool_lock_schema_preserves_v1_and_requires_executable_digest_for_v2(
+    [InlineData(1, false, false, true)]
+    [InlineData(1, true, false, true)]
+    [InlineData(2, false, true, false)]
+    [InlineData(2, true, false, false)]
+    [InlineData(2, true, true, true)]
+    public void Tool_lock_schema_preserves_v1_and_requires_executable_digest_and_commit_for_v2(
         int schemaVersion,
         bool includeExecutableDigest,
+        bool includeCommit,
         bool expectedValid)
     {
         var schema = JsonSchema.FromText(File.ReadAllText(GetSchemaPath("powerforge.tool.schema.json")));
         var executableDigest = includeExecutableDigest
             ? ", \"executableSha256\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\""
             : string.Empty;
+        var commit = includeCommit
+            ? "\"commit\": \"0123456789abcdef0123456789abcdef01234567\","
+            : string.Empty;
         var document = JsonNode.Parse($$"""
             {
               "schemaVersion": {{schemaVersion}},
+              {{commit}}
               "version": "3.0.110",
               "assets": {
                 "osx-arm64": {
