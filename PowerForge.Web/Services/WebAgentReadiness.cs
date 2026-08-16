@@ -341,7 +341,7 @@ public static partial class WebAgentReadiness
             ? new HttpClient()
             : new HttpClient(options.HttpMessageHandler, disposeHandler: false);
         http.Timeout = TimeSpan.FromMilliseconds(options.TimeoutMs <= 0 ? 15000 : options.TimeoutMs);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForge.Web.AgentReady/1.0");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForge.Web/1.0");
 
         var root = await TrySendAsync(http, HttpMethod.Get, baseUrl, null, cancellationToken).ConfigureAwait(false);
         var linkHeader = root.Response?.Headers.TryGetValues("Link", out var links) == true ? string.Join(", ", links) : string.Empty;
