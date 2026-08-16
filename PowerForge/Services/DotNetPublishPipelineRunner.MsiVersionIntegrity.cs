@@ -183,11 +183,12 @@ public sealed partial class DotNetPublishPipelineRunner
             gitRoot!,
             allExplicitInputPaths,
             trustedExternalInputPaths);
-        bool untrustedIgnoredBuildInput = HasIgnoredBuildInputs(
+        string[] untrustedBuildInputs = FindUntrustedBuildInputs(
             projectRoot,
             gitRoot!,
             generatedPaths,
             dirtyScope);
+        bool untrustedIgnoredBuildInput = untrustedBuildInputs.Length > 0;
         var dirtyReasons = new List<string>();
         if (statusChangedDuringVerification)
             dirtyReasons.Add("Git status changed during provenance verification");
@@ -198,7 +199,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (untrustedExplicitInput)
             dirtyReasons.Add("an explicit release input is untracked, ignored, external, or traverses a reparse point");
         if (untrustedIgnoredBuildInput)
-            dirtyReasons.Add("the evaluated build input graph contains an untrusted ignored or generated input");
+            dirtyReasons.Add("untrusted evaluated build input(s): " + string.Join(", ", untrustedBuildInputs));
         bool? dirty = trackedStatus is null || untrackedOutput is null
             ? null
             : statusChangedDuringVerification
@@ -285,7 +286,7 @@ public sealed partial class DotNetPublishPipelineRunner
         return false;
     }
 
-    private static bool HasIgnoredBuildInputs(
+    private static string[] FindUntrustedBuildInputs(
         string projectRoot,
         string gitRoot,
         IEnumerable<string>? generatedPaths,
@@ -297,23 +298,29 @@ public sealed partial class DotNetPublishPipelineRunner
             gitRoot,
             "ls-files --others --ignored --exclude-standard -z");
         if (ignoredOutput is null)
-            return true;
+            return new[] { "Git ignored-input query failed" };
         if (!dirtyScope.BuildInputsResolved)
-            return true;
+            return new[] { "MSBuild input evaluation failed" };
         string[] projectDirectories = dirtyScope.ProjectDirectories;
         HashSet<string> buildInputs = dirtyScope.BuildInputs;
         HashSet<string> sourceInputs = dirtyScope.SourceInputs;
         if (HasGeneratedOutputInputOverlap(projectRoot, generatedPaths, buildInputs))
-            return true;
-        if (projectDirectories.Any(directory =>
-                !IsBuildProjectDirectoryAdmitted(directory, projectRoot, gitRoot)))
+            return new[] { "a generated output overlaps an evaluated build input" };
+        string[] untrustedProjectDirectories = projectDirectories
+            .Where(directory => !IsBuildProjectDirectoryAdmitted(directory, projectRoot, gitRoot))
+            .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
+        if (untrustedProjectDirectories.Length > 0)
         {
-            return true;
+            return untrustedProjectDirectories;
         }
-        if (sourceInputs.Any(path =>
-                !IsBuildSourceInputAdmitted(path, projectRoot, gitRoot)))
+        string[] untrustedSourceInputs = sourceInputs
+            .Where(path => !IsBuildSourceInputAdmitted(path, projectRoot, gitRoot))
+            .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
+        if (untrustedSourceInputs.Length > 0)
         {
-            return true;
+            return untrustedSourceInputs;
         }
         string[] ignoredPaths = ignoredOutput.Split(
                 new[] { '\0' },
@@ -321,7 +328,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .Select(path => path.Replace('\\', '/').TrimStart('/'))
             .ToArray();
         if (ignoredPaths.Length == 0)
-            return false;
+            return Array.Empty<string>();
         var gitRelativeBuildInputs = new HashSet<string>(
             buildInputs
                 .Select(path => ToGitRelativeExclusion(projectRoot, gitRoot, path))
@@ -331,7 +338,11 @@ public sealed partial class DotNetPublishPipelineRunner
         string[] ignoredCandidates = ignoredPaths
             .Where(path => !IsGeneratedPath(path, generatedExclusions, comparison))
             .ToArray();
-        return ignoredCandidates.Any(gitRelativeBuildInputs.Contains);
+        return ignoredCandidates
+            .Where(gitRelativeBuildInputs.Contains)
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static bool IsBuildProjectDirectoryAdmitted(
