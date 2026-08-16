@@ -915,7 +915,6 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                     <Content Include="payload.custom" />
                     <Content Include="debug.custom" Condition="'$(Configuration)' == 'Debug'" />
                     <Content Include="rid.custom" Condition="'$(RuntimeIdentifier)' == 'win-x64'" />
-                    <Content Include="single.custom" Condition="'$(PublishSingleFile)' == 'true'" />
                     <Content Include="property.custom" Condition="'$(CustomFlavor)' == 'Secure'" />
                     <Content Include="environment.custom" Condition="'$(POWERFORGE_TEST_INPUT)' == 'enabled'" />
                     <Content Include="assets/bin/payload.dat" />
@@ -928,7 +927,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 </Project>
                 """);
             File.WriteAllText(Path.Combine(root, "Program.cs"), "internal static class Program { }");
-            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\nrid.custom\nsingle.custom\nproperty.custom\nenvironment.custom\nanalyzer.editorconfig\nanalyzer.globalconfig\nignored/\nhooks/\nassets/bin/\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated.cs\nExcluded.cs\npayload.custom\ndebug.custom\nrid.custom\nproperty.custom\nenvironment.custom\nanalyzer.editorconfig\nanalyzer.globalconfig\nignored/\nhooks/\nassets/bin/\n.idea/\nnotes.tmp\nbin/\nobj/\nArtifacts/\n");
             RunDotNet(root, $"restore \"{projectPath}\" --use-lock-file -r win-x64 -p:TargetFramework=net10.0");
             RunGit(root, "add Sample.csproj Program.cs packages.lock.json .gitignore");
             RunGit(root, "commit -m \"tracked source\"");
@@ -952,7 +951,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                             {
                                 Framework = "net10.0",
                                 Runtime = "win-x64",
-                                Style = DotNetPublishStyle.PortableCompat
+                                Style = DotNetPublishStyle.FrameworkDependent
                             }
                         ]
                     }
@@ -969,7 +968,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                     Target = "Sample",
                     Framework = "net10.0",
                     Runtime = "win-x64",
-                    Style = DotNetPublishStyle.PortableCompat,
+                    Style = DotNetPublishStyle.FrameworkDependent,
                     PublishDir = outputDirectory,
                     OutputDir = outputDirectory,
                     ExePath = executablePath,
@@ -1064,7 +1063,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             File.Delete(Path.Combine(root, "debug.custom"));
             plan.Configuration = "Release";
-            foreach (string contextInput in new[] { "rid.custom", "single.custom", "property.custom", "environment.custom" })
+            foreach (string contextInput in new[] { "rid.custom", "property.custom", "environment.custom" })
             {
                 File.WriteAllText(Path.Combine(root, contextInput), "publish-context input");
                 InvokeWriteManifests(plan, artefacts);
@@ -1301,7 +1300,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(nuGetConfig, nuGetConfigContent);
             File.WriteAllText(
                 projectPath,
-                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile></PropertyGroup><ItemGroup><PackageReference Include=\"Local.Build.Inputs\" Version=\"1.0.0\" /></ItemGroup></Project>");
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile><RestorePackagesPath>../../.nuget/packages</RestorePackagesPath></PropertyGroup><ItemGroup><PackageReference Include=\"Local.Build.Inputs\" Version=\"1.0.0\" /></ItemGroup></Project>");
             File.WriteAllText(sourcePath, "internal static class Program { }");
             File.WriteAllText(buildScript, "param([string] $RunMode = 'Build')");
             File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n.nuget/\n");

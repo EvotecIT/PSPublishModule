@@ -27,6 +27,11 @@ public sealed partial class DotNetPublishPipelineRunner
             "-p:RestoreLockedMode=false",
             "-p:NuGetLockFilePath=" + temporaryLockFile
         };
+        if (!string.IsNullOrWhiteSpace(request.TargetFramework) &&
+            !ProjectDeclaresTargetFramework(request.ProjectPath))
+        {
+            arguments.Add("-p:TargetFramework=" + request.TargetFramework);
+        }
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
                      entry => entry.Key,
                      StringComparer.OrdinalIgnoreCase))
@@ -303,7 +308,8 @@ public sealed partial class DotNetPublishPipelineRunner
         HashSet<string> inputs,
         HashSet<string> sourceInputs,
         IEnumerable<string> generatedBuildRoots,
-        VerifiedPackageInputCatalog? verifiedPackages)
+        VerifiedPackageInputCatalog? verifiedPackages,
+        IEnumerable<string>? trustedBuildInfrastructureRoots)
     {
         string fullPath = Path.GetFullPath(path);
         if (IsGeneratedBuildInfrastructurePath(fullPath, generatedBuildRoots))
@@ -316,7 +322,9 @@ public sealed partial class DotNetPublishPipelineRunner
         inputs.Add(fullPath);
         if (File.Exists(fullPath) &&
             (isPackageInput ||
-             (isSourceInput && !IsTrustedExternalBuildInfrastructurePath(fullPath))))
+             (isSourceInput && !IsTrustedExternalBuildInfrastructurePath(
+                 fullPath,
+                 trustedBuildInfrastructureRoots))))
         {
             sourceInputs.Add(fullPath);
         }
@@ -490,6 +498,20 @@ public sealed partial class DotNetPublishPipelineRunner
                                 value.ValueKind == JsonValueKind.True)
                             {
                                 autoReferenced.Add(dependency.Name);
+                            }
+                        }
+
+                        if (framework.Value.TryGetProperty("downloadDependencies", out JsonElement downloads) &&
+                            downloads.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (JsonElement download in downloads.EnumerateArray())
+                            {
+                                if (download.TryGetProperty("name", out JsonElement name) &&
+                                    name.ValueKind == JsonValueKind.String &&
+                                    !string.IsNullOrWhiteSpace(name.GetString()))
+                                {
+                                    autoReferenced.Add(name.GetString()!);
+                                }
                             }
                         }
                     }
