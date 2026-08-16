@@ -20,6 +20,18 @@
           "NuGet.Common": "7.6.0"
         }
       },
+      "NuGet.Packaging": {
+        "type": "Direct",
+        "requested": "[7.6.0, )",
+        "resolved": "7.6.0",
+        "contentHash": "TDp+qHzRBy1zjwiJGCbfpdO0jMG5hH/bk7p1EABLKv9p5SIykDPGnbuYXm2iZO0QJ/H+hOI/vo5LfqM17Q+G0w==",
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.3",
+          "NuGet.Configuration": "7.6.0",
+          "NuGet.Versioning": "7.6.0",
+          "System.Text.Json": "8.0.5"
+        }
+      },
       "System.Reflection.Metadata": {
         "type": "Direct",
         "requested": "[10.0.10, )",
@@ -93,6 +105,11 @@
         "resolved": "1.0.3",
         "contentHash": "0E7evZXHXaDYYiLRfpyXvCh+yzM2rNTyuZDI+ZO7UUqSc6GfjePiXTdqJGtgIKUwdI81tzQKmaWprnUiPj9hAw=="
       },
+      "Newtonsoft.Json": {
+        "type": "Transitive",
+        "resolved": "13.0.3",
+        "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
+      },
       "NuGet.Common": {
         "type": "Transitive",
         "resolved": "7.6.0",
@@ -106,6 +123,11 @@
         "type": "Transitive",
         "resolved": "7.6.0",
         "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
+      },
+      "NuGet.Versioning": {
+        "type": "Transitive",
+        "resolved": "7.6.0",
+        "contentHash": "TpZxfOoQBQk/0r/2uc1A1qNYIKHkJGgOrWP+ax3nsNAUN/1BOQMDrgmGADogSA4hOXH1ZJiyeYg4Ca+vUW0sEg=="
       },
       "System.Buffers": {
         "type": "Transitive",
@@ -195,6 +217,18 @@
           "System.Security.Cryptography.ProtectedData": "8.0.0"
         }
       },
+      "NuGet.Packaging": {
+        "type": "Direct",
+        "requested": "[7.6.0, )",
+        "resolved": "7.6.0",
+        "contentHash": "TDp+qHzRBy1zjwiJGCbfpdO0jMG5hH/bk7p1EABLKv9p5SIykDPGnbuYXm2iZO0QJ/H+hOI/vo5LfqM17Q+G0w==",
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.3",
+          "NuGet.Configuration": "7.6.0",
+          "NuGet.Versioning": "7.6.0",
+          "System.Security.Cryptography.Pkcs": "8.0.1"
+        }
+      },
       "System.IO.Packaging": {
         "type": "Direct",
         "requested": "[10.0.10, )",
@@ -225,6 +259,11 @@
         "resolved": "1.0.0",
         "contentHash": "sg2uLSJS37PyZenldT55a+B93ct2bvz3653uU0FwFtv1v3bcrG453O7/n1hcSp9DO4burBNIyEu00O8ZWHptNQ=="
       },
+      "Newtonsoft.Json": {
+        "type": "Transitive",
+        "resolved": "13.0.3",
+        "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
+      },
       "NuGet.Common": {
         "type": "Transitive",
         "resolved": "7.6.0",
@@ -237,6 +276,11 @@
         "type": "Transitive",
         "resolved": "7.6.0",
         "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
+      },
+      "NuGet.Versioning": {
+        "type": "Transitive",
+        "resolved": "7.6.0",
+        "contentHash": "TpZxfOoQBQk/0r/2uc1A1qNYIKHkJGgOrWP+ax3nsNAUN/1BOQMDrgmGADogSA4hOXH1ZJiyeYg4Ca+vUW0sEg=="
       }
     },
     "net8.0": {
@@ -248,6 +292,18 @@
         "dependencies": {
           "NuGet.Common": "7.6.0",
           "System.Security.Cryptography.ProtectedData": "8.0.0"
+        }
+      },
+      "NuGet.Packaging": {
+        "type": "Direct",
+        "requested": "[7.6.0, )",
+        "resolved": "7.6.0",
+        "contentHash": "TDp+qHzRBy1zjwiJGCbfpdO0jMG5hH/bk7p1EABLKv9p5SIykDPGnbuYXm2iZO0QJ/H+hOI/vo5LfqM17Q+G0w==",
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.3",
+          "NuGet.Configuration": "7.6.0",
+          "NuGet.Versioning": "7.6.0",
+          "System.Security.Cryptography.Pkcs": "8.0.1"
         }
       },
       "System.IO.Packaging": {
@@ -296,6 +352,11 @@
           "System.Formats.Asn1": "10.0.10"
         }
       },
+      "Newtonsoft.Json": {
+        "type": "Transitive",
+        "resolved": "13.0.3",
+        "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
+      },
       "NuGet.Common": {
         "type": "Transitive",
         "resolved": "7.6.0",
@@ -308,6 +369,11 @@
         "type": "Transitive",
         "resolved": "7.6.0",
         "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
+      },
+      "NuGet.Versioning": {
+        "type": "Transitive",
+        "resolved": "7.6.0",
+        "contentHash": "TpZxfOoQBQk/0r/2uc1A1qNYIKHkJGgOrWP+ax3nsNAUN/1BOQMDrgmGADogSA4hOXH1ZJiyeYg4Ca+vUW0sEg=="
       },
       "System.Collections.Immutable": {
         "type": "Transitive",

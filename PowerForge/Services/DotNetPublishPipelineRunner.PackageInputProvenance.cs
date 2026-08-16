@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using NuGet.Packaging;
 
 namespace PowerForge;
 
@@ -466,18 +467,16 @@ public sealed partial class DotNetPublishPipelineRunner
             ZipArchive? archive = null;
             try
             {
-                stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                using (SHA512 sha512 = SHA512.Create())
+                using (var packageReader = new PackageArchiveReader(path))
                 {
-                    string actualHash = Convert.ToBase64String(sha512.ComputeHash(stream));
+                    string actualHash = packageReader.GetContentHash(
+                        CancellationToken.None,
+                        () => File.ReadAllText(path + ".sha512").Trim());
                     if (!string.Equals(actualHash, expectedContentHash, StringComparison.Ordinal))
-                    {
-                        stream.Dispose();
                         return null;
-                    }
                 }
 
-                stream.Position = 0;
+                stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                 archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
                 var entries = new Dictionary<string, ZipArchiveEntry>(
                     IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
