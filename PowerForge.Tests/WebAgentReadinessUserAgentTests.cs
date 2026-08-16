@@ -6,7 +6,7 @@ namespace PowerForge.Tests;
 public partial class WebAgentReadinessTests
 {
     [Fact]
-    public async Task Scan_UsesStablePowerForgeUserAgent()
+    public async Task Scan_UsesSyntheticBrowserUserAgent()
     {
         var handler = new UserAgentScanHandler();
 
@@ -29,7 +29,11 @@ public partial class WebAgentReadinessTests
         });
 
         Assert.NotEmpty(handler.UserAgents);
-        Assert.All(handler.UserAgents, userAgent => Assert.Equal("PowerForge.Web/1.0", userAgent));
+        Assert.All(handler.UserAgents, userAgent =>
+            Assert.Equal(
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                userAgent));
     }
 
     private sealed class UserAgentScanHandler : HttpMessageHandler

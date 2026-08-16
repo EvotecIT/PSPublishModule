@@ -341,7 +341,12 @@ public static partial class WebAgentReadiness
             ? new HttpClient()
             : new HttpClient(options.HttpMessageHandler, disposeHandler: false);
         http.Timeout = TimeSpan.FromMilliseconds(options.TimeoutMs <= 0 ? 15000 : options.TimeoutMs);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForge.Web/1.0");
+        // Treat the remote scan as a normal web-client availability check. Crawler-style
+        // identities can be challenged by edge bot protection before the discovery
+        // documents themselves are evaluated.
+        http.DefaultRequestHeaders.UserAgent.ParseAdd(
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
 
         var root = await TrySendAsync(http, HttpMethod.Get, baseUrl, null, cancellationToken).ConfigureAwait(false);
         var linkHeader = root.Response?.Headers.TryGetValues("Link", out var links) == true ? string.Join(", ", links) : string.Empty;
