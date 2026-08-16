@@ -337,9 +337,12 @@ public static partial class WebAgentReadiness
             };
         }
 
-        using var http = options.HttpMessageHandler is null
-            ? new HttpClient()
-            : new HttpClient(options.HttpMessageHandler, disposeHandler: false);
+        var transport = options.HttpMessageHandler;
+        using var http = transport is null
+            ? new HttpClient(new RequestPacingHandler(
+                new HttpClientHandler(),
+                TimeSpan.FromMilliseconds(Math.Max(0, options.RequestIntervalMs))))
+            : new HttpClient(transport, disposeHandler: false);
         http.Timeout = TimeSpan.FromMilliseconds(options.TimeoutMs <= 0 ? 15000 : options.TimeoutMs);
         // Treat the remote scan as a normal web-client availability check. Crawler-style
         // identities can be challenged by edge bot protection before the discovery
@@ -348,11 +351,10 @@ public static partial class WebAgentReadiness
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
 
-        var root = await TrySendAsync(http, HttpMethod.Get, baseUrl, null, cancellationToken).ConfigureAwait(false);
+        var rootText = await TryGetTextAsync(http, baseUrl, null, cancellationToken).ConfigureAwait(false);
+        var root = new HttpResponseResult(rootText.Success, rootText.Message, rootText.Response);
         var linkHeader = root.Response?.Headers.TryGetValues("Link", out var links) == true ? string.Join(", ", links) : string.Empty;
         AddRemoteSecurityHeaderChecks(checks, root.Response, baseUrl, spec);
-
-        var rootText = await TryGetTextAsync(http, baseUrl, null, cancellationToken).ConfigureAwait(false);
         if (rootText.Success)
         {
             AddHtmlSemanticsChecks(checks, rootText.Text, baseUrl);
@@ -2932,6 +2934,8 @@ public sealed class WebAgentReadinessScanOptions
     public string BaseUrl { get; set; } = string.Empty;
     /// <summary>HTTP timeout in milliseconds.</summary>
     public int TimeoutMs { get; set; } = 15000;
+    /// <summary>Minimum interval between live-site requests in milliseconds.</summary>
+    public int RequestIntervalMs { get; set; } = 1000;
     /// <summary>Optional site policy used to decide which live headers are required.</summary>
     public AgentReadinessSpec? AgentReadiness { get; set; }
     /// <summary>Optional test or host-provided HTTP transport.</summary>
