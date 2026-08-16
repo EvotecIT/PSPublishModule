@@ -190,6 +190,10 @@ public sealed partial class DotNetPublishPipelineRunner
             dirtyScope);
         bool untrustedIgnoredBuildInput = untrustedBuildInputs.Length > 0;
         var dirtyReasons = new List<string>();
+        if (trackedStatus is null)
+            dirtyReasons.Add("tracked Git status query failed");
+        if (untrackedOutput is null)
+            dirtyReasons.Add("untracked Git status query failed");
         if (statusChangedDuringVerification)
             dirtyReasons.Add("Git status changed during provenance verification");
         if (generatedOutputOverlapsInput)

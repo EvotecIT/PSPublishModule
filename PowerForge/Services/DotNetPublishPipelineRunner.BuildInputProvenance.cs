@@ -33,6 +33,7 @@ public sealed partial class DotNetPublishPipelineRunner
         "Content",
         "EmbeddedResource",
         "AdditionalFiles",
+        "Analyzer",
         "EditorConfigFiles",
         "GlobalAnalyzerConfigFiles",
         "ApplicationDefinition",
@@ -496,6 +497,8 @@ public sealed partial class DotNetPublishPipelineRunner
         out EvaluatedProjectInputs? evaluation)
     {
         evaluation = null;
+        if (!TryRefreshLockedRestoreOutputs(request))
+            return false;
         var arguments = new List<string>
         {
             "msbuild",
@@ -509,6 +512,9 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:MSBuildProjectExtensionsPath",
             "-getProperty:IntermediateOutputPath",
             "-getProperty:NuGetPackageRoot",
+            "-getProperty:NuGetPackageFolders",
+            "-getProperty:ProjectAssetsFile",
+            "-getProperty:NuGetLockFilePath",
             "-p:Configuration=" + request.Configuration
         };
         foreach (string itemName in EvaluatedBuildItemNames)
@@ -552,75 +558,102 @@ public sealed partial class DotNetPublishPipelineRunner
             var targetFrameworks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var generatedBuildRoots = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-            var trustedRestoreRoots = new HashSet<string>(
+            var packageRoots = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
                 AddPropertyPath(properties, "BaseIntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "MSBuildProjectExtensionsPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "IntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
-                AddPropertyPath(properties, "NuGetPackageRoot", Path.GetDirectoryName(request.ProjectPath)!, trustedRestoreRoots);
-                AddSemicolonSeparatedPaths(
+                AddPropertyPath(properties, "NuGetPackageRoot", Path.GetDirectoryName(request.ProjectPath)!, packageRoots);
+                AddSemicolonSeparatedPathValues(
                     properties,
-                    "MSBuildAllProjects",
+                    "NuGetPackageFolders",
                     Path.GetDirectoryName(request.ProjectPath)!,
-                    inputs,
-                    sourceInputs,
-                    generatedBuildRoots,
-                    trustedRestoreRoots);
+                    packageRoots);
+                AddPackageFoldersFromAssets(
+                    properties,
+                    Path.GetDirectoryName(request.ProjectPath)!,
+                    packageRoots);
+                AddEffectiveBuildControlInputs(request.ProjectPath, properties, inputs, sourceInputs);
                 AddSemicolonSeparatedValues(properties, "TargetFrameworks", targetFrameworks);
                 if (targetFrameworks.Count == 0)
                     AddSemicolonSeparatedValues(properties, "TargetFramework", targetFrameworks);
-            }
-            if (root.TryGetProperty("Items", out JsonElement items))
-            {
-                foreach (string itemName in EvaluatedBuildItemNames)
-                {
-                    if (!items.TryGetProperty(itemName, out JsonElement values) || values.ValueKind != JsonValueKind.Array)
-                        continue;
-                    foreach (JsonElement item in values.EnumerateArray())
-                    {
-                        if (itemName.Equals("Reference", StringComparison.Ordinal) &&
-                            TryResolveEvaluatedItemPath(
-                                item,
-                                "HintPath",
-                                Path.GetDirectoryName(request.ProjectPath)!,
-                                out string? hintPath))
-                        {
-                            if (!trustedRestoreRoots.Any(root => IsSameOrBelowBuildInputPath(hintPath!, root)))
-                            {
-                                inputs.Add(hintPath!);
-                                sourceInputs.Add(hintPath!);
-                            }
-                        }
 
-                        if (!item.TryGetProperty("FullPath", out JsonElement fullPathElement) ||
-                            fullPathElement.ValueKind != JsonValueKind.String ||
-                            string.IsNullOrWhiteSpace(fullPathElement.GetString()))
-                        {
+                using VerifiedPackageInputCatalog? verifiedPackages =
+                    VerifiedPackageInputCatalog.TryCreate(request.ProjectPath, properties, packageRoots);
+                var importPaths = new HashSet<string>(
+                    IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                AddSemicolonSeparatedPathValues(
+                    properties,
+                    "MSBuildAllProjects",
+                    Path.GetDirectoryName(request.ProjectPath)!,
+                    importPaths);
+                if (!TryReadPreprocessedProjectImports(request, out string[] preprocessedImports))
+                    return false;
+                importPaths.UnionWith(preprocessedImports);
+                foreach (string importPath in importPaths)
+                {
+                    AddClassifiedEvaluatedInput(
+                        importPath,
+                        isSourceInput: true,
+                        inputs,
+                        sourceInputs,
+                        generatedBuildRoots,
+                        verifiedPackages);
+                }
+
+                if (root.TryGetProperty("Items", out JsonElement items))
+                {
+                    foreach (string itemName in EvaluatedBuildItemNames)
+                    {
+                        if (!items.TryGetProperty(itemName, out JsonElement values) || values.ValueKind != JsonValueKind.Array)
                             continue;
-                        }
-                        string fullPath = Path.GetFullPath(fullPathElement.GetString()!);
-                        if (trustedRestoreRoots.Any(root => IsSameOrBelowBuildInputPath(fullPath, root)))
-                            continue;
-                        if (itemName.Equals("ProjectReference", StringComparison.Ordinal))
+                        foreach (JsonElement item in values.EnumerateArray())
                         {
-                            inputs.Add(fullPath);
-                            rawReferences.Add(fullPath);
-                        }
-                        else if (!itemName.Equals("None", StringComparison.Ordinal) || IsOutputRelevantNoneItem(item))
-                        {
-                            inputs.Add(fullPath);
-                            if (File.Exists(fullPath) &&
-                                (EvaluatedSourceItemNames.Contains(itemName) ||
-                                 (itemName.Equals("None", StringComparison.Ordinal) && IsOutputRelevantNoneItem(item))))
+                            if (itemName.Equals("Reference", StringComparison.Ordinal) &&
+                                TryResolveEvaluatedItemPath(
+                                    item,
+                                    "HintPath",
+                                    Path.GetDirectoryName(request.ProjectPath)!,
+                                    out string? hintPath))
                             {
-                                sourceInputs.Add(fullPath);
+                                AddClassifiedEvaluatedInput(
+                                    hintPath!,
+                                    isSourceInput: true,
+                                    inputs,
+                                    sourceInputs,
+                                    generatedBuildRoots,
+                                    verifiedPackages);
+                            }
+
+                            if (!item.TryGetProperty("FullPath", out JsonElement fullPathElement) ||
+                                fullPathElement.ValueKind != JsonValueKind.String ||
+                                string.IsNullOrWhiteSpace(fullPathElement.GetString()))
+                            {
+                                continue;
+                            }
+                            string fullPath = Path.GetFullPath(fullPathElement.GetString()!);
+                            if (itemName.Equals("ProjectReference", StringComparison.Ordinal))
+                            {
+                                inputs.Add(fullPath);
+                                rawReferences.Add(fullPath);
+                            }
+                            else if (!itemName.Equals("None", StringComparison.Ordinal) || IsOutputRelevantNoneItem(item))
+                            {
+                                bool isSourceInput = EvaluatedSourceItemNames.Contains(itemName) ||
+                                    (itemName.Equals("None", StringComparison.Ordinal) && IsOutputRelevantNoneItem(item));
+                                AddClassifiedEvaluatedInput(
+                                    fullPath,
+                                    isSourceInput,
+                                    inputs,
+                                    sourceInputs,
+                                    generatedBuildRoots,
+                                    verifiedPackages);
                             }
                         }
                     }
                 }
-
             }
 
             if (string.IsNullOrWhiteSpace(request.TargetFramework))
@@ -845,14 +878,11 @@ public sealed partial class DotNetPublishPipelineRunner
             ? value.GetString()
             : null;
 
-    private static void AddSemicolonSeparatedPaths(
+    private static void AddSemicolonSeparatedPathValues(
         JsonElement properties,
         string name,
         string baseDirectory,
-        HashSet<string> values,
-        HashSet<string>? sourceValues = null,
-        IEnumerable<string>? generatedBuildRoots = null,
-        IEnumerable<string>? trustedBuildRoots = null)
+        HashSet<string> values)
     {
         if (!properties.TryGetProperty(name, out JsonElement property) || property.ValueKind != JsonValueKind.String)
             return;
@@ -862,17 +892,8 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             string fullPath = Path.GetFullPath(
                 Path.IsPathRooted(value) ? value : Path.Combine(baseDirectory, value));
-            if (File.Exists(fullPath))
-            {
-                if (IsGeneratedBuildInfrastructurePath(fullPath, generatedBuildRoots) ||
-                    (trustedBuildRoots ?? Array.Empty<string>())
-                    .Any(root => IsSameOrBelowBuildInputPath(fullPath, root)))
-                    continue;
+            if (File.Exists(fullPath) || Directory.Exists(fullPath))
                 values.Add(fullPath);
-                if (sourceValues is not null &&
-                    !IsTrustedExternalBuildInfrastructurePath(fullPath))
-                    sourceValues.Add(fullPath);
-            }
         }
     }
 

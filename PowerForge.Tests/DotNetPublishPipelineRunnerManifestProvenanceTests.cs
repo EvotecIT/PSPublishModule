@@ -1276,9 +1276,8 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             ZipFile.CreateFromDirectory(
                 packageSource,
                 Path.Combine(packageFeed, "Local.Build.Inputs.1.0.0.nupkg"));
-            File.WriteAllText(
-                Path.Combine(root, "NuGet.Config"),
-                """
+            string nuGetConfig = Path.Combine(root, "NuGet.Config");
+            const string nuGetConfigContent = """
                 <?xml version="1.0" encoding="utf-8"?>
                 <configuration>
                   <config>
@@ -1289,18 +1288,23 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                     <add key="local" value="feed" />
                   </packageSources>
                 </configuration>
-                """);
+                """;
+            File.WriteAllText(nuGetConfig, nuGetConfigContent);
             File.WriteAllText(
                 projectPath,
-                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup><ItemGroup><PackageReference Include=\"Local.Build.Inputs\" Version=\"1.0.0\" /></ItemGroup></Project>");
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile></PropertyGroup><ItemGroup><PackageReference Include=\"Local.Build.Inputs\" Version=\"1.0.0\" /></ItemGroup></Project>");
             File.WriteAllText(sourcePath, "internal static class Program { }");
             File.WriteAllText(buildScript, "param([string] $RunMode = 'Build')");
             File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n.nuget/\n");
             RunGit(root, "add .");
             RunGit(root, "commit -m \"approved source\"");
             RunDotNet(root, $"restore \"{projectPath}\" --nologo");
+            string lockFile = Path.Combine(projectRoot, "packages.lock.json");
+            string lockFileContent = File.ReadAllText(lockFile);
+            RunGit(root, "add src/App/packages.lock.json");
+            RunGit(root, "commit -m \"lock approved dependencies\"");
             Assert.True(File.Exists(Path.Combine(projectRoot, "obj", "Sample.csproj.nuget.g.props")));
-            Assert.Contains(
+            string restoredPayload = Assert.Single(
                 Directory.EnumerateFiles(root, "package-payload.txt", SearchOption.AllDirectories),
                 path => path.Contains(
                     Path.Combine(".nuget", "packages", "local.build.inputs", "1.0.0"),
@@ -1315,6 +1319,37 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             Assert.False(provenance.Dirty);
             Assert.Empty(provenance.DirtyPaths);
+
+            File.WriteAllText(restoredPayload, "tampered restored package content");
+            DotNetPublishPipelineRunner.SourceProvenance tamperedPackage =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+            Assert.True(tamperedPackage.Dirty);
+            Assert.Contains(
+                tamperedPackage.DirtyReasons,
+                reason => reason.Contains("untrusted evaluated build input", StringComparison.OrdinalIgnoreCase));
+
+            File.WriteAllText(restoredPayload, "restored package content");
+            File.AppendAllText(lockFile, Environment.NewLine);
+            DotNetPublishPipelineRunner.SourceProvenance dirtyLockFile =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+            Assert.True(dirtyLockFile.Dirty);
+            Assert.Contains("src/App/packages.lock.json", dirtyLockFile.DirtyPaths, StringComparer.OrdinalIgnoreCase);
+
+            File.WriteAllText(lockFile, lockFileContent);
+            File.AppendAllText(nuGetConfig, Environment.NewLine + "<!-- dirty effective config -->");
+            DotNetPublishPipelineRunner.SourceProvenance dirtyNuGetConfig =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+            Assert.True(dirtyNuGetConfig.Dirty);
+            Assert.Contains("NuGet.Config", dirtyNuGetConfig.DirtyPaths, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
@@ -1685,9 +1720,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             string projectPath = Path.Combine(root, "Sample.csproj");
             File.WriteAllText(
                 externalImport,
-                "<Project><PropertyGroup><ExternalBuildInput>true</ExternalBuildInput>" +
-                "<MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>" +
-                "</PropertyGroup></Project>");
+                "<Project><PropertyGroup><ExternalBuildInput>true</ExternalBuildInput></PropertyGroup></Project>");
             File.WriteAllText(projectPath, $"""
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
