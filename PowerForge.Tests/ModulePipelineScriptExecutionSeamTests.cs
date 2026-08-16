@@ -574,6 +574,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         public bool AutoSuccessfulSigningResult { get; set; }
         public bool AutoSuccessfulPublishResult { get; set; }
         public Action<int>? SigningCallStarted { get; set; }
+        public Action<int, string[]>? SigningFilesCompleted { get; set; }
         public Action<ModulePipelineActionConfiguration, ModulePipelineActionContext>? ActionStarted { get; set; }
         public List<string> SigningRootPaths { get; } = new();
         public List<string> OperationOrder { get; } = new();
@@ -740,6 +741,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
                 .Where(path => !LastExcludePatterns.Any(excluded =>
                     path.IndexOf(excluded, StringComparison.OrdinalIgnoreCase) >= 0))
                 .ToArray();
+            SigningFilesCompleted?.Invoke(SignCalls, verified);
             return new ModuleSigningResult
             {
                 TotalMatched = verified.Length,

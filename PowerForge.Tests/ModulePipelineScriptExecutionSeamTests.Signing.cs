@@ -152,7 +152,19 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             var hostedOperations = new FakeHostedOperations
             {
                 AutoSuccessfulSigningResult = true,
-                AutoSuccessfulPublishResult = true
+                AutoSuccessfulPublishResult = true,
+                SigningFilesCompleted = (call, files) =>
+                {
+                    if (call != 1)
+                        return;
+
+                    string stagedManifest = Assert.Single(
+                        files,
+                        path => path.EndsWith(moduleName + ".psd1", StringComparison.OrdinalIgnoreCase));
+                    File.AppendAllText(
+                        stagedManifest,
+                        Environment.NewLine + "# SIG # simulated Authenticode mutation" + Environment.NewLine);
+                }
             };
             var runner = CreateRunner(hostedOperations);
             string outputRoot = Path.Combine(root.FullName, "Artefacts", "Packed");
@@ -720,8 +732,10 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         }
     }
 
-    [Fact]
-    public void Run_SignedGitHubPackedArtifactRejectsManifestMutationAfterAuthorizedSync()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_SignedGitHubPackedArtifactRejectsManifestMutationAfterAuthorizedSync(bool mutateProjectManifest)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -740,8 +754,10 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
                 ActionStarted = (_, context) =>
                 {
                     string mutation = Environment.NewLine + "# changed after authorized manifest synchronization";
-                    File.AppendAllText(context.ManifestPath!, mutation);
-                    File.AppendAllText(Path.Combine(root.FullName, moduleName + ".psd1"), mutation);
+                    string manifestPath = mutateProjectManifest
+                        ? Path.Combine(root.FullName, moduleName + ".psd1")
+                        : context.ManifestPath!;
+                    File.AppendAllText(manifestPath, mutation);
                 }
             };
             var runner = CreateRunner(hostedOperations);
