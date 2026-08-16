@@ -4,14 +4,6 @@ param()
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 
-function Assert-LastExitCode {
-    param([Parameter(Mandatory)][string] $Operation)
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "$Operation failed with exit code $LASTEXITCODE."
-    }
-}
-
 if ($env:RUNNER_OS -ne 'Linux') {
     throw 'PowerForge Cloudflare site policy requires a Linux runner.'
 }
@@ -65,9 +57,15 @@ if ($env:POWERFORGE_CLOUDFLARE_DRY_RUN -eq 'true') {
 }
 $arguments += @('--output', 'json')
 
-$jsonOutput = @(dotnet @arguments)
-Assert-LastExitCode -Operation 'Applying Cloudflare site policy'
+$jsonOutput = [object[]] @(dotnet @arguments)
+$cliExitCode = $LASTEXITCODE
 $jsonText = $jsonOutput -join [Environment]::NewLine
+if ($cliExitCode -ne 0) {
+    if (-not [string]::IsNullOrWhiteSpace($jsonText)) {
+        Write-Host $jsonText
+    }
+    throw "Applying Cloudflare site policy failed with exit code $cliExitCode."
+}
 try {
     $result = $jsonText | ConvertFrom-Json
     if ($result.success -ne $true -or $null -eq $result.result.changesRequired) {
