@@ -41,6 +41,19 @@ public sealed partial class WebAgentContentSecurityScanner
         ScanDynamicExecutableInvocations(content, path, lineOffset, countLogicalLines, findings);
         foreach (Match match in CommandSegmentRegex.Matches(content))
         {
+            if (!IsPackageCommandInvocationContext(content, match.Index) &&
+                !IsUntrustedExecutableReference(content, match.Index) &&
+                !HasCommandScopedEnvironmentPrefix(content, match.Index) &&
+                !HasExecutionContextWrapperPrefix(content, match.Index) &&
+                !HasDataAppendingWrapperPrefix(content, match.Index) &&
+                !HasRemoteExecutionWrapperPrefix(content, match.Index) &&
+                flowState?.WorkingDirectoryChanged != true &&
+                !(workingDirectoryChange.Success && workingDirectoryChange.Index < match.Index) &&
+                flowState?.RemoteExecutionContextChanged != true &&
+                !(remoteExecutionContextChange.Success && remoteExecutionContextChange.Index < match.Index) &&
+                !HasShellCommandSeparatorPrefix(content, match.Index))
+                continue;
+
             var matchedCommand = TrimMarkdownInlineCodeCommand(
                 content,
                 match.Index,
@@ -197,40 +210,6 @@ public sealed partial class WebAgentContentSecurityScanner
         return references;
     }
 
-    private static string TrimMarkdownInlineCodeCommand(
-        string content,
-        int commandIndex,
-        string matchedCommand)
-    {
-        var openingStart = commandIndex;
-        while (openingStart > 0 && content[openingStart - 1] == '`')
-            openingStart--;
-
-        var delimiterLength = commandIndex - openingStart;
-        if (delimiterLength == 0)
-            return matchedCommand;
-
-        var lineEnd = content.IndexOfAny(['\r', '\n'], commandIndex);
-        if (lineEnd < 0)
-            lineEnd = content.Length;
-
-        for (var index = commandIndex; index < lineEnd; index++)
-        {
-            if (content[index] != '`')
-                continue;
-
-            var runLength = 1;
-            while (index + runLength < lineEnd && content[index + runLength] == '`')
-                runLength++;
-            if (runLength == delimiterLength)
-                return content.Substring(commandIndex, index - commandIndex);
-
-            index += runLength - 1;
-        }
-
-        return matchedCommand;
-    }
-
     private static bool HasShellExpansionInOptionValue(string[] tokens)
     {
         for (var index = 1; index < tokens.Length; index++)
@@ -261,6 +240,9 @@ public sealed partial class WebAgentContentSecurityScanner
     {
         foreach (Match match in ObfuscatedExecutableRegex.Matches(content))
         {
+            if (!IsPackageCommandInvocationContext(content, match.Index))
+                continue;
+
             var escaped = match.Groups["command"].Value;
             var normalized = NormalizeExecutable(escaped.Replace("\\", string.Empty, StringComparison.Ordinal)
                 .Replace("`", string.Empty, StringComparison.Ordinal)
