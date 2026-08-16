@@ -629,13 +629,16 @@ public sealed partial class DotNetPublishPipelineRunner
                                     Path.GetDirectoryName(request.ProjectPath)!,
                                     out string? hintPath))
                             {
-                                AddClassifiedEvaluatedInput(
-                                    hintPath!,
-                                    isSourceInput: true,
-                                    inputs,
-                                    sourceInputs,
-                                    generatedBuildRoots,
-                                    verifiedPackages);
+                                if (!IsBelowGeneratedBuildRoot(hintPath!, generatedBuildRoots))
+                                {
+                                    AddClassifiedEvaluatedInput(
+                                        hintPath!,
+                                        isSourceInput: true,
+                                        inputs,
+                                        sourceInputs,
+                                        generatedBuildRoots,
+                                        verifiedPackages);
+                                }
                             }
 
                             if (!item.TryGetProperty("FullPath", out JsonElement fullPathElement) ||
@@ -645,6 +648,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                 continue;
                             }
                             string fullPath = Path.GetFullPath(fullPathElement.GetString()!);
+                            if (IsBelowGeneratedBuildRoot(fullPath, generatedBuildRoots))
+                                continue;
                             if (itemName.Equals("ProjectReference", StringComparison.Ordinal))
                             {
                                 inputs.Add(fullPath);
@@ -923,16 +928,19 @@ public sealed partial class DotNetPublishPipelineRunner
         string path,
         IEnumerable<string>? generatedBuildRoots)
     {
-        if (!(generatedBuildRoots ?? Array.Empty<string>())
-            .Any(root => IsSameOrBelowBuildInputPath(path, root)))
-        {
+        if (!IsBelowGeneratedBuildRoot(path, generatedBuildRoots))
             return false;
-        }
 
         string fileName = Path.GetFileName(path);
         return fileName.EndsWith(".nuget.g.props", StringComparison.OrdinalIgnoreCase) ||
                fileName.EndsWith(".nuget.g.targets", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool IsBelowGeneratedBuildRoot(
+        string path,
+        IEnumerable<string>? generatedBuildRoots)
+        => (generatedBuildRoots ?? Array.Empty<string>())
+            .Any(root => IsSameOrBelowBuildInputPath(path, root));
 
     private static void AddPropertyPath(
         JsonElement properties,
