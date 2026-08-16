@@ -89,6 +89,7 @@ public sealed class ConfigurationSegmentJsonConverter : JsonConverter<IConfigura
         if (discriminator.Equals("ProjectBuild", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationProjectBuildSegment);
         if (discriminator.Equals("PackageBuild", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationPackageBuildSegment);
         if (discriminator.Equals("Release", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationReleaseSegment);
+        if (discriminator.Equals("ReleaseProtection", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationReleaseProtectionSegment);
 
         // Dynamic discriminator types (maps to a single concrete segment type)
         if (discriminator.Equals("GalleryNuget", StringComparison.OrdinalIgnoreCase) ||

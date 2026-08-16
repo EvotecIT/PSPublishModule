@@ -565,6 +565,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         public ImportModuleEntry[] LastImportModules { get; private set; } = Array.Empty<ImportModuleEntry>();
         public ModuleImportValidationTarget[] LastTargets { get; private set; } = Array.Empty<ModuleImportValidationTarget>();
         public int SignCalls { get; private set; }
+        public int PublishCalls { get; private set; }
         public string[] LastPackageFilePaths { get; private set; } = Array.Empty<string>();
         public string[] LastIncludePatterns { get; private set; } = Array.Empty<string>();
         public string[] LastExcludePatterns { get; private set; } = Array.Empty<string>();
@@ -575,6 +576,9 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         public bool AutoSuccessfulPublishResult { get; set; }
         public Action<int>? SigningCallStarted { get; set; }
         public Action<int, string[]>? SigningFilesCompleted { get; set; }
+        public Action? BeforeRemotePublishAttempted { get; set; }
+        public Action? BeforeRemoteSideEffectObserved { get; set; }
+        public bool InvokeRemoteSideEffectObserved { get; set; }
         public Action<ModulePipelineActionConfiguration, ModulePipelineActionContext>? ActionStarted { get; set; }
         public List<string> SigningRootPaths { get; } = new();
         public List<string> OperationOrder { get; } = new();
@@ -655,9 +659,16 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             Action? remoteSideEffectObserved,
             IGitHubReleaseProgressReporter? gitHubProgress)
         {
+            PublishCalls++;
             if (!AutoSuccessfulPublishResult)
                 throw new InvalidOperationException("Not used in this test.");
 
+            if (InvokeRemoteSideEffectObserved)
+            {
+                BeforeRemoteSideEffectObserved?.Invoke();
+                remoteSideEffectObserved?.Invoke();
+            }
+            BeforeRemotePublishAttempted?.Invoke();
             remotePublishAttempted?.Invoke();
             remoteSideEffectObserved?.Invoke();
             LastPublishedArtefacts = artefactResults.ToArray();

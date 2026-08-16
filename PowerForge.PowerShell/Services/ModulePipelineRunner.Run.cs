@@ -51,7 +51,7 @@ public sealed partial class ModulePipelineRunner
 
         try
         {
-            if (plan.GenerateReleaseProvenance)
+            if (plan.RequireReleaseSourceUnchanged)
                 ValidateReleaseSourceUnchanged(plan, generatedOutputPaths: null, trackedGeneratedOutputPaths: null);
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);
             if (plan.GateMode == ConfigurationGateMode.Documentation)

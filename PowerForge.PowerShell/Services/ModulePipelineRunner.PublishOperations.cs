@@ -256,16 +256,27 @@ public sealed partial class ModulePipelineRunner
         session.Start(step);
         try
         {
+            ValidateModuleReleaseSourceUnchangedBeforePublish(plan, state, buildResult);
+            Action guardedRemotePublishAttempted = () =>
+            {
+                ValidateModuleReleaseSourceUnchangedBeforePublish(plan, state, buildResult);
+                remotePublishAttempted();
+            };
+            Action guardedRemoteSideEffectObserved = () =>
+            {
+                ValidateModuleReleaseSourceUnchangedBeforePublish(plan, state, buildResult);
+                MarkSynchronizedReleaseRemoteSideEffectObserved(state);
+            };
             state.PublishResults.Add(ShouldPublishUnifiedGitHubRelease(plan, publish.Configuration)
-                ? PublishUnifiedGitHubRelease(publish.Configuration, plan, state, remotePublishAttempted, gitHubProgress)
+                ? PublishUnifiedGitHubRelease(publish.Configuration, plan, state, guardedRemotePublishAttempted, gitHubProgress)
                 : _hostedOperations.PublishModule(
                     publish.Configuration,
                     plan,
                     buildResult,
                     state.ArtefactResults,
                     includeScriptFolders: !state.PackageWithoutScriptFolders,
-                    remotePublishAttempted: remotePublishAttempted,
-                    remoteSideEffectObserved: () => MarkSynchronizedReleaseRemoteSideEffectObserved(state),
+                    remotePublishAttempted: guardedRemotePublishAttempted,
+                    remoteSideEffectObserved: guardedRemoteSideEffectObserved,
                     gitHubProgress: gitHubProgress));
             session.Done(step);
         }
@@ -274,6 +285,26 @@ public sealed partial class ModulePipelineRunner
             session.Fail(step, ex);
             throw;
         }
+    }
+
+    private static void ValidateModuleReleaseSourceUnchangedBeforePublish(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state,
+        ModuleBuildResult buildResult)
+    {
+        if (!plan.RequireReleaseSourceUnchanged)
+            return;
+
+        string projectManifestPath = Path.Combine(plan.ProjectRoot, plan.ModuleName + ".psd1");
+        string[] generatedOutputs = state.ArtefactResults
+            .SelectMany(static result =>
+                new[] { result.OutputPath }.Concat(result.EvidencePaths ?? Array.Empty<string>()))
+            .Concat(new[] { buildResult.StagingPath })
+            .ToArray();
+        ValidateReleaseSourceUnchanged(
+            plan,
+            generatedOutputs,
+            File.Exists(projectManifestPath) ? new[] { projectManifestPath } : Array.Empty<string>());
     }
 
     private static ReleasePublishDestination[] ResolvePublishOrder(ModulePipelinePlan plan)

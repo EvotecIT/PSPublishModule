@@ -124,6 +124,16 @@
       "required": ["Mode"]
     },
 
+    "ReleaseProtectionConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "RequireCleanSource": { "type": "boolean" },
+        "RequireSourceUnchanged": { "type": "boolean" },
+        "GenerateProvenance": { "type": "boolean" }
+      }
+    },
+
     "DocumentationConfiguration": {
       "type": "object",
       "additionalProperties": false,
@@ -853,6 +863,16 @@
       "required": ["Type", "Configuration"]
     },
 
+    "ReleaseProtectionSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "ReleaseProtection" },
+        "Configuration": { "$ref": "#/$defs/ReleaseProtectionConfiguration" }
+      },
+      "required": ["Type", "Configuration"]
+    },
+
     "InformationSegment": {
       "type": "object",
       "additionalProperties": false,
@@ -1071,6 +1091,7 @@
         { "$ref": "#/$defs/BuildSegment" },
         { "$ref": "#/$defs/BuildLibrariesSegment" },
         { "$ref": "#/$defs/GateSegment" },
+        { "$ref": "#/$defs/ReleaseProtectionSegment" },
         { "$ref": "#/$defs/InformationSegment" },
         { "$ref": "#/$defs/OptionsSegment" },
         { "$ref": "#/$defs/FormattingSegment" },
