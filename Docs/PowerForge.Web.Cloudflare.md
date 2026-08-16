@@ -147,8 +147,11 @@ inputs:
     api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 ```
 
-Pin `POWERFORGE_COMMIT` to an exact commit. The reusable GitHub Pages deployment
-workflow can apply the same action after a successful deployment:
+Pin `POWERFORGE_COMMIT` to an exact commit. The reusable website deployment
+workflow can apply the same action. GitHub Pages applies it after a successful
+Pages deployment so incremental purge can correlate the exact deployment record.
+
+For GitHub Pages, pass the policy credential directly to the reusable policy job:
 
 ```yaml
 with:
@@ -157,6 +160,29 @@ secrets:
   cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
   cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 ```
+
+Linux deployment has two distinct credential boundaries. The narrow purge-only
+token is staged ephemerally for promotion and rollback. The broader policy token
+stays on the protected Actions runner, is used only after promotion succeeds, and
+performs a final hostname purge after policy reconciliation:
+
+```yaml
+with:
+  deployment_target: linux
+  deployment_cloudflare_zone: example.com
+  manage_cloudflare_site_policy: true
+secrets:
+  deployment_cloudflare_api_token: ${{ secrets.CLOUDFLARE_CACHE_PURGE_TOKEN }}
+  deployment_cloudflare_policy_api_token: ${{ secrets.CLOUDFLARE_SITE_POLICY_TOKEN }}
+  cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+```
+
+Never reuse the site-policy token as `deployment_cloudflare_api_token`: that
+credential is deliberately copied into the protected remote promotion staging
+area so the host can purge on finalize or rollback. The policy token needs Cache
+Rules Write and Transform Rules Write, Cache Settings Write when Smart Tiered
+Cache is enabled, and Cache Purge for the post-policy hostname invalidation. The
+deployment token needs only Cache Purge (and Zone Read when no zone id is passed).
 
 The existing `powerforge-cloudflare-cache-policy` action remains cache-only for
 backward compatibility.

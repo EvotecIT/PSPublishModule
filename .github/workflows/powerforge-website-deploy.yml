@@ -157,6 +157,9 @@ on:
         required: false
       deployment_cloudflare_api_token:
         required: false
+      deployment_cloudflare_policy_api_token:
+        description: Optional protected Cloudflare site-policy token. Unlike the narrow deploy-time purge token, this credential never reaches the Linux host.
+        required: false
       deployment_host:
         description: Optional masked deployment host from the caller's protected environment.
         required: false
@@ -365,7 +368,7 @@ jobs:
           fetch-depth: 1
 
       - name: Apply managed Cloudflare cache policy
-        if: ${{ inputs.deployment_cloudflare_zone != '' }}
+        if: ${{ inputs.deployment_cloudflare_zone != '' && !inputs.manage_cloudflare_site_policy }}
         uses: ./.powerforge-deployment/.github/actions/powerforge-cloudflare-cache-policy
         with:
           site-config: ${{ format('{0}/site.json', inputs.website_root) }}
@@ -396,6 +399,16 @@ jobs:
           engine-sha: ${{ needs.build.outputs.engine_sha }}
           engine-asset: ${{ needs.build.outputs.engine_asset }}
           engine-asset-sha256: ${{ needs.build.outputs.engine_asset_sha256 }}
+
+      - name: Apply managed Cloudflare site policy
+        if: ${{ inputs.deployment_cloudflare_zone != '' && inputs.manage_cloudflare_site_policy }}
+        uses: ./.powerforge-deployment/.github/actions/powerforge-cloudflare-site-policy
+        with:
+          site-config: ${{ format('{0}/site.json', inputs.website_root) }}
+          zone-id: ${{ vars.CLOUDFLARE_ZONE_ID || secrets.cloudflare_zone_id }}
+          api-token: ${{ secrets.deployment_cloudflare_policy_api_token }}
+          checkout-caller: "false"
+          purge-after-policy: "true"
 
   post-deploy:
     if: ${{ always() && inputs.post_deploy_pipeline_config != '' && ((inputs.deployment_target == 'github-pages' && needs.deploy.result == 'success' && (!inputs.manage_cloudflare_site_policy || needs.cloudflare-site-policy.result == 'success')) || (inputs.deployment_target == 'linux' && needs.deploy-linux.result == 'success')) }}
