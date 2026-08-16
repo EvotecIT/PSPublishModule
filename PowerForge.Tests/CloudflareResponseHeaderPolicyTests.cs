@@ -490,10 +490,10 @@ public sealed class CloudflareResponseHeaderPolicyTests
         var script = ReadRepoFile(".github", "actions", "powerforge-cloudflare-site-policy", "Invoke-PowerForgeCloudflareSitePolicy.ps1");
 
         Assert.Contains("Reject pull request site-policy changes", action, StringComparison.Ordinal);
-        Assert.Contains("Cache Rules Write", action, StringComparison.Ordinal);
-        Assert.Contains("Transform Rules Write", action, StringComparison.Ordinal);
         Assert.Contains("Cache Settings Write", action, StringComparison.Ordinal);
-        Assert.DoesNotContain("Zone Settings Write", action, StringComparison.Ordinal);
+        Assert.Contains("Zone Transform Rules Write", action, StringComparison.Ordinal);
+        Assert.Contains("Zone Settings Read and Write", action, StringComparison.Ordinal);
+        Assert.DoesNotContain("add Cache Settings Write when SmartTieredCache", action, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeCloudflareSitePolicy.ps1", action, StringComparison.Ordinal);
         Assert.Contains("--token-env', 'POWERFORGE_CLOUDFLARE_API_TOKEN'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("--token', $env:POWERFORGE_CLOUDFLARE_API_TOKEN", script, StringComparison.Ordinal);

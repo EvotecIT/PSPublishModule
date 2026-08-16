@@ -33,7 +33,8 @@ powerforge-web cloudflare site-policy apply \
 ```
 
 The token needs write access to Cache Rules and Transform Rules for the target
-zone. Add Cache Settings Write when `Cloudflare.SmartTieredCache` is configured,
+zone. Add Zone Settings Read and Zone Settings Write when
+`Cloudflare.SmartTieredCache` is configured,
 and add Cache Purge when the same token runs the post-deploy purge step. Keep the
 token in a protected environment or secret and pass only its environment-variable
 name to the CLI.
@@ -180,7 +181,8 @@ secrets:
 Never reuse the site-policy token as `deployment_cloudflare_api_token`: that
 credential is deliberately copied into the protected remote promotion staging
 area so the host can purge on finalize or rollback. The policy token needs Cache
-Rules Write and Transform Rules Write, Cache Settings Write when Smart Tiered
+Rules Write and Transform Rules Write, Zone Settings Read and Zone Settings
+Write when Smart Tiered
 Cache is enabled, and Cache Purge for the post-policy hostname invalidation. The
 deployment token needs only Cache Purge (and Zone Read when no zone id is passed).
 
