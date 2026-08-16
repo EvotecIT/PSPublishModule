@@ -872,7 +872,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             "net10.0-windows");
 
         Assert.Equal(new[] { "win-arm64", "win-x64" }, runtimes);
-        Assert.Equal("win-arm64;win-x64", DotNetPublishPipelineRunner.BuildMsBuildListPropertyValue(runtimes));
+        Assert.Equal("\"win-arm64;win-x64\"", DotNetPublishPipelineRunner.BuildMsBuildListPropertyValue(runtimes));
     }
 
     [Fact]
@@ -956,7 +956,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             "win-arm64",
             "net10.0-windows");
 
-        Assert.Contains("/p:RuntimeIdentifiers=win-arm64;win-x64", args);
+        Assert.Contains("/p:RuntimeIdentifiers=\"win-arm64;win-x64\"", args);
         Assert.Contains("/p:PublishReadyToRun=true", args);
         Assert.DoesNotContain("/p:TargetFramework=net10.0-windows", args);
     }
