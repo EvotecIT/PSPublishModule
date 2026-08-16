@@ -316,6 +316,11 @@ jobs:
           CLOUDFLARE_ZONE_ID: ${{ inputs.credential_mode != 'none' && secrets.cloudflare_zone_id || '' }}
           POWERFORGE_RUNNER_RESULT_PATH: ${{ runner.temp }}/powerforge-website-runner-result.json
         run: |
+          $runnerRestoreConfig = Join-Path $env:GITHUB_WORKSPACE '.powerforge-runner/.github/nuget.public.config'
+          if (-not (Test-Path -LiteralPath $runnerRestoreConfig -PathType Leaf)) {
+            throw "PowerForge runner NuGet configuration not found: $runnerRestoreConfig"
+          }
+
           $runnerArgs = @(
             'website-runner',
             '--website-root', '${{ inputs.website_root }}',
@@ -336,7 +341,7 @@ jobs:
             $runnerArgs += '--maintenance-note'
           }
 
-          dotnet run --framework net10.0 -p:RestoreLockedMode=false --project ./.powerforge-runner/PowerForge.Web.Cli/PowerForge.Web.Cli.csproj -- $runnerArgs
+          dotnet run --framework net10.0 -p:RestoreLockedMode=false "-p:RestoreConfigFile=$runnerRestoreConfig" --project ./.powerforge-runner/PowerForge.Web.Cli/PowerForge.Web.Cli.csproj -- $runnerArgs
 
       - name: Resolve actual PowerForge engine provenance
         id: engine_provenance

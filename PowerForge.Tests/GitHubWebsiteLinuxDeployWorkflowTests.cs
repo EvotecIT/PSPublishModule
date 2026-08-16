@@ -8,6 +8,7 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         var workflow = ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml");
         var normalizedWorkflow = workflow.Replace("\r\n", "\n", StringComparison.Ordinal);
 
+        Assert.NotNull(new YamlDotNet.Serialization.DeserializerBuilder().Build().Deserialize<object>(workflow));
         Assert.Contains("default: \"github-pages\"", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_target == 'linux'", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_site", workflow, StringComparison.Ordinal);
@@ -98,24 +99,45 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("^/tmp/powerforge-([0-9]+)-([0-9]+)-", script, StringComparison.Ordinal);
         Assert.Contains("BASH_REMATCH[3]", script, StringComparison.Ordinal);
         string workflow = ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml");
+        string linuxJob = workflow[
+            workflow.IndexOf("  deploy-linux:", StringComparison.Ordinal)..
+            workflow.IndexOf("  post-deploy:", StringComparison.Ordinal)];
+        string linuxSitePolicyStep = linuxJob[
+            linuxJob.IndexOf("      - name: Apply managed Cloudflare site policy", StringComparison.Ordinal)..];
         Assert.Contains("deployment_cloudflare_zone", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_cloudflare_api_token", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_cloudflare_policy_api_token", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment-cloudflare-api-token: ${{ secrets.deployment_cloudflare_api_token }}", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("deployment-cloudflare-api-token: ${{ secrets.cloudflare_api_token }}", workflow, StringComparison.Ordinal);
         Assert.Contains("cloudflare-zone-id: ${{ vars.CLOUDFLARE_ZONE_ID || secrets.cloudflare_zone_id }}", workflow, StringComparison.Ordinal);
         Assert.Contains("zone-id: ${{ vars.CLOUDFLARE_ZONE_ID || secrets.cloudflare_zone_id }}", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment-public-url: ${{ inputs.deployment_url }}", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment-smoke-paths: ${{ inputs.deployment_smoke_paths }}", workflow, StringComparison.Ordinal);
-        Assert.Contains("uses: ./.powerforge-deployment/.github/actions/powerforge-cloudflare-cache-policy", workflow, StringComparison.Ordinal);
-        Assert.Contains("checkout-caller: \"false\"", workflow, StringComparison.Ordinal);
-        Assert.Contains("if: ${{ inputs.deployment_cloudflare_zone != '' }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("uses: ./.powerforge-deployment/.github/actions/powerforge-cloudflare-site-policy", linuxJob, StringComparison.Ordinal);
+        Assert.Contains("uses: ./.powerforge-deployment/.github/actions/powerforge-cloudflare-cache-policy", linuxJob, StringComparison.Ordinal);
+        Assert.Equal(2, linuxJob.Split("checkout-caller: \"false\"", StringSplitOptions.None).Length - 1);
+        Assert.Contains("if: ${{ inputs.deployment_cloudflare_zone != '' && inputs.manage_cloudflare_site_policy }}", linuxJob, StringComparison.Ordinal);
+        Assert.Contains("if: ${{ inputs.deployment_cloudflare_zone != '' && !inputs.manage_cloudflare_site_policy }}", linuxJob, StringComparison.Ordinal);
+        Assert.Contains("api-token: ${{ secrets.deployment_cloudflare_policy_api_token }}", linuxJob, StringComparison.Ordinal);
+        Assert.Contains("purge-after-policy: \"true\"", linuxJob, StringComparison.Ordinal);
+        Assert.DoesNotContain("secrets.deployment_cloudflare_api_token", linuxSitePolicyStep, StringComparison.Ordinal);
         Assert.DoesNotContain("\n  cache-policy:\n", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.True(
-            workflow.IndexOf("powerforge-cloudflare-cache-policy", StringComparison.Ordinal) < workflow.IndexOf("powerforge-linux-site-deploy", StringComparison.Ordinal),
-            "The optional cache policy and deployment must share one protected job and approval boundary.");
+            linuxJob.IndexOf("powerforge-linux-site-deploy", StringComparison.Ordinal) < linuxJob.IndexOf("powerforge-cloudflare-site-policy", StringComparison.Ordinal),
+            "The optional full site policy must run only after a successful protected deployment so rollback cannot leave new policy over old content.");
+        Assert.True(
+            linuxJob.IndexOf("powerforge-cloudflare-cache-policy", StringComparison.Ordinal) < linuxJob.IndexOf("powerforge-linux-site-deploy", StringComparison.Ordinal),
+            "The compatibility cache policy and deployment must share one protected job and approval boundary.");
         Assert.Contains("name: ${{ inputs.deployment_environment }}", workflow, StringComparison.Ordinal);
         string deployAction = ReadRepoFile(".github", "actions", "powerforge-linux-site-deploy", "Invoke-PowerForgeLinuxSiteDeploy.ps1");
         Assert.Contains("per_page=5", deployAction, StringComparison.Ordinal);
+        string sitePolicyAction = ReadRepoFile(".github", "actions", "powerforge-cloudflare-site-policy", "action.yml");
+        Assert.NotNull(new YamlDotNet.Serialization.DeserializerBuilder().Build().Deserialize<object>(sitePolicyAction));
+        Assert.Contains("purge-after-policy:", sitePolicyAction, StringComparison.Ordinal);
+        Assert.Contains("--purge-mode', 'hostname'", sitePolicyAction, StringComparison.Ordinal);
+        Assert.Contains("$arguments += @('--hostname', $env:POWERFORGE_CLOUDFLARE_HOSTNAME)", sitePolicyAction, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_CLOUDFLARE_DRY_RUN", sitePolicyAction, StringComparison.Ordinal);
+        Assert.Contains("purge-after-policy cannot be combined with manage-incremental-purge", sitePolicyAction, StringComparison.Ordinal);
         string environmentExample = ReadRepoFile("Deployment", "Linux", "powerforge-site.env.example");
         Assert.Contains("deployment_cloudflare_api_token", environmentExample, StringComparison.Ordinal);
         Assert.DoesNotContain("workflow's cloudflare_api_token secret", environmentExample, StringComparison.Ordinal);
