@@ -150,14 +150,21 @@ function Invoke-WithFileRetry {
     [Parameter(Mandatory = $true)] [scriptblock]$ScriptBlock,
     [Parameter(Mandatory = $true)] [string]$FilePath,
     [Parameter(Mandatory = $true)] [string]$Action,
-    [int]$MaxAttempts = 15
+    [int]$MaxAttempts = 15,
+    [scriptblock]$ShouldRetryResult
   )
 
   if ($MaxAttempts -lt 1) { throw 'MaxAttempts must be at least 1.' }
   $delay = 200
   for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
     try {
-      return & $ScriptBlock
+      $result = & $ScriptBlock
+      if ($null -eq $ShouldRetryResult -or -not (& $ShouldRetryResult $result)) {
+        return $result
+      }
+      if ($attempt -ge $MaxAttempts) {
+        return $result
+      }
     } catch {
       if ($attempt -ge $MaxAttempts) {
         $message = $_.Exception.Message
@@ -167,10 +174,10 @@ function Invoke-WithFileRetry {
 
         throw ('{0} failed for ''{1}'' after {2} attempt(s): {3}' -f $Action, $FilePath, $MaxAttempts, $message)
       }
-
-      Start-Sleep -Milliseconds $delay
-      $delay = [Math]::Min($delay * 2, 5000)
     }
+
+    Start-Sleep -Milliseconds $delay
+    $delay = [Math]::Min($delay * 2, 5000)
   }
 }
 
@@ -307,6 +314,10 @@ try {
     [string]::IsNullOrWhiteSpace($PfxPath) -and `
     [string]::IsNullOrWhiteSpace($PfxBase64)
   $signingMaxAttempts = 15
+  $retryUnknownSigningResult = {
+    param([object]$result)
+    return $null -ne $result -and [string]$result.Status -eq 'UnknownError'
+  }
   $canDeferToWindowsPowerShell = $false
   $hasNonCompatibilitySigningFailure = $false
   $deferRemainingSigningTargets = $false
@@ -378,11 +389,13 @@ try {
       }
       try {
         if ($overwrite) {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -MaxAttempts $signingMaxAttempts -ScriptBlock {
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -MaxAttempts $signingMaxAttempts -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
+            Clear-SigningCloudPlacementAttributes -filePath $f
             Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -Force -ErrorAction Stop
           }
         } else {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -MaxAttempts $signingMaxAttempts -ScriptBlock {
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -MaxAttempts $signingMaxAttempts -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
+            Clear-SigningCloudPlacementAttributes -filePath $f
             Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -ErrorAction Stop
           }
         }
@@ -474,11 +487,13 @@ try {
       $wasSigned = $preStatus[$f] -ne 'NotSigned'
       try {
         if ($overwrite) {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -ScriptBlock {
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
+            Clear-SigningCloudPlacementAttributes -filePath $f
             Set-OpenAuthenticodeSignature -FilePath $f -Certificate $cert -TimeStampServer $ts -IncludeChain WholeChain -HashAlgorithm SHA256 -Force -ErrorAction Stop
           }
         } else {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -ScriptBlock {
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
+            Clear-SigningCloudPlacementAttributes -filePath $f
             Set-OpenAuthenticodeSignature -FilePath $f -Certificate $cert -TimeStampServer $ts -IncludeChain WholeChain -HashAlgorithm SHA256 -ErrorAction Stop
           }
         }

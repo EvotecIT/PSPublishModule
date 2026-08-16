@@ -157,6 +157,34 @@ public sealed class SigningScriptRetryTests
         });
     }
 
+    [Fact]
+    public void ReturnedUnknownErrorReclearsCloudAttributesAndRetriesBeforeCompatibilityFallback()
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return;
+
+        const int pinnedAttribute = 0x00080000;
+        var evidence = RunSigningProviderFailureHarness(
+            includePrecheckFailure: false,
+            includeNonCompatibilitySigningFailure: false,
+            signingSucceeds: true,
+            signingTargetAttributes: FileAttributes.Archive | (FileAttributes)pinnedAttribute,
+            resultFailuresBeforeSuccess: 2);
+
+        Assert.Equal(12, evidence.Summary.SignedNew);
+        Assert.Equal(0, evidence.Summary.Failed);
+        Assert.Equal(0, evidence.Summary.UnknownError);
+        Assert.Equal(14, evidence.SigningCallCount);
+        Assert.All(evidence.SigningTargetAttributes, attributes =>
+        {
+            Assert.Equal(0, attributes & pinnedAttribute);
+            Assert.NotEqual(0, attributes & (int)FileAttributes.Archive);
+        });
+        Assert.DoesNotContain(evidence.Summary.FailedFiles, failure => failure.Contains(
+            "Windows PowerShell compatibility retry",
+            StringComparison.Ordinal));
+    }
+
     private static (
         ModuleSigningResult Summary,
         int SigningCallCount,
@@ -170,7 +198,8 @@ public sealed class SigningScriptRetryTests
             bool currentUserHasCodeSigningEku = true,
             bool currentUserHasEkuRestriction = true,
             bool signingSucceeds = false,
-            FileAttributes? signingTargetAttributes = null)
+            FileAttributes? signingTargetAttributes = null,
+            int resultFailuresBeforeSuccess = 0)
     {
         var rootPath = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -196,6 +225,9 @@ public sealed class SigningScriptRetryTests
             var script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
             var includeB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes("*.ps1"));
             var precheckFailurePath = includePrecheckFailure ? packageFilePaths[0] : string.Empty;
+            var signingTargetAttributeValue = signingTargetAttributes.HasValue
+                ? (int)signingTargetAttributes.Value
+                : 0;
             var harness = $$"""
                 $scriptText = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(script))}}'))
                 $rootPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(rootPath))}}'))
@@ -209,7 +241,10 @@ public sealed class SigningScriptRetryTests
                 $currentUserHasCodeSigningEku = [Convert]::ToBoolean('{{currentUserHasCodeSigningEku}}')
                 $currentUserHasEkuRestriction = [Convert]::ToBoolean('{{currentUserHasEkuRestriction}}')
                 $signingSucceeds = [Convert]::ToBoolean('{{signingSucceeds}}')
+                $resultFailuresBeforeSuccess = [Convert]::ToInt32('{{resultFailuresBeforeSuccess}}')
+                $signingTargetAttributeValue = [Convert]::ToInt32('{{signingTargetAttributeValue}}')
                 $script:firstSigningCall = $true
+                $script:signingCallNumber = 0
                 function Get-Item {
                   [CmdletBinding()]
                   param([string]$LiteralPath)
@@ -253,6 +288,18 @@ public sealed class SigningScriptRetryTests
                   [IO.File]::AppendAllText(
                     $signingAttributeLogPath,
                     ([int][IO.File]::GetAttributes($FilePath)).ToString() + [Environment]::NewLine)
+                  $script:signingCallNumber++
+                  if ($script:signingCallNumber -le $resultFailuresBeforeSuccess) {
+                    if ($signingTargetAttributeValue -ne 0) {
+                      [IO.File]::SetAttributes(
+                        $FilePath,
+                        [IO.FileAttributes]$signingTargetAttributeValue)
+                    }
+                    return [pscustomobject]@{
+                      Status = 'UnknownError'
+                      StatusMessage = 'Access was denied because of a security violation.'
+                    }
+                  }
                   if ($signingSucceeds) {
                     return [pscustomobject]@{ Status = 'Valid'; StatusMessage = '' }
                   }
