@@ -27,8 +27,6 @@ public sealed partial class DotNetPublishPipelineRunner
             "-p:RestoreLockedMode=false",
             "-p:NuGetLockFilePath=" + temporaryLockFile
         };
-        if (!string.IsNullOrWhiteSpace(request.TargetFramework))
-            arguments.Add("-p:TargetFramework=" + request.TargetFramework);
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
                      entry => entry.Key,
                      StringComparer.OrdinalIgnoreCase))
