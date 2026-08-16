@@ -1,10 +1,23 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Xml.Linq;
 
 namespace PowerForge.Tests;
 
 public sealed class GitHubWebsiteDeployGuardrailTests
 {
+    [Fact]
+    public void Repository_ShouldIsolateNestedActionBuildsFromCallerCentralPackageManagement()
+    {
+        var document = XDocument.Load(GetRepoPath("Directory.Packages.props"));
+        var setting = document
+            .Descendants("ManagePackageVersionsCentrally")
+            .SingleOrDefault();
+
+        Assert.NotNull(setting);
+        Assert.Equal("false", setting.Value.Trim(), ignoreCase: true);
+    }
+
     [Fact]
     public void ReusableWorkflow_ShouldInvokeSharedGuardrailWithoutEmbeddedPolicyBrain()
     {
