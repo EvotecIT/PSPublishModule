@@ -1239,7 +1239,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void ReadSourceProvenance_IgnoresGeneratedRestoreImportsAndDirtyOperatorFile()
+    public void ReadSourceProvenance_IgnoresRestoreOutputsPackageCacheAndDirtyOperatorFile()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try

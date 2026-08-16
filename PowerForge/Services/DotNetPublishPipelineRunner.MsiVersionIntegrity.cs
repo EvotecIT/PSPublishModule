@@ -199,7 +199,13 @@ public sealed partial class DotNetPublishPipelineRunner
         if (untrustedExplicitInput)
             dirtyReasons.Add("an explicit release input is untracked, ignored, external, or traverses a reparse point");
         if (untrustedIgnoredBuildInput)
-            dirtyReasons.Add("untrusted evaluated build input(s): " + string.Join(", ", untrustedBuildInputs));
+        {
+            const int maximumReportedBuildInputs = 10;
+            string summary = string.Join(", ", untrustedBuildInputs.Take(maximumReportedBuildInputs));
+            if (untrustedBuildInputs.Length > maximumReportedBuildInputs)
+                summary += $" (+{untrustedBuildInputs.Length - maximumReportedBuildInputs} more)";
+            dirtyReasons.Add("untrusted evaluated build input(s): " + summary);
+        }
         bool? dirty = trackedStatus is null || untrackedOutput is null
             ? null
             : statusChangedDuringVerification
