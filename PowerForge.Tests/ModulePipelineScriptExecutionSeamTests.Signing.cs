@@ -279,7 +279,43 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
                 CreateRunner(new FakeHostedOperations()).Plan(spec));
 
-            Assert.Contains("resolved clean Git checkout", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("clean release inputs", exception.Message, StringComparison.OrdinalIgnoreCase);
+            if (makeDirty)
+                Assert.Contains("dirty.txt", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Plan_SignedGitHubPackedArtifactAllowsDirtyTrackedOperatorFileOutsideReleaseInputs()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            string moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module")).FullName;
+            string buildRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Build")).FullName;
+            string buildScript = Path.Combine(buildRoot, "Build-Project.ps1");
+            WriteMinimalModule(moduleRoot, moduleName, "1.0.0");
+            File.WriteAllText(buildScript, "param([string] $RunMode = 'Build')");
+            RunGit(root.FullName, "init", "--quiet");
+            RunGit(root.FullName, "config", "user.email", "powerforge-tests@example.invalid");
+            RunGit(root.FullName, "config", "user.name", "PowerForge Tests");
+            RunGit(root.FullName, "add", ".");
+            RunGit(root.FullName, "commit", "--quiet", "-m", "fixture");
+            File.WriteAllText(buildScript, "param([string] $RunMode = 'Publish')");
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                moduleRoot,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Packed"));
+            EnableGitHubPublish(spec, moduleName);
+
+            ModulePipelinePlan plan = CreateRunner(new FakeHostedOperations()).Plan(spec);
+
+            Assert.False(plan.SourceDirty);
         }
         finally
         {
@@ -311,7 +347,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
                 CreateRunner(new FakeHostedOperations()).Plan(spec));
 
-            Assert.Contains("resolved clean Git checkout", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("clean release inputs", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -363,7 +399,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             {
                 InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
                     CreateRunner(new FakeHostedOperations()).Plan(spec));
-                Assert.Contains("resolved clean Git checkout", exception.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("clean release inputs", exception.Message, StringComparison.OrdinalIgnoreCase);
             }
             else
             {
@@ -416,7 +452,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
                 CreateRunner(new FakeHostedOperations()).Plan(spec));
 
-            Assert.Contains("resolved clean Git checkout", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("clean release inputs", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -461,7 +497,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
                 CreateRunner(new FakeHostedOperations()).Plan(spec));
 
-            Assert.Contains("resolved clean Git checkout", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("clean release inputs", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

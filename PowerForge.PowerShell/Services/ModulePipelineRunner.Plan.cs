@@ -1086,11 +1086,13 @@ public sealed partial class ModulePipelineRunner
                     buildProjectPaths: string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath)
                         ? Array.Empty<string>()
                         : new[] { plan.BuildSpec.CsprojPath! },
-                    buildConfiguration: plan.BuildSpec.Configuration);
+                    buildConfiguration: plan.BuildSpec.Configuration,
+                    sourceRootPaths: new[] { plan.BuildSpec.SourcePath });
             if (string.IsNullOrWhiteSpace(provenance.Revision) || provenance.Dirty is not false)
             {
                 throw new InvalidOperationException(
-                    "Signed GitHub module releases require a resolved clean Git checkout before packaging.");
+                    "Signed GitHub module releases require a resolved Git revision with clean release inputs before packaging." +
+                    FormatDirtySourcePaths(provenance));
             }
 
             plan.SourceRevision = DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(
@@ -1108,6 +1110,11 @@ public sealed partial class ModulePipelineRunner
             Path.Combine(projectRoot, PublishedRegistryProvenanceValidator.ModuleProvenanceFileName),
             Path.Combine(projectRoot, PowerForgeModuleSourceAttestationWriter.FileName)
         };
+
+    private static string FormatDirtySourcePaths(DotNetPublishPipelineRunner.SourceProvenance provenance)
+        => provenance.DirtyPaths.Length == 0
+            ? string.Empty
+            : " Blocking source input(s): " + string.Join(", ", provenance.DirtyPaths) + ".";
 
     private static string[] CollectReleaseSourceInputPaths(
         ModuleBuildSpec build,
@@ -1280,7 +1287,8 @@ public sealed partial class ModulePipelineRunner
                 buildProjectPaths: string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath)
                     ? Array.Empty<string>()
                     : new[] { plan.BuildSpec.CsprojPath! },
-                buildConfiguration: plan.BuildSpec.Configuration);
+                buildConfiguration: plan.BuildSpec.Configuration,
+                sourceRootPaths: new[] { plan.BuildSpec.SourcePath });
         if (string.IsNullOrWhiteSpace(current.Revision) ||
             !string.Equals(current.Revision, plan.SourceRevision, StringComparison.OrdinalIgnoreCase) ||
             current.Dirty is not false)

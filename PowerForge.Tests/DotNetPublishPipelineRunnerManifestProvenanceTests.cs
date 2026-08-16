@@ -1163,6 +1163,70 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void ReadSourceProvenance_IgnoresDirtyTrackedOperatorFileOutsideEvaluatedProjectInputs()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string projectRoot = root;
+            string buildRoot = Directory.CreateDirectory(Path.Combine(root, "Build")).FullName;
+            string projectPath = Path.Combine(projectRoot, "Sample.csproj");
+            string sourcePath = Path.Combine(projectRoot, "Program.cs");
+            string buildScript = Path.Combine(buildRoot, "Build-Project.ps1");
+            File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(sourcePath, "internal static class Program { }");
+            File.WriteAllText(buildScript, "param([string] $RunMode = 'Build')");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            File.WriteAllText(buildScript, "param([string] $RunMode = 'Publish')");
+
+            DotNetPublishPipelineRunner.SourceProvenance operatorDirty =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+
+            Assert.False(operatorDirty.Dirty);
+            Assert.Empty(operatorDirty.DirtyPaths);
+
+            File.AppendAllText(sourcePath, Environment.NewLine + "// dirty source");
+            DotNetPublishPipelineRunner.SourceProvenance sourceDirty =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+
+            Assert.True(sourceDirty.Dirty);
+            Assert.Contains("Program.cs", sourceDirty.DirtyPaths, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Build/Build-Project.ps1", sourceDirty.DirtyPaths, StringComparer.OrdinalIgnoreCase);
+
+            File.WriteAllText(sourcePath, "internal static class Program { }");
+            File.Delete(sourcePath);
+            DotNetPublishPipelineRunner.SourceProvenance deletedSource =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+
+            Assert.True(deletedSource.Dirty);
+            Assert.Contains("Program.cs", deletedSource.DirtyPaths, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void ReadPortableInventorySourceProvenance_RejectsDirtySameRevision()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
