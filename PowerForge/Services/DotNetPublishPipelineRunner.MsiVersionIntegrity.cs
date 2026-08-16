@@ -178,6 +178,27 @@ public sealed partial class DotNetPublishPipelineRunner
             projectRoot,
             generatedPaths,
             allExplicitInputPaths);
+        bool untrustedExplicitInput = HasUntrackedOrIgnoredExplicitInputs(
+            projectRoot,
+            gitRoot!,
+            allExplicitInputPaths,
+            trustedExternalInputPaths);
+        bool untrustedIgnoredBuildInput = HasIgnoredBuildInputs(
+            projectRoot,
+            gitRoot!,
+            generatedPaths,
+            dirtyScope);
+        var dirtyReasons = new List<string>();
+        if (statusChangedDuringVerification)
+            dirtyReasons.Add("Git status changed during provenance verification");
+        if (generatedOutputOverlapsInput)
+            dirtyReasons.Add("a generated output overlaps a release input");
+        if (trackedSourceChanges is null)
+            dirtyReasons.Add("tracked Git status could not be parsed");
+        if (untrustedExplicitInput)
+            dirtyReasons.Add("an explicit release input is untracked, ignored, external, or traverses a reparse point");
+        if (untrustedIgnoredBuildInput)
+            dirtyReasons.Add("the evaluated build input graph contains an untrusted ignored or generated input");
         bool? dirty = trackedStatus is null || untrackedOutput is null
             ? null
             : statusChangedDuringVerification
@@ -185,16 +206,8 @@ public sealed partial class DotNetPublishPipelineRunner
               || trackedSourceChanges is null
               || trackedSourceChanges.Length > 0
               || untrackedSourceFiles.Length > 0
-              || HasUntrackedOrIgnoredExplicitInputs(
-                  projectRoot,
-                  gitRoot!,
-                  allExplicitInputPaths,
-                  trustedExternalInputPaths)
-              || HasIgnoredBuildInputs(
-                  projectRoot,
-                  gitRoot!,
-                  generatedPaths,
-                  dirtyScope);
+              || untrustedExplicitInput
+              || untrustedIgnoredBuildInput;
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
             dirty,
@@ -202,7 +215,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Concat(untrackedSourceFiles)
                 .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
-                .ToArray());
+                .ToArray(),
+            dirtyReasons.ToArray());
     }
 
     private static bool HasGeneratedOutputInputOverlap(
@@ -799,11 +813,16 @@ public sealed partial class DotNetPublishPipelineRunner
 
     internal sealed class SourceProvenance
     {
-        public SourceProvenance(string? revision, bool? dirty, string[]? dirtyPaths = null)
+        public SourceProvenance(
+            string? revision,
+            bool? dirty,
+            string[]? dirtyPaths = null,
+            string[]? dirtyReasons = null)
         {
             Revision = revision;
             Dirty = dirty;
             DirtyPaths = dirtyPaths ?? Array.Empty<string>();
+            DirtyReasons = dirtyReasons ?? Array.Empty<string>();
         }
 
         public string? Revision { get; }
@@ -811,6 +830,8 @@ public sealed partial class DotNetPublishPipelineRunner
         public bool? Dirty { get; }
 
         public string[] DirtyPaths { get; }
+
+        public string[] DirtyReasons { get; }
     }
 
     private sealed class MsiVersionStateWrite

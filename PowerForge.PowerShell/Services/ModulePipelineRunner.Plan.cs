@@ -1124,9 +1124,15 @@ public sealed partial class ModulePipelineRunner
         };
 
     private static string FormatDirtySourcePaths(DotNetPublishPipelineRunner.SourceProvenance provenance)
-        => provenance.DirtyPaths.Length == 0
+    {
+        string paths = provenance.DirtyPaths.Length == 0
             ? string.Empty
             : " Blocking source input(s): " + string.Join(", ", provenance.DirtyPaths) + ".";
+        string reasons = provenance.DirtyReasons.Length == 0
+            ? string.Empty
+            : " Blocking condition(s): " + string.Join("; ", provenance.DirtyReasons) + ".";
+        return paths + reasons;
+    }
 
     private static string[] CollectReleaseSourceInputPaths(
         ModuleBuildSpec build,
