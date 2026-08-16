@@ -121,7 +121,8 @@ public sealed class DotNetPublishPipelineRunnerServicePackageTests
                 {
                     Enabled = true,
                     ResetPeriodSeconds = 900,
-                    RestartDelaySeconds = 30
+                    RestartDelaySeconds = 30,
+                    RestartDelaySequenceSeconds = [30, 60, 90]
                 }
             };
 
@@ -152,6 +153,15 @@ public sealed class DotNetPublishPipelineRunnerServicePackageTests
             Assert.Contains("Get-CimInstance -ClassName Win32_Service", installContent, StringComparison.Ordinal);
             Assert.Contains("Invoke-CimMethod -InputObject $service -MethodName Change", installContent, StringComparison.Ordinal);
             Assert.DoesNotContain("sc.exe delete", installContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Invoke-ServiceRecoveryCommand", installContent, StringComparison.Ordinal);
+            Assert.Contains("@('failure', $ServiceName, 'reset=', [string]$recoveryResetPeriodSeconds, 'actions=', $recoveryActions)", installContent, StringComparison.Ordinal);
+            Assert.Contains("$recoveryEnabled = $true", installContent, StringComparison.Ordinal);
+            Assert.Contains("$recoveryConfigured = $true", installContent, StringComparison.Ordinal);
+            Assert.Contains("$recoveryResetPeriodSeconds = 900", installContent, StringComparison.Ordinal);
+            Assert.Contains("$recoveryRestartDelayMilliseconds = @(30000, 60000, 90000)", installContent, StringComparison.Ordinal);
+            Assert.Contains("$recoveryApplyToNonCrashFailures = $true", installContent, StringComparison.Ordinal);
+            Assert.Contains("'Skip' { }", installContent, StringComparison.Ordinal);
+            Assert.Contains("'actions=', $recoveryActions", installContent, StringComparison.Ordinal);
             Assert.Contains("--config", installContent, StringComparison.Ordinal);
             Assert.DoesNotContain("{{", installContent, StringComparison.Ordinal);
 
@@ -164,6 +174,50 @@ public sealed class DotNetPublishPipelineRunnerServicePackageTests
             Assert.Contains("\"ServiceName\": \"PowerForge.Svc\"", metadata, StringComparison.Ordinal);
             Assert.Contains("\"InstallScriptPath\":", metadata, StringComparison.Ordinal);
             Assert.Contains("\"Recovery\":", metadata, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    public void TryCreateServicePackage_DistinguishesAbsentRecoveryFromExplicitDisable(
+        bool declareRecovery,
+        bool enabled)
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            File.WriteAllText(Path.Combine(outputDir, "Svc.exe"), "dummy");
+            var options = new DotNetPublishServicePackageOptions
+            {
+                ServiceName = "PowerForge.Svc",
+                ExecutablePath = "Svc.exe",
+                GenerateInstallScript = true,
+                Recovery = declareRecovery
+                    ? new DotNetPublishServiceRecoveryOptions { Enabled = enabled, OnFailure = DotNetPublishPolicyMode.Skip }
+                    : null
+            };
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var method = typeof(DotNetPublishPipelineRunner).GetMethod("TryCreateServicePackage", BindingFlags.Instance | BindingFlags.NonPublic);
+            var result = method!.Invoke(runner, new object[] { outputDir, "svc", "win-x64", options }) as DotNetPublishServicePackageResult;
+            string installContent = File.ReadAllText(result!.InstallScriptPath!);
+
+            Assert.Contains($"$recoveryConfigured = {(declareRecovery ? "$true" : "$false")}", installContent, StringComparison.Ordinal);
+            Assert.Contains("-Arguments @('failure', $ServiceName, 'reset=', [string]$recoveryResetPeriodSeconds, 'actions=', $recoveryActions)", installContent, StringComparison.Ordinal);
+            Assert.Contains("$recoveryEnabled -and $recoveryApplyToNonCrashFailures", installContent, StringComparison.Ordinal);
+            Assert.Contains("$recoveryActions = if ($recoveryEnabled)", installContent, StringComparison.Ordinal);
+            Assert.Contains("'\"\"'", installContent, StringComparison.Ordinal);
+            if (declareRecovery)
+            {
+                Assert.Contains("$recoveryEnabled = $false", installContent, StringComparison.Ordinal);
+                Assert.Contains("$recoveryFailureMode = 'Skip'", installContent, StringComparison.Ordinal);
+            }
         }
         finally
         {

@@ -568,6 +568,12 @@ public sealed class DotNetPublishServiceRecoveryOptions
     public int RestartDelaySeconds { get; set; } = 60;
 
     /// <summary>
+    /// Optional ordered restart delays in seconds. When empty, <see cref="RestartDelaySeconds"/>
+    /// is repeated for three recovery attempts for backward compatibility.
+    /// </summary>
+    public int[] RestartDelaySequenceSeconds { get; set; } = Array.Empty<int>();
+
+    /// <summary>
     /// When true, enables recovery actions for non-crash failures.
     /// </summary>
     public bool ApplyToNonCrashFailures { get; set; } = true;
