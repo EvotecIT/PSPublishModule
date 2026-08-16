@@ -426,6 +426,43 @@ For .NET/NuGet work, prefer package-oriented names:
 
 That avoids describing `.nupkg` output as a "release" before it actually participates in the repo-level release.
 
+## Release Protection
+
+Source-state and provenance checks are opt-in. Signing a module or publishing it to GitHub does not enable them.
+When no `ReleaseProtection` segment is configured, the module pipeline does not require a clean checkout, does not
+compare release inputs with the planned source snapshot, and does not add PowerForge provenance files to packed
+modules. Reserved provenance files left by an earlier protected run are removed from package staging while the
+feature is disabled.
+
+Choose only the protection the release needs:
+
+```powershell
+# Check only when the plan is created.
+New-ConfigurationReleaseProtection -RequireCleanSource
+
+# Keep the release inputs clean and unchanged through packaging and publication.
+New-ConfigurationReleaseProtection -RequireSourceUnchanged
+
+# Add signed provenance to eligible signed GitHub module artefacts.
+New-ConfigurationReleaseProtection -GenerateProvenance
+```
+
+`RequireSourceUnchanged` implies `RequireCleanSource`. `GenerateProvenance` implies both source checks and also
+requires module signing, at least one artefact, and a GitHub release destination. Manifest, Documentation, and
+Build gate runs leave provenance generation and its implied checks inactive; an explicitly selected clean or
+unchanged-source check still applies in those modes. The equivalent JSON segment is:
+
+```json
+{
+  "Type": "ReleaseProtection",
+  "Configuration": {
+    "RequireCleanSource": false,
+    "RequireSourceUnchanged": false,
+    "GenerateProvenance": true
+  }
+}
+```
+
 ## Non-Goals
 
 - Do not make `Build-Module.ps1` responsible for NuGet package publishing mechanics.

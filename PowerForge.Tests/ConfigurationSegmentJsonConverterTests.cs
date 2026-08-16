@@ -37,6 +37,60 @@ public sealed class ConfigurationSegmentJsonConverterTests
     }
 
     [Fact]
+    public void SegmentsSchema_IncludesOptInReleaseProtectionSegment()
+    {
+        using var schema = JsonDocument.Parse(File.ReadAllText(SchemaPath("powerforge.segments.schema.json")));
+        var defs = schema.RootElement.GetProperty("$defs");
+
+        var protection = defs.GetProperty("ReleaseProtectionConfiguration").GetProperty("properties");
+        Assert.True(protection.TryGetProperty("RequireCleanSource", out _));
+        Assert.True(protection.TryGetProperty("RequireSourceUnchanged", out _));
+        Assert.True(protection.TryGetProperty("GenerateProvenance", out _));
+        var segmentRefs = defs
+            .GetProperty("ConfigurationSegment")
+            .GetProperty("oneOf")
+            .EnumerateArray()
+            .Select(static item => item.GetProperty("$ref").GetString())
+            .ToArray();
+        Assert.Contains("#/$defs/ReleaseProtectionSegment", segmentRefs);
+    }
+
+    [Fact]
+    public void Deserialize_ReadsReleaseProtectionSegment()
+    {
+        const string json = """
+            {
+              "Build": {
+                "Name": "PSPublishModule",
+                "SourcePath": ".",
+                "Version": "1.0.0"
+              },
+              "Segments": [
+                {
+                  "Type": "ReleaseProtection",
+                  "Configuration": {
+                    "RequireCleanSource": true,
+                    "RequireSourceUnchanged": true,
+                    "GenerateProvenance": false
+                  }
+                }
+              ]
+            }
+            """;
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        options.Converters.Add(new ConfigurationSegmentJsonConverter());
+
+        var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options);
+
+        var segment = Assert.IsType<ConfigurationReleaseProtectionSegment>(Assert.Single(spec!.Segments));
+        Assert.True(segment.Configuration.RequireCleanSource);
+        Assert.True(segment.Configuration.RequireSourceUnchanged);
+        Assert.False(segment.Configuration.GenerateProvenance);
+    }
+
+    [Fact]
     public void ConfigurationGateMode_NumericValuesRemainStable()
     {
         Assert.Equal(0, (int)ConfigurationGateMode.Manifest);

@@ -108,6 +108,7 @@ public sealed partial class ModulePipelineRunner
         var projectBuilds = new List<ConfigurationProjectBuildSegment>();
         var packageBuilds = new List<ConfigurationPackageBuildSegment>();
         ConfigurationReleaseSegment? release = null;
+        ReleaseProtectionConfiguration? releaseProtection = null;
         ConfigurationGateMode? gateMode = null;
         var approvedModules = new List<string>();
         var moduleSkipIgnoreModules = new List<string>();
@@ -381,6 +382,11 @@ public sealed partial class ModulePipelineRunner
                         delivery = opts.Delivery;
                     if (opts.Signing is not null)
                         signing = opts.Signing;
+                    break;
+                }
+                case ConfigurationReleaseProtectionSegment releaseProtectionSegment:
+                {
+                    releaseProtection = releaseProtectionSegment.Configuration ?? new ReleaseProtectionConfiguration();
                     break;
                 }
                 case ConfigurationModuleSkipSegment skipSeg:
@@ -1057,12 +1063,25 @@ public sealed partial class ModulePipelineRunner
             deleteGeneratedStagingAfterRun: deleteAfter,
             embeddedModules: embeddedModules);
         plan.UseLocalVersioning = localVersioning;
-        plan.GenerateReleaseProvenance = plan.SignModule &&
-                                         plan.Artefacts.Length > 0 &&
-                                         (spec.UnifiedGitHubRelease ||
-                                          plan.Publishes.Any(static publish =>
-                                              publish?.Configuration?.Destination == PublishDestination.GitHub));
-        if (plan.GenerateReleaseProvenance)
+        bool provenanceEnabledForRun = releaseProtection?.GenerateProvenance == true &&
+                                       gateMode is not ConfigurationGateMode.Manifest and
+                                           not ConfigurationGateMode.Documentation and
+                                           not ConfigurationGateMode.Build;
+        plan.GenerateReleaseProvenance = provenanceEnabledForRun;
+        plan.RequireReleaseSourceUnchanged = plan.GenerateReleaseProvenance ||
+                                             releaseProtection?.RequireSourceUnchanged == true;
+        plan.RequireCleanReleaseSource = plan.RequireReleaseSourceUnchanged ||
+                                         releaseProtection?.RequireCleanSource == true;
+        bool hasGitHubRelease = spec.UnifiedGitHubRelease ||
+                                plan.Publishes.Any(static publish =>
+                                    publish?.Configuration?.Destination == PublishDestination.GitHub);
+        if (plan.GenerateReleaseProvenance &&
+            (!plan.SignModule || plan.Artefacts.Length == 0 || !hasGitHubRelease))
+        {
+            throw new InvalidOperationException(
+                "GenerateProvenance requires module signing, at least one artefact, and a GitHub release destination.");
+        }
+        if (plan.RequireCleanReleaseSource)
         {
             string[] generatedProvenancePaths = GetGeneratedReleaseProvenancePaths(plan.ProjectRoot);
             string[] lifecycleActionInputs = CollectReleaseActionInputPaths(plan.ProjectRoot, plan.Actions);
@@ -1103,7 +1122,7 @@ public sealed partial class ModulePipelineRunner
             if (string.IsNullOrWhiteSpace(provenance.Revision) || provenance.Dirty is not false)
             {
                 throw new InvalidOperationException(
-                    "Signed GitHub module releases require a resolved Git revision with clean release inputs before packaging." +
+                    "Release source protection requires a resolved Git revision with clean release inputs before packaging." +
                     FormatDirtySourcePaths(provenance));
             }
 
@@ -1111,7 +1130,8 @@ public sealed partial class ModulePipelineRunner
                 provenance.Revision,
                 "module source revision");
             plan.SourceDirty = false;
-            plan.SourceRepositoryUrl = ResolveGitHubModuleRepositoryUrl(plan);
+            if (plan.GenerateReleaseProvenance)
+                plan.SourceRepositoryUrl = ResolveGitHubModuleRepositoryUrl(plan);
         }
         return plan;
     }
@@ -1335,7 +1355,7 @@ public sealed partial class ModulePipelineRunner
             current.Dirty is not false)
         {
             throw new InvalidOperationException(
-                "Signed GitHub module release source changed after planning; packaging is blocked before final signing.");
+                "Module release source changed after planning; packaging or publication is blocked before remote mutation.");
         }
     }
 
