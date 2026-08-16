@@ -16,6 +16,12 @@ $ErrorActionPreference = 'Stop'
 
 $binaryRelative = '{{ExecutableRelativePath}}'
 $arguments = '{{Arguments}}'
+$recoveryConfigured = {{RecoveryConfigured}}
+$recoveryEnabled = {{RecoveryEnabled}}
+$recoveryResetPeriodSeconds = {{RecoveryResetPeriodSeconds}}
+$recoveryRestartDelayMilliseconds = @({{RecoveryRestartDelayMilliseconds}})
+$recoveryApplyToNonCrashFailures = {{RecoveryApplyToNonCrashFailures}}
+$recoveryFailureMode = '{{RecoveryFailureMode}}'
 
 $packageRoot = Split-Path -Parent $PSCommandPath
 $exePath = Join-Path -Path $packageRoot -ChildPath $binaryRelative
@@ -43,6 +49,30 @@ function Set-CommandLineOption {
     }
 
     return ($CommandLine + ' ' + $Name + ' "' + $escapedValue + '"').Trim()
+}
+
+function Invoke-ServiceRecoveryCommand {
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Arguments,
+
+        [Parameter(Mandatory)]
+        [string]$Operation
+    )
+
+    $output = & sc.exe @Arguments 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        return $true
+    }
+
+    $message = "Failed to $Operation for service '$ServiceName' (sc.exe exit $LASTEXITCODE). $($output -join ' ')"
+    switch ($recoveryFailureMode) {
+        'Fail' { throw $message }
+        'Warn' { Write-Warning $message }
+        'Skip' { }
+        default { Write-Warning $message }
+    }
+    return $false
 }
 
 $binaryPathName = '"' + $exePath + '"'
@@ -129,6 +159,24 @@ if ($existing) {
     Set-Service -Name $ServiceName -DisplayName $DisplayName -Description $Description -StartupType Automatic
 } else {
     New-Service @newServiceParams | Out-Null
+}
+
+if ($recoveryConfigured) {
+    $recoveryActions = if ($recoveryEnabled) {
+        ($recoveryRestartDelayMilliseconds | ForEach-Object { "restart/$_" }) -join '/'
+    } else {
+        # Windows PowerShell 5.1 drops empty native arguments. The quoted payload
+        # preserves the required empty value for `sc.exe failure ... actions= ""`.
+        '""'
+    }
+    $recoveryActionsConfigured = Invoke-ServiceRecoveryCommand `
+        -Arguments @('failure', $ServiceName, 'reset=', [string]$recoveryResetPeriodSeconds, 'actions=', $recoveryActions) `
+        -Operation $(if ($recoveryEnabled) { 'configure recovery actions' } else { 'clear recovery actions' })
+    if ($recoveryActionsConfigured) {
+        [void](Invoke-ServiceRecoveryCommand `
+            -Arguments @('failureflag', $ServiceName, $(if ($recoveryEnabled -and $recoveryApplyToNonCrashFailures) { '1' } else { '0' })) `
+            -Operation 'configure the recovery failure flag')
+    }
 }
 
 if ($Start) {

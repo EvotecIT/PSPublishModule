@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
@@ -361,7 +362,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(installPath))
             File.WriteAllText(
                 installPath!,
-                BuildInstallServiceScript(serviceName, displayName, description, executableRelativePath, arguments),
+                BuildInstallServiceScript(serviceName, displayName, description, executableRelativePath, arguments, service.Recovery),
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         if (!string.IsNullOrWhiteSpace(uninstallPath))
             File.WriteAllText(
@@ -394,6 +395,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     Enabled = service.Recovery.Enabled,
                     ResetPeriodSeconds = service.Recovery.ResetPeriodSeconds,
                     RestartDelaySeconds = service.Recovery.RestartDelaySeconds,
+                    RestartDelaySequenceSeconds = service.Recovery.RestartDelaySequenceSeconds?.ToArray() ?? Array.Empty<int>(),
                     ApplyToNonCrashFailures = service.Recovery.ApplyToNonCrashFailures,
                     OnFailure = service.Recovery.OnFailure
                 },
@@ -491,21 +493,48 @@ public sealed partial class DotNetPublishPipelineRunner
         string displayName,
         string description,
         string executableRelativePath,
-        string? arguments)
+        string? arguments,
+        DotNetPublishServiceRecoveryOptions? recovery)
     {
+        var recoveryConfigured = recovery is not null;
+        var recoveryEnabled = recovery?.Enabled == true;
+        var recoveryResetPeriodSeconds = recovery is null || recovery.ResetPeriodSeconds <= 0
+            ? 86400
+            : recovery.ResetPeriodSeconds;
+        int[] recoveryRestartDelayMilliseconds = ResolveRecoveryRestartDelaySeconds(recovery)
+            .Select(static delay => checked(delay * 1000))
+            .ToArray();
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["ServiceName"] = EscapePowerShellSingleQuoted(serviceName),
             ["DisplayName"] = EscapePowerShellSingleQuoted(displayName),
             ["Description"] = EscapePowerShellSingleQuoted(description),
             ["ExecutableRelativePath"] = EscapePowerShellSingleQuoted(executableRelativePath),
-            ["Arguments"] = EscapePowerShellSingleQuoted(arguments ?? string.Empty)
+            ["Arguments"] = EscapePowerShellSingleQuoted(arguments ?? string.Empty),
+            ["RecoveryConfigured"] = recoveryConfigured ? "$true" : "$false",
+            ["RecoveryEnabled"] = recoveryEnabled ? "$true" : "$false",
+            ["RecoveryResetPeriodSeconds"] = recoveryResetPeriodSeconds.ToString(CultureInfo.InvariantCulture),
+            ["RecoveryRestartDelayMilliseconds"] = string.Join(", ", recoveryRestartDelayMilliseconds.Select(static delay => delay.ToString(CultureInfo.InvariantCulture))),
+            ["RecoveryApplyToNonCrashFailures"] = recovery?.ApplyToNonCrashFailures == false ? "$false" : "$true",
+            ["RecoveryFailureMode"] = (recovery?.OnFailure ?? DotNetPublishPolicyMode.Warn).ToString()
         };
 
         return RenderServiceTemplate(
             "Install-Service.ps1",
             EmbeddedScripts.Load("Scripts/DotNetPublish/Install-Service.Template.ps1"),
             tokens);
+    }
+
+    private static int[] ResolveRecoveryRestartDelaySeconds(DotNetPublishServiceRecoveryOptions? recovery) {
+        int[] configured = recovery?.RestartDelaySequenceSeconds?
+            .Where(static delay => delay > 0)
+            .ToArray() ?? Array.Empty<int>();
+        if (configured.Length > 0) {
+            return configured;
+        }
+
+        int fallback = recovery is null || recovery.RestartDelaySeconds <= 0 ? 60 : recovery.RestartDelaySeconds;
+        return [fallback, fallback, fallback];
     }
 
     private static string BuildUninstallServiceScript(string serviceName)

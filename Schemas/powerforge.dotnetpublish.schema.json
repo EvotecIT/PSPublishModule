@@ -799,6 +799,11 @@
         "Enabled": { "type": "boolean" },
         "ResetPeriodSeconds": { "type": "integer", "minimum": 1 },
         "RestartDelaySeconds": { "type": "integer", "minimum": 1 },
+        "RestartDelaySequenceSeconds": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 },
+          "minItems": 1
+        },
         "ApplyToNonCrashFailures": { "type": "boolean" },
         "OnFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" }
       }

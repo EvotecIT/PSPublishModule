@@ -326,14 +326,15 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishServiceLifecycleOptions lifecycle)
     {
         var recovery = ResolveRecoveryOptions(package);
-        if (recovery is null || !recovery.Enabled)
+        if (recovery is null)
             return;
 
-        var reset = recovery.ResetPeriodSeconds <= 0 ? 86400 : recovery.ResetPeriodSeconds;
-        var delayMs = (recovery.RestartDelaySeconds <= 0 ? 60 : recovery.RestartDelaySeconds) * 1000;
-        var actions = $"restart/{delayMs}/restart/{delayMs}/restart/{delayMs}";
+        var reset = recovery.Enabled && recovery.ResetPeriodSeconds > 0 ? recovery.ResetPeriodSeconds : 0;
+        var actions = recovery.Enabled
+            ? string.Join("/", ResolveRecoveryRestartDelaySeconds(recovery).Select(static delay => $"restart/{checked(delay * 1000)}"))
+            : string.Empty;
 
-        _logger.Info($"Service lifecycle: configuring recovery for '{serviceName}'");
+        _logger.Info($"Service lifecycle: {(recovery.Enabled ? "configuring" : "clearing")} recovery for '{serviceName}'");
         var failure = RunProcess("sc.exe", workingDir, new[] { "failure", serviceName, "reset=", reset.ToString(), "actions=", actions });
         if (failure.ExitCode != 0)
         {
@@ -343,7 +344,7 @@ public sealed partial class DotNetPublishPipelineRunner
             return;
         }
 
-        var failureFlag = RunProcess("sc.exe", workingDir, new[] { "failureflag", serviceName, recovery.ApplyToNonCrashFailures ? "1" : "0" });
+        var failureFlag = RunProcess("sc.exe", workingDir, new[] { "failureflag", serviceName, recovery.Enabled && recovery.ApplyToNonCrashFailures ? "1" : "0" });
         if (failureFlag.ExitCode != 0)
         {
             HandlePolicy(

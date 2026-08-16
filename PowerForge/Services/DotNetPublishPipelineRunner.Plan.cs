@@ -1746,6 +1746,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Enabled = recovery.Enabled,
             ResetPeriodSeconds = recovery.ResetPeriodSeconds,
             RestartDelaySeconds = recovery.RestartDelaySeconds,
+            RestartDelaySequenceSeconds = recovery.RestartDelaySequenceSeconds?.ToArray() ?? Array.Empty<int>(),
             ApplyToNonCrashFailures = recovery.ApplyToNonCrashFailures,
             OnFailure = recovery.OnFailure
         };
