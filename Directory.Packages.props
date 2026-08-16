@@ -1,0 +1,9 @@
+<Project>
+  <!--
+    PowerForge is checked out beneath consumer repositories by reusable Actions.
+    Keep this source tree independent from a caller-owned central package file.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>
