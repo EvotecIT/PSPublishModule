@@ -100,6 +100,23 @@ public sealed class GitHubWebsiteRunWorkflowTests
     }
 
     [Fact]
+    public void WebsiteRunWorkflow_ShouldRestoreRunnerWithItsOwnNuGetConfiguration()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-run.yml");
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.Contains("Join-Path $env:GITHUB_WORKSPACE '.powerforge-runner/.github/nuget.public.config'", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("-p:RestoreConfigFile=$runnerRestoreConfig", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("PowerForge runner NuGet configuration not found", workflowYaml, StringComparison.Ordinal);
+
+        var restoreConfigPath = Path.Combine(repoRoot, ".github", "nuget.public.config");
+        var restoreConfig = File.ReadAllText(restoreConfigPath);
+        Assert.Contains("<clear />", restoreConfig, StringComparison.Ordinal);
+        Assert.Contains("https://api.nuget.org/v3/index.json", restoreConfig, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WebsiteRunWorkflow_ShouldValidateCredentialModeBeforeCheckout()
     {
         var repoRoot = FindRepoRoot();
