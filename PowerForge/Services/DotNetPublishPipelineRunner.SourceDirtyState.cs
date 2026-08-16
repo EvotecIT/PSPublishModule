@@ -182,10 +182,29 @@ public sealed partial class DotNetPublishPipelineRunner
             if (File.Exists(workingTreePath) || Directory.Exists(workingTreePath))
                 return false;
 
-            // A deleted or renamed path cannot be re-evaluated from the current filesystem. Once a
-            // release has a scoped input closure, treat every missing changed path conservatively so
-            // linked sources and repository-level imports cannot disappear from that closure unnoticed.
-            return true;
+            if (ProjectDirectoryPaths.Any(directory =>
+                    directory.Length == 0 ||
+                    string.Equals(path, directory, comparison) ||
+                    path.StartsWith(directory + "/", comparison)))
+            {
+                return true;
+            }
+
+            string fileName = Path.GetFileName(path);
+            if (!IsRepositoryBuildControlFile(fileName))
+                return false;
+            string directoryPath = Path.GetDirectoryName(path)?.Replace('\\', '/').Trim('/') ?? string.Empty;
+            return ProjectDirectoryPaths.Any(projectDirectory =>
+                directoryPath.Length == 0 ||
+                string.Equals(projectDirectory, directoryPath, comparison) ||
+                projectDirectory.StartsWith(directoryPath + "/", comparison));
         }
+
+        private static bool IsRepositoryBuildControlFile(string fileName)
+            => fileName.Equals("Directory.Build.props", StringComparison.OrdinalIgnoreCase) ||
+               fileName.Equals("Directory.Build.targets", StringComparison.OrdinalIgnoreCase) ||
+               fileName.Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase) ||
+               fileName.Equals("global.json", StringComparison.OrdinalIgnoreCase) ||
+               fileName.Equals("NuGet.Config", StringComparison.OrdinalIgnoreCase);
     }
 }
