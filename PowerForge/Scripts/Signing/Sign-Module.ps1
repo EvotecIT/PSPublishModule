@@ -42,6 +42,21 @@ function Get-CodeSigningCertificateByThumbprint([string]$thumbprint) {
 
   return $null
 }
+function Clear-SigningCloudPlacementAttributes([string]$filePath) {
+  if ([System.IO.Path]::DirectorySeparatorChar -ne '\') { return }
+
+  # Cloud providers can propagate FILE_ATTRIBUTE_PINNED or FILE_ATTRIBUTE_UNPINNED
+  # into a local staging copy. Authenticode cannot update such a file even when
+  # its content is fully hydrated, so remove only those placement hints.
+  $cloudPlacementMask = 0x00180000
+  $attributes = [int][System.IO.File]::GetAttributes($filePath)
+  $normalizedAttributes = $attributes -band (-bnot $cloudPlacementMask)
+  if ($normalizedAttributes -ne $attributes) {
+    [System.IO.File]::SetAttributes(
+      $filePath,
+      [System.IO.FileAttributes]$normalizedAttributes)
+  }
+}
 function Test-ExcludedPackagePath([string]$relativePath, [string[]]$exclusions) {
   if ([string]::IsNullOrWhiteSpace($relativePath) -or -not $exclusions -or $exclusions.Count -eq 0) {
     return $false
@@ -307,6 +322,7 @@ try {
 
     foreach ($f in $all) {
       try {
+        Clear-SigningCloudPlacementAttributes -filePath $f
         $sig = Invoke-WithFileRetry -FilePath $f -Action 'Get-AuthenticodeSignature' -ScriptBlock {
           Get-AuthenticodeSignature -FilePath $f -ErrorAction Stop
         }
@@ -413,6 +429,7 @@ try {
 
     foreach ($f in $all) {
       try {
+        Clear-SigningCloudPlacementAttributes -filePath $f
         $sig = Invoke-WithFileRetry -FilePath $f -Action 'Get-OpenAuthenticodeSignature' -ScriptBlock {
           Get-OpenAuthenticodeSignature -FilePath $f -ErrorAction Stop
         }
