@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -1251,14 +1252,59 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             string projectPath = Path.Combine(projectRoot, "Sample.csproj");
             string sourcePath = Path.Combine(projectRoot, "Program.cs");
             string buildScript = Path.Combine(buildRoot, "Build-Project.ps1");
-            File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+            string packageSource = Directory.CreateDirectory(Path.Combine(root, "package-source")).FullName;
+            string packageFeed = Directory.CreateDirectory(Path.Combine(root, "feed")).FullName;
+            File.WriteAllText(
+                Path.Combine(packageSource, "Local.Build.Inputs.nuspec"),
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+                  <metadata>
+                    <id>Local.Build.Inputs</id>
+                    <version>1.0.0</version>
+                    <authors>PowerForge Tests</authors>
+                    <description>Local package-cache provenance fixture.</description>
+                    <contentFiles>
+                      <files include="any/any/**" buildAction="Content" copyToOutput="true" />
+                    </contentFiles>
+                  </metadata>
+                </package>
+                """);
+            string packageContent = Directory.CreateDirectory(
+                Path.Combine(packageSource, "contentFiles", "any", "any")).FullName;
+            File.WriteAllText(Path.Combine(packageContent, "package-payload.txt"), "restored package content");
+            ZipFile.CreateFromDirectory(
+                packageSource,
+                Path.Combine(packageFeed, "Local.Build.Inputs.1.0.0.nupkg"));
+            File.WriteAllText(
+                Path.Combine(root, "NuGet.Config"),
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <configuration>
+                  <config>
+                    <add key="globalPackagesFolder" value=".nuget/packages" />
+                  </config>
+                  <packageSources>
+                    <clear />
+                    <add key="local" value="feed" />
+                  </packageSources>
+                </configuration>
+                """);
+            File.WriteAllText(
+                projectPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup><ItemGroup><PackageReference Include=\"Local.Build.Inputs\" Version=\"1.0.0\" /></ItemGroup></Project>");
             File.WriteAllText(sourcePath, "internal static class Program { }");
             File.WriteAllText(buildScript, "param([string] $RunMode = 'Build')");
-            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n.nuget/\n");
             RunGit(root, "add .");
             RunGit(root, "commit -m \"approved source\"");
             RunDotNet(root, $"restore \"{projectPath}\" --nologo");
             Assert.True(File.Exists(Path.Combine(projectRoot, "obj", "Sample.csproj.nuget.g.props")));
+            Assert.Contains(
+                Directory.EnumerateFiles(root, "package-payload.txt", SearchOption.AllDirectories),
+                path => path.Contains(
+                    Path.Combine(".nuget", "packages", "local.build.inputs", "1.0.0"),
+                    StringComparison.OrdinalIgnoreCase));
             File.WriteAllText(buildScript, "param([string] $RunMode = 'Publish')");
 
             DotNetPublishPipelineRunner.SourceProvenance provenance =
