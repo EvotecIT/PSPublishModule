@@ -117,7 +117,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string>? trustedExternalInputPaths = null,
         IEnumerable<string>? buildProjectPaths = null,
         string? buildConfiguration = null,
-        DotNetPublishPlan? buildPlan = null)
+        DotNetPublishPlan? buildPlan = null,
+        IEnumerable<string>? sourceRootPaths = null)
     {
         var gitRevision = ReadGitText(projectRoot, "rev-parse HEAD");
         var environmentRevision = Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim();
@@ -153,6 +154,26 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string> allExplicitInputPaths = (explicitInputPaths ?? Array.Empty<string>())
             .Concat(bundleSourceInputs)
             .Concat(commandHookSourceInputs);
+        SourceDirtyScope dirtyScope = BuildSourceDirtyScope(
+            projectRoot,
+            gitRoot!,
+            allExplicitInputPaths,
+            sourceRootPaths,
+            buildProjectPaths,
+            buildConfiguration,
+            buildPlan);
+        string[]? trackedSourceChanges = FindTrackedSourceChanges(
+            projectRoot,
+            gitRoot!,
+            finalTrackedStatus,
+            trackedGeneratedPaths,
+            dirtyScope);
+        string[] untrackedSourceFiles = FindUntrackedSourceFiles(
+            projectRoot,
+            gitRoot!,
+            untrackedOutput,
+            generatedPaths,
+            dirtyScope);
         bool generatedOutputOverlapsInput = HasGeneratedOutputInputOverlap(
             projectRoot,
             generatedPaths,
@@ -161,16 +182,9 @@ public sealed partial class DotNetPublishPipelineRunner
             ? null
             : statusChangedDuringVerification
               || generatedOutputOverlapsInput
-              || HasTrackedSourceChanges(
-                projectRoot,
-                gitRoot!,
-                finalTrackedStatus!,
-                trackedGeneratedPaths)
-              || HasUntrackedSourceFiles(
-                projectRoot,
-                gitRoot!,
-                untrackedOutput,
-                generatedPaths)
+              || trackedSourceChanges is null
+              || trackedSourceChanges.Length > 0
+              || untrackedSourceFiles.Length > 0
               || HasUntrackedOrIgnoredExplicitInputs(
                   projectRoot,
                   gitRoot!,
@@ -179,13 +193,16 @@ public sealed partial class DotNetPublishPipelineRunner
               || HasIgnoredBuildInputs(
                   projectRoot,
                   gitRoot!,
-                  buildProjectPaths,
-                  buildConfiguration,
-                  buildPlan,
-                  generatedPaths);
+                  generatedPaths,
+                  dirtyScope);
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
-            dirty);
+            dirty,
+            (trackedSourceChanges ?? Array.Empty<string>())
+                .Concat(untrackedSourceFiles)
+                .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                .ToArray());
     }
 
     private static bool HasGeneratedOutputInputOverlap(
@@ -257,10 +274,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool HasIgnoredBuildInputs(
         string projectRoot,
         string gitRoot,
-        IEnumerable<string>? buildProjectPaths,
-        string? buildConfiguration,
-        DotNetPublishPlan? buildPlan,
-        IEnumerable<string>? generatedPaths)
+        IEnumerable<string>? generatedPaths,
+        SourceDirtyScope dirtyScope)
     {
         var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         string[] generatedExclusions = BuildGeneratedPathExclusions(projectRoot, gitRoot, generatedPaths);
@@ -269,14 +284,11 @@ public sealed partial class DotNetPublishPipelineRunner
             "ls-files --others --ignored --exclude-standard -z");
         if (ignoredOutput is null)
             return true;
-        if (!TryEvaluateDotNetBuildInputs(
-                buildProjectPaths,
-                buildConfiguration,
-                buildPlan,
-                out string[] projectDirectories,
-                out HashSet<string> buildInputs,
-                out HashSet<string> sourceInputs))
+        if (!dirtyScope.BuildInputsResolved)
             return true;
+        string[] projectDirectories = dirtyScope.ProjectDirectories;
+        HashSet<string> buildInputs = dirtyScope.BuildInputs;
+        HashSet<string> sourceInputs = dirtyScope.SourceInputs;
         if (HasGeneratedOutputInputOverlap(projectRoot, generatedPaths, buildInputs))
             return true;
         if (projectDirectories.Any(directory =>
@@ -654,45 +666,6 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
     }
 
-    private static bool HasUntrackedSourceFiles(
-        string projectRoot,
-        string gitRoot,
-        string untrackedOutput,
-        IEnumerable<string>? generatedPaths)
-    {
-        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        var exclusions = BuildGeneratedPathExclusions(projectRoot, gitRoot, generatedPaths);
-
-        foreach (var untrackedPath in untrackedOutput.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries))
-        {
-            var normalizedPath = untrackedPath.Replace('\\', '/').TrimStart('/');
-            if (!IsGeneratedPath(normalizedPath, exclusions, comparison))
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool HasTrackedSourceChanges(
-        string projectRoot,
-        string gitRoot,
-        string trackedOutput,
-        IEnumerable<string>? generatedPaths)
-    {
-        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        var exclusions = BuildGeneratedPathExclusions(projectRoot, gitRoot, generatedPaths);
-        if (!TryParseTrackedStatusPaths(trackedOutput, out var changedPaths))
-            return true;
-
-        foreach (var path in changedPaths)
-        {
-            if (!IsGeneratedPath(path, exclusions, comparison))
-                return true;
-        }
-
-        return false;
-    }
-
     private static bool TryParseTrackedStatusPaths(string trackedOutput, out string[] paths)
     {
         var parsed = new List<string>();
@@ -826,15 +799,18 @@ public sealed partial class DotNetPublishPipelineRunner
 
     internal sealed class SourceProvenance
     {
-        public SourceProvenance(string? revision, bool? dirty)
+        public SourceProvenance(string? revision, bool? dirty, string[]? dirtyPaths = null)
         {
             Revision = revision;
             Dirty = dirty;
+            DirtyPaths = dirtyPaths ?? Array.Empty<string>();
         }
 
         public string? Revision { get; }
 
         public bool? Dirty { get; }
+
+        public string[] DirtyPaths { get; }
     }
 
     private sealed class MsiVersionStateWrite

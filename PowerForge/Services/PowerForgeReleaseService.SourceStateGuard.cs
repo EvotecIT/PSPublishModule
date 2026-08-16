@@ -54,7 +54,8 @@ internal sealed partial class PowerForgeReleaseService
                     path.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ||
                     path.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase)),
                 buildConfiguration: request.Configuration,
-                buildPlan: request.DotNetPublishPlan);
+                buildPlan: request.DotNetPublishPlan,
+                sourceRootPaths: request.SourceRootPaths);
         ValidateExpectedSourceSnapshot(source, expectedRevision);
 
         if (request.PackageBuildSpec is not null)
@@ -67,7 +68,8 @@ internal sealed partial class PowerForgeReleaseService
                     generatedPaths: request.GeneratedProvenancePaths,
                     explicitInputPaths: (request.SourceInputPaths ?? Array.Empty<string>()).Concat(packageProjectPaths),
                     buildProjectPaths: packageProjectPaths,
-                    buildConfiguration: request.PackageBuildSpec.Configuration);
+                    buildConfiguration: request.PackageBuildSpec.Configuration,
+                    sourceRootPaths: request.SourceRootPaths);
             ValidateExpectedSourceSnapshot(packageSource, expectedRevision);
         }
 

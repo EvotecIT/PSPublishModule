@@ -898,6 +898,74 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_post_build_source_guard_allows_dirty_operator_file_outside_configured_module_source()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            string moduleRoot = Directory.CreateDirectory(Path.Combine(root, "Module")).FullName;
+            string buildRoot = Directory.CreateDirectory(Path.Combine(root, "Build")).FullName;
+            string moduleConfigPath = Path.Combine(root, "powerforge.json");
+            string releasePath = Path.Combine(root, "release.json");
+            string operatorScript = Path.Combine(buildRoot, "Build-Project.ps1");
+            File.WriteAllText(Path.Combine(moduleRoot, "TestModule.psm1"), "function Get-Test { 'ok' }");
+            File.WriteAllText(moduleConfigPath, """
+                {
+                  "Build": {
+                    "Name": "TestModule",
+                    "SourcePath": "Module",
+                    "Version": "1.0.0"
+                  }
+                }
+                """);
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(operatorScript, "param([string] $RunMode = 'Build')");
+            RunGitForSourceGuard(root, "init");
+            RunGitForSourceGuard(root, "config user.name \"PowerForge Tests\"");
+            RunGitForSourceGuard(root, "config user.email \"powerforge-tests@example.invalid\"");
+            RunGitForSourceGuard(root, "add .");
+            RunGitForSourceGuard(root, "commit -m \"approved source\"");
+            string revision = RunGitForSourceGuard(root, "rev-parse HEAD").Trim();
+            File.WriteAllText(operatorScript, "param([string] $RunMode = 'Publish')");
+
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true });
+            var spec = new PowerForgeReleaseSpec
+            {
+                Module = new PowerForgeModuleReleaseOptions
+                {
+                    RepositoryRoot = root,
+                    ConfigPath = moduleConfigPath
+                }
+            };
+
+            PowerForgeReleaseResult result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleOnly = true,
+                    ModuleRunMode = ConfigurationGateMode.Publish,
+                    SourceRepositoryRoot = root,
+                    ExpectedSourceRevision = revision,
+                    SourceInputPaths = [releasePath]
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(2, moduleCalls.Count);
+            Assert.Equal(ConfigurationGateMode.Build, moduleCalls[0].RunMode);
+            Assert.Equal(ConfigurationGateMode.Publish, moduleCalls[1].RunMode);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void BuildModuleFailureMessage_UsesStructuredFailureWithoutRepeatingStandardOutput()
     {
         var message = PowerForgeReleaseService.BuildModuleFailureMessage(

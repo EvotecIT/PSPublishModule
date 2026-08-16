@@ -1487,6 +1487,15 @@ internal sealed partial class PowerForgeReleaseService
         var moduleConfig = configPath is null
             ? null
             : new ModulePipelineConfigurationService().Load(configPath);
+        if (moduleConfig is not null)
+        {
+            request.SourceRootPaths = request.SourceRootPaths
+                .Concat(new[] { moduleConfig.ProjectRoot })
+                .Distinct(Path.DirectorySeparatorChar == '\\'
+                    ? StringComparer.OrdinalIgnoreCase
+                    : StringComparer.Ordinal)
+                .ToArray();
+        }
         if (scriptPath is not null && !File.Exists(scriptPath))
             throw new FileNotFoundException($"Module build script was not found: {scriptPath}", scriptPath);
         if (!request.PlanOnly &&

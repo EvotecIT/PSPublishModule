@@ -1072,6 +1072,18 @@ public sealed partial class ModulePipelineRunner
                 plan.ResolvedVersion,
                 plan.PreRelease,
                 plan.Artefacts);
+            string[] artefactMappingRoots = CollectReleaseArtefactInputRootPaths(
+                plan.ProjectRoot,
+                plan.ModuleName,
+                plan.ResolvedVersion,
+                plan.PreRelease,
+                plan.Artefacts);
+            plan.SourceRootPaths = new[] { plan.BuildSpec.SourcePath }
+                .Concat(artefactMappingRoots)
+                .Distinct(Path.DirectorySeparatorChar == '\\'
+                    ? StringComparer.OrdinalIgnoreCase
+                    : StringComparer.Ordinal)
+                .ToArray();
             plan.SourceInputPaths = CollectReleaseSourceInputPaths(
                 plan.BuildSpec,
                 (spec.SourceInputPaths ?? Array.Empty<string>())
@@ -1086,11 +1098,13 @@ public sealed partial class ModulePipelineRunner
                     buildProjectPaths: string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath)
                         ? Array.Empty<string>()
                         : new[] { plan.BuildSpec.CsprojPath! },
-                    buildConfiguration: plan.BuildSpec.Configuration);
+                    buildConfiguration: plan.BuildSpec.Configuration,
+                    sourceRootPaths: plan.SourceRootPaths);
             if (string.IsNullOrWhiteSpace(provenance.Revision) || provenance.Dirty is not false)
             {
                 throw new InvalidOperationException(
-                    "Signed GitHub module releases require a resolved clean Git checkout before packaging.");
+                    "Signed GitHub module releases require a resolved Git revision with clean release inputs before packaging." +
+                    FormatDirtySourcePaths(provenance));
             }
 
             plan.SourceRevision = DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(
@@ -1108,6 +1122,11 @@ public sealed partial class ModulePipelineRunner
             Path.Combine(projectRoot, PublishedRegistryProvenanceValidator.ModuleProvenanceFileName),
             Path.Combine(projectRoot, PowerForgeModuleSourceAttestationWriter.FileName)
         };
+
+    private static string FormatDirtySourcePaths(DotNetPublishPipelineRunner.SourceProvenance provenance)
+        => provenance.DirtyPaths.Length == 0
+            ? string.Empty
+            : " Blocking source input(s): " + string.Join(", ", provenance.DirtyPaths) + ".";
 
     private static string[] CollectReleaseSourceInputPaths(
         ModuleBuildSpec build,
@@ -1237,6 +1256,24 @@ public sealed partial class ModulePipelineRunner
         return inputs.OrderBy(static path => path, comparer).ToArray();
     }
 
+    private static string[] CollectReleaseArtefactInputRootPaths(
+        string projectRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease,
+        IEnumerable<ConfigurationArtefactSegment>? artefacts)
+    {
+        var comparer = Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        return (artefacts ?? Array.Empty<ConfigurationArtefactSegment>())
+            .Where(static artefact => artefact?.Configuration?.Enabled == true)
+            .SelectMany(static artefact => artefact.Configuration.DirectoryOutput ?? Array.Empty<ArtefactCopyMapping>())
+            .Where(static mapping => mapping is not null)
+            .Select(mapping => ResolveArtefactInputPath(mapping.Source, projectRoot, moduleName, moduleVersion, preRelease))
+            .Distinct(comparer)
+            .OrderBy(static path => path, comparer)
+            .ToArray();
+    }
+
     private static string ResolveArtefactInputPath(
         string value,
         string projectRoot,
@@ -1269,7 +1306,12 @@ public sealed partial class ModulePipelineRunner
             .ToArray();
         string[] currentInputs = CollectReleaseSourceInputPaths(
             plan.BuildSpec,
-            plan.SourceInputPaths,
+            plan.SourceInputPaths.Concat(CollectReleaseArtefactInputPaths(
+                plan.ProjectRoot,
+                plan.ModuleName,
+                plan.ResolvedVersion,
+                plan.PreRelease,
+                plan.Artefacts)),
             generatedPaths);
         DotNetPublishPipelineRunner.SourceProvenance current =
             DotNetPublishPipelineRunner.ReadSourceProvenance(
@@ -1280,7 +1322,8 @@ public sealed partial class ModulePipelineRunner
                 buildProjectPaths: string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath)
                     ? Array.Empty<string>()
                     : new[] { plan.BuildSpec.CsprojPath! },
-                buildConfiguration: plan.BuildSpec.Configuration);
+                buildConfiguration: plan.BuildSpec.Configuration,
+                sourceRootPaths: plan.SourceRootPaths);
         if (string.IsNullOrWhiteSpace(current.Revision) ||
             !string.Equals(current.Revision, plan.SourceRevision, StringComparison.OrdinalIgnoreCase) ||
             current.Dirty is not false)
@@ -1303,13 +1346,22 @@ public sealed partial class ModulePipelineRunner
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal)
             .ToArray();
+        string[] currentArtefactInputs = CollectReleaseArtefactInputPaths(
+            plan.ProjectRoot,
+            plan.ModuleName,
+            plan.ResolvedVersion,
+            plan.PreRelease,
+            plan.Artefacts);
         DotNetPublishPipelineRunner.SourceProvenance current =
             DotNetPublishPipelineRunner.ReadSourceProvenance(
                 plan.ProjectRoot,
                 generatedPaths: generatedPaths,
-                explicitInputPaths: (plan.SourceInputPaths ?? Array.Empty<string>()).Concat(projectPaths),
+                explicitInputPaths: (plan.SourceInputPaths ?? Array.Empty<string>())
+                    .Concat(currentArtefactInputs)
+                    .Concat(projectPaths),
                 buildProjectPaths: projectPaths,
-                buildConfiguration: spec.Configuration);
+                buildConfiguration: spec.Configuration,
+                sourceRootPaths: plan.SourceRootPaths);
         if (string.IsNullOrWhiteSpace(current.Revision) ||
             !string.Equals(current.Revision, plan.SourceRevision, StringComparison.OrdinalIgnoreCase) ||
             current.Dirty is not false)

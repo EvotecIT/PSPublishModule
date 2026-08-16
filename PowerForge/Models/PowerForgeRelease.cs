@@ -57,6 +57,8 @@ internal sealed class PowerForgeReleaseRequest
 
     internal string[] SourceInputPaths { get; set; } = Array.Empty<string>();
 
+    internal string[] SourceRootPaths { get; set; } = Array.Empty<string>();
+
     internal DotNetPublishPlan? DotNetPublishPlan { get; set; }
 
     internal DotNetRepositoryReleaseSpec? PackageBuildSpec { get; set; }

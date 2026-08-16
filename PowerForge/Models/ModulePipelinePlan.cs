@@ -13,6 +13,7 @@ public sealed class ModulePipelinePlan
     internal bool GenerateReleaseProvenance { get; set; }
     internal string? SourceRepositoryUrl { get; set; }
     internal string[] SourceInputPaths { get; set; } = Array.Empty<string>();
+    internal string[] SourceRootPaths { get; set; } = Array.Empty<string>();
 
     /// <summary>
     /// Module name resolved for the pipeline.
