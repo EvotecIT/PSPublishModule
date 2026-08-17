@@ -7,11 +7,12 @@ public sealed class PowerForgeReleaseSchemaTests
 {
     [Theory]
     [InlineData(1, false, false, true)]
-    [InlineData(1, true, false, true)]
+    [InlineData(1, true, true, true)]
+    [InlineData(2, false, false, false)]
     [InlineData(2, false, true, false)]
-    [InlineData(2, true, false, false)]
+    [InlineData(2, true, false, true)]
     [InlineData(2, true, true, true)]
-    public void Tool_lock_schema_preserves_v1_and_requires_executable_digest_and_commit_for_v2(
+    public void Tool_lock_schema_requires_executable_digest_and_keeps_commit_optional(
         int schemaVersion,
         bool includeExecutableDigest,
         bool includeCommit,

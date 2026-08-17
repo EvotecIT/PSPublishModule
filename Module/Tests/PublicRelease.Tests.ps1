@@ -26,29 +26,37 @@ Describe 'Standalone PowerForge installer host compatibility' {
         $content | Should -Match '\$PSVersionTable\.PSEdition'
     }
 
-    It 'rejects schema version 2 without exact commit provenance' {
+    It 'accepts schema version 2 without commit metadata' {
         $testRoot = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
         try {
             New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
+            $isWindowsHost = $PSVersionTable.PSEdition -eq 'Desktop' -or
+                [Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+                    [Runtime.InteropServices.OSPlatform]::Windows)
+            $isMacOSHost = -not $isWindowsHost -and
+                [Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+                    [Runtime.InteropServices.OSPlatform]::OSX)
+            $platform = if ($isWindowsHost) { 'win' } elseif ($isMacOSHost) { 'osx' } else { 'linux' }
+            $architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+            $rid = "$platform-$architecture"
             $manifestPath = Join-Path $testRoot 'PowerForge-tool-manifest.json'
-            @'
-{
-  "schemaVersion": 2,
-  "version": "3.0.116",
-  "assets": {
-    "osx-arm64": {
-      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "executableSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    }
-  }
-}
-'@ | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+            [ordered]@{
+                schemaVersion = 2
+                version = '3.0.118'
+                assets = [ordered]@{
+                    $rid = [ordered]@{
+                        sha256 = 'invalid'
+                        executableSha256 = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+                    }
+                }
+            } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 
             {
                 & $script:ToolInstallerPath `
                     -ManifestPath $manifestPath `
-                    -CacheRoot (Join-Path $testRoot 'cache')
-            } | Should -Throw '*schema version 2 requires an exact commit*'
+                    -CacheRoot (Join-Path $testRoot 'cache') `
+                    -ArtifactRoot $testRoot
+            } | Should -Throw "*asset '$rid' requires a 64-character SHA-256 digest*"
         } finally {
             if (Test-Path -LiteralPath $testRoot) {
                 Remove-Item -LiteralPath $testRoot -Recurse -Force

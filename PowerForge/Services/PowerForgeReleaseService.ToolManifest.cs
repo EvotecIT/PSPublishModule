@@ -45,12 +45,6 @@ internal sealed partial class PowerForgeReleaseService
                 "PowerForgeToolManifestPath cannot be combined with Outputs.Staging.ToolsNameTemplate because " +
                 "the installer manifest must name the exact published tool archive.");
         }
-
-        if (NormalizePowerForgeToolManifestCommit(spec.GitHub?.Commitish) is null)
-        {
-            throw new InvalidOperationException(
-                "PowerForgeToolManifestPath requires GitHub.Commitish to be an exact 40-character Git SHA.");
-        }
     }
 
     private static bool IsStandalonePowerForgeToolSelected(PowerForgeReleaseResult result)

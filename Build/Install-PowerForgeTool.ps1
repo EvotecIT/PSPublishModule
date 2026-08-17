@@ -58,9 +58,6 @@ if ($repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
     throw 'PowerForge repository must use owner/name.'
 }
 $expectedCommit = [string] (Get-ManifestPropertyValue -Object $manifest -Name 'commit')
-if ($schemaVersion -eq 2 -and [string]::IsNullOrWhiteSpace($expectedCommit)) {
-    throw 'PowerForge tool manifest schema version 2 requires an exact commit.'
-}
 if (-not [string]::IsNullOrWhiteSpace($expectedCommit) -and $expectedCommit -notmatch '^[A-Fa-f0-9]{40}$') {
     throw 'PowerForge tool manifest commit must be an exact 40-character Git SHA.'
 }
