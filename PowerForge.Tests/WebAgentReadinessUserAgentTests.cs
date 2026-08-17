@@ -29,6 +29,7 @@ public partial class WebAgentReadinessTests
         });
 
         Assert.NotEmpty(handler.UserAgents);
+        Assert.Equal(2, handler.RequestUris.Count(uri => uri.AbsolutePath == "/" && string.IsNullOrEmpty(uri.Query)));
         Assert.All(handler.UserAgents, userAgent =>
             Assert.Equal(
                 "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
@@ -39,12 +40,14 @@ public partial class WebAgentReadinessTests
     private sealed class UserAgentScanHandler : HttpMessageHandler
     {
         internal List<string> UserAgents { get; } = [];
+        internal List<Uri> RequestUris { get; } = [];
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             UserAgents.Add(request.Headers.UserAgent.ToString());
+            RequestUris.Add(request.RequestUri!);
             var path = request.RequestUri!.AbsolutePath;
             var content = path switch
             {
