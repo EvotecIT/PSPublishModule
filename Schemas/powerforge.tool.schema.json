@@ -49,7 +49,6 @@
         "required": ["schemaVersion"]
       },
       "then": {
-        "required": ["commit"],
         "properties": {
           "assets": {
             "patternProperties": {

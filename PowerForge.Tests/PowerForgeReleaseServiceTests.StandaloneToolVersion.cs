@@ -159,7 +159,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_WritesConsumerToolManifestAndIncludesInstallerAsset()
+    public void Execute_WritesConsumerToolManifestWithoutCommitGuard()
     {
         var root = CreateSandbox();
         try
@@ -175,12 +175,6 @@ public sealed partial class PowerForgeReleaseServiceTests
                 stream.Write(executableBytes, 0, executableBytes.Length);
             }
             File.WriteAllText(installer, "param()");
-            RunSnapshotGit(root, "init", "--quiet");
-            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
-            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
-            RunSnapshotGit(root, "add", ".");
-            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
-            var commit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
                 executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not run."),
@@ -243,7 +237,6 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         Owner = "EvotecIT",
                         Repository = "PSPublishModule",
-                        Commitish = commit,
                         TagTemplate = "v{Version}"
                     }
                 },
@@ -262,7 +255,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal(2, json.GetProperty("schemaVersion").GetInt32());
             Assert.Equal("3.0.110", json.GetProperty("version").GetString());
             Assert.Equal("v3.0.110", json.GetProperty("releaseTag").GetString());
-            Assert.Equal(commit, json.GetProperty("commit").GetString());
+            Assert.False(json.TryGetProperty("commit", out _));
             var asset = json.GetProperty("assets").GetProperty("osx-arm64");
             Assert.Equal(Path.GetFileName(zip), asset.GetProperty("name").GetString());
             Assert.Equal(
@@ -402,7 +395,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void ValidatePowerForgeToolManifestStaging_requires_exact_commit_provenance()
+    public void ValidatePowerForgeToolManifestStaging_allows_optional_commit_provenance()
     {
         var spec = new PowerForgeReleaseSpec
         {
@@ -417,11 +410,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             }
         };
 
-        var error = Assert.Throws<InvalidOperationException>(() =>
-            PowerForgeReleaseService.ValidatePowerForgeToolManifestStaging(spec));
-
-        Assert.Contains("GitHub.Commitish", error.Message, StringComparison.Ordinal);
-        Assert.Contains("exact 40-character Git SHA", error.Message, StringComparison.Ordinal);
+        PowerForgeReleaseService.ValidatePowerForgeToolManifestStaging(spec);
     }
 
     [Fact]

@@ -95,8 +95,8 @@ dotnet tool install --global PowerForge.Web.Build
 
 For an exact standalone `powerforge` binary from a GitHub release, download the
 installer and tool manifest from the same `v<version>` release. The installer selects
-the current OS/architecture asset, verifies its SHA-256, checks the embedded version
-and release commit, and reuses the verified cache on later runs:
+the current OS/architecture asset, verifies the archive and executable SHA-256 values,
+checks the embedded version, and reuses the verified cache on later runs:
 
 ```powershell
 $version = '3.0.110'
