@@ -29,16 +29,22 @@ public sealed class GitHubWebsiteDeployGuardrailTests
     }
 
     [Fact]
-    public void ReusableWorkflow_ShouldApplyGitHubPagesCloudflarePolicyOnLinux()
+    public void ReusableWorkflow_ShouldApplyGitHubPagesCloudflarePolicyOnConfiguredRunner()
     {
         var workflow = ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml");
+        var cloudflareInputStart = workflow.IndexOf("      cloudflare_runner_labels_json:", StringComparison.Ordinal);
+        var timeoutInputStart = workflow.IndexOf("      timeout_minutes:", StringComparison.Ordinal);
         var policyStart = workflow.IndexOf("  cloudflare-site-policy:", StringComparison.Ordinal);
         var linuxStart = workflow.IndexOf("  deploy-linux:", StringComparison.Ordinal);
+        Assert.True(cloudflareInputStart >= 0 && timeoutInputStart > cloudflareInputStart);
         Assert.True(policyStart >= 0 && linuxStart > policyStart);
+        var cloudflareInput = workflow[cloudflareInputStart..timeoutInputStart];
         var policyJob = workflow[policyStart..linuxStart];
 
         Assert.Contains("needs: [deploy, build, guardrails]", policyJob, StringComparison.Ordinal);
-        Assert.Contains("runs-on: ubuntu-latest", policyJob, StringComparison.Ordinal);
+        Assert.Contains("type: string", cloudflareInput, StringComparison.Ordinal);
+        Assert.Contains("default: '[\"ubuntu-latest\"]'", cloudflareInput, StringComparison.Ordinal);
+        Assert.Contains("runs-on: ${{ fromJson(inputs.cloudflare_runner_labels_json) }}", policyJob, StringComparison.Ordinal);
         Assert.Contains("powerforge-cloudflare-site-policy", policyJob, StringComparison.Ordinal);
         Assert.Contains("needs: [deploy, cloudflare-site-policy, deploy-linux]", workflow, StringComparison.Ordinal);
         Assert.Contains("needs.cloudflare-site-policy.result == 'success'", workflow, StringComparison.Ordinal);
