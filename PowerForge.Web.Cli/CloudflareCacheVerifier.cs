@@ -62,7 +62,7 @@ internal static class CloudflareCacheVerifier
         {
             Timeout = TimeSpan.FromMilliseconds(timeoutMs)
         };
-        http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "powerforge-web-cloudflare-verify");
+        http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", WebVerificationIdentity.UserAgent);
 
         var entries = new List<CloudflareVerifyEntry>(normalizedUrls.Length);
         foreach (var url in normalizedUrls)

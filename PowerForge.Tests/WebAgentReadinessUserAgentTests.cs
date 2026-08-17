@@ -6,7 +6,7 @@ namespace PowerForge.Tests;
 public partial class WebAgentReadinessTests
 {
     [Fact]
-    public async Task Scan_UsesSyntheticBrowserUserAgent()
+    public async Task Scan_UsesSharedVerificationUserAgent()
     {
         var handler = new UserAgentScanHandler();
 
@@ -31,10 +31,7 @@ public partial class WebAgentReadinessTests
         Assert.NotEmpty(handler.UserAgents);
         Assert.Equal(2, handler.RequestUris.Count(uri => uri.AbsolutePath == "/" && string.IsNullOrEmpty(uri.Query)));
         Assert.All(handler.UserAgents, userAgent =>
-            Assert.Equal(
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                userAgent));
+            Assert.Equal(WebVerificationIdentity.UserAgent, userAgent));
     }
 
     private sealed class UserAgentScanHandler : HttpMessageHandler
