@@ -344,12 +344,10 @@ public static partial class WebAgentReadiness
                 TimeSpan.FromMilliseconds(Math.Max(0, options.RequestIntervalMs))))
             : new HttpClient(transport, disposeHandler: false);
         http.Timeout = TimeSpan.FromMilliseconds(options.TimeoutMs <= 0 ? 15000 : options.TimeoutMs);
-        // Treat the remote scan as a normal web-client availability check. Crawler-style
-        // identities can be challenged by edge bot protection before the discovery
-        // documents themselves are evaluated.
-        http.DefaultRequestHeaders.UserAgent.ParseAdd(
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+        // Use the same truthful verifier identity as the immediately preceding cache
+        // checks. Pretending HttpClient has a browser TLS/JavaScript fingerprint can
+        // trigger managed bot challenges before discovery documents are evaluated.
+        http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", WebVerificationIdentity.UserAgent);
 
         var rootText = await TryGetTextAsync(http, baseUrl, null, cancellationToken).ConfigureAwait(false);
         var root = new HttpResponseResult(rootText.Success, rootText.Message, rootText.Response);
