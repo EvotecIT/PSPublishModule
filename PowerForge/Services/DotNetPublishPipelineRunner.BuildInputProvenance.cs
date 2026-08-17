@@ -530,12 +530,14 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
         {
             if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
-                property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase))
+                property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
+                property.Key.Equals("BuildProjectReferences", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
             arguments.Add("-p:" + property.Key + "=" + property.Value);
         }
+        arguments.Add("-p:BuildProjectReferences=false");
 
         try
         {
@@ -659,15 +661,11 @@ public sealed partial class DotNetPublishPipelineRunner
                                 inputs.Add(fullPath);
                                 rawReferences.Add(fullPath);
                             }
-                            else if ((itemName.Equals("ReferencePath", StringComparison.Ordinal) ||
-                                      itemName.Equals("ReferenceCopyLocalPaths", StringComparison.Ordinal)) &&
-                                     string.Equals(
-                                         ReadItemText(item, "ReferenceSourceTarget"),
-                                         "ProjectReference",
-                                         StringComparison.OrdinalIgnoreCase))
+                            else if (IsGeneratedProjectReferenceOutput(itemName, fullPath, item))
                             {
                                 // The referenced project's evaluated sources are queued below; its compiled
-                                // output is generated state and cannot become a release source input.
+                                // output (including analyzer/source-generator outputs) is generated state and
+                                // cannot become a release source input.
                                 continue;
                             }
                             else if (!itemName.Equals("None", StringComparison.Ordinal) || IsOutputRelevantNoneItem(item))
@@ -858,12 +856,14 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
         {
             if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
-                property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase))
+                property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
+                property.Key.Equals("BuildProjectReferences", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
             arguments.Add("-p:" + property.Key + "=" + property.Value);
         }
+        arguments.Add("-p:BuildProjectReferences=false");
 
         try
         {
@@ -909,6 +909,30 @@ public sealed partial class DotNetPublishPipelineRunner
         => item.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+
+    private static bool IsGeneratedProjectReferenceOutput(
+        string itemName,
+        string fullPath,
+        JsonElement item)
+    {
+        bool resolvedFromProjectReference = string.Equals(
+            ReadItemText(item, "ReferenceSourceTarget"),
+            "ProjectReference",
+            StringComparison.OrdinalIgnoreCase);
+        if (itemName.Equals("ReferencePath", StringComparison.Ordinal) ||
+            itemName.Equals("ReferenceCopyLocalPaths", StringComparison.Ordinal))
+        {
+            return resolvedFromProjectReference;
+        }
+
+        // An analyzer ProjectReference resolves to its compiled DLL even when project builds are
+        // disabled. MSBuild stamps that direct target output with its source project but does not
+        // guarantee ReferenceSourceTarget metadata. Other output item types can intentionally return
+        // tracked source inputs and must remain in provenance.
+        return itemName.Equals("Analyzer", StringComparison.Ordinal) &&
+               Path.GetExtension(fullPath).Equals(".dll", StringComparison.OrdinalIgnoreCase) &&
+               !string.IsNullOrWhiteSpace(ReadItemText(item, "MSBuildSourceProjectFile"));
+    }
 
     private static void AddSemicolonSeparatedPathValues(
         JsonElement properties,
