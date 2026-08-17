@@ -1391,6 +1391,147 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void ReadSourceProvenance_DoesNotBuildProjectReferenceOutputsDuringEvaluation()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "Library")).FullName;
+            string generatorDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "Generator")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string libraryProject = Path.Combine(libraryDirectory, "Library.csproj");
+            string generatorProject = Path.Combine(generatorDirectory, "Generator.csproj");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj" />
+                    <ProjectReference Include="../Generator/Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(libraryProject, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(generatorProject, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>netstandard2.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { private static void Main() { } }");
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.cs"), "public static class Library { }");
+            File.WriteAllText(Path.Combine(generatorDirectory, "Generator.cs"), "public static class Generator { }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add src/*/packages.lock.json");
+            RunGit(root, "commit -m \"lock approved dependencies\"");
+            string libraryOutput = Path.Combine(libraryDirectory, "bin", "Release", "net8.0", "Library.dll");
+            string generatorOutput = Path.Combine(generatorDirectory, "bin", "Release", "netstandard2.0", "Generator.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(libraryOutput)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(generatorOutput)!);
+            File.WriteAllText(libraryOutput, "stale generated library");
+            File.WriteAllText(generatorOutput, "stale generated analyzer");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                Targets =
+                [
+                    new DotNetPublishTargetPlan
+                    {
+                        Name = "App",
+                        ProjectPath = appProject,
+                        Combinations =
+                        [
+                            new DotNetPublishTargetCombination
+                            {
+                                Framework = "net8.0",
+                                Style = DotNetPublishStyle.FrameworkDependent
+                            }
+                        ]
+                    }
+                ]
+            };
+            plan.MsBuildProperties["BuildProjectReferences"] = "true";
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [appProject],
+                    buildConfiguration: "Release",
+                    buildPlan: plan);
+
+            Assert.False(provenance.Dirty);
+            Assert.Empty(provenance.DirtyPaths);
+            Assert.Equal("stale generated library", File.ReadAllText(libraryOutput));
+            Assert.Equal("stale generated analyzer", File.ReadAllText(generatorOutput));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_TracksSourceItemWithProjectReferenceMetadata()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string inputDirectory = Directory.CreateDirectory(Path.Combine(root, "inputs")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string releaseInput = Path.Combine(inputDirectory, "release-input.json");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <AdditionalFiles Include="../../inputs/release-input.json">
+                      <ReferenceSourceTarget>ProjectReference</ReferenceSourceTarget>
+                      <MSBuildSourceProjectFile>../Input/Input.csproj</MSBuildSourceProjectFile>
+                    </AdditionalFiles>
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { private static void Main() { } }");
+            File.WriteAllText(releaseInput, "{\"approved\":true}");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            File.WriteAllText(releaseInput, "{\"approved\":false}");
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [appProject],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+            Assert.Contains(
+                provenance.DirtyPaths,
+                path => path.Replace('\\', '/').EndsWith("inputs/release-input.json", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void ReadSourceProvenance_RejectsDirtyEvaluatedAnalyzerOutsideProjectDirectory()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
