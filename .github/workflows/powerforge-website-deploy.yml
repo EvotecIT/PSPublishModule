@@ -30,6 +30,11 @@ on:
         required: false
         type: string
         default: '["ubuntu-latest"]'
+      cloudflare_runner_labels_json:
+        description: JSON array of runner labels for the protected Cloudflare site-policy job.
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
       timeout_minutes:
         description: Maximum deployment or post-deployment job duration. GitHub Pages retries once within this budget because deploy-pages limits each attempt to 10 minutes.
         required: false
@@ -303,7 +308,7 @@ jobs:
   cloudflare-site-policy:
     if: ${{ inputs.deployment_target == 'github-pages' && inputs.manage_cloudflare_site_policy }}
     needs: [deploy, build, guardrails]
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJson(inputs.cloudflare_runner_labels_json) }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     environment:
       name: github-pages
