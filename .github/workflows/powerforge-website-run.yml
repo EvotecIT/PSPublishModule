@@ -193,7 +193,6 @@ jobs:
       DOTNET_BUNDLE_EXTRACT_BASE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/dotnet-bundle
       BUN_INSTALL_CACHE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/bun-install-cache
       NPM_CONFIG_CACHE: ${{ github.workspace }}/.cache/powerforge-runner/npm-cache
-      POWERFORGE_DEPLOYMENT_MANIFEST: ${{ runner.temp }}/powerforge-deployment-manifest/manifest.json
       POWERFORGE_DEPLOYMENT_BASE_URL: ${{ inputs.deployment_base_url }}
     steps:
       - name: Validate credential mode
@@ -342,6 +341,7 @@ jobs:
           POWERFORGE_REPOSITORY_TOKEN: ${{ inputs.credential_mode != 'none' && secrets.repository_read_token || '' }}
           CLOUDFLARE_API_TOKEN: ${{ inputs.credential_mode != 'none' && secrets.cloudflare_api_token || '' }}
           CLOUDFLARE_ZONE_ID: ${{ inputs.credential_mode != 'none' && secrets.cloudflare_zone_id || '' }}
+          POWERFORGE_DEPLOYMENT_MANIFEST: ${{ runner.temp }}/powerforge-deployment-manifest/manifest.json
           POWERFORGE_RUNNER_RESULT_PATH: ${{ runner.temp }}/powerforge-website-runner-result.json
         run: |
           $runnerRestoreConfig = Join-Path $env:GITHUB_WORKSPACE '.powerforge-runner/.github/nuget.public.config'

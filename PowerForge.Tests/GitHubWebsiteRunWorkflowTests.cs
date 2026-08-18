@@ -293,7 +293,14 @@ public sealed class GitHubWebsiteRunWorkflowTests
         Assert.Contains("source_ref: ${{ needs.build.outputs.source_sha }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("deployment_manifest_artifact_name: ${{ needs.build.outputs.deployment_manifest_artifact_name }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("deployment_base_url: ${{ inputs.deployment_target == 'linux' && inputs.deployment_url || '' }}", deployWorkflow, StringComparison.Ordinal);
-        Assert.Contains("POWERFORGE_DEPLOYMENT_MANIFEST: ${{ runner.temp }}/powerforge-deployment-manifest/manifest.json", runWorkflow, StringComparison.Ordinal);
+        var manifestEnvironmentLines = runWorkflow
+            .Split('\n')
+            .Where(static line => line.Contains("POWERFORGE_DEPLOYMENT_MANIFEST:", StringComparison.Ordinal))
+            .ToArray();
+        Assert.Equal(2, manifestEnvironmentLines.Length);
+        Assert.All(manifestEnvironmentLines, static line =>
+            Assert.StartsWith("          POWERFORGE_DEPLOYMENT_MANIFEST: ${{ runner.temp }}/powerforge-deployment-manifest/manifest.json", line, StringComparison.Ordinal));
+        Assert.DoesNotContain("\n      POWERFORGE_DEPLOYMENT_MANIFEST:", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_DEPLOYMENT_BASE_URL: ${{ inputs.deployment_base_url }}", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("name: ${{ inputs.deployment_manifest_artifact_name }}", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("--artifact $env:POWERFORGE_SITE_ARTIFACT --out $env:POWERFORGE_DEPLOYMENT_MANIFEST", runWorkflow, StringComparison.Ordinal);

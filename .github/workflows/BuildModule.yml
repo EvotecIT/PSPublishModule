@@ -67,6 +67,60 @@ on:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
+  WorkflowLint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate website workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          readonly actionlint_version='1.7.12'
+          readonly actionlint_archive="actionlint_${actionlint_version}_linux_amd64.tar.gz"
+          readonly actionlint_sha256='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
+          readonly actionlint_url="https://github.com/rhysd/actionlint/releases/download/v${actionlint_version}/${actionlint_archive}"
+          readonly lint_root="${RUNNER_TEMP}/powerforge-actionlint"
+
+          rm --recursive --force "$lint_root"
+          mkdir --parents "$lint_root/.github/workflows"
+          curl --fail --location --silent --show-error "$actionlint_url" --output "$lint_root/$actionlint_archive"
+          printf '%s  %s\n' "$actionlint_sha256" "$lint_root/$actionlint_archive" | sha256sum --check --strict
+          tar --extract --gzip --file "$lint_root/$actionlint_archive" --directory "$lint_root" actionlint
+
+          readonly -a website_workflows=(
+            '.github/workflows/powerforge-website-ci.yml'
+            '.github/workflows/powerforge-website-deploy.yml'
+            '.github/workflows/powerforge-website-maintenance.yml'
+            '.github/workflows/powerforge-website-run.yml'
+          )
+
+          # GitHub added job.workflow_* identity fields after actionlint's current schema.
+          # Lint copies with only those five documented fields normalized to another string field.
+          readonly workflow_identity_expression='\$\{\{[[:space:]]*job\.workflow_(repository|sha|ref|file_path)[[:space:]]*\}\}'
+          readonly replacement_expression='$'"{{ job.status }}"
+          readonly expected_workflow_identity_count=5
+          workflow_identity_count="$({ grep --no-filename --only-matching --extended-regexp "$workflow_identity_expression" "${website_workflows[@]}" || true; } | wc --lines | tr --delete '[:space:]')"
+          if [[ "$workflow_identity_count" != "$expected_workflow_identity_count" ]]; then
+            printf 'Expected %s documented job.workflow_* expressions, found %s.\n' "$expected_workflow_identity_count" "$workflow_identity_count" >&2
+            exit 1
+          fi
+
+          lint_workflows=()
+          for workflow in "${website_workflows[@]}"; do
+            lint_workflow="$lint_root/$workflow"
+            cp "$workflow" "$lint_workflow"
+            sed --regexp-extended --in-place "s#$workflow_identity_expression#$replacement_expression#g" "$lint_workflow"
+            lint_workflows+=("$lint_workflow")
+          done
+
+          "$lint_root/actionlint" -oneline "${lint_workflows[@]}"
+
   DependencyAudit:
     # Prefer private/self-hosted runners for private repos to reduce hosted spend.
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","linux"]' || '["ubuntu-latest"]') }}
