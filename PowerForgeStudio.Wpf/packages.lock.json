@@ -10,12 +10,12 @@
       },
       "OfficeIMO.MarkdownRenderer.Wpf": {
         "type": "Direct",
-        "requested": "[3.1.0, )",
-        "resolved": "3.1.0",
-        "contentHash": "Of6ppLCXADqaRdVDsMC3B/2PybSMtCOI1DzZ1dpnvsSGyrPVcHSH+iaTnAl9y8dWFmjNxcZmfzYNFareCI2Taw==",
+        "requested": "[3.2.0, )",
+        "resolved": "3.2.0",
+        "contentHash": "N0CUhTDjrv84JPi/F2WIoo0vAPcx5QGUZCUYUKQje1TC5ErSWXcGFKxzoYeFVJ1fWrUoSkOV+F+39oisjUEO3g==",
         "dependencies": {
           "Microsoft.Web.WebView2": "1.0.3912.50",
-          "OfficeIMO.MarkdownRenderer": "3.1.0"
+          "OfficeIMO.MarkdownRenderer": "3.2.0"
         }
       },
       "AngleSharp": {
@@ -92,62 +92,43 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.1.0",
-        "contentHash": "emx6dngAz5tgLHkJZTgG5LjHBavuOKTNYjORw1Egep8C9VvhfrCA3THBcb9yAg1YyF0KABBEtOT736ecQCXSBQ=="
-      },
-      "OfficeIMO.Email": {
-        "type": "Transitive",
-        "resolved": "3.1.0",
-        "contentHash": "lAocObJkKR0mjaMS5vUbXdnypYGks5x7OksV7UgMHqWCLti1EAalTXPMTSbT0FKkIAjqyYP+hNumvZpo78EIjw==",
-        "dependencies": {
-          "OfficeIMO.Core": "3.1.0",
-          "OfficeIMO.Rtf": "3.1.0"
-        }
+        "resolved": "3.2.0",
+        "contentHash": "AVI8bOcKFwltj4YpfspJa5/BKyferdeLpGqMxh3GM4BHrG/mlX5cVapeF9MpCDrIoTTzJQC8KQLm7eye0YXnkg=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
-        "resolved": "3.1.0",
-        "contentHash": "OANXLODRAKrj9x0aYcYOcSelQTPigRJ0R+pOdZrihkv20GXq5CD9WB4Ehfx/moMv/j181TvKZ/Ddz2igG5005A==",
+        "resolved": "3.2.0",
+        "contentHash": "LlHGb2cJJ/1AIAPAGHNFkMcZgeVw6DG8ILOdwHugnLib9gGuBQ3VTUi9ylVJ3cjyNkBjXQBn4M2qC5lNYdZrGg==",
         "dependencies": {
           "AngleSharp": "1.5.2",
           "AngleSharp.Css": "1.0.0-beta.216",
-          "OfficeIMO.Core": "3.1.0",
-          "OfficeIMO.Email": "3.1.0",
-          "OfficeIMO.Rtf": "3.1.0"
+          "OfficeIMO.Core": "3.2.0"
         }
       },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
-        "resolved": "3.1.0",
-        "contentHash": "XhFoqTq1aSmSzYJBq8sdLxi5mnXqm+Cgbwwc0moLHrjeymPb7E4ujfTF8TB69EMhhwKZQTTm8mn124zPC4hs1A==",
+        "resolved": "3.2.0",
+        "contentHash": "Ehtfk/5of+19tK9HZhXsOMac6Zi+FW8hh260PQEo3bJyb/5vIW83/fqnrNjCg8sKo3oIyNKWQ/ROC6Su9oLYXA==",
         "dependencies": {
-          "OfficeIMO.Core": "3.1.0"
+          "OfficeIMO.Core": "3.2.0"
         }
       },
       "OfficeIMO.Markdown.Html": {
         "type": "Transitive",
-        "resolved": "3.1.0",
-        "contentHash": "FUF/7xaKPzNDkH/7TRyl15xOvOVnUzA4WxUo8TAGpgI03ABwj76IQVA7HDZWf0MNf1XoKOlevXWVjCx5mswdSA==",
+        "resolved": "3.2.0",
+        "contentHash": "3eqYPKo2+bStLGZk7vFpeU5gDM7CE4ceuBjXv6CrMfsa6Up9UeK5wJLAeuT/fj4IS8VXbPv0aUTiFYbeXsSK4A==",
         "dependencies": {
-          "OfficeIMO.Html": "3.1.0",
-          "OfficeIMO.Markdown": "3.1.0"
+          "OfficeIMO.Html": "3.2.0",
+          "OfficeIMO.Markdown": "3.2.0"
         }
       },
       "OfficeIMO.MarkdownRenderer": {
         "type": "Transitive",
-        "resolved": "3.1.0",
-        "contentHash": "Q5PZZE9CdiNp6cPeECOVArot2qH9gsBg44yrWEa3dfzwtB1ynmZdz+5NRlFfzqZOipBqXbsag+NXmjEEMNlVjQ==",
+        "resolved": "3.2.0",
+        "contentHash": "l0W0Oh9St4I6piearsym+6o7cdGZY/2xf9TT3maVoCbNg31GTHvgIDetX+H6e6TZOzSELRUtiGk3xJYYbdi0sA==",
         "dependencies": {
-          "OfficeIMO.Markdown": "3.1.0",
-          "OfficeIMO.Markdown.Html": "3.1.0"
-        }
-      },
-      "OfficeIMO.Rtf": {
-        "type": "Transitive",
-        "resolved": "3.1.0",
-        "contentHash": "EHnOkfxzFCgL0M/hCnpCZIFm9oIexRO56WBYwqErXTl6n7q6tp5RKaV8UTZko5yIyD0xEiqP9dy+ILJLCJsE6g==",
-        "dependencies": {
-          "OfficeIMO.Core": "3.1.0"
+          "OfficeIMO.Markdown": "3.2.0",
+          "OfficeIMO.Markdown.Html": "3.2.0"
         }
       },
       "SQLite": {
@@ -225,7 +206,7 @@
           "DBAClientX.Core": "[1.0.0, )",
           "DBAClientX.SQLite": "[0.14.0, )",
           "Microsoft.Data.Sqlite": "[10.0.10, )",
-          "PowerForge": "[3.0.111, )",
+          "PowerForge": "[3.0.119, )",
           "PowerForgeStudio.Domain": "[1.0.0, )"
         }
       }

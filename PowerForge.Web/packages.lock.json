@@ -44,11 +44,11 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[3.0.3, )",
-        "resolved": "3.0.3",
-        "contentHash": "4VAWWPaUFiuzyVx2ZQ2b6/h97ZN5j8nltCmUtv1OWIdmGUfazZRQd/CEYM2e468zkOswGAZDHIU+QV31rQ2A0A==",
+        "requested": "[3.2.0, )",
+        "resolved": "3.2.0",
+        "contentHash": "Ehtfk/5of+19tK9HZhXsOMac6Zi+FW8hh260PQEo3bJyb/5vIW83/fqnrNjCg8sKo3oIyNKWQ/ROC6Su9oLYXA==",
         "dependencies": {
-          "OfficeIMO.Drawing": "3.0.3"
+          "OfficeIMO.Core": "3.2.0"
         }
       },
       "Scriban": {
@@ -205,10 +205,15 @@
         "resolved": "1.21.17",
         "contentHash": "K2ywYpoPEvU3+Ooq6wxz+FJOkmbDeoE41q/sJZWv9tI7qbTmH2A5R0E4hWzruvl/9pnUhqwbu1mxT06C45D0ZQ=="
       },
+      "OfficeIMO.Core": {
+        "type": "Transitive",
+        "resolved": "3.2.0",
+        "contentHash": "AVI8bOcKFwltj4YpfspJa5/BKyferdeLpGqMxh3GM4BHrG/mlX5cVapeF9MpCDrIoTTzJQC8KQLm7eye0YXnkg=="
+      },
       "OfficeIMO.Drawing": {
         "type": "Transitive",
-        "resolved": "3.0.3",
-        "contentHash": "xpFbtcKgYZ27uWjQD8GAxWERdvOnpEG7VfOY5qk7TTk4AeyIIsqdqIt/PPlE+Ht4STpdSUvaH37PuyyuNpHgIg=="
+        "resolved": "3.0.2",
+        "contentHash": "QRk5Gqc7ID9knhroFpmzcY/qacHcJJLlErvW2ZDll7mIoSuY8z8NRHeY/JicSPjQDuM1Dgu7tLRMp+lT6gZR5Q=="
       },
       "OfficeIMO.Email": {
         "type": "Transitive",
@@ -364,11 +369,11 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[3.0.3, )",
-        "resolved": "3.0.3",
-        "contentHash": "4VAWWPaUFiuzyVx2ZQ2b6/h97ZN5j8nltCmUtv1OWIdmGUfazZRQd/CEYM2e468zkOswGAZDHIU+QV31rQ2A0A==",
+        "requested": "[3.2.0, )",
+        "resolved": "3.2.0",
+        "contentHash": "Ehtfk/5of+19tK9HZhXsOMac6Zi+FW8hh260PQEo3bJyb/5vIW83/fqnrNjCg8sKo3oIyNKWQ/ROC6Su9oLYXA==",
         "dependencies": {
-          "OfficeIMO.Drawing": "3.0.3"
+          "OfficeIMO.Core": "3.2.0"
         }
       },
       "Scriban": {
@@ -532,10 +537,15 @@
         "resolved": "1.21.17",
         "contentHash": "K2ywYpoPEvU3+Ooq6wxz+FJOkmbDeoE41q/sJZWv9tI7qbTmH2A5R0E4hWzruvl/9pnUhqwbu1mxT06C45D0ZQ=="
       },
+      "OfficeIMO.Core": {
+        "type": "Transitive",
+        "resolved": "3.2.0",
+        "contentHash": "AVI8bOcKFwltj4YpfspJa5/BKyferdeLpGqMxh3GM4BHrG/mlX5cVapeF9MpCDrIoTTzJQC8KQLm7eye0YXnkg=="
+      },
       "OfficeIMO.Drawing": {
         "type": "Transitive",
-        "resolved": "3.0.3",
-        "contentHash": "xpFbtcKgYZ27uWjQD8GAxWERdvOnpEG7VfOY5qk7TTk4AeyIIsqdqIt/PPlE+Ht4STpdSUvaH37PuyyuNpHgIg=="
+        "resolved": "3.0.2",
+        "contentHash": "QRk5Gqc7ID9knhroFpmzcY/qacHcJJLlErvW2ZDll7mIoSuY8z8NRHeY/JicSPjQDuM1Dgu7tLRMp+lT6gZR5Q=="
       },
       "OfficeIMO.Email": {
         "type": "Transitive",
