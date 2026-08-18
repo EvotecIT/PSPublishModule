@@ -105,6 +105,7 @@ public sealed class DeploymentArtifactVerifierTests
         var root = Path.Combine(Path.GetTempPath(), "pf-deployment-verify-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var previousManifest = Environment.GetEnvironmentVariable("POWERFORGE_DEPLOYMENT_MANIFEST");
+        var previousBaseUrl = Environment.GetEnvironmentVariable("POWERFORGE_DEPLOYMENT_BASE_URL");
         HttpListener? listener = null;
         CancellationTokenSource? cancellation = null;
         Task? server = null;
@@ -142,7 +143,7 @@ public sealed class DeploymentArtifactVerifierTests
                 {
                   "SchemaVersion": 1,
                   "HashAlgorithm": "sha256",
-                  "BaseUrl": "http://127.0.0.1:{{port}}/",
+                  "BaseUrl": "https://production.example/",
                   "CachePolicyFingerprint": "",
                   "Files": [
                     { "Path": "apps/demo/app.js", "Length": {{bytes.Length}}, "Sha256": "{{Sha256(bytes)}}" }
@@ -165,6 +166,7 @@ public sealed class DeploymentArtifactVerifierTests
                 }
                 """);
             Environment.SetEnvironmentVariable("POWERFORGE_DEPLOYMENT_MANIFEST", manifestPath);
+            Environment.SetEnvironmentVariable("POWERFORGE_DEPLOYMENT_BASE_URL", $"http://127.0.0.1:{port}/");
 
             var result = WebPipelineRunner.RunPipeline(Path.Combine(root, "pipeline.json"), logger: null);
 
@@ -175,6 +177,7 @@ public sealed class DeploymentArtifactVerifierTests
         finally
         {
             Environment.SetEnvironmentVariable("POWERFORGE_DEPLOYMENT_MANIFEST", previousManifest);
+            Environment.SetEnvironmentVariable("POWERFORGE_DEPLOYMENT_BASE_URL", previousBaseUrl);
             cancellation?.Cancel();
             listener?.Stop();
             if (server is not null)
@@ -198,6 +201,7 @@ public sealed class DeploymentArtifactVerifierTests
               "steps": [
                 {
                   "task": "deployment-verify",
+                  "baseUrl": "https://staging.example/",
                   "pathPrefixes": ["/apps/converter/"],
                   "attempts": 12,
                   "delayMs": 30000,

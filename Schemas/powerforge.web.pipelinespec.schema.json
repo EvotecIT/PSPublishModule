@@ -485,6 +485,8 @@
         "skip-modes": { "type": "array", "items": { "type": "string" } },
         "manifestPath": { "type": "string", "description": "Private deployment manifest generated from the exact site artifact. Defaults to POWERFORGE_DEPLOYMENT_MANIFEST." },
         "manifest-path": { "type": "string", "description": "Alias for manifestPath." },
+        "baseUrl": { "type": "string", "format": "uri", "description": "Deployment origin override. Defaults to POWERFORGE_DEPLOYMENT_BASE_URL, then the manifest BaseUrl." },
+        "base-url": { "type": "string", "format": "uri", "description": "Alias for baseUrl." },
         "pathPrefixes": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }], "description": "Optional manifest path prefixes to verify. All manifest files are verified when omitted." },
         "path-prefixes": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }], "description": "Alias for pathPrefixes." },
         "pathPrefix": { "type": "string", "description": "Alias for pathPrefixes." },

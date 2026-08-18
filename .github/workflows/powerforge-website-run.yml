@@ -154,6 +154,11 @@ on:
         required: false
         type: string
         default: ""
+      deployment_base_url:
+        description: Actual deployment origin used by post-deployment integrity verification.
+        required: false
+        type: string
+        default: ""
     secrets:
       indexnow_key:
         required: false
@@ -189,6 +194,7 @@ jobs:
       BUN_INSTALL_CACHE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/bun-install-cache
       NPM_CONFIG_CACHE: ${{ github.workspace }}/.cache/powerforge-runner/npm-cache
       POWERFORGE_DEPLOYMENT_MANIFEST: ${{ runner.temp }}/powerforge-deployment-manifest/manifest.json
+      POWERFORGE_DEPLOYMENT_BASE_URL: ${{ inputs.deployment_base_url }}
     steps:
       - name: Validate credential mode
         shell: pwsh

@@ -7,6 +7,7 @@ namespace PowerForge.Web.Cli;
 
 internal sealed class DeploymentArtifactVerificationOptions
 {
+    public string? BaseUrl { get; set; }
     public string[] PathPrefixes { get; set; } = Array.Empty<string>();
     public int Attempts { get; set; } = 3;
     public int DelayMilliseconds { get; set; } = 5000;
@@ -80,6 +81,9 @@ internal static class DeploymentArtifactVerifier
         CloudflareDeploymentManifestStore.Validate(manifest);
         options ??= new DeploymentArtifactVerificationOptions();
         ValidateOptions(options);
+        var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)
+            ? manifest.BaseUrl
+            : CloudflareDeploymentManifestStore.NormalizeBaseUrl(options.BaseUrl);
 
         var prefixes = NormalizePrefixes(options.PathPrefixes);
         var selected = manifest.Files
@@ -132,7 +136,7 @@ internal static class DeploymentArtifactVerifier
                     foreach (var entry in selected)
                     {
                         var target = AddCacheIdentity(
-                            CloudflareDeploymentManifestStore.ResolveUrl(manifest.BaseUrl, entry.Path),
+                            CloudflareDeploymentManifestStore.ResolveUrl(baseUrl, entry.Path),
                             cacheIdentity);
                         var observation = VerifyEntry(httpClient, entry, target, options, delay);
                         observations.Add(observation);
@@ -149,7 +153,7 @@ internal static class DeploymentArtifactVerifier
                     {
                         Success = true,
                         Message = $"Verified {selected.Length} deployed file(s) and {selectedBytes} expected byte(s) against the build manifest on attempt {attemptNumber}.",
-                        BaseUrl = manifest.BaseUrl,
+                        BaseUrl = baseUrl,
                         PathPrefixes = prefixes,
                         SelectedFileCount = selected.Length,
                         SelectedBytes = selectedBytes,
@@ -182,7 +186,7 @@ internal static class DeploymentArtifactVerifier
         {
             Success = false,
             Message = $"Deployment verification failed after {attempts.Count} complete graph attempt(s): {lastError}",
-            BaseUrl = manifest.BaseUrl,
+            BaseUrl = baseUrl,
             PathPrefixes = prefixes,
             SelectedFileCount = selected.Length,
             SelectedBytes = selectedBytes,

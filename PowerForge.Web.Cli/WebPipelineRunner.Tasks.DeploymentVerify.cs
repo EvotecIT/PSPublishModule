@@ -17,6 +17,9 @@ internal static partial class WebPipelineRunner
         var manifest = CloudflareDeploymentManifestStore.LoadRequired(manifestPath);
         var options = new DeploymentArtifactVerificationOptions
         {
+            BaseUrl = GetString(step, "baseUrl") ??
+                      GetString(step, "base-url") ??
+                      Environment.GetEnvironmentVariable("POWERFORGE_DEPLOYMENT_BASE_URL"),
             PathPrefixes = ReadStringList(step, "pathPrefixes", "path-prefixes", "pathPrefix", "path-prefix").ToArray(),
             Attempts = GetInt(step, "attempts") ?? 3,
             DelayMilliseconds = GetInt(step, "delayMs") ?? GetInt(step, "delay-ms") ?? 5000,
