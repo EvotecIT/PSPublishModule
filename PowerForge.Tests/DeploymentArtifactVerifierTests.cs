@@ -221,6 +221,57 @@ public sealed class DeploymentArtifactVerifierTests
         Assert.True(evaluation.IsValid, evaluation.ToString());
     }
 
+    [Fact]
+    public void RunPipeline_DeploymentVerify_RejectsConfiguredOriginThatConflictsWithWorkflowOrigin()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-deployment-origin-conflict-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var previousManifest = Environment.GetEnvironmentVariable("POWERFORGE_DEPLOYMENT_MANIFEST");
+        var previousBaseUrl = Environment.GetEnvironmentVariable("POWERFORGE_DEPLOYMENT_BASE_URL");
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes("deployed");
+            var manifestPath = Path.Combine(root, "manifest.json");
+            File.WriteAllText(manifestPath,
+                $$"""
+                {
+                  "SchemaVersion": 1,
+                  "HashAlgorithm": "sha256",
+                  "BaseUrl": "https://production.example/",
+                  "CachePolicyFingerprint": "",
+                  "Files": [
+                    { "Path": "app.js", "Length": {{bytes.Length}}, "Sha256": "{{Sha256(bytes)}}" }
+                  ]
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "pipeline.json"),
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "deployment-verify",
+                      "baseUrl": "https://wrong.example/",
+                      "attempts": 1
+                    }
+                  ]
+                }
+                """);
+            Environment.SetEnvironmentVariable("POWERFORGE_DEPLOYMENT_MANIFEST", manifestPath);
+            Environment.SetEnvironmentVariable("POWERFORGE_DEPLOYMENT_BASE_URL", "https://actual.example/");
+
+            var result = WebPipelineRunner.RunPipeline(Path.Combine(root, "pipeline.json"), logger: null);
+
+            Assert.False(result.Success);
+            Assert.Contains("conflicts with workflow deployment origin", result.Steps.Single().Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("POWERFORGE_DEPLOYMENT_MANIFEST", previousManifest);
+            Environment.SetEnvironmentVariable("POWERFORGE_DEPLOYMENT_BASE_URL", previousBaseUrl);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     private static DeploymentArtifactVerificationOptions Options(int attempts, string[]? prefixes = null) => new()
     {
         Attempts = attempts,

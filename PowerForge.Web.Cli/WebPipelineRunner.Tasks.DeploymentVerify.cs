@@ -15,11 +15,18 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException("deployment-verify: manifestPath is required when POWERFORGE_DEPLOYMENT_MANIFEST is not set.");
 
         var manifest = CloudflareDeploymentManifestStore.LoadRequired(manifestPath);
+        var configuredBaseUrl = GetString(step, "baseUrl") ?? GetString(step, "base-url");
+        var deployedBaseUrl = Environment.GetEnvironmentVariable("POWERFORGE_DEPLOYMENT_BASE_URL");
+        if (!string.IsNullOrWhiteSpace(configuredBaseUrl) && !string.IsNullOrWhiteSpace(deployedBaseUrl))
+        {
+            var normalizedConfigured = CloudflareDeploymentManifestStore.NormalizeBaseUrl(configuredBaseUrl);
+            var normalizedDeployed = CloudflareDeploymentManifestStore.NormalizeBaseUrl(deployedBaseUrl);
+            if (!normalizedConfigured.Equals(normalizedDeployed, StringComparison.Ordinal))
+                throw new InvalidOperationException($"deployment-verify: configured baseUrl '{normalizedConfigured}' conflicts with workflow deployment origin '{normalizedDeployed}'.");
+        }
         var options = new DeploymentArtifactVerificationOptions
         {
-            BaseUrl = GetString(step, "baseUrl") ??
-                      GetString(step, "base-url") ??
-                      Environment.GetEnvironmentVariable("POWERFORGE_DEPLOYMENT_BASE_URL"),
+            BaseUrl = !string.IsNullOrWhiteSpace(deployedBaseUrl) ? deployedBaseUrl : configuredBaseUrl,
             PathPrefixes = ReadStringList(step, "pathPrefixes", "path-prefixes", "pathPrefix", "path-prefix").ToArray(),
             Attempts = GetInt(step, "attempts") ?? 3,
             DelayMilliseconds = GetInt(step, "delayMs") ?? GetInt(step, "delay-ms") ?? 5000,
