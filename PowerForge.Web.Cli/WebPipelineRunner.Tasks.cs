@@ -113,6 +113,10 @@ internal static partial class WebPipelineRunner
             case "cloudflare":
                 ExecuteCloudflare(step, baseDir, stepResult);
                 break;
+            case "deployment-verify":
+            case "deployment-integrity":
+                ExecuteDeploymentVerify(step, baseDir, stepResult);
+                break;
             case "engine-lock":
             case "enginelock":
                 ExecuteEngineLock(step, baseDir, stepResult);

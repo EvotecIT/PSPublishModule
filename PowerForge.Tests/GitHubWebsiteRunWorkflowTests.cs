@@ -279,6 +279,24 @@ public sealed class GitHubWebsiteRunWorkflowTests
         Assert.Contains("Remove-Item -LiteralPath $cacheRoot -Recurse -Force", workflowYaml, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void WebsiteDeployWorkflow_ShouldCarryExactBuildManifestIntoPostDeploy()
+    {
+        var repoRoot = FindRepoRoot();
+        var runWorkflow = File.ReadAllText(Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-run.yml"));
+        var deployWorkflow = File.ReadAllText(Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-deploy.yml"));
+
+        Assert.NotNull(new YamlDotNet.Serialization.DeserializerBuilder().Build().Deserialize<object>(runWorkflow));
+        Assert.NotNull(new YamlDotNet.Serialization.DeserializerBuilder().Build().Deserialize<object>(deployWorkflow));
+        Assert.Contains("generate_deployment_manifest: ${{ inputs.post_deploy_pipeline_config != '' }}", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("needs: [build, deploy, cloudflare-site-policy, deploy-linux]", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("source_ref: ${{ needs.build.outputs.source_sha }}", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_manifest_artifact_name: ${{ needs.build.outputs.deployment_manifest_artifact_name }}", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_DEPLOYMENT_MANIFEST: ${{ runner.temp }}/powerforge-deployment-manifest/manifest.json", runWorkflow, StringComparison.Ordinal);
+        Assert.Contains("name: ${{ inputs.deployment_manifest_artifact_name }}", runWorkflow, StringComparison.Ordinal);
+        Assert.Contains("--artifact $env:POWERFORGE_SITE_ARTIFACT --out $env:POWERFORGE_DEPLOYMENT_MANIFEST", runWorkflow, StringComparison.Ordinal);
+    }
+
     private static string FindRepoRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

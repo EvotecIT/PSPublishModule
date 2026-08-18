@@ -262,6 +262,7 @@ jobs:
       site_artifact_path: ${{ inputs.site_output_path }}
       site_artifact_retention_days: ${{ inputs.deployment_artifact_retention_days }}
       generate_cloudflare_cache_manifest: ${{ inputs.deployment_target == 'github-pages' && inputs.manage_cloudflare_site_policy }}
+      generate_deployment_manifest: ${{ inputs.post_deploy_pipeline_config != '' }}
     secrets:
       indexnow_key: ${{ secrets.indexnow_key }}
       repository_read_token: ${{ secrets.repository_read_token }}
@@ -417,12 +418,12 @@ jobs:
 
   post-deploy:
     if: ${{ always() && inputs.post_deploy_pipeline_config != '' && ((inputs.deployment_target == 'github-pages' && needs.deploy.result == 'success' && (!inputs.manage_cloudflare_site_policy || needs.cloudflare-site-policy.result == 'success')) || (inputs.deployment_target == 'linux' && needs.deploy-linux.result == 'success')) }}
-    needs: [deploy, cloudflare-site-policy, deploy-linux]
+    needs: [build, deploy, cloudflare-site-policy, deploy-linux]
     uses: ./.github/workflows/powerforge-website-run.yml
     with:
       website_root: ${{ inputs.website_root }}
       pipeline_config: ${{ inputs.post_deploy_pipeline_config }}
-      source_ref: ${{ inputs.source_ref }}
+      source_ref: ${{ needs.build.outputs.source_sha }}
       engine_mode: ${{ inputs.engine_mode }}
       runner_labels_json: ${{ inputs.runner_labels_json }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
@@ -438,6 +439,7 @@ jobs:
       powerforge_web_tag: ${{ inputs.powerforge_web_tag }}
       pipeline_mode: ci
       use_playwright_cache: ${{ inputs.post_deploy_use_playwright_cache }}
+      deployment_manifest_artifact_name: ${{ needs.build.outputs.deployment_manifest_artifact_name }}
     secrets:
       indexnow_key: ${{ secrets.indexnow_key }}
       repository_read_token: ${{ secrets.repository_read_token }}

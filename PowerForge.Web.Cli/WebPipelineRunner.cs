@@ -46,7 +46,7 @@ internal static partial class WebPipelineRunner
         "templateRoot", "templateIndex", "templateType",
         "templateDocsIndex", "templateDocsType",
         "docsScript", "searchScript",
-        "items", "itemsPath", "items-path", "manifest", "data",
+        "items", "itemsPath", "items-path", "manifest", "manifestPath", "manifest-path", "data",
         "coverageReport", "coverage-report", "coverageReportPath", "coverage-report-path",
         "xrefMap", "xref-map", "xrefMapPath", "xref-map-path",
         "psExamplesPath", "ps-examples-path", "powerShellExamplesPath", "powershell-examples-path",
