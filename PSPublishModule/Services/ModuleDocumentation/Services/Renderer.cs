@@ -276,7 +276,7 @@ internal sealed class Renderer
     {
         switch (node)
         {
-            case TextRun t:
+            case MarkdownTextRun t:
                 return Markup.Escape(t.Text);
             case BoldInline b:
                 return $"[bold]{Markup.Escape(b.Text)}[/]";
