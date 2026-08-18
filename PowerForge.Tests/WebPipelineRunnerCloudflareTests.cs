@@ -219,7 +219,27 @@ public class WebPipelineRunnerCloudflareTests
             var port = GetFreePort();
             const string discoveryPath = "/redirect";
             const string appPath = "/apps/converter/";
-            var html = """<html><head><base href="./"></head><body><img srcset="data:image/gif;base64,R0lGODlhAQABAAAAACw= 1x, _framework/ignored,asset.js 1.5x, _framework/blazor.webassembly.abc123.js?v=release 2x"></body></html>""";
+            var html = """
+                       <html>
+                       <head>
+                         <base href="./">
+                         <script type="importmap">
+                         {
+                           "imports": {
+                             "./_framework/dotnet.native.js": "./_framework/dotnet.native.native123.js",
+                             "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.runtime123.js"
+                           },
+                           "scopes": {
+                             "./feature/": {
+                               "dependency": "./_framework/scoped.scoped123.js"
+                             }
+                           }
+                         }
+                         </script>
+                       </head>
+                       <body><img srcset="data:image/gif;base64,R0lGODlhAQABAAAAACw= 1x, _framework/ignored,asset.js 1.5x, _framework/blazor.webassembly.abc123.js?v=release 2x"></body>
+                       </html>
+                       """;
             (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(
                 port, "HIT", appPath, html, discoveryPath, appPath);
 
@@ -246,7 +266,10 @@ public class WebPipelineRunnerCloudflareTests
                       "discoverAssetsFrom": [ "{{discoveryPath}}" ],
                       "assetPathPatterns": [
                         "/apps/converter/_framework/ignored,asset.js",
-                        "/apps/converter/_framework/blazor.webassembly.*.js"
+                        "/apps/converter/_framework/blazor.webassembly.*.js",
+                        "/apps/converter/_framework/dotnet.native.*.js",
+                        "/apps/converter/_framework/dotnet.runtime.*.js",
+                        "/apps/converter/_framework/scoped.*.js"
                       ]
                     }
                   ]
@@ -262,6 +285,9 @@ public class WebPipelineRunnerCloudflareTests
             Assert.Contains("/sitemap.xml", requestCounter.Paths);
             Assert.Contains("/apps/converter/_framework/ignored,asset.js", requestCounter.Paths);
             Assert.Contains("/apps/converter/_framework/blazor.webassembly.abc123.js?v=release", requestCounter!.Paths);
+            Assert.Contains("/apps/converter/_framework/dotnet.native.native123.js", requestCounter.Paths);
+            Assert.Contains("/apps/converter/_framework/dotnet.runtime.runtime123.js", requestCounter.Paths);
+            Assert.Contains("/apps/converter/_framework/scoped.scoped123.js", requestCounter.Paths);
         }
         finally
         {
