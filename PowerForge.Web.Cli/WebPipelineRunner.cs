@@ -24,7 +24,7 @@ internal static partial class WebPipelineRunner
     {
         "config", "siteRoot", "site-root", "project", "solution", "path",
         "repos", "repositories",
-        "repoBaseUrl", "repo-base-url", "repositoryBaseUrl", "repository-base-url", "repoHost", "repo-host",
+        "repoBaseUrl", "repo-base-url", "repositoryBaseUrl", "repository-base-url", "baseUrl", "base-url", "repoHost", "repo-host",
         "lockPath", "lock-path", "lock", "lockMode", "lock-mode",
         "retry", "retries", "retryCount", "retry-count", "retryDelayMs", "retry-delay-ms", "retryDelay", "retry-delay",
         "contextPath", "context-path", "context", "stdoutPath", "stdout-path", "stdout", "stderrPath", "stderr-path", "stderr",
@@ -46,7 +46,7 @@ internal static partial class WebPipelineRunner
         "templateRoot", "templateIndex", "templateType",
         "templateDocsIndex", "templateDocsType",
         "docsScript", "searchScript",
-        "items", "itemsPath", "items-path", "manifest", "data",
+        "items", "itemsPath", "items-path", "manifest", "manifestPath", "manifest-path", "data",
         "coverageReport", "coverage-report", "coverageReportPath", "coverage-report-path",
         "xrefMap", "xref-map", "xrefMapPath", "xref-map-path",
         "psExamplesPath", "ps-examples-path", "powerShellExamplesPath", "powershell-examples-path",
