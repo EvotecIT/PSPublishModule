@@ -2,13 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Text.Json;
 using AngleSharp.Dom;
 using HtmlTinkerX;
 using PowerForge.Web;
 
 namespace PowerForge.Web.Cli;
 
-/// <summary>Discovers same-origin deployed assets from HTML so fingerprinted URLs can be cache-verified.</summary>
+/// <summary>Discovers same-origin deployed assets from HTML references and import maps so fingerprinted URLs can be cache-verified.</summary>
 internal static class CloudflareHtmlAssetResolver
 {
     internal static string[] Resolve(
@@ -79,6 +80,15 @@ internal static class CloudflareHtmlAssetResolver
                     foreach (var candidate in ParseSourceSet(sourceSet))
                         AddMatchingAsset(candidate);
                 }
+            }
+
+            foreach (var script in document.QuerySelectorAll("script[type]"))
+            {
+                if (!string.Equals(script.GetAttribute("type")?.Trim(), "importmap", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                foreach (var address in ParseImportMapAddresses(script.TextContent))
+                    AddMatchingAsset(address);
             }
         }
 
@@ -248,6 +258,48 @@ internal static class CloudflareHtmlAssetResolver
                     parentheses--;
                 else if (character == ',' && parentheses == 0)
                     break;
+            }
+        }
+    }
+
+    private static IEnumerable<string> ParseImportMapAddresses(string importMap)
+    {
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(importMap);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException("cloudflare: deployed HTML contains an invalid import map.", ex);
+        }
+
+        using (document)
+        {
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                yield break;
+
+            if (document.RootElement.TryGetProperty("imports", out var imports) && imports.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var entry in imports.EnumerateObject())
+                {
+                    if (entry.Value.ValueKind == JsonValueKind.String && entry.Value.GetString() is { } address)
+                        yield return address;
+                }
+            }
+
+            if (document.RootElement.TryGetProperty("scopes", out var scopes) && scopes.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var scope in scopes.EnumerateObject())
+                {
+                    if (scope.Value.ValueKind != JsonValueKind.Object)
+                        continue;
+                    foreach (var entry in scope.Value.EnumerateObject())
+                    {
+                        if (entry.Value.ValueKind == JsonValueKind.String && entry.Value.GetString() is { } address)
+                            yield return address;
+                    }
+                }
             }
         }
     }
