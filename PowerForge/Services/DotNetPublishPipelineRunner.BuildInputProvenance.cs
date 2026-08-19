@@ -303,53 +303,71 @@ public sealed partial class DotNetPublishPipelineRunner
         out HashSet<string> sourceInputs)
     {
         var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var pending = new Queue<ProjectEvaluationRequest>(BuildProjectEvaluationRequests(
-            projectPaths,
-            configuration,
-            buildPlan));
+        ProjectEvaluationRequest[] roots = BuildProjectEvaluationRequests(
+                projectPaths,
+                configuration,
+                buildPlan)
+            .ToArray();
         var visited = new HashSet<string>(comparison);
         var directories = new HashSet<string>(comparison);
+        using var verifiedPackageArchives = new VerifiedPackageArchiveCache();
         buildInputs = new HashSet<string>(comparison);
         sourceInputs = new HashSet<string>(comparison);
 
-        while (pending.Count > 0)
+        foreach (ProjectEvaluationRequest root in roots)
         {
-            ProjectEvaluationRequest request = pending.Dequeue();
-            string visitKey = request.BuildVisitKey();
-            if (!visited.Add(visitKey) || !File.Exists(request.ProjectPath))
-                continue;
-
-            string projectDirectory = Path.GetDirectoryName(request.ProjectPath)!;
-            directories.Add(projectDirectory);
-            buildInputs.Add(request.ProjectPath);
-            sourceInputs.Add(request.ProjectPath);
-            if (!TryReadEvaluatedProjectInputs(request, out EvaluatedProjectInputs? evaluation) || evaluation is null)
+            if (!TryRefreshLockedRestoreOutputs(root))
             {
-                projectDirectories = directories.ToArray();
+                projectDirectories = roots
+                    .Select(request => Path.GetDirectoryName(request.ProjectPath)!)
+                    .Distinct(comparison)
+                    .ToArray();
                 return false;
             }
 
-            foreach (string input in evaluation.BuildInputs)
-                buildInputs.Add(input);
-            foreach (string input in evaluation.SourceInputs)
-                sourceInputs.Add(input);
-            if (request.TargetFramework is null)
+            var pending = new Queue<ProjectEvaluationRequest>(new[] { root });
+            while (pending.Count > 0)
             {
-                if (evaluation.TargetFrameworks.Length > 0)
+                ProjectEvaluationRequest request = pending.Dequeue();
+                string visitKey = request.BuildVisitKey();
+                if (!visited.Add(visitKey) || !File.Exists(request.ProjectPath))
+                    continue;
+
+                string projectDirectory = Path.GetDirectoryName(request.ProjectPath)!;
+                directories.Add(projectDirectory);
+                buildInputs.Add(request.ProjectPath);
+                sourceInputs.Add(request.ProjectPath);
+                if (!TryReadEvaluatedProjectInputs(
+                        request,
+                        verifiedPackageArchives,
+                        out EvaluatedProjectInputs? evaluation) || evaluation is null)
                 {
-                    foreach (string targetFramework in evaluation.TargetFrameworks)
-                        pending.Enqueue(request.ForProject(request.ProjectPath, targetFramework));
+                    projectDirectories = directories.ToArray();
+                    return false;
+                }
+
+                foreach (string input in evaluation.BuildInputs)
+                    buildInputs.Add(input);
+                foreach (string input in evaluation.SourceInputs)
+                    sourceInputs.Add(input);
+                if (request.TargetFramework is null)
+                {
+                    if (evaluation.TargetFrameworks.Length > 0)
+                    {
+                        foreach (string targetFramework in evaluation.TargetFrameworks)
+                            pending.Enqueue(request.ForProject(request.ProjectPath, targetFramework));
+                    }
+                    else
+                    {
+                        foreach (EvaluatedProjectReference projectReference in evaluation.ProjectReferences)
+                            pending.Enqueue(request.ForProject(projectReference.ProjectPath, targetFramework: null));
+                    }
                 }
                 else
                 {
                     foreach (EvaluatedProjectReference projectReference in evaluation.ProjectReferences)
-                        pending.Enqueue(request.ForProject(projectReference.ProjectPath, targetFramework: null));
+                        pending.Enqueue(request.ForProject(projectReference.ProjectPath, projectReference.TargetFramework));
                 }
-            }
-            else
-            {
-                foreach (EvaluatedProjectReference projectReference in evaluation.ProjectReferences)
-                    pending.Enqueue(request.ForProject(projectReference.ProjectPath, projectReference.TargetFramework));
             }
         }
 
@@ -453,11 +471,10 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool TryReadEvaluatedProjectInputs(
         ProjectEvaluationRequest request,
+        VerifiedPackageArchiveCache verifiedPackageArchives,
         out EvaluatedProjectInputs? evaluation)
     {
         evaluation = null;
-        if (!TryRefreshLockedRestoreOutputs(request))
-            return false;
         var arguments = new List<string>
         {
             "msbuild",
@@ -484,6 +501,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(request.TargetFramework))
         {
             arguments.Add("-target:ResolveReferences");
+            arguments.Add("-getItem:_MSBuildProjectReferenceExistent");
             arguments.Add("-p:TargetFramework=" + request.TargetFramework);
         }
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
@@ -549,8 +567,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (targetFrameworks.Count == 0)
                     AddSemicolonSeparatedValues(properties, "TargetFramework", targetFrameworks);
 
-                using VerifiedPackageInputCatalog? verifiedPackages =
-                    VerifiedPackageInputCatalog.TryCreate(request.ProjectPath, properties, packageRoots);
+                VerifiedPackageInputCatalog? verifiedPackages =
+                    VerifiedPackageInputCatalog.TryCreate(
+                        request.ProjectPath,
+                        properties,
+                        packageRoots,
+                        verifiedPackageArchives);
                 string[] trustedBuildInfrastructureRoots =
                     ReadTrustedBuildInfrastructureRoots(properties, Path.GetDirectoryName(request.ProjectPath)!);
                 var importPaths = new HashSet<string>(
@@ -652,7 +674,10 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             else if (rawReferences.Count > 0)
             {
-                if (!TryReadResolvedProjectReferences(request, out EvaluatedProjectReference[] resolvedReferences))
+                if (!root.TryGetProperty("Items", out JsonElement resolvedItems) ||
+                    !TryReadResolvedProjectReferences(
+                        resolvedItems,
+                        out EvaluatedProjectReference[] resolvedReferences))
                     return false;
                 foreach (EvaluatedProjectReference reference in resolvedReferences)
                 {
@@ -797,71 +822,28 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     private static bool TryReadResolvedProjectReferences(
-        ProjectEvaluationRequest request,
+        JsonElement items,
         out EvaluatedProjectReference[] references)
     {
         references = Array.Empty<EvaluatedProjectReference>();
-        var arguments = new List<string>
-        {
-            "msbuild",
-            request.ProjectPath,
-            "-nologo",
-            "-verbosity:quiet",
-            "-target:PrepareProjectReferences",
-            "-getItem:_MSBuildProjectReferenceExistent",
-            "-p:Configuration=" + request.Configuration,
-            "-p:TargetFramework=" + request.TargetFramework
-        };
-        foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
-        {
-            if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
-                property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
-                property.Key.Equals("BuildProjectReferences", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-            arguments.Add("-p:" + property.Key + "=" + property.Value);
-        }
-        arguments.Add("-p:BuildProjectReferences=false");
-
-        try
-        {
-            var process = RunBuildInputEvaluationProcess(
-                "dotnet",
-                Path.GetDirectoryName(request.ProjectPath)!,
-                arguments,
-                request.EnvironmentVariables,
-                TimeSpan.FromMinutes(2));
-            if (process.ExitCode != 0 || process.TimedOut)
-                return false;
-            int jsonStart = process.StdOut.IndexOf('{');
-            int jsonEnd = process.StdOut.LastIndexOf('}');
-            if (jsonStart < 0 || jsonEnd < jsonStart)
-                return false;
-            using JsonDocument document = JsonDocument.Parse(
-                process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
-            if (!document.RootElement.TryGetProperty("Items", out JsonElement items) ||
-                !items.TryGetProperty("_MSBuildProjectReferenceExistent", out JsonElement resolvedReferences) ||
-                resolvedReferences.ValueKind != JsonValueKind.Array)
-            {
-                return false;
-            }
-
-            references = resolvedReferences.EnumerateArray()
-                .Select(item => TryReadEvaluatedProjectReference(item, out EvaluatedProjectReference? reference)
-                    ? reference
-                    : null)
-                .Where(static reference => reference is not null)
-                .Cast<EvaluatedProjectReference>()
-                .ToArray();
-            // An empty resolved item list is a valid result for a conditional
-            // ProjectReference that does not participate in this target framework.
-            return true;
-        }
-        catch
+        if (!items.TryGetProperty(
+                "_MSBuildProjectReferenceExistent",
+                out JsonElement resolvedReferences) ||
+            resolvedReferences.ValueKind != JsonValueKind.Array)
         {
             return false;
         }
+
+        references = resolvedReferences.EnumerateArray()
+            .Select(item => TryReadEvaluatedProjectReference(item, out EvaluatedProjectReference? reference)
+                ? reference
+                : null)
+            .Where(static reference => reference is not null)
+            .Cast<EvaluatedProjectReference>()
+            .ToArray();
+        // An empty resolved item list is a valid result for a conditional
+        // ProjectReference that does not participate in this target framework.
+        return true;
     }
 
     private static string? ReadItemText(JsonElement item, string name)

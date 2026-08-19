@@ -311,22 +311,21 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string>? generatedPaths,
         SourceDirtyScope dirtyScope)
     {
-        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        string[] generatedExclusions = BuildGeneratedPathExclusions(projectRoot, gitRoot, generatedPaths);
-        string? ignoredOutput = ReadGitRawText(
-            gitRoot,
-            "ls-files --others --ignored --exclude-standard -z");
-        if (ignoredOutput is null)
-            return new[] { "Git ignored-input query failed" };
         if (!dirtyScope.BuildInputsResolved)
             return new[] { "MSBuild input evaluation failed" };
         string[] projectDirectories = dirtyScope.ProjectDirectories;
         HashSet<string> buildInputs = dirtyScope.BuildInputs;
         HashSet<string> sourceInputs = dirtyScope.SourceInputs;
+        var reparsePointCache = new Dictionary<string, bool>(
+            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         if (HasGeneratedOutputInputOverlap(projectRoot, generatedPaths, buildInputs))
             return new[] { "a generated output overlaps an evaluated build input" };
         string[] untrustedProjectDirectories = projectDirectories
-            .Where(directory => !IsBuildProjectDirectoryAdmitted(directory, projectRoot, gitRoot))
+            .Where(directory => !IsBuildProjectDirectoryAdmitted(
+                directory,
+                projectRoot,
+                gitRoot,
+                reparsePointCache))
             .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .ToArray();
         if (untrustedProjectDirectories.Length > 0)
@@ -334,40 +333,117 @@ public sealed partial class DotNetPublishPipelineRunner
             return untrustedProjectDirectories;
         }
         string[] untrustedSourceInputs = sourceInputs
-            .Where(path => !IsBuildSourceInputAdmitted(path, projectRoot, gitRoot))
+            .Where(path => !IsBuildSourceInputAdmitted(
+                path,
+                projectRoot,
+                gitRoot,
+                reparsePointCache))
             .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .ToArray();
         if (untrustedSourceInputs.Length > 0)
         {
             return untrustedSourceInputs;
         }
+        string[] gitRelativeBuildInputs = buildInputs
+            .Where(File.Exists)
+            .Select(path => ToGitRelativeExclusion(projectRoot, gitRoot, path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path!.Replace('\\', '/').TrimStart('/'))
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
+        string? ignoredOutput = ReadIgnoredGitPaths(gitRoot, gitRelativeBuildInputs);
+        if (ignoredOutput is null)
+            return new[] { "Git ignored-input query failed" };
         string[] ignoredPaths = ignoredOutput.Split(
                 new[] { '\0' },
                 StringSplitOptions.RemoveEmptyEntries)
             .Select(path => path.Replace('\\', '/').TrimStart('/'))
             .ToArray();
-        if (ignoredPaths.Length == 0)
-            return Array.Empty<string>();
-        var gitRelativeBuildInputs = new HashSet<string>(
-            buildInputs
-                .Select(path => ToGitRelativeExclusion(projectRoot, gitRoot, path))
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .Select(path => path!.Replace('\\', '/').TrimStart('/')),
-            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-        string[] ignoredCandidates = ignoredPaths
-            .Where(path => !IsGeneratedPath(path, generatedExclusions, comparison))
-            .ToArray();
-        return ignoredCandidates
-            .Where(gitRelativeBuildInputs.Contains)
+        return ignoredPaths
             .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .ToArray();
     }
 
+    private static string? ReadIgnoredGitPaths(string gitRoot, IReadOnlyCollection<string> paths)
+    {
+        if (paths.Count == 0)
+            return string.Empty;
+
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "git",
+                    Arguments = "check-ignore -z --stdin",
+                    WorkingDirectory = gitRoot,
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            if (!process.Start())
+                return null;
+
+            Task<string> output = process.StandardOutput.ReadToEndAsync();
+            Task<string> error = process.StandardError.ReadToEndAsync();
+            Task input = process.StandardInput.WriteAsync(string.Join("\0", paths) + '\0');
+            Task inputClosed = input.ContinueWith(
+                _ => process.StandardInput.Close(),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            if (!process.WaitForExit(5000))
+            {
+                try
+                {
+#if NET472
+                    process.Kill();
+#else
+                    process.Kill(entireProcessTree: true);
+#endif
+                }
+                catch
+                {
+                    // A failed or already-exited Git process still makes the query untrusted.
+                }
+                try
+                {
+                    inputClosed.Wait(1000);
+                }
+                catch
+                {
+                    // The process was terminated before it could consume the full request.
+                }
+                return null;
+            }
+
+            input.GetAwaiter().GetResult();
+            inputClosed.GetAwaiter().GetResult();
+            _ = error.GetAwaiter().GetResult();
+            string ignored = output.GetAwaiter().GetResult();
+            return process.ExitCode switch
+            {
+                0 => ignored,
+                1 => string.Empty,
+                _ => null
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static bool IsBuildProjectDirectoryAdmitted(
         string directory,
         string projectRoot,
-        string gitRoot)
+        string gitRoot,
+        Dictionary<string, bool> reparsePointCache)
     {
         string fullDirectory = Path.GetFullPath(directory)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -379,21 +455,32 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return false;
         }
-        return !HasReparsePointBelowRoot(fullDirectory, fullGitRoot);
+        return !HasReparsePointBelowRoot(fullDirectory, fullGitRoot, reparsePointCache);
     }
 
     private static bool IsBuildSourceInputAdmitted(
         string path,
         string projectRoot,
-        string gitRoot)
+        string gitRoot,
+        Dictionary<string, bool> reparsePointCache)
     {
         string fullPath = Path.GetFullPath(path);
         if (ToGitRelativeExclusion(projectRoot, gitRoot, fullPath) is null)
             return false;
-        return !HasReparsePointBelowRoot(fullPath, gitRoot);
+        return !HasReparsePointBelowRoot(fullPath, gitRoot, reparsePointCache);
     }
 
     internal static bool HasReparsePointBelowRoot(string path, string root)
+        => HasReparsePointBelowRoot(
+            path,
+            root,
+            new Dictionary<string, bool>(
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
+
+    private static bool HasReparsePointBelowRoot(
+        string path,
+        string root,
+        Dictionary<string, bool> cache)
     {
         string current = Path.GetFullPath(path);
         string boundary = Path.GetFullPath(root)
@@ -401,28 +488,49 @@ public sealed partial class DotNetPublishPipelineRunner
         var comparison = IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
+        var traversed = new List<string>();
 
         while (!string.Equals(
                    current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
                    boundary,
                    comparison))
         {
+            if (cache.TryGetValue(current, out bool cached))
+            {
+                foreach (string traversedPath in traversed)
+                    cache[traversedPath] = cached;
+                return cached;
+            }
+
+            traversed.Add(current);
             try
             {
                 if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                {
+                    foreach (string traversedPath in traversed)
+                        cache[traversedPath] = true;
                     return true;
+                }
             }
             catch
             {
+                foreach (string traversedPath in traversed)
+                    cache[traversedPath] = true;
                 return true;
             }
 
             string? parent = Path.GetDirectoryName(current);
             if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, comparison))
+            {
+                foreach (string traversedPath in traversed)
+                    cache[traversedPath] = true;
                 return true;
+            }
             current = parent;
         }
 
+        foreach (string traversedPath in traversed)
+            cache[traversedPath] = false;
         return false;
     }
 
@@ -765,38 +873,59 @@ public sealed partial class DotNetPublishPipelineRunner
         if (string.IsNullOrWhiteSpace(path))
             return null;
 
-        var project = Path.GetFullPath(projectRoot)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var fullPath = Path.GetFullPath(
             Path.IsPathRooted(path)
                 ? path
                 : Path.Combine(projectRoot, path));
         var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
-        var projectPrefix = project + Path.DirectorySeparatorChar;
-        if (fullPath.StartsWith(projectPrefix, comparison))
-        {
-            var gitProjectPrefix = ReadGitText(projectRoot, "rev-parse --show-prefix");
-            if (gitProjectPrefix is not null)
-            {
-                var relativeToProject = fullPath.Substring(projectPrefix.Length)
-                    .Replace('\\', '/')
-                    .Trim('/');
-                return (gitProjectPrefix.Trim('/', '\\') + "/" + relativeToProject)
-                    .Trim('/');
-            }
-        }
-
         var root = Path.GetFullPath(gitRoot)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (string.Equals(root, fullPath, comparison))
+        string? relativePath = GetPathBelowRoot(root, fullPath, comparison);
+        if (relativePath is not null)
+            return relativePath;
+
+#if NET472
+        return null;
+#else
+        string fullProjectRoot = Path.GetFullPath(projectRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string? projectRelativePath = GetPathBelowRoot(fullProjectRoot, fullPath, comparison);
+        if (projectRelativePath is null)
             return null;
 
-        var rootPrefix = root + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(rootPrefix, comparison))
+        try
+        {
+            FileSystemInfo? resolvedProjectRoot = new DirectoryInfo(fullProjectRoot)
+                .ResolveLinkTarget(returnFinalTarget: true);
+            if (resolvedProjectRoot is null)
+                return null;
+
+            string resolvedPath = Path.GetFullPath(Path.Combine(
+                resolvedProjectRoot.FullName,
+                projectRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            return GetPathBelowRoot(root, resolvedPath, comparison);
+        }
+        catch
+        {
+            return null;
+        }
+#endif
+    }
+
+    private static string? GetPathBelowRoot(
+        string root,
+        string path,
+        StringComparison comparison)
+    {
+        if (string.Equals(root, path, comparison))
+            return string.Empty;
+
+        string rootPrefix = root + Path.DirectorySeparatorChar;
+        if (!path.StartsWith(rootPrefix, comparison))
             return null;
 
-        return fullPath.Substring(rootPrefix.Length)
+        return path.Substring(rootPrefix.Length)
             .Replace('\\', '/')
             .Trim('/');
     }

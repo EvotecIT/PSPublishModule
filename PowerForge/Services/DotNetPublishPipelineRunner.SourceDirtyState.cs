@@ -35,7 +35,7 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (string directory in projectDirectories)
             AddProjectDirectoryScopePath(scope, projectRoot, gitRoot, directory);
         foreach (string path in buildInputs)
-            AddSourceDirtyScopePath(scope, projectRoot, gitRoot, path, directory: Directory.Exists(path));
+            AddSourceDirtyScopePath(scope, projectRoot, gitRoot, path, directory: false);
         return scope;
     }
 
