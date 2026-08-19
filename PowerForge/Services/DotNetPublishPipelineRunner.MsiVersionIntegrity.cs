@@ -152,23 +152,15 @@ public sealed partial class DotNetPublishPipelineRunner
         string[] bundleSourceInputs = EnumerateBundleSourceInputs(buildPlan);
         string[] commandHookSourceInputs = EnumerateCommandHookSourceInputs(buildPlan);
         string[] hookGeneratedOutputs = EnumerateCommandHookGeneratedOutputs(buildPlan);
-        var pathComparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        bool IsHookGeneratedInput(string path)
-        {
-            string fullPath = Path.GetFullPath(Path.IsPathRooted(path)
-                ? path
-                : Path.Combine(projectRoot, path));
-            return hookGeneratedOutputs.Any(output =>
-                string.Equals(fullPath, output, pathComparison) ||
-                fullPath.StartsWith(
-                    output.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
-                    Path.DirectorySeparatorChar,
-                    pathComparison));
-        }
+        string[] hookDeclaredOutputs = EnumerateCommandHookDeclaredOutputs(buildPlan);
         IEnumerable<string> allExplicitInputPaths = (explicitInputPaths ?? Array.Empty<string>())
             .Concat(bundleSourceInputs)
             .Concat(commandHookSourceInputs)
-            .Where(path => !IsHookGeneratedInput(path));
+            .Where(path => !IsAdmittedCommandHookGeneratedInput(
+                projectRoot,
+                path,
+                hookDeclaredOutputs,
+                hookGeneratedOutputs));
         IEnumerable<string> allGeneratedPaths = (generatedPaths ?? Array.Empty<string>())
             .Concat(hookGeneratedOutputs);
         SourceDirtyScope dirtyScope = BuildSourceDirtyScope(
