@@ -617,6 +617,9 @@ public sealed class DotNetPublishStep
     /// <summary>Optional command hook environment variables.</summary>
     public Dictionary<string, string> HookEnvironment { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Optional paths generated exclusively by this command hook.</summary>
+    public string[] HookGeneratedOutputs { get; set; } = Array.Empty<string>();
+
     /// <summary>Optional command hook timeout in seconds.</summary>
     public int HookTimeoutSeconds { get; set; } = DotNetPublishCommandHook.DefaultTimeoutSeconds;
 

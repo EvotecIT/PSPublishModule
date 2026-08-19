@@ -54,6 +54,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .Select(target => target.ProjectPath)
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .ToArray();
+        string[] hookGeneratedOutputs = EnumerateCommandHookGeneratedOutputs(plan);
         IEnumerable<string> generatedPaths = EnumerateGeneratedProvenancePaths(
                 plan,
                 Array.Empty<DotNetPublishArtefactResult>(),
@@ -63,10 +64,26 @@ public sealed partial class DotNetPublishPipelineRunner
                 ? Array.Empty<string>()
                 : new[] { outputDirectory! })
             .Concat(additionalGeneratedPaths ?? Array.Empty<string>());
+        generatedPaths = generatedPaths.Concat(hookGeneratedOutputs);
+        var pathComparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        bool IsHookGeneratedInput(string path)
+        {
+            string fullPath = Path.GetFullPath(Path.IsPathRooted(path)
+                ? path
+                : Path.Combine(plan.ProjectRoot, path));
+            return hookGeneratedOutputs.Any(output =>
+                string.Equals(fullPath, output, pathComparison) ||
+                fullPath.StartsWith(
+                    output.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                    Path.DirectorySeparatorChar,
+                    pathComparison));
+        }
         SourceProvenance provenance = ReadSourceProvenance(
             plan.ProjectRoot,
             generatedPaths,
-            (plan.ConfigurationInputPaths ?? Array.Empty<string>()).Concat(projectPaths),
+            (plan.ConfigurationInputPaths ?? Array.Empty<string>())
+                .Concat(projectPaths)
+                .Where(path => !IsHookGeneratedInput(path)),
             trustedExternalInputPaths: plan.GeneratedConfigurationInputPaths,
             buildProjectPaths: projectPaths,
             buildConfiguration: plan.Configuration,
@@ -80,10 +97,52 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         if (provenance.Dirty is not false)
         {
+            string details = string.Join("; ", provenance.DirtyReasons
+                .Concat(provenance.DirtyPaths.Select(path => "path: " + path)));
             throw new InvalidOperationException(
-                "Release source changed after planning; portable signing is blocked before build or signing.");
+                "Release source changed after planning; portable signing is blocked before build or signing." +
+                (string.IsNullOrWhiteSpace(details) ? string.Empty : " " + details));
         }
         return provenance;
+    }
+
+    internal static string[] EnumerateCommandHookGeneratedOutputs(DotNetPublishPlan? plan)
+    {
+        if (plan is null || string.IsNullOrWhiteSpace(plan.ProjectRoot))
+            return Array.Empty<string>();
+
+        var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var outputs = new HashSet<string>(comparison);
+        foreach (DotNetPublishStep step in (plan.Steps ?? Array.Empty<DotNetPublishStep>())
+                     .Where(step => step is not null && step.Kind == DotNetPublishStepKind.CommandHook))
+        {
+            var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["hook"] = step.HookId ?? string.Empty,
+                ["phase"] = step.HookPhase?.ToString() ?? string.Empty,
+                ["target"] = step.TargetName ?? string.Empty,
+                ["rid"] = step.Runtime ?? string.Empty,
+                ["framework"] = step.Framework ?? string.Empty,
+                ["style"] = step.Style?.ToString() ?? string.Empty,
+                ["bundle"] = step.BundleId ?? string.Empty,
+                ["configuration"] = plan.Configuration,
+                ["projectRoot"] = plan.ProjectRoot
+            };
+            foreach (string path in step.HookGeneratedOutputs ?? Array.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                    continue;
+                string output = ResolvePath(plan.ProjectRoot, ApplyTemplate(path, tokens));
+                EnsurePathWithinRoot(plan.ProjectRoot, output, $"Hook '{step.HookId}' generated output");
+                if (PathsEqual(plan.ProjectRoot, output))
+                {
+                    throw new InvalidOperationException(
+                        $"Hook '{step.HookId}' generated output cannot be the project root.");
+                }
+                outputs.Add(output);
+            }
+        }
+        return outputs.OrderBy(path => path, comparison).ToArray();
     }
 
     internal static string[] EnumerateBundleSourceInputs(DotNetPublishPlan? plan)

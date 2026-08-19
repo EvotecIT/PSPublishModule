@@ -151,9 +151,26 @@ public sealed partial class DotNetPublishPipelineRunner
             && !string.Equals(trackedStatus, finalTrackedStatus, StringComparison.Ordinal);
         string[] bundleSourceInputs = EnumerateBundleSourceInputs(buildPlan);
         string[] commandHookSourceInputs = EnumerateCommandHookSourceInputs(buildPlan);
+        string[] hookGeneratedOutputs = EnumerateCommandHookGeneratedOutputs(buildPlan);
+        var pathComparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        bool IsHookGeneratedInput(string path)
+        {
+            string fullPath = Path.GetFullPath(Path.IsPathRooted(path)
+                ? path
+                : Path.Combine(projectRoot, path));
+            return hookGeneratedOutputs.Any(output =>
+                string.Equals(fullPath, output, pathComparison) ||
+                fullPath.StartsWith(
+                    output.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                    Path.DirectorySeparatorChar,
+                    pathComparison));
+        }
         IEnumerable<string> allExplicitInputPaths = (explicitInputPaths ?? Array.Empty<string>())
             .Concat(bundleSourceInputs)
-            .Concat(commandHookSourceInputs);
+            .Concat(commandHookSourceInputs)
+            .Where(path => !IsHookGeneratedInput(path));
+        IEnumerable<string> allGeneratedPaths = (generatedPaths ?? Array.Empty<string>())
+            .Concat(hookGeneratedOutputs);
         SourceDirtyScope dirtyScope = BuildSourceDirtyScope(
             projectRoot,
             gitRoot!,
@@ -172,11 +189,11 @@ public sealed partial class DotNetPublishPipelineRunner
             projectRoot,
             gitRoot!,
             untrackedOutput,
-            generatedPaths,
+            allGeneratedPaths,
             dirtyScope);
         bool generatedOutputOverlapsInput = HasGeneratedOutputInputOverlap(
             projectRoot,
-            generatedPaths,
+            allGeneratedPaths,
             allExplicitInputPaths);
         bool untrustedExplicitInput = HasUntrackedOrIgnoredExplicitInputs(
             projectRoot,
@@ -186,7 +203,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string[] untrustedBuildInputs = FindUntrustedBuildInputs(
             projectRoot,
             gitRoot!,
-            generatedPaths,
+            allGeneratedPaths,
             dirtyScope);
         bool untrustedIgnoredBuildInput = untrustedBuildInputs.Length > 0;
         var dirtyReasons = new List<string>();

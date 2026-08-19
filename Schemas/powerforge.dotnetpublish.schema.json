@@ -1121,6 +1121,11 @@
           "type": ["object", "null"],
           "additionalProperties": { "type": "string" }
         },
+        "GeneratedOutputs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Project-relative paths produced exclusively by this hook. Each path must be absent before the hook and present after a successful invocation."
+        },
         "TimeoutSeconds": {
           "type": "integer",
           "minimum": 0,

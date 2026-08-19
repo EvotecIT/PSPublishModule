@@ -38,6 +38,8 @@ public sealed partial class DotNetPublishPipelineRunner
             if (string.IsNullOrWhiteSpace(entry.Key)) continue;
             environment[entry.Key.Trim()] = ApplyTemplate(entry.Value ?? string.Empty, tokens);
         }
+        string[] generatedOutputs = ResolveHookGeneratedOutputs(plan, step, tokens);
+        EnsureHookGeneratedOutputsAbsent(plan.ProjectRoot, step, generatedOutputs);
 
         _logger.Info($"Hook {step.HookPhase}: {step.HookId}");
         var result = RunHookProcess(
@@ -49,6 +51,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         if (result.ExitCode == 0)
         {
+            EnsureHookGeneratedOutputsPresent(plan.ProjectRoot, step, generatedOutputs);
             if (_logger.IsVerbose)
             {
                 if (!string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.TrimEnd());
@@ -80,6 +83,69 @@ public sealed partial class DotNetPublishPipelineRunner
             result.ExitCode,
             result.StdOut,
             result.StdErr);
+    }
+
+    private static string[] ResolveHookGeneratedOutputs(
+        DotNetPublishPlan plan,
+        DotNetPublishStep step,
+        IReadOnlyDictionary<string, string> tokens)
+    {
+        var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        return (step.HookGeneratedOutputs ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => ResolvePath(plan.ProjectRoot, ApplyTemplate(path, tokens)))
+            .Distinct(comparison)
+            .ToArray();
+    }
+
+    private static void EnsureHookGeneratedOutputsAbsent(
+        string projectRoot,
+        DotNetPublishStep step,
+        IEnumerable<string> generatedOutputs)
+    {
+        foreach (string output in generatedOutputs)
+        {
+            EnsureHookGeneratedOutputPath(projectRoot, step, output);
+            if (File.Exists(output) || Directory.Exists(output))
+            {
+                throw new InvalidOperationException(
+                    $"Hook '{step.HookId}' generated output must be absent before execution: {output}");
+            }
+        }
+    }
+
+    private static void EnsureHookGeneratedOutputsPresent(
+        string projectRoot,
+        DotNetPublishStep step,
+        IEnumerable<string> generatedOutputs)
+    {
+        foreach (string output in generatedOutputs)
+        {
+            EnsureHookGeneratedOutputPath(projectRoot, step, output);
+            if (!File.Exists(output) && !Directory.Exists(output))
+            {
+                throw new InvalidOperationException(
+                    $"Hook '{step.HookId}' did not produce its declared output: {output}");
+            }
+            if (HasReparsePointBelowRoot(output, projectRoot))
+            {
+                throw new InvalidOperationException(
+                    $"Hook '{step.HookId}' generated output traverses a reparse point: {output}");
+            }
+        }
+    }
+
+    private static void EnsureHookGeneratedOutputPath(
+        string projectRoot,
+        DotNetPublishStep step,
+        string output)
+    {
+        EnsurePathWithinRoot(projectRoot, output, $"Hook '{step.HookId}' generated output");
+        if (PathsEqual(projectRoot, output))
+        {
+            throw new InvalidOperationException(
+                $"Hook '{step.HookId}' generated output cannot be the project root.");
+        }
     }
 
     private static string ResolveHookCommandPath(string projectRoot, string command)

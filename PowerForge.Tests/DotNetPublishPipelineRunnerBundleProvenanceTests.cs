@@ -4,6 +4,56 @@ namespace PowerForge.Tests;
 
 public sealed class DotNetPublishPipelineRunnerBundleProvenanceTests
 {
+    [Fact]
+    public void ReadSourceProvenance_AdmitsBundleInputProducedByDeclaredHook()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config", "user.name", "PowerForge Tests");
+            RunGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            string projectPath = Path.Combine(root, "Sample.csproj");
+            File.WriteAllText(projectPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "Generated/\nArtifacts/\n");
+            RunGit(root, "add", "Sample.csproj", ".gitignore");
+            RunGit(root, "commit", "-m", "tracked source");
+
+            string generatedModule = Path.Combine(root, "Generated", "SampleModule");
+            Directory.CreateDirectory(generatedModule);
+            File.WriteAllText(Path.Combine(generatedModule, "SampleModule.psm1"), "'generated module'");
+            DotNetPublishPlan plan = CreatePlan(
+                root,
+                projectPath,
+                "module-include",
+                Path.Combine(generatedModule, "SampleModule.psm1"));
+            plan.Steps = plan.Steps.Concat(new[]
+            {
+                new DotNetPublishStep
+                {
+                    Key = "hook:BeforeBundle:module",
+                    Kind = DotNetPublishStepKind.CommandHook,
+                    HookId = "module",
+                    HookPhase = DotNetPublishCommandHookPhase.BeforeBundle,
+                    HookCommand = "pwsh",
+                    HookGeneratedOutputs = new[] { "Generated/SampleModule" }
+                }
+            }).ToArray();
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
+
+            Assert.False(provenance.Dirty);
+        }
+        finally
+        {
+            foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                file.Attributes = FileAttributes.Normal;
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("copy-item")]
     [InlineData("module-include")]

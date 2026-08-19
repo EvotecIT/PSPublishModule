@@ -1464,6 +1464,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 Arguments = NormalizeArguments(h.Arguments),
                 WorkingDirectory = h.WorkingDirectory,
                 Environment = CloneDictionary(h.Environment),
+                GeneratedOutputs = NormalizeStrings(h.GeneratedOutputs),
                 TimeoutSeconds = h.TimeoutSeconds,
                 Required = h.Required,
                 Targets = NormalizeStrings(h.Targets),
@@ -1821,6 +1822,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 Arguments = NormalizeArguments(hook.Arguments),
                 WorkingDirectory = string.IsNullOrWhiteSpace(hook.WorkingDirectory) ? null : hook.WorkingDirectory!.Trim(),
                 Environment = CloneDictionary(hook.Environment),
+                GeneratedOutputs = NormalizeStrings(hook.GeneratedOutputs),
                 TimeoutSeconds = hook.TimeoutSeconds <= 0
                     ? DefaultCommandHookTimeoutSeconds
                     : Math.Max(1, hook.TimeoutSeconds),
@@ -1868,6 +1870,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 HookArguments = hook.Arguments,
                 HookWorkingDirectory = hook.WorkingDirectory,
                 HookEnvironment = hook.Environment ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                HookGeneratedOutputs = hook.GeneratedOutputs,
                 HookTimeoutSeconds = hook.TimeoutSeconds,
                 HookRequired = hook.Required,
                 TargetName = targetName,

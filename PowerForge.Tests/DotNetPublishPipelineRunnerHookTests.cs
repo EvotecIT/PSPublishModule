@@ -58,6 +58,7 @@ public sealed class DotNetPublishPipelineRunnerHookTests
                         Phase = DotNetPublishCommandHookPhase.BeforeTargetPublish,
                         Command = "pwsh",
                         Arguments = new[] { "-NoProfile", "-Command", "exit 0" },
+                        GeneratedOutputs = new[] { "Artifacts/{target}/{rid}/catalog.json" },
                         Targets = new[] { "App" }
                     },
                     new DotNetPublishCommandHook
@@ -79,6 +80,8 @@ public sealed class DotNetPublishPipelineRunnerHookTests
             var afterBundle = Array.FindIndex(keys, key => key.StartsWith("hook:AfterBundle:bundle-summary", StringComparison.Ordinal));
 
             Assert.True(beforePublish >= 0);
+            Assert.Equal("Artifacts/{target}/{rid}/catalog.json",
+                plan.Steps[beforePublish].HookGeneratedOutputs.Single());
             Assert.True(publish > beforePublish);
             Assert.True(bundle > publish);
             Assert.True(afterBundle > bundle);
@@ -245,6 +248,7 @@ public sealed class DotNetPublishPipelineRunnerHookTests
                     ["PF_HOOK_OUTPUT"] = outputPath,
                     ["PF_HOOK_PHASE"] = "{phase}"
                 },
+                HookGeneratedOutputs = new[] { "hook-output.txt" },
                 TargetName = "App",
                 Runtime = "win-x64",
                 Framework = "net10.0",
@@ -266,6 +270,79 @@ public sealed class DotNetPublishPipelineRunnerHookTests
             Assert.Contains("target=App", output, StringComparison.Ordinal);
             Assert.Contains("rid=win-x64", output, StringComparison.Ordinal);
             Assert.Contains("phase=BeforeBuild", output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void RunCommandHook_RejectsPreexistingDeclaredGeneratedOutput()
+    {
+        if (!CommandExists("pwsh"))
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            string outputPath = Path.Combine(root, "generated", "module.psm1");
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            File.WriteAllText(outputPath, "stale");
+            var step = new DotNetPublishStep
+            {
+                Key = "hook:BeforeBundle:module",
+                Kind = DotNetPublishStepKind.CommandHook,
+                HookId = "module",
+                HookPhase = DotNetPublishCommandHookPhase.BeforeBundle,
+                HookCommand = "pwsh",
+                HookArguments = new[] { "-NoLogo", "-NoProfile", "-Command", "exit 0" },
+                HookGeneratedOutputs = new[] { "generated" },
+                HookTimeoutSeconds = 30,
+                HookRequired = true
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).RunCommandHook(
+                    new DotNetPublishPlan { ProjectRoot = root, Configuration = "Release" },
+                    step));
+
+            Assert.Contains("must be absent", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void RunCommandHook_RequiresDeclaredGeneratedOutputAfterSuccess()
+    {
+        if (!CommandExists("pwsh"))
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var step = new DotNetPublishStep
+            {
+                Key = "hook:BeforeBundle:module",
+                Kind = DotNetPublishStepKind.CommandHook,
+                HookId = "module",
+                HookPhase = DotNetPublishCommandHookPhase.BeforeBundle,
+                HookCommand = "pwsh",
+                HookArguments = new[] { "-NoLogo", "-NoProfile", "-Command", "exit 0" },
+                HookGeneratedOutputs = new[] { "generated" },
+                HookTimeoutSeconds = 30,
+                HookRequired = true
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).RunCommandHook(
+                    new DotNetPublishPlan { ProjectRoot = root, Configuration = "Release" },
+                    step));
+
+            Assert.Contains("did not produce", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

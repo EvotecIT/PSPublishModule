@@ -561,15 +561,18 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                     new XAttribute("Value", "PowerForgeDialogShellExecute"),
                     new XAttribute("Order", "2"),
                     new XAttribute("Condition", action.Condition)),
-                CreateExitLaunchTargetRestorePublish(exitLaunch, action.Condition)));
+                CreateExitLaunchTargetRestorePublish(exitLaunch, action.Target, action.Condition)));
         }
     }
 
     private static XElement? CreateExitLaunchTargetRestorePublish(
         PowerForgeInstallerExitLaunch? exitLaunch,
+        string actionTarget,
         string condition)
     {
         if (exitLaunch is not { Enabled: true } || string.IsNullOrWhiteSpace(exitLaunch.Target))
+            return null;
+        if (string.Equals(exitLaunch.Target, actionTarget, StringComparison.Ordinal))
             return null;
 
         return new XElement(

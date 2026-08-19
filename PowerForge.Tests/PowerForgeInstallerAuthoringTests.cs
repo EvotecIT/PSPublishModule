@@ -554,6 +554,36 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
+    public void EmitSource_SkipsDuplicateRestoreForMatchingExitLaunchTarget()
+    {
+        var definition = CreateMonitoringInstaller();
+        const string target = "http://127.0.0.1:58433/studio";
+        definition.ExitLaunch = new PowerForgeInstallerExitLaunch
+        {
+            Text = "Open Studio",
+            Target = target
+        };
+        var dialog = definition.Dialogs.Single(dialog => dialog.Id == "ConfigurationDlg");
+        dialog.Actions.Add(new PowerForgeInstallerDialogAction
+        {
+            Id = "OpenStudio",
+            Text = "Open Studio",
+            Target = target
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+        var action = doc.Descendants(Wix + "Control").Single(e =>
+            (string?)e.Attribute("Id") == "OpenStudio");
+
+        Assert.Single(action.Elements(Wix + "Publish"), e =>
+            (string?)e.Attribute("Property") == "WixShellExecTarget" &&
+            (string?)e.Attribute("Value") == target);
+        Assert.DoesNotContain(action.Elements(Wix + "Publish"), e =>
+            (string?)e.Attribute("Order") == "3");
+    }
+
+    [Fact]
     public void EmitSource_UsesUniqueScriptServiceActionIdsForLongComponentNames()
     {
         var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
