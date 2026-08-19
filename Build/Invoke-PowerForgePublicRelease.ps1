@@ -130,7 +130,11 @@ try {
         -ReleaseConfig $releaseConfig `
         -SourceConfigurationPath $ConfigPath `
         -EvidenceDirectory $effectiveConfigDirectory
-    $releaseConfig.GitHub | Add-Member -NotePropertyName Commitish -NotePropertyValue $ExpectedCommit -Force
+    . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Set-PowerForgeAuthorizedReleaseCommitish.ps1')
+    $releaseConfig = Set-PowerForgeAuthorizedReleaseCommitish `
+        -ReleaseConfig $releaseConfig `
+        -Operation $Operation `
+        -ExpectedCommit $ExpectedCommit
     $certificateThumbprint = [string] $releaseConfig.Packages.CertificateThumbprint
     $certificateStore = [string] $releaseConfig.Packages.CertificateStore
     if ([string]::IsNullOrWhiteSpace($certificateThumbprint) -or [string]::IsNullOrWhiteSpace($certificateStore)) {
