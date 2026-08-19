@@ -270,6 +270,7 @@ public sealed class DotNetPublishPipelineRunnerHookTests
             Assert.Contains("target=App", output, StringComparison.Ordinal);
             Assert.Contains("rid=win-x64", output, StringComparison.Ordinal);
             Assert.Contains("phase=BeforeBuild", output, StringComparison.Ordinal);
+            Assert.True(step.HookGeneratedOutputsValidated);
         }
         finally
         {
@@ -347,6 +348,155 @@ public sealed class DotNetPublishPipelineRunnerHookTests
         finally
         {
             TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void RunCommandHook_FailedOptionalHookRejectsPartialGeneratedOutput()
+    {
+        if (!CommandExists("pwsh"))
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            string outputPath = Path.Combine(root, "generated", "partial.txt");
+            var step = new DotNetPublishStep
+            {
+                Key = "hook:BeforeBundle:optional-module",
+                Kind = DotNetPublishStepKind.CommandHook,
+                HookId = "optional-module",
+                HookPhase = DotNetPublishCommandHookPhase.BeforeBundle,
+                HookCommand = "pwsh",
+                HookArguments = new[]
+                {
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-Command",
+                    "New-Item -ItemType Directory -Path (Split-Path -Parent $env:PF_HOOK_OUTPUT) -Force | Out-Null; Set-Content -LiteralPath $env:PF_HOOK_OUTPUT -Value partial; exit 7"
+                },
+                HookEnvironment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PF_HOOK_OUTPUT"] = outputPath
+                },
+                HookGeneratedOutputs = new[] { "generated" },
+                HookTimeoutSeconds = 30,
+                HookRequired = false
+            };
+
+            var ex = Assert.ThrowsAny<Exception>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).RunCommandHook(
+                    new DotNetPublishPlan { ProjectRoot = root, Configuration = "Release" },
+                    step));
+
+            Assert.Contains("left a declared generated output", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(step.HookGeneratedOutputsValidated);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void GeneratedOutputTree_RejectsNestedSymbolicLink()
+    {
+        var root = CreateTempRoot();
+        string externalRoot = CreateTempRoot();
+        try
+        {
+            string output = Path.Combine(root, "generated");
+            Directory.CreateDirectory(output);
+            string externalFile = Path.Combine(externalRoot, "outside.txt");
+            File.WriteAllText(externalFile, "outside");
+            try
+            {
+                File.CreateSymbolicLink(Path.Combine(output, "linked.txt"), externalFile);
+            }
+            catch (Exception linkException) when (linkException is PlatformNotSupportedException or UnauthorizedAccessException)
+            {
+                return;
+            }
+
+            var step = new DotNetPublishStep { HookId = "module" };
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                DotNetPublishPipelineRunner.EnsureHookGeneratedOutputTreeIsSafe(root, step, output));
+
+            Assert.Contains("reparse point", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+            TryDelete(externalRoot);
+        }
+    }
+
+    [Fact]
+    public void DirectoryCopy_RejectsNestedSymbolicLink()
+    {
+        var root = CreateTempRoot();
+        string externalRoot = CreateTempRoot();
+        try
+        {
+            string source = Path.Combine(root, "source");
+            string destination = Path.Combine(root, "destination");
+            Directory.CreateDirectory(source);
+            string externalFile = Path.Combine(externalRoot, "outside.txt");
+            File.WriteAllText(externalFile, "outside");
+            try
+            {
+                File.CreateSymbolicLink(Path.Combine(source, "linked.txt"), externalFile);
+            }
+            catch (Exception linkException) when (linkException is PlatformNotSupportedException or UnauthorizedAccessException)
+            {
+                return;
+            }
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                DotNetPublishPipelineRunner.DirectoryCopy(source, destination));
+
+            Assert.Contains("reparse point", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+            TryDelete(externalRoot);
+        }
+    }
+
+    [Fact]
+    public void DirectoryCopy_RejectsDestinationSymbolicLink()
+    {
+        var root = CreateTempRoot();
+        string externalRoot = CreateTempRoot();
+        try
+        {
+            string source = Path.Combine(root, "source");
+            string destination = Path.Combine(root, "destination");
+            Directory.CreateDirectory(source);
+            Directory.CreateDirectory(destination);
+            File.WriteAllText(Path.Combine(source, "payload.txt"), "payload");
+            string externalFile = Path.Combine(externalRoot, "outside.txt");
+            File.WriteAllText(externalFile, "outside");
+            try
+            {
+                File.CreateSymbolicLink(Path.Combine(destination, "payload.txt"), externalFile);
+            }
+            catch (Exception linkException) when (linkException is PlatformNotSupportedException or UnauthorizedAccessException)
+            {
+                return;
+            }
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                DotNetPublishPipelineRunner.DirectoryCopy(source, destination));
+
+            Assert.Contains("destination contains a reparse point", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("outside", File.ReadAllText(externalFile));
+        }
+        finally
+        {
+            TryDelete(root);
+            TryDelete(externalRoot);
         }
     }
 

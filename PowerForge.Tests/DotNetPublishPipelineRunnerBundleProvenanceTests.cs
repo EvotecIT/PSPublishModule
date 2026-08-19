@@ -37,7 +37,8 @@ public sealed class DotNetPublishPipelineRunnerBundleProvenanceTests
                     HookId = "module",
                     HookPhase = DotNetPublishCommandHookPhase.BeforeBundle,
                     HookCommand = "pwsh",
-                    HookGeneratedOutputs = new[] { "Generated/SampleModule" }
+                    HookGeneratedOutputs = new[] { "Generated/SampleModule" },
+                    HookGeneratedOutputsValidated = true
                 }
             }).ToArray();
 

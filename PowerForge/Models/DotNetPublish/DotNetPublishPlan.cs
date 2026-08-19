@@ -620,6 +620,9 @@ public sealed class DotNetPublishStep
     /// <summary>Optional paths generated exclusively by this command hook.</summary>
     public string[] HookGeneratedOutputs { get; set; } = Array.Empty<string>();
 
+    /// <summary>Whether the declared generated outputs were produced and validated successfully in this run.</summary>
+    public bool HookGeneratedOutputsValidated { get; set; }
+
     /// <summary>Optional command hook timeout in seconds.</summary>
     public int HookTimeoutSeconds { get; set; } = DotNetPublishCommandHook.DefaultTimeoutSeconds;
 

@@ -114,7 +114,9 @@ public sealed partial class DotNetPublishPipelineRunner
         var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var outputs = new HashSet<string>(comparison);
         foreach (DotNetPublishStep step in (plan.Steps ?? Array.Empty<DotNetPublishStep>())
-                     .Where(step => step is not null && step.Kind == DotNetPublishStepKind.CommandHook))
+                     .Where(step => step is not null &&
+                                    step.Kind == DotNetPublishStepKind.CommandHook &&
+                                    step.HookGeneratedOutputsValidated))
         {
             var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -139,6 +141,12 @@ public sealed partial class DotNetPublishPipelineRunner
                     throw new InvalidOperationException(
                         $"Hook '{step.HookId}' generated output cannot be the project root.");
                 }
+                if (!PathEntryExists(output))
+                {
+                    throw new InvalidOperationException(
+                        $"Hook '{step.HookId}' validated generated output no longer exists: {output}");
+                }
+                EnsureHookGeneratedOutputTreeIsSafe(plan.ProjectRoot, step, output);
                 outputs.Add(output);
             }
         }
