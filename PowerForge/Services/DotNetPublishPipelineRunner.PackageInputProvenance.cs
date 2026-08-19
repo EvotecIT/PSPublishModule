@@ -418,29 +418,30 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private sealed class VerifiedPackageInputCatalog : IDisposable
+    private sealed class VerifiedPackageInputCatalog
     {
         private readonly string[] _packageRoots;
         private readonly IReadOnlyDictionary<string, string> _lockedPackageHashes;
-        private readonly Dictionary<string, VerifiedPackageArchive> _archives;
+        private readonly VerifiedPackageArchiveCache _archives;
 
         private VerifiedPackageInputCatalog(
             IEnumerable<string> packageRoots,
-            IReadOnlyDictionary<string, string> lockedPackageHashes)
+            IReadOnlyDictionary<string, string> lockedPackageHashes,
+            VerifiedPackageArchiveCache archives)
         {
             _packageRoots = packageRoots
                 .Select(Path.GetFullPath)
                 .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .ToArray();
             _lockedPackageHashes = lockedPackageHashes;
-            _archives = new Dictionary<string, VerifiedPackageArchive>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            _archives = archives;
         }
 
         internal static VerifiedPackageInputCatalog? TryCreate(
             string projectPath,
             JsonElement properties,
-            IEnumerable<string> packageRoots)
+            IEnumerable<string> packageRoots,
+            VerifiedPackageArchiveCache archives)
         {
             string projectDirectory = Path.GetDirectoryName(projectPath)!;
             string lockFilePath = ReadEvaluatedPath(properties, "NuGetLockFilePath", projectDirectory)
@@ -467,7 +468,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (allRoots.Count == 0)
                 return null;
 
-            return new VerifiedPackageInputCatalog(allRoots, hashes);
+            return new VerifiedPackageInputCatalog(allRoots, hashes, archives);
         }
 
         internal bool TryVerify(string path, out bool isPackageInput)
@@ -510,21 +511,16 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
 
                 string packageDirectory = Path.Combine(root, packageId, packageVersion);
-                string archiveKey = Path.GetFullPath(packageDirectory);
-                if (!_archives.TryGetValue(archiveKey, out VerifiedPackageArchive? archive))
-                {
-                    string expectedName = packageId + "." + packageVersion + ".nupkg";
-                    string? archivePath = Directory.EnumerateFiles(packageDirectory, "*.nupkg", SearchOption.TopDirectoryOnly)
-                        .FirstOrDefault(candidate => Path.GetFileName(candidate).Equals(
-                            expectedName,
-                            StringComparison.OrdinalIgnoreCase));
-                    if (string.IsNullOrWhiteSpace(archivePath))
-                        return false;
-                    archive = VerifiedPackageArchive.TryOpen(archivePath!, expectedHash);
-                    if (archive is null)
-                        return false;
-                    _archives[archiveKey] = archive;
-                }
+                string expectedName = packageId + "." + packageVersion + ".nupkg";
+                string? archivePath = Directory.EnumerateFiles(packageDirectory, "*.nupkg", SearchOption.TopDirectoryOnly)
+                    .FirstOrDefault(candidate => Path.GetFileName(candidate).Equals(
+                        expectedName,
+                        StringComparison.OrdinalIgnoreCase));
+                if (string.IsNullOrWhiteSpace(archivePath))
+                    return false;
+                VerifiedPackageArchive? archive = _archives.TryGetOrOpen(archivePath!, expectedHash);
+                if (archive is null)
+                    return false;
 
                 string packageRelativePath = string.Join("/", segments.Skip(2));
                 return archive.VerifyExtractedFile(packageRelativePath, path);
@@ -533,13 +529,6 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 return false;
             }
-        }
-
-        public void Dispose()
-        {
-            foreach (VerifiedPackageArchive archive in _archives.Values)
-                archive.Dispose();
-            _archives.Clear();
         }
 
         private static bool TryReadLockedPackageHashes(
@@ -607,11 +596,44 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    private sealed class VerifiedPackageArchiveCache : IDisposable
+    {
+        private readonly Dictionary<string, CacheEntry> _archives = new(
+            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+        internal VerifiedPackageArchive? TryGetOrOpen(string path, string expectedContentHash)
+        {
+            string fullPath = Path.GetFullPath(path);
+            if (_archives.TryGetValue(fullPath, out CacheEntry? cached))
+            {
+                return string.Equals(cached.ExpectedContentHash, expectedContentHash, StringComparison.Ordinal)
+                    ? cached.Archive
+                    : null;
+            }
+
+            VerifiedPackageArchive? archive = VerifiedPackageArchive.TryOpen(fullPath, expectedContentHash);
+            if (archive is not null)
+                _archives.Add(fullPath, new CacheEntry(expectedContentHash, archive));
+            return archive;
+        }
+
+        public void Dispose()
+        {
+            foreach (CacheEntry cached in _archives.Values)
+                cached.Archive.Dispose();
+            _archives.Clear();
+        }
+
+        private sealed record CacheEntry(string ExpectedContentHash, VerifiedPackageArchive Archive);
+    }
+
     private sealed class VerifiedPackageArchive : IDisposable
     {
         private readonly FileStream _stream;
         private readonly ZipArchive _archive;
         private readonly IReadOnlyDictionary<string, ZipArchiveEntry> _entries;
+        private readonly Dictionary<string, byte[]> _entryHashes;
+        private readonly Dictionary<string, ExtractedFileHash> _extractedFileHashes;
 
         private VerifiedPackageArchive(
             FileStream stream,
@@ -621,6 +643,10 @@ public sealed partial class DotNetPublishPipelineRunner
             _stream = stream;
             _archive = archive;
             _entries = entries;
+            _entryHashes = new Dictionary<string, byte[]>(
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            _extractedFileHashes = new Dictionary<string, ExtractedFileHash>(
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         }
 
         internal static VerifiedPackageArchive? TryOpen(string path, string expectedContentHash)
@@ -675,20 +701,50 @@ public sealed partial class DotNetPublishPipelineRunner
 
         internal bool VerifyExtractedFile(string relativePath, string extractedPath)
         {
-            if (!_entries.TryGetValue(relativePath.Replace('\\', '/').TrimStart('/'), out ZipArchiveEntry? entry))
+            string normalizedRelativePath = relativePath.Replace('\\', '/').TrimStart('/');
+            if (!_entries.TryGetValue(normalizedRelativePath, out ZipArchiveEntry? entry))
                 return false;
 
             var file = new FileInfo(extractedPath);
             if (!file.Exists || file.Length != entry.Length)
                 return false;
 
-            using Stream entryStream = entry.Open();
+            string fullExtractedPath = file.FullName;
+            long lastWriteTimeUtcTicks = file.LastWriteTimeUtc.Ticks;
+            if (_extractedFileHashes.TryGetValue(fullExtractedPath, out ExtractedFileHash? cached) &&
+                cached.Length == file.Length &&
+                cached.LastWriteTimeUtcTicks == lastWriteTimeUtcTicks)
+            {
+                return GetEntryHash(normalizedRelativePath, entry).SequenceEqual(cached.Hash);
+            }
+
             using FileStream fileStream = file.Open(FileMode.Open, FileAccess.Read, FileShare.Read);
-            using SHA256 entryHasher = SHA256.Create();
             using SHA256 fileHasher = SHA256.Create();
-            byte[] expected = entryHasher.ComputeHash(entryStream);
             byte[] actual = fileHasher.ComputeHash(fileStream);
-            return expected.SequenceEqual(actual);
+            byte[] expected = GetEntryHash(normalizedRelativePath, entry);
+            if (expected.SequenceEqual(actual))
+            {
+                _extractedFileHashes[fullExtractedPath] = new ExtractedFileHash(
+                    file.Length,
+                    lastWriteTimeUtcTicks,
+                    actual);
+                return true;
+            }
+
+            _extractedFileHashes.Remove(fullExtractedPath);
+            return false;
+        }
+
+        private byte[] GetEntryHash(string relativePath, ZipArchiveEntry entry)
+        {
+            if (_entryHashes.TryGetValue(relativePath, out byte[]? hash))
+                return hash;
+
+            using Stream entryStream = entry.Open();
+            using SHA256 entryHasher = SHA256.Create();
+            hash = entryHasher.ComputeHash(entryStream);
+            _entryHashes.Add(relativePath, hash);
+            return hash;
         }
 
         public void Dispose()
@@ -696,5 +752,7 @@ public sealed partial class DotNetPublishPipelineRunner
             _archive.Dispose();
             _stream.Dispose();
         }
+
+        private sealed record ExtractedFileHash(long Length, long LastWriteTimeUtcTicks, byte[] Hash);
     }
 }
