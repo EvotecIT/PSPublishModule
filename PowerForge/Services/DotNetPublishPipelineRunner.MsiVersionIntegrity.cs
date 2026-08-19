@@ -881,14 +881,51 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var root = Path.GetFullPath(gitRoot)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (string.Equals(root, fullPath, comparison))
+        string? relativePath = GetPathBelowRoot(root, fullPath, comparison);
+        if (relativePath is not null)
+            return relativePath;
+
+#if NET472
+        return null;
+#else
+        string fullProjectRoot = Path.GetFullPath(projectRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string? projectRelativePath = GetPathBelowRoot(fullProjectRoot, fullPath, comparison);
+        if (projectRelativePath is null)
             return null;
 
-        var rootPrefix = root + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(rootPrefix, comparison))
+        try
+        {
+            FileSystemInfo? resolvedProjectRoot = new DirectoryInfo(fullProjectRoot)
+                .ResolveLinkTarget(returnFinalTarget: true);
+            if (resolvedProjectRoot is null)
+                return null;
+
+            string resolvedPath = Path.GetFullPath(Path.Combine(
+                resolvedProjectRoot.FullName,
+                projectRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            return GetPathBelowRoot(root, resolvedPath, comparison);
+        }
+        catch
+        {
+            return null;
+        }
+#endif
+    }
+
+    private static string? GetPathBelowRoot(
+        string root,
+        string path,
+        StringComparison comparison)
+    {
+        if (string.Equals(root, path, comparison))
+            return string.Empty;
+
+        string rootPrefix = root + Path.DirectorySeparatorChar;
+        if (!path.StartsWith(rootPrefix, comparison))
             return null;
 
-        return fullPath.Substring(rootPrefix.Length)
+        return path.Substring(rootPrefix.Length)
             .Replace('\\', '/')
             .Trim('/');
     }
