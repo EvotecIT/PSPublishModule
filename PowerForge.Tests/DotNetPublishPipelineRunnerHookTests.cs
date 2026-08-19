@@ -501,6 +501,42 @@ public sealed class DotNetPublishPipelineRunnerHookTests
     }
 
     [Fact]
+    public void DirectoryCopy_RejectsDestinationAncestorSymbolicLink()
+    {
+        var root = CreateTempRoot();
+        string externalRoot = CreateTempRoot();
+        try
+        {
+            string source = Path.Combine(root, "source");
+            string output = Path.Combine(root, "output");
+            Directory.CreateDirectory(source);
+            Directory.CreateDirectory(output);
+            File.WriteAllText(Path.Combine(source, "payload.txt"), "payload");
+            string linkedDirectory = Path.Combine(output, "Modules");
+            try
+            {
+                Directory.CreateSymbolicLink(linkedDirectory, externalRoot);
+            }
+            catch (Exception linkException) when (linkException is PlatformNotSupportedException or UnauthorizedAccessException)
+            {
+                return;
+            }
+
+            string destination = Path.Combine(linkedDirectory, "TierBridge");
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                DotNetPublishPipelineRunner.DirectoryCopy(source, destination, output));
+
+            Assert.Contains("traverses a reparse point", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(Path.Combine(externalRoot, "TierBridge")));
+        }
+        finally
+        {
+            TryDelete(root);
+            TryDelete(externalRoot);
+        }
+    }
+
+    [Fact]
     public void RunCommandHook_ReportsTimeoutExplicitly()
     {
         if (!CommandExists("pwsh"))

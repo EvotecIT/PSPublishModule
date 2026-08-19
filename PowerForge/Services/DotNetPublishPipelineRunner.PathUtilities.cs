@@ -27,7 +27,10 @@ public sealed partial class DotNetPublishPipelineRunner
         return null;
     }
 
-    internal static void DirectoryCopy(string sourceDir, string destDir)
+    internal static void DirectoryCopy(
+        string sourceDir,
+        string destDir,
+        string? destinationBoundary = null)
     {
         var source = Path.GetFullPath(sourceDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var dest = Path.GetFullPath(destDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -37,8 +40,10 @@ public sealed partial class DotNetPublishPipelineRunner
 
         if ((File.GetAttributes(source) & FileAttributes.ReparsePoint) != 0)
             throw new InvalidOperationException($"Bundle source directory cannot be a reparse point: {source}");
-        if (Directory.Exists(dest) && (File.GetAttributes(dest) & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidOperationException($"Bundle destination directory cannot be a reparse point: {dest}");
+        EnsureNoReparsePointsInExistingPath(
+            dest,
+            destinationBoundary ?? dest,
+            "Bundle destination");
 
         Directory.CreateDirectory(dest);
 
@@ -83,6 +88,35 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
                 File.Copy(entry, target, overwrite: true);
             }
+        }
+    }
+
+    internal static void EnsureNoReparsePointsInExistingPath(
+        string path,
+        string boundary,
+        string description)
+    {
+        string current = Path.GetFullPath(path)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string root = Path.GetFullPath(boundary)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        EnsurePathWithinRoot(root, current, description);
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+        while (true)
+        {
+            if (PathEntryExists(current) &&
+                (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException($"{description} traverses a reparse point: {current}");
+            }
+            if (string.Equals(current, root, comparison))
+                return;
+
+            string? parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, comparison))
+                throw new InvalidOperationException($"{description} escapes its boundary: {path}");
+            current = parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
     }
 }
