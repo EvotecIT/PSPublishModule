@@ -80,6 +80,76 @@ public class WebPipelineRunnerSourcesSyncTests
     }
 
     [Fact]
+    public void RunPipeline_SourcesSync_BypassesPipelineCacheForRemoteChanges()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-sources-sync-cache-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var source = CreateGitSource(root, "source", "README.md", "first revision");
+
+            Directory.CreateDirectory(Path.Combine(root, "content", "pages"));
+            File.WriteAllText(Path.Combine(root, "content", "pages", "index.md"),
+                """
+                ---
+                title: Home
+                slug: /
+                ---
+
+                # Home
+                """);
+
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                $$"""
+                {
+                  "Name": "Pipeline Sources Sync Cache Test",
+                  "BaseUrl": "https://example.test",
+                  "ContentRoot": "content",
+                  "ProjectsRoot": "projects",
+                  "Collections": [
+                    { "Name": "pages", "Input": "content/pages", "Output": "/" }
+                  ],
+                  "Sources": [
+                    { "Repo": "{{EscapeJson(source)}}", "Slug": "demo-project" }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "cache": true,
+                  "cachePath": "./pipeline-cache.json",
+                  "steps": [
+                    { "task": "sources-sync", "config": "./site.json" }
+                  ]
+                }
+                """);
+
+            var firstResult = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(firstResult.Success);
+            Assert.Equal("first revision", File.ReadAllText(Path.Combine(root, "projects", "demo-project", "README.md")));
+
+            File.WriteAllText(Path.Combine(source, "README.md"), "second revision");
+            RunGit(source, "add", "README.md");
+            RunGit(source, "commit", "-m", "update", "--quiet");
+
+            var secondResult = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(secondResult.Success);
+            Assert.Equal("second revision", File.ReadAllText(Path.Combine(root, "projects", "demo-project", "README.md")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_SourcesSync_CleanStepDefault_ReplacesExistingDestination()
     {
         if (!IsGitAvailable())
