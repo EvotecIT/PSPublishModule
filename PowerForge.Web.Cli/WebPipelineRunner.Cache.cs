@@ -43,6 +43,8 @@ internal static partial class WebPipelineRunner
             return false;
         if (task.Equals("git-sync", StringComparison.OrdinalIgnoreCase))
             return false;
+        if (task.Equals("sources-sync", StringComparison.OrdinalIgnoreCase))
+            return false;
         if (task.Equals("wordpress-media-sync", StringComparison.OrdinalIgnoreCase))
             return false;
         if (task.Equals("wordpress-sync-media", StringComparison.OrdinalIgnoreCase))
