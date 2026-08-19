@@ -108,7 +108,8 @@ internal static partial class WebPipelineRunner
                 currentManifestPath,
                 previousManifestPath,
                 dryRun,
-                logger: null);
+                logger: null,
+                alwaysPurgePaths: siteProfile?.Cloudflare?.AlwaysPurgePaths);
             stepResult.Success = result.Success;
             stepResult.Message = result.Message;
             if (!result.Success)

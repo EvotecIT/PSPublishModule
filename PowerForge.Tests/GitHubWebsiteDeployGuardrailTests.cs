@@ -46,7 +46,7 @@ public sealed class GitHubWebsiteDeployGuardrailTests
         Assert.Contains("default: '[\"ubuntu-latest\"]'", cloudflareInput, StringComparison.Ordinal);
         Assert.Contains("runs-on: ${{ fromJson(inputs.cloudflare_runner_labels_json) }}", policyJob, StringComparison.Ordinal);
         Assert.Contains("powerforge-cloudflare-site-policy", policyJob, StringComparison.Ordinal);
-        Assert.Contains("needs: [deploy, cloudflare-site-policy, deploy-linux]", workflow, StringComparison.Ordinal);
+        Assert.Contains("needs: [build, deploy, cloudflare-site-policy, deploy-linux]", workflow, StringComparison.Ordinal);
         Assert.Contains("needs.cloudflare-site-policy.result == 'success'", workflow, StringComparison.Ordinal);
     }
 

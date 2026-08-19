@@ -112,7 +112,8 @@ internal static partial class WebCliCommandHandlers
             logger,
             forcedHostnameFallbackReason: forceHostnameFallback
                 ? forceHostnameFallbackReason?.Trim() ?? "the managed site policy was reconciled"
-                : null);
+                : null,
+            alwaysPurgePaths: siteProfile?.Cloudflare?.AlwaysPurgePaths);
 
         if (outputJson)
         {

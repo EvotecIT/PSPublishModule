@@ -48,6 +48,8 @@ internal static class CloudflareRouteProfileResolver
         var purgePaths = BuildPurgePaths(verifyPaths);
         var agentReadiness = spec.AgentReadiness is null ? null : WebAgentReadiness.ResolveSpec(spec.AgentReadiness);
         ValidateCloudflarePolicy(spec.Cloudflare);
+        foreach (var path in spec.Cloudflare?.AlwaysPurgePaths ?? Array.Empty<string>())
+            CloudflareIncrementalCachePurger.ResolveAlwaysPurgeUrl(baseUrl, path);
 
         return new CloudflareSiteRouteProfile
         {
@@ -72,6 +74,12 @@ internal static class CloudflareRouteProfileResolver
         if (!CloudflareCachePurger.TryParseCanonicalMode(policy.PurgeMode, out var purgeMode))
             throw new InvalidOperationException("Cloudflare.PurgeMode must be files, incremental, hostname, or everything.");
         policy.PurgeMode = CloudflareCachePurger.FormatMode(purgeMode);
+
+        policy.AlwaysPurgePaths = (policy.AlwaysPurgePaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
         if (policy.Cache is null)
             return;

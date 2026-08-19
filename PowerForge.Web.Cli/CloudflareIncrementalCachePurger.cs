@@ -28,7 +28,8 @@ internal static class CloudflareIncrementalCachePurger
         bool dryRun,
         WebConsoleLogger? logger,
         HttpClient? httpClient = null,
-        string? forcedHostnameFallbackReason = null)
+        string? forcedHostnameFallbackReason = null,
+        IEnumerable<string>? alwaysPurgePaths = null)
     {
         CloudflareDeploymentManifest current;
         string normalizedBaseUrl;
@@ -80,39 +81,42 @@ internal static class CloudflareIncrementalCachePurger
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToArray();
 
-        if (changedPaths.Length == 0)
+        string[] urls;
+        try
+        {
+            urls = changedPaths
+                .Select(path => CloudflareDeploymentManifestStore.ResolveUrl(normalizedBaseUrl, path).AbsoluteUri)
+                .Concat((alwaysPurgePaths ?? Array.Empty<string>())
+                    .Select(path => ResolveAlwaysPurgeUrl(normalizedBaseUrl, path)))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(url => url, StringComparer.Ordinal)
+                .ToArray();
+        }
+        catch (InvalidDataException ex)
+        {
+            return Failure($"Incremental purge contains an unsafe configured URL path: {ex.Message}");
+        }
+
+        if (urls.Length == 0)
         {
             return new CloudflareIncrementalPurgeResult
             {
                 Success = true,
-                Message = "Deployment manifest is unchanged; no Cloudflare purge was required.",
+                Message = "Deployment manifest is unchanged and no always-purge paths are configured; no Cloudflare purge was required.",
                 ActualMode = CloudflareCachePurgeMode.Files
             };
         }
 
-        if (changedPaths.Length > MaxIncrementalTargets)
+        if (urls.Length > MaxIncrementalTargets)
         {
             return PurgeHostnameFallback(
                 zoneId,
                 apiToken,
                 fallbackBaseUrls,
                 dryRun,
-                $"incremental diff contains {changedPaths.Length} URL paths, exceeding the {MaxIncrementalTargets} target safety limit",
+                $"incremental purge contains {urls.Length} URL targets, exceeding the {MaxIncrementalTargets} target safety limit",
                 logger,
                 httpClient);
-        }
-
-        string[] urls;
-        try
-        {
-            urls = changedPaths
-                .Select(path => CloudflareDeploymentManifestStore.ResolveUrl(normalizedBaseUrl, path).AbsoluteUri)
-                .Distinct(StringComparer.Ordinal)
-                .ToArray();
-        }
-        catch (InvalidDataException ex)
-        {
-            return Failure($"Deployment manifest diff contains an unsafe URL path: {ex.Message}");
         }
 
         var ownsHttpClient = httpClient is null;
@@ -141,8 +145,8 @@ internal static class CloudflareIncrementalCachePurger
             {
                 Success = true,
                 Message = dryRun
-                    ? $"Incremental purge dry-run selected {urls.Length} changed URL(s) in {plannedBatchCount} planned batch(es)."
-                    : $"Incrementally purged {urls.Length} changed URL(s) in {requestCount} batch(es).",
+                    ? $"Incremental purge dry-run selected {urls.Length} deployment URL(s) in {plannedBatchCount} planned batch(es)."
+                    : $"Incrementally purged {urls.Length} deployment URL(s) in {requestCount} batch(es).",
                 ActualMode = CloudflareCachePurgeMode.Files,
                 TargetCount = urls.Length,
                 RequestCount = requestCount
@@ -153,6 +157,34 @@ internal static class CloudflareIncrementalCachePurger
             if (ownsHttpClient)
                 httpClient.Dispose();
         }
+    }
+
+    internal static string ResolveAlwaysPurgeUrl(string baseUrl, string path)
+    {
+        var normalizedBaseUrl = CloudflareDeploymentManifestStore.NormalizeBaseUrl(baseUrl);
+        var baseUri = new Uri(normalizedBaseUrl, UriKind.Absolute);
+        var value = (path ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(value) ||
+            value.StartsWith("//", StringComparison.Ordinal) ||
+            value.Contains('\\') ||
+            value.Contains('#') ||
+            value.Any(char.IsControl))
+            throw new InvalidDataException($"Always-purge path '{path}' must be a site-relative URL path without credentials, fragment, or control characters.");
+
+        var relative = value.TrimStart('/');
+        if (Uri.TryCreate(relative, UriKind.Absolute, out _))
+            throw new InvalidDataException($"Always-purge path '{path}' must be a site-relative URL path without credentials, fragment, or control characters.");
+
+        var target = new Uri(baseUri, relative);
+        if (!target.Scheme.Equals(baseUri.Scheme, StringComparison.OrdinalIgnoreCase) ||
+            !target.Host.Equals(baseUri.Host, StringComparison.OrdinalIgnoreCase) ||
+            target.Port != baseUri.Port ||
+            !target.AbsolutePath.StartsWith(baseUri.AbsolutePath, StringComparison.Ordinal) ||
+            !string.IsNullOrEmpty(target.UserInfo) ||
+            !string.IsNullOrEmpty(target.Fragment))
+            throw new InvalidDataException($"Always-purge path '{path}' escapes configured site base '{baseUri}'.");
+
+        return target.AbsoluteUri;
     }
 
     private static bool TryLoadPrevious(

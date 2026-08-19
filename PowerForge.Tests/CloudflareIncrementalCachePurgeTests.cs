@@ -597,11 +597,11 @@ public sealed partial class CloudflareIncrementalCachePurgeTests
         var action = ReadRepoFile(".github", "actions", "powerforge-cloudflare-site-policy", "action.yml");
 
         Assert.Contains("cloudflare manifest create", runWorkflow, StringComparison.Ordinal);
-        Assert.Contains("powerforge-cloudflare-cache-manifest", runWorkflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge-deployment-manifest-", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("cloudflare_cache_manifest_artifact_name", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("inputs.site_artifact_name != '' || inputs.generate_cloudflare_cache_manifest", runWorkflow, StringComparison.Ordinal);
         foreach (var operatingSystem in new[] { "Linux", "macOS", "Windows" })
-            Assert.Contains($"inputs.generate_cloudflare_cache_manifest) && runner.os == '{operatingSystem}'", runWorkflow, StringComparison.Ordinal);
+            Assert.Contains($"inputs.generate_deployment_manifest) && runner.os == '{operatingSystem}'", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("generate_cloudflare_cache_manifest", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("manifest-artifact-name: ${{ needs.build.outputs.cloudflare_cache_manifest_artifact_name }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("deployment-run-id: ${{ needs.deploy.outputs.run_id }}", deployWorkflow, StringComparison.Ordinal);
@@ -640,9 +640,9 @@ public sealed partial class CloudflareIncrementalCachePurgeTests
         Assert.Contains("Purge changed Cloudflare URLs", action, StringComparison.Ordinal);
         Assert.True(
             runWorkflow.IndexOf("Archive site artifact", StringComparison.Ordinal) <
-            runWorkflow.IndexOf("Create incremental Cloudflare deployment manifest", StringComparison.Ordinal));
+            runWorkflow.IndexOf("Create exact deployment manifest", StringComparison.Ordinal));
         Assert.True(
-            runWorkflow.IndexOf("Create incremental Cloudflare deployment manifest", StringComparison.Ordinal) <
+            runWorkflow.IndexOf("Create exact deployment manifest", StringComparison.Ordinal) <
             runWorkflow.IndexOf("Upload Pages artifact", StringComparison.Ordinal));
         Assert.True(
             action.IndexOf("Purge changed Cloudflare URLs", StringComparison.Ordinal) <

@@ -10,6 +10,12 @@ public sealed class CloudflareSitePolicySpec
     public string PurgeMode { get; set; } = "files";
 
     /// <summary>
+    /// Site-relative URL paths that incremental deployments purge on every successful deployment.
+    /// Use this for mutable entry points whose query variants have distinct Cloudflare cache keys.
+    /// </summary>
+    public string[] AlwaysPurgePaths { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// When set, PowerForge manages the zone's Smart Tiered Cache setting as part of the recoverable site policy.
     /// Leave null to preserve the operator-managed zone setting.
     /// </summary>
