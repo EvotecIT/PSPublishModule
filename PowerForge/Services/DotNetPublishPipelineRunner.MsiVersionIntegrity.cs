@@ -151,9 +151,18 @@ public sealed partial class DotNetPublishPipelineRunner
             && !string.Equals(trackedStatus, finalTrackedStatus, StringComparison.Ordinal);
         string[] bundleSourceInputs = EnumerateBundleSourceInputs(buildPlan);
         string[] commandHookSourceInputs = EnumerateCommandHookSourceInputs(buildPlan);
+        string[] hookGeneratedOutputs = EnumerateCommandHookGeneratedOutputs(buildPlan);
+        string[] hookDeclaredOutputs = EnumerateCommandHookDeclaredOutputs(buildPlan);
         IEnumerable<string> allExplicitInputPaths = (explicitInputPaths ?? Array.Empty<string>())
             .Concat(bundleSourceInputs)
-            .Concat(commandHookSourceInputs);
+            .Concat(commandHookSourceInputs)
+            .Where(path => !IsAdmittedCommandHookGeneratedInput(
+                projectRoot,
+                path,
+                hookDeclaredOutputs,
+                hookGeneratedOutputs));
+        IEnumerable<string> allGeneratedPaths = (generatedPaths ?? Array.Empty<string>())
+            .Concat(hookGeneratedOutputs);
         SourceDirtyScope dirtyScope = BuildSourceDirtyScope(
             projectRoot,
             gitRoot!,
@@ -172,11 +181,11 @@ public sealed partial class DotNetPublishPipelineRunner
             projectRoot,
             gitRoot!,
             untrackedOutput,
-            generatedPaths,
+            allGeneratedPaths,
             dirtyScope);
         bool generatedOutputOverlapsInput = HasGeneratedOutputInputOverlap(
             projectRoot,
-            generatedPaths,
+            allGeneratedPaths,
             allExplicitInputPaths);
         bool untrustedExplicitInput = HasUntrackedOrIgnoredExplicitInputs(
             projectRoot,
@@ -186,7 +195,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string[] untrustedBuildInputs = FindUntrustedBuildInputs(
             projectRoot,
             gitRoot!,
-            generatedPaths,
+            allGeneratedPaths,
             dirtyScope);
         bool untrustedIgnoredBuildInput = untrustedBuildInputs.Length > 0;
         var dirtyReasons = new List<string>();

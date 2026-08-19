@@ -939,6 +939,12 @@ public sealed class DotNetPublishCommandHook
     /// <summary>Optional environment variables. Values support hook tokens.</summary>
     public Dictionary<string, string>? Environment { get; set; }
 
+    /// <summary>
+    /// Paths produced by this hook. Relative paths resolve against the project root and support hook tokens.
+    /// Each path must be absent before the hook and present after a successful invocation.
+    /// </summary>
+    public string[] GeneratedOutputs { get; set; } = Array.Empty<string>();
+
     /// <summary>Maximum command execution time in seconds. Default: 600.</summary>
     public int TimeoutSeconds { get; set; } = DefaultTimeoutSeconds;
 

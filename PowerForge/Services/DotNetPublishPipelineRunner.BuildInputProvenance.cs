@@ -45,47 +45,6 @@ public sealed partial class DotNetPublishPipelineRunner
     ],
     StringComparer.Ordinal);
 
-    internal static SourceProvenance ReadPortableInventorySourceProvenance(
-        DotNetPublishPlan plan,
-        string? outputDirectory = null,
-        IEnumerable<string>? additionalGeneratedPaths = null)
-    {
-        string[] projectPaths = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
-            .Select(target => target.ProjectPath)
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .ToArray();
-        IEnumerable<string> generatedPaths = EnumerateGeneratedProvenancePaths(
-                plan,
-                Array.Empty<DotNetPublishArtefactResult>(),
-                Array.Empty<DotNetPublishStorePackageResult>(),
-                Array.Empty<DotNetPublishMsiBuildResult>())
-            .Concat(string.IsNullOrWhiteSpace(outputDirectory)
-                ? Array.Empty<string>()
-                : new[] { outputDirectory! })
-            .Concat(additionalGeneratedPaths ?? Array.Empty<string>());
-        SourceProvenance provenance = ReadSourceProvenance(
-            plan.ProjectRoot,
-            generatedPaths,
-            (plan.ConfigurationInputPaths ?? Array.Empty<string>()).Concat(projectPaths),
-            trustedExternalInputPaths: plan.GeneratedConfigurationInputPaths,
-            buildProjectPaths: projectPaths,
-            buildConfiguration: plan.Configuration,
-            buildPlan: plan);
-        if (string.IsNullOrWhiteSpace(provenance.Revision) ||
-            !string.Equals(provenance.Revision, plan.SourceRevision, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"Release source revision changed after planning; expected '{plan.SourceRevision ?? "unknown"}', " +
-                $"received '{provenance.Revision ?? "unknown"}'.");
-        }
-        if (provenance.Dirty is not false)
-        {
-            throw new InvalidOperationException(
-                "Release source changed after planning; portable signing is blocked before build or signing.");
-        }
-        return provenance;
-    }
-
     internal static string[] EnumerateBundleSourceInputs(DotNetPublishPlan? plan)
     {
         if (plan is null || string.IsNullOrWhiteSpace(plan.ProjectRoot))

@@ -64,6 +64,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 outputDir,
                 EnumerateBundleGeneratedArtefactPaths(artefacts));
 
+        string outputBoundary = plan.AllowOutputOutsideProjectRoot
+            ? outputDir
+            : plan.ProjectRoot;
+        EnsureNoReparsePointsInExistingPath(outputDir, outputBoundary, $"Bundle '{bundleId}' output path");
+
         if (bundle.ClearOutput && Directory.Exists(outputDir))
         {
             try { Directory.Delete(outputDir, recursive: true); }
@@ -75,8 +80,12 @@ public sealed partial class DotNetPublishPipelineRunner
             ? outputDir
             : ResolvePath(outputDir, bundle.PrimarySubdirectory!);
         EnsurePathWithinRoot(outputDir, primaryDestination, $"Bundle '{bundleId}' primary destination");
+        EnsureNoReparsePointsInExistingPath(
+            primaryDestination,
+            outputDir,
+            $"Bundle '{bundleId}' primary destination");
         Directory.CreateDirectory(primaryDestination);
-        DirectoryCopy(sourceArtefact.OutputDir, primaryDestination);
+        DirectoryCopy(sourceArtefact.OutputDir, primaryDestination, outputDir);
         RemoveCopiedPortableEvidence(plan, sourceArtefact, primaryDestination);
 
         foreach (var include in bundle.Includes ?? Array.Empty<DotNetPublishBundleIncludePlan>())
@@ -109,8 +118,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 ? outputDir
                 : ResolvePath(outputDir, include.Subdirectory!);
             EnsurePathWithinRoot(outputDir, includeDestination, $"Bundle '{bundleId}' include destination");
+            EnsureNoReparsePointsInExistingPath(
+                includeDestination,
+                outputDir,
+                $"Bundle '{bundleId}' include destination");
             Directory.CreateDirectory(includeDestination);
-            DirectoryCopy(includeArtefact.OutputDir, includeDestination);
+            DirectoryCopy(includeArtefact.OutputDir, includeDestination, outputDir);
             RemoveCopiedPortableEvidence(plan, includeArtefact, includeDestination);
         }
 
@@ -385,7 +398,13 @@ public sealed partial class DotNetPublishPipelineRunner
             var destination = ResolvePath(outputDir, ApplyTemplate(item.DestinationPath, tokens));
             EnsurePathWithinRoot(outputDir, destination, $"Bundle '{bundle.Id}' copy destination");
 
-            CopyBundlePath(source, destination, item.Required, item.ClearDestination, $"Bundle '{bundle.Id}' copy item");
+            CopyBundlePath(
+                source,
+                destination,
+                outputDir,
+                item.Required,
+                item.ClearDestination,
+                $"Bundle '{bundle.Id}' copy item");
         }
     }
 
@@ -408,7 +427,13 @@ public sealed partial class DotNetPublishPipelineRunner
             var destination = ResolvePath(outputDir, ApplyTemplate(module.DestinationPath, moduleTokens));
             EnsurePathWithinRoot(outputDir, destination, $"Bundle '{bundle.Id}' module include destination");
 
-            CopyBundlePath(source, destination, module.Required, module.ClearDestination, $"Bundle '{bundle.Id}' module include '{module.ModuleName}'");
+            CopyBundlePath(
+                source,
+                destination,
+                outputDir,
+                module.Required,
+                module.ClearDestination,
+                $"Bundle '{bundle.Id}' module include '{module.ModuleName}'");
         }
     }
 
@@ -424,6 +449,10 @@ public sealed partial class DotNetPublishPipelineRunner
 
             var outputPath = ResolvePath(outputDir, ApplyTemplate(script.OutputPath, tokens));
             EnsurePathWithinRoot(outputDir, outputPath, $"Bundle '{bundle.Id}' generated script output path");
+            EnsureNoReparsePointsInExistingPath(
+                outputPath,
+                outputDir,
+                $"Bundle '{bundle.Id}' generated script output path");
             if (File.Exists(outputPath) && !script.Overwrite)
                 throw new IOException($"Generated script already exists and Overwrite=false: {outputPath}");
 
@@ -461,12 +490,14 @@ public sealed partial class DotNetPublishPipelineRunner
     private void CopyBundlePath(
         string source,
         string destination,
+        string destinationBoundary,
         bool required,
         bool clearDestination,
         string description)
     {
         source = Path.GetFullPath(source);
         destination = Path.GetFullPath(destination);
+        EnsureNoReparsePointsInExistingPath(destination, destinationBoundary, description + " destination");
 
         if (Directory.Exists(source))
         {
@@ -477,7 +508,7 @@ public sealed partial class DotNetPublishPipelineRunner
             else if (!clearDestination && (Directory.Exists(destination) || File.Exists(destination)))
                 throw new IOException($"{description}: destination already exists and ClearDestination=false: {destination}");
 
-            DirectoryCopy(source, destination);
+            DirectoryCopy(source, destination, destinationBoundary);
             return;
         }
 
@@ -487,6 +518,10 @@ public sealed partial class DotNetPublishPipelineRunner
             var destinationFile = destinationWasDirectory
                 ? Path.Combine(destination, Path.GetFileName(source))
                 : destination;
+            EnsureNoReparsePointsInExistingPath(
+                destinationFile,
+                destinationBoundary,
+                description + " destination");
 
             Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
             if (clearDestination && destinationWasDirectory)

@@ -440,15 +440,6 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    internal static bool IsWindows()
-    {
-#if NET472
-        return true;
-#else
-        return OperatingSystem.IsWindows();
-#endif
-    }
-
     private static string? ResolveSignToolPath(string? toolPath)
     {
         if (!string.IsNullOrWhiteSpace(toolPath))
@@ -487,55 +478,6 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return null;
-    }
-
-    private static string? ResolveOnPath(string fileName)
-    {
-        if (string.IsNullOrWhiteSpace(fileName)) return null;
-        var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-        foreach (var dir in path.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries))
-        {
-            try
-            {
-                var candidate = Path.Combine(dir, fileName);
-                if (File.Exists(candidate)) return candidate;
-            }
-            catch { /* ignore */ }
-        }
-        return null;
-    }
-
-    private static void DirectoryCopy(string sourceDir, string destDir)
-    {
-        var source = Path.GetFullPath(sourceDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var dest = Path.GetFullPath(destDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        if (!Directory.Exists(source))
-            throw new DirectoryNotFoundException($"Source directory not found: {source}");
-
-        Directory.CreateDirectory(dest);
-
-        var sourcePrefix = source + Path.DirectorySeparatorChar;
-        foreach (var dir in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
-        {
-            var full = Path.GetFullPath(dir);
-            var rel = full.StartsWith(sourcePrefix, StringComparison.OrdinalIgnoreCase)
-                ? full.Substring(sourcePrefix.Length)
-                : Path.GetFileName(full) ?? full;
-            Directory.CreateDirectory(Path.Combine(dest, rel));
-        }
-
-        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
-        {
-            var full = Path.GetFullPath(file);
-            var rel = full.StartsWith(sourcePrefix, StringComparison.OrdinalIgnoreCase)
-                ? full.Substring(sourcePrefix.Length)
-                : Path.GetFileName(full) ?? full;
-
-            var target = Path.Combine(dest, rel);
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            File.Copy(full, target, overwrite: true);
-        }
     }
 
     internal static string ApplyTemplate(string template, IReadOnlyDictionary<string, string> tokens)
