@@ -140,6 +140,7 @@ public sealed class CloudflareStaticCacheProfileTests
         using var siteSchema = JsonDocument.Parse(ReadRepoFile("Schemas", "powerforge.web.sitespec.schema.json"));
         var cloudflare = siteSchema.RootElement.GetProperty("$defs").GetProperty("CloudflareSitePolicySpec");
         Assert.True(cloudflare.GetProperty("properties").TryGetProperty("Cache", out _));
+        Assert.True(cloudflare.GetProperty("properties").TryGetProperty("AlwaysPurgePaths", out _));
         Assert.Equal(
             ["files", "incremental", "hostname", "everything"],
             cloudflare.GetProperty("properties").GetProperty("PurgeMode").GetProperty("enum")

@@ -248,8 +248,25 @@ Incremental purge targets the canonical URLs emitted by the deployment. It is
 therefore intended for static sites whose query parameters do not select a
 different representation. Cloudflare's default cache key includes the query
 string, and a canonical URL purge does not enumerate arbitrary cached query
-variants. Keep `PurgeMode` set to `hostname` for a site that intentionally
-caches query-dependent responses.
+variants. List every known mutable variant in `Cloudflare.AlwaysPurgePaths` when
+the variants are a small, bounded part of the site's deployment contract:
+
+```json
+{
+  "Cloudflare": {
+    "PurgeMode": "incremental",
+    "AlwaysPurgePaths": [
+      "/apps/converter/",
+      "/apps/converter/?embedded=1"
+    ]
+  }
+}
+```
+
+These site-relative URLs are included in every successful incremental purge,
+deduplicated with changed deployment URLs, and counted against the same 500-URL
+safety limit. Unknown or unbounded query-dependent responses should still keep
+`PurgeMode` set to `hostname`.
 The reusable managed-incremental action derives its hostname and base path from
 the same `site.json` `BaseUrl` used to build the manifest. It rejects the
 action's `hostname` and `base-path` overrides in this mode so purge targets
