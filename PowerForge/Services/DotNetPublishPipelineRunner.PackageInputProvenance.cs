@@ -624,7 +624,18 @@ public sealed partial class DotNetPublishPipelineRunner
             _archives.Clear();
         }
 
-        private sealed record CacheEntry(string ExpectedContentHash, VerifiedPackageArchive Archive);
+        private sealed class CacheEntry
+        {
+            internal CacheEntry(string expectedContentHash, VerifiedPackageArchive archive)
+            {
+                ExpectedContentHash = expectedContentHash;
+                Archive = archive;
+            }
+
+            internal string ExpectedContentHash { get; }
+
+            internal VerifiedPackageArchive Archive { get; }
+        }
     }
 
     private sealed class VerifiedPackageArchive : IDisposable
@@ -753,6 +764,20 @@ public sealed partial class DotNetPublishPipelineRunner
             _stream.Dispose();
         }
 
-        private sealed record ExtractedFileHash(long Length, long LastWriteTimeUtcTicks, byte[] Hash);
+        private sealed class ExtractedFileHash
+        {
+            internal ExtractedFileHash(long length, long lastWriteTimeUtcTicks, byte[] hash)
+            {
+                Length = length;
+                LastWriteTimeUtcTicks = lastWriteTimeUtcTicks;
+                Hash = hash;
+            }
+
+            internal long Length { get; }
+
+            internal long LastWriteTimeUtcTicks { get; }
+
+            internal byte[] Hash { get; }
+        }
     }
 }

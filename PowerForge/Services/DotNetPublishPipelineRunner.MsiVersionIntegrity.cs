@@ -377,6 +377,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = "git",
+                    Arguments = "check-ignore -z --stdin",
                     WorkingDirectory = gitRoot,
                     RedirectStandardInput = true,
                     RedirectStandardOutput = true,
@@ -385,15 +386,12 @@ public sealed partial class DotNetPublishPipelineRunner
                     CreateNoWindow = true
                 }
             };
-            process.StartInfo.ArgumentList.Add("check-ignore");
-            process.StartInfo.ArgumentList.Add("-z");
-            process.StartInfo.ArgumentList.Add("--stdin");
             if (!process.Start())
                 return null;
 
             Task<string> output = process.StandardOutput.ReadToEndAsync();
             Task<string> error = process.StandardError.ReadToEndAsync();
-            Task input = process.StandardInput.WriteAsync(string.Join('\0', paths) + '\0');
+            Task input = process.StandardInput.WriteAsync(string.Join("\0", paths) + '\0');
             Task inputClosed = input.ContinueWith(
                 _ => process.StandardInput.Close(),
                 CancellationToken.None,
@@ -403,7 +401,11 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 try
                 {
+#if NET472
+                    process.Kill();
+#else
                     process.Kill(entireProcessTree: true);
+#endif
                 }
                 catch
                 {
