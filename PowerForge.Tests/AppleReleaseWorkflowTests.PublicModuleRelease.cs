@@ -10,6 +10,7 @@ public sealed partial class AppleReleaseWorkflowTests
         var script = Read(root, "Build", "Invoke-PowerForgePublicRelease.ps1");
         var sourceState = Read(root, "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1");
         var evidenceWorkspace = Read(root, "Build", "Private", "New-PowerForgeReleaseEvidenceWorkspace.ps1");
+        var commitishAuthorization = Read(root, "Build", "Private", "Set-PowerForgeAuthorizedReleaseCommitish.ps1");
         var releaseConfig = Read(root, "Build", "release.json");
         var moduleConfig = Read(root, "powerforge.json");
         var releaseSchema = Read(root, "Schemas", "powerforge.release.schema.json");
@@ -65,7 +66,9 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("\"PowerForge.ReleaseProvenance.json\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains("\"PowerForge.ReleaseProvenance.psd1\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains(". .\\Build\\Private\\Assert-PowerForgeCommittedReleaseVersion.ps1", workflow, StringComparison.Ordinal);
-        Assert.Contains("$releaseConfig.GitHub | Add-Member -NotePropertyName Commitish", script, StringComparison.Ordinal);
+        Assert.Contains("Set-PowerForgeAuthorizedReleaseCommitish", script, StringComparison.Ordinal);
+        Assert.Contains("$Operation -eq 'Prepare'", commitishAuthorization, StringComparison.Ordinal);
+        Assert.Contains("Add-Member -NotePropertyName Commitish", commitishAuthorization, StringComparison.Ordinal);
         Assert.Contains("ExpectedTagCommitSha = gitHub.Commitish", Read(root, "PowerForge", "Services", "PowerForgeReleaseService.cs"), StringComparison.Ordinal);
         Assert.Contains("Status         = 'Failed'", script, StringComparison.Ordinal);
         Assert.Contains("$release.isDraft -eq $true", workflow, StringComparison.Ordinal);
@@ -84,6 +87,36 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.DoesNotContain("pull_request:", workflow, StringComparison.Ordinal);
         Assert.Contains("\"PlanOutputPath\": \"../Artefacts/ProjectBuild/project.build.plan.json\"", releaseConfig, StringComparison.Ordinal);
         Assert.Contains("\"Commitish\"", releaseSchema, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("powershell", "Plan", "0123456789abcdef0123456789abcdef01234567")]
+    [InlineData("powershell", "Prepare", "<absent>")]
+    [InlineData("powershell", "Publish", "0123456789abcdef0123456789abcdef01234567")]
+    [InlineData("pwsh", "Plan", "0123456789abcdef0123456789abcdef01234567")]
+    [InlineData("pwsh", "Prepare", "<absent>")]
+    [InlineData("pwsh", "Publish", "0123456789abcdef0123456789abcdef01234567")]
+    public void PublicModuleReleaseOmitsCommitishOnlyWhilePreparingVersionChanges(
+        string shell,
+        string operation,
+        string expectedCommitish)
+    {
+        var root = FindRepoRoot();
+        var helper = Path.Combine(
+            root,
+            "Build",
+            "Private",
+            "Set-PowerForgeAuthorizedReleaseCommitish.ps1");
+        const string commit = "0123456789abcdef0123456789abcdef01234567";
+        string command = $". '{helper.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                         "$config = '{\"GitHub\":{\"Commitish\":\"caller-supplied\"}}' | ConvertFrom-Json; " +
+                         $"$config = Set-PowerForgeAuthorizedReleaseCommitish -ReleaseConfig $config -Operation '{operation}' -ExpectedCommit '{commit}'; " +
+                         "$property = $config.GitHub.PSObject.Properties['Commitish']; " +
+                         "if ($null -eq $property) { '<absent>' } else { [string] $property.Value }";
+
+        var result = Run(shell, root, "-NoProfile", "-Command", command).EnsureSuccess();
+
+        Assert.Equal(expectedCommitish, result.StandardOutput.Trim());
     }
 
     [Theory]
