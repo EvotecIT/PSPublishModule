@@ -10,6 +10,7 @@ mkdir -p "$test_root/config" "$test_root/locks" "$test_root/bin" "$test_root/ser
 export POWERFORGE_SERVICE_CONFIG_ROOT="$test_root/config"
 export POWERFORGE_SERVICE_LOCK_ROOT="$test_root/locks"
 export POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT="$test_root/trusted-stage"
+export POWERFORGE_SERVICE_TRANSACTION_ROOT="$test_root/transactions"
 export POWERFORGE_SYSTEMD_CONFIG_ROOT="$test_root/systemd"
 export TEST_SYSTEMCTL_LOG="$test_root/systemctl.log"
 
@@ -103,8 +104,8 @@ EOF
 }
 
 write_config example "$test_root/service"
-mkdir -p "$test_root/service/data"
-printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/service/data" >>"$test_root/config/example.env"
+mkdir -p "$test_root/example-data"
+printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/example-data" >>"$test_root/config/example.env"
 create_stage example 92001 1 1111111111111111111111111111111111111111
 TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" \
   --service example
@@ -116,17 +117,46 @@ grep -q '^restart example.service$' "$TEST_SYSTEMCTL_LOG"
 grep -q '^daemon-reload$' "$TEST_SYSTEMCTL_LOG"
 drop_in="$POWERFORGE_SYSTEMD_CONFIG_ROOT/example.service.d/powerforge-read-write-paths.conf"
 grep -qxF '[Service]' "$drop_in"
-grep -qxF "ReadWritePaths=$test_root/service/data" "$drop_in"
+grep -qxF "ReadWritePaths=$test_root/example-data" "$drop_in"
 [[ ! -e /tmp/powerforge-service-example ]]
+
+# A persisted transaction must restore the prior drop-in/current link after an
+# uncatchable process or host failure, before a later deployment is considered.
+transaction_key="$(printf '%s' 'example.service' | sha256sum | awk '{print $1}')"
+transaction_dir="$POWERFORGE_SERVICE_TRANSACTION_ROOT/systemd-${transaction_key}.transaction"
+mkdir -m 0700 "$transaction_dir"
+printf '%s\n' "$test_root/service" >"$transaction_dir/service-root"
+printf '%s\n' 'example.service' >"$transaction_dir/systemd-service"
+printf '%s\n' "$first_target" >"$transaction_dir/previous-target"
+printf '%s\n' 'present' >"$transaction_dir/drop-in-state"
+printf '%s\n' "$(stat -c '%u' "$drop_in")" >"$transaction_dir/drop-in-owner"
+printf '%s\n' "$(stat -c '%g' "$drop_in")" >"$transaction_dir/drop-in-group"
+printf '%s\n' "$(stat -c '%a' "$drop_in")" >"$transaction_dir/drop-in-mode"
+cp "$drop_in" "$transaction_dir/drop-in"
+chmod 0600 "$transaction_dir"/*
+stranded_release="$test_root/service/releases/stranded-release"
+cp -a "$first_target" "$stranded_release"
+ln -sfn "$stranded_release" "$test_root/service/current"
+printf '[Service]\nReadWritePaths=%s\n' "$test_root/stranded-data" >"$drop_in"
+set +e
+recovery_output="$(TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" --service example 2>&1)"
+recovery_status=$?
+set -e
+[[ "$recovery_status" -ne 0 ]]
+grep -q 'Recovering incomplete systemd writable-path transaction' <<<"$recovery_output"
+grep -q 'Recovered incomplete systemd writable-path transaction' <<<"$recovery_output"
+[[ "$(readlink -f "$test_root/service/current")" == "$first_target" ]]
+grep -qxF "ReadWritePaths=$test_root/example-data" "$drop_in"
+[[ ! -e "$transaction_dir" ]]
 if TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" --service example --archive /etc/passwd; then
   echo 'Promoter unexpectedly accepted a caller-controlled archive path.' >&2
   exit 1
 fi
 
 previous_example_target="$(readlink -f "$test_root/service/current")"
-mkdir -p "$test_root/service/data-next"
+mkdir -p "$test_root/example-data-next"
 write_config example "$test_root/service"
-printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/service/data-next" >>"$test_root/config/example.env"
+printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/example-data-next" >>"$test_root/config/example.env"
 create_stage example 92005 1 5555555555555555555555555555555555555555
 : >"$TEST_SYSTEMCTL_LOG"
 reload_count_file="$test_root/restore-reload-count"
@@ -139,11 +169,11 @@ if TEST_SERVICE_ROOT="$test_root/service" \
   exit 1
 fi
 [[ "$(readlink -f "$test_root/service/current")" == "$previous_example_target" ]]
-grep -qxF "ReadWritePaths=$test_root/service/data" "$drop_in"
+grep -qxF "ReadWritePaths=$test_root/example-data" "$drop_in"
 [[ "$(grep -c '^restart example.service$' "$TEST_SYSTEMCTL_LOG")" -eq 1 ]]
 grep -q '^stop example.service$' "$TEST_SYSTEMCTL_LOG"
-find "$test_root/locks" -maxdepth 1 -type f -name '.powerforge-systemd-example.*' | grep -q .
-rm -f -- "$test_root/locks"/.powerforge-systemd-example.*
+[[ -d "$transaction_dir" ]]
+rm -rf -- "$transaction_dir"
 : >"$TEST_SYSTEMCTL_LOG"
 [[ "$(readlink -f "$test_root/service/current")" == "$first_target" ]]
 
@@ -184,8 +214,10 @@ if TEST_SERVICE_ROOT="$test_root/early-service" \
 fi
 grep -q '^stop early.service$' "$TEST_SYSTEMCTL_LOG"
 grep -qxF 'ReadWritePaths=/previous' "$POWERFORGE_SYSTEMD_CONFIG_ROOT/early.service.d/powerforge-read-write-paths.conf"
-find "$test_root/locks" -maxdepth 1 -type f -name '.powerforge-systemd-early.*' | grep -q .
-rm -f -- "$test_root/locks"/.powerforge-systemd-early.*
+early_transaction_key="$(printf '%s' 'early.service' | sha256sum | awk '{print $1}')"
+early_transaction_dir="$POWERFORGE_SERVICE_TRANSACTION_ROOT/systemd-${early_transaction_key}.transaction"
+[[ -d "$early_transaction_dir" ]]
+rm -rf -- "$early_transaction_dir"
 : >"$TEST_SYSTEMCTL_LOG"
 
 mkdir -p "$test_root/fresh-service"
@@ -214,6 +246,26 @@ if TEST_SERVICE_ROOT="$test_root/unsafe-service" "$deploy_script" --service unsa
   echo 'Deployment unexpectedly accepted the filesystem root as a writable path.' >&2
   exit 1
 fi
+
+control_ids=(configcontrol systemdcontrol transactioncontrol stagecontrol lockcontrol)
+control_paths=("$POWERFORGE_SERVICE_CONFIG_ROOT" "$POWERFORGE_SYSTEMD_CONFIG_ROOT" "$POWERFORGE_SERVICE_TRANSACTION_ROOT" "$POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT" "$(realpath -e "$POWERFORGE_SERVICE_LOCK_ROOT")")
+for index in "${!control_ids[@]}"; do
+  control_id="${control_ids[$index]}"
+  control_path="${control_paths[$index]}"
+  control_service="$test_root/${control_id}-service"
+  mkdir -p "$control_service"
+  write_config "$control_id" "$control_service"
+  printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$control_path" >>"$test_root/config/${control_id}.env"
+  set +e
+  control_output="$(TEST_SERVICE_ROOT="$control_service" "$deploy_script" --service "$control_id" 2>&1)"
+  control_status=$?
+  set -e
+  if [[ "$control_status" -eq 0 ]]; then
+    echo "Deployment unexpectedly allowed writable access to deployment control state: $control_path" >&2
+    exit 1
+  fi
+  grep -q 'Systemd writable path must not overlap deployment control path' <<<"$control_output"
+done
 
 mkdir -p "$test_root/glob-service"
 write_config glob "$test_root/glob-service"

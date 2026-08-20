@@ -6,6 +6,7 @@ umask 022
 CONFIG_ROOT="${POWERFORGE_SERVICE_CONFIG_ROOT:-/etc/powerforge/services}"
 LOCK_ROOT="${POWERFORGE_SERVICE_LOCK_ROOT:-/var/lock}"
 TRUSTED_STAGE_ROOT="${POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT:-/var/lib/powerforge/service-deployment-staging}"
+TRANSACTION_ROOT="${POWERFORGE_SERVICE_TRANSACTION_ROOT:-/var/lib/powerforge/service-deployment-state}"
 SYSTEMD_CONFIG_ROOT="${POWERFORGE_SYSTEMD_CONFIG_ROOT:-/etc/systemd/system}"
 deployment_shell_pid="$BASHPID"
 service_id=""
@@ -24,6 +25,7 @@ systemd_drop_in_owner=""
 systemd_drop_in_group=""
 systemd_drop_in_mode=""
 systemd_write_paths_snapshot_ready=0
+systemd_transaction_path=""
 
 cleanup_staging() {
   [[ -z "$workflow_stage" || ! -d "$workflow_stage" ]] || rm -rf -- "$workflow_stage"
@@ -60,6 +62,46 @@ assert_trusted_directory_chain() {
   done
 }
 
+paths_overlap() {
+  local first="$1"
+  local second="$2"
+  [[ "$first" == "$second" || "$first" == "$second"/* || "$second" == "$first"/* ]]
+}
+
+prepare_transaction_root() {
+  local parent resolved
+  [[ "$TRANSACTION_ROOT" == /* && "$TRANSACTION_ROOT" != '/' && "$TRANSACTION_ROOT" != *[[:space:]]* ]] ||
+    fail 'Transaction root must be an absolute non-root path without whitespace.'
+  parent="$(dirname -- "$TRANSACTION_ROOT")"
+  assert_trusted_directory_chain "$parent" 'Transaction root parent'
+  if [[ -e "$TRANSACTION_ROOT" || -L "$TRANSACTION_ROOT" ]]; then
+    [[ -d "$TRANSACTION_ROOT" && ! -L "$TRANSACTION_ROOT" ]] || fail "Transaction root must be a real directory: $TRANSACTION_ROOT"
+  else
+    install -d -m 0700 "$TRANSACTION_ROOT"
+  fi
+  assert_trusted_directory_chain "$TRANSACTION_ROOT" 'Transaction root'
+  resolved="$(realpath -e -- "$TRANSACTION_ROOT")"
+  [[ "$resolved" == "$TRANSACTION_ROOT" ]] || fail "Transaction root must be canonical and contain no symlinked components: $TRANSACTION_ROOT"
+  TRANSACTION_ROOT="$resolved"
+}
+
+prepare_trusted_stage_root() {
+  local parent resolved
+  [[ "$TRUSTED_STAGE_ROOT" == /* && "$TRUSTED_STAGE_ROOT" != '/' && "$TRUSTED_STAGE_ROOT" != *[[:space:]]* ]] ||
+    fail 'Trusted staging root must be an absolute non-root path without whitespace.'
+  parent="$(dirname -- "$TRUSTED_STAGE_ROOT")"
+  assert_trusted_directory_chain "$parent" 'Trusted staging root parent'
+  if [[ -e "$TRUSTED_STAGE_ROOT" || -L "$TRUSTED_STAGE_ROOT" ]]; then
+    [[ -d "$TRUSTED_STAGE_ROOT" && ! -L "$TRUSTED_STAGE_ROOT" ]] || fail "Trusted staging root must be a real directory: $TRUSTED_STAGE_ROOT"
+  else
+    install -d -m 0700 "$TRUSTED_STAGE_ROOT"
+  fi
+  assert_trusted_directory_chain "$TRUSTED_STAGE_ROOT" 'Trusted staging root'
+  resolved="$(realpath -e -- "$TRUSTED_STAGE_ROOT")"
+  [[ "$resolved" == "$TRUSTED_STAGE_ROOT" ]] || fail "Trusted staging root must be canonical and contain no symlinked components: $TRUSTED_STAGE_ROOT"
+  TRUSTED_STAGE_ROOT="$resolved"
+}
+
 usage() {
   echo 'Usage: powerforge-service-deploy --service <id>'
 }
@@ -89,6 +131,9 @@ metadata="$workflow_stage/deployment.json"
 [[ "$CONFIG_ROOT" == /* && "$CONFIG_ROOT" != '/' && "$CONFIG_ROOT" != *[[:space:]]* ]] || fail 'Service config root must be an absolute non-root path without whitespace.'
 [[ -d "$CONFIG_ROOT" && ! -L "$CONFIG_ROOT" ]] || fail "Service config root must be a real directory: $CONFIG_ROOT"
 assert_trusted_directory_chain "$CONFIG_ROOT" 'Service config root'
+resolved_config_root="$(realpath -e -- "$CONFIG_ROOT")"
+[[ "$resolved_config_root" == "$CONFIG_ROOT" ]] || fail "Service config root must be canonical and contain no symlinked components: $CONFIG_ROOT"
+CONFIG_ROOT="$resolved_config_root"
 config_path="${CONFIG_ROOT}/${service_id}.env"
 [[ -f "$config_path" && ! -L "$config_path" ]] || fail "Service is not configured: $service_id"
 if [[ "$(id -u)" -eq 0 ]]; then
@@ -146,6 +191,7 @@ prepare_systemd_drop_in_directory() {
     install -d -m 0755 "$SYSTEMD_CONFIG_ROOT"
   fi
   assert_trusted_directory_chain "$SYSTEMD_CONFIG_ROOT" 'Systemd config root'
+  [[ "$(realpath -e -- "$SYSTEMD_CONFIG_ROOT")" == "$SYSTEMD_CONFIG_ROOT" ]] || fail "Systemd config root must be canonical and contain no symlinked components: $SYSTEMD_CONFIG_ROOT"
 
   systemd_drop_in_dir="${SYSTEMD_CONFIG_ROOT}/${SYSTEMD_SERVICE}.d"
   systemd_drop_in_path="${systemd_drop_in_dir}/powerforge-read-write-paths.conf"
@@ -175,12 +221,18 @@ prepare_service_release_root() {
 }
 
 snapshot_systemd_write_paths() {
-  local backup_temporary drop_in_mode
+  local transaction_temporary drop_in_mode
+  [[ ! -e "$systemd_transaction_path" && ! -L "$systemd_transaction_path" ]] ||
+    fail "An incomplete systemd writable-path transaction already exists: $systemd_transaction_path"
+  transaction_temporary="$(mktemp -d "${TRANSACTION_ROOT}/.systemd-${unit_lock_key}.XXXXXXXX")"
+  chmod 0700 "$transaction_temporary"
   systemd_drop_in_existed=0
   systemd_drop_in_owner=""
   systemd_drop_in_group=""
   systemd_drop_in_mode=""
-  systemd_write_paths_snapshot_ready=1
+  printf '%s\n' "$SERVICE_ROOT" >"$transaction_temporary/service-root"
+  printf '%s\n' "$SYSTEMD_SERVICE" >"$transaction_temporary/systemd-service"
+  printf '%s\n' "$previous_target" >"$transaction_temporary/previous-target"
   if [[ -e "$systemd_drop_in_path" || -L "$systemd_drop_in_path" ]]; then
     [[ -f "$systemd_drop_in_path" && ! -L "$systemd_drop_in_path" ]] || fail "PowerForge systemd drop-in must be a regular file: $systemd_drop_in_path"
     if [[ "$(id -u)" -eq 0 ]]; then
@@ -191,14 +243,59 @@ snapshot_systemd_write_paths() {
     systemd_drop_in_owner="$(stat -c '%u' -- "$systemd_drop_in_path")"
     systemd_drop_in_group="$(stat -c '%g' -- "$systemd_drop_in_path")"
     systemd_drop_in_mode="$(stat -c '%a' -- "$systemd_drop_in_path")"
-    backup_temporary="$(mktemp "${LOCK_ROOT}/.powerforge-systemd-${service_id}.XXXXXXXX")"
-    if ! install -m 0600 "$systemd_drop_in_path" "$backup_temporary"; then
-      rm -f -- "$backup_temporary"
+    if ! install -m 0600 "$systemd_drop_in_path" "$transaction_temporary/drop-in"; then
+      rm -rf -- "$transaction_temporary"
       return 1
     fi
-    systemd_drop_in_backup="$backup_temporary"
+    printf 'present\n' >"$transaction_temporary/drop-in-state"
+    printf '%s\n' "$systemd_drop_in_owner" >"$transaction_temporary/drop-in-owner"
+    printf '%s\n' "$systemd_drop_in_group" >"$transaction_temporary/drop-in-group"
+    printf '%s\n' "$systemd_drop_in_mode" >"$transaction_temporary/drop-in-mode"
     systemd_drop_in_existed=1
+  else
+    printf 'absent\n' >"$transaction_temporary/drop-in-state"
   fi
+  chmod 0600 "$transaction_temporary"/*
+  sync -f "$transaction_temporary"/*
+  sync -f "$transaction_temporary"
+  mv -- "$transaction_temporary" "$systemd_transaction_path"
+  sync -f "$TRANSACTION_ROOT"
+  systemd_drop_in_backup="${systemd_transaction_path}/drop-in"
+  systemd_write_paths_snapshot_ready=1
+}
+
+load_systemd_write_paths_transaction() {
+  local stored_root stored_service stored_state
+  [[ -d "$systemd_transaction_path" && ! -L "$systemd_transaction_path" ]] ||
+    fail "Systemd writable-path transaction must be a real directory: $systemd_transaction_path"
+  assert_trusted_directory_chain "$systemd_transaction_path" 'Systemd writable-path transaction'
+  stored_root="$(<"$systemd_transaction_path/service-root")"
+  stored_service="$(<"$systemd_transaction_path/systemd-service")"
+  previous_target="$(<"$systemd_transaction_path/previous-target")"
+  stored_state="$(<"$systemd_transaction_path/drop-in-state")"
+  [[ "$stored_root" == "$SERVICE_ROOT" ]] || fail "Incomplete transaction belongs to a different service root: $stored_root"
+  [[ "$stored_service" == "$SYSTEMD_SERVICE" ]] || fail "Incomplete transaction belongs to a different systemd unit: $stored_service"
+  if [[ -n "$previous_target" ]]; then
+    [[ -d "$previous_target" && "$previous_target" == "$resolved_release_root"/* ]] ||
+      fail "Incomplete transaction contains an invalid previous release: $previous_target"
+  fi
+  if [[ "$stored_state" == 'present' ]]; then
+    [[ -f "$systemd_transaction_path/drop-in" && ! -L "$systemd_transaction_path/drop-in" ]] ||
+      fail 'Incomplete transaction is missing its systemd drop-in backup.'
+    systemd_drop_in_owner="$(<"$systemd_transaction_path/drop-in-owner")"
+    systemd_drop_in_group="$(<"$systemd_transaction_path/drop-in-group")"
+    systemd_drop_in_mode="$(<"$systemd_transaction_path/drop-in-mode")"
+    [[ "$systemd_drop_in_owner" =~ ^[0-9]+$ && "$systemd_drop_in_group" =~ ^[0-9]+$ && "$systemd_drop_in_mode" =~ ^[0-7]{3,4}$ ]] ||
+      fail 'Incomplete transaction contains invalid systemd drop-in metadata.'
+    systemd_drop_in_backup="${systemd_transaction_path}/drop-in"
+    systemd_drop_in_existed=1
+  elif [[ "$stored_state" == 'absent' ]]; then
+    systemd_drop_in_backup=""
+    systemd_drop_in_existed=0
+  else
+    fail "Incomplete transaction contains an invalid drop-in state: $stored_state"
+  fi
+  systemd_write_paths_snapshot_ready=1
 }
 
 restore_systemd_write_paths() {
@@ -216,25 +313,74 @@ restore_systemd_write_paths() {
     rm -f -- "$systemd_drop_in_path" || return 1
   fi
   systemctl daemon-reload || return 1
-  if [[ -n "$systemd_drop_in_backup" && "$BASH_SUBSHELL" -eq 0 ]]; then
-    rm -f -- "$systemd_drop_in_backup" || log "WARNING: restored systemd drop-in backup remains at $systemd_drop_in_backup"
-    systemd_drop_in_backup=""
-  fi
+}
+
+finish_systemd_write_paths_transaction() {
+  [[ "$systemd_transaction_path" == "$TRANSACTION_ROOT"/systemd-*.transaction ]] ||
+    fail "Refusing to remove an unexpected transaction path: $systemd_transaction_path"
+  rm -rf -- "$systemd_transaction_path" || return 1
+  sync -f "$TRANSACTION_ROOT"
   systemd_write_paths_snapshot_ready=0
+  systemd_drop_in_backup=""
 }
 
 commit_systemd_write_paths() {
-  local committed_backup="$systemd_drop_in_backup"
+  local committed_path="${systemd_transaction_path}.committed.$$"
+  # The rename is the durable commit point. Ignore catchable termination during
+  # this tiny section so a signal cannot run rollback after the transaction has
+  # disappeared but before the in-memory state reflects that fact.
+  trap - INT TERM
+  mv -- "$systemd_transaction_path" "$committed_path"
+  promoted=0
   systemd_write_paths_snapshot_ready=0
   systemd_drop_in_backup=""
-  [[ -z "$committed_backup" ]] || rm -f -- "$committed_backup" || log "WARNING: committed systemd drop-in backup remains at $committed_backup"
+  sync -f "$TRANSACTION_ROOT" || log "WARNING: failed to sync committed transaction directory $TRANSACTION_ROOT" >&2
+  rm -rf -- "$committed_path" || log "WARNING: committed transaction cleanup remains at $committed_path" >&2
 }
 
 report_systemd_restore_failure() {
-  if [[ -n "$systemd_drop_in_backup" ]]; then
-    log "ERROR: failed to restore systemd writable paths; backup retained at $systemd_drop_in_backup" >&2
+  log "ERROR: failed to restore systemd writable paths; transaction retained at $systemd_transaction_path" >&2
+}
+
+restore_previous_current_link() {
+  local rollback_link=""
+  if [[ -n "$previous_target" ]]; then
+    rollback_link="$SERVICE_ROOT/.current.rollback.$$"
+    rm -f -- "$rollback_link"
+    ln -s "$previous_target" "$rollback_link" || return 1
+    mv -Tf "$rollback_link" "$SERVICE_ROOT/current" || { rm -f -- "$rollback_link"; return 1; }
+    [[ "$(readlink -f "$SERVICE_ROOT/current" 2>/dev/null)" == "$previous_target" ]]
   else
-    log 'ERROR: failed to reload the prior systemd writable-path state.' >&2
+    rm -f -- "$SERVICE_ROOT/current"
+    [[ ! -e "$SERVICE_ROOT/current" && ! -L "$SERVICE_ROOT/current" ]]
+  fi
+}
+
+recover_incomplete_systemd_transaction() {
+  local permissions_restored=1 current_restored=1 service_safe=0
+  if [[ -e "$systemd_transaction_path" || -L "$systemd_transaction_path" ]]; then
+    log "Recovering incomplete systemd writable-path transaction for $SYSTEMD_SERVICE."
+    if ! load_systemd_write_paths_transaction; then
+      systemctl stop "$SYSTEMD_SERVICE" || true
+      fail "Incomplete deployment transaction is invalid; $SYSTEMD_SERVICE was stopped and operator recovery is required."
+    fi
+    restore_systemd_write_paths || permissions_restored=0
+    restore_previous_current_link || current_restored=0
+    if [[ "$permissions_restored" == '1' && "$current_restored" == '1' && -n "$previous_target" ]]; then
+      if systemctl restart "$SYSTEMD_SERVICE"; then
+        service_safe=1
+      else
+        systemctl stop "$SYSTEMD_SERVICE" && service_safe=1
+      fi
+    else
+      systemctl stop "$SYSTEMD_SERVICE" && service_safe=1
+    fi
+    if [[ "$permissions_restored" != '1' || "$current_restored" != '1' || "$service_safe" != '1' ]]; then
+      report_systemd_restore_failure
+      fail "Incomplete deployment recovery could not prove $SYSTEMD_SERVICE safe."
+    fi
+    finish_systemd_write_paths_transaction
+    log "Recovered incomplete systemd writable-path transaction for $SYSTEMD_SERVICE."
   fi
 }
 
@@ -266,6 +412,8 @@ exec 9>"${LOCK_ROOT}/powerforge-service-${service_id}.lock"
 flock -n 9 || fail "Another deployment is active for $service_id."
 
 prepare_service_release_root
+prepare_transaction_root
+prepare_trusted_stage_root
 unit_lock_key="$(printf '%s' "$SYSTEMD_SERVICE" | sha256sum | awk '{print $1}')"
 service_root_lock_key="$(printf '%s' "$SERVICE_ROOT" | sha256sum | awk '{print $1}')"
 exec 8>"${LOCK_ROOT}/powerforge-systemd-${unit_lock_key}.lock"
@@ -274,6 +422,14 @@ exec 7>"${LOCK_ROOT}/powerforge-root-${service_root_lock_key}.lock"
 flock -n 7 || fail "Another deployment is active for service root $SERVICE_ROOT."
 
 prepare_systemd_drop_in_directory
+systemd_transaction_path="${TRANSACTION_ROOT}/systemd-${unit_lock_key}.transaction"
+recover_incomplete_systemd_transaction
+previous_target=""
+if [[ -e "$SERVICE_ROOT/current" || -L "$SERVICE_ROOT/current" ]]; then
+  [[ -L "$SERVICE_ROOT/current" ]] || fail 'Current release pointer must be a symlink.'
+  previous_target="$(readlink -f "$SERVICE_ROOT/current")"
+  [[ -d "$previous_target" && "$previous_target" == "$resolved_release_root"/* ]] || fail 'Current release pointer must resolve inside the canonical release root.'
+fi
 systemd_read_write_paths=()
 for read_write_path in "${configured_systemd_read_write_paths[@]}"; do
   [[ -d "$read_write_path" ]] || fail "Systemd writable path does not exist: $read_write_path"
@@ -282,19 +438,24 @@ for read_write_path in "${configured_systemd_read_write_paths[@]}"; do
   [[ -d "$resolved_read_write_path" && "$resolved_read_write_path" != '/' ]] || fail "Systemd writable path is not a safe directory: $read_write_path"
   [[ "$resolved_read_write_path" == "$read_write_path" ]] || fail "Systemd writable path must be canonical and contain no symlinked components: $read_write_path"
   [[ "$resolved_read_write_path" =~ ^/[A-Za-z0-9._@:+,-]+(/[A-Za-z0-9._@:+,-]+)*$ ]] || fail "Resolved systemd writable path contains unsupported characters: $read_write_path"
-  if [[ "$resolved_read_write_path" == "$resolved_release_root" ||
-        "$resolved_read_write_path" == "$resolved_release_root"/* ||
-        "$resolved_release_root" == "$resolved_read_write_path"/* ]]; then
-    fail "Systemd writable path must not overlap immutable release storage: $read_write_path"
-  fi
+  protected_roots=("$CONFIG_ROOT" "$SYSTEMD_CONFIG_ROOT" "$TRANSACTION_ROOT" "$TRUSTED_STAGE_ROOT" "$SERVICE_ROOT" "$(realpath -e -- "$LOCK_ROOT")")
+  for protected_root in "${protected_roots[@]}"; do
+    paths_overlap "$resolved_read_write_path" "$protected_root" || continue
+    fail "Systemd writable path must not overlap deployment control path $protected_root: $read_write_path"
+  done
   systemd_read_write_paths+=("$resolved_read_write_path")
 done
 
 snapshot_systemd_write_paths
 pre_promotion_failure() {
   local exit_code="$1"
+  local permissions_restored=1
   set +e
-  if ! restore_systemd_write_paths; then
+  restore_systemd_write_paths || permissions_restored=0
+  if [[ "$permissions_restored" == '1' ]]; then
+    finish_systemd_write_paths_transaction || permissions_restored=0
+  fi
+  if [[ "$permissions_restored" != '1' ]]; then
     report_systemd_restore_failure
     log 'Permission rollback failed before promotion; stopping the service to prevent restart with unverified write access.' >&2
     systemctl stop "$SYSTEMD_SERVICE" || log "CRITICAL: failed to stop $SYSTEMD_SERVICE after permission rollback failure." >&2
@@ -378,7 +539,6 @@ rollback() {
   local current_restored=1
   local service_safe=0
   local current_target=""
-  local rollback_link=""
   set +e
   if ! restore_systemd_write_paths; then
     permissions_restored=0
@@ -387,13 +547,8 @@ rollback() {
   if [[ "$promoted" == '1' ]]; then
     if [[ -n "$previous_target" && -d "$previous_target" ]]; then
       log "Deployment failed; rolling back to $previous_target"
-      rollback_link="$SERVICE_ROOT/.current.rollback.$$"
-      rm -f -- "$rollback_link"
-      if ! ln -s "$previous_target" "$rollback_link" ||
-         ! mv -Tf "$rollback_link" "$SERVICE_ROOT/current" ||
-         [[ "$(readlink -f "$SERVICE_ROOT/current" 2>/dev/null)" != "$previous_target" ]]; then
+      if ! restore_previous_current_link; then
         current_restored=0
-        rm -f -- "$rollback_link"
         log 'ERROR: failed to restore the previous current release link.' >&2
       fi
       if [[ "$permissions_restored" == '1' && "$current_restored" == '1' ]]; then
@@ -417,6 +572,11 @@ rollback() {
     fi
     if [[ "$service_safe" != '1' ]]; then
       log "CRITICAL: failed to prove $SYSTEMD_SERVICE is safely restored or stopped." >&2
+    fi
+    if [[ "$permissions_restored" == '1' && "$current_restored" == '1' && "$service_safe" == '1' ]]; then
+      finish_systemd_write_paths_transaction || log "WARNING: rollback transaction retained at $systemd_transaction_path" >&2
+    else
+      log "Rollback transaction retained for recovery: $systemd_transaction_path" >&2
     fi
   fi
   current_target="$(readlink -f "$SERVICE_ROOT/current" 2>/dev/null || true)"
@@ -442,11 +602,6 @@ done
 mkdir -p "$release_dir/_powerforge"
 install -m 0644 "$metadata" "$release_dir/_powerforge/deployment.json"
 
-if [[ -e "$SERVICE_ROOT/current" || -L "$SERVICE_ROOT/current" ]]; then
-  [[ -L "$SERVICE_ROOT/current" ]] || fail 'Current release pointer must be a symlink.'
-  previous_target="$(readlink -f "$SERVICE_ROOT/current")"
-  [[ -d "$previous_target" && "$previous_target" == "$resolved_release_root"/* ]] || fail 'Current release pointer must resolve inside the canonical release root.'
-fi
 candidate_link="$SERVICE_ROOT/.current.${run_id}.${run_attempt}"
 ln -s "$release_dir" "$candidate_link"
 promoted=1
@@ -460,8 +615,8 @@ for ((index=RELEASES_TO_KEEP; index<${#old_releases[@]}; index++)); do
   [[ "${old_releases[$index]}" == "$release_dir" || "${old_releases[$index]}" == "$previous_target" ]] || rm -rf "${old_releases[$index]}"
 done
 
-trap - ERR INT TERM
 commit_systemd_write_paths
+trap - ERR INT TERM
 cleanup_staging
 trap - EXIT
 log "Promoted $service_id release $release_id from $source_sha"

@@ -47,6 +47,9 @@ public sealed class GitHubServiceLinuxDeployWorkflowTests
         Assert.Contains("assert_trusted_directory_chain \"$CONFIG_ROOT\"", script, StringComparison.Ordinal);
         Assert.Contains("powerforge-systemd-${unit_lock_key}.lock", script, StringComparison.Ordinal);
         Assert.Contains("powerforge-root-${service_root_lock_key}.lock", script, StringComparison.Ordinal);
+        Assert.Contains("service-deployment-state", script, StringComparison.Ordinal);
+        Assert.Contains("Recovering incomplete systemd writable-path transaction", script, StringComparison.Ordinal);
+        Assert.Contains("must not overlap deployment control path", script, StringComparison.Ordinal);
         Assert.Contains("rollback 143", script, StringComparison.Ordinal);
         Assert.Contains("Rejected release retained for recovery", script, StringComparison.Ordinal);
     }
