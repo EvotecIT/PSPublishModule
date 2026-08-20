@@ -30,22 +30,70 @@ Create one root-owned configuration per service under `/etc/powerforge/services`
 
 ```bash
 install -d -o root -g root -m 0750 /etc/powerforge/services
+install -d -o root -g root -m 0755 /srv/example/service
+install -d -o example-service -g example-service -m 0750 /var/lib/example-service
+install -d -o root -g root -m 0755 /var/lib/powerforge
+install -d -o root -g root -m 0700 \
+  /var/lib/powerforge/service-deployment-staging \
+  /var/lib/powerforge/service-deployment-state
 install -o root -g root -m 0640 \
   Deployment/Linux/powerforge-service.env.example \
   /etc/powerforge/services/example.env
 ```
+
+`example-service` is the account configured by the systemd unit. Create that account
+first or substitute the unit's existing `User=`/`Group=` values. `ReadWritePaths=`
+opens the systemd mount namespace but does not bypass normal filesystem ownership and
+mode checks.
 
 Example configuration:
 
 ```dotenv
 SERVICE_ROOT=/srv/example/service
 SYSTEMD_SERVICE=example.service
+SYSTEMD_READ_WRITE_PATHS="/var/lib/example-service"
 LOCAL_HEALTH_URL=http://127.0.0.1:8080/healthz
 PUBLIC_HEALTH_URLS="https://api.example.com/healthz https://api-alt.example.com/healthz"
 REQUIRED_RELEASE_PATHS="package.json src/server.mjs"
 RELEASES_TO_KEEP=5
 REQUIRE_HEALTH_PROVENANCE=1
 ```
+
+`SYSTEMD_READ_WRITE_PATHS` is optional. Set it to existing, space-separated absolute
+data directories when the service unit uses `ProtectSystem=strict`. The root-owned
+promoter writes a PowerForge-owned systemd drop-in and reloads systemd before restart,
+so application releases remain immutable while declared databases, uploads, or other
+mutable service state stay writable. The deployment rejects missing, relative, root,
+traversal, symlinked, redirectable, release/control-plane-overlapping, or
+systemd-special paths. Writable exceptions cannot contain or reside beneath the
+service configuration, systemd configuration, lock, transaction, trusted staging,
+or service/release roots.
+Every parent must be root-owned and not group/world writable when the promoter runs
+as root. Removing the setting removes only PowerForge's owned drop-in after a
+successful deployment, while a failed deployment restores the previous permissions
+before rolling the application back. Restoration preserves the previous drop-in owner,
+group, and mode. If the permissions cannot be restored and reloaded, the promoter
+keeps its recovery backup and stops instead of restarting with unverified access.
+The systemd configuration root and unit drop-in directory must also be real,
+root-owned, non-writable directory chains; the promoter never follows a service-owned
+drop-in directory or reloads configuration from one. The same trust rule protects the
+root-sourced service configuration and the canonical service/release roots. Deployments
+are serialized by service id, systemd unit, and canonical service root. Cancellation
+uses explicit non-zero signal exits, and rollback retains a rejected release whenever
+the previous link or safe service state cannot be proven.
+Immediately before switching `current`, the promoter persists the previous permission
+and current-release state under `/var/lib/powerforge/service-deployment-state`, then
+reloads the candidate policy. Transactions are keyed by the stable service id, so a
+later invocation restores the recorded unit, service root, and systemd configuration
+root even when current configuration was renamed or is temporarily unavailable. Before
+validating a new service root, the promoter also scans pending transactions for another
+service id that shares the configured unit or root and recovers that state under both
+service locks. It proves the service restarted or stopped before accepting a new
+deployment, so process termination or host loss cannot strand an uncommitted writable
+policy. Restored drop-in and service-root filesystems are flushed before recovery state
+is removed. Successful promotion retains a recognizable committed marker until the
+transaction-directory rename is durable, then safely clears that marker on this or the
+next invocation.
 
 Give the dedicated deployment account only the exact promoter command it needs. Keep the service identifier fixed in sudoers rather than granting general root shell or `systemctl` access:
 
@@ -152,7 +200,14 @@ The root promoter:
 8. Stops the service after a failed first deployment and removes the failed release.
 9. Retains the configured number of known-good releases.
 
-The promoter never copies or removes files outside `SERVICE_ROOT`, its lock, and its deployment staging. Environment files, private keys, API credentials, queues, databases, registration stores, and other mutable state must remain external and be covered by the server-recovery manifest.
+The promoter mutates only the configured `SERVICE_ROOT`, its lock and root-only
+transaction/staging roots, and the PowerForge-owned
+`SYSTEMD_CONFIG_ROOT/<unit>.d/powerforge-read-write-paths.conf`. It reloads systemd
+after changing or restoring that drop-in. Environment files, private keys, API
+credentials, queues, databases, registration stores, and other mutable state remain
+external and must be covered by the server-recovery manifest. Recovery planning must
+also preserve the service configuration and systemd unit/drop-ins; transaction state
+is temporary and is either committed or replayed by the next promoter invocation.
 
 ## Recovery Coverage
 
