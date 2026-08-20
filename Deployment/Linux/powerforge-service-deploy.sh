@@ -15,6 +15,7 @@ metadata=""
 promoted=0
 previous_target=""
 release_dir=""
+candidate_link=""
 workflow_stage=""
 trusted_stage=""
 systemd_drop_in_backup=""
@@ -224,7 +225,7 @@ snapshot_systemd_write_paths() {
   local transaction_temporary drop_in_mode
   [[ ! -e "$systemd_transaction_path" && ! -L "$systemd_transaction_path" ]] ||
     fail "An incomplete systemd writable-path transaction already exists: $systemd_transaction_path"
-  transaction_temporary="$(mktemp -d "${TRANSACTION_ROOT}/.systemd-${unit_lock_key}.XXXXXXXX")"
+  transaction_temporary="$(mktemp -d "${TRANSACTION_ROOT}/.service-${service_id}.XXXXXXXX")"
   chmod 0700 "$transaction_temporary"
   systemd_drop_in_existed=0
   systemd_drop_in_owner=""
@@ -316,12 +317,19 @@ restore_systemd_write_paths() {
 }
 
 finish_systemd_write_paths_transaction() {
-  [[ "$systemd_transaction_path" == "$TRANSACTION_ROOT"/systemd-*.transaction ]] ||
+  [[ "$systemd_transaction_path" == "$TRANSACTION_ROOT"/service-*.transaction ]] ||
     fail "Refusing to remove an unexpected transaction path: $systemd_transaction_path"
+  sync_deployment_state
   rm -rf -- "$systemd_transaction_path" || return 1
   sync -f "$TRANSACTION_ROOT"
   systemd_write_paths_snapshot_ready=0
   systemd_drop_in_backup=""
+}
+
+sync_deployment_state() {
+  [[ ! -f "$systemd_drop_in_path" ]] || sync -f "$systemd_drop_in_path"
+  sync -f "$systemd_drop_in_dir"
+  sync -f "$SERVICE_ROOT"
 }
 
 commit_systemd_write_paths() {
@@ -329,6 +337,7 @@ commit_systemd_write_paths() {
   # The rename is the durable commit point. Ignore catchable termination during
   # this tiny section so a signal cannot run rollback after the transaction has
   # disappeared but before the in-memory state reflects that fact.
+  sync_deployment_state
   trap - INT TERM
   mv -- "$systemd_transaction_path" "$committed_path"
   promoted=0
@@ -354,6 +363,18 @@ restore_previous_current_link() {
     rm -f -- "$SERVICE_ROOT/current"
     [[ ! -e "$SERVICE_ROOT/current" && ! -L "$SERVICE_ROOT/current" ]]
   fi
+}
+
+peek_systemd_transaction_identity() {
+  [[ -d "$systemd_transaction_path" && ! -L "$systemd_transaction_path" ]] ||
+    fail "Systemd writable-path transaction must be a real directory: $systemd_transaction_path"
+  assert_trusted_directory_chain "$systemd_transaction_path" 'Systemd writable-path transaction'
+  transaction_service_root="$(<"$systemd_transaction_path/service-root")"
+  transaction_systemd_service="$(<"$systemd_transaction_path/systemd-service")"
+  [[ "$transaction_service_root" == /* && "$transaction_service_root" != '/' && "$transaction_service_root" != *[[:space:]]* ]] ||
+    fail 'Incomplete transaction contains an invalid service root.'
+  [[ "$transaction_systemd_service" =~ ^[A-Za-z0-9_.@-]+\.service$ ]] ||
+    fail 'Incomplete transaction contains an invalid systemd unit.'
 }
 
 recover_incomplete_systemd_transaction() {
@@ -414,6 +435,15 @@ flock -n 9 || fail "Another deployment is active for $service_id."
 prepare_service_release_root
 prepare_transaction_root
 prepare_trusted_stage_root
+configured_service_root="$SERVICE_ROOT"
+configured_release_root="$resolved_release_root"
+configured_systemd_service="$SYSTEMD_SERVICE"
+systemd_transaction_path="${TRANSACTION_ROOT}/service-${service_id}.transaction"
+transaction_service_root=""
+transaction_systemd_service=""
+if [[ -e "$systemd_transaction_path" || -L "$systemd_transaction_path" ]]; then
+  peek_systemd_transaction_identity
+fi
 unit_lock_key="$(printf '%s' "$SYSTEMD_SERVICE" | sha256sum | awk '{print $1}')"
 service_root_lock_key="$(printf '%s' "$SERVICE_ROOT" | sha256sum | awk '{print $1}')"
 exec 8>"${LOCK_ROOT}/powerforge-systemd-${unit_lock_key}.lock"
@@ -421,9 +451,28 @@ flock -n 8 || fail "Another deployment is active for systemd unit $SYSTEMD_SERVI
 exec 7>"${LOCK_ROOT}/powerforge-root-${service_root_lock_key}.lock"
 flock -n 7 || fail "Another deployment is active for service root $SERVICE_ROOT."
 
+if [[ -n "$transaction_systemd_service" && "$transaction_systemd_service" != "$configured_systemd_service" ]]; then
+  transaction_unit_lock_key="$(printf '%s' "$transaction_systemd_service" | sha256sum | awk '{print $1}')"
+  exec {transaction_unit_lock_fd}>"${LOCK_ROOT}/powerforge-systemd-${transaction_unit_lock_key}.lock"
+  flock -n "$transaction_unit_lock_fd" || fail "Another deployment is active for prior systemd unit $transaction_systemd_service."
+fi
+if [[ -n "$transaction_service_root" && "$transaction_service_root" != "$configured_service_root" ]]; then
+  transaction_root_lock_key="$(printf '%s' "$transaction_service_root" | sha256sum | awk '{print $1}')"
+  exec {transaction_root_lock_fd}>"${LOCK_ROOT}/powerforge-root-${transaction_root_lock_key}.lock"
+  flock -n "$transaction_root_lock_fd" || fail "Another deployment is active for prior service root $transaction_service_root."
+fi
+
+if [[ -n "$transaction_systemd_service" ]]; then
+  SYSTEMD_SERVICE="$transaction_systemd_service"
+  SERVICE_ROOT="$transaction_service_root"
+  prepare_service_release_root
+  prepare_systemd_drop_in_directory
+  recover_incomplete_systemd_transaction
+  SYSTEMD_SERVICE="$configured_systemd_service"
+  SERVICE_ROOT="$configured_service_root"
+  resolved_release_root="$configured_release_root"
+fi
 prepare_systemd_drop_in_directory
-systemd_transaction_path="${TRANSACTION_ROOT}/systemd-${unit_lock_key}.transaction"
-recover_incomplete_systemd_transaction
 previous_target=""
 if [[ -e "$SERVICE_ROOT/current" || -L "$SERVICE_ROOT/current" ]]; then
   [[ -L "$SERVICE_ROOT/current" ]] || fail 'Current release pointer must be a symlink.'
@@ -445,27 +494,6 @@ for read_write_path in "${configured_systemd_read_write_paths[@]}"; do
   done
   systemd_read_write_paths+=("$resolved_read_write_path")
 done
-
-snapshot_systemd_write_paths
-pre_promotion_failure() {
-  local exit_code="$1"
-  local permissions_restored=1
-  set +e
-  restore_systemd_write_paths || permissions_restored=0
-  if [[ "$permissions_restored" == '1' ]]; then
-    finish_systemd_write_paths_transaction || permissions_restored=0
-  fi
-  if [[ "$permissions_restored" != '1' ]]; then
-    report_systemd_restore_failure
-    log 'Permission rollback failed before promotion; stopping the service to prevent restart with unverified write access.' >&2
-    systemctl stop "$SYSTEMD_SERVICE" || log "CRITICAL: failed to stop $SYSTEMD_SERVICE after permission rollback failure." >&2
-  fi
-  exit "$exit_code"
-}
-trap 'exit_code=$?; if [[ "$BASHPID" == "$deployment_shell_pid" ]]; then pre_promotion_failure "$exit_code"; else exit "$exit_code"; fi' ERR
-trap 'if [[ "$BASHPID" == "$deployment_shell_pid" ]]; then pre_promotion_failure 130; else exit 130; fi' INT
-trap 'if [[ "$BASHPID" == "$deployment_shell_pid" ]]; then pre_promotion_failure 143; else exit 143; fi' TERM
-reconcile_systemd_write_paths
 
 archive="$(realpath -e "$archive")"
 metadata="$(realpath -e "$metadata")"
@@ -578,8 +606,16 @@ rollback() {
     else
       log "Rollback transaction retained for recovery: $systemd_transaction_path" >&2
     fi
+  elif [[ "$systemd_write_paths_snapshot_ready" == '1' ]]; then
+    if [[ "$permissions_restored" == '1' ]]; then
+      finish_systemd_write_paths_transaction || log "WARNING: restored pre-switch transaction retained at $systemd_transaction_path" >&2
+    else
+      systemctl stop "$SYSTEMD_SERVICE" || log "CRITICAL: failed to stop $SYSTEMD_SERVICE after pre-switch permission rollback failure." >&2
+      log "Pre-switch transaction retained for recovery: $systemd_transaction_path" >&2
+    fi
   fi
   current_target="$(readlink -f "$SERVICE_ROOT/current" 2>/dev/null || true)"
+  [[ -z "$candidate_link" || ! -L "$candidate_link" ]] || rm -f -- "$candidate_link"
   if [[ -n "$release_dir" && -d "$release_dir" && "$release_dir" != "$previous_target" ]]; then
     if [[ "$current_target" != "$release_dir" && ( "$promoted" != '1' || ( "$current_restored" == '1' && "$service_safe" == '1' ) ) ]]; then
       rm -rf -- "$release_dir" || log "WARNING: failed to remove rejected release $release_dir" >&2
@@ -604,6 +640,8 @@ install -m 0644 "$metadata" "$release_dir/_powerforge/deployment.json"
 
 candidate_link="$SERVICE_ROOT/.current.${run_id}.${run_attempt}"
 ln -s "$release_dir" "$candidate_link"
+snapshot_systemd_write_paths
+reconcile_systemd_write_paths
 promoted=1
 mv -Tf "$candidate_link" "$SERVICE_ROOT/current"
 

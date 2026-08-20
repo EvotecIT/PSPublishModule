@@ -76,11 +76,15 @@ root-sourced service configuration and the canonical service/release roots. Depl
 are serialized by service id, systemd unit, and canonical service root. Cancellation
 uses explicit non-zero signal exits, and rollback retains a rejected release whenever
 the previous link or safe service state cannot be proven.
-Before changing a drop-in, the promoter persists the previous permission and current-
-release state under `/var/lib/powerforge/service-deployment-state`. A later invocation
-restores that state and proves the service restarted or stopped before accepting a new
-deployment, so process termination or host loss cannot strand an uncommitted writable
-policy. Recovery state is removed only at the successful deployment commit point.
+Immediately before switching `current`, the promoter persists the previous permission
+and current-release state under `/var/lib/powerforge/service-deployment-state`, then
+reloads the candidate policy. Transactions are keyed by the stable service id, so a
+later invocation restores the recorded unit and service root even when configuration
+was renamed in the meantime. It proves the service restarted or stopped before
+accepting a new deployment, so process termination or host loss cannot strand an
+uncommitted writable policy. Restored drop-in and service-root filesystems are flushed
+before recovery state is removed; successful promotion uses the same durable commit
+boundary.
 
 Give the dedicated deployment account only the exact promoter command it needs. Keep the service identifier fixed in sudoers rather than granting general root shell or `systemctl` access:
 

@@ -26,7 +26,10 @@ if [[ "$*" == 'daemon-reload' && -n "${FAIL_DAEMON_RELOAD_COUNT_FILE:-}" ]]; the
   [[ ! -f "$FAIL_DAEMON_RELOAD_COUNT_FILE" ]] || count="$(cat "$FAIL_DAEMON_RELOAD_COUNT_FILE")"
   count=$((count + 1))
   printf '%s\n' "$count" >"$FAIL_DAEMON_RELOAD_COUNT_FILE"
-  if (( count >= ${FAIL_DAEMON_RELOAD_FROM_CALL:-2} )); then
+  if [[ -n "${FAIL_DAEMON_RELOAD_FROM_CALL:-}" ]] && (( count >= FAIL_DAEMON_RELOAD_FROM_CALL )); then
+    exit 1
+  fi
+  if [[ -n "${FAIL_DAEMON_RELOAD_ON_CALL:-}" && "$count" -eq "$FAIL_DAEMON_RELOAD_ON_CALL" ]]; then
     exit 1
   fi
 fi
@@ -122,8 +125,7 @@ grep -qxF "ReadWritePaths=$test_root/example-data" "$drop_in"
 
 # A persisted transaction must restore the prior drop-in/current link after an
 # uncatchable process or host failure, before a later deployment is considered.
-transaction_key="$(printf '%s' 'example.service' | sha256sum | awk '{print $1}')"
-transaction_dir="$POWERFORGE_SERVICE_TRANSACTION_ROOT/systemd-${transaction_key}.transaction"
+transaction_dir="$POWERFORGE_SERVICE_TRANSACTION_ROOT/service-example.transaction"
 mkdir -m 0700 "$transaction_dir"
 printf '%s\n' "$test_root/service" >"$transaction_dir/service-root"
 printf '%s\n' 'example.service' >"$transaction_dir/systemd-service"
@@ -138,6 +140,7 @@ stranded_release="$test_root/service/releases/stranded-release"
 cp -a "$first_target" "$stranded_release"
 ln -sfn "$stranded_release" "$test_root/service/current"
 printf '[Service]\nReadWritePaths=%s\n' "$test_root/stranded-data" >"$drop_in"
+sed -i 's/^SYSTEMD_SERVICE=.*/SYSTEMD_SERVICE=renamed.service/' "$test_root/config/example.env"
 set +e
 recovery_output="$(TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" --service example 2>&1)"
 recovery_status=$?
@@ -145,9 +148,12 @@ set -e
 [[ "$recovery_status" -ne 0 ]]
 grep -q 'Recovering incomplete systemd writable-path transaction' <<<"$recovery_output"
 grep -q 'Recovered incomplete systemd writable-path transaction' <<<"$recovery_output"
+grep -q '^restart example.service$' "$TEST_SYSTEMCTL_LOG"
 [[ "$(readlink -f "$test_root/service/current")" == "$first_target" ]]
 grep -qxF "ReadWritePaths=$test_root/example-data" "$drop_in"
 [[ ! -e "$transaction_dir" ]]
+write_config example "$test_root/service"
+printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/example-data" >>"$test_root/config/example.env"
 if TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" --service example --archive /etc/passwd; then
   echo 'Promoter unexpectedly accepted a caller-controlled archive path.' >&2
   exit 1
@@ -202,22 +208,23 @@ write_config early "$test_root/early-service"
 printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/early-data" >>"$test_root/config/early.env"
 printf '[Service]\nReadWritePaths=/previous\n' >"$POWERFORGE_SYSTEMD_CONFIG_ROOT/early.service.d/powerforge-read-write-paths.conf"
 create_stage early 92006 1 6666666666666666666666666666666666666666
-sed -i 's/"sourceSha": "[^"]*"/"sourceSha": "invalid"/' /tmp/powerforge-service-early/deployment.json
 : >"$TEST_SYSTEMCTL_LOG"
 early_reload_count_file="$test_root/early-reload-count"
 if TEST_SERVICE_ROOT="$test_root/early-service" \
    FAIL_DAEMON_RELOAD_COUNT_FILE="$early_reload_count_file" \
-   FAIL_DAEMON_RELOAD_FROM_CALL=2 \
+   FAIL_DAEMON_RELOAD_ON_CALL=1 \
    "$deploy_script" --service early; then
-  echo 'Pre-promotion validation unexpectedly ignored a failed permission restore.' >&2
+  echo 'Pre-switch reconciliation unexpectedly ignored a failed systemd reload.' >&2
   exit 1
 fi
-grep -q '^stop early.service$' "$TEST_SYSTEMCTL_LOG"
 grep -qxF 'ReadWritePaths=/previous' "$POWERFORGE_SYSTEMD_CONFIG_ROOT/early.service.d/powerforge-read-write-paths.conf"
-early_transaction_key="$(printf '%s' 'early.service' | sha256sum | awk '{print $1}')"
-early_transaction_dir="$POWERFORGE_SERVICE_TRANSACTION_ROOT/systemd-${early_transaction_key}.transaction"
-[[ -d "$early_transaction_dir" ]]
-rm -rf -- "$early_transaction_dir"
+early_transaction_dir="$POWERFORGE_SERVICE_TRANSACTION_ROOT/service-early.transaction"
+[[ ! -e "$early_transaction_dir" ]]
+[[ ! -e "$test_root/early-service/current" ]]
+if grep -q '^stop early.service$' "$TEST_SYSTEMCTL_LOG"; then
+  echo 'Restored pre-switch state unexpectedly stopped the untouched service.' >&2
+  exit 1
+fi
 : >"$TEST_SYSTEMCTL_LOG"
 
 mkdir -p "$test_root/fresh-service"
