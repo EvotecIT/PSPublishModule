@@ -60,6 +60,13 @@ successful deployment, while a failed deployment restores the previous permissio
 before rolling the application back. Restoration preserves the previous drop-in owner,
 group, and mode. If the permissions cannot be restored and reloaded, the promoter
 keeps its recovery backup and stops instead of restarting with unverified access.
+The systemd configuration root and unit drop-in directory must also be real,
+root-owned, non-writable directory chains; the promoter never follows a service-owned
+drop-in directory or reloads configuration from one. The same trust rule protects the
+root-sourced service configuration and the canonical service/release roots. Deployments
+are serialized by service id, systemd unit, and canonical service root. Cancellation
+uses explicit non-zero signal exits, and rollback retains a rejected release whenever
+the previous link or safe service state cannot be proven.
 
 Give the dedicated deployment account only the exact promoter command it needs. Keep the service identifier fixed in sudoers rather than granting general root shell or `systemctl` access:
 

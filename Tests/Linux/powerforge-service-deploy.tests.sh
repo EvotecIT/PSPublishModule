@@ -29,6 +29,12 @@ if [[ "$*" == 'daemon-reload' && -n "${FAIL_DAEMON_RELOAD_COUNT_FILE:-}" ]]; the
     exit 1
   fi
 fi
+if [[ -n "${FAIL_SYSTEMCTL_COMMAND:-}" && "$*" == "$FAIL_SYSTEMCTL_COMMAND" ]]; then
+  exit 1
+fi
+if [[ -n "${SIGNAL_ON_SYSTEMCTL_COMMAND:-}" && "$*" == "$SIGNAL_ON_SYSTEMCTL_COMMAND" ]]; then
+  kill -"${SIGNAL_NAME:-TERM}" "$PPID"
+fi
 EOF
 
 cat >"$test_root/bin/curl" <<'EOF'
@@ -41,6 +47,16 @@ fi
 cat "$marker"
 EOF
 chmod +x "$test_root/bin/systemctl" "$test_root/bin/curl"
+
+cat >"$test_root/bin/mv" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+if [[ "${FAIL_ROLLBACK_LINK_MOVE:-}" == '1' && "$*" == *'.current.rollback.'* ]]; then
+  exit 1
+fi
+exec /usr/bin/mv "$@"
+EOF
+chmod +x "$test_root/bin/mv"
 export PATH="$test_root/bin:$PATH"
 
 write_config() {
@@ -132,14 +148,45 @@ rm -f -- "$test_root/locks"/.powerforge-systemd-example.*
 [[ "$(readlink -f "$test_root/service/current")" == "$first_target" ]]
 
 create_stage example 92002 1 2222222222222222222222222222222222222222
-if TEST_SERVICE_ROOT="$test_root/service" FAIL_SOURCE_SHA=2222222222222222222222222222222222222222 "$deploy_script" \
+single_rollback_count_file="$test_root/single-rollback-count"
+if TEST_SERVICE_ROOT="$test_root/service" \
+   FAIL_SOURCE_SHA=2222222222222222222222222222222222222222 \
+   FAIL_DAEMON_RELOAD_COUNT_FILE="$single_rollback_count_file" \
+   FAIL_DAEMON_RELOAD_FROM_CALL=3 \
+   "$deploy_script" \
   --service example; then
   echo 'Deployment unexpectedly succeeded when exact provenance health failed.' >&2
   exit 1
 fi
 [[ "$(readlink -f "$test_root/service/current")" == "$first_target" ]]
 [[ ! -e /tmp/powerforge-service-example ]]
-[[ "$(grep -c '^restart example.service$' "$TEST_SYSTEMCTL_LOG")" -ge 3 ]]
+[[ "$(cat "$single_rollback_count_file")" == '2' ]]
+[[ "$(grep -c '^restart example.service$' "$TEST_SYSTEMCTL_LOG")" -eq 2 ]]
+if grep -q '^stop example.service$' "$TEST_SYSTEMCTL_LOG"; then
+  echo 'Top-level permission rollback unexpectedly stopped the restored healthy service.' >&2
+  exit 1
+fi
+
+mkdir -p "$test_root/early-service" "$test_root/early-data" "$POWERFORGE_SYSTEMD_CONFIG_ROOT/early.service.d"
+write_config early "$test_root/early-service"
+printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/early-data" >>"$test_root/config/early.env"
+printf '[Service]\nReadWritePaths=/previous\n' >"$POWERFORGE_SYSTEMD_CONFIG_ROOT/early.service.d/powerforge-read-write-paths.conf"
+create_stage early 92006 1 6666666666666666666666666666666666666666
+sed -i 's/"sourceSha": "[^"]*"/"sourceSha": "invalid"/' /tmp/powerforge-service-early/deployment.json
+: >"$TEST_SYSTEMCTL_LOG"
+early_reload_count_file="$test_root/early-reload-count"
+if TEST_SERVICE_ROOT="$test_root/early-service" \
+   FAIL_DAEMON_RELOAD_COUNT_FILE="$early_reload_count_file" \
+   FAIL_DAEMON_RELOAD_FROM_CALL=2 \
+   "$deploy_script" --service early; then
+  echo 'Pre-promotion validation unexpectedly ignored a failed permission restore.' >&2
+  exit 1
+fi
+grep -q '^stop early.service$' "$TEST_SYSTEMCTL_LOG"
+grep -qxF 'ReadWritePaths=/previous' "$POWERFORGE_SYSTEMD_CONFIG_ROOT/early.service.d/powerforge-read-write-paths.conf"
+find "$test_root/locks" -maxdepth 1 -type f -name '.powerforge-systemd-early.*' | grep -q .
+rm -f -- "$test_root/locks"/.powerforge-systemd-early.*
+: >"$TEST_SYSTEMCTL_LOG"
 
 mkdir -p "$test_root/fresh-service"
 write_config fresh "$test_root/fresh-service"
@@ -207,6 +254,178 @@ if TEST_SERVICE_ROOT="$test_root/untrusted-service" "$deploy_script" --service u
   exit 1
 fi
 chmod 0755 "$test_root/untrusted-parent"
+
+mkdir -p "$test_root/systemd-symlink-service" "$test_root/systemd-attacker"
+write_config dirsymlink "$test_root/systemd-symlink-service"
+ln -s "$test_root/systemd-attacker" "$POWERFORGE_SYSTEMD_CONFIG_ROOT/dirsymlink.service.d"
+if TEST_SERVICE_ROOT="$test_root/systemd-symlink-service" "$deploy_script" --service dirsymlink; then
+  echo 'Deployment unexpectedly accepted a symlinked systemd drop-in directory.' >&2
+  exit 1
+fi
+rm -f -- "$POWERFORGE_SYSTEMD_CONFIG_ROOT/dirsymlink.service.d"
+
+mkdir -p "$test_root/systemd-untrusted-service" "$POWERFORGE_SYSTEMD_CONFIG_ROOT/diruntrusted.service.d"
+chmod 0777 "$POWERFORGE_SYSTEMD_CONFIG_ROOT/diruntrusted.service.d"
+write_config diruntrusted "$test_root/systemd-untrusted-service"
+if TEST_SERVICE_ROOT="$test_root/systemd-untrusted-service" "$deploy_script" --service diruntrusted; then
+  echo 'Deployment unexpectedly accepted a writable systemd drop-in directory.' >&2
+  exit 1
+fi
+chmod 0755 "$POWERFORGE_SYSTEMD_CONFIG_ROOT/diruntrusted.service.d"
+
+mkdir -p "$test_root/config-symlink-target" "$test_root/config-trust-service"
+write_config configtrust "$test_root/config-trust-service"
+cp "$test_root/config/configtrust.env" "$test_root/config-symlink-target/configtrust.env"
+ln -s "$test_root/config-symlink-target" "$test_root/config-symlink"
+set +e
+config_symlink_output="$(POWERFORGE_SERVICE_CONFIG_ROOT="$test_root/config-symlink" TEST_SERVICE_ROOT="$test_root/config-trust-service" "$deploy_script" --service configtrust 2>&1)"
+config_symlink_status=$?
+set -e
+if [[ "$config_symlink_status" -eq 0 ]]; then
+  echo 'Deployment unexpectedly accepted a symlinked service config root.' >&2
+  exit 1
+fi
+grep -q 'Service config root must be a real directory' <<<"$config_symlink_output"
+mkdir -p "$test_root/config-writable"
+cp "$test_root/config/configtrust.env" "$test_root/config-writable/configtrust.env"
+chmod 0777 "$test_root/config-writable"
+set +e
+config_writable_output="$(POWERFORGE_SERVICE_CONFIG_ROOT="$test_root/config-writable" TEST_SERVICE_ROOT="$test_root/config-trust-service" "$deploy_script" --service configtrust 2>&1)"
+config_writable_status=$?
+set -e
+if [[ "$config_writable_status" -eq 0 ]]; then
+  echo 'Deployment unexpectedly accepted a writable service config root.' >&2
+  exit 1
+fi
+grep -q 'Service config root must not be group/world writable' <<<"$config_writable_output"
+chmod 0755 "$test_root/config-writable"
+
+mkdir -p "$test_root/service-root-target" "$test_root/service-root-config"
+ln -s "$test_root/service-root-target" "$test_root/service-root-link"
+write_config rootsymlink "$test_root/service-root-link"
+set +e
+root_symlink_output="$(TEST_SERVICE_ROOT="$test_root/service-root-target" "$deploy_script" --service rootsymlink 2>&1)"
+root_symlink_status=$?
+set -e
+if [[ "$root_symlink_status" -eq 0 ]]; then
+  echo 'Deployment unexpectedly accepted a symlinked service root.' >&2
+  exit 1
+fi
+grep -q 'Service root must be a real, pre-provisioned directory' <<<"$root_symlink_output"
+mkdir -p "$test_root/service-root-writable"
+chmod 0777 "$test_root/service-root-writable"
+write_config rootwritable "$test_root/service-root-writable"
+set +e
+root_writable_output="$(TEST_SERVICE_ROOT="$test_root/service-root-writable" "$deploy_script" --service rootwritable 2>&1)"
+root_writable_status=$?
+set -e
+if [[ "$root_writable_status" -eq 0 ]]; then
+  echo 'Deployment unexpectedly accepted a writable service root.' >&2
+  exit 1
+fi
+grep -q 'Service root must not be group/world writable' <<<"$root_writable_output"
+chmod 0755 "$test_root/service-root-writable"
+
+mkdir -p "$test_root/release-link-service" "$test_root/release-link-target"
+ln -s "$test_root/release-link-target" "$test_root/release-link-service/releases"
+write_config releaselink "$test_root/release-link-service"
+set +e
+release_link_output="$(TEST_SERVICE_ROOT="$test_root/release-link-service" "$deploy_script" --service releaselink 2>&1)"
+release_link_status=$?
+set -e
+if [[ "$release_link_status" -eq 0 ]]; then
+  echo 'Deployment unexpectedly accepted a symlinked release root.' >&2
+  exit 1
+fi
+grep -q 'Release root must be a real directory' <<<"$release_link_output"
+
+mkdir -p "$test_root/unit-lock-service"
+write_config unitalias "$test_root/unit-lock-service"
+sed -i 's/^SYSTEMD_SERVICE=.*/SYSTEMD_SERVICE=example.service/' "$test_root/config/unitalias.env"
+unit_lock_key="$(printf '%s' 'example.service' | sha256sum | awk '{print $1}')"
+unit_lock_ready="$test_root/unit-lock-ready"
+(
+  exec 200>"$test_root/locks/powerforge-systemd-${unit_lock_key}.lock"
+  flock 200
+  : >"$unit_lock_ready"
+  sleep 30
+) &
+unit_lock_holder=$!
+for _ in {1..100}; do [[ -e "$unit_lock_ready" ]] && break; sleep 0.05; done
+[[ -e "$unit_lock_ready" ]]
+set +e
+unit_lock_output="$(TEST_SERVICE_ROOT="$test_root/unit-lock-service" "$deploy_script" --service unitalias 2>&1)"
+unit_lock_status=$?
+set -e
+if [[ "$unit_lock_status" -eq 0 ]]; then
+  echo 'Deployment unexpectedly bypassed serialization for a shared systemd unit.' >&2
+  kill "$unit_lock_holder" 2>/dev/null || true
+  wait "$unit_lock_holder" 2>/dev/null || true
+  exit 1
+fi
+grep -q 'Another deployment is active for systemd unit example.service' <<<"$unit_lock_output"
+kill "$unit_lock_holder" 2>/dev/null || true
+wait "$unit_lock_holder" 2>/dev/null || true
+
+write_config rootalias "$test_root/service"
+service_root_lock_key="$(printf '%s' "$test_root/service" | sha256sum | awk '{print $1}')"
+root_lock_ready="$test_root/root-lock-ready"
+(
+  exec 201>"$test_root/locks/powerforge-root-${service_root_lock_key}.lock"
+  flock 201
+  : >"$root_lock_ready"
+  sleep 30
+) &
+root_lock_holder=$!
+for _ in {1..100}; do [[ -e "$root_lock_ready" ]] && break; sleep 0.05; done
+[[ -e "$root_lock_ready" ]]
+set +e
+root_lock_output="$(TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" --service rootalias 2>&1)"
+root_lock_status=$?
+set -e
+if [[ "$root_lock_status" -eq 0 ]]; then
+  echo 'Deployment unexpectedly bypassed serialization for a shared service root.' >&2
+  kill "$root_lock_holder" 2>/dev/null || true
+  wait "$root_lock_holder" 2>/dev/null || true
+  exit 1
+fi
+grep -q "Another deployment is active for service root $test_root/service" <<<"$root_lock_output"
+kill "$root_lock_holder" 2>/dev/null || true
+wait "$root_lock_holder" 2>/dev/null || true
+
+mkdir -p "$test_root/signal-service"
+write_config signal "$test_root/signal-service"
+create_stage signal 92007 1 7777777777777777777777777777777777777777
+set +e
+TEST_SERVICE_ROOT="$test_root/signal-service" \
+  SIGNAL_ON_SYSTEMCTL_COMMAND='restart signal.service' \
+  SIGNAL_NAME=TERM \
+  "$deploy_script" --service signal
+signal_status=$?
+set -e
+[[ "$signal_status" -eq 143 ]]
+[[ ! -e "$test_root/signal-service/current" ]]
+grep -q '^stop signal.service$' "$TEST_SYSTEMCTL_LOG"
+
+mkdir -p "$test_root/rollback-service"
+write_config rollback "$test_root/rollback-service"
+create_stage rollback 92008 1 8888888888888888888888888888888888888888
+TEST_SERVICE_ROOT="$test_root/rollback-service" "$deploy_script" --service rollback
+rollback_previous="$(readlink -f "$test_root/rollback-service/current")"
+create_stage rollback 92009 1 9999999999999999999999999999999999999999
+set +e
+rollback_output="$(TEST_SERVICE_ROOT="$test_root/rollback-service" \
+  FAIL_SOURCE_SHA=9999999999999999999999999999999999999999 \
+  FAIL_ROLLBACK_LINK_MOVE=1 \
+  FAIL_SYSTEMCTL_COMMAND='stop rollback.service' \
+  "$deploy_script" --service rollback 2>&1)"
+rollback_status=$?
+set -e
+[[ "$rollback_status" -ne 0 ]]
+grep -q 'CRITICAL: failed to prove rollback.service is safely restored or stopped.' <<<"$rollback_output"
+rollback_current="$(readlink -f "$test_root/rollback-service/current")"
+[[ "$rollback_current" != "$rollback_previous" && -d "$rollback_current" ]]
+grep -q '9999999999999999999999999999999999999999' "$rollback_current/_powerforge/deployment.json"
 
 mkdir -p "$test_root/reload-service" "$test_root/reload-data"
 write_config reload "$test_root/reload-service"
