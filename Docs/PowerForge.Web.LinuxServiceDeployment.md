@@ -53,8 +53,13 @@ data directories when the service unit uses `ProtectSystem=strict`. The root-own
 promoter writes a PowerForge-owned systemd drop-in and reloads systemd before restart,
 so application releases remain immutable while declared databases, uploads, or other
 mutable service state stay writable. The deployment rejects missing, relative, root,
-traversal, or systemd-special paths. Removing the setting removes only PowerForge's
-owned drop-in on the next deployment, so obsolete write access does not persist.
+traversal, symlinked, redirectable, release-overlapping, or systemd-special paths.
+Every parent must be root-owned and not group/world writable when the promoter runs
+as root. Removing the setting removes only PowerForge's owned drop-in after a
+successful deployment, while a failed deployment restores the previous permissions
+before rolling the application back. Restoration preserves the previous drop-in owner,
+group, and mode. If the permissions cannot be restored and reloaded, the promoter
+keeps its recovery backup and stops instead of restarting with unverified access.
 
 Give the dedicated deployment account only the exact promoter command it needs. Keep the service identifier fixed in sudoers rather than granting general root shell or `systemctl` access:
 

@@ -15,6 +15,14 @@ previous_target=""
 release_dir=""
 workflow_stage=""
 trusted_stage=""
+systemd_drop_in_backup=""
+systemd_drop_in_dir=""
+systemd_drop_in_path=""
+systemd_drop_in_existed=0
+systemd_drop_in_owner=""
+systemd_drop_in_group=""
+systemd_drop_in_mode=""
+systemd_write_paths_snapshot_ready=0
 
 cleanup_staging() {
   [[ -z "$workflow_stage" || ! -d "$workflow_stage" ]] || rm -rf -- "$workflow_stage"
@@ -99,16 +107,100 @@ for read_write_path in "${configured_systemd_read_write_paths[@]}"; do
   [[ "/${read_write_path#/}/" != *'/../'* ]] || fail "Systemd writable path must not contain traversal: $read_write_path"
 done
 
+assert_trusted_systemd_path() {
+  local declared_path="$1"
+  local deployment_uid component current owner mode parent
+  local -a components
+  deployment_uid="$(id -u)"
+  [[ ! -L "$declared_path" ]] || fail "Systemd writable path must not be a symlink: $declared_path"
+  parent="$(dirname -- "$declared_path")"
+  current='/'
+  IFS='/' read -r -a components <<<"${parent#/}"
+  for component in "${components[@]}"; do
+    [[ -n "$component" ]] || continue
+    current="${current%/}/$component"
+    [[ -d "$current" && ! -L "$current" ]] || fail "Systemd writable path parent must be a real directory: $current"
+    owner="$(stat -c '%u' -- "$current")"
+    mode="$(stat -c '%a' -- "$current")"
+    [[ "$owner" -eq 0 || "$owner" -eq "$deployment_uid" ]] || fail "Systemd writable path parent has an untrusted owner: $current"
+    (( (8#$mode & 0022) == 0 )) || fail "Systemd writable path parent must not be group/world writable: $current"
+  done
+}
+
+snapshot_systemd_write_paths() {
+  local backup_temporary drop_in_mode
+  systemd_drop_in_dir="${SYSTEMD_CONFIG_ROOT}/${SYSTEMD_SERVICE}.d"
+  systemd_drop_in_path="${systemd_drop_in_dir}/powerforge-read-write-paths.conf"
+  systemd_drop_in_existed=0
+  systemd_drop_in_owner=""
+  systemd_drop_in_group=""
+  systemd_drop_in_mode=""
+  systemd_write_paths_snapshot_ready=1
+  if [[ -e "$systemd_drop_in_path" || -L "$systemd_drop_in_path" ]]; then
+    [[ -f "$systemd_drop_in_path" && ! -L "$systemd_drop_in_path" ]] || fail "PowerForge systemd drop-in must be a regular file: $systemd_drop_in_path"
+    if [[ "$(id -u)" -eq 0 ]]; then
+      [[ "$(stat -c '%u' -- "$systemd_drop_in_path")" -eq 0 ]] || fail "PowerForge systemd drop-in must be owned by root: $systemd_drop_in_path"
+      drop_in_mode="$(stat -c '%a' -- "$systemd_drop_in_path")"
+      (( (8#$drop_in_mode & 0022) == 0 )) || fail "PowerForge systemd drop-in must not be group/world writable: $systemd_drop_in_path"
+    fi
+    systemd_drop_in_owner="$(stat -c '%u' -- "$systemd_drop_in_path")"
+    systemd_drop_in_group="$(stat -c '%g' -- "$systemd_drop_in_path")"
+    systemd_drop_in_mode="$(stat -c '%a' -- "$systemd_drop_in_path")"
+    backup_temporary="$(mktemp "${LOCK_ROOT}/.powerforge-systemd-${service_id}.XXXXXXXX")"
+    if ! install -m 0600 "$systemd_drop_in_path" "$backup_temporary"; then
+      rm -f -- "$backup_temporary"
+      return 1
+    fi
+    systemd_drop_in_backup="$backup_temporary"
+    systemd_drop_in_existed=1
+  fi
+}
+
+restore_systemd_write_paths() {
+  local restore_temporary=""
+  [[ "$systemd_write_paths_snapshot_ready" == '1' ]] || return 0
+  if [[ "$systemd_drop_in_existed" == '1' ]]; then
+    install -d -m 0755 "$systemd_drop_in_dir" || return 1
+    restore_temporary="$(mktemp "${systemd_drop_in_dir}/.powerforge-read-write-paths.restore.XXXXXXXX")" || return 1
+    if ! install -m "$systemd_drop_in_mode" "$systemd_drop_in_backup" "$restore_temporary" ||
+       ! chown "$systemd_drop_in_owner:$systemd_drop_in_group" "$restore_temporary" ||
+       ! mv -f -- "$restore_temporary" "$systemd_drop_in_path"; then
+      rm -f -- "$restore_temporary"
+      return 1
+    fi
+  else
+    rm -f -- "$systemd_drop_in_path" || return 1
+  fi
+  systemctl daemon-reload || return 1
+  if [[ -n "$systemd_drop_in_backup" && "$BASH_SUBSHELL" -eq 0 ]]; then
+    rm -f -- "$systemd_drop_in_backup" || log "WARNING: restored systemd drop-in backup remains at $systemd_drop_in_backup"
+    systemd_drop_in_backup=""
+  fi
+  systemd_write_paths_snapshot_ready=0
+}
+
+commit_systemd_write_paths() {
+  [[ -z "$systemd_drop_in_backup" ]] || rm -f -- "$systemd_drop_in_backup"
+  systemd_drop_in_backup=""
+  systemd_write_paths_snapshot_ready=0
+}
+
+report_systemd_restore_failure() {
+  if [[ -n "$systemd_drop_in_backup" ]]; then
+    log "ERROR: failed to restore systemd writable paths; backup retained at $systemd_drop_in_backup" >&2
+  else
+    log 'ERROR: failed to reload the prior systemd writable-path state.' >&2
+  fi
+}
+
 reconcile_systemd_write_paths() (
-  drop_in_dir="${SYSTEMD_CONFIG_ROOT}/${SYSTEMD_SERVICE}.d"
-  drop_in_path="${drop_in_dir}/powerforge-read-write-paths.conf"
   if ((${#systemd_read_write_paths[@]} == 0)); then
-    [[ ! -f "$drop_in_path" ]] || rm -f -- "$drop_in_path"
+    [[ ! -f "$systemd_drop_in_path" ]] || rm -f -- "$systemd_drop_in_path"
     systemctl daemon-reload
     return 0
   fi
-  install -d -m 0755 "$drop_in_dir"
-  temporary="$(mktemp "${drop_in_dir}/.powerforge-read-write-paths.XXXXXXXX")"
+  install -d -m 0755 "$systemd_drop_in_dir"
+  temporary="$(mktemp "${systemd_drop_in_dir}/.powerforge-read-write-paths.XXXXXXXX")"
   trap 'rm -f -- "$temporary"' EXIT
   {
     printf '[Service]\n'
@@ -117,10 +209,10 @@ reconcile_systemd_write_paths() (
     done
   } >"$temporary"
   chmod 0644 "$temporary"
-  if [[ -f "$drop_in_path" ]] && cmp -s -- "$temporary" "$drop_in_path"; then
+  if [[ -f "$systemd_drop_in_path" ]] && cmp -s -- "$temporary" "$systemd_drop_in_path"; then
     rm -f -- "$temporary"
   else
-    mv -f -- "$temporary" "$drop_in_path"
+    mv -f -- "$temporary" "$systemd_drop_in_path"
   fi
   systemctl daemon-reload
 )
@@ -129,15 +221,26 @@ mkdir -p "$LOCK_ROOT"
 exec 9>"${LOCK_ROOT}/powerforge-service-${service_id}.lock"
 flock -n 9 || fail "Another deployment is active for $service_id."
 
+mkdir -p "$SERVICE_ROOT/releases"
+resolved_release_root="$(realpath -e -- "$SERVICE_ROOT/releases")"
 systemd_read_write_paths=()
 for read_write_path in "${configured_systemd_read_write_paths[@]}"; do
   [[ -d "$read_write_path" ]] || fail "Systemd writable path does not exist: $read_write_path"
+  assert_trusted_systemd_path "$read_write_path"
   resolved_read_write_path="$(realpath -e -- "$read_write_path")"
   [[ -d "$resolved_read_write_path" && "$resolved_read_write_path" != '/' ]] || fail "Systemd writable path is not a safe directory: $read_write_path"
+  [[ "$resolved_read_write_path" == "$read_write_path" ]] || fail "Systemd writable path must be canonical and contain no symlinked components: $read_write_path"
   [[ "$resolved_read_write_path" =~ ^/[A-Za-z0-9._@:+,-]+(/[A-Za-z0-9._@:+,-]+)*$ ]] || fail "Resolved systemd writable path contains unsupported characters: $read_write_path"
+  if [[ "$resolved_read_write_path" == "$resolved_release_root" ||
+        "$resolved_read_write_path" == "$resolved_release_root"/* ||
+        "$resolved_release_root" == "$resolved_read_write_path"/* ]]; then
+    fail "Systemd writable path must not overlap immutable release storage: $read_write_path"
+  fi
   systemd_read_write_paths+=("$resolved_read_write_path")
 done
 
+snapshot_systemd_write_paths
+trap 'exit_code=$?; set +e; restore_systemd_write_paths || report_systemd_restore_failure; exit "$exit_code"' ERR INT TERM
 reconcile_systemd_write_paths
 
 archive="$(realpath -e "$archive")"
@@ -185,7 +288,6 @@ while IFS= read -r listing; do
   [[ "$entry_type" == '-' || "$entry_type" == 'd' ]] || fail 'Archive contains links or special files.'
 done < <(tar -tvf "$archive")
 
-mkdir -p "$SERVICE_ROOT/releases"
 release_id="$(date -u +%Y%m%d%H%M%S)-${run_id}-${run_attempt}-${source_sha:0:12}"
 release_dir="$SERVICE_ROOT/releases/$release_id"
 [[ ! -e "$release_dir" ]] || fail "Release already exists: $release_id"
@@ -209,14 +311,24 @@ verify_health() {
 
 rollback() {
   local exit_code="$1"
+  local permissions_restored=1
   set +e
+  if ! restore_systemd_write_paths; then
+    permissions_restored=0
+    report_systemd_restore_failure
+  fi
   if [[ "$promoted" == '1' ]]; then
     if [[ -n "$previous_target" && -d "$previous_target" ]]; then
       log "Deployment failed; rolling back to $previous_target"
       rollback_link="$SERVICE_ROOT/.current.rollback.$$"
       ln -s "$previous_target" "$rollback_link"
       mv -Tf "$rollback_link" "$SERVICE_ROOT/current"
-      systemctl restart "$SYSTEMD_SERVICE"
+      if [[ "$permissions_restored" == '1' ]]; then
+        systemctl restart "$SYSTEMD_SERVICE"
+      else
+        log 'Permission rollback failed; stopping the service instead of restarting with unverified write access.' >&2
+        systemctl stop "$SYSTEMD_SERVICE"
+      fi
     else
       log 'Deployment failed; removing the first release from current and stopping the service.'
       rm -f "$SERVICE_ROOT/current"
@@ -253,6 +365,7 @@ for ((index=RELEASES_TO_KEEP; index<${#old_releases[@]}; index++)); do
   [[ "${old_releases[$index]}" == "$release_dir" || "${old_releases[$index]}" == "$previous_target" ]] || rm -rf "${old_releases[$index]}"
 done
 
+commit_systemd_write_paths
 trap - ERR INT TERM
 cleanup_staging
 trap - EXIT

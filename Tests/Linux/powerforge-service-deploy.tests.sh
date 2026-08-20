@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 deploy_script="$repo_root/Deployment/Linux/powerforge-service-deploy.sh"
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${HOME}/powerforge-service-deploy-tests.XXXXXXXX")"
 trap 'rm -rf "$test_root" /tmp/powerforge-service-example /tmp/powerforge-service-fresh' EXIT
 
 mkdir -p "$test_root/config" "$test_root/locks" "$test_root/bin" "$test_root/service"
@@ -19,6 +19,15 @@ set -Eeuo pipefail
 printf '%s\n' "$*" >>"$TEST_SYSTEMCTL_LOG"
 if [[ "$*" == 'daemon-reload' && "${FAIL_DAEMON_RELOAD:-}" == '1' ]]; then
   exit 1
+fi
+if [[ "$*" == 'daemon-reload' && -n "${FAIL_DAEMON_RELOAD_COUNT_FILE:-}" ]]; then
+  count=0
+  [[ ! -f "$FAIL_DAEMON_RELOAD_COUNT_FILE" ]] || count="$(cat "$FAIL_DAEMON_RELOAD_COUNT_FILE")"
+  count=$((count + 1))
+  printf '%s\n' "$count" >"$FAIL_DAEMON_RELOAD_COUNT_FILE"
+  if (( count >= ${FAIL_DAEMON_RELOAD_FROM_CALL:-2} )); then
+    exit 1
+  fi
 fi
 EOF
 
@@ -78,8 +87,8 @@ EOF
 }
 
 write_config example "$test_root/service"
-mkdir -p "$test_root/service-data"
-printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/service-data" >>"$test_root/config/example.env"
+mkdir -p "$test_root/service/data"
+printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/service/data" >>"$test_root/config/example.env"
 create_stage example 92001 1 1111111111111111111111111111111111111111
 TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" \
   --service example
@@ -91,12 +100,35 @@ grep -q '^restart example.service$' "$TEST_SYSTEMCTL_LOG"
 grep -q '^daemon-reload$' "$TEST_SYSTEMCTL_LOG"
 drop_in="$POWERFORGE_SYSTEMD_CONFIG_ROOT/example.service.d/powerforge-read-write-paths.conf"
 grep -qxF '[Service]' "$drop_in"
-grep -qxF "ReadWritePaths=$test_root/service-data" "$drop_in"
+grep -qxF "ReadWritePaths=$test_root/service/data" "$drop_in"
 [[ ! -e /tmp/powerforge-service-example ]]
 if TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" --service example --archive /etc/passwd; then
   echo 'Promoter unexpectedly accepted a caller-controlled archive path.' >&2
   exit 1
 fi
+
+previous_example_target="$(readlink -f "$test_root/service/current")"
+mkdir -p "$test_root/service/data-next"
+write_config example "$test_root/service"
+printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/service/data-next" >>"$test_root/config/example.env"
+create_stage example 92005 1 5555555555555555555555555555555555555555
+: >"$TEST_SYSTEMCTL_LOG"
+reload_count_file="$test_root/restore-reload-count"
+if TEST_SERVICE_ROOT="$test_root/service" \
+   FAIL_SOURCE_SHA=5555555555555555555555555555555555555555 \
+   FAIL_DAEMON_RELOAD_COUNT_FILE="$reload_count_file" \
+   FAIL_DAEMON_RELOAD_FROM_CALL=2 \
+   "$deploy_script" --service example; then
+  echo 'Deployment unexpectedly restarted after permission rollback failed.' >&2
+  exit 1
+fi
+[[ "$(readlink -f "$test_root/service/current")" == "$previous_example_target" ]]
+grep -qxF "ReadWritePaths=$test_root/service/data" "$drop_in"
+[[ "$(grep -c '^restart example.service$' "$TEST_SYSTEMCTL_LOG")" -eq 1 ]]
+grep -q '^stop example.service$' "$TEST_SYSTEMCTL_LOG"
+find "$test_root/locks" -maxdepth 1 -type f -name '.powerforge-systemd-example.*' | grep -q .
+rm -f -- "$test_root/locks"/.powerforge-systemd-example.*
+: >"$TEST_SYSTEMCTL_LOG"
 [[ "$(readlink -f "$test_root/service/current")" == "$first_target" ]]
 
 create_stage example 92002 1 2222222222222222222222222222222222222222
@@ -113,6 +145,7 @@ mkdir -p "$test_root/fresh-service"
 write_config fresh "$test_root/fresh-service"
 mkdir -p "$POWERFORGE_SYSTEMD_CONFIG_ROOT/fresh.service.d"
 printf '[Service]\nReadWritePaths=/obsolete\n' >"$POWERFORGE_SYSTEMD_CONFIG_ROOT/fresh.service.d/powerforge-read-write-paths.conf"
+chmod 0640 "$POWERFORGE_SYSTEMD_CONFIG_ROOT/fresh.service.d/powerforge-read-write-paths.conf"
 create_stage fresh 92003 1 3333333333333333333333333333333333333333
 if TEST_SERVICE_ROOT="$test_root/fresh-service" FAIL_SOURCE_SHA=3333333333333333333333333333333333333333 "$deploy_script" \
   --service fresh; then
@@ -120,8 +153,12 @@ if TEST_SERVICE_ROOT="$test_root/fresh-service" FAIL_SOURCE_SHA=3333333333333333
   exit 1
 fi
 [[ ! -e "$test_root/fresh-service/current" ]]
-[[ ! -e "$POWERFORGE_SYSTEMD_CONFIG_ROOT/fresh.service.d/powerforge-read-write-paths.conf" ]]
+grep -qxF 'ReadWritePaths=/obsolete' "$POWERFORGE_SYSTEMD_CONFIG_ROOT/fresh.service.d/powerforge-read-write-paths.conf"
+[[ "$(stat -c '%a' "$POWERFORGE_SYSTEMD_CONFIG_ROOT/fresh.service.d/powerforge-read-write-paths.conf")" == '640' ]]
 grep -q '^stop fresh.service$' "$TEST_SYSTEMCTL_LOG"
+create_stage fresh 92003 1 3333333333333333333333333333333333333333
+TEST_SERVICE_ROOT="$test_root/fresh-service" "$deploy_script" --service fresh
+[[ ! -e "$POWERFORGE_SYSTEMD_CONFIG_ROOT/fresh.service.d/powerforge-read-write-paths.conf" ]]
 
 mkdir -p "$test_root/unsafe-service"
 write_config unsafe "$test_root/unsafe-service"
@@ -139,6 +176,38 @@ if TEST_SERVICE_ROOT="$test_root/glob-service" "$deploy_script" --service glob; 
   exit 1
 fi
 
+mkdir -p "$test_root/overlap-service/releases/nested"
+for overlap_path in \
+  "$test_root/overlap-service" \
+  "$test_root/overlap-service/releases" \
+  "$test_root/overlap-service/releases/nested"; do
+  write_config overlap "$test_root/overlap-service"
+  printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$overlap_path" >>"$test_root/config/overlap.env"
+  if TEST_SERVICE_ROOT="$test_root/overlap-service" "$deploy_script" --service overlap; then
+    echo "Deployment unexpectedly allowed writable access to immutable release storage: $overlap_path" >&2
+    exit 1
+  fi
+done
+
+mkdir -p "$test_root/symlink-target/data" "$test_root/symlink-service"
+ln -s "$test_root/symlink-target" "$test_root/symlink-parent"
+write_config symlink "$test_root/symlink-service"
+printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/symlink-parent/data" >>"$test_root/config/symlink.env"
+if TEST_SERVICE_ROOT="$test_root/symlink-service" "$deploy_script" --service symlink; then
+  echo 'Deployment unexpectedly accepted a symlinked writable-path parent.' >&2
+  exit 1
+fi
+
+mkdir -p "$test_root/untrusted-parent/data" "$test_root/untrusted-service"
+chmod 0777 "$test_root/untrusted-parent"
+write_config untrusted "$test_root/untrusted-service"
+printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/untrusted-parent/data" >>"$test_root/config/untrusted.env"
+if TEST_SERVICE_ROOT="$test_root/untrusted-service" "$deploy_script" --service untrusted; then
+  echo 'Deployment unexpectedly accepted a writable-path parent that can be redirected.' >&2
+  exit 1
+fi
+chmod 0755 "$test_root/untrusted-parent"
+
 mkdir -p "$test_root/reload-service" "$test_root/reload-data"
 write_config reload "$test_root/reload-service"
 printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/reload-data" >>"$test_root/config/reload.env"
@@ -147,6 +216,7 @@ if TEST_SERVICE_ROOT="$test_root/reload-service" FAIL_DAEMON_RELOAD=1 "$deploy_s
   echo 'Deployment unexpectedly ignored a failed systemd reload.' >&2
   exit 1
 fi
+[[ ! -e "$POWERFORGE_SYSTEMD_CONFIG_ROOT/reload.service.d/powerforge-read-write-paths.conf" ]]
 create_stage reload 92004 1 4444444444444444444444444444444444444444
 TEST_SERVICE_ROOT="$test_root/reload-service" "$deploy_script" --service reload
 [[ -L "$test_root/reload-service/current" ]]
