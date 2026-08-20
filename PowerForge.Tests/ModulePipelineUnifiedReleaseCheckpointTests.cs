@@ -680,7 +680,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         bool publishNuGet,
         bool? skipDuplicate = null,
         bool publishGitHub = false,
-        string? gitHubReleaseMode = null)
+        string? gitHubReleaseMode = null,
+        string? gitHubTagTemplate = null)
     {
         var path = Path.Combine(rootPath, "Build", fileName);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -690,9 +691,12 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         var gitHubReleaseModeProperty = string.IsNullOrWhiteSpace(gitHubReleaseMode)
             ? string.Empty
             : $",\"GitHubReleaseMode\":\"{gitHubReleaseMode}\"";
+        var gitHubTagTemplateProperty = string.IsNullOrWhiteSpace(gitHubTagTemplate)
+            ? string.Empty
+            : $",\"GitHubTagTemplate\":\"{gitHubTagTemplate}\"";
         File.WriteAllText(
             path,
-            $"{{\"RootPath\":\"Sources\",\"ExpectedVersionMap\":{{\"{projectName}\":\"2.0.X\"}},\"ExpectedVersionMapAsInclude\":true,\"UpdateVersions\":true,\"Build\":true,\"PublishNuget\":{publishNuGet.ToString().ToLowerInvariant()},\"PublishGitHub\":{publishGitHub.ToString().ToLowerInvariant()}{skipDuplicateProperty}{gitHubReleaseModeProperty}}}");
+            $"{{\"RootPath\":\"Sources\",\"ExpectedVersionMap\":{{\"{projectName}\":\"2.0.X\"}},\"ExpectedVersionMapAsInclude\":true,\"UpdateVersions\":true,\"Build\":true,\"PublishNuget\":{publishNuGet.ToString().ToLowerInvariant()},\"PublishGitHub\":{publishGitHub.ToString().ToLowerInvariant()}{skipDuplicateProperty}{gitHubReleaseModeProperty}{gitHubTagTemplateProperty}}}");
     }
 
     private static ModulePipelineSpec CreateGalleryReleaseSpec(

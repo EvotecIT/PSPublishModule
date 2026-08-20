@@ -15,6 +15,7 @@ public sealed partial class ModulePipelineRunner
     {
         EnterSynchronizedReleaseCheckpointScope(plan, state);
         RestoreSynchronizedReleaseCheckpoint(plan, state);
+        PreflightSynchronizedPackageGitHubConfigurationRetrySafety(plan);
         var synchronizeVersionBeforeLifecycleActions = ShouldSynchronizeModuleVersionForRun(
             plan.Release,
             plan.GateMode);
