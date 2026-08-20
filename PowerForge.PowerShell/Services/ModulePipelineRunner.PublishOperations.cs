@@ -124,6 +124,53 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
+    private void PreflightSynchronizedPackageGitHubConfigurationRetrySafety(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
+    {
+        if (!ShouldUseSynchronizedReleaseCheckpoint(plan, state))
+            return;
+
+        foreach (var segment in plan.ProjectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>())
+        {
+            if (segment?.Configuration is null ||
+                !ShouldExecuteProjectBuildPublish(plan, segment, PackageBuildPublishDestination.GitHub))
+            {
+                continue;
+            }
+
+            var operationKey = CreateProjectBuildPublishOperationFingerprint(
+                plan,
+                segment,
+                PackageBuildPublishDestination.GitHub);
+            if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
+                continue;
+
+            var configPath = ResolvePackageBuildPath(plan.ProjectRoot, segment.Configuration.ConfigPath);
+            ValidateCoordinatedProjectBuildGitHubConfigurationRetrySafety(
+                LoadProjectBuildConfiguration(configPath, segment.Configuration));
+        }
+
+        foreach (var segment in plan.PackageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>())
+        {
+            if (segment?.Configuration is null ||
+                !ShouldExecutePackageBuildPublish(plan, segment, PackageBuildPublishDestination.GitHub))
+            {
+                continue;
+            }
+
+            var operationKey = CreatePackageBuildPublishOperationFingerprint(
+                plan,
+                segment,
+                PackageBuildPublishDestination.GitHub);
+            if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
+                continue;
+
+            ValidateCoordinatedProjectBuildGitHubConfigurationRetrySafety(
+                MapPackageBuildConfiguration(segment.Configuration, plan.ProjectRoot));
+        }
+    }
+
     private static bool TryGetProjectBuildReleaseForCoordinatedGitHubPreflight(
         ModulePipelineRunState state,
         object segment,
@@ -149,6 +196,14 @@ public sealed partial class ModulePipelineRunner
         DotNetRepositoryReleaseResult release)
     {
         var retrySafetyError = ProjectBuildGitHubRetrySafety.Validate(configuration, release);
+        if (!string.IsNullOrWhiteSpace(retrySafetyError))
+            throw new InvalidOperationException(retrySafetyError);
+    }
+
+    private static void ValidateCoordinatedProjectBuildGitHubConfigurationRetrySafety(
+        ProjectBuildConfiguration configuration)
+    {
+        var retrySafetyError = ProjectBuildGitHubRetrySafety.ValidateConfiguration(configuration);
         if (!string.IsNullOrWhiteSpace(retrySafetyError))
             throw new InvalidOperationException(retrySafetyError);
     }

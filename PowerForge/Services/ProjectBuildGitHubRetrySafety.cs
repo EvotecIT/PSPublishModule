@@ -14,6 +14,28 @@ internal static class ProjectBuildGitHubRetrySafety
         if (release is null)
             throw new ArgumentNullException(nameof(release));
 
+        var configurationError = ValidateConfiguration(configuration);
+        if (!string.IsNullOrWhiteSpace(configurationError))
+            return configurationError;
+
+        if (string.IsNullOrWhiteSpace(configuration.GitHubTagName) &&
+            string.IsNullOrWhiteSpace(ProjectBuildSupportService.ResolveGitHubBaseVersion(configuration, release)) &&
+            UsesBaseVersion(configuration.GitHubTagTemplate))
+        {
+            return "Coordinated GitHub publishing requires GitHubTagName, GitHubPrimaryProject, or a stable GitHubTagTemplate that does not depend on {Version}/{PrimaryVersion} when the planned packages have no single base version. Otherwise the publisher falls back to a date-based tag that cannot be resumed safely.";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Validates retry-safety rules that depend only on configuration and can run before package build work begins.
+    /// </summary>
+    internal static string? ValidateConfiguration(ProjectBuildConfiguration configuration)
+    {
+        if (configuration is null)
+            throw new ArgumentNullException(nameof(configuration));
+
         var normalizedReleaseMode = string.IsNullOrWhiteSpace(configuration.GitHubReleaseMode)
             ? "Single"
             : configuration.GitHubReleaseMode!.Trim();
@@ -37,14 +59,7 @@ internal static class ProjectBuildGitHubRetrySafety
         if (string.IsNullOrWhiteSpace(configuration.GitHubTagName) &&
             HasVolatileTagTemplate(configuration.GitHubTagTemplate))
         {
-            return "Coordinated GitHub publishing requires a stable GitHub tag; timestamp tokens are not retry-safe unless GitHubTagName fixes the exact tag.";
-        }
-
-        if (string.IsNullOrWhiteSpace(configuration.GitHubTagName) &&
-            string.IsNullOrWhiteSpace(ProjectBuildSupportService.ResolveGitHubBaseVersion(configuration, release)) &&
-            UsesBaseVersion(configuration.GitHubTagTemplate))
-        {
-            return "Coordinated GitHub publishing requires GitHubTagName, GitHubPrimaryProject, or a stable GitHubTagTemplate that does not depend on {Version}/{PrimaryVersion} when the planned packages have no single base version. Otherwise the publisher falls back to a date-based tag that cannot be resumed safely.";
+            return "Coordinated GitHub publishing requires a stable GitHub tag. GitHubTagTemplate contains date or timestamp tokens, so a retry would target a different release. Set GitHubTagName to the exact tag or use a version-based GitHubTagTemplate such as '{Repo}-v{PrimaryVersion}'.";
         }
 
         return null;
