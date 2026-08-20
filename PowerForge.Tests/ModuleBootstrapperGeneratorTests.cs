@@ -191,8 +191,11 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("ProcessArchitecture", bootstrapper);
             Assert.Contains("IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)", bootstrapper);
             Assert.Contains("Lib\\{0}\\runtimes\\{1}\\native", bootstrapper);
+            Assert.Contains("$NativeLibraryFolders = @(", bootstrapper);
+            Assert.Contains("Get-ChildItem -LiteralPath $LibraryRoot -Directory", bootstrapper);
+            Assert.Contains("foreach ($NativeLibraryFolder in $NativeLibraryFolders)", bootstrapper);
+            Assert.Contains("if ($NativePath -and ($PathEntries -notcontains $NativePath))", bootstrapper);
             Assert.Contains("$PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }", bootstrapper);
-            Assert.Contains("($PathEntries -notcontains $NativePath)", bootstrapper);
             Assert.Contains("$Arch = [string][System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture", bootstrapper);
             Assert.Contains("$Arch = [string]$env:PROCESSOR_ARCHITECTURE", bootstrapper);
             Assert.Contains("'AMD64' { 'win-x64' }", bootstrapper);
