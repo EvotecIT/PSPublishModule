@@ -31,7 +31,7 @@ Create one root-owned configuration per service under `/etc/powerforge/services`
 ```bash
 install -d -o root -g root -m 0750 /etc/powerforge/services
 install -d -o root -g root -m 0755 /srv/example/service
-install -d -o root -g root -m 0755 /var/lib/example-service
+install -d -o example-service -g example-service -m 0750 /var/lib/example-service
 install -d -o root -g root -m 0755 /var/lib/powerforge
 install -d -o root -g root -m 0700 \
   /var/lib/powerforge/service-deployment-staging \
@@ -40,6 +40,11 @@ install -o root -g root -m 0640 \
   Deployment/Linux/powerforge-service.env.example \
   /etc/powerforge/services/example.env
 ```
+
+`example-service` is the account configured by the systemd unit. Create that account
+first or substitute the unit's existing `User=`/`Group=` values. `ReadWritePaths=`
+opens the systemd mount namespace but does not bypass normal filesystem ownership and
+mode checks.
 
 Example configuration:
 

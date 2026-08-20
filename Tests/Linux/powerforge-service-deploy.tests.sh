@@ -61,6 +61,15 @@ fi
 exec /usr/bin/mv "$@"
 EOF
 chmod +x "$test_root/bin/mv"
+cat >"$test_root/bin/sync" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+if [[ -n "${FAIL_SYNC_PATH:-}" && "$*" == *"$FAIL_SYNC_PATH"* ]]; then
+  exit 1
+fi
+exec /usr/bin/sync "$@"
+EOF
+chmod +x "$test_root/bin/sync"
 export PATH="$test_root/bin:$PATH"
 
 write_config() {
@@ -129,6 +138,7 @@ transaction_dir="$POWERFORGE_SERVICE_TRANSACTION_ROOT/service-example.transactio
 mkdir -m 0700 "$transaction_dir"
 printf '%s\n' "$test_root/service" >"$transaction_dir/service-root"
 printf '%s\n' 'example.service' >"$transaction_dir/systemd-service"
+printf '%s\n' "$POWERFORGE_SYSTEMD_CONFIG_ROOT" >"$transaction_dir/systemd-config-root"
 printf '%s\n' "$first_target" >"$transaction_dir/previous-target"
 printf '%s\n' 'present' >"$transaction_dir/drop-in-state"
 printf '%s\n' "$(stat -c '%u' "$drop_in")" >"$transaction_dir/drop-in-owner"
@@ -142,7 +152,7 @@ ln -sfn "$stranded_release" "$test_root/service/current"
 printf '[Service]\nReadWritePaths=%s\n' "$test_root/stranded-data" >"$drop_in"
 sed -i 's/^SYSTEMD_SERVICE=.*/SYSTEMD_SERVICE=renamed.service/' "$test_root/config/example.env"
 set +e
-recovery_output="$(TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" --service example 2>&1)"
+recovery_output="$(POWERFORGE_SYSTEMD_CONFIG_ROOT="$test_root/systemd-renamed" TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" --service example 2>&1)"
 recovery_status=$?
 set -e
 [[ "$recovery_status" -ne 0 ]]
@@ -154,6 +164,38 @@ grep -qxF "ReadWritePaths=$test_root/example-data" "$drop_in"
 [[ ! -e "$transaction_dir" ]]
 write_config example "$test_root/service"
 printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/example-data" >>"$test_root/config/example.env"
+
+mkdir -p "$test_root/recovery-current-service"
+write_config recoverymissing "$test_root/recovery-current-service"
+missing_transaction="$POWERFORGE_SERVICE_TRANSACTION_ROOT/service-recoverymissing.transaction"
+mkdir -m 0700 "$missing_transaction"
+printf '%s\n' "$test_root/recovery-root-missing" >"$missing_transaction/service-root"
+printf '%s\n' 'recorded.service' >"$missing_transaction/systemd-service"
+printf '%s\n' "$POWERFORGE_SYSTEMD_CONFIG_ROOT" >"$missing_transaction/systemd-config-root"
+chmod 0600 "$missing_transaction"/*
+set +e
+missing_recovery_output="$(TEST_SERVICE_ROOT="$test_root/recovery-current-service" "$deploy_script" --service recoverymissing 2>&1)"
+missing_recovery_status=$?
+set -e
+[[ "$missing_recovery_status" -ne 0 ]]
+grep -q '^stop recorded.service$' "$TEST_SYSTEMCTL_LOG"
+grep -q 'Recorded recovery paths are unavailable' <<<"$missing_recovery_output"
+[[ -d "$missing_transaction" ]]
+rm -rf -- "$missing_transaction"
+
+create_stage example 92010 1 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+set +e
+sync_failure_output="$(TEST_SERVICE_ROOT="$test_root/service" \
+  FAIL_SOURCE_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  FAIL_SYNC_PATH="$drop_in" \
+  "$deploy_script" --service example 2>&1)"
+sync_failure_status=$?
+set -e
+[[ "$sync_failure_status" -ne 0 ]]
+grep -q 'rollback transaction retained' <<<"${sync_failure_output,,}"
+[[ -d "$transaction_dir" ]]
+[[ "$(readlink -f "$test_root/service/current")" == "$first_target" ]]
+rm -rf -- "$transaction_dir"
 if TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" --service example --archive /etc/passwd; then
   echo 'Promoter unexpectedly accepted a caller-controlled archive path.' >&2
   exit 1

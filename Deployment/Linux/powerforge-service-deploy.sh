@@ -185,39 +185,57 @@ assert_trusted_systemd_path() {
 prepare_systemd_drop_in_directory() {
   local config_parent
   config_parent="$(dirname -- "$SYSTEMD_CONFIG_ROOT")"
-  assert_trusted_directory_chain "$config_parent" 'Systemd config parent'
+  assert_trusted_directory_chain "$config_parent" 'Systemd config parent' || return 1
   if [[ -e "$SYSTEMD_CONFIG_ROOT" || -L "$SYSTEMD_CONFIG_ROOT" ]]; then
-    [[ -d "$SYSTEMD_CONFIG_ROOT" && ! -L "$SYSTEMD_CONFIG_ROOT" ]] || fail "Systemd config root must be a real directory: $SYSTEMD_CONFIG_ROOT"
+    [[ -d "$SYSTEMD_CONFIG_ROOT" && ! -L "$SYSTEMD_CONFIG_ROOT" ]] || {
+      fail "Systemd config root must be a real directory: $SYSTEMD_CONFIG_ROOT"
+      return 1
+    }
   else
-    install -d -m 0755 "$SYSTEMD_CONFIG_ROOT"
+    install -d -m 0755 "$SYSTEMD_CONFIG_ROOT" || return 1
   fi
-  assert_trusted_directory_chain "$SYSTEMD_CONFIG_ROOT" 'Systemd config root'
-  [[ "$(realpath -e -- "$SYSTEMD_CONFIG_ROOT")" == "$SYSTEMD_CONFIG_ROOT" ]] || fail "Systemd config root must be canonical and contain no symlinked components: $SYSTEMD_CONFIG_ROOT"
+  assert_trusted_directory_chain "$SYSTEMD_CONFIG_ROOT" 'Systemd config root' || return 1
+  [[ "$(realpath -e -- "$SYSTEMD_CONFIG_ROOT")" == "$SYSTEMD_CONFIG_ROOT" ]] || {
+    fail "Systemd config root must be canonical and contain no symlinked components: $SYSTEMD_CONFIG_ROOT"
+    return 1
+  }
 
   systemd_drop_in_dir="${SYSTEMD_CONFIG_ROOT}/${SYSTEMD_SERVICE}.d"
   systemd_drop_in_path="${systemd_drop_in_dir}/powerforge-read-write-paths.conf"
   if [[ -e "$systemd_drop_in_dir" || -L "$systemd_drop_in_dir" ]]; then
-    [[ -d "$systemd_drop_in_dir" && ! -L "$systemd_drop_in_dir" ]] || fail "Systemd drop-in directory must be a real directory: $systemd_drop_in_dir"
+    [[ -d "$systemd_drop_in_dir" && ! -L "$systemd_drop_in_dir" ]] || {
+      fail "Systemd drop-in directory must be a real directory: $systemd_drop_in_dir"
+      return 1
+    }
   else
-    install -d -m 0755 "$systemd_drop_in_dir"
+    install -d -m 0755 "$systemd_drop_in_dir" || return 1
   fi
-  assert_trusted_directory_chain "$systemd_drop_in_dir" 'Systemd drop-in directory'
+  assert_trusted_directory_chain "$systemd_drop_in_dir" 'Systemd drop-in directory' || return 1
 }
 
 prepare_service_release_root() {
-  [[ -d "$SERVICE_ROOT" && ! -L "$SERVICE_ROOT" ]] || fail "Service root must be a real, pre-provisioned directory: $SERVICE_ROOT"
-  assert_trusted_directory_chain "$SERVICE_ROOT" 'Service root'
-  resolved_service_root="$(realpath -e -- "$SERVICE_ROOT")"
-  [[ "$resolved_service_root" == "$SERVICE_ROOT" ]] || fail "Service root must be canonical and contain no symlinked components: $SERVICE_ROOT"
+  [[ -d "$SERVICE_ROOT" && ! -L "$SERVICE_ROOT" ]] || {
+    fail "Service root must be a real, pre-provisioned directory: $SERVICE_ROOT"
+    return 1
+  }
+  assert_trusted_directory_chain "$SERVICE_ROOT" 'Service root' || return 1
+  resolved_service_root="$(realpath -e -- "$SERVICE_ROOT")" || return 1
+  [[ "$resolved_service_root" == "$SERVICE_ROOT" ]] || {
+    fail "Service root must be canonical and contain no symlinked components: $SERVICE_ROOT"
+    return 1
+  }
   SERVICE_ROOT="$resolved_service_root"
 
   resolved_release_root="${SERVICE_ROOT}/releases"
   if [[ -e "$resolved_release_root" || -L "$resolved_release_root" ]]; then
-    [[ -d "$resolved_release_root" && ! -L "$resolved_release_root" ]] || fail "Release root must be a real directory: $resolved_release_root"
+    [[ -d "$resolved_release_root" && ! -L "$resolved_release_root" ]] || {
+      fail "Release root must be a real directory: $resolved_release_root"
+      return 1
+    }
   else
-    install -d -m 0755 "$resolved_release_root"
+    install -d -m 0755 "$resolved_release_root" || return 1
   fi
-  assert_trusted_directory_chain "$resolved_release_root" 'Release root'
+  assert_trusted_directory_chain "$resolved_release_root" 'Release root' || return 1
   [[ "$(realpath -e -- "$resolved_release_root")" == "$resolved_release_root" ]] || fail "Release root must be canonical and contain no symlinked components: $resolved_release_root"
 }
 
@@ -233,6 +251,7 @@ snapshot_systemd_write_paths() {
   systemd_drop_in_mode=""
   printf '%s\n' "$SERVICE_ROOT" >"$transaction_temporary/service-root"
   printf '%s\n' "$SYSTEMD_SERVICE" >"$transaction_temporary/systemd-service"
+  printf '%s\n' "$SYSTEMD_CONFIG_ROOT" >"$transaction_temporary/systemd-config-root"
   printf '%s\n' "$previous_target" >"$transaction_temporary/previous-target"
   if [[ -e "$systemd_drop_in_path" || -L "$systemd_drop_in_path" ]]; then
     [[ -f "$systemd_drop_in_path" && ! -L "$systemd_drop_in_path" ]] || fail "PowerForge systemd drop-in must be a regular file: $systemd_drop_in_path"
@@ -266,16 +285,18 @@ snapshot_systemd_write_paths() {
 }
 
 load_systemd_write_paths_transaction() {
-  local stored_root stored_service stored_state
+  local stored_root stored_service stored_systemd_root stored_state
   [[ -d "$systemd_transaction_path" && ! -L "$systemd_transaction_path" ]] ||
     fail "Systemd writable-path transaction must be a real directory: $systemd_transaction_path"
   assert_trusted_directory_chain "$systemd_transaction_path" 'Systemd writable-path transaction'
   stored_root="$(<"$systemd_transaction_path/service-root")"
   stored_service="$(<"$systemd_transaction_path/systemd-service")"
+  stored_systemd_root="$(<"$systemd_transaction_path/systemd-config-root")"
   previous_target="$(<"$systemd_transaction_path/previous-target")"
   stored_state="$(<"$systemd_transaction_path/drop-in-state")"
   [[ "$stored_root" == "$SERVICE_ROOT" ]] || fail "Incomplete transaction belongs to a different service root: $stored_root"
   [[ "$stored_service" == "$SYSTEMD_SERVICE" ]] || fail "Incomplete transaction belongs to a different systemd unit: $stored_service"
+  [[ "$stored_systemd_root" == "$SYSTEMD_CONFIG_ROOT" ]] || fail "Incomplete transaction belongs to a different systemd config root: $stored_systemd_root"
   if [[ -n "$previous_target" ]]; then
     [[ -d "$previous_target" && "$previous_target" == "$resolved_release_root"/* ]] ||
       fail "Incomplete transaction contains an invalid previous release: $previous_target"
@@ -319,17 +340,19 @@ restore_systemd_write_paths() {
 finish_systemd_write_paths_transaction() {
   [[ "$systemd_transaction_path" == "$TRANSACTION_ROOT"/service-*.transaction ]] ||
     fail "Refusing to remove an unexpected transaction path: $systemd_transaction_path"
-  sync_deployment_state
+  sync_deployment_state || return 1
   rm -rf -- "$systemd_transaction_path" || return 1
-  sync -f "$TRANSACTION_ROOT"
+  sync -f "$TRANSACTION_ROOT" || return 1
   systemd_write_paths_snapshot_ready=0
   systemd_drop_in_backup=""
 }
 
 sync_deployment_state() {
-  [[ ! -f "$systemd_drop_in_path" ]] || sync -f "$systemd_drop_in_path"
-  sync -f "$systemd_drop_in_dir"
-  sync -f "$SERVICE_ROOT"
+  if [[ -f "$systemd_drop_in_path" ]]; then
+    sync -f "$systemd_drop_in_path" || return 1
+  fi
+  sync -f "$systemd_drop_in_dir" || return 1
+  sync -f "$SERVICE_ROOT" || return 1
 }
 
 commit_systemd_write_paths() {
@@ -337,9 +360,9 @@ commit_systemd_write_paths() {
   # The rename is the durable commit point. Ignore catchable termination during
   # this tiny section so a signal cannot run rollback after the transaction has
   # disappeared but before the in-memory state reflects that fact.
-  sync_deployment_state
+  sync_deployment_state || return 1
   trap - INT TERM
-  mv -- "$systemd_transaction_path" "$committed_path"
+  mv -- "$systemd_transaction_path" "$committed_path" || return 1
   promoted=0
   systemd_write_paths_snapshot_ready=0
   systemd_drop_in_backup=""
@@ -371,10 +394,13 @@ peek_systemd_transaction_identity() {
   assert_trusted_directory_chain "$systemd_transaction_path" 'Systemd writable-path transaction'
   transaction_service_root="$(<"$systemd_transaction_path/service-root")"
   transaction_systemd_service="$(<"$systemd_transaction_path/systemd-service")"
+  transaction_systemd_config_root="$(<"$systemd_transaction_path/systemd-config-root")"
   [[ "$transaction_service_root" == /* && "$transaction_service_root" != '/' && "$transaction_service_root" != *[[:space:]]* ]] ||
     fail 'Incomplete transaction contains an invalid service root.'
   [[ "$transaction_systemd_service" =~ ^[A-Za-z0-9_.@-]+\.service$ ]] ||
     fail 'Incomplete transaction contains an invalid systemd unit.'
+  [[ "$transaction_systemd_config_root" == /* && "$transaction_systemd_config_root" != '/' && "$transaction_systemd_config_root" != *[[:space:]]* ]] ||
+    fail 'Incomplete transaction contains an invalid systemd config root.'
 }
 
 recover_incomplete_systemd_transaction() {
@@ -438,9 +464,11 @@ prepare_trusted_stage_root
 configured_service_root="$SERVICE_ROOT"
 configured_release_root="$resolved_release_root"
 configured_systemd_service="$SYSTEMD_SERVICE"
+configured_systemd_config_root="$SYSTEMD_CONFIG_ROOT"
 systemd_transaction_path="${TRANSACTION_ROOT}/service-${service_id}.transaction"
 transaction_service_root=""
 transaction_systemd_service=""
+transaction_systemd_config_root=""
 if [[ -e "$systemd_transaction_path" || -L "$systemd_transaction_path" ]]; then
   peek_systemd_transaction_identity
 fi
@@ -465,12 +493,21 @@ fi
 if [[ -n "$transaction_systemd_service" ]]; then
   SYSTEMD_SERVICE="$transaction_systemd_service"
   SERVICE_ROOT="$transaction_service_root"
-  prepare_service_release_root
-  prepare_systemd_drop_in_directory
+  SYSTEMD_CONFIG_ROOT="$transaction_systemd_config_root"
+  recovery_preparation_status=0
+  prepare_service_release_root || recovery_preparation_status=$?
+  if [[ "$recovery_preparation_status" -eq 0 ]]; then
+    prepare_systemd_drop_in_directory || recovery_preparation_status=$?
+  fi
+  if [[ "$recovery_preparation_status" -ne 0 ]]; then
+    systemctl stop "$SYSTEMD_SERVICE" || log "CRITICAL: failed to stop recorded unit $SYSTEMD_SERVICE after recovery preparation failed." >&2
+    fail "Recorded recovery paths are unavailable; $SYSTEMD_SERVICE was stopped and operator recovery is required."
+  fi
   recover_incomplete_systemd_transaction
   SYSTEMD_SERVICE="$configured_systemd_service"
   SERVICE_ROOT="$configured_service_root"
   resolved_release_root="$configured_release_root"
+  SYSTEMD_CONFIG_ROOT="$configured_systemd_config_root"
 fi
 prepare_systemd_drop_in_directory
 previous_target=""
