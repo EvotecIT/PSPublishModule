@@ -124,9 +124,11 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
-    private void PreflightSynchronizedPackageGitHubConfigurationRetrySafety(ModulePipelinePlan plan)
+    private void PreflightSynchronizedPackageGitHubConfigurationRetrySafety(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
     {
-        if (plan.Release?.Configuration?.SynchronizeModuleVersion != true)
+        if (!ShouldUseSynchronizedReleaseCheckpoint(plan, state))
             return;
 
         foreach (var segment in plan.ProjectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>())
@@ -136,6 +138,13 @@ public sealed partial class ModulePipelineRunner
             {
                 continue;
             }
+
+            var operationKey = CreateProjectBuildPublishOperationFingerprint(
+                plan,
+                segment,
+                PackageBuildPublishDestination.GitHub);
+            if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
+                continue;
 
             var configPath = ResolvePackageBuildPath(plan.ProjectRoot, segment.Configuration.ConfigPath);
             ValidateCoordinatedProjectBuildGitHubConfigurationRetrySafety(
@@ -149,6 +158,13 @@ public sealed partial class ModulePipelineRunner
             {
                 continue;
             }
+
+            var operationKey = CreatePackageBuildPublishOperationFingerprint(
+                plan,
+                segment,
+                PackageBuildPublishDestination.GitHub);
+            if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
+                continue;
 
             ValidateCoordinatedProjectBuildGitHubConfigurationRetrySafety(
                 MapPackageBuildConfiguration(segment.Configuration, plan.ProjectRoot));

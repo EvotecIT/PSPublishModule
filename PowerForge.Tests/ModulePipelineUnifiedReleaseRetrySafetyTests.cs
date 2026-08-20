@@ -101,6 +101,62 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
+    public void Run_AllowsVolatilePackageGitHubTagWhenBuildGateCannotPublish()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            WriteSynchronizedProjectBuildConfig(
+                root.FullName,
+                "project.build.json",
+                moduleName,
+                publishNuGet: true,
+                publishGitHub: true,
+                gitHubReleaseMode: "Single",
+                gitHubTagTemplate: "{Repo}-v{UtcTimestamp}");
+
+            var packageBuildRequests = 0;
+            var runner = CreateRunner(
+                new FakeHostedOperations(new List<string>()),
+                (request, configuration, configPath) =>
+                {
+                    packageBuildRequests++;
+                    Assert.False(request.PublishNuget);
+                    Assert.False(request.PublishGitHub);
+                    return CreateProjectBuildResult(
+                        root.FullName,
+                        moduleName,
+                        "2.0.11",
+                        Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                        request,
+                        configPath,
+                        includePackage: true);
+                });
+            var spec = CreateNuGetOnlyReleaseSpec(root.FullName, stagingPath, moduleName);
+            spec.Segments = spec.Segments
+                .Prepend(new ConfigurationGateSegment
+                {
+                    Configuration = new GateConfiguration { Mode = ConfigurationGateMode.Build }
+                })
+                .ToArray();
+
+            var result = runner.Run(spec);
+
+            Assert.Equal(ConfigurationGateMode.Build, result.Plan.GateMode);
+            Assert.Equal(1, packageBuildRequests);
+            AssertNoCoordinatedReleaseCheckpoint(root.FullName);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_DefersGitHubRetryPreflightForPackageLaneBuiltAfterModule()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
