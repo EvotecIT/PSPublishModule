@@ -195,10 +195,11 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("Get-ChildItem -LiteralPath $LibraryRoot -Directory", bootstrapper);
             Assert.Contains("foreach ($NativeLibraryFolder in $NativeLibraryFolders)", bootstrapper);
             Assert.Contains("[array] $NativePaths = foreach", bootstrapper);
-            Assert.Contains("[array] $MissingNativePaths = foreach", bootstrapper);
-            Assert.Contains("$NativePrefix = [string]::Join([IO.Path]::PathSeparator, $MissingNativePaths)", bootstrapper);
-            Assert.Contains("if ($MissingNativePaths.Count -gt 0)", bootstrapper);
             Assert.Contains("$PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }", bootstrapper);
+            Assert.Contains("[array] $RemainingPathEntries = foreach ($PathEntry in $PathEntries)", bootstrapper);
+            Assert.Contains("if ($NativePaths -notcontains $PathEntry)", bootstrapper);
+            Assert.Contains("[array] $OrderedPathEntries = @($NativePaths) + @($RemainingPathEntries)", bootstrapper);
+            Assert.Contains("$env:PATH = [string]::Join([IO.Path]::PathSeparator, $OrderedPathEntries)", bootstrapper);
             Assert.Contains("$Arch = [string][System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture", bootstrapper);
             Assert.Contains("$Arch = [string]$env:PROCESSOR_ARCHITECTURE", bootstrapper);
             Assert.Contains("'AMD64' { 'win-x64' }", bootstrapper);
@@ -968,7 +969,10 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("$PowerForgeDevelopmentLibFolder = [IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)", bootstrapper);
             Assert.Contains("Join-Path -Path $PowerForgeDevelopmentLibFolder -ChildPath (\"runtimes\\{0}\\native\" -f $PowerForgeDevelopmentArchFolder)", bootstrapper);
             Assert.Contains("$PowerForgeDevelopmentPathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH))", bootstrapper);
-            Assert.Contains("$env:PATH = \"$PowerForgeDevelopmentNativePath$([IO.Path]::PathSeparator)$env:PATH\"", bootstrapper);
+            Assert.Contains("[array] $PowerForgeDevelopmentRemainingPathEntries = foreach", bootstrapper);
+            Assert.Contains("if ($PowerForgeDevelopmentPathEntry -ne $PowerForgeDevelopmentNativePath)", bootstrapper);
+            Assert.Contains("[array] $PowerForgeDevelopmentOrderedPathEntries = @($PowerForgeDevelopmentNativePath) +", bootstrapper);
+            Assert.Contains("$env:PATH = [string]::Join([IO.Path]::PathSeparator, $PowerForgeDevelopmentOrderedPathEntries)", bootstrapper);
         }
         finally
         {

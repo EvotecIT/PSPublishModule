@@ -25,19 +25,16 @@ if ($IsWindowsPlatform -and $LibFolder) {
         }
     }
     $PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }
-    [array] $MissingNativePaths = foreach ($NativePath in $NativePaths) {
-        if ($PathEntries -notcontains $NativePath) {
-            $NativePath
+    if ($NativePaths.Count -gt 0) {
+        [array] $RemainingPathEntries = foreach ($PathEntry in $PathEntries) {
+            if ($NativePaths -notcontains $PathEntry) {
+                $PathEntry
+            }
         }
-    }
-    if ($MissingNativePaths.Count -gt 0) {
-        # Prepend every module-native runtime path so split dependency sets remain complete.
-        # The active managed-framework folder stays first and wins on duplicate file names.
-        $NativePrefix = [string]::Join([IO.Path]::PathSeparator, $MissingNativePaths)
-        if ([string]::IsNullOrWhiteSpace($env:PATH)) {
-            $env:PATH = $NativePrefix
-        } else {
-            $env:PATH = "$NativePrefix$([IO.Path]::PathSeparator)$env:PATH"
-        }
+        # Rebuild the module-owned prefix on every import. This keeps the active
+        # managed-framework folder first even when an earlier import already
+        # inserted a fallback folder, while preserving unrelated PATH order.
+        [array] $OrderedPathEntries = @($NativePaths) + @($RemainingPathEntries)
+        $env:PATH = [string]::Join([IO.Path]::PathSeparator, $OrderedPathEntries)
     }
 }
