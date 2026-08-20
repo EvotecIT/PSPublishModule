@@ -40,12 +40,21 @@ Example configuration:
 ```dotenv
 SERVICE_ROOT=/srv/example/service
 SYSTEMD_SERVICE=example.service
+SYSTEMD_READ_WRITE_PATHS="/var/lib/example-service"
 LOCAL_HEALTH_URL=http://127.0.0.1:8080/healthz
 PUBLIC_HEALTH_URLS="https://api.example.com/healthz https://api-alt.example.com/healthz"
 REQUIRED_RELEASE_PATHS="package.json src/server.mjs"
 RELEASES_TO_KEEP=5
 REQUIRE_HEALTH_PROVENANCE=1
 ```
+
+`SYSTEMD_READ_WRITE_PATHS` is optional. Set it to existing, space-separated absolute
+data directories when the service unit uses `ProtectSystem=strict`. The root-owned
+promoter writes a PowerForge-owned systemd drop-in and reloads systemd before restart,
+so application releases remain immutable while declared databases, uploads, or other
+mutable service state stay writable. The deployment rejects missing, relative, root,
+traversal, or systemd-special paths. Removing the setting removes only PowerForge's
+owned drop-in on the next deployment, so obsolete write access does not persist.
 
 Give the dedicated deployment account only the exact promoter command it needs. Keep the service identifier fixed in sudoers rather than granting general root shell or `systemctl` access:
 

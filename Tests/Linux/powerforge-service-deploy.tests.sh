@@ -10,12 +10,16 @@ mkdir -p "$test_root/config" "$test_root/locks" "$test_root/bin" "$test_root/ser
 export POWERFORGE_SERVICE_CONFIG_ROOT="$test_root/config"
 export POWERFORGE_SERVICE_LOCK_ROOT="$test_root/locks"
 export POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT="$test_root/trusted-stage"
+export POWERFORGE_SYSTEMD_CONFIG_ROOT="$test_root/systemd"
 export TEST_SYSTEMCTL_LOG="$test_root/systemctl.log"
 
 cat >"$test_root/bin/systemctl" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 printf '%s\n' "$*" >>"$TEST_SYSTEMCTL_LOG"
+if [[ "$*" == 'daemon-reload' && "${FAIL_DAEMON_RELOAD:-}" == '1' ]]; then
+  exit 1
+fi
 EOF
 
 cat >"$test_root/bin/curl" <<'EOF'
@@ -74,6 +78,8 @@ EOF
 }
 
 write_config example "$test_root/service"
+mkdir -p "$test_root/service-data"
+printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/service-data" >>"$test_root/config/example.env"
 create_stage example 92001 1 1111111111111111111111111111111111111111
 TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" \
   --service example
@@ -82,6 +88,10 @@ first_target="$(readlink -f "$test_root/service/current")"
 [[ -s "$first_target/package.json" ]]
 grep -q '1111111111111111111111111111111111111111' "$first_target/_powerforge/deployment.json"
 grep -q '^restart example.service$' "$TEST_SYSTEMCTL_LOG"
+grep -q '^daemon-reload$' "$TEST_SYSTEMCTL_LOG"
+drop_in="$POWERFORGE_SYSTEMD_CONFIG_ROOT/example.service.d/powerforge-read-write-paths.conf"
+grep -qxF '[Service]' "$drop_in"
+grep -qxF "ReadWritePaths=$test_root/service-data" "$drop_in"
 [[ ! -e /tmp/powerforge-service-example ]]
 if TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" --service example --archive /etc/passwd; then
   echo 'Promoter unexpectedly accepted a caller-controlled archive path.' >&2
@@ -101,6 +111,8 @@ fi
 
 mkdir -p "$test_root/fresh-service"
 write_config fresh "$test_root/fresh-service"
+mkdir -p "$POWERFORGE_SYSTEMD_CONFIG_ROOT/fresh.service.d"
+printf '[Service]\nReadWritePaths=/obsolete\n' >"$POWERFORGE_SYSTEMD_CONFIG_ROOT/fresh.service.d/powerforge-read-write-paths.conf"
 create_stage fresh 92003 1 3333333333333333333333333333333333333333
 if TEST_SERVICE_ROOT="$test_root/fresh-service" FAIL_SOURCE_SHA=3333333333333333333333333333333333333333 "$deploy_script" \
   --service fresh; then
@@ -108,7 +120,36 @@ if TEST_SERVICE_ROOT="$test_root/fresh-service" FAIL_SOURCE_SHA=3333333333333333
   exit 1
 fi
 [[ ! -e "$test_root/fresh-service/current" ]]
+[[ ! -e "$POWERFORGE_SYSTEMD_CONFIG_ROOT/fresh.service.d/powerforge-read-write-paths.conf" ]]
 grep -q '^stop fresh.service$' "$TEST_SYSTEMCTL_LOG"
+
+mkdir -p "$test_root/unsafe-service"
+write_config unsafe "$test_root/unsafe-service"
+printf 'SYSTEMD_READ_WRITE_PATHS="/"\n' >>"$test_root/config/unsafe.env"
+if TEST_SERVICE_ROOT="$test_root/unsafe-service" "$deploy_script" --service unsafe; then
+  echo 'Deployment unexpectedly accepted the filesystem root as a writable path.' >&2
+  exit 1
+fi
+
+mkdir -p "$test_root/glob-service"
+write_config glob "$test_root/glob-service"
+printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/service-*" >>"$test_root/config/glob.env"
+if TEST_SERVICE_ROOT="$test_root/glob-service" "$deploy_script" --service glob; then
+  echo 'Deployment unexpectedly expanded a writable-path glob.' >&2
+  exit 1
+fi
+
+mkdir -p "$test_root/reload-service" "$test_root/reload-data"
+write_config reload "$test_root/reload-service"
+printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/reload-data" >>"$test_root/config/reload.env"
+create_stage reload 92004 1 4444444444444444444444444444444444444444
+if TEST_SERVICE_ROOT="$test_root/reload-service" FAIL_DAEMON_RELOAD=1 "$deploy_script" --service reload; then
+  echo 'Deployment unexpectedly ignored a failed systemd reload.' >&2
+  exit 1
+fi
+create_stage reload 92004 1 4444444444444444444444444444444444444444
+TEST_SERVICE_ROOT="$test_root/reload-service" "$deploy_script" --service reload
+[[ -L "$test_root/reload-service/current" ]]
 
 if [[ -d "$POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT" ]] && find "$POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT" -mindepth 1 -maxdepth 1 | grep -q .; then
   echo 'Root-owned service deployment staging was not cleaned.' >&2

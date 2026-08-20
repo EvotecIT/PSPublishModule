@@ -6,6 +6,7 @@ umask 022
 CONFIG_ROOT="${POWERFORGE_SERVICE_CONFIG_ROOT:-/etc/powerforge/services}"
 LOCK_ROOT="${POWERFORGE_SERVICE_LOCK_ROOT:-/var/lock}"
 TRUSTED_STAGE_ROOT="${POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT:-/var/lib/powerforge/service-deployment-staging}"
+SYSTEMD_CONFIG_ROOT="${POWERFORGE_SYSTEMD_CONFIG_ROOT:-/etc/systemd/system}"
 service_id=""
 archive=""
 metadata=""
@@ -71,6 +72,7 @@ source "$config_path"
 
 : "${SERVICE_ROOT:?SERVICE_ROOT is required in $config_path}"
 : "${SYSTEMD_SERVICE:?SYSTEMD_SERVICE is required in $config_path}"
+: "${SYSTEMD_READ_WRITE_PATHS:=}"
 : "${LOCAL_HEALTH_URL:?LOCAL_HEALTH_URL is required in $config_path}"
 : "${RELEASES_TO_KEEP:=5}"
 : "${REQUIRED_RELEASE_PATHS:=}"
@@ -80,6 +82,8 @@ source "$config_path"
 [[ "$SERVICE_ROOT" == /* && "$SERVICE_ROOT" != '/' ]] || fail 'SERVICE_ROOT must be an absolute non-root path.'
 [[ "$SERVICE_ROOT" != *[[:space:]]* ]] || fail 'SERVICE_ROOT must not contain whitespace.'
 [[ "$TRUSTED_STAGE_ROOT" == /* && "$TRUSTED_STAGE_ROOT" != '/' ]] || fail 'Trusted staging root must be an absolute non-root path.'
+[[ "$SYSTEMD_CONFIG_ROOT" == /* && "$SYSTEMD_CONFIG_ROOT" != '/' ]] || fail 'Systemd config root must be an absolute non-root path.'
+[[ "$SYSTEMD_CONFIG_ROOT" != *[[:space:]]* ]] || fail 'Systemd config root must not contain whitespace.'
 [[ "$SYSTEMD_SERVICE" =~ ^[A-Za-z0-9_.@-]+\.service$ ]] || fail 'SYSTEMD_SERVICE must be a systemd service unit name.'
 [[ "$LOCAL_HEALTH_URL" =~ ^https?://[^[:space:]]+$ ]] || fail 'LOCAL_HEALTH_URL must be an HTTP or HTTPS URL.'
 [[ "$RELEASES_TO_KEEP" =~ ^[1-9][0-9]*$ ]] || fail 'RELEASES_TO_KEEP must be a positive integer.'
@@ -88,9 +92,53 @@ for health_url in $PUBLIC_HEALTH_URLS; do
   [[ "$health_url" =~ ^https://[^[:space:]]+$ ]] || fail "Public health URL must use HTTPS: $health_url"
 done
 
+read -r -a configured_systemd_read_write_paths <<<"$SYSTEMD_READ_WRITE_PATHS"
+for read_write_path in "${configured_systemd_read_write_paths[@]}"; do
+  [[ "$read_write_path" == /* && "$read_write_path" != '/' ]] || fail 'Systemd writable paths must be absolute non-root paths.'
+  [[ "$read_write_path" =~ ^/[A-Za-z0-9._@:+,-]+(/[A-Za-z0-9._@:+,-]+)*$ ]] || fail "Systemd writable path contains unsupported characters: $read_write_path"
+  [[ "/${read_write_path#/}/" != *'/../'* ]] || fail "Systemd writable path must not contain traversal: $read_write_path"
+done
+
+reconcile_systemd_write_paths() (
+  drop_in_dir="${SYSTEMD_CONFIG_ROOT}/${SYSTEMD_SERVICE}.d"
+  drop_in_path="${drop_in_dir}/powerforge-read-write-paths.conf"
+  if ((${#systemd_read_write_paths[@]} == 0)); then
+    [[ ! -f "$drop_in_path" ]] || rm -f -- "$drop_in_path"
+    systemctl daemon-reload
+    return 0
+  fi
+  install -d -m 0755 "$drop_in_dir"
+  temporary="$(mktemp "${drop_in_dir}/.powerforge-read-write-paths.XXXXXXXX")"
+  trap 'rm -f -- "$temporary"' EXIT
+  {
+    printf '[Service]\n'
+    for path in "${systemd_read_write_paths[@]}"; do
+      printf 'ReadWritePaths=%s\n' "$path"
+    done
+  } >"$temporary"
+  chmod 0644 "$temporary"
+  if [[ -f "$drop_in_path" ]] && cmp -s -- "$temporary" "$drop_in_path"; then
+    rm -f -- "$temporary"
+  else
+    mv -f -- "$temporary" "$drop_in_path"
+  fi
+  systemctl daemon-reload
+)
+
 mkdir -p "$LOCK_ROOT"
 exec 9>"${LOCK_ROOT}/powerforge-service-${service_id}.lock"
 flock -n 9 || fail "Another deployment is active for $service_id."
+
+systemd_read_write_paths=()
+for read_write_path in "${configured_systemd_read_write_paths[@]}"; do
+  [[ -d "$read_write_path" ]] || fail "Systemd writable path does not exist: $read_write_path"
+  resolved_read_write_path="$(realpath -e -- "$read_write_path")"
+  [[ -d "$resolved_read_write_path" && "$resolved_read_write_path" != '/' ]] || fail "Systemd writable path is not a safe directory: $read_write_path"
+  [[ "$resolved_read_write_path" =~ ^/[A-Za-z0-9._@:+,-]+(/[A-Za-z0-9._@:+,-]+)*$ ]] || fail "Resolved systemd writable path contains unsupported characters: $read_write_path"
+  systemd_read_write_paths+=("$resolved_read_write_path")
+done
+
+reconcile_systemd_write_paths
 
 archive="$(realpath -e "$archive")"
 metadata="$(realpath -e "$metadata")"
