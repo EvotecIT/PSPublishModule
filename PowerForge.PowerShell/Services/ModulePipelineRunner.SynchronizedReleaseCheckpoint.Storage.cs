@@ -192,7 +192,8 @@ public sealed partial class ModulePipelineRunner
             previous.PayloadComponents is null || candidate.PayloadComponents is null ||
             previous.PlannedLanes is null || candidate.PlannedLanes is null ||
             previous.AttemptedLanes is null || candidate.AttemptedLanes is null ||
-            previous.Lanes is null || candidate.Lanes is null)
+            previous.Lanes is null || candidate.Lanes is null ||
+            previous.GitHubReleases is null || candidate.GitHubReleases is null)
         {
             return false;
         }
@@ -228,6 +229,9 @@ public sealed partial class ModulePipelineRunner
             !IsSetSubset(previous.AttemptedOperations, candidate.AttemptedOperations) ||
             !IsSetSubset(previous.CompletedOperations, candidate.CompletedOperations) ||
             !IsSetSubset(previous.AttemptedLanes, candidate.AttemptedLanes) ||
+            !IsValidSynchronizedGitHubReleaseCheckpoints(previous) ||
+            !IsValidSynchronizedGitHubReleaseCheckpoints(candidate) ||
+            !IsSynchronizedGitHubReleaseCheckpointSubset(previous.GitHubReleases, candidate.GitHubReleases) ||
             (previous.AuxiliaryRemoteSideEffectsObserved && !candidate.AuxiliaryRemoteSideEffectsObserved))
         {
             return false;
@@ -258,6 +262,33 @@ public sealed partial class ModulePipelineRunner
 
         return true;
     }
+
+    private static bool IsValidSynchronizedGitHubReleaseCheckpoints(SynchronizedReleaseCheckpoint checkpoint)
+        => checkpoint.GitHubReleases.All(release =>
+               release is not null &&
+               release.ReleaseId > 0 &&
+               !string.IsNullOrWhiteSpace(release.Owner) &&
+               !string.IsNullOrWhiteSpace(release.Repository) &&
+               !string.IsNullOrWhiteSpace(release.TagName) &&
+               !string.IsNullOrWhiteSpace(release.OperationKey) &&
+               checkpoint.CompletedOperations.Contains(release.OperationKey, StringComparer.OrdinalIgnoreCase)) &&
+           checkpoint.GitHubReleases
+               .Select(CreateSynchronizedGitHubReleaseCheckpointIdentity)
+               .Distinct(StringComparer.OrdinalIgnoreCase)
+               .Count() == checkpoint.GitHubReleases.Length;
+
+    private static bool IsSynchronizedGitHubReleaseCheckpointSubset(
+        SynchronizedGitHubReleaseCheckpoint[] subset,
+        SynchronizedGitHubReleaseCheckpoint[] superset)
+    {
+        var identities = superset
+            .Select(CreateSynchronizedGitHubReleaseCheckpointIdentity)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return subset.All(release => identities.Contains(CreateSynchronizedGitHubReleaseCheckpointIdentity(release)));
+    }
+
+    private static string CreateSynchronizedGitHubReleaseCheckpointIdentity(SynchronizedGitHubReleaseCheckpoint release)
+        => $"{release.OperationKey}\n{release.ProjectName}\n{release.Owner}\n{release.Repository}\n{release.TagName}\n{release.ReleaseId}";
 
     private static bool CanAdvanceSynchronizedReleaseVersion(string? previous, string? candidate)
     {
@@ -410,7 +441,18 @@ public sealed partial class ModulePipelineRunner
         public string[] PlannedLanes { get; set; } = Array.Empty<string>();
         public string[] AttemptedLanes { get; set; } = Array.Empty<string>();
         public SynchronizedReleaseLaneCheckpoint[] Lanes { get; set; } = Array.Empty<SynchronizedReleaseLaneCheckpoint>();
+        public SynchronizedGitHubReleaseCheckpoint[] GitHubReleases { get; set; } = Array.Empty<SynchronizedGitHubReleaseCheckpoint>();
         public DateTimeOffset CreatedUtc { get; set; }
+    }
+
+    private sealed class SynchronizedGitHubReleaseCheckpoint
+    {
+        public string OperationKey { get; set; } = string.Empty;
+        public string ProjectName { get; set; } = string.Empty;
+        public string Owner { get; set; } = string.Empty;
+        public string Repository { get; set; } = string.Empty;
+        public string TagName { get; set; } = string.Empty;
+        public long ReleaseId { get; set; }
     }
 
     private sealed class SynchronizedReleaseLaneCheckpoint

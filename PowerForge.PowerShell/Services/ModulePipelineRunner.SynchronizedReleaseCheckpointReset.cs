@@ -339,6 +339,7 @@ public sealed partial class ModulePipelineRunner
            checkpoint.PlannedOperations.Distinct(StringComparer.OrdinalIgnoreCase).Count() == checkpoint.PlannedOperations.Length &&
            checkpoint.AttemptedOperations is { Length: 0 } &&
            checkpoint.CompletedOperations is { Length: 0 } &&
+           checkpoint.GitHubReleases is { Length: 0 } &&
            checkpoint.OperationFingerprints is { Length: > 0 } &&
            checkpoint.OperationFingerprints.All(IsSynchronizedReleaseFingerprint) &&
            (hasNoBoundPayload || hasValidBoundPayload) &&

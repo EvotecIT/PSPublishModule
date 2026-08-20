@@ -193,7 +193,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                     var projectName = configPath!.EndsWith("companion.build.json", StringComparison.OrdinalIgnoreCase)
                         ? companionName
                         : moduleName;
-                    return CreateProjectBuildResult(
+                    var result = CreateProjectBuildResult(
                         root.FullName,
                         projectName,
                         "2.0.11",
@@ -201,6 +201,20 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         request,
                         configPath,
                         includePackage: true);
+                    if (request.PublishGitHub == true)
+                    {
+                        result.Result.GitHub.Add(new ProjectBuildGitHubResult
+                        {
+                            ProjectName = projectName,
+                            Owner = "EvotecIT",
+                            Repository = moduleName,
+                            Success = true,
+                            TagName = $"{moduleName}-v2.0.11",
+                            ReleaseId = 4242
+                        });
+                    }
+
+                    return result;
                 });
             var spec = CreatePackageOnlyReleaseSpec(
                 root.FullName,

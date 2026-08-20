@@ -106,6 +106,11 @@ public sealed partial class GitHubReleasePublisher
             expectedExistingReleaseId,
             requirePublishedStableRelease,
             cancellationToken);
+        if (release.Id <= 0)
+        {
+            throw new InvalidOperationException(
+                $"GitHub returned an invalid release identifier for tag '{tagName}'.");
+        }
         releaseWatch.Stop();
         _logger.Success($"GitHub release ready in {DotNetRepositoryReleaseService.FormatDuration(releaseWatch.Elapsed)}: {release.HtmlUrl}");
 
@@ -113,6 +118,7 @@ public sealed partial class GitHubReleasePublisher
         {
             Succeeded = true,
             ReleaseCreationSucceeded = true,
+            ReleaseId = release.Id,
             AllAssetUploadsSucceeded = assets.Length == 0 ? null : true,
             HtmlUrl = release.HtmlUrl,
             UploadUrl = release.UploadUrl,
