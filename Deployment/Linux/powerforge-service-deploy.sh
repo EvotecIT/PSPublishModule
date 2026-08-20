@@ -253,6 +253,7 @@ sync_deployment_state() {
   fi
   sync -f "$systemd_drop_in_dir" || return 1
   sync -f "$SERVICE_ROOT" || return 1
+  sync -f "$resolved_release_root" || return 1
 }
 commit_systemd_write_paths() {
   local committed_path="${systemd_transaction_path}.committed"
@@ -514,6 +515,9 @@ if ((${#related_transactions[@]} == 1)); then
   SYSTEMD_CONFIG_ROOT="$configured_systemd_config_root"
 fi
 prepare_service_release_root
+for deployment_control_root in "$CONFIG_ROOT" "$SYSTEMD_CONFIG_ROOT" "$TRANSACTION_ROOT" "$TRUSTED_STAGE_ROOT" "$(realpath -e -- "$LOCK_ROOT")"; do
+  paths_overlap "$deployment_control_root" "$resolved_release_root" && fail "Deployment control path must not overlap release storage: $deployment_control_root"
+done
 prepare_trusted_stage_root
 if [[ "$locked_systemd_service" != "$SYSTEMD_SERVICE" ]]; then
   unit_lock_key="$(printf '%s' "$SYSTEMD_SERVICE" | sha256sum | awk '{print $1}')"
@@ -606,11 +610,7 @@ verify_health() {
   done
 }
 rollback() {
-  local exit_code="$1"
-  local permissions_restored=1
-  local current_restored=1
-  local service_safe=0
-  local current_target=""
+  local exit_code="$1" permissions_restored=1 current_restored=1 service_safe=0 current_target=""
   set +e
   if ! restore_systemd_write_paths; then
     permissions_restored=0

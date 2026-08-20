@@ -13,6 +13,7 @@ export POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT="$test_root/trusted-stage"
 export POWERFORGE_SERVICE_TRANSACTION_ROOT="$test_root/transactions"
 export POWERFORGE_SYSTEMD_CONFIG_ROOT="$test_root/systemd"
 export TEST_SYSTEMCTL_LOG="$test_root/systemctl.log"
+export TEST_SYNC_LOG="$test_root/sync.log"
 
 cat >"$test_root/bin/systemctl" <<'EOF'
 #!/usr/bin/env bash
@@ -64,6 +65,7 @@ chmod +x "$test_root/bin/mv"
 cat >"$test_root/bin/sync" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
+[[ -z "${TEST_SYNC_LOG:-}" ]] || printf '%s\n' "$*" >>"$TEST_SYNC_LOG"
 if [[ -n "${FAIL_SYNC_PATH:-}" && "${*: -1}" == "$FAIL_SYNC_PATH" ]]; then
   count=1
   if [[ -n "${FAIL_SYNC_COUNT_FILE:-}" ]]; then
@@ -132,14 +134,30 @@ first_target="$(readlink -f "$test_root/service/current")"
 grep -q '1111111111111111111111111111111111111111' "$first_target/_powerforge/deployment.json"
 grep -q '^restart example.service$' "$TEST_SYSTEMCTL_LOG"
 grep -q '^daemon-reload$' "$TEST_SYSTEMCTL_LOG"
+grep -qxF -- "-f $test_root/service/releases" "$TEST_SYNC_LOG"
 drop_in="$POWERFORGE_SYSTEMD_CONFIG_ROOT/example.service.d/powerforge-read-write-paths.conf"
+transaction_dir="$POWERFORGE_SERVICE_TRANSACTION_ROOT/service-example.transaction"
 grep -qxF '[Service]' "$drop_in"
 grep -qxF "ReadWritePaths=$test_root/example-data" "$drop_in"
 [[ ! -e /tmp/powerforge-service-example ]]
 
+# A release-filesystem flush failure must happen before the commit marker and
+# roll the current link back through the still-live transaction.
+create_stage example 92012 1 cccccccccccccccccccccccccccccccccccccccc
+set +e
+release_sync_output="$(TEST_SERVICE_ROOT="$test_root/service" FAIL_SYNC_PATH="$test_root/service/releases" "$deploy_script" --service example 2>&1)"
+release_sync_status=$?
+set -e
+[[ "$release_sync_status" -ne 0 ]]
+[[ "$(readlink -f "$test_root/service/current")" == "$first_target" ]]
+[[ ! -e "$POWERFORGE_SERVICE_TRANSACTION_ROOT/service-example.transaction.committed" ]]
+[[ -d "$transaction_dir" ]]
+grep -q 'Deployment failed; rolling back' <<<"$release_sync_output"
+grep -q 'transaction retained' <<<"${release_sync_output,,}"
+rm -rf -- "$transaction_dir"
+
 # A persisted transaction must restore the prior drop-in/current link after an
 # uncatchable process or host failure, before a later deployment is considered.
-transaction_dir="$POWERFORGE_SERVICE_TRANSACTION_ROOT/service-example.transaction"
 mkdir -m 0700 "$transaction_dir"
 printf '%s\n' "$test_root/service" >"$transaction_dir/service-root"
 printf '%s\n' 'example.service' >"$transaction_dir/systemd-service"
@@ -414,6 +432,26 @@ for index in "${!control_ids[@]}"; do
     exit 1
   fi
   grep -q 'Systemd writable path must not overlap deployment control path' <<<"$control_output"
+done
+
+# Deployment-owned state must never be placed inside prunable release storage.
+mkdir -p "$test_root/control-overlap-service/releases"
+write_config controloverlap "$test_root/control-overlap-service"
+overlap_variables=(POWERFORGE_SERVICE_CONFIG_ROOT POWERFORGE_SYSTEMD_CONFIG_ROOT POWERFORGE_SERVICE_TRANSACTION_ROOT POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT POWERFORGE_SERVICE_LOCK_ROOT)
+overlap_names=(config systemd transactions staging locks)
+for index in "${!overlap_variables[@]}"; do
+  overlap_variable="${overlap_variables[$index]}"
+  overlap_root="$test_root/control-overlap-service/releases/${overlap_names[$index]}"
+  if [[ "$overlap_variable" == 'POWERFORGE_SERVICE_CONFIG_ROOT' ]]; then
+    mkdir -p "$overlap_root"
+    cp "$test_root/config/controloverlap.env" "$overlap_root/controloverlap.env"
+  fi
+  set +e
+  control_overlap_output="$(TEST_SERVICE_ROOT="$test_root/control-overlap-service" env "$overlap_variable=$overlap_root" "$deploy_script" --service controloverlap 2>&1)"
+  control_overlap_status=$?
+  set -e
+  [[ "$control_overlap_status" -ne 0 ]]
+  grep -qxF "[powerforge-service-deploy] ERROR: Deployment control path must not overlap release storage: $overlap_root" <<<"$control_overlap_output"
 done
 
 mkdir -p "$test_root/glob-service"
