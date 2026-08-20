@@ -18,21 +18,26 @@ if ($IsWindowsPlatform -and $LibFolder) {
             }
         }
     )
-    $NativePath = $null
-    foreach ($NativeLibraryFolder in $NativeLibraryFolders) {
+    [array] $NativePaths = foreach ($NativeLibraryFolder in $NativeLibraryFolders) {
         $NativeCandidate = Join-Path -Path $PSScriptRoot -ChildPath ("Lib\{0}\runtimes\{1}\native" -f $NativeLibraryFolder, $ArchFolder)
         if (Test-Path -LiteralPath $NativeCandidate) {
-            $NativePath = $NativeCandidate
-            break
+            $NativeCandidate
         }
     }
     $PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }
-    if ($NativePath -and ($PathEntries -notcontains $NativePath)) {
-        # Prepend the module-native runtime path so the packaged payload wins over unrelated machine-wide copies.
+    [array] $MissingNativePaths = foreach ($NativePath in $NativePaths) {
+        if ($PathEntries -notcontains $NativePath) {
+            $NativePath
+        }
+    }
+    if ($MissingNativePaths.Count -gt 0) {
+        # Prepend every module-native runtime path so split dependency sets remain complete.
+        # The active managed-framework folder stays first and wins on duplicate file names.
+        $NativePrefix = [string]::Join([IO.Path]::PathSeparator, $MissingNativePaths)
         if ([string]::IsNullOrWhiteSpace($env:PATH)) {
-            $env:PATH = $NativePath
+            $env:PATH = $NativePrefix
         } else {
-            $env:PATH = "$NativePath$([IO.Path]::PathSeparator)$env:PATH"
+            $env:PATH = "$NativePrefix$([IO.Path]::PathSeparator)$env:PATH"
         }
     }
 }

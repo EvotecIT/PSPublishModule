@@ -194,7 +194,10 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("$NativeLibraryFolders = @(", bootstrapper);
             Assert.Contains("Get-ChildItem -LiteralPath $LibraryRoot -Directory", bootstrapper);
             Assert.Contains("foreach ($NativeLibraryFolder in $NativeLibraryFolders)", bootstrapper);
-            Assert.Contains("if ($NativePath -and ($PathEntries -notcontains $NativePath))", bootstrapper);
+            Assert.Contains("[array] $NativePaths = foreach", bootstrapper);
+            Assert.Contains("[array] $MissingNativePaths = foreach", bootstrapper);
+            Assert.Contains("$NativePrefix = [string]::Join([IO.Path]::PathSeparator, $MissingNativePaths)", bootstrapper);
+            Assert.Contains("if ($MissingNativePaths.Count -gt 0)", bootstrapper);
             Assert.Contains("$PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }", bootstrapper);
             Assert.Contains("$Arch = [string][System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture", bootstrapper);
             Assert.Contains("$Arch = [string]$env:PROCESSOR_ARCHITECTURE", bootstrapper);
