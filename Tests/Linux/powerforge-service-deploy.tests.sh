@@ -64,8 +64,13 @@ chmod +x "$test_root/bin/mv"
 cat >"$test_root/bin/sync" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-if [[ -n "${FAIL_SYNC_PATH:-}" && "$*" == *"$FAIL_SYNC_PATH"* ]]; then
-  exit 1
+if [[ -n "${FAIL_SYNC_PATH:-}" && "${*: -1}" == "$FAIL_SYNC_PATH" ]]; then
+  count=1
+  if [[ -n "${FAIL_SYNC_COUNT_FILE:-}" ]]; then
+    [[ ! -f "$FAIL_SYNC_COUNT_FILE" ]] || count=$(( $(cat "$FAIL_SYNC_COUNT_FILE") + 1 ))
+    printf '%s\n' "$count" >"$FAIL_SYNC_COUNT_FILE"
+  fi
+  if [[ -z "${FAIL_SYNC_FROM_CALL:-}" || "$count" -ge "$FAIL_SYNC_FROM_CALL" ]]; then exit 1; fi
 fi
 exec /usr/bin/sync "$@"
 EOF
@@ -150,7 +155,7 @@ stranded_release="$test_root/service/releases/stranded-release"
 cp -a "$first_target" "$stranded_release"
 ln -sfn "$stranded_release" "$test_root/service/current"
 printf '[Service]\nReadWritePaths=%s\n' "$test_root/stranded-data" >"$drop_in"
-sed -i 's/^SYSTEMD_SERVICE=.*/SYSTEMD_SERVICE=renamed.service/' "$test_root/config/example.env"
+mv "$test_root/config/example.env" "$test_root/config/example.env.unavailable"
 set +e
 recovery_output="$(POWERFORGE_SYSTEMD_CONFIG_ROOT="$test_root/systemd-renamed" TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" --service example 2>&1)"
 recovery_status=$?
@@ -158,12 +163,84 @@ set -e
 [[ "$recovery_status" -ne 0 ]]
 grep -q 'Recovering incomplete systemd writable-path transaction' <<<"$recovery_output"
 grep -q 'Recovered incomplete systemd writable-path transaction' <<<"$recovery_output"
+grep -q 'Service is not configured' <<<"$recovery_output"
 grep -q '^restart example.service$' "$TEST_SYSTEMCTL_LOG"
 [[ "$(readlink -f "$test_root/service/current")" == "$first_target" ]]
 grep -qxF "ReadWritePaths=$test_root/example-data" "$drop_in"
 [[ ! -e "$transaction_dir" ]]
+rm -f -- "$test_root/config/example.env.unavailable"
 write_config example "$test_root/service"
 printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/example-data" >>"$test_root/config/example.env"
+
+alias_transaction="$POWERFORGE_SERVICE_TRANSACTION_ROOT/service-aliasowner.transaction"
+mkdir -m 0700 "$alias_transaction"
+printf '%s\n' "$test_root/service" >"$alias_transaction/service-root"
+printf '%s\n' 'example.service' >"$alias_transaction/systemd-service"
+printf '%s\n' "$POWERFORGE_SYSTEMD_CONFIG_ROOT" >"$alias_transaction/systemd-config-root"
+printf '%s\n' "$first_target" >"$alias_transaction/previous-target"
+printf '%s\n' 'present' >"$alias_transaction/drop-in-state"
+printf '%s\n' "$(stat -c '%u' "$drop_in")" >"$alias_transaction/drop-in-owner"
+printf '%s\n' "$(stat -c '%g' "$drop_in")" >"$alias_transaction/drop-in-group"
+printf '%s\n' "$(stat -c '%a' "$drop_in")" >"$alias_transaction/drop-in-mode"
+cp "$drop_in" "$alias_transaction/drop-in"
+chmod 0600 "$alias_transaction"/*
+ln -sfn "$stranded_release" "$test_root/service/current"
+printf '[Service]\nReadWritePaths=%s\n' "$test_root/stranded-data" >"$drop_in"
+write_config aliasconsumer "$test_root/service/."
+set +e
+alias_output="$(TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" --service aliasconsumer 2>&1)"
+alias_status=$?
+set -e
+[[ "$alias_status" -ne 0 ]]
+grep -q 'Recovered incomplete systemd writable-path transaction for example.service' <<<"$alias_output"
+[[ ! -e "$alias_transaction" ]]
+[[ "$(readlink -f "$test_root/service/current")" == "$first_target" ]]
+grep -qxF "ReadWritePaths=$test_root/example-data" "$drop_in"
+
+mkdir -p "$test_root/multi-current"
+write_config multiinvoker "$test_root/multi-current"
+sed -i 's/^SYSTEMD_SERVICE=.*/SYSTEMD_SERVICE=sharedmulti.service/' "$test_root/config/multiinvoker.env"
+multi_transactions=()
+for owner in aliasmulti1 aliasmulti2; do
+  multi_transaction="$POWERFORGE_SERVICE_TRANSACTION_ROOT/service-${owner}.transaction"
+  multi_transactions+=("$multi_transaction")
+  mkdir -m 0700 "$multi_transaction"
+  printf '%s\n' "$test_root/${owner}-root" >"$multi_transaction/service-root"
+  printf '%s\n' 'sharedmulti.service' >"$multi_transaction/systemd-service"
+  printf '%s\n' "$POWERFORGE_SYSTEMD_CONFIG_ROOT" >"$multi_transaction/systemd-config-root"
+  chmod 0600 "$multi_transaction"/*
+done
+multi_lock_ready="$test_root/multi-lock-ready"
+(
+  exec 202>"$test_root/locks/powerforge-service-aliasmulti1.lock"
+  flock 202
+  : >"$multi_lock_ready"
+  sleep 30
+) &
+multi_lock_holder=$!
+for _ in {1..100}; do [[ -e "$multi_lock_ready" ]] && break; sleep 0.05; done
+[[ -e "$multi_lock_ready" ]]
+: >"$TEST_SYSTEMCTL_LOG"
+set +e
+multi_busy_output="$(TEST_SERVICE_ROOT="$test_root/multi-current" "$deploy_script" --service multiinvoker 2>&1)"
+multi_busy_status=$?
+set -e
+[[ "$multi_busy_status" -ne 0 ]]
+grep -q 'Another deployment is active for aliasmulti1' <<<"$multi_busy_output"
+if grep -q '^stop sharedmulti.service$' "$TEST_SYSTEMCTL_LOG"; then
+  echo 'Ambiguous recovery stopped a unit while a transaction owner was active.' >&2
+  exit 1
+fi
+kill "$multi_lock_holder" 2>/dev/null || true
+wait "$multi_lock_holder" 2>/dev/null || true
+set +e
+multi_output="$(TEST_SERVICE_ROOT="$test_root/multi-current" "$deploy_script" --service multiinvoker 2>&1)"
+multi_status=$?
+set -e
+[[ "$multi_status" -ne 0 ]]
+grep -q 'Multiple incomplete transactions overlap this deployment' <<<"$multi_output"
+[[ "$(grep -c '^stop sharedmulti.service$' "$TEST_SYSTEMCTL_LOG")" -eq 1 ]]
+for multi_transaction in "${multi_transactions[@]}"; do [[ -d "$multi_transaction" ]]; rm -rf -- "$multi_transaction"; done
 
 mkdir -p "$test_root/recovery-current-service"
 write_config recoverymissing "$test_root/recovery-current-service"
@@ -196,6 +273,29 @@ grep -q 'rollback transaction retained' <<<"${sync_failure_output,,}"
 [[ -d "$transaction_dir" ]]
 [[ "$(readlink -f "$test_root/service/current")" == "$first_target" ]]
 rm -rf -- "$transaction_dir"
+
+mkdir -p "$test_root/commit-service" "$test_root/commit-data"
+write_config commitdurable "$test_root/commit-service"
+printf 'SYSTEMD_READ_WRITE_PATHS="%s"\n' "$test_root/commit-data" >>"$test_root/config/commitdurable.env"
+create_stage commitdurable 92011 1 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+commit_sync_count="$test_root/commit-sync-count"
+set +e
+commit_output="$(TEST_SERVICE_ROOT="$test_root/commit-service" \
+  FAIL_SYNC_PATH="$POWERFORGE_SERVICE_TRANSACTION_ROOT" \
+  FAIL_SYNC_COUNT_FILE="$commit_sync_count" \
+  FAIL_SYNC_FROM_CALL=2 \
+  "$deploy_script" --service commitdurable 2>&1)"
+commit_status=$?
+set -e
+[[ "$commit_status" -ne 0 ]]
+committed_marker="$POWERFORGE_SERVICE_TRANSACTION_ROOT/service-commitdurable.transaction.committed"
+grep -q 'committed transaction retained' <<<"${commit_output,,}"
+[[ -d "$committed_marker" ]]
+grep -q 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' "$test_root/commit-service/current/_powerforge/deployment.json"
+set +e
+TEST_SERVICE_ROOT="$test_root/commit-service" "$deploy_script" --service commitdurable >/dev/null 2>&1
+set -e
+[[ ! -e "$committed_marker" ]]
 if TEST_SERVICE_ROOT="$test_root/service" "$deploy_script" --service example --archive /etc/passwd; then
   echo 'Promoter unexpectedly accepted a caller-controlled archive path.' >&2
   exit 1

@@ -84,12 +84,16 @@ the previous link or safe service state cannot be proven.
 Immediately before switching `current`, the promoter persists the previous permission
 and current-release state under `/var/lib/powerforge/service-deployment-state`, then
 reloads the candidate policy. Transactions are keyed by the stable service id, so a
-later invocation restores the recorded unit and service root even when configuration
-was renamed in the meantime. It proves the service restarted or stopped before
-accepting a new deployment, so process termination or host loss cannot strand an
-uncommitted writable policy. Restored drop-in and service-root filesystems are flushed
-before recovery state is removed; successful promotion uses the same durable commit
-boundary.
+later invocation restores the recorded unit, service root, and systemd configuration
+root even when current configuration was renamed or is temporarily unavailable. Before
+validating a new service root, the promoter also scans pending transactions for another
+service id that shares the configured unit or root and recovers that state under both
+service locks. It proves the service restarted or stopped before accepting a new
+deployment, so process termination or host loss cannot strand an uncommitted writable
+policy. Restored drop-in and service-root filesystems are flushed before recovery state
+is removed. Successful promotion retains a recognizable committed marker until the
+transaction-directory rename is durable, then safely clears that marker on this or the
+next invocation.
 
 Give the dedicated deployment account only the exact promoter command it needs. Keep the service identifier fixed in sudoers rather than granting general root shell or `systemctl` access:
 
