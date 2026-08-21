@@ -280,6 +280,9 @@ public sealed class ModuleBuilder
 
         // 3) Exports
         var existingExports = ModuleManifestExportReader.ReadExports(psd1);
+        var hasNestedModules = ModuleManifestValueReader
+            .ReadTopLevelModuleReferencePaths(psd1, "NestedModules")
+            .Length > 0;
         var rootModuleScriptPath = Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psm1");
         var rootModuleDiscovery = DiscoverAuthoredRootModuleScript(rootModuleScriptPath);
         if (opts.RootModuleScriptWillBeReplaced && !rootModuleDiscovery.IsComplete)
@@ -335,6 +338,14 @@ public sealed class ModuleBuilder
             }
         }
 
+        if (hasNestedModules && functionsToSet is not null)
+        {
+            var functionsToPreserve = opts.RootModuleScriptWillBeReplaced
+                ? existingExports.Functions.Except(rootFunctionsToRemove, StringComparer.OrdinalIgnoreCase)
+                : existingExports.Functions;
+            functionsToSet = MergeDeclaredExports(functionsToPreserve, functionsToSet);
+        }
+
         IEnumerable<string>? cmdletsToSet = null;
         IEnumerable<string>? aliasesToSet = null;
         var rootAliasAnalysis = opts.RootModuleScriptWillBeReplaced
@@ -374,9 +385,6 @@ public sealed class ModuleBuilder
         }
         if (aliasDiscoveries.Any(static discovery => !discovery.IsComplete) && aliasAnalysis.IsComplete)
             aliasAnalysis = new ScriptAliasExportAnalysis(aliasAnalysis.Aliases, isComplete: false);
-        var hasNestedModules = ModuleManifestValueReader
-            .ReadTopLevelModuleReferencePaths(psd1, "NestedModules")
-            .Length > 0;
         if (hasNestedModules && aliasAnalysis.IsComplete)
             aliasAnalysis = new ScriptAliasExportAnalysis(aliasAnalysis.Aliases, isComplete: false);
         if (opts.DisableBinaryCmdletScan)
@@ -413,7 +421,14 @@ public sealed class ModuleBuilder
                 var detectedCmdlets = binaryExportSurface.Cmdlets;
                 var detectedAliases = binaryExportSurface.Aliases;
 
-                cmdletsToSet = detectedCmdlets;
+                cmdletsToSet = hasNestedModules
+                    ? MergeDeclaredExports(existingExports.Cmdlets, detectedCmdlets)
+                    : detectedCmdlets;
+                if (hasNestedModules)
+                {
+                    _logger.Warn(
+                        $"NestedModules are retained for '{opts.ModuleName}'; preserving existing CmdletsToExport entries while refreshing detected binary cmdlets.");
+                }
                 var aliasesToPreserve = supportsCompleteAliasAnalysis && aliasAnalysis.IsComplete
                     ? Array.Empty<string>()
                     : existingAliasesWithoutReplacedRoot;
@@ -447,10 +462,13 @@ public sealed class ModuleBuilder
     }
 
     internal static string[] MergeDeclaredAliases(params IEnumerable<string>?[] aliasSets)
-        => (aliasSets ?? Array.Empty<IEnumerable<string>?>())
-            .SelectMany(static aliases => aliases ?? Array.Empty<string>())
-            .Where(static alias => !string.IsNullOrWhiteSpace(alias))
-            .Select(static alias => alias.Trim())
+        => MergeDeclaredExports(aliasSets);
+
+    private static string[] MergeDeclaredExports(params IEnumerable<string>?[] exportSets)
+        => (exportSets ?? Array.Empty<IEnumerable<string>?>())
+            .SelectMany(static exports => exports ?? Array.Empty<string>())
+            .Where(static export => !string.IsNullOrWhiteSpace(export))
+            .Select(static export => export.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 

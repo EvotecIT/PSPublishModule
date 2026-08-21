@@ -396,7 +396,7 @@ public sealed class ModuleBuilderManifestMutatorTests
     }
 
     [Fact]
-    public void BuildInPlace_PreservesAliasesExportedByNestedModules()
+    public void BuildInPlace_PreservesExportsContributedByNestedModules()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -406,11 +406,15 @@ public sealed class ModuleBuilderManifestMutatorTests
             const string moduleName = "PowerForge";
             File.WriteAllText(
                 Path.Combine(root, $"{moduleName}.psd1"),
-                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; NestedModules = @('Nested.psm1'); CmdletsToExport = @(); AliasesToExport = @('NestedAlias') }");
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; NestedModules = @('Nested.psm1', 'Nested.dll'); FunctionsToExport = @('Invoke-NestedFunction'); CmdletsToExport = @('Find-ManagedModule'); AliasesToExport = @('NestedAlias') }");
             File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
             File.WriteAllText(
                 Path.Combine(root, "Nested.psm1"),
-                "Set-Alias -Name NestedAlias -Value Get-Item");
+                "function Invoke-NestedFunction { }; Set-Alias -Name NestedAlias -Value Get-Item");
+            File.Copy(
+                typeof(PSPublishModule.FindManagedModuleCommand).Assembly.Location,
+                Path.Combine(root, "Nested.dll"),
+                overwrite: true);
             var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
             File.Copy(
                 typeof(ModuleBuilder).Assembly.Location,
@@ -426,8 +430,64 @@ public sealed class ModuleBuilderManifestMutatorTests
                 ModuleVersion = "2.0.0",
             });
 
+            var functionWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "FunctionsToExport");
+            var cmdletWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "CmdletsToExport");
             var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("Invoke-NestedFunction", functionWrite.Values);
+            Assert.Contains("Find-ManagedModule", cmdletWrite.Values);
             Assert.Contains("NestedAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_PreservesNestedFunctionsWhenReplacingAuthoredRootScript()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; NestedModules = @('Nested.psm1'); FunctionsToExport = @('Invoke-RootOnly', 'Invoke-NestedFunction'); CmdletsToExport = @(); AliasesToExport = @() }");
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psm1"),
+                "function Invoke-RootOnly { }");
+            File.WriteAllText(
+                Path.Combine(root, "Nested.psm1"),
+                "function Invoke-NestedFunction { }");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+                RootModuleScriptWillBeReplaced = true,
+            });
+
+            var functionWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "FunctionsToExport");
+            Assert.Contains("Invoke-NestedFunction", functionWrite.Values);
+            Assert.DoesNotContain("Invoke-RootOnly", functionWrite.Values);
         }
         finally
         {
