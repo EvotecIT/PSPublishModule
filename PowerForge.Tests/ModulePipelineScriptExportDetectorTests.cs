@@ -35,6 +35,317 @@ foreach ($alias in $aliases.GetEnumerator()) {
     }
 
     [Fact]
+    public void PowerShellDetector_UsesOnlyAliasNameArgumentForHashtableExpansion()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, """
+$aliases = @{ WrongKey = 'Get-Wrong' }
+foreach ($entry in $aliases.GetEnumerator()) {
+    Set-Alias -Value $entry.Key -Name FixedAlias
+}
+""");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.True(analysis.IsComplete);
+            Assert.Equal(new[] { "FixedAlias" }, analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_ExpandsPositionalHashtableAliasNameArgument()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, """
+$aliases = @{ PositionalAlias = 'Get-Positional' }
+foreach ($entry in $aliases.GetEnumerator()) {
+    Set-Alias $entry.Key $entry.Value
+}
+""");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.True(analysis.IsComplete);
+            Assert.Equal(new[] { "PositionalAlias" }, analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_AppliesModuleScopeAliasRemovalsInSourceOrder()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, """
+Set-Alias RemovedByCommand Get-One
+Set-Alias RemovedByProvider Get-Two
+Set-Alias RecreatedAlias Get-Old
+Remove-Alias RemovedByCommand
+Microsoft.PowerShell.Management\Remove-Item -LiteralPath Alias:\RemovedByProvider
+Remove-Item Alias:RecreatedAlias
+Set-Alias RecreatedAlias Get-New
+""");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.True(analysis.IsComplete);
+            Assert.Equal(new[] { "RecreatedAlias" }, analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_ReportsIncompleteSetForConditionalOrDynamicAliasRemoval()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var sources = new[]
+        {
+            "Set-Alias RetainedAlias Get-One; if ($condition) { Remove-Alias RetainedAlias }",
+            "Set-Alias RetainedAlias Get-One; Remove-Item \"Alias:$name\"",
+        };
+
+        try
+        {
+            foreach (var source in sources)
+            {
+                var scriptPath = Path.Combine(root.FullName, Guid.NewGuid().ToString("N") + ".ps1");
+                File.WriteAllText(scriptPath, source);
+
+                var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+                Assert.False(analysis.IsComplete);
+                Assert.Equal(new[] { "RetainedAlias" }, analysis.Aliases);
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_IgnoresRemoveItemCommandsForOtherProviders()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, "Set-Alias RetainedAlias Get-One; if ($condition) { Remove-Item C:\\Temp\\file.txt }");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.True(analysis.IsComplete);
+            Assert.Equal(new[] { "RetainedAlias" }, analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_RecognizesRemoveItemAliasesAndSwitchesBeforePositionalPaths()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, """
+Set-Alias RemovedByRm Get-One
+Set-Alias RemovedByForce Get-Two
+Set-Alias RemovedByCommonParameter Get-Three
+rm Alias:RemovedByRm
+ri -Force Alias:RemovedByForce
+Remove-Item -ErrorAction SilentlyContinue Alias:RemovedByCommonParameter
+""");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.True(analysis.IsComplete);
+            Assert.Empty(analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_AppliesDeterministicHashtableForeachRemovals()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, """
+$aliases = @{ RemovedAlias = 'Get-One' }
+foreach ($entry in $aliases.GetEnumerator()) {
+    Set-Alias $entry.Key $entry.Value
+    Remove-Alias $entry.Key
+}
+Set-Alias RemovedByProviderLoop Get-Two
+$paths = @{ First = 'Alias:RemovedByProviderLoop' }
+foreach ($entry in $paths.GetEnumerator()) {
+    Remove-Item $entry.Value
+}
+""");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.True(analysis.IsComplete);
+            Assert.Empty(analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_RejectsGatedHashtableValueAsDeterministic()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, """
+$aliases = if ($IsWindows) { @{ WinAlias = 'Get-One' } } else { @{ UnixAlias = 'Get-Two' } }
+foreach ($entry in $aliases.GetEnumerator()) { Set-Alias $entry.Key $entry.Value }
+""");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.False(analysis.IsComplete);
+            Assert.Empty(analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_RespectsExplicitAliasScope()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, """
+Set-Alias -Name GlobalOnly -Value Get-One -Scope Global
+Set-Alias -Name RetainedModuleAlias -Value Get-Two
+Remove-Alias -Name RetainedModuleAlias -Scope Global -ErrorAction SilentlyContinue
+Set-Alias -Name RemovedScriptAlias -Value Get-Three -Scope Script
+Remove-Alias -Name RemovedScriptAlias -Scope Local
+Set-Alias -Name RemovedNumericAlias -Value Get-Four -Scope 0
+Remove-Alias -Name RemovedNumericAlias -Scope 0
+""");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.True(analysis.IsComplete);
+            Assert.Equal(new[] { "RetainedModuleAlias" }, analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_IgnoresComputedRemoveItemPathsWithoutAliasProviderEvidence()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, "Set-Alias RetainedAlias Get-One; Remove-Item -LiteralPath (Join-Path $PSScriptRoot 'temp')");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.True(analysis.IsComplete);
+            Assert.Equal(new[] { "RetainedAlias" }, analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_ModelsWhatIfWithoutApplyingSkippedAliasChanges()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, """
+Set-Alias RetainedAlias Get-One
+Remove-Item -WhatIf Alias:RetainedAlias
+Set-Alias -WhatIf PhantomAlias Get-Two
+Set-Alias RemovedAlias Get-Three
+Remove-Item -WhatIf:$false Alias:RemovedAlias
+""");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.True(analysis.IsComplete);
+            Assert.Equal(new[] { "RetainedAlias" }, analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_ReportsIncompleteSetForComputedAliasProviderPaths()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var sources = new[]
+        {
+            "Set-Alias RetainedAlias Get-One; Remove-Item ('Alias:' + $name)",
+            "$path = 'Alias:' + $name; Set-Alias RetainedAlias Get-One; Remove-Item $path",
+        };
+
+        try
+        {
+            foreach (var source in sources)
+            {
+                var scriptPath = Path.Combine(root.FullName, Guid.NewGuid().ToString("N") + ".ps1");
+                File.WriteAllText(scriptPath, source);
+
+                var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+                Assert.False(analysis.IsComplete);
+                Assert.Equal(new[] { "RetainedAlias" }, analysis.Aliases);
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void PowerShellDetector_IgnoresAliasesDeclaredInsideFunctionBodies()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
