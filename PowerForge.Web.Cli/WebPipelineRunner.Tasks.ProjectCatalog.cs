@@ -482,6 +482,7 @@ internal static partial class WebPipelineRunner
         var listedIndex = Array.FindIndex(header, h => h.Equals("listed", StringComparison.OrdinalIgnoreCase));
         var modeIndex = FindCsvColumnIndex(header, "mode", "projectMode", "project_mode");
         var externalUrlIndex = FindCsvColumnIndex(header, "externalUrl", "external_url", "external-url", "url");
+        var aliasesIndex = FindCsvColumnIndex(header, "aliases", "alias");
 
         var linkColumns = BuildCsvPrefixedColumnMap(header, "links.");
         foreach (var pair in BuildCsvPrefixedColumnMap(header, "link."))
@@ -509,6 +510,7 @@ internal static partial class WebPipelineRunner
             listedIndex >= 0 ||
             modeIndex >= 0 ||
             externalUrlIndex >= 0 ||
+            aliasesIndex >= 0 ||
             linkColumns.Count > 0 ||
             surfaceColumns.Count > 0 ||
             apiDocsColumns.Count > 0;
@@ -547,6 +549,11 @@ internal static partial class WebPipelineRunner
             if (externalUrlIndex >= 0 && externalUrlIndex < parts.Length && !string.IsNullOrWhiteSpace(parts[externalUrlIndex]))
             {
                 project.ExternalUrl = parts[externalUrlIndex].Trim();
+                updates++;
+            }
+            if (aliasesIndex >= 0 && aliasesIndex < parts.Length && !string.IsNullOrWhiteSpace(parts[aliasesIndex]))
+            {
+                project.Aliases = SplitDelimitedList(parts[aliasesIndex]);
                 updates++;
             }
 
