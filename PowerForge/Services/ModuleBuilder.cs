@@ -368,6 +368,11 @@ public sealed class ModuleBuilder
         var aliasAnalysis = AnalyzeScriptAliases(aliasScripts);
         if (aliasDiscoveries.Any(static discovery => !discovery.IsComplete) && aliasAnalysis.IsComplete)
             aliasAnalysis = new ScriptAliasExportAnalysis(aliasAnalysis.Aliases, isComplete: false);
+        var hasNestedModules = ModuleManifestValueReader
+            .ReadTopLevelModuleReferencePaths(psd1, "NestedModules")
+            .Length > 0;
+        if (hasNestedModules && aliasAnalysis.IsComplete)
+            aliasAnalysis = new ScriptAliasExportAnalysis(aliasAnalysis.Aliases, isComplete: false);
         if (opts.DisableBinaryCmdletScan)
         {
             ModuleBinaryExportSurfaceValidator.ValidateConfiguredAssemblies(

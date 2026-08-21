@@ -366,9 +366,10 @@ function Invoke-DeferredSetup {
 
         try
         {
-            var aliases = new PowerShellScriptFunctionExportDetector().DetectScriptAliases(new[] { scriptPath });
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
 
-            Assert.Equal(new[] { "ModuleAlias" }, aliases);
+            Assert.True(analysis.IsComplete);
+            Assert.Equal(new[] { "ModuleAlias" }, analysis.Aliases);
         }
         finally
         {
@@ -454,6 +455,55 @@ nal -Name ShortNew -Value Get-Qux
 
             Assert.True(analysis.IsComplete);
             Assert.Equal(new[] { "QualifiedNew", "QualifiedSet", "ShortNew", "ShortSet" }, analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_RecognizesAliasProviderCreationCommands()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, """
+New-Item Alias:CreatedByNewItem -Value Get-One
+Set-Item -Path Alias:CreatedBySetItem -Value Get-Two
+ni -Path Alias:CreatedByNi -Value Get-Three
+si Alias:CreatedBySi Get-Four
+""");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.True(analysis.IsComplete);
+            Assert.Equal(
+                new[] { "CreatedByNewItem", "CreatedByNi", "CreatedBySetItem", "CreatedBySi" },
+                analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData("1 | ForEach-Object { Set-Alias -Scope Script InvokedAlias Get-One }")]
+    [InlineData("$path = 'Alias:InvokedAlias'; & { Set-Item $path Get-One }")]
+    public void PowerShellDetector_ReportsIncompleteSetForNestedInvokedScriptBlockAlias(string source)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, source);
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.False(analysis.IsComplete);
+            Assert.Empty(analysis.Aliases);
         }
         finally
         {

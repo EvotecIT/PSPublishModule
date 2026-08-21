@@ -175,6 +175,13 @@ internal static class ModuleBinaryPayloadLayout
         var hostVersion = runtimeVersion ?? Environment.Version;
         var selected = string.Empty;
         var selectedVersion = new Version(0, 0);
+        if (hasCore &&
+            TryReadCoreBaselineVersion(libRoot, out var compatibleBaselineVersion) &&
+            compatibleBaselineVersion <= hostVersion)
+        {
+            selected = "Core";
+            selectedVersion = compatibleBaselineVersion;
+        }
         foreach (var folder in folders)
         {
             const string prefix = "Core-";
@@ -220,6 +227,10 @@ internal static class ModuleBinaryPayloadLayout
         builder.AppendLine("    }");
         builder.AppendLine("    $PowerForgeSelectedRuntimeVersion = [Version]'0.0'");
         builder.AppendLine("    $PowerForgeSelectedRuntimeFolder = $null");
+        builder.AppendLine("    if ($Core -and $null -ne $PowerForgeCoreBaselineVersion -and $PowerForgeCoreBaselineVersion -le $PowerForgeRuntimeVersion) {");
+        builder.AppendLine("        $PowerForgeSelectedRuntimeVersion = $PowerForgeCoreBaselineVersion");
+        builder.AppendLine("        $PowerForgeSelectedRuntimeFolder = 'Core'");
+        builder.AppendLine("    }");
         builder.AppendLine("    foreach ($PowerForgeRuntimeFolder in @($AssemblyFolders.Name)) {");
         builder.AppendLine("        if ($PowerForgeRuntimeFolder -notmatch '^Core-(?:net|netcoreapp)(\\d+\\.\\d+)$') { continue }");
         builder.AppendLine("        try { $PowerForgeCandidateRuntimeVersion = [Version]$Matches[1] } catch { continue }");

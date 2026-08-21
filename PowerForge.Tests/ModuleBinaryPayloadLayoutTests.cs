@@ -105,6 +105,32 @@ public sealed class ModuleBinaryPayloadLayoutTests
         }
     }
 
+    [Fact]
+    public void ResolveRuntimePayloadFolder_RanksMarkedCoreBaselineWithNamedPayloads()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib"));
+        var core = Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core"));
+        Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core-net8.0"));
+        File.WriteAllText(
+            Path.Combine(core.FullName, ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName),
+            "net10.0");
+
+        try
+        {
+            Assert.Equal(
+                "Core",
+                ModuleBinaryPayloadLayout.ResolveRuntimePayloadFolder(
+                    libRoot.FullName,
+                    "Core",
+                    new Version(10, 0)));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
     [InlineData(null, 8, "Standard")]
     [InlineData("net10.0", 8, "Standard")]
@@ -270,6 +296,41 @@ public sealed class ModuleBinaryPayloadLayoutTests
 
             Assert.Empty(powerShell.Streams.Error);
             Assert.Equal(expectedFolder, Assert.Single(result).BaseObject);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void BuildPowerShellRuntimeSelector_RanksMarkedCoreBaselineWithNamedPayloads()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib"));
+        var core = Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core"));
+        Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core-net8.0"));
+        File.WriteAllText(
+            Path.Combine(core.FullName, ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName),
+            $"net{Environment.Version.Major}.0");
+
+        try
+        {
+            using var powerShell = PowerShell.Create();
+            powerShell.AddScript(
+                "param($LibRoot)\n" +
+                "$AssemblyFolders = @(Get-ChildItem -LiteralPath $LibRoot -Directory)\n" +
+                "$Core = $true\n" +
+                "$Standard = $false\n" +
+                "$Framework = 'Core'\n" +
+                ModuleBinaryPayloadLayout.BuildPowerShellRuntimeSelector() +
+                "$Framework\n");
+            powerShell.AddArgument(libRoot.FullName);
+
+            var result = powerShell.Invoke();
+
+            Assert.Empty(powerShell.Streams.Error);
+            Assert.Equal("Core", Assert.Single(result).BaseObject);
         }
         finally
         {

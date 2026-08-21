@@ -142,6 +142,32 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
                         continue;
                     }
 
+                    if (IsAliasProviderCreationCommand(command.GetCommandName()))
+                    {
+                        if (!TryGetProviderCreatedAliasNames(
+                                ast,
+                                command,
+                                out var providerAliases,
+                                out var isRelevantCreation))
+                        {
+                            if (isRelevantCreation)
+                                isComplete = false;
+                            continue;
+                        }
+
+                        if (!isRelevantCreation)
+                            continue;
+                        if (!IsUnconditionalModuleScopeCommand(command))
+                        {
+                            isComplete = false;
+                            continue;
+                        }
+
+                        foreach (var providerAlias in providerAliases)
+                            result.Add(providerAlias);
+                        continue;
+                    }
+
                     var creationScope = GetAliasScopeDisposition(ast, command);
                     if (creationScope == AliasScopeDisposition.OutsideModule)
                         continue;
@@ -181,6 +207,16 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
                         continue;
                     }
 
+                    isComplete = false;
+                }
+
+                if (ast.FindAll(
+                        node => node is CommandAst nestedCommand &&
+                                IsPotentialNestedAliasLifecycleCommand(ast, nestedCommand),
+                        searchNestedScriptBlocks: true)
+                    .Cast<CommandAst>()
+                    .Any(command => !commands.Contains(command) && !IsDeferredFunctionCommand(command)))
+                {
                     isComplete = false;
                 }
             }
@@ -386,7 +422,32 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
     }
 
     private static bool IsAliasLifecycleCommand(string? commandName)
-        => IsAliasCreationCommand(commandName) || IsAliasRemovalCommand(commandName);
+        => IsAliasCreationCommand(commandName) ||
+           IsAliasProviderCreationCommand(commandName) ||
+           IsAliasRemovalCommand(commandName);
+
+    private static bool IsPotentialNestedAliasLifecycleCommand(ScriptBlockAst script, CommandAst command)
+    {
+        var commandName = command.GetCommandName();
+        if (IsAliasCreationCommand(commandName) || IsRemoveAliasCommand(commandName))
+            return true;
+        if (!IsAliasProviderCreationCommand(commandName) && !IsAliasRemovalCommand(commandName))
+            return false;
+
+        return TryGetCommandArgument(command, new[] { "Path", "LiteralPath" }, out var expression) &&
+               ExpressionResemblesAliasProvider(script, command, expression);
+    }
+
+    private static bool IsDeferredFunctionCommand(CommandAst command)
+    {
+        for (Ast? current = command.Parent; current is not null; current = current.Parent)
+        {
+            if (current is FunctionDefinitionAst)
+                return true;
+        }
+
+        return false;
+    }
 
     private static bool IsAliasCreationCommand(string? commandName)
     {
@@ -398,6 +459,18 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
                string.Equals(leafName, "New-Alias", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(leafName, "sal", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(leafName, "nal", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAliasProviderCreationCommand(string? commandName)
+    {
+        if (string.IsNullOrWhiteSpace(commandName))
+            return false;
+
+        var leafName = commandName!.Substring(commandName.LastIndexOf('\\') + 1);
+        return string.Equals(leafName, "Set-Item", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(leafName, "New-Item", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(leafName, "si", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(leafName, "ni", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsAliasRemovalCommand(string? commandName)
@@ -552,6 +625,44 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
         }
 
         return false;
+    }
+
+    private static bool TryGetProviderCreatedAliasNames(
+        ScriptBlockAst script,
+        CommandAst command,
+        out IReadOnlyList<string> aliases,
+        out bool isRelevantCreation)
+    {
+        aliases = Array.Empty<string>();
+        isRelevantCreation = false;
+        if (!TryGetCommandArgument(command, new[] { "Path", "LiteralPath" }, out var expression))
+            return true;
+        if (!TryResolveStringValues(script, command, expression, out var values))
+        {
+            isRelevantCreation = ExpressionResemblesAliasProvider(script, command, expression);
+            return false;
+        }
+
+        var resolved = new List<string>();
+        foreach (var value in values)
+        {
+            if (!TryParseAliasProviderPath(value, out var alias, out var resemblesAliasPath))
+            {
+                if (resemblesAliasPath)
+                {
+                    isRelevantCreation = true;
+                    return false;
+                }
+
+                continue;
+            }
+
+            isRelevantCreation = true;
+            resolved.Add(alias);
+        }
+
+        aliases = resolved;
+        return true;
     }
 
     private static bool TryGetRemovedAliasNames(
