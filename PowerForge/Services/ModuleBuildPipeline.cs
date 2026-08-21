@@ -251,7 +251,9 @@ public sealed class ModuleBuildPipeline
             _logger.Info("RefreshPSD1Only enabled: skipping bootstrapper/libraries regeneration.");
         }
 
-        var buildNotes = builder.AnalyzeInstalledBinaryConflicts(buildOptions);
+        var buildNotes = spec.AnalyzeInstalledBinaryConflictsDuringBuild
+            ? builder.AnalyzeInstalledBinaryConflicts(buildOptions)
+            : Array.Empty<ModuleOwnerNote>();
         return new ModuleBuildResult(staging, psd1, exports, buildNotes);
     }
 

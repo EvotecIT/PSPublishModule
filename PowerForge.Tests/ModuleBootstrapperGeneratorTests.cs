@@ -304,6 +304,43 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void Generate_WithMultipleModernPayloads_WritesRuntimeSelectorAndLibraryMaps()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-multitfm-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core-net10.0"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Core-net10.0", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Default", "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                targetFrameworks: new[] { "net472", "net8.0", "net10.0" });
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
+
+            Assert.Contains("$PowerForgeRuntimeVersion = [Environment]::Version", bootstrapper);
+            Assert.Contains("$Framework = 'Core-net10.0'", bootstrapper);
+            Assert.Contains("'Core-net10.0' = @(", libraries);
+            Assert.Contains("Lib\\Core-net10.0\\DemoModule.dll", libraries);
+            Assert.Contains("$Framework = 'Core-net10.0'", libraries);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     [Trait("Category", "Integration")]
     public void Generate_WithAssemblyLoadContext_WritesAlcBootstrapperAndKeepsDesktopLibrariesScript()
     {

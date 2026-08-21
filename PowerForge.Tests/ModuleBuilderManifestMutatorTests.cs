@@ -8,6 +8,16 @@ namespace PowerForge.Tests;
 public sealed class ModuleBuilderManifestMutatorTests
 {
     [Fact]
+    public void MergeDeclaredAliases_PreservesScriptAliasesAndAddsDetectedBinaryAliases()
+    {
+        var aliases = ModuleBuilder.MergeDeclaredAliases(
+            new[] { "New-HeroImage", "TeamsMessage" },
+            new[] { "TeamsMessage", "TeamsSection" });
+
+        Assert.Equal(new[] { "New-HeroImage", "TeamsMessage", "TeamsSection" }, aliases);
+    }
+
+    [Fact]
     public void BuildInPlace_UsesManifestMutatorForManifestUpdates()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));

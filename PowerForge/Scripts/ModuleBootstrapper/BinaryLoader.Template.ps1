@@ -44,6 +44,7 @@ if ($Standard -and $Core -and $Default) {
     return
 }
 
+{{RuntimePayloadSelectorBlock}}
 if ($PSEdition -eq 'Core') {
     $LibFolder = $Framework
 } else {

@@ -2,6 +2,9 @@
 
 ## Unreleased
 ### What's Changed
+- Added side-by-side portable modern binary payloads for PowerShell modules, allowing a .NET 8 baseline and newer targets such as .NET 10 to be packaged together, checked for a consistent command surface, and selected at runtime.
+- Preserved aliases declared by module scripts when binary cmdlet and alias exports are discovered during packaging.
+- Made installed-module binary conflict analysis opt-in during builds; explicit pipeline conflict validation remains available when installed-state inspection is required.
 - Added portable visual-story bundle validation and staging, an optional trusted `visual-story` pipeline producer task, responsive site/blog shortcodes, completed PNG outcome enforcement, accessible transcripts/downloads, and API-doc story media with reduced-motion fallback.
 - Added pipeline-thread marshalling for terminating errors and `ShouldContinue` prompts raised after an asynchronous cmdlet await, while preserving derived cmdlet resource cleanup through virtual disposal.
 - Fixed module merging so `using` lines inside PowerShell here-strings and block comments remain in place instead of being moved into the generated module header.

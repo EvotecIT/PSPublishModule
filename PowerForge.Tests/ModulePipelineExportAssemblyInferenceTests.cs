@@ -1056,6 +1056,7 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
                 ExportAssemblies = new[] { "SharedAuth.dll" },
                 DisableBinaryCmdletScan = true,
                 UseAssemblyLoadContext = true,
+                AnalyzeInstalledBinaryConflictsDuringBuild = true,
                 BinaryConflictSearchRoots = new[] { moduleSearchRoot.FullName }
             });
 
@@ -1106,6 +1107,7 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
                 ExportAssemblies = new[] { "SharedAuth.dll" },
                 DisableBinaryCmdletScan = true,
                 UseAssemblyLoadContext = true,
+                AnalyzeInstalledBinaryConflictsDuringBuild = true,
                 BinaryConflictSearchRoots = new[] { moduleSearchRoot.FullName }
             });
 
