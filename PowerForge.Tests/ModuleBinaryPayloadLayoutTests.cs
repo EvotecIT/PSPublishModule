@@ -1,3 +1,4 @@
+using System.Management.Automation;
 using PowerForge;
 
 public sealed class ModuleBinaryPayloadLayoutTests
@@ -42,6 +43,7 @@ public sealed class ModuleBinaryPayloadLayoutTests
     [InlineData("net8.0", "net10.0-windows")]
     [InlineData("net10.0", "net10.0-windows")]
     [InlineData("net8.0-windows", "net10.0-windows")]
+    [InlineData("netstandard2.0", "net10.0-windows")]
     public void ResolveBuildPayloads_RejectsSideBySidePlatformQualifiedCorePayloads(
         string first,
         string second)
@@ -80,6 +82,10 @@ public sealed class ModuleBinaryPayloadLayoutTests
         Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core"));
         Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core-net10.0"));
         Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Default"));
+        Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Standard"));
+        File.WriteAllText(
+            Path.Combine(libRoot.FullName, "Core", ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName),
+            "net8.0");
 
         try
         {
@@ -92,6 +98,68 @@ public sealed class ModuleBinaryPayloadLayoutTests
             Assert.Equal(
                 "Default",
                 ModuleBinaryPayloadLayout.ResolveRuntimePayloadFolder(libRoot.FullName, "Desktop", new Version(4, 8)));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(null, 8, "Standard")]
+    [InlineData("net10.0", 8, "Standard")]
+    [InlineData("net8.0", 8, "Core")]
+    public void ResolveRuntimePayloadFolder_UsesCoreMetadataBeforeStandardFallback(
+        string? coreFramework,
+        int runtimeMajor,
+        string expectedFolder)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib"));
+        Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core"));
+        Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Standard"));
+        if (coreFramework is not null)
+        {
+            File.WriteAllText(
+                Path.Combine(libRoot.FullName, "Core", ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName),
+                coreFramework);
+        }
+
+        try
+        {
+            var selected = ModuleBinaryPayloadLayout.ResolveRuntimePayloadFolder(
+                libRoot.FullName,
+                "Core",
+                new Version(runtimeMajor, 0));
+
+            Assert.Equal(expectedFolder, selected);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(8, "Standard")]
+    [InlineData(10, "Core-net10.0")]
+    public void ResolveRuntimePayloadFolder_UsesNamedCoreBeforeStandardFallback(
+        int runtimeMajor,
+        string expectedFolder)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib"));
+        Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core-net10.0"));
+        Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Standard"));
+
+        try
+        {
+            var selected = ModuleBinaryPayloadLayout.ResolveRuntimePayloadFolder(
+                libRoot.FullName,
+                "Core",
+                new Version(runtimeMajor, 0));
+
+            Assert.Equal(expectedFolder, selected);
         }
         finally
         {
@@ -121,17 +189,63 @@ public sealed class ModuleBinaryPayloadLayoutTests
     }
 
     [Fact]
-    public void BuildPowerShellRuntimeSelector_EmitsDescendingCompatibleRuntimeChecks()
+    public void BuildPowerShellRuntimeSelector_DiscoversCompatiblePackagedPayloads()
     {
-        var selector = ModuleBinaryPayloadLayout.BuildPowerShellRuntimeSelector(new[] { "net8.0", "net10.0", "net12.0" });
+        var selector = ModuleBinaryPayloadLayout.BuildPowerShellRuntimeSelector();
 
         Assert.Contains("$PowerForgeRuntimeVersion = [Environment]::Version", selector);
-        Assert.Contains("[Version]'12.0'", selector);
-        Assert.Contains("$Framework = 'Core-net12.0'", selector);
-        Assert.Contains("[Version]'10.0'", selector);
-        Assert.Contains("$Framework = 'Core-net10.0'", selector);
-        Assert.True(
-            selector.IndexOf("[Version]'12.0'", StringComparison.Ordinal) <
-            selector.IndexOf("[Version]'10.0'", StringComparison.Ordinal));
+        Assert.Contains("foreach ($PowerForgeRuntimeFolder in @($AssemblyFolders.Name))", selector);
+        Assert.Contains("^Core-(?:net|netcoreapp)", selector);
+        Assert.Contains("$Framework = $PowerForgeSelectedRuntimeFolder", selector);
+        Assert.Contains("PowerForge.TargetFramework.txt", selector);
+        Assert.Contains("$PowerForgeCoreBaselineVersion -le $PowerForgeRuntimeVersion", selector);
+        Assert.Contains("} elseif ($Standard) {", selector);
+        Assert.DoesNotContain("Core-net10.0", selector, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null, false, "Standard")]
+    [InlineData("net8.0", false, "Core")]
+    [InlineData(null, true, "Core-net10.0")]
+    public void BuildPowerShellRuntimeSelector_SelectsCompatiblePayload(
+        string? coreFramework,
+        bool includeNamedCurrentRuntime,
+        string expectedFolder)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib"));
+        Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core"));
+        Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Standard"));
+        if (coreFramework is not null)
+        {
+            File.WriteAllText(
+                Path.Combine(libRoot.FullName, "Core", ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName),
+                coreFramework);
+        }
+        if (includeNamedCurrentRuntime)
+            Directory.CreateDirectory(Path.Combine(libRoot.FullName, $"Core-net{Environment.Version.Major}.0"));
+
+        try
+        {
+            using var powerShell = PowerShell.Create();
+            powerShell.AddScript(
+                "param($LibRoot)\n" +
+                "$AssemblyFolders = @(Get-ChildItem -LiteralPath $LibRoot -Directory)\n" +
+                "$Core = Test-Path -LiteralPath ([IO.Path]::Combine($LibRoot, 'Core'))\n" +
+                "$Standard = Test-Path -LiteralPath ([IO.Path]::Combine($LibRoot, 'Standard'))\n" +
+                "$Framework = 'Standard'\n" +
+                ModuleBinaryPayloadLayout.BuildPowerShellRuntimeSelector() +
+                "$Framework\n");
+            powerShell.AddArgument(libRoot.FullName);
+
+            var result = powerShell.Invoke();
+
+            Assert.Empty(powerShell.Streams.Error);
+            Assert.Equal(expectedFolder, Assert.Single(result).BaseObject);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
     }
 }

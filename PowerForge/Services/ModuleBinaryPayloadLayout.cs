@@ -31,6 +31,8 @@ internal sealed class ModuleBinaryPayload
 
 internal static class ModuleBinaryPayloadLayout
 {
+    internal const string TargetFrameworkMarkerFileName = "PowerForge.TargetFramework.txt";
+
     internal static bool IsCoreFramework(string? framework)
     {
         if (framework is null)
@@ -51,6 +53,15 @@ internal static class ModuleBinaryPayloadLayout
             .Select(static group => group.First())
             .ToArray();
 
+        var corePayloads = parsed.Where(static payload => payload.Kind == ModuleBinaryPayloadKind.Core).ToArray();
+        if (corePayloads.Any(static payload => HasPlatformQualifier(payload.Framework)) &&
+            (corePayloads.Length > 1 || parsed.Any(static payload => payload.Kind == ModuleBinaryPayloadKind.Standard)))
+        {
+            throw new InvalidOperationException(
+                $"Side-by-side platform-qualified Core target frameworks are not supported because runtime platform selection is undefined: {string.Join(", ", parsed.Where(static payload => payload.Kind is ModuleBinaryPayloadKind.Core or ModuleBinaryPayloadKind.Standard).Select(static payload => payload.Framework))}. " +
+                "Use portable Core target frameworks or package a single platform-qualified Core target framework without a Standard fallback.");
+        }
+
         var resolved = new List<ModuleBinaryPayload>(parsed.Length);
         foreach (var group in parsed.GroupBy(static payload => payload.Kind))
         {
@@ -58,14 +69,6 @@ internal static class ModuleBinaryPayloadLayout
                 .OrderBy(static payload => payload.Version)
                 .ThenBy(static payload => payload.Framework, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            if (group.Key == ModuleBinaryPayloadKind.Core &&
-                ordered.Length > 1 &&
-                ordered.Any(static payload => HasPlatformQualifier(payload.Framework)))
-            {
-                throw new InvalidOperationException(
-                    $"Side-by-side platform-qualified Core target frameworks are not supported because runtime platform selection is undefined: {string.Join(", ", ordered.Select(static payload => payload.Framework))}. " +
-                    "Use portable Core target frameworks or package a single platform-qualified Core target framework.");
-            }
             if (ordered.Length > 1 && group.Key != ModuleBinaryPayloadKind.Core)
             {
                 throw new InvalidOperationException(
@@ -96,21 +99,27 @@ internal static class ModuleBinaryPayloadLayout
             .Where(static item => !string.IsNullOrWhiteSpace(item.Name))
             .ToArray();
 
-        foreach (var kind in new[] { ModuleBinaryPayloadKind.Standard, ModuleBinaryPayloadKind.Core, ModuleBinaryPayloadKind.Default })
-        {
-            var baseName = GetBaseFolderName(kind);
-            var matches = directories
-                .Where(item => item.Name!.Equals(baseName, StringComparison.OrdinalIgnoreCase) ||
-                               item.Name.StartsWith(baseName + "-", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(item => item.Name!.Equals(baseName, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
-                .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
-                .Select(static item => item.Path)
-                .ToArray();
-            if (matches.Length > 0)
-                return matches;
-        }
+        var coreAndStandard = directories
+            .Where(static item =>
+                item.Name!.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
+                item.Name.StartsWith("Core-", StringComparison.OrdinalIgnoreCase) ||
+                item.Name.Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
+                item.Name.StartsWith("Standard-", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static item => item.Name!.Equals("Core", StringComparison.OrdinalIgnoreCase) ? 0 :
+                                    item.Name.StartsWith("Core-", StringComparison.OrdinalIgnoreCase) ? 1 :
+                                    item.Name.Equals("Standard", StringComparison.OrdinalIgnoreCase) ? 2 : 3)
+            .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(static item => item.Path)
+            .ToArray();
+        if (coreAndStandard.Length > 0)
+            return coreAndStandard;
 
-        return Array.Empty<string>();
+        return directories
+            .Where(static item => item.Name!.Equals("Default", StringComparison.OrdinalIgnoreCase) ||
+                                  item.Name.StartsWith("Default-", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(static item => item.Path)
+            .ToArray();
     }
 
     internal static string ResolveRuntimePayloadFolder(string libRoot, string powerShellEdition, Version? runtimeVersion = null)
@@ -130,17 +139,11 @@ internal static class ModuleBinaryPayloadLayout
         var hasDefault = folderSet.Contains("Default");
         var isCore = !string.Equals(powerShellEdition?.Trim(), "Desktop", StringComparison.OrdinalIgnoreCase);
 
-        var baseFolder = isCore
-            ? hasStandard ? "Standard" : hasCore ? "Core" : string.Empty
-            : hasDefault ? "Default" : hasStandard ? "Standard" : string.Empty;
-
-        if (string.IsNullOrWhiteSpace(baseFolder))
-            return string.Empty;
-        if (!isCore || !baseFolder.Equals("Core", StringComparison.OrdinalIgnoreCase))
-            return baseFolder;
+        if (!isCore)
+            return hasDefault ? "Default" : hasStandard ? "Standard" : string.Empty;
 
         var hostVersion = runtimeVersion ?? Environment.Version;
-        var selected = baseFolder;
+        var selected = string.Empty;
         var selectedVersion = new Version(0, 0);
         foreach (var folder in folders)
         {
@@ -149,7 +152,9 @@ internal static class ModuleBinaryPayloadLayout
                 continue;
 
             var framework = folder.Substring(prefix.Length);
-            if (!TryParseModernFrameworkVersion(framework, out var candidateVersion) || candidateVersion > hostVersion)
+            if (HasPlatformQualifier(framework) ||
+                !TryParseModernFrameworkVersion(framework, out var candidateVersion) ||
+                candidateVersion > hostVersion)
                 continue;
             if (candidateVersion <= selectedVersion)
                 continue;
@@ -158,36 +163,48 @@ internal static class ModuleBinaryPayloadLayout
             selectedVersion = candidateVersion;
         }
 
-        return selected;
+        if (!string.IsNullOrWhiteSpace(selected))
+            return selected;
+        if (hasCore && (!hasStandard ||
+                        TryReadCoreBaselineVersion(libRoot, out var baselineVersion) && baselineVersion <= hostVersion))
+            return "Core";
+        return hasStandard ? "Standard" : hasCore ? "Core" : string.Empty;
     }
 
-    internal static string BuildPowerShellRuntimeSelector(IEnumerable<string>? frameworks)
+    internal static string BuildPowerShellRuntimeSelector()
     {
-        var candidates = ResolveBuildPayloads(frameworks)
-            .Where(static payload => payload.Kind == ModuleBinaryPayloadKind.Core &&
-                                     !payload.FolderName.Equals("Core", StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(static payload => payload.Version)
-            .ToArray();
-        if (candidates.Length == 0)
-            return string.Empty;
-
         var builder = new StringBuilder();
-        builder.AppendLine("if ($PSEdition -eq 'Core' -and $Framework -eq 'Core') {");
+        builder.AppendLine("if ($PSEdition -eq 'Core') {");
         builder.AppendLine("    $PowerForgeRuntimeVersion = [Environment]::Version");
-        foreach (var candidate in candidates)
-        {
-            builder.Append("    if ($Framework -eq 'Core' -and $PowerForgeRuntimeVersion -ge [Version]'")
-                .Append(candidate.Version.Major)
-                .Append('.')
-                .Append(candidate.Version.Minor)
-                .Append("' -and (Test-Path -LiteralPath ([IO.Path]::Combine($LibRoot, '")
-                .Append(EscapePowerShellSingleQuoted(candidate.FolderName))
-                .AppendLine("')))) {");
-            builder.Append("        $Framework = '")
-                .Append(EscapePowerShellSingleQuoted(candidate.FolderName))
-                .AppendLine("'");
-            builder.AppendLine("    }");
-        }
+        builder.AppendLine("    $PowerForgeCoreBaselineVersion = $null");
+        builder.AppendLine("    if ($Core) {");
+        builder.AppendLine("        $PowerForgeCoreMarkerPath = [IO.Path]::Combine($LibRoot, 'Core', 'PowerForge.TargetFramework.txt')");
+        builder.AppendLine("        if (Test-Path -LiteralPath $PowerForgeCoreMarkerPath -PathType Leaf) {");
+        builder.AppendLine("            try {");
+        builder.AppendLine("                $PowerForgeCoreTargetFramework = [IO.File]::ReadAllText($PowerForgeCoreMarkerPath).Trim()");
+        builder.AppendLine("                if ($PowerForgeCoreTargetFramework -match '^net(?:coreapp)?(\\d+\\.\\d+)$') {");
+        builder.AppendLine("                    $PowerForgeCoreBaselineVersion = [Version]$Matches[1]");
+        builder.AppendLine("                }");
+        builder.AppendLine("            } catch { $PowerForgeCoreBaselineVersion = $null }");
+        builder.AppendLine("        }");
+        builder.AppendLine("    }");
+        builder.AppendLine("    $PowerForgeSelectedRuntimeVersion = [Version]'0.0'");
+        builder.AppendLine("    $PowerForgeSelectedRuntimeFolder = $null");
+        builder.AppendLine("    foreach ($PowerForgeRuntimeFolder in @($AssemblyFolders.Name)) {");
+        builder.AppendLine("        if ($PowerForgeRuntimeFolder -notmatch '^Core-(?:net|netcoreapp)(\\d+\\.\\d+)$') { continue }");
+        builder.AppendLine("        try { $PowerForgeCandidateRuntimeVersion = [Version]$Matches[1] } catch { continue }");
+        builder.AppendLine("        if ($PowerForgeCandidateRuntimeVersion -le $PowerForgeRuntimeVersion -and $PowerForgeCandidateRuntimeVersion -gt $PowerForgeSelectedRuntimeVersion -and (Test-Path -LiteralPath ([IO.Path]::Combine($LibRoot, $PowerForgeRuntimeFolder)))) {");
+        builder.AppendLine("            $PowerForgeSelectedRuntimeVersion = $PowerForgeCandidateRuntimeVersion");
+        builder.AppendLine("            $PowerForgeSelectedRuntimeFolder = $PowerForgeRuntimeFolder");
+        builder.AppendLine("        }");
+        builder.AppendLine("    }");
+        builder.AppendLine("    if (-not [string]::IsNullOrWhiteSpace($PowerForgeSelectedRuntimeFolder)) {");
+        builder.AppendLine("        $Framework = $PowerForgeSelectedRuntimeFolder");
+        builder.AppendLine("    } elseif ($Core -and (-not $Standard -or ($null -ne $PowerForgeCoreBaselineVersion -and $PowerForgeCoreBaselineVersion -le $PowerForgeRuntimeVersion))) {");
+        builder.AppendLine("        $Framework = 'Core'");
+        builder.AppendLine("    } elseif ($Standard) {");
+        builder.AppendLine("        $Framework = 'Standard'");
+        builder.AppendLine("    }");
         builder.AppendLine("}");
         return builder.ToString();
     }
@@ -234,6 +251,24 @@ internal static class ModuleBinaryPayloadLayout
     private static bool TryParseModernFrameworkVersion(string framework, out Version version)
         => TryParseVersionSuffix(framework, new[] { "netcoreapp", "net" }, out version);
 
+    private static bool TryReadCoreBaselineVersion(string libRoot, out Version version)
+    {
+        version = new Version(0, 0);
+        try
+        {
+            var markerPath = Path.Combine(libRoot, "Core", TargetFrameworkMarkerFileName);
+            if (!File.Exists(markerPath))
+                return false;
+            var framework = File.ReadAllText(markerPath).Trim();
+            return !HasPlatformQualifier(framework) && TryParseModernFrameworkVersion(framework, out version);
+        }
+        catch
+        {
+            version = new Version(0, 0);
+            return false;
+        }
+    }
+
     private static bool HasPlatformQualifier(string framework)
         => !string.IsNullOrWhiteSpace(framework) && framework.IndexOf('-') >= 0;
 
@@ -272,6 +307,4 @@ internal static class ModuleBinaryPayloadLayout
         return builder.ToString();
     }
 
-    private static string EscapePowerShellSingleQuoted(string value)
-        => value.Replace("'", "''");
 }
