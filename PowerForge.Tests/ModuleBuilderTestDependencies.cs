@@ -34,7 +34,5 @@ internal static class ModuleBuilderTestDependencies
         public IReadOnlyList<string> DetectScriptFunctions(IEnumerable<string> scriptFiles)
             => Array.Empty<string>();
 
-        public IReadOnlyList<string> DetectScriptAliases(IEnumerable<string> scriptFiles)
-            => Array.Empty<string>();
     }
 }

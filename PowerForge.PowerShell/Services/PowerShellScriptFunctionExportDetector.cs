@@ -6,7 +6,7 @@ namespace PowerForge;
 /// <summary>
 /// Detects exported PowerShell script functions using the PowerShell AST parser.
 /// </summary>
-public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExportDetector
+public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExportDetector, IScriptAliasExportDetector
 {
     /// <inheritdoc />
     public IReadOnlyList<string> DetectScriptFunctions(IEnumerable<string> scriptFiles)
@@ -59,7 +59,7 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
                 if (errors is { Length: > 0 })
                     continue;
 
-                var commands = ast.FindAll(node => node is CommandAst, searchNestedScriptBlocks: true)
+                var commands = ast.FindAll(node => node is CommandAst, searchNestedScriptBlocks: false)
                     .Cast<CommandAst>()
                     .Where(static command =>
                         string.Equals(command.GetCommandName(), "Set-Alias", StringComparison.OrdinalIgnoreCase) ||
@@ -152,7 +152,7 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
             yield break;
         var tableVariable = match.Groups["name"].Value;
 
-        foreach (var assignment in script.FindAll(node => node is AssignmentStatementAst, searchNestedScriptBlocks: true).Cast<AssignmentStatementAst>())
+        foreach (var assignment in script.FindAll(node => node is AssignmentStatementAst, searchNestedScriptBlocks: false).Cast<AssignmentStatementAst>())
         {
             if (assignment.Left is not VariableExpressionAst variable ||
                 !string.Equals(variable.VariablePath.UserPath, tableVariable, StringComparison.OrdinalIgnoreCase))
