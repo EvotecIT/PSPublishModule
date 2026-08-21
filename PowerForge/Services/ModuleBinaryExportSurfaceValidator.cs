@@ -132,6 +132,7 @@ internal static class ModuleBinaryExportSurfaceValidator
         IReadOnlyList<string>? exportAssemblies)
     {
         var fileNames = ResolveExportAssemblyFileNames(moduleName, exportAssemblies);
+        var hasExplicitExportAssemblies = exportAssemblies?.Any(static entry => !string.IsNullOrWhiteSpace(entry)) == true;
         var libRoot = Path.Combine(projectRoot, "Lib");
         if (Directory.Exists(libRoot))
         {
@@ -156,7 +157,12 @@ internal static class ModuleBinaryExportSurfaceValidator
 
                 return payloadDirectories.ToDictionary(
                     static item => item.Name!,
-                    item => ResolveMatchingAssemblies(item.Path, fileNames),
+                    item => ResolveMatchingAssemblies(
+                        item.Path,
+                        fileNames,
+                        hasExplicitExportAssemblies
+                            ? StringComparison.OrdinalIgnoreCase
+                            : StringComparison.Ordinal),
                     StringComparer.OrdinalIgnoreCase);
             }
         }
@@ -229,16 +235,20 @@ internal static class ModuleBinaryExportSurfaceValidator
                !ModuleBinaryPayloadLayout.IsSelectablePayloadFolderName(firstDirectory);
     }
 
-    private static string[] ResolveMatchingAssemblies(string root, ISet<string> fileNames)
+    private static string[] ResolveMatchingAssemblies(
+        string root,
+        ISet<string> fileNames,
+        StringComparison fileNameComparison)
     {
         if (!Directory.Exists(root))
             return Array.Empty<string>();
 
         try
         {
-            return Directory.EnumerateFiles(root, "*.dll", SearchOption.TopDirectoryOnly)
+            return Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly)
+                .Where(static path => string.Equals(Path.GetExtension(path), ".dll", StringComparison.OrdinalIgnoreCase))
                 .Where(path => fileNames.Any(expected =>
-                    string.Equals(expected, Path.GetFileName(path), StringComparison.Ordinal)))
+                    string.Equals(expected, Path.GetFileName(path), fileNameComparison)))
                 .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         }

@@ -444,6 +444,59 @@ public sealed class ModuleBuilderManifestMutatorTests
     }
 
     [Fact]
+    public void BuildInPlace_PreservesManifestAliasesWhenBootstrapperScriptDotSourcesExternalHelper()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; CmdletsToExport = @(); AliasesToExport = @('HelperAlias') }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            var publicRoot = Directory.CreateDirectory(Path.Combine(root, "Public"));
+            File.WriteAllText(
+                Path.Combine(publicRoot.FullName, "Init.ps1"),
+                ". (Join-Path $PSScriptRoot '..\\Helpers\\Aliases.ps1')");
+            var helpersRoot = Directory.CreateDirectory(Path.Combine(root, "Helpers"));
+            File.WriteAllText(
+                Path.Combine(helpersRoot.FullName, "Aliases.ps1"),
+                "Set-Alias -Name HelperAlias -Value Get-Item");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("HelperAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
     public void BuildInPlace_PreservesAliasesFromImmediatelyInvokedScriptBlocks()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));

@@ -366,6 +366,12 @@ public sealed class ModuleBuilder
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var aliasAnalysis = AnalyzeScriptAliases(aliasScripts);
+        if (_scriptFunctionExportDetector is IScriptAliasExternalSourceDetector externalSourceDetector &&
+            externalSourceDetector.HasModuleScopeDotSources(aliasScripts) &&
+            aliasAnalysis.IsComplete)
+        {
+            aliasAnalysis = new ScriptAliasExportAnalysis(aliasAnalysis.Aliases, isComplete: false);
+        }
         if (aliasDiscoveries.Any(static discovery => !discovery.IsComplete) && aliasAnalysis.IsComplete)
             aliasAnalysis = new ScriptAliasExportAnalysis(aliasAnalysis.Aliases, isComplete: false);
         var hasNestedModules = ModuleManifestValueReader

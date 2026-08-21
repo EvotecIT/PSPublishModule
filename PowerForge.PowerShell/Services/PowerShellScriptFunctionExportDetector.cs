@@ -6,7 +6,7 @@ namespace PowerForge;
 /// <summary>
 /// Detects exported PowerShell script functions using the PowerShell AST parser.
 /// </summary>
-public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExportDetector, IScriptAliasExportDetector, IScriptAliasExportAnalysisDetector
+public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExportDetector, IScriptAliasExportDetector, IScriptAliasExportAnalysisDetector, IScriptAliasExternalSourceDetector
 {
     /// <inheritdoc />
     public IReadOnlyList<string> DetectScriptFunctions(IEnumerable<string> scriptFiles)
@@ -227,6 +227,40 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
         }
 
         return new ScriptAliasExportAnalysis(result, isComplete);
+    }
+
+    /// <inheritdoc />
+    public bool HasModuleScopeDotSources(IEnumerable<string> scriptFiles)
+    {
+        foreach (var file in scriptFiles ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
+                continue;
+
+            try
+            {
+                Token[] tokens;
+                ParseError[] errors;
+                var ast = Parser.ParseFile(file, out tokens, out errors);
+                if (errors is { Length: > 0 })
+                    continue;
+
+                if (ast.FindAll(
+                        node => node is CommandAst { InvocationOperator: TokenKind.Dot } dotSource &&
+                                !IsDeferredFunctionCommand(dotSource),
+                        searchNestedScriptBlocks: true)
+                    .Any())
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // Alias analysis already treats unreadable or invalid scripts as incomplete.
+            }
+        }
+
+        return false;
     }
 
     private static bool IsUnconditionalModuleScopeCommand(CommandAst command)

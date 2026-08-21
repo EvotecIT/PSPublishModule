@@ -593,6 +593,46 @@ si Alias:CreatedBySi Get-Four
     }
 
     [Fact]
+    public void PowerShellDetector_ReportsModuleScopeDotSourceAsExternalAliasSource()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Init.ps1");
+        File.WriteAllText(scriptPath, ". (Join-Path $PSScriptRoot '..\\Helpers\\Aliases.ps1')");
+
+        try
+        {
+            var detector = new PowerShellScriptFunctionExportDetector();
+
+            Assert.True(detector.HasModuleScopeDotSources(new[] { scriptPath }));
+            Assert.True(detector.AnalyzeScriptAliases(new[] { scriptPath }).IsComplete);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_DoesNotReportDeferredFunctionDotSourceAsExternalAliasSource()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Commands.ps1");
+        File.WriteAllText(scriptPath, "function Invoke-Later { . (Join-Path $PSScriptRoot 'Aliases.ps1') }");
+
+        try
+        {
+            var detector = new PowerShellScriptFunctionExportDetector();
+
+            Assert.False(detector.HasModuleScopeDotSources(new[] { scriptPath }));
+            Assert.True(detector.AnalyzeScriptAliases(new[] { scriptPath }).IsComplete);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void FunctionDetectorContract_DoesNotRequireAliasDetection()
     {
         IScriptFunctionExportDetector detector = new RecordingScriptFunctionExportDetector("Invoke-Test");

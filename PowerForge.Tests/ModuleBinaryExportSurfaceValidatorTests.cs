@@ -228,6 +228,55 @@ public sealed class ModuleBinaryExportSurfaceValidatorTests
     }
 
     [Fact]
+    public void ValidateConfiguredAssemblies_MatchesExplicitAssemblyNamesCaseInsensitively()
+    {
+        var root = CreateModulePayloads(
+            typeof(BinaryExportDetector).Assembly.Location,
+            typeof(BinaryExportDetector).Assembly.Location);
+
+        try
+        {
+            ModuleBinaryExportSurfaceValidator.ValidateConfiguredAssemblies(
+                root.FullName,
+                "DemoModule",
+                new[] { "demomodule.dll" });
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ValidateConfiguredAssemblies_MatchesExplicitAssemblyExtensionsCaseInsensitively()
+    {
+        var root = CreateModulePayloads(
+            typeof(BinaryExportDetector).Assembly.Location,
+            typeof(BinaryExportDetector).Assembly.Location);
+        foreach (var payloadName in new[] { "Core", "Core-net10.0" })
+        {
+            var payloadRoot = Path.Combine(root.FullName, "Lib", payloadName);
+            var temporaryPath = Path.Combine(payloadRoot, "DemoModule.rename");
+            File.Move(
+                Path.Combine(payloadRoot, "DemoModule.dll"),
+                temporaryPath);
+            File.Move(temporaryPath, Path.Combine(payloadRoot, "DemoModule.DLL"));
+        }
+
+        try
+        {
+            ModuleBinaryExportSurfaceValidator.ValidateConfiguredAssemblies(
+                root.FullName,
+                "DemoModule",
+                new[] { "demomodule.dll" });
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Detect_RejectsConfiguredExportAssemblyMissingFromEveryPayload()
     {
         var root = CreateModulePayloads(
