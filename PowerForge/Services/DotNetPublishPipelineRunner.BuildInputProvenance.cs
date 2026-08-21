@@ -355,7 +355,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 outputRootsByEvaluation[visitKey] = evaluation.OutputRoots;
                 generatedProjectReferenceOutputs.AddRange(
                     evaluation.GeneratedProjectReferenceOutputs.Select(output => (request, output)));
-                if (request.TargetFramework is null)
+                if (string.IsNullOrEmpty(request.TargetFramework))
                 {
                     if (evaluation.TargetFrameworks.Length > 0)
                     {
@@ -514,16 +514,20 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:NuGetPackageFolders",
             "-getProperty:ProjectAssetsFile",
             "-getProperty:NuGetLockFilePath",
-            "-getProperty:MSBuildToolsPath"
+            "-getProperty:MSBuildToolsPath",
+            "-getProperty:MSBuildSDKsPath"
         };
         if (request.Configuration is not null)
             arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
         foreach (string itemName in EvaluatedBuildItemNames)
             arguments.Add("-getItem:" + itemName);
-        if (request.TargetFramework is not null)
+        if (!string.IsNullOrEmpty(request.TargetFramework))
         {
             arguments.Add("-target:ResolveReferences");
             arguments.Add("-getItem:_MSBuildProjectReferenceExistent");
+        }
+        if (request.TargetFramework is not null)
+        {
             arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
         }
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
@@ -637,6 +641,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     HashSet<string> analyzerProjectReferences =
                         ReadProjectReferenceOutputKeys(items, "Analyzer");
                     string? msBuildToolsPath = ReadItemText(properties, "MSBuildToolsPath");
+                    string? msBuildSdksPath = ReadItemText(properties, "MSBuildSDKsPath");
                     foreach (string itemName in EvaluatedBuildItemNames)
                     {
                         if (!items.TryGetProperty(itemName, out JsonElement values) || values.ValueKind != JsonValueKind.Array)
@@ -675,31 +680,33 @@ public sealed partial class DotNetPublishPipelineRunner
                             if (itemName.Equals("ProjectReference", StringComparison.Ordinal))
                             {
                                 inputs.Add(fullPath);
-                                if (!TryReadEvaluatedProjectReference(
+                                if (!TryReadEvaluatedProjectReferences(
                                         item,
                                         taskWideProjectReferencePropertyRemovals,
-                                        out EvaluatedProjectReference? rawReference) ||
-                                    rawReference is null)
+                                        out EvaluatedProjectReference[] itemReferences) ||
+                                    itemReferences.Length == 0)
                                 {
                                     return false;
                                 }
-                                rawReferences[BuildEvaluatedProjectReferenceKey(rawReference)] = rawReference;
+                                foreach (EvaluatedProjectReference rawReference in itemReferences)
+                                    rawReferences[BuildEvaluatedProjectReferenceKey(rawReference)] = rawReference;
                             }
                             else if (IsGeneratedProjectReferenceAssemblyReference(itemName, item))
                             {
                                 continue;
                             }
-                            else if (TryReadGeneratedProjectReferenceOutput(
+                            else if (TryReadGeneratedProjectReferenceOutputs(
                                          itemName,
                                          fullPath,
                                          item,
                                          msBuildToolsPath,
+                                         msBuildSdksPath,
                                          embeddedResourceProjectReferences,
                                          analyzerProjectReferences,
                                          taskWideProjectReferencePropertyRemovals,
-                                         out GeneratedProjectReferenceOutput? generatedProjectReferenceOutput))
+                                         out GeneratedProjectReferenceOutput[] generatedOutputs))
                             {
-                                generatedProjectReferenceOutputs.Add(generatedProjectReferenceOutput!);
+                                generatedProjectReferenceOutputs.AddRange(generatedOutputs);
                                 continue;
                             }
                             else if (!itemName.Equals("None", StringComparison.Ordinal) || IsOutputRelevantNoneItem(item))
@@ -846,90 +853,6 @@ public sealed partial class DotNetPublishPipelineRunner
            && value.ValueKind == JsonValueKind.String
            && !string.IsNullOrWhiteSpace(value.GetString())
            && !value.GetString()!.Equals("Never", StringComparison.OrdinalIgnoreCase);
-
-    private static bool TryReadEvaluatedProjectReference(
-        JsonElement item,
-        IReadOnlyCollection<string> taskWidePropertyRemovals,
-        out EvaluatedProjectReference? reference)
-        => TryReadEvaluatedProjectReference(item, "FullPath", taskWidePropertyRemovals, out reference);
-
-    private static bool TryReadEvaluatedProjectReference(
-        JsonElement item,
-        string projectPathMetadataName,
-        IReadOnlyCollection<string> taskWidePropertyRemovals,
-        out EvaluatedProjectReference? reference)
-    {
-        reference = null;
-        if (!item.TryGetProperty(projectPathMetadataName, out JsonElement fullPathElement) ||
-            fullPathElement.ValueKind != JsonValueKind.String ||
-            string.IsNullOrWhiteSpace(fullPathElement.GetString()))
-        {
-            return false;
-        }
-
-        var globalProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        string? projectProperties = ReadItemText(item, "Properties");
-        if (!string.IsNullOrWhiteSpace(projectProperties))
-        {
-            // MSBuild item-level Properties replaces the task-wide property table.
-            AddProjectReferenceProperties(globalProperties, projectProperties);
-        }
-        else
-        {
-            AddProjectReferenceProperties(globalProperties, ReadItemText(item, "SetConfiguration"));
-            AddProjectReferenceProperties(globalProperties, ReadItemText(item, "SetPlatform"));
-            AddProjectReferenceProperties(globalProperties, ReadItemText(item, "SetTargetFramework"));
-        }
-        // Per-item AdditionalProperties overlays either the replacement or task-wide table.
-        AddProjectReferenceProperties(globalProperties, ReadItemText(item, "AdditionalProperties"));
-
-        string? targetFramework = globalProperties.TryGetValue(
-            "TargetFramework",
-            out string? propertyTargetFramework)
-            ? propertyTargetFramework
-            : ReadItemText(item, "NearestTargetFramework");
-
-        string[] undefineProperties = ReadProjectReferencePropertyNames(
-            ReadItemText(item, "UndefineProperties"),
-            ReadItemText(item, "GlobalPropertiesToRemove"),
-            string.Join(";", taskWidePropertyRemovals));
-
-        reference = new EvaluatedProjectReference(
-            Path.GetFullPath(fullPathElement.GetString()!),
-            targetFramework,
-            globalProperties,
-            undefineProperties);
-        return true;
-    }
-
-    private static bool TryReadResolvedProjectReferences(
-        JsonElement items,
-        IReadOnlyCollection<string> taskWidePropertyRemovals,
-        out EvaluatedProjectReference[] references)
-    {
-        references = Array.Empty<EvaluatedProjectReference>();
-        if (!items.TryGetProperty(
-                "_MSBuildProjectReferenceExistent",
-                out JsonElement resolvedReferences) ||
-            resolvedReferences.ValueKind != JsonValueKind.Array)
-        {
-            return false;
-        }
-
-        references = resolvedReferences.EnumerateArray()
-            .Select(item => TryReadEvaluatedProjectReference(
-                    item,
-                    taskWidePropertyRemovals,
-                    out EvaluatedProjectReference? reference)
-                ? reference
-                : null)
-            .Where(static reference => reference is not null)
-            .Cast<EvaluatedProjectReference>()
-            .ToArray();
-        // An empty resolved item list is a valid result for a conditional
-        // ProjectReference that does not participate in this target framework.
-        return true;
-    }
 
     private static string? ReadItemText(JsonElement item, string name)
         => item.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
