@@ -596,8 +596,8 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                   },
                   "nuget": {
                     "owner": "EvotecIT",
-                    "packageCount": 9,
-                    "totalDownloads": 5600,
+                    "packageCount": 12,
+                    "totalDownloads": 10400,
                     "packages": [
                       {
                         "id": "Current.Core",
@@ -659,13 +659,31 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                         "version": "1.0.0",
                         "totalDownloads": 1200,
                         "packageUrl": "https://www.nuget.org/packages/Target.Package"
+                      },
+                      {
+                        "id": "Security Policy",
+                        "version": "1.0.0",
+                        "totalDownloads": 1500,
+                        "packageUrl": "https://www.nuget.org/packages/Security%20Policy"
+                      },
+                      {
+                        "id": "Ambiguous-One",
+                        "version": "1.0.0",
+                        "totalDownloads": 1600,
+                        "packageUrl": "https://www.nuget.org/packages/Ambiguous-One"
+                      },
+                      {
+                        "id": "Ambiguous.One",
+                        "version": "1.0.0",
+                        "totalDownloads": 1700,
+                        "packageUrl": "https://www.nuget.org/packages/Ambiguous.One"
                       }
                     ]
                   },
                   "powerShellGallery": {
                     "owner": "Przemyslaw.Klys",
-                    "moduleCount": 2,
-                    "totalDownloads": 2700,
+                    "moduleCount": 4,
+                    "totalDownloads": 6400,
                     "modules": [
                       {
                         "id": "TargetModule",
@@ -678,6 +696,18 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                         "version": "1.0.0",
                         "downloadCount": 1400,
                         "galleryUrl": "https://www.powershellgallery.com/packages/Target.Module"
+                      },
+                      {
+                        "id": "Ambiguous-One",
+                        "version": "1.0.0",
+                        "downloadCount": 1800,
+                        "galleryUrl": "https://www.powershellgallery.com/packages/Ambiguous-One"
+                      },
+                      {
+                        "id": "Ambiguous.One",
+                        "version": "1.0.0",
+                        "downloadCount": 1900,
+                        "galleryUrl": "https://www.powershellgallery.com/packages/Ambiguous.One"
                       }
                     ]
                   },
@@ -716,6 +746,24 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "name": "Renamed Exact Variant Product",
                       "githubRepo": "EvotecIT/RenamedExactVariantRepo",
                       "aliases": ["/projects/target-package/", "/projects/target-module/"]
+                    },
+                    {
+                      "slug": "renamed-literal-priority",
+                      "name": "TargetPackage",
+                      "githubRepo": "EvotecIT/RenamedLiteralPriorityRepo",
+                      "aliases": ["/projects/target-package/"]
+                    },
+                    {
+                      "slug": "renamed-percent-encoded",
+                      "name": "Renamed Percent Encoded Product",
+                      "githubRepo": "EvotecIT/RenamedPercentEncodedRepo",
+                      "aliases": ["/projects/security%20policy/"]
+                    },
+                    {
+                      "slug": "renamed-compact-ambiguous",
+                      "name": "Renamed Compact Ambiguous Product",
+                      "githubRepo": "EvotecIT/RenamedCompactAmbiguousRepo",
+                      "aliases": ["/projects/ambiguous_one/"]
                     }
                   ]
                 }
@@ -727,7 +775,7 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
 
             var args = new object?[] { statsPath, catalogPath, publishedCatalogPath, null };
             var merged = Assert.IsType<int>(syncMethod!.Invoke(null, args));
-            Assert.Equal(5, merged);
+            Assert.Equal(7, merged);
             Assert.Null(args[3]);
 
             using var catalog = JsonDocument.Parse(File.ReadAllText(catalogPath));
@@ -761,6 +809,16 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
             Assert.Equal(1200L, renamedExactVariants.GetProperty("nuget").GetProperty("totalDownloads").GetInt64());
             Assert.Equal("Target.Module", renamedExactVariants.GetProperty("powerShellGallery").GetProperty("id").GetString());
             Assert.Equal(1400L, renamedExactVariants.GetProperty("powerShellGallery").GetProperty("totalDownloads").GetInt64());
+
+            var renamedLiteralPriority = projectsBySlug["renamed-literal-priority"].GetProperty("metrics").GetProperty("nuget");
+            Assert.Equal("TargetPackage", renamedLiteralPriority.GetProperty("id").GetString());
+            Assert.Equal(1100L, renamedLiteralPriority.GetProperty("totalDownloads").GetInt64());
+
+            var renamedPercentEncoded = projectsBySlug["renamed-percent-encoded"].GetProperty("metrics").GetProperty("nuget");
+            Assert.Equal("Security Policy", renamedPercentEncoded.GetProperty("id").GetString());
+            Assert.Equal(1500L, renamedPercentEncoded.GetProperty("totalDownloads").GetInt64());
+
+            Assert.Equal(JsonValueKind.Null, projectsBySlug["renamed-compact-ambiguous"].GetProperty("metrics").ValueKind);
             Assert.True(File.Exists(publishedCatalogPath));
         }
         finally

@@ -2159,6 +2159,7 @@ internal static partial class WebPipelineRunner
 
         var nugetById = new Dictionary<string, WebEcosystemNuGetPackage>(StringComparer.OrdinalIgnoreCase);
         var nugetByCompactId = new Dictionary<string, WebEcosystemNuGetPackage>(StringComparer.OrdinalIgnoreCase);
+        var ambiguousNuGetCompactIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var nugetByGitHubProject = new Dictionary<string, List<WebEcosystemNuGetPackage>>(StringComparer.OrdinalIgnoreCase);
         var nugetByGitHubProjectName = new Dictionary<string, List<WebEcosystemNuGetPackage>>(StringComparer.OrdinalIgnoreCase);
         var nugetGitHubProjectByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -2171,8 +2172,18 @@ internal static partial class WebPipelineRunner
                     nugetById[package.Id] = package;
 
                 var compact = CompactToken(package.Id);
-                if (!string.IsNullOrWhiteSpace(compact) && !nugetByCompactId.ContainsKey(compact))
-                    nugetByCompactId[compact] = package;
+                if (!string.IsNullOrWhiteSpace(compact))
+                {
+                    if (nugetByCompactId.TryGetValue(compact, out var compactPackage))
+                    {
+                        if (!string.Equals(compactPackage.Id, package.Id, StringComparison.OrdinalIgnoreCase))
+                            ambiguousNuGetCompactIds.Add(compact);
+                    }
+                    else
+                    {
+                        nugetByCompactId[compact] = package;
+                    }
+                }
 
                 if (!string.IsNullOrWhiteSpace(package.ProjectUrl) &&
                     TryExtractGitHubRepo(package.ProjectUrl!, out var packageRepo))
@@ -2211,6 +2222,7 @@ internal static partial class WebPipelineRunner
 
         var psgalleryById = new Dictionary<string, WebEcosystemPowerShellGalleryModule>(StringComparer.OrdinalIgnoreCase);
         var psgalleryByCompactId = new Dictionary<string, WebEcosystemPowerShellGalleryModule>(StringComparer.OrdinalIgnoreCase);
+        var ambiguousPowerShellGalleryCompactIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (stats.PowerShellGallery?.Modules is { Count: > 0 })
         {
             foreach (var module in stats.PowerShellGallery.Modules)
@@ -2219,8 +2231,18 @@ internal static partial class WebPipelineRunner
                     psgalleryById[module.Id] = module;
 
                 var compact = CompactToken(module.Id);
-                if (!string.IsNullOrWhiteSpace(compact) && !psgalleryByCompactId.ContainsKey(compact))
-                    psgalleryByCompactId[compact] = module;
+                if (!string.IsNullOrWhiteSpace(compact))
+                {
+                    if (psgalleryByCompactId.TryGetValue(compact, out var compactModule))
+                    {
+                        if (!string.Equals(compactModule.Id, module.Id, StringComparison.OrdinalIgnoreCase))
+                            ambiguousPowerShellGalleryCompactIds.Add(compact);
+                    }
+                    else
+                    {
+                        psgalleryByCompactId[compact] = module;
+                    }
+                }
             }
         }
 
@@ -2262,7 +2284,9 @@ internal static partial class WebPipelineRunner
                 foreach (var candidate in candidates)
                 {
                     var compact = CompactToken(candidate);
-                    if (!string.IsNullOrWhiteSpace(compact) && nugetByCompactId.TryGetValue(compact, out var package))
+                    if (!string.IsNullOrWhiteSpace(compact) &&
+                        !ambiguousNuGetCompactIds.Contains(compact) &&
+                        nugetByCompactId.TryGetValue(compact, out var package))
                     {
                         nuget = package;
                         break;
@@ -2318,7 +2342,9 @@ internal static partial class WebPipelineRunner
                 foreach (var candidate in candidates)
                 {
                     var compact = CompactToken(candidate);
-                    if (!string.IsNullOrWhiteSpace(compact) && psgalleryByCompactId.TryGetValue(compact, out var found))
+                    if (!string.IsNullOrWhiteSpace(compact) &&
+                        !ambiguousPowerShellGalleryCompactIds.Contains(compact) &&
+                        psgalleryByCompactId.TryGetValue(compact, out var found))
                     {
                         module = found;
                         break;
@@ -2610,62 +2636,24 @@ internal static partial class WebPipelineRunner
         return sb.ToString();
     }
 
-    private static HashSet<string> BuildProjectIdentifierCandidates(ProjectCatalogEntry project)
+    private static string[] BuildProjectIdentifierCandidates(ProjectCatalogEntry project)
     {
-        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        void Add(string? value)
+        var literalCandidates = new List<string?>
         {
-            if (string.IsNullOrWhiteSpace(value))
-                return;
-
-            var token = value.Trim();
-            if (string.IsNullOrWhiteSpace(token))
-                return;
-
-            candidates.Add(token);
-            var dotVariant = token.Replace("-", ".", StringComparison.Ordinal);
-            if (!string.Equals(dotVariant, token, StringComparison.Ordinal))
-                candidates.Add(dotVariant);
-            var dashVariant = token.Replace(".", "-", StringComparison.Ordinal);
-            if (!string.Equals(dashVariant, token, StringComparison.Ordinal))
-                candidates.Add(dashVariant);
-        }
-
-        Add(project.Slug);
-        Add(project.Name);
-        Add(project.GitHubRepo);
-        Add(ExtractRepositoryName(project.GitHubRepo));
-        candidates.UnionWith(BuildProjectAliasIdentifierCandidates(project, includeSeparatorVariants: true));
-        return candidates;
+            project.Slug,
+            project.Name,
+            project.GitHubRepo,
+            ExtractRepositoryName(project.GitHubRepo)
+        };
+        literalCandidates.AddRange(BuildProjectAliasIdentifierCandidates(project, includeSeparatorVariants: false));
+        return BuildIdentifierCandidateSequence(literalCandidates, includeSeparatorVariants: true);
     }
 
-    private static HashSet<string> BuildProjectAliasIdentifierCandidates(
+    private static string[] BuildProjectAliasIdentifierCandidates(
         ProjectCatalogEntry project,
         bool includeSeparatorVariants)
     {
-        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        void Add(string? value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return;
-
-            var token = value.Trim();
-            if (string.IsNullOrWhiteSpace(token))
-                return;
-
-            candidates.Add(token);
-            if (!includeSeparatorVariants)
-                return;
-
-            var dotVariant = token.Replace("-", ".", StringComparison.Ordinal);
-            if (!string.Equals(dotVariant, token, StringComparison.Ordinal))
-                candidates.Add(dotVariant);
-            var dashVariant = token.Replace(".", "-", StringComparison.Ordinal);
-            if (!string.Equals(dashVariant, token, StringComparison.Ordinal))
-                candidates.Add(dashVariant);
-        }
+        var literalCandidates = new List<string?>();
 
         if (project.Aliases is { Length: > 0 })
         {
@@ -2695,18 +2683,63 @@ internal static partial class WebPipelineRunner
                     if (segments.Length > 0)
                     {
                         var identitySegment = segments[^1];
+                        identitySegment = DecodeAliasPathSegment(identitySegment);
                         if (segments.Length > 1 && IsLegacyDefaultDocument(identitySegment))
-                            identitySegment = segments[^2];
-                        Add(RemoveLegacyRouteFileSuffix(identitySegment));
+                            identitySegment = DecodeAliasPathSegment(segments[^2]);
+                        literalCandidates.Add(RemoveLegacyRouteFileSuffix(identitySegment));
                     }
                 }
                 else
                 {
-                    Add(RemoveLegacyRouteFileSuffix(aliasToken));
+                    literalCandidates.Add(RemoveLegacyRouteFileSuffix(DecodeAliasPathSegment(aliasToken)));
                 }
             }
         }
-        return candidates;
+        return BuildIdentifierCandidateSequence(literalCandidates, includeSeparatorVariants);
+    }
+
+    private static string[] BuildIdentifierCandidateSequence(
+        IEnumerable<string?> values,
+        bool includeSeparatorVariants)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var literals = new List<string>();
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+
+            var token = value.Trim();
+            if (!string.IsNullOrWhiteSpace(token) && seen.Add(token))
+                literals.Add(token);
+        }
+
+        if (!includeSeparatorVariants)
+            return literals.ToArray();
+
+        var candidates = new List<string>(literals);
+        foreach (var literal in literals)
+        {
+            var dotVariant = literal.Replace("-", ".", StringComparison.Ordinal);
+            if (!string.Equals(dotVariant, literal, StringComparison.Ordinal) && seen.Add(dotVariant))
+                candidates.Add(dotVariant);
+            var dashVariant = literal.Replace(".", "-", StringComparison.Ordinal);
+            if (!string.Equals(dashVariant, literal, StringComparison.Ordinal) && seen.Add(dashVariant))
+                candidates.Add(dashVariant);
+        }
+        return candidates.ToArray();
+    }
+
+    private static string DecodeAliasPathSegment(string value)
+    {
+        try
+        {
+            return Uri.UnescapeDataString(value);
+        }
+        catch (UriFormatException)
+        {
+            return value;
+        }
     }
 
     private static bool IsLegacyDefaultDocument(string value)
