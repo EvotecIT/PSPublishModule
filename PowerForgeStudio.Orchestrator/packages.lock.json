@@ -130,7 +130,7 @@
       "dbaclientx.sqlite": {
         "type": "Project",
         "dependencies": {
-          "DBAClientX.Core": "[1.0.0, )",
+          "DBAClientX.Core": "[1.0.1, )",
           "Microsoft.Data.Sqlite": "[10.0.10, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )",
           "SQLitePCLRaw.core": "[3.0.5, )"
