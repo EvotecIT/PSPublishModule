@@ -344,6 +344,31 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void Generate_WithOnlyNamedCorePayload_AllowsRuntimeSelectionBeforeEmptyLayoutGuard()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-named-core-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core-net10.0"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Core-net10.0", "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(root, "DemoModule", exports, new[] { "DemoModule.dll" }, handleRuntimes: false);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$HasNamedCorePayload = $true", bootstrapper);
+            Assert.Contains("elseif ($HasNamedCorePayload -and $PSEdition -eq 'Core')", bootstrapper);
+            Assert.Contains("$Framework = $PowerForgeSelectedRuntimeFolder", bootstrapper);
+            Assert.Contains("No compatible PowerShell Core assemblies found", bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     [Trait("Category", "Integration")]
     public void Generate_WithAssemblyLoadContext_WritesAlcBootstrapperAndKeepsDesktopLibrariesScript()
     {

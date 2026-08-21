@@ -189,6 +189,31 @@ public sealed class ModuleBinaryPayloadLayoutTests
     }
 
     [Fact]
+    public void ResolveValidationPayloadDirectories_ReturnsEverySelectableCorePayload()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib"));
+        var core = Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core"));
+        var net10 = Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core-net10.0"));
+        var standard = Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Standard"));
+        var desktop = Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Default"));
+
+        try
+        {
+            Assert.Equal(
+                new[] { core.FullName, net10.FullName, standard.FullName },
+                ModuleBinaryPayloadLayout.ResolveValidationPayloadDirectories(libRoot.FullName, "Core"));
+            Assert.Equal(
+                new[] { desktop.FullName },
+                ModuleBinaryPayloadLayout.ResolveValidationPayloadDirectories(libRoot.FullName, "Desktop"));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void BuildPowerShellRuntimeSelector_DiscoversCompatiblePackagedPayloads()
     {
         var selector = ModuleBinaryPayloadLayout.BuildPowerShellRuntimeSelector();

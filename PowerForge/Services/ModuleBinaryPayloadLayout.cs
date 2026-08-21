@@ -122,6 +122,39 @@ internal static class ModuleBinaryPayloadLayout
             .ToArray();
     }
 
+    internal static string[] ResolveValidationPayloadDirectories(string libRoot, string powerShellEdition)
+    {
+        if (!Directory.Exists(libRoot))
+            return Array.Empty<string>();
+
+        if (string.Equals(powerShellEdition?.Trim(), "Desktop", StringComparison.OrdinalIgnoreCase))
+        {
+            var selected = ResolveRuntimePayloadFolder(libRoot, "Desktop");
+            return string.IsNullOrWhiteSpace(selected)
+                ? new[] { libRoot }
+                : new[] { Path.Combine(libRoot, selected) };
+        }
+
+        var candidates = Directory.EnumerateDirectories(libRoot)
+            .Select(static path => new { Path = path, Name = Path.GetFileName(path) ?? string.Empty })
+            .Where(static item =>
+                item.Name.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
+                item.Name.Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
+                IsPortableNamedCorePayload(item.Name))
+            .OrderBy(static item => item.Name.Equals("Core", StringComparison.OrdinalIgnoreCase) ? 0 :
+                                    IsPortableNamedCorePayload(item.Name) ? 1 : 2)
+            .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(static item => item.Path)
+            .ToArray();
+        if (candidates.Length > 0)
+            return candidates;
+
+        var fallback = ResolveRuntimePayloadFolder(libRoot, "Core");
+        return string.IsNullOrWhiteSpace(fallback)
+            ? new[] { libRoot }
+            : new[] { Path.Combine(libRoot, fallback) };
+    }
+
     internal static string ResolveRuntimePayloadFolder(string libRoot, string powerShellEdition, Version? runtimeVersion = null)
     {
         if (!Directory.Exists(libRoot))
@@ -271,6 +304,16 @@ internal static class ModuleBinaryPayloadLayout
 
     private static bool HasPlatformQualifier(string framework)
         => !string.IsNullOrWhiteSpace(framework) && framework.IndexOf('-') >= 0;
+
+    private static bool IsPortableNamedCorePayload(string folderName)
+    {
+        const string prefix = "Core-";
+        if (string.IsNullOrWhiteSpace(folderName) || !folderName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var framework = folderName.Substring(prefix.Length);
+        return !HasPlatformQualifier(framework) && TryParseModernFrameworkVersion(framework, out _);
+    }
 
     private static bool TryParseVersionSuffix(string framework, IReadOnlyList<string> prefixes, out Version version)
     {

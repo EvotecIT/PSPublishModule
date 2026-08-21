@@ -147,6 +147,7 @@ public sealed class ModuleBuilder
         if (hasCsproj)
         {
             var frameworks = opts.Frameworks.Count > 0 ? opts.Frameworks : new[] { "net472", "net8.0" };
+            var payloads = ModuleBinaryPayloadLayout.ResolveBuildPayloads(frameworks);
 
             var libRoot = Path.Combine(opts.ProjectRoot, "Lib");
             if (Directory.Exists(libRoot)) Directory.Delete(libRoot, recursive: true);
@@ -164,7 +165,6 @@ public sealed class ModuleBuilder
             {
                 var publishes = publisher.Publish(opts.CsprojPath, opts.Configuration, frameworks, opts.ModuleVersion, artifactsRoot, opts.NuGetRestoreSources);
 
-                var payloads = ModuleBinaryPayloadLayout.ResolveBuildPayloads(frameworks);
                 foreach (var payload in payloads)
                 {
                     var tfm = payload.Framework;
@@ -286,7 +286,14 @@ public sealed class ModuleBuilder
 
         IEnumerable<string>? cmdletsToSet = null;
         IEnumerable<string>? aliasesToSet = null;
-        var declaredAliases = ModuleManifestExportReader.ReadExports(psd1).Aliases;
+        var aliasScripts = scripts
+            .Concat(EnumerateScriptFiles(Path.Combine(opts.ProjectRoot, "Private")))
+            .Concat(EnumerateExistingFile(Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psm1")))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var declaredAliases = aliasScripts.Length > 0
+            ? _scriptFunctionExportDetector.DetectScriptAliases(aliasScripts)
+            : Array.Empty<string>();
         if (!opts.DisableBinaryCmdletScan)
         {
             var binaryExportSurface = ModuleBinaryExportSurfaceValidator.Detect(
@@ -309,7 +316,7 @@ public sealed class ModuleBuilder
                 else
                 {
                     if (detectedCmdlets.Length > 0) cmdletsToSet = detectedCmdlets;
-                    if (detectedAliases.Length > 0) aliasesToSet = MergeDeclaredAliases(declaredAliases, detectedAliases);
+                    aliasesToSet = MergeDeclaredAliases(declaredAliases, detectedAliases);
                 }
             }
         }
@@ -329,6 +336,18 @@ public sealed class ModuleBuilder
             .Select(static alias => alias.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+    private static IEnumerable<string> EnumerateScriptFiles(string directory)
+    {
+        if (!Directory.Exists(directory))
+            return Array.Empty<string>();
+
+        try { return Directory.EnumerateFiles(directory, "*.ps1", SearchOption.AllDirectories).ToArray(); }
+        catch { return Array.Empty<string>(); }
+    }
+
+    private static IEnumerable<string> EnumerateExistingFile(string path)
+        => File.Exists(path) ? new[] { path } : Array.Empty<string>();
 
     internal ModuleOwnerNote[] AnalyzeInstalledBinaryConflicts(Options opts)
     {
