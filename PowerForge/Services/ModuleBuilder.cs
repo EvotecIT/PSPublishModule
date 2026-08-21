@@ -291,8 +291,8 @@ public sealed class ModuleBuilder
             .Concat(EnumerateExistingFile(Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psm1")))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var declaredAliases = aliasScripts.Length > 0
-            ? _scriptFunctionExportDetector.DetectScriptAliases(aliasScripts)
+        var declaredAliases = aliasScripts.Length > 0 && _scriptFunctionExportDetector is IScriptAliasExportDetector aliasExportDetector
+            ? aliasExportDetector.DetectScriptAliases(aliasScripts)
             : Array.Empty<string>();
         if (!opts.DisableBinaryCmdletScan)
         {

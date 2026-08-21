@@ -236,7 +236,5 @@ public sealed class ModuleBuilderManifestMutatorTests
         public IReadOnlyList<string> DetectScriptFunctions(IEnumerable<string> scriptFiles)
             => _functions;
 
-        public IReadOnlyList<string> DetectScriptAliases(IEnumerable<string> scriptFiles)
-            => Array.Empty<string>();
     }
 }
