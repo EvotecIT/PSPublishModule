@@ -87,7 +87,7 @@ public sealed partial class ModuleValidationService
                 if (parameter is null || string.IsNullOrWhiteSpace(parameter.Name)) continue;
 
                 totalParameterCount++;
-                if (!string.IsNullOrWhiteSpace(parameter.Description))
+                if (!ParameterDescriptionFallback.IsMissingOrPlaceholder(parameter.Description))
                 {
                     parameterDescriptionCount++;
                 }

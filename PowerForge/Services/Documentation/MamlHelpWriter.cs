@@ -317,7 +317,7 @@ internal sealed class MamlHelpWriter
 
         writer.WriteElementString("maml", "name", MamlNs, p.Name.Trim());
         writer.WriteStartElement("maml", "description", MamlNs);
-        WriteParas(writer, p.Description);
+        WriteParas(writer, ParameterDescriptionFallback.Resolve(p.Description, p.Name, p.Type));
         writer.WriteEndElement(); // maml:description
 
         if (includeParameterValue)

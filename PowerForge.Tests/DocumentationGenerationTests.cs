@@ -185,6 +185,7 @@ EXAMPLES
                             {
                                 Name = "Mode",
                                 Type = "String",
+                                Description = "{{ Fill Mode Description }}",
                                 ParameterSets = new List<string> { "ByMode" },
                                 PossibleValues = new List<string> { "Basic", "basic", "Advanced" }
                             }
@@ -209,6 +210,9 @@ EXAMPLES
             var parameter = doc.Descendants(commandNs + "parameter")
                 .FirstOrDefault(p => string.Equals(p.Element(mamlNs + "name")?.Value, "Mode", StringComparison.Ordinal));
             Assert.NotNull(parameter);
+            Assert.Equal(
+                "Specifies a value for mode.",
+                parameter!.Element(mamlNs + "description")?.Value.Trim());
 
             var possibleValues = parameter!
                 .Element(commandNs + "parameterValueGroup")?
@@ -222,6 +226,10 @@ EXAMPLES
             new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "TestModule", markdownRoot);
             Assert.Contains(
                 "Possible values: Basic, basic, Advanced",
+                File.ReadAllText(Path.Combine(markdownRoot, "Invoke-Thing.md")),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "{{ Fill Mode Description }}",
                 File.ReadAllText(Path.Combine(markdownRoot, "Invoke-Thing.md")),
                 StringComparison.Ordinal);
         }
