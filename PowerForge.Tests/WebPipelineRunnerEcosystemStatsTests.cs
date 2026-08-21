@@ -561,8 +561,8 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                 {
                   "nuget": {
                     "owner": "EvotecIT",
-                    "packageCount": 7,
-                    "totalDownloads": 3300,
+                    "packageCount": 9,
+                    "totalDownloads": 5600,
                     "packages": [
                       {
                         "id": "Current.Core",
@@ -612,6 +612,37 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                         "totalDownloads": 700,
                         "packageUrl": "https://www.nuget.org/packages/Slashless.Core",
                         "projectUrl": "https://github.com/Owner/Slashless"
+                      },
+                      {
+                        "id": "TargetPackage",
+                        "version": "1.0.0",
+                        "totalDownloads": 1100,
+                        "packageUrl": "https://www.nuget.org/packages/TargetPackage"
+                      },
+                      {
+                        "id": "Target.Package",
+                        "version": "1.0.0",
+                        "totalDownloads": 1200,
+                        "packageUrl": "https://www.nuget.org/packages/Target.Package"
+                      }
+                    ]
+                  },
+                  "powerShellGallery": {
+                    "owner": "Przemyslaw.Klys",
+                    "moduleCount": 2,
+                    "totalDownloads": 2700,
+                    "modules": [
+                      {
+                        "id": "TargetModule",
+                        "version": "1.0.0",
+                        "downloadCount": 1300,
+                        "galleryUrl": "https://www.powershellgallery.com/packages/TargetModule"
+                      },
+                      {
+                        "id": "Target.Module",
+                        "version": "1.0.0",
+                        "downloadCount": 1400,
+                        "galleryUrl": "https://www.powershellgallery.com/packages/Target.Module"
                       }
                     ]
                   },
@@ -644,6 +675,12 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "name": "Renamed Slashless Product",
                       "githubRepo": "EvotecIT/RenamedSlashlessRepo",
                       "aliases": ["slashless.html"]
+                    },
+                    {
+                      "slug": "renamed-exact-variants",
+                      "name": "Renamed Exact Variant Product",
+                      "githubRepo": "EvotecIT/RenamedExactVariantRepo",
+                      "aliases": ["/projects/target-package/", "/projects/target-module/"]
                     }
                   ]
                 }
@@ -655,26 +692,37 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
 
             var args = new object?[] { statsPath, catalogPath, publishedCatalogPath, null };
             var merged = Assert.IsType<int>(syncMethod!.Invoke(null, args));
-            Assert.Equal(4, merged);
+            Assert.Equal(5, merged);
             Assert.Null(args[3]);
 
             using var catalog = JsonDocument.Parse(File.ReadAllText(catalogPath));
             var projects = catalog.RootElement.GetProperty("projects");
-            var current = projects[0].GetProperty("metrics").GetProperty("nuget");
+            var projectsBySlug = projects.EnumerateArray()
+                .ToDictionary(
+                    static project => project.GetProperty("slug").GetString()!,
+                    static project => project,
+                    StringComparer.OrdinalIgnoreCase);
+            var current = projectsBySlug["legacyrepo"].GetProperty("metrics").GetProperty("nuget");
             Assert.Equal(1, current.GetProperty("packageCount").GetInt32());
             Assert.Equal(400L, current.GetProperty("totalDownloads").GetInt64());
 
-            var renamed = projects[1].GetProperty("metrics").GetProperty("nuget");
+            var renamed = projectsBySlug["renamed"].GetProperty("metrics").GetProperty("nuget");
             Assert.Equal(1, renamed.GetProperty("packageCount").GetInt32());
             Assert.Equal(100L, renamed.GetProperty("totalDownloads").GetInt64());
 
-            var renamedSeparators = projects[2].GetProperty("metrics").GetProperty("nuget");
+            var renamedSeparators = projectsBySlug["renamed-separators"].GetProperty("metrics").GetProperty("nuget");
             Assert.Equal(1, renamedSeparators.GetProperty("packageCount").GetInt32());
             Assert.Equal(500L, renamedSeparators.GetProperty("totalDownloads").GetInt64());
 
-            var renamedSlashless = projects[3].GetProperty("metrics").GetProperty("nuget");
+            var renamedSlashless = projectsBySlug["renamed-slashless"].GetProperty("metrics").GetProperty("nuget");
             Assert.Equal(1, renamedSlashless.GetProperty("packageCount").GetInt32());
             Assert.Equal(700L, renamedSlashless.GetProperty("totalDownloads").GetInt64());
+
+            var renamedExactVariants = projectsBySlug["renamed-exact-variants"].GetProperty("metrics");
+            Assert.Equal("Target.Package", renamedExactVariants.GetProperty("nuget").GetProperty("id").GetString());
+            Assert.Equal(1200L, renamedExactVariants.GetProperty("nuget").GetProperty("totalDownloads").GetInt64());
+            Assert.Equal("Target.Module", renamedExactVariants.GetProperty("powerShellGallery").GetProperty("id").GetString());
+            Assert.Equal(1400L, renamedExactVariants.GetProperty("powerShellGallery").GetProperty("totalDownloads").GetInt64());
             Assert.True(File.Exists(publishedCatalogPath));
         }
         finally

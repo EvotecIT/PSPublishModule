@@ -2240,12 +2240,18 @@ internal static partial class WebPipelineRunner
                     nuget = package;
                     break;
                 }
+            }
 
-                var compact = CompactToken(candidate);
-                if (!string.IsNullOrWhiteSpace(compact) && nugetByCompactId.TryGetValue(compact, out package))
+            if (nuget is null)
+            {
+                foreach (var candidate in candidates)
                 {
-                    nuget = package;
-                    break;
+                    var compact = CompactToken(candidate);
+                    if (!string.IsNullOrWhiteSpace(compact) && nugetByCompactId.TryGetValue(compact, out var package))
+                    {
+                        nuget = package;
+                        break;
+                    }
                 }
             }
 
@@ -2290,12 +2296,18 @@ internal static partial class WebPipelineRunner
                     module = found;
                     break;
                 }
+            }
 
-                var compact = CompactToken(candidate);
-                if (!string.IsNullOrWhiteSpace(compact) && psgalleryByCompactId.TryGetValue(compact, out found))
+            if (module is null)
+            {
+                foreach (var candidate in candidates)
                 {
-                    module = found;
-                    break;
+                    var compact = CompactToken(candidate);
+                    if (!string.IsNullOrWhiteSpace(compact) && psgalleryByCompactId.TryGetValue(compact, out var found))
+                    {
+                        module = found;
+                        break;
+                    }
                 }
             }
 
