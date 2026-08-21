@@ -348,6 +348,49 @@ public sealed class ModuleBinaryExportSurfaceValidatorTests
     }
 
     [Fact]
+    public void Detect_HonorsRelativeExportAssemblyPathForSingleSelectablePayload()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var relativePath = Path.Combine("Lib", "Core", "DemoModule.dll");
+        var assemblyPath = Path.Combine(root.FullName, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(assemblyPath)!);
+        File.Copy(typeof(InvokePowerForgePluginExportCommand).Assembly.Location, assemblyPath);
+
+        try
+        {
+            var surface = ModuleBinaryExportSurfaceValidator.Detect(root.FullName, "DemoModule", new[] { relativePath });
+
+            Assert.True(surface.HasAssemblies);
+            Assert.Contains("Invoke-PowerForgePluginExport", surface.Cmdlets);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Detect_HonorsAbsoluteExportAssemblyPathForSingleSelectablePayload()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var payloadRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
+        var assemblyPath = Path.Combine(payloadRoot.FullName, "DemoModule.dll");
+        File.Copy(typeof(InvokePowerForgePluginExportCommand).Assembly.Location, assemblyPath);
+
+        try
+        {
+            var surface = ModuleBinaryExportSurfaceValidator.Detect(root.FullName, "DemoModule", new[] { assemblyPath });
+
+            Assert.True(surface.HasAssemblies);
+            Assert.Contains("Invoke-PowerForgePluginExport", surface.Cmdlets);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Detect_HonorsAbsoluteExportAssemblyPathForSinglePayloadLayout()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

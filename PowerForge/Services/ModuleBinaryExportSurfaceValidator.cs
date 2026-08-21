@@ -147,12 +147,23 @@ internal static class ModuleBinaryExportSurfaceValidator
                 var pathQualifiedEntries = ResolveConfiguredEntries(moduleName, exportAssemblies)
                     .Where(IsPathQualifiedEntry)
                     .ToArray();
-                if (pathQualifiedEntries.Length > 0)
+                if (pathQualifiedEntries.Length > 0 && payloadDirectories.Length > 1)
                 {
                     throw new InvalidOperationException(
                         "Path-qualified export assemblies are ambiguous with side-by-side module payloads: " +
                         string.Join(", ", pathQualifiedEntries) +
                         ". Configure export assembly file names so each payload can be validated independently.");
+                }
+
+                if (pathQualifiedEntries.Length > 0)
+                {
+                    return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [payloadDirectories[0].Name!] = ResolveLegacyMatchingAssemblies(
+                            projectRoot,
+                            moduleName,
+                            exportAssemblies),
+                    };
                 }
 
                 return payloadDirectories.ToDictionary(
