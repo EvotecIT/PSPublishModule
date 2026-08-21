@@ -551,9 +551,11 @@ internal static partial class WebPipelineRunner
                 project.ExternalUrl = parts[externalUrlIndex].Trim();
                 updates++;
             }
-            if (aliasesIndex >= 0 && aliasesIndex < parts.Length && !string.IsNullOrWhiteSpace(parts[aliasesIndex]))
+            if (aliasesIndex >= 0 && aliasesIndex < parts.Length &&
+                !string.IsNullOrWhiteSpace(parts[aliasesIndex]) &&
+                TryParseCurationAliases(parts[aliasesIndex], out var aliases))
             {
-                project.Aliases = ParseCurationAliases(parts[aliasesIndex]);
+                project.Aliases = aliases;
                 updates++;
             }
 
@@ -781,29 +783,32 @@ internal static partial class WebPipelineRunner
         return values.ToArray();
     }
 
-    private static string[] ParseCurationAliases(string value)
+    private static bool TryParseCurationAliases(string value, out string[] aliases)
     {
+        aliases = Array.Empty<string>();
         if (string.IsNullOrWhiteSpace(value))
-            return Array.Empty<string>();
+            return false;
 
         var token = value.Trim();
         if (token.StartsWith("[", StringComparison.Ordinal))
         {
             try
             {
-                return JsonSerializer.Deserialize<string[]>(token)?
+                aliases = JsonSerializer.Deserialize<string[]>(token)?
                     .Where(static alias => !string.IsNullOrWhiteSpace(alias))
                     .Select(static alias => alias.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray() ?? Array.Empty<string>();
+                return true;
             }
             catch (JsonException)
             {
-                return Array.Empty<string>();
+                return false;
             }
         }
 
-        return new[] { token };
+        aliases = new[] { token };
+        return true;
     }
 
     private static bool TryParseBoolean(string? value, out bool parsed)
@@ -2135,6 +2140,8 @@ internal static partial class WebPipelineRunner
         var nugetByCompactId = new Dictionary<string, WebEcosystemNuGetPackage>(StringComparer.OrdinalIgnoreCase);
         var nugetByGitHubProject = new Dictionary<string, List<WebEcosystemNuGetPackage>>(StringComparer.OrdinalIgnoreCase);
         var nugetByGitHubProjectName = new Dictionary<string, List<WebEcosystemNuGetPackage>>(StringComparer.OrdinalIgnoreCase);
+        var nugetGitHubProjectByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var ambiguousNuGetGitHubProjectNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (stats.NuGet?.Items is { Count: > 0 })
         {
             foreach (var package in stats.NuGet.Items)
@@ -2159,6 +2166,16 @@ internal static partial class WebPipelineRunner
                     var packageRepoName = ExtractRepositoryName(packageRepo);
                     if (!string.IsNullOrWhiteSpace(packageRepoName))
                     {
+                        if (nugetGitHubProjectByName.TryGetValue(packageRepoName, out var knownPackageRepo) &&
+                            !string.Equals(knownPackageRepo, packageRepo, StringComparison.OrdinalIgnoreCase))
+                        {
+                            ambiguousNuGetGitHubProjectNames.Add(packageRepoName);
+                        }
+                        else
+                        {
+                            nugetGitHubProjectByName[packageRepoName] = packageRepo;
+                        }
+
                         if (!nugetByGitHubProjectName.TryGetValue(packageRepoName, out var projectNamePackages))
                         {
                             projectNamePackages = new List<WebEcosystemNuGetPackage>();
@@ -2237,9 +2254,10 @@ internal static partial class WebPipelineRunner
                         nugetPackages.Add(package);
                 }
             }
-            foreach (var candidate in candidates)
+            foreach (var candidate in BuildProjectAliasIdentifierCandidates(project))
             {
-                if (!nugetByGitHubProjectName.TryGetValue(candidate, out var aliasProjectPackages))
+                if (ambiguousNuGetGitHubProjectNames.Contains(candidate) ||
+                    !nugetByGitHubProjectName.TryGetValue(candidate, out var aliasProjectPackages))
                     continue;
 
                 foreach (var package in aliasProjectPackages)
@@ -2584,6 +2602,32 @@ internal static partial class WebPipelineRunner
         Add(project.Name);
         Add(project.GitHubRepo);
         Add(ExtractRepositoryName(project.GitHubRepo));
+        candidates.UnionWith(BuildProjectAliasIdentifierCandidates(project));
+        return candidates;
+    }
+
+    private static HashSet<string> BuildProjectAliasIdentifierCandidates(ProjectCatalogEntry project)
+    {
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Add(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return;
+
+            var token = value.Trim();
+            if (string.IsNullOrWhiteSpace(token))
+                return;
+
+            candidates.Add(token);
+            var dotVariant = token.Replace("-", ".", StringComparison.Ordinal);
+            if (!string.Equals(dotVariant, token, StringComparison.Ordinal))
+                candidates.Add(dotVariant);
+            var dashVariant = token.Replace(".", "-", StringComparison.Ordinal);
+            if (!string.Equals(dashVariant, token, StringComparison.Ordinal))
+                candidates.Add(dashVariant);
+        }
+
         if (project.Aliases is { Length: > 0 })
         {
             foreach (var alias in project.Aliases)
@@ -2592,16 +2636,24 @@ internal static partial class WebPipelineRunner
                     continue;
 
                 var aliasToken = alias.Trim();
-                if (aliasToken.StartsWith("/", StringComparison.Ordinal))
+                if (Uri.TryCreate(aliasToken, UriKind.Absolute, out var absoluteAlias))
+                {
+                    aliasToken = absoluteAlias.AbsolutePath;
+                }
+                else
                 {
                     var delimiterIndex = aliasToken.IndexOfAny(new[] { '?', '#' });
                     if (delimiterIndex >= 0)
                         aliasToken = aliasToken[..delimiterIndex];
+                }
+
+                if (aliasToken.StartsWith("/", StringComparison.Ordinal))
+                {
                     var segments = aliasToken.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
                     if (segments.Length > 0)
                         Add(segments[^1]);
                 }
-                else if (!Uri.TryCreate(aliasToken, UriKind.Absolute, out _))
+                else
                 {
                     Add(aliasToken);
                 }

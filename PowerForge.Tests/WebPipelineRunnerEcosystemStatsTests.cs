@@ -337,7 +337,7 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "slug": "securitypolicyx",
                       "name": "SecurityPolicyX",
                       "githubRepo": "EvotecIT/SecurityPolicyX",
-                      "aliases": ["/projects/securitypolicy/?ref=legacy"],
+                      "aliases": ["https://legacy.evotec.example/projects/securitypolicy/?ref=legacy"],
                       "links": {
                         "powerShellGallery": "https://www.powershellgallery.com/packages/SecurityPolicy"
                       },
@@ -537,6 +537,103 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
             Assert.Equal(2, project.GetProperty("metrics").GetProperty("nuget").GetProperty("packageCount").GetInt32());
             Assert.Equal(300L, project.GetProperty("metrics").GetProperty("nuget").GetProperty("totalDownloads").GetInt64());
             Assert.Equal(123756L, project.GetProperty("metrics").GetProperty("downloads").GetProperty("total").GetInt64());
+            Assert.True(File.Exists(publishedCatalogPath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void SyncProjectCatalogTelemetryFromStats_DoesNotAggregateNuGetRepositoryNameCollisions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-ecosystem-catalog-repo-collisions-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var statsPath = Path.Combine(root, "stats.json");
+            var catalogPath = Path.Combine(root, "catalog.json");
+            var publishedCatalogPath = Path.Combine(root, "published-catalog.json");
+            File.WriteAllText(statsPath,
+                """
+                {
+                  "nuget": {
+                    "owner": "EvotecIT",
+                    "packageCount": 4,
+                    "totalDownloads": 1500,
+                    "packages": [
+                      {
+                        "id": "Current.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 400,
+                        "packageUrl": "https://www.nuget.org/packages/Current.Core",
+                        "projectUrl": "https://github.com/EvotecIT/CurrentRepo"
+                      },
+                      {
+                        "id": "Collision.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 800,
+                        "packageUrl": "https://www.nuget.org/packages/Collision.Core",
+                        "projectUrl": "https://github.com/OtherOwner/LegacyRepo"
+                      },
+                      {
+                        "id": "SharedRepo",
+                        "version": "1.0.0",
+                        "totalDownloads": 100,
+                        "packageUrl": "https://www.nuget.org/packages/SharedRepo",
+                        "projectUrl": "https://github.com/OwnerA/SharedRepo"
+                      },
+                      {
+                        "id": "SharedRepo.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 200,
+                        "packageUrl": "https://www.nuget.org/packages/SharedRepo.Core",
+                        "projectUrl": "https://github.com/OwnerB/SharedRepo"
+                      }
+                    ]
+                  },
+                  "warnings": []
+                }
+                """);
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "legacyrepo",
+                      "name": "Current Product",
+                      "githubRepo": "EvotecIT/CurrentRepo"
+                    },
+                    {
+                      "slug": "renamed",
+                      "name": "Renamed Product",
+                      "githubRepo": "EvotecIT/RenamedRepo",
+                      "aliases": ["/projects/sharedrepo/"]
+                    }
+                  ]
+                }
+                """);
+
+            var syncMethod = typeof(WebPipelineRunner)
+                .GetMethod("SyncProjectCatalogTelemetryFromStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            Assert.NotNull(syncMethod);
+
+            var args = new object?[] { statsPath, catalogPath, publishedCatalogPath, null };
+            var merged = Assert.IsType<int>(syncMethod!.Invoke(null, args));
+            Assert.Equal(2, merged);
+            Assert.Null(args[3]);
+
+            using var catalog = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            var projects = catalog.RootElement.GetProperty("projects");
+            var current = projects[0].GetProperty("metrics").GetProperty("nuget");
+            Assert.Equal(1, current.GetProperty("packageCount").GetInt32());
+            Assert.Equal(400L, current.GetProperty("totalDownloads").GetInt64());
+
+            var renamed = projects[1].GetProperty("metrics").GetProperty("nuget");
+            Assert.Equal(1, renamed.GetProperty("packageCount").GetInt32());
+            Assert.Equal(100L, renamed.GetProperty("totalDownloads").GetInt64());
             Assert.True(File.Exists(publishedCatalogPath));
         }
         finally

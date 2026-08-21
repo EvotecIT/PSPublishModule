@@ -506,11 +506,25 @@ public class WebPipelineRunnerProjectCatalogTests
                 }
                 """);
 
+            var gammaManifestPath = Path.Combine(root, "projects-sources", "gamma", "WebsiteArtifacts");
+            Directory.CreateDirectory(gammaManifestPath);
+            File.WriteAllText(Path.Combine(gammaManifestPath, "project-manifest.json"),
+                """
+                {
+                  "slug": "gamma",
+                  "name": "Gamma",
+                  "mode": "hub-full",
+                  "description": "Gamma project",
+                  "aliases": ["/projects/gamma-legacy/"]
+                }
+                """);
+
             var curationPath = Path.Combine(root, "data", "projects", "curation.csv");
             File.WriteAllText(curationPath,
                 """
                 "slug","aliases","apiDocs.quickStartTypes","apiDocs.relatedContentManifest"
                 "beta","[""/projects/beta-legacy/?ids=one,two"",""/projects/beta-classic/?mode=a;b#details""]","Invoke-Beta","./data/projects/beta-api-guides.json"
+                "gamma","[malformed","",""
                 """);
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
@@ -549,6 +563,8 @@ public class WebPipelineRunnerProjectCatalogTests
             Assert.Contains("\"relatedContentManifest\": \"./data/projects/beta-api-guides.json\"", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"/projects/beta-legacy/?ids=one,two\"", catalogText, StringComparison.Ordinal);
             Assert.Contains("\"/projects/beta-classic/?mode=a;b#details\"", catalogText, StringComparison.Ordinal);
+            Assert.Contains("\"/projects/gamma-legacy/\"", catalogText, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"aliases\": []", catalogText, StringComparison.Ordinal);
         }
         finally
         {
