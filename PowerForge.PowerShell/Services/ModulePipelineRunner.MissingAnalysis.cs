@@ -515,7 +515,6 @@ public sealed partial class ModulePipelineRunner
         internal static readonly MergeExecutionResult None = new(
             mergedModule: false,
             usedExistingPsm1: false,
-            retainedBootstrapperBecauseBinaryOutputsDetected: false,
             requiredModules: Array.Empty<RequiredModuleReference>(),
             approvedModules: Array.Empty<string>(),
             dependentModules: Array.Empty<string>(),
@@ -527,7 +526,6 @@ public sealed partial class ModulePipelineRunner
 
         internal bool MergedModule { get; }
         internal bool UsedExistingPsm1 { get; }
-        internal bool RetainedBootstrapperBecauseBinaryOutputsDetected { get; }
         internal RequiredModuleReference[] RequiredModules { get; }
         internal string[] ApprovedModules { get; }
         internal string[] DependentModules { get; }
@@ -540,7 +538,6 @@ public sealed partial class ModulePipelineRunner
         internal MergeExecutionResult(
             bool mergedModule,
             bool usedExistingPsm1,
-            bool retainedBootstrapperBecauseBinaryOutputsDetected,
             RequiredModuleReference[] requiredModules,
             string[] approvedModules,
             string[] dependentModules,
@@ -552,7 +549,6 @@ public sealed partial class ModulePipelineRunner
         {
             MergedModule = mergedModule;
             UsedExistingPsm1 = usedExistingPsm1;
-            RetainedBootstrapperBecauseBinaryOutputsDetected = retainedBootstrapperBecauseBinaryOutputsDetected;
             RequiredModules = requiredModules ?? Array.Empty<RequiredModuleReference>();
             ApprovedModules = approvedModules ?? Array.Empty<string>();
             DependentModules = dependentModules ?? Array.Empty<string>();

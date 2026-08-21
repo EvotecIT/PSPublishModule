@@ -1,6 +1,10 @@
 $UnregisterPowerForgeDesktopAssemblyResolver = $null
-if ($PSEdition -ne 'Core' -and $LibFolder) {
-    $PowerForgeDesktopAssemblyRoot = [IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder))
+if ($PSEdition -ne 'Core' -and ($LibFolder -or $Root)) {
+    $PowerForgeDesktopAssemblyRoot = if ($LibFolder) {
+        [IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder))
+    } else {
+        [IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, 'Lib'))
+    }
     $PowerForgeDesktopAssemblyRootPrefix = $PowerForgeDesktopAssemblyRoot
     if (-not $PowerForgeDesktopAssemblyRootPrefix.EndsWith([IO.Path]::DirectorySeparatorChar.ToString(), [StringComparison]::Ordinal)) {
         $PowerForgeDesktopAssemblyRootPrefix += [IO.Path]::DirectorySeparatorChar

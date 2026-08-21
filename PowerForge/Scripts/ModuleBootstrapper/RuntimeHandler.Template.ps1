@@ -1,7 +1,7 @@
 # Ensure native runtime libraries are discoverable on Windows
 $IsWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
 # Skip probing when the current host cannot resolve a Windows-facing Lib folder (for example Desktop + Core-only payloads).
-if ($IsWindowsPlatform -and $LibFolder) {
+if ($IsWindowsPlatform -and ($LibFolder -or $Root)) {
 {{ArchitectureResolverBlock}}
 
     # Prefer the active managed-framework folder, then reuse a compatible native

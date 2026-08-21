@@ -4,6 +4,7 @@
 {{LibrariesByFolderMap}}
 
 $AssemblyFolders = Get-ChildItem -Path $PSScriptRoot\Lib -Directory -ErrorAction SilentlyContinue
+$Root = @(Get-ChildItem -Path $PSScriptRoot\Lib -File -Filter '*.dll' -ErrorAction SilentlyContinue).Count -gt 0
 
 $Default = $false
 $Core = $false
@@ -38,6 +39,9 @@ if ($Standard -and $Core -and $Default) {
 } elseif ($Default) {
     $Framework = ''
     $FrameworkNet = 'Default'
+} elseif ($Root) {
+    $Framework = ''
+    $FrameworkNet = ''
 } else {
     #Write-Error -Message 'No assemblies found'
 }

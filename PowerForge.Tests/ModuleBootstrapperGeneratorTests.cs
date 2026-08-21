@@ -304,6 +304,26 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void ResolveAssemblyLoadContextTargetDirectories_UsesRootLibForRootLevelBinaryLayout()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-root-layout-" + Guid.NewGuid().ToString("N"));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib")).FullName;
+        File.WriteAllText(Path.Combine(libRoot, "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var directories = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetDirectories(libRoot);
+
+            Assert.Equal(new[] { libRoot }, directories);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     [Trait("Category", "Integration")]
     public void Generate_WithAssemblyLoadContext_WritesAlcBootstrapperAndKeepsDesktopLibrariesScript()
     {

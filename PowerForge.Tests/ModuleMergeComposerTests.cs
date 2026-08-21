@@ -148,6 +148,28 @@ public sealed class ModuleMergeComposerTests
     }
 
     [Fact]
+    public void PrependFunctions_PreservesPowerShellPreamble()
+    {
+        var content = "#requires -Version 5.1" + Environment.NewLine +
+                      "using namespace System.Text" + Environment.NewLine + Environment.NewLine +
+                      "function Get-Test { [StringBuilder]::new() }";
+
+        var merged = ModuleMergeComposer.PrependFunctions(
+            new[] { "function Invoke-Hidden { 'ok' }" },
+            content);
+
+        Assert.StartsWith(
+            "#requires -Version 5.1" + Environment.NewLine + "using namespace System.Text",
+            merged,
+            StringComparison.Ordinal);
+        Assert.True(
+            merged.IndexOf("using namespace System.Text", StringComparison.Ordinal) <
+            merged.IndexOf("function Invoke-Hidden", StringComparison.Ordinal));
+        Parser.ParseInput(merged, out _, out var errors);
+        Assert.Empty(errors);
+    }
+
+    [Fact]
     public void BuildSources_RewritesLegacyPSScriptRootParentPathsByDefault()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

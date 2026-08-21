@@ -37,7 +37,8 @@ internal static partial class ModuleBootstrapperGenerator
 
         var hasScriptFolders = HasAnyDirectory(root, "Public", "Private", "Classes", "Enums");
         var libRoot = Path.Combine(root, "Lib");
-        var hasLib = Directory.Exists(libRoot) && Directory.EnumerateDirectories(libRoot).Any();
+        var hasLib = Directory.Exists(libRoot) &&
+                     Directory.EnumerateFiles(libRoot, "*.dll", SearchOption.AllDirectories).Any();
         var hasDevelopmentBinaryLoader = developmentBinaries?.Enabled == true;
 
         // Avoid overwriting "single file" script modules that keep all code in the PSM1 and do not use folder layout.
@@ -346,6 +347,7 @@ internal static partial class ModuleBootstrapperGenerator
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["ModuleName"] = moduleName,
+            ["ScriptPreambleBlock"] = string.Empty,
             ["ModuleRootCaptureBlock"] = includeBinaryLoader
                 ? "$PowerForgeModuleRoot = $PSScriptRoot"
                 : string.Empty,
@@ -473,6 +475,9 @@ internal static partial class ModuleBootstrapperGenerator
 
         if (byName.TryGetValue("Default", out var @default))
             return new[] { @default };
+
+        if (Directory.EnumerateFiles(libRoot, "*.dll", SearchOption.TopDirectoryOnly).Any())
+            return new[] { libRoot };
 
         return Array.Empty<string>();
     }

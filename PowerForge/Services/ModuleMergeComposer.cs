@@ -43,7 +43,8 @@ internal static class ModuleMergeComposer
             ? BuildMergedScriptContent(ordered, exports, fixRelativePaths, conditionalFunctionDependencies, moduleName)
             : string.Empty;
         var libRoot = Path.Combine(root, "Lib");
-        var hasLib = Directory.Exists(libRoot) && Directory.EnumerateDirectories(libRoot).Any();
+        var hasLib = Directory.Exists(libRoot) &&
+                     Directory.EnumerateFiles(libRoot, "*.dll", SearchOption.AllDirectories).Any();
 
         return new ModuleMergeSources(psm1, ordered, merged, hasLib);
     }
@@ -103,9 +104,50 @@ internal static class ModuleMergeComposer
             return content;
 
         var prefix = string.Join(System.Environment.NewLine, block);
-        return string.IsNullOrWhiteSpace(content)
+        var preamble = ExtractMergedScriptPreamble(content, out var body);
+        var updatedBody = string.IsNullOrWhiteSpace(body)
             ? prefix
-            : prefix + System.Environment.NewLine + System.Environment.NewLine + content;
+            : prefix + System.Environment.NewLine + System.Environment.NewLine + body;
+        return string.IsNullOrWhiteSpace(preamble)
+            ? updatedBody
+            : preamble + System.Environment.NewLine + System.Environment.NewLine + updatedBody;
+    }
+
+    internal static string ExtractMergedScriptPreamble(string? content, out string body)
+    {
+        body = content ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(body))
+            return string.Empty;
+
+        var normalized = body.Replace("\r\n", "\n").Replace('\r', '\n');
+        var lines = normalized.Split('\n');
+        var preamble = new List<string>();
+        var index = 0;
+        for (; index < lines.Length; index++)
+        {
+            var line = lines[index];
+            var directiveStart = 0;
+            while (directiveStart < line.Length && char.IsWhiteSpace(line[directiveStart]))
+                directiveStart++;
+
+            if (StartsWithDirective(line, directiveStart, "#requires") ||
+                StartsWithDirective(line, directiveStart, "using"))
+            {
+                preamble.Add(line);
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(line) && preamble.Count > 0)
+                continue;
+
+            break;
+        }
+
+        if (preamble.Count == 0)
+            return string.Empty;
+
+        body = string.Join(System.Environment.NewLine, lines.Skip(index)).TrimStart('\r', '\n');
+        return string.Join(System.Environment.NewLine, preamble);
     }
 
     internal static void WriteMergedPsm1(string path, string content)

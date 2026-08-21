@@ -5,6 +5,7 @@ $Class = "$LibraryName.Initialize"
 
 $LibRoot = [IO.Path]::Combine($PowerForgeModuleRoot, 'Lib')
 $AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction SilentlyContinue
+$Root = @(Get-ChildItem -LiteralPath $LibRoot -File -Filter '*.dll' -ErrorAction SilentlyContinue).Count -gt 0
 
 $Default = $false
 $Core = $false
@@ -39,6 +40,9 @@ if ($Standard -and $Core -and $Default) {
 } elseif ($Default) {
     $Framework = ''
     $FrameworkNet = 'Default'
+} elseif ($Root) {
+    $Framework = ''
+    $FrameworkNet = ''
 } else {
     Write-Error -Message 'No assemblies found'
     return

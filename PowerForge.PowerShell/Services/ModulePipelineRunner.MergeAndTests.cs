@@ -34,7 +34,6 @@ public sealed partial class ModulePipelineRunner
             return new MergeExecutionResult(
                 mergedModule: false,
                 usedExistingPsm1: false,
-                retainedBootstrapperBecauseBinaryOutputsDetected: false,
                 requiredModules: plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
                 approvedModules: plan.ApprovedModules ?? Array.Empty<string>(),
                 dependentModules: Array.Empty<string>(),
@@ -69,7 +68,6 @@ public sealed partial class ModulePipelineRunner
         return new MergeExecutionResult(
             mergedModule: mergeOutcome.MergedModule,
             usedExistingPsm1: mergeOutcome.UsedExistingPsm1,
-            retainedBootstrapperBecauseBinaryOutputsDetected: mergeOutcome.RetainedBootstrapperBecauseBinaryOutputsDetected,
             requiredModules: plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
             approvedModules: plan.ApprovedModules ?? Array.Empty<string>(),
             dependentModules: dependentRequiredModules,
