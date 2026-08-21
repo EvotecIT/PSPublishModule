@@ -2659,7 +2659,12 @@ internal static partial class WebPipelineRunner
                 {
                     var segments = aliasToken.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
                     if (segments.Length > 0)
-                        Add(RemoveLegacyRouteFileSuffix(segments[^1]));
+                    {
+                        var identitySegment = segments[^1];
+                        if (segments.Length > 1 && IsLegacyDefaultDocument(identitySegment))
+                            identitySegment = segments[^2];
+                        Add(RemoveLegacyRouteFileSuffix(identitySegment));
+                    }
                 }
                 else
                 {
@@ -2668,6 +2673,14 @@ internal static partial class WebPipelineRunner
             }
         }
         return candidates;
+    }
+
+    private static bool IsLegacyDefaultDocument(string value)
+    {
+        return value.Equals("index.html", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("index.htm", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("default.html", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("default.htm", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string RemoveLegacyRouteFileSuffix(string value)
