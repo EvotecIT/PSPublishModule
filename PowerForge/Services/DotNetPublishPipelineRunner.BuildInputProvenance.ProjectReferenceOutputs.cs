@@ -43,12 +43,19 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool TryReadEvaluatedProjectReferences(
         JsonElement item,
+        string declaringProjectPath,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
         out EvaluatedProjectReference[] references)
-        => TryReadEvaluatedProjectReferences(item, "FullPath", taskWidePropertyRemovals, out references);
+        => TryReadEvaluatedProjectReferences(
+            item,
+            declaringProjectPath,
+            "FullPath",
+            taskWidePropertyRemovals,
+            out references);
 
     private static bool TryReadEvaluatedProjectReferences(
         JsonElement item,
+        string declaringProjectPath,
         string projectPathMetadataName,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
         out EvaluatedProjectReference[] references)
@@ -71,6 +78,10 @@ public sealed partial class DotNetPublishPipelineRunner
             // MSBuild item-level Properties replaces the task-wide property table.
             if (!TryOverlayProjectReferenceProperties(
                     propertyContexts,
+                    item,
+                    declaringProjectPath,
+                    projectPathMetadataName,
+                    "Properties",
                     projectProperties,
                     out propertyContexts))
             {
@@ -83,6 +94,10 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 if (!TryOverlayProjectReferenceProperties(
                         propertyContexts,
+                        item,
+                        declaringProjectPath,
+                        projectPathMetadataName,
+                        metadataName,
                         ReadItemText(item, metadataName),
                         out propertyContexts))
                 {
@@ -93,6 +108,10 @@ public sealed partial class DotNetPublishPipelineRunner
         // Per-item AdditionalProperties overlays either the replacement or task-wide table.
         if (!TryOverlayProjectReferenceProperties(
                 propertyContexts,
+                item,
+                declaringProjectPath,
+                projectPathMetadataName,
+                "AdditionalProperties",
                 ReadItemText(item, "AdditionalProperties"),
                 out propertyContexts))
         {
@@ -122,6 +141,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool TryReadResolvedProjectReferences(
         JsonElement items,
+        string declaringProjectPath,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
         out EvaluatedProjectReference[] references)
     {
@@ -139,6 +159,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             if (!TryReadEvaluatedProjectReferences(
                     item,
+                    declaringProjectPath,
                     taskWidePropertyRemovals,
                     out EvaluatedProjectReference[] itemReferences))
             {
@@ -252,6 +273,7 @@ public sealed partial class DotNetPublishPipelineRunner
         JsonElement item,
         string? msBuildToolsPath,
         string? msBuildSdksPath,
+        string declaringProjectPath,
         HashSet<string> embeddedResourceProjectReferences,
         HashSet<string> analyzerProjectReferences,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
@@ -284,6 +306,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 declaredOutputs!) ||
             !TryReadEvaluatedProjectReferences(
                 item,
+                declaringProjectPath,
                 "MSBuildSourceProjectFile",
                 taskWidePropertyRemovals,
                 out EvaluatedProjectReference[] projectReferences) ||

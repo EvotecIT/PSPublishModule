@@ -41,15 +41,23 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool IsTrustedGeneratedOutputPath(
         string path,
-        IEnumerable<string>? outputRoots)
+        IEnumerable<string>? outputRoots,
+        string referencedProjectDirectory,
+        IEnumerable<string> evaluatedProjectDirectories)
     {
         foreach (string root in outputRoots ?? Array.Empty<string>())
         {
             try
             {
+                string traversalBoundary = FindCommonBuildInputPathRoot(
+                    root,
+                    referencedProjectDirectory);
                 if (!IsSameOrBelowBuildInputPath(path, root) ||
+                    evaluatedProjectDirectories.Any(projectDirectory =>
+                        IsSameOrBelowBuildInputPath(projectDirectory, root)) ||
                     IsReparsePointPath(root) ||
-                    HasReparsePointBelowRoot(path, root))
+                    IsReparsePointPath(traversalBoundary) ||
+                    HasReparsePointBelowRoot(path, traversalBoundary))
                 {
                     continue;
                 }
@@ -63,6 +71,43 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return false;
+    }
+
+    private static string FindCommonBuildInputPathRoot(string firstPath, string secondPath)
+    {
+        string current = NormalizeBuildInputPathRoot(firstPath);
+        string second = Path.GetFullPath(secondPath);
+        while (!IsSameOrBelowBuildInputPath(second, current))
+        {
+            string? parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) ||
+                string.Equals(
+                    parent,
+                    current,
+                    IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                return current;
+            }
+            current = NormalizeBuildInputPathRoot(parent);
+        }
+        return current;
+    }
+
+    private static string NormalizeBuildInputPathRoot(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        string trimmed = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string pathRoot = Path.GetPathRoot(fullPath)!;
+        string trimmedPathRoot = pathRoot.TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar);
+        return trimmed.Length == 0 ||
+               string.Equals(
+                   trimmed,
+                   trimmedPathRoot,
+                   IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+            ? pathRoot
+            : trimmed;
     }
 
     private static bool IsReparsePointPath(string path)
@@ -156,13 +201,16 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool IsSameOrBelowBuildInputPath(string path, string root)
     {
-        string fullRoot = Path.GetFullPath(root)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string fullRoot = NormalizeBuildInputPathRoot(root);
         StringComparison comparison = IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
-        return string.Equals(path, fullRoot, comparison) ||
-               path.StartsWith(fullRoot + Path.DirectorySeparatorChar, comparison);
+        string separator = fullRoot.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
+                           fullRoot.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+            ? string.Empty
+            : Path.DirectorySeparatorChar.ToString();
+        return string.Equals(Path.GetFullPath(path), fullRoot, comparison) ||
+               Path.GetFullPath(path).StartsWith(fullRoot + separator, comparison);
     }
 
     private sealed class ProjectEvaluationRequest

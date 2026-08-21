@@ -380,7 +380,11 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             ProjectEvaluationRequest referencedProject = request.ForProject(output.ProjectReference);
             if (outputRootsByEvaluation.TryGetValue(referencedProject.BuildVisitKey(), out string[]? outputRoots) &&
-                IsTrustedGeneratedOutputPath(output.OutputPath, outputRoots))
+                IsTrustedGeneratedOutputPath(
+                    output.OutputPath,
+                    outputRoots,
+                    Path.GetDirectoryName(referencedProject.ProjectPath)!,
+                    directories))
             {
                 continue;
             }
@@ -682,6 +686,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                 inputs.Add(fullPath);
                                 if (!TryReadEvaluatedProjectReferences(
                                         item,
+                                        request.ProjectPath,
                                         taskWideProjectReferencePropertyRemovals,
                                         out EvaluatedProjectReference[] itemReferences) ||
                                     itemReferences.Length == 0)
@@ -701,6 +706,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                          item,
                                          msBuildToolsPath,
                                          msBuildSdksPath,
+                                         request.ProjectPath,
                                          embeddedResourceProjectReferences,
                                          analyzerProjectReferences,
                                          taskWideProjectReferencePropertyRemovals,
@@ -737,6 +743,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!root.TryGetProperty("Items", out JsonElement resolvedItems) ||
                     !TryReadResolvedProjectReferences(
                         resolvedItems,
+                        request.ProjectPath,
                         taskWideProjectReferencePropertyRemovals,
                         out EvaluatedProjectReference[] resolvedReferences))
                     return false;
