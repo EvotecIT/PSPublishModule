@@ -559,6 +559,41 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
             File.WriteAllText(statsPath,
                 """
                 {
+                  "gitHub": {
+                    "organization": "EvotecIT",
+                    "repositoryCount": 3,
+                    "totalStars": 60,
+                    "totalForks": 6,
+                    "repositories": [
+                      {
+                        "name": "CurrentRepo",
+                        "fullName": "EvotecIT/CurrentRepo",
+                        "url": "https://github.com/EvotecIT/CurrentRepo",
+                        "stars": 30,
+                        "forks": 3,
+                        "watchers": 4,
+                        "openIssues": 1
+                      },
+                      {
+                        "name": "SharedRepo",
+                        "fullName": "OwnerA/SharedRepo",
+                        "url": "https://github.com/OwnerA/SharedRepo",
+                        "stars": 10,
+                        "forks": 1,
+                        "watchers": 2,
+                        "openIssues": 1
+                      },
+                      {
+                        "name": "SharedRepo",
+                        "fullName": "OwnerB/SharedRepo",
+                        "url": "https://github.com/OwnerB/SharedRepo",
+                        "stars": 20,
+                        "forks": 2,
+                        "watchers": 3,
+                        "openIssues": 1
+                      }
+                    ]
+                  },
                   "nuget": {
                     "owner": "EvotecIT",
                     "packageCount": 9,
@@ -705,10 +740,13 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
             var current = projectsBySlug["legacyrepo"].GetProperty("metrics").GetProperty("nuget");
             Assert.Equal(1, current.GetProperty("packageCount").GetInt32());
             Assert.Equal(400L, current.GetProperty("totalDownloads").GetInt64());
+            Assert.Equal(30, projectsBySlug["legacyrepo"].GetProperty("metrics").GetProperty("github").GetProperty("stars").GetInt32());
 
-            var renamed = projectsBySlug["renamed"].GetProperty("metrics").GetProperty("nuget");
+            var renamedMetrics = projectsBySlug["renamed"].GetProperty("metrics");
+            var renamed = renamedMetrics.GetProperty("nuget");
             Assert.Equal(1, renamed.GetProperty("packageCount").GetInt32());
             Assert.Equal(100L, renamed.GetProperty("totalDownloads").GetInt64());
+            Assert.Equal(JsonValueKind.Null, renamedMetrics.GetProperty("github").ValueKind);
 
             var renamedSeparators = projectsBySlug["renamed-separators"].GetProperty("metrics").GetProperty("nuget");
             Assert.Equal(1, renamedSeparators.GetProperty("packageCount").GetInt32());

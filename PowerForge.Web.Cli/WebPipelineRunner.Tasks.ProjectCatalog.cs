@@ -2128,18 +2128,32 @@ internal static partial class WebPipelineRunner
 
         var githubByFullName = new Dictionary<string, WebEcosystemGitHubRepository>(StringComparer.OrdinalIgnoreCase);
         var githubByRepoName = new Dictionary<string, WebEcosystemGitHubRepository>(StringComparer.OrdinalIgnoreCase);
+        var ambiguousGitHubRepoNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (stats.GitHub?.Repositories is { Count: > 0 })
         {
+            void IndexRepositoryName(string? name, WebEcosystemGitHubRepository repository)
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                    return;
+
+                if (githubByRepoName.TryGetValue(name, out var existing))
+                {
+                    if (!string.Equals(existing.FullName, repository.FullName, StringComparison.OrdinalIgnoreCase))
+                        ambiguousGitHubRepoNames.Add(name);
+                    return;
+                }
+
+                githubByRepoName[name] = repository;
+            }
+
             foreach (var repository in stats.GitHub.Repositories)
             {
                 if (!string.IsNullOrWhiteSpace(repository.FullName) && !githubByFullName.ContainsKey(repository.FullName))
                     githubByFullName[repository.FullName] = repository;
 
                 var shortName = ExtractRepositoryName(repository.FullName);
-                if (!string.IsNullOrWhiteSpace(shortName) && !githubByRepoName.ContainsKey(shortName))
-                    githubByRepoName[shortName] = repository;
-                if (!string.IsNullOrWhiteSpace(repository.Name) && !githubByRepoName.ContainsKey(repository.Name))
-                    githubByRepoName[repository.Name] = repository;
+                IndexRepositoryName(shortName, repository);
+                IndexRepositoryName(repository.Name, repository);
             }
         }
 
@@ -2224,7 +2238,8 @@ internal static partial class WebPipelineRunner
             {
                 foreach (var candidate in candidates)
                 {
-                    if (githubByRepoName.TryGetValue(candidate, out var repository))
+                    if (!ambiguousGitHubRepoNames.Contains(candidate) &&
+                        githubByRepoName.TryGetValue(candidate, out var repository))
                     {
                         github = repository;
                         break;
