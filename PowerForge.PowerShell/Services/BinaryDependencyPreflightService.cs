@@ -374,55 +374,7 @@ public sealed class BinaryDependencyPreflightService
         if (!Directory.Exists(libRoot))
             return moduleRoot;
 
-        var folders = new HashSet<string>(
-            Directory.EnumerateDirectories(libRoot).Select(Path.GetFileName).Where(static n => !string.IsNullOrWhiteSpace(n))!,
-            StringComparer.OrdinalIgnoreCase);
-
-        var framework = string.Empty;
-        var frameworkNet = string.Empty;
-        var hasStandard = folders.Contains("Standard");
-        var hasCore = folders.Contains("Core");
-        var hasDefault = folders.Contains("Default");
-
-        if (hasStandard && hasCore && hasDefault)
-        {
-            framework = "Standard";
-            frameworkNet = "Default";
-        }
-        else if (hasStandard && hasCore)
-        {
-            framework = "Standard";
-            frameworkNet = "Standard";
-        }
-        else if (hasCore && hasDefault)
-        {
-            framework = "Core";
-            frameworkNet = "Default";
-        }
-        else if (hasStandard && hasDefault)
-        {
-            framework = "Standard";
-            frameworkNet = "Default";
-        }
-        else if (hasStandard)
-        {
-            framework = "Standard";
-            frameworkNet = "Standard";
-        }
-        else if (hasCore)
-        {
-            framework = "Core";
-            frameworkNet = string.Empty;
-        }
-        else if (hasDefault)
-        {
-            framework = string.Empty;
-            frameworkNet = "Default";
-        }
-
-        var selected = string.Equals(edition, "Core", StringComparison.OrdinalIgnoreCase)
-            ? framework
-            : frameworkNet;
+        var selected = ModuleBinaryPayloadLayout.ResolveRuntimePayloadFolder(libRoot, edition);
 
         if (string.IsNullOrWhiteSpace(selected))
             return libRoot;

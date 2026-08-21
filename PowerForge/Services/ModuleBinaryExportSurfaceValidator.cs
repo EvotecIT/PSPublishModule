@@ -1,0 +1,268 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace PowerForge;
+
+internal sealed class ModuleBinaryExportSurface
+{
+    internal ModuleBinaryExportSurface(bool hasAssemblies, string[] cmdlets, string[] aliases)
+    {
+        HasAssemblies = hasAssemblies;
+        Cmdlets = cmdlets ?? Array.Empty<string>();
+        Aliases = aliases ?? Array.Empty<string>();
+    }
+
+    internal bool HasAssemblies { get; }
+    internal string[] Cmdlets { get; }
+    internal string[] Aliases { get; }
+}
+
+internal static class ModuleBinaryExportSurfaceValidator
+{
+    internal static ModuleBinaryExportSurface Detect(
+        string projectRoot,
+        string moduleName,
+        IReadOnlyList<string>? exportAssemblies)
+    {
+        var assembliesByPayload = ResolveAssembliesByPayload(projectRoot, moduleName, exportAssemblies);
+        var surfaces = assembliesByPayload
+            .Select(pair => new
+            {
+                Payload = pair.Key,
+                HasAssemblies = pair.Value.Length > 0,
+                AssemblyFileNames = pair.Value
+                    .Select(Path.GetFileName)
+                    .Where(static name => !string.IsNullOrWhiteSpace(name))
+                    .Select(static name => name!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                Cmdlets = BinaryExportDetector.DetectBinaryCmdlets(pair.Value).ToArray(),
+                Aliases = BinaryExportDetector.DetectBinaryAliases(pair.Value).ToArray(),
+            })
+            .ToArray();
+
+        if (surfaces.Length == 0)
+            return new ModuleBinaryExportSurface(false, Array.Empty<string>(), Array.Empty<string>());
+
+        var baseline = surfaces[0];
+        foreach (var candidate in surfaces.Skip(1))
+        {
+            var assembliesMatch = baseline.AssemblyFileNames.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                .SetEquals(candidate.AssemblyFileNames);
+            var cmdletsMatch = baseline.Cmdlets.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                .SetEquals(candidate.Cmdlets);
+            var aliasesMatch = baseline.Aliases.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                .SetEquals(candidate.Aliases);
+            if (assembliesMatch && cmdletsMatch && aliasesMatch)
+                continue;
+
+            throw new InvalidOperationException(BuildMismatchMessage(
+                baseline.Payload,
+                baseline.AssemblyFileNames,
+                baseline.Cmdlets,
+                baseline.Aliases,
+                candidate.Payload,
+                candidate.AssemblyFileNames,
+                candidate.Cmdlets,
+                candidate.Aliases));
+        }
+
+        return new ModuleBinaryExportSurface(
+            surfaces.Any(static surface => surface.HasAssemblies),
+            baseline.Cmdlets,
+            baseline.Aliases);
+    }
+
+    private static IReadOnlyDictionary<string, string[]> ResolveAssembliesByPayload(
+        string projectRoot,
+        string moduleName,
+        IReadOnlyList<string>? exportAssemblies)
+    {
+        var fileNames = ResolveExportAssemblyFileNames(moduleName, exportAssemblies);
+        var libRoot = Path.Combine(projectRoot, "Lib");
+        if (Directory.Exists(libRoot))
+        {
+            var payloadDirectories = Directory.EnumerateDirectories(libRoot)
+                .Select(path => new { Path = path, Name = Path.GetFileName(path) })
+                .Where(static item => !string.IsNullOrWhiteSpace(item.Name) && IsPayloadFolder(item.Name!))
+                .OrderBy(static item => GetPayloadFolderSortOrder(item.Name!))
+                .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (payloadDirectories.Length > 1)
+            {
+                var pathQualifiedEntries = ResolveConfiguredEntries(moduleName, exportAssemblies)
+                    .Where(IsPathQualifiedEntry)
+                    .ToArray();
+                if (pathQualifiedEntries.Length > 0)
+                {
+                    throw new InvalidOperationException(
+                        "Path-qualified export assemblies are ambiguous with side-by-side module payloads: " +
+                        string.Join(", ", pathQualifiedEntries) +
+                        ". Configure export assembly file names so each payload can be validated independently.");
+                }
+
+                return payloadDirectories.ToDictionary(
+                    static item => item.Name!,
+                    item => ResolveMatchingAssemblies(item.Path, fileNames),
+                    StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["module"] = ResolveLegacyMatchingAssemblies(projectRoot, moduleName, exportAssemblies),
+        };
+    }
+
+    private static string[] ResolveLegacyMatchingAssemblies(
+        string projectRoot,
+        string moduleName,
+        IReadOnlyList<string>? exportAssemblies)
+    {
+        var paths = new List<string>();
+        var entries = ResolveConfiguredEntries(moduleName, exportAssemblies);
+
+        foreach (var entry in entries)
+        {
+            var name = entry.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+                ? entry
+                : entry + ".dll";
+            try
+            {
+                if (Path.IsPathRooted(name))
+                {
+                    if (File.Exists(name))
+                        paths.Add(Path.GetFullPath(name));
+                    continue;
+                }
+
+                if (name.Contains(Path.DirectorySeparatorChar) || name.Contains(Path.AltDirectorySeparatorChar))
+                {
+                    var relativePath = Path.GetFullPath(Path.Combine(projectRoot, name));
+                    if (File.Exists(relativePath))
+                        paths.Add(relativePath);
+                    continue;
+                }
+
+                paths.AddRange(Directory.EnumerateFiles(projectRoot, name, SearchOption.AllDirectories));
+            }
+            catch
+            {
+                // Preserve best-effort legacy discovery for single-payload and prebuilt layouts.
+            }
+        }
+
+        return paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static string[] ResolveMatchingAssemblies(string root, ISet<string> fileNames)
+    {
+        if (!Directory.Exists(root))
+            return Array.Empty<string>();
+
+        try
+        {
+            return Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories)
+                .Where(path => fileNames.Contains(Path.GetFileName(path)))
+                .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    private static ISet<string> ResolveExportAssemblyFileNames(
+        string moduleName,
+        IReadOnlyList<string>? exportAssemblies)
+    {
+        var fileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var entries = ResolveConfiguredEntries(moduleName, exportAssemblies);
+
+        foreach (var entry in entries)
+        {
+            var name = entry.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+                ? entry
+                : entry + ".dll";
+            name = Path.GetFileName(name);
+            if (!string.IsNullOrWhiteSpace(name))
+                fileNames.Add(name);
+        }
+
+        return fileNames;
+    }
+
+    private static string[] ResolveConfiguredEntries(
+        string moduleName,
+        IReadOnlyList<string>? exportAssemblies)
+    {
+        var entries = (exportAssemblies ?? Array.Empty<string>())
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry))
+            .Select(static entry => entry.Trim().Trim('"'))
+            .ToArray();
+        return entries.Length > 0 ? entries : new[] { moduleName + ".dll" };
+    }
+
+    private static bool IsPathQualifiedEntry(string entry)
+        => Path.IsPathRooted(entry) ||
+           entry.Contains(Path.DirectorySeparatorChar) ||
+           entry.Contains(Path.AltDirectorySeparatorChar);
+
+    private static bool IsPayloadFolder(string folder)
+        => folder.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
+           folder.StartsWith("Core-", StringComparison.OrdinalIgnoreCase) ||
+           folder.Equals("Default", StringComparison.OrdinalIgnoreCase) ||
+           folder.StartsWith("Default-", StringComparison.OrdinalIgnoreCase) ||
+           folder.Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
+           folder.StartsWith("Standard-", StringComparison.OrdinalIgnoreCase);
+
+    private static int GetPayloadFolderSortOrder(string folder)
+    {
+        if (folder.Equals("Core", StringComparison.OrdinalIgnoreCase)) return 0;
+        if (folder.StartsWith("Core-", StringComparison.OrdinalIgnoreCase)) return 1;
+        if (folder.Equals("Default", StringComparison.OrdinalIgnoreCase)) return 10;
+        if (folder.StartsWith("Default-", StringComparison.OrdinalIgnoreCase)) return 11;
+        if (folder.Equals("Standard", StringComparison.OrdinalIgnoreCase)) return 20;
+        if (folder.StartsWith("Standard-", StringComparison.OrdinalIgnoreCase)) return 21;
+        return 30;
+    }
+
+    private static string BuildMismatchMessage(
+        string baselinePayload,
+        IReadOnlyList<string> baselineAssemblyFileNames,
+        IReadOnlyList<string> baselineCmdlets,
+        IReadOnlyList<string> baselineAliases,
+        string candidatePayload,
+        IReadOnlyList<string> candidateAssemblyFileNames,
+        IReadOnlyList<string> candidateCmdlets,
+        IReadOnlyList<string> candidateAliases)
+    {
+        var differences = new List<string>();
+        AddDifferences(differences, "export assemblies", baselinePayload, baselineAssemblyFileNames, candidatePayload, candidateAssemblyFileNames);
+        AddDifferences(differences, "cmdlets", baselinePayload, baselineCmdlets, candidatePayload, candidateCmdlets);
+        AddDifferences(differences, "aliases", baselinePayload, baselineAliases, candidatePayload, candidateAliases);
+        return "Binary export surfaces must match across side-by-side module payloads. " + string.Join(" ", differences);
+    }
+
+    private static void AddDifferences(
+        ICollection<string> differences,
+        string surfaceName,
+        string baselinePayload,
+        IReadOnlyList<string> baselineValues,
+        string candidatePayload,
+        IReadOnlyList<string> candidateValues)
+    {
+        var baselineSet = baselineValues.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var candidateSet = candidateValues.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missing = baselineSet.Except(candidateSet, StringComparer.OrdinalIgnoreCase).OrderBy(static value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+        var additional = candidateSet.Except(baselineSet, StringComparer.OrdinalIgnoreCase).OrderBy(static value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+        if (missing.Length > 0)
+            differences.Add($"Payload '{candidatePayload}' is missing {surfaceName} from '{baselinePayload}': {string.Join(", ", missing)}.");
+        if (additional.Length > 0)
+            differences.Add($"Payload '{candidatePayload}' adds {surfaceName} not present in '{baselinePayload}': {string.Join(", ", additional)}.");
+    }
+}
