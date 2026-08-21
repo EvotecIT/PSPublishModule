@@ -602,6 +602,11 @@ public sealed partial class DotNetPublishPipelineRunner
 
                 if (root.TryGetProperty("Items", out JsonElement items))
                 {
+                    HashSet<string> embeddedResourceProjectReferences =
+                        ReadProjectReferenceOutputKeys(items, "EmbeddedResource");
+                    HashSet<string> analyzerProjectReferences =
+                        ReadProjectReferenceOutputKeys(items, "Analyzer");
+                    string? msBuildToolsPath = ReadItemText(properties, "MSBuildToolsPath");
                     foreach (string itemName in EvaluatedBuildItemNames)
                     {
                         if (!items.TryGetProperty(itemName, out JsonElement values) || values.ValueKind != JsonValueKind.Array)
@@ -642,7 +647,13 @@ public sealed partial class DotNetPublishPipelineRunner
                                 inputs.Add(fullPath);
                                 rawReferences.Add(fullPath);
                             }
-                            else if (IsGeneratedProjectReferenceOutput(itemName, fullPath, item))
+                            else if (IsGeneratedProjectReferenceOutput(
+                                         itemName,
+                                         fullPath,
+                                         item,
+                                         msBuildToolsPath,
+                                         embeddedResourceProjectReferences,
+                                         analyzerProjectReferences))
                             {
                                 // The referenced project's evaluated sources are queued below; its compiled
                                 // output (including analyzer/source-generator outputs) is generated state and
@@ -850,30 +861,6 @@ public sealed partial class DotNetPublishPipelineRunner
         => item.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
-
-    private static bool IsGeneratedProjectReferenceOutput(
-        string itemName,
-        string fullPath,
-        JsonElement item)
-    {
-        bool resolvedFromProjectReference = string.Equals(
-            ReadItemText(item, "ReferenceSourceTarget"),
-            "ProjectReference",
-            StringComparison.OrdinalIgnoreCase);
-        if (itemName.Equals("ReferencePath", StringComparison.Ordinal) ||
-            itemName.Equals("ReferenceCopyLocalPaths", StringComparison.Ordinal))
-        {
-            return resolvedFromProjectReference;
-        }
-
-        // An analyzer ProjectReference resolves to its compiled DLL even when project builds are
-        // disabled. MSBuild stamps that direct target output with its source project but does not
-        // guarantee ReferenceSourceTarget metadata. Other output item types can intentionally return
-        // tracked source inputs and must remain in provenance.
-        return itemName.Equals("Analyzer", StringComparison.Ordinal) &&
-               Path.GetExtension(fullPath).Equals(".dll", StringComparison.OrdinalIgnoreCase) &&
-               !string.IsNullOrWhiteSpace(ReadItemText(item, "MSBuildSourceProjectFile"));
-    }
 
     private static void AddSemicolonSeparatedPathValues(
         JsonElement properties,

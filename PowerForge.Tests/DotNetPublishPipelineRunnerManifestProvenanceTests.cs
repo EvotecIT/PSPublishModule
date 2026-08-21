@@ -9,7 +9,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
+public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
     public void EnumerateBundleSourceInputs_IncludesFileValuedScriptArguments()
@@ -1623,7 +1623,11 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(projectPath, """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-                  <ItemGroup><Analyzer Include="../../tools/Rules.dll" /></ItemGroup>
+                  <ItemGroup>
+                    <Analyzer Include="../../tools/Rules.dll">
+                      <MSBuildSourceProjectFile>../Generator/Generator.csproj</MSBuildSourceProjectFile>
+                    </Analyzer>
+                  </ItemGroup>
                 </Project>
                 """);
             File.WriteAllBytes(analyzerPath, [0x01, 0x02, 0x03]);
