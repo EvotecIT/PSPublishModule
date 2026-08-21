@@ -2254,7 +2254,7 @@ internal static partial class WebPipelineRunner
                         nugetPackages.Add(package);
                 }
             }
-            foreach (var candidate in BuildProjectAliasIdentifierCandidates(project))
+            foreach (var candidate in BuildProjectAliasIdentifierCandidates(project, includeSeparatorVariants: false))
             {
                 if (ambiguousNuGetGitHubProjectNames.Contains(candidate) ||
                     !nugetByGitHubProjectName.TryGetValue(candidate, out var aliasProjectPackages))
@@ -2602,11 +2602,13 @@ internal static partial class WebPipelineRunner
         Add(project.Name);
         Add(project.GitHubRepo);
         Add(ExtractRepositoryName(project.GitHubRepo));
-        candidates.UnionWith(BuildProjectAliasIdentifierCandidates(project));
+        candidates.UnionWith(BuildProjectAliasIdentifierCandidates(project, includeSeparatorVariants: true));
         return candidates;
     }
 
-    private static HashSet<string> BuildProjectAliasIdentifierCandidates(ProjectCatalogEntry project)
+    private static HashSet<string> BuildProjectAliasIdentifierCandidates(
+        ProjectCatalogEntry project,
+        bool includeSeparatorVariants)
     {
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -2620,6 +2622,9 @@ internal static partial class WebPipelineRunner
                 return;
 
             candidates.Add(token);
+            if (!includeSeparatorVariants)
+                return;
+
             var dotVariant = token.Replace("-", ".", StringComparison.Ordinal);
             if (!string.Equals(dotVariant, token, StringComparison.Ordinal))
                 candidates.Add(dotVariant);
@@ -2636,22 +2641,25 @@ internal static partial class WebPipelineRunner
                     continue;
 
                 var aliasToken = alias.Trim();
+                var isRouteAlias = false;
                 if (Uri.TryCreate(aliasToken, UriKind.Absolute, out var absoluteAlias))
                 {
                     aliasToken = absoluteAlias.AbsolutePath;
+                    isRouteAlias = true;
                 }
                 else
                 {
                     var delimiterIndex = aliasToken.IndexOfAny(new[] { '?', '#' });
                     if (delimiterIndex >= 0)
                         aliasToken = aliasToken[..delimiterIndex];
+                    isRouteAlias = aliasToken.Contains('/', StringComparison.Ordinal);
                 }
 
-                if (aliasToken.StartsWith("/", StringComparison.Ordinal))
+                if (isRouteAlias)
                 {
                     var segments = aliasToken.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
                     if (segments.Length > 0)
-                        Add(segments[^1]);
+                        Add(RemoveLegacyRouteFileSuffix(segments[^1]));
                 }
                 else
                 {
@@ -2660,6 +2668,15 @@ internal static partial class WebPipelineRunner
             }
         }
         return candidates;
+    }
+
+    private static string RemoveLegacyRouteFileSuffix(string value)
+    {
+        if (value.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+            return value[..^5];
+        if (value.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
+            return value[..^4];
+        return value;
     }
 
     private static void AppendProjectFrontMatterExtensions(

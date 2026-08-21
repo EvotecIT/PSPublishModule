@@ -337,7 +337,7 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "slug": "securitypolicyx",
                       "name": "SecurityPolicyX",
                       "githubRepo": "EvotecIT/SecurityPolicyX",
-                      "aliases": ["https://legacy.evotec.example/projects/securitypolicy/?ref=legacy"],
+                      "aliases": ["https://legacy.evotec.example/projects/securitypolicy.html?ref=legacy"],
                       "links": {
                         "powerShellGallery": "https://www.powershellgallery.com/packages/SecurityPolicy"
                       },
@@ -561,8 +561,8 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                 {
                   "nuget": {
                     "owner": "EvotecIT",
-                    "packageCount": 4,
-                    "totalDownloads": 1500,
+                    "packageCount": 6,
+                    "totalDownloads": 2600,
                     "packages": [
                       {
                         "id": "Current.Core",
@@ -591,6 +591,20 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                         "totalDownloads": 200,
                         "packageUrl": "https://www.nuget.org/packages/SharedRepo.Core",
                         "projectUrl": "https://github.com/OwnerB/SharedRepo"
+                      },
+                      {
+                        "id": "FooDash.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 500,
+                        "packageUrl": "https://www.nuget.org/packages/FooDash.Core",
+                        "projectUrl": "https://github.com/Owner/Foo-Bar"
+                      },
+                      {
+                        "id": "FooDot.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 600,
+                        "packageUrl": "https://www.nuget.org/packages/FooDot.Core",
+                        "projectUrl": "https://github.com/Owner/Foo.Bar"
                       }
                     ]
                   },
@@ -611,6 +625,12 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "name": "Renamed Product",
                       "githubRepo": "EvotecIT/RenamedRepo",
                       "aliases": ["/projects/sharedrepo/"]
+                    },
+                    {
+                      "slug": "renamed-separators",
+                      "name": "Renamed Separator Product",
+                      "githubRepo": "EvotecIT/RenamedSeparatorRepo",
+                      "aliases": ["/projects/foo-bar/"]
                     }
                   ]
                 }
@@ -622,7 +642,7 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
 
             var args = new object?[] { statsPath, catalogPath, publishedCatalogPath, null };
             var merged = Assert.IsType<int>(syncMethod!.Invoke(null, args));
-            Assert.Equal(2, merged);
+            Assert.Equal(3, merged);
             Assert.Null(args[3]);
 
             using var catalog = JsonDocument.Parse(File.ReadAllText(catalogPath));
@@ -634,6 +654,10 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
             var renamed = projects[1].GetProperty("metrics").GetProperty("nuget");
             Assert.Equal(1, renamed.GetProperty("packageCount").GetInt32());
             Assert.Equal(100L, renamed.GetProperty("totalDownloads").GetInt64());
+
+            var renamedSeparators = projects[2].GetProperty("metrics").GetProperty("nuget");
+            Assert.Equal(1, renamedSeparators.GetProperty("packageCount").GetInt32());
+            Assert.Equal(500L, renamedSeparators.GetProperty("totalDownloads").GetInt64());
             Assert.True(File.Exists(publishedCatalogPath));
         }
         finally
