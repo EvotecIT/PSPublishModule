@@ -223,6 +223,57 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void ResolveAssemblyLoadContextTargetFramework_UsesPowerShell70BaselineForNetStandard21()
+    {
+        var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFramework(new[] { "net472", "netstandard2.1", "net8.0-windows" });
+
+        Assert.Equal("netcoreapp3.1", framework);
+    }
+
+    [Fact]
+    public void ResolveAssemblyLoadContextTargetFramework_IgnoresNetCoreAppBeforeAssemblyDependencyResolver()
+    {
+        var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFramework(new[] { "netcoreapp2.1", "net8.0" });
+
+        Assert.Equal("net8.0", framework);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithNetStandard21_WritesPowerShell70CompatibleAssemblyLoadContextLoader()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-ps70-alc-" + Guid.NewGuid().ToString("N"));
+        var coreRoot = Path.Combine(root, "Lib", "Core");
+        Directory.CreateDirectory(coreRoot);
+        File.WriteAllText(Path.Combine(coreRoot, "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0", "netstandard2.1", "net472" });
+
+            var loaderPath = Path.Combine(coreRoot, "DemoModule.ModuleLoadContext.dll");
+            Assert.True(File.Exists(loaderPath));
+            Assert.Contains(
+                ".NETCoreApp,Version=v3.1",
+                System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(loaderPath)),
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void ResolveAssemblyLoadContextTargetFramework_DefaultsToNet8WhenNoModernFrameworkIsKnown()
     {
         var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFramework(new[] { "net472", "netstandard2.0" });
@@ -326,7 +377,7 @@ public class ModuleBootstrapperGeneratorTests
         Assert.Contains("TryLoadPackagedNativeLibrary", source);
         Assert.Contains("Path.Combine(_assemblyDirectory, \"runtimes\", rid, \"native\", fileName)", source);
         Assert.Contains("RuntimeInformation.ProcessArchitecture", source);
-        Assert.Contains("RuntimeInformation.RuntimeIdentifier", source);
+        Assert.Contains("GetProperty(\"RuntimeIdentifier\", BindingFlags.Public | BindingFlags.Static)", source);
         Assert.Contains("LoadUnmanagedDllFromPath(path)", source);
         Assert.Contains("BadImageFormatException || ex is DllNotFoundException || ex is FileLoadException", source);
         Assert.Contains("yield return \"win-\" + arch", source);

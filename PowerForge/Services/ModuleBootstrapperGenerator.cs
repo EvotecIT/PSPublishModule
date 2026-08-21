@@ -551,7 +551,22 @@ internal static partial class ModuleBootstrapperGenerator
         if (platformIndex >= 0)
             normalized = normalized.Substring(0, platformIndex);
 
-        return TryGetNetTfmVersion(normalized, out _) ? normalized : null;
+        // PowerShell 7.0 runs on .NET Core 3.1. A netstandard2.1 module payload
+        // explicitly promises compatibility with that host, so compile the small
+        // module-scoped loader against the matching runtime baseline as well.
+        if (normalized.Equals("netstandard2.1", StringComparison.OrdinalIgnoreCase))
+            return "netcoreapp3.1";
+
+        if (!TryGetNetTfmVersion(normalized, out var version))
+            return null;
+
+        if (normalized.StartsWith("netcoreapp", StringComparison.OrdinalIgnoreCase) &&
+            version < new Version(3, 0))
+        {
+            return null;
+        }
+
+        return normalized;
     }
 
     private static Version GetNetTfmVersion(string framework)
@@ -560,17 +575,24 @@ internal static partial class ModuleBootstrapperGenerator
     private static bool TryGetNetTfmVersion(string framework, out Version version)
     {
         version = new Version(0, 0);
-        if (string.IsNullOrWhiteSpace(framework) ||
-            !framework.StartsWith("net", StringComparison.OrdinalIgnoreCase) ||
-            framework.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase) ||
-            framework.Length < 5 ||
-            !char.IsDigit(framework[3]))
+        if (string.IsNullOrWhiteSpace(framework))
         {
             return false;
         }
 
-        if (!Version.TryParse(framework.Substring(3), out var parsed))
+        var versionStart = framework.StartsWith("netcoreapp", StringComparison.OrdinalIgnoreCase)
+            ? "netcoreapp".Length
+            : framework.StartsWith("net", StringComparison.OrdinalIgnoreCase) &&
+              !framework.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase)
+                ? "net".Length
+                : -1;
+        if (versionStart < 0 ||
+            framework.Length <= versionStart ||
+            !char.IsDigit(framework[versionStart]) ||
+            !Version.TryParse(framework.Substring(versionStart), out var parsed))
+        {
             return false;
+        }
 
         version = parsed;
         return true;
@@ -1027,7 +1049,9 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 
     private static IEnumerable<string> GetRuntimeIdentifiers()
     {{
-        var runtimeIdentifier = RuntimeInformation.RuntimeIdentifier ?? string.Empty;
+        var runtimeIdentifier = typeof(RuntimeInformation)
+            .GetProperty(""RuntimeIdentifier"", BindingFlags.Public | BindingFlags.Static)?
+            .GetValue(null) as string ?? string.Empty;
         if (!string.IsNullOrWhiteSpace(runtimeIdentifier))
             yield return runtimeIdentifier;
 
