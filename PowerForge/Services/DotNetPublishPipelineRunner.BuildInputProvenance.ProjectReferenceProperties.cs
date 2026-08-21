@@ -105,16 +105,21 @@ public sealed partial class DotNetPublishPipelineRunner
                             attribute.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase))?.Value
                         ?? projectReference.Elements().FirstOrDefault(element =>
                             element.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase))?.Value;
-                    if (!TryReadLiteralProjectReferencePropertyTable(
-                            rawAssignments,
-                            evaluatedAssignments,
-                            out Dictionary<string, string>? table))
+                    foreach (string candidateAssignments in ReadLiteralProjectReferencePropertyAssignmentCandidates(
+                                 document,
+                                 rawAssignments))
                     {
-                        continue;
-                    }
+                        if (!TryReadLiteralProjectReferencePropertyTable(
+                                candidateAssignments,
+                                evaluatedAssignments,
+                                out Dictionary<string, string>? table))
+                        {
+                            continue;
+                        }
 
-                    if (keys.Add(BuildProjectReferencePropertyTableKey(table!)))
-                        results.Add(table!);
+                        if (keys.Add(BuildProjectReferencePropertyTableKey(table!)))
+                            results.Add(table!);
+                    }
                 }
             }
 
@@ -125,6 +130,48 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return false;
         }
+    }
+
+    private static IEnumerable<string> ReadLiteralProjectReferencePropertyAssignmentCandidates(
+        XDocument document,
+        string? rawAssignments)
+    {
+        if (string.IsNullOrWhiteSpace(rawAssignments))
+            yield break;
+
+        yield return rawAssignments!;
+        if (!TryReadSingleMsBuildPropertyExpression(rawAssignments!, out string? propertyName))
+            yield break;
+
+        foreach (XElement property in document.Descendants().Where(element =>
+                     element.Parent?.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) == true &&
+                     element.Name.LocalName.Equals(propertyName, StringComparison.OrdinalIgnoreCase)))
+        {
+            yield return property.Value;
+        }
+    }
+
+    private static bool TryReadSingleMsBuildPropertyExpression(string value, out string? propertyName)
+    {
+        propertyName = null;
+        string trimmed = value.Trim();
+        if (trimmed.Length < 4 ||
+            !trimmed.StartsWith("$(", StringComparison.Ordinal) ||
+            !trimmed.EndsWith(")", StringComparison.Ordinal) ||
+            trimmed.IndexOf("$(", 2, StringComparison.Ordinal) >= 0)
+        {
+            return false;
+        }
+
+        string candidate = trimmed.Substring(2, trimmed.Length - 3).Trim();
+        if (candidate.Length == 0 ||
+            candidate.IndexOfAny(new[] { '$', '(', ')', ';', '=' }) >= 0)
+        {
+            return false;
+        }
+
+        propertyName = candidate;
+        return true;
     }
 
     private static bool TryResolveLiteralProjectReferencePath(
@@ -206,130 +253,31 @@ public sealed partial class DotNetPublishPipelineRunner
         string assignments,
         out Dictionary<string, string>[] tables)
     {
-        var results = new List<Dictionary<string, string>>();
-        var keys = new HashSet<string>(StringComparer.Ordinal);
-        string[] segments = assignments.Split(new[] { ';' });
-        if (!TryExpandProjectReferencePropertyTables(
-                segments,
-                index: 0,
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-                currentName: null,
-                currentValue: string.Empty,
-                results,
-                keys))
+        var table = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string segment in assignments.Split(new[] { ';' }))
         {
-            tables = Array.Empty<Dictionary<string, string>>();
-            return false;
-        }
+            if (string.IsNullOrWhiteSpace(segment))
+                continue;
 
-        tables = results.ToArray();
-        return tables.Length > 0;
-    }
-
-    private static bool TryExpandProjectReferencePropertyTables(
-        IReadOnlyList<string> segments,
-        int index,
-        Dictionary<string, string> completed,
-        string? currentName,
-        string currentValue,
-        List<Dictionary<string, string>> results,
-        HashSet<string> keys)
-    {
-        if (results.Count > MaximumProjectReferencePropertyContexts)
-            return false;
-
-        if (index >= segments.Count)
-        {
-            var result = new Dictionary<string, string>(completed, StringComparer.OrdinalIgnoreCase);
-            if (currentName is not null)
-                result[currentName] = currentValue;
-            if (keys.Add(BuildProjectReferencePropertyTableKey(result)))
-                results.Add(result);
-            return results.Count <= MaximumProjectReferencePropertyContexts;
-        }
-
-        string segment = segments[index];
-        int separator = segment.IndexOf('=');
-        if (currentName is null)
-        {
+            int separator = segment.IndexOf('=');
             if (separator <= 0)
             {
-                return TryExpandProjectReferencePropertyTables(
-                    segments,
-                    index + 1,
-                    completed,
-                    currentName: null,
-                    currentValue: string.Empty,
-                    results,
-                    keys);
+                tables = Array.Empty<Dictionary<string, string>>();
+                return false;
             }
 
             string name = segment.Substring(0, separator).Trim();
             if (name.Length == 0)
             {
-                return TryExpandProjectReferencePropertyTables(
-                    segments,
-                    index + 1,
-                    completed,
-                    currentName: null,
-                    currentValue: string.Empty,
-                    results,
-                    keys);
+                tables = Array.Empty<Dictionary<string, string>>();
+                return false;
             }
 
-            return TryExpandProjectReferencePropertyTables(
-                segments,
-                index + 1,
-                completed,
-                name,
-                segment.Substring(separator + 1).Trim(),
-                results,
-                keys);
+            table[name] = segment.Substring(separator + 1).Trim();
         }
 
-        if (!TryExpandProjectReferencePropertyTables(
-                segments,
-                index + 1,
-                completed,
-                currentName,
-                currentValue + ";" + segment,
-                results,
-                keys))
-        {
-            return false;
-        }
-
-        if (segment.Length == 0)
-        {
-            return TryExpandProjectReferencePropertyTables(
-                segments,
-                index + 1,
-                completed,
-                currentName,
-                currentValue,
-                results,
-                keys);
-        }
-
-        if (separator <= 0)
-            return true;
-
-        string nextName = segment.Substring(0, separator).Trim();
-        if (nextName.Length == 0)
-            return true;
-
-        var nextCompleted = new Dictionary<string, string>(completed, StringComparer.OrdinalIgnoreCase)
-        {
-            [currentName] = currentValue
-        };
-        return TryExpandProjectReferencePropertyTables(
-            segments,
-            index + 1,
-            nextCompleted,
-            nextName,
-            segment.Substring(separator + 1).Trim(),
-            results,
-            keys);
+        tables = table.Count == 0 ? Array.Empty<Dictionary<string, string>>() : [table];
+        return tables.Length > 0;
     }
 
     private static string BuildProjectReferencePropertyTableKey(

@@ -21,10 +21,13 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string escapedSource = Path.Combine(inputDirectory, "EscapedEquals.cs");
             File.WriteAllText(appProject, """
                 <Project Sdk="Microsoft.NET.Sdk">
-                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <ReferenceProperties>Flavor=A%3BB%3DC</ReferenceProperties>
+                  </PropertyGroup>
                   <ItemGroup>
                     <ProjectReference Include="../Library/Library.csproj"
-                                      AdditionalProperties="Flavor=A%3BB%3DC" />
+                                      AdditionalProperties="$(ReferenceProperties)" />
                   </ItemGroup>
                 </Project>
                 """);

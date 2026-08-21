@@ -55,6 +55,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!IsSameOrBelowBuildInputPath(path, root) ||
                     evaluatedProjectDirectories.Any(projectDirectory =>
                         IsSameOrBelowBuildInputPath(projectDirectory, root)) ||
+                    IsTrackedProjectOutputPath(path, referencedProjectDirectory) ||
                     IsReparsePointPath(root) ||
                     IsReparsePointPath(traversalBoundary) ||
                     HasReparsePointBelowRoot(path, traversalBoundary))
@@ -68,6 +69,30 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 // Generated outputs are trusted only when physical containment can be proven.
             }
+        }
+
+        return false;
+    }
+
+    private static bool IsTrackedProjectOutputPath(string path, string projectDirectory)
+    {
+        string outputDirectory = Path.GetDirectoryName(Path.GetFullPath(path))!;
+        foreach (string candidateDirectory in new[] { projectDirectory, outputDirectory }
+                     .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+        {
+            string? gitRoot = ReadGitText(candidateDirectory, "rev-parse --show-toplevel");
+            if (string.IsNullOrWhiteSpace(gitRoot))
+                continue;
+
+            string? relativePath = ToGitRelativeExclusion(candidateDirectory, gitRoot!, path);
+            if (relativePath is null)
+                continue;
+
+            string? trackedOutput = ReadGitRawText(
+                gitRoot!,
+                $"ls-files --stage -- {QuoteLiteralGitPath(relativePath)}");
+            if (trackedOutput is null || trackedOutput.Length > 0)
+                return true;
         }
 
         return false;
