@@ -508,8 +508,10 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2), stopwatch.Elapsed.ToString());
     }
 
-    [Fact]
-    public void RunProcessWithTimeout_DoesNotWaitIndefinitelyForInheritedOutputHandles()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RunProcessWithTimeout_PreservesUnterminatedOutputWithInheritedHandles(bool useStandardError)
     {
         if (!DotNetPublishPipelineRunner.IsWindows())
             return;
@@ -534,11 +536,10 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                 {
                     "-NoProfile",
                     "-Command",
-                    "$psi = [System.Diagnostics.ProcessStartInfo]::new($env:ComSpec); " +
-                    "$psi.UseShellExecute = $false; " +
-                    "$psi.ArgumentList.Add('/d'); $psi.ArgumentList.Add('/c'); " +
-                    "$psi.ArgumentList.Add('ping 127.0.0.1 -n 11'); " +
-                    "$null = [System.Diagnostics.Process]::Start($psi); Write-Output 'parent-complete'"
+                    "Start-Process -FilePath $env:ComSpec -ArgumentList '/d','/c','ping 127.0.0.1 -n 11 >nul' -NoNewWindow; " +
+                    (useStandardError
+                        ? "[Console]::Error.Write('parent-complete')"
+                        : "[Console]::Out.Write('parent-complete')")
                 },
                 TimeSpan.FromSeconds(2),
                 CancellationToken.None
@@ -549,11 +550,15 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         var resultType = raw!.GetType();
         var exitCode = (int)resultType.GetField("Item1")!.GetValue(raw)!;
         var stdout = (string)resultType.GetField("Item2")!.GetValue(raw)!;
+        var stderr = (string)resultType.GetField("Item3")!.GetValue(raw)!;
         var timedOut = (bool)resultType.GetField("Item4")!.GetValue(raw)!;
 
         Assert.False(timedOut);
         Assert.Equal(0, exitCode);
-        Assert.Contains("parent-complete", stdout, StringComparison.Ordinal);
+        Assert.Contains(
+            "parent-complete",
+            useStandardError ? stderr : stdout,
+            StringComparison.Ordinal);
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), stopwatch.Elapsed.ToString());
     }
 

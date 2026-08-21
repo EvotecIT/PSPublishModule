@@ -346,6 +346,71 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
     }
 
+    [Theory]
+    [InlineData("$(ChildProject)")]
+    [InlineData("../Library/*.csproj")]
+    public void ReadSourceProvenance_RecoversPropertiesForComputedOrGlobbedProjectReferenceInclude(string projectReferenceInclude)
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "Library")).FullName;
+            string inputDirectory = Directory.CreateDirectory(Path.Combine(root, "inputs")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string selectedSource = Path.Combine(inputDirectory, "Selected.cs");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <ChildProject>../Library/Library.csproj</ChildProject>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="__PROJECT_REFERENCE_INCLUDE__"
+                                      AdditionalProperties="Flavor=Signed;Mode=Release" />
+                  </ItemGroup>
+                </Project>
+                """.Replace("__PROJECT_REFERENCE_INCLUDE__", projectReferenceInclude));
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.csproj"), """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup Condition="'$(Flavor)' == 'Signed' and '$(Mode)' == 'Release'">
+                    <Compile Include="../../inputs/Selected.cs" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { private static void Main() { } }");
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.cs"), "public static class Library { }");
+            File.WriteAllText(selectedSource, "public static class SelectedInput { public const int Value = 1; }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            File.WriteAllText(selectedSource, "public static class SelectedInput { public const int Value = 2; }");
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [appProject],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+            Assert.DoesNotContain(
+                provenance.DirtyReasons,
+                reason => reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal));
+            Assert.Contains(
+                provenance.DirtyPaths,
+                path => path.Replace('\\', '/').EndsWith("inputs/Selected.cs", StringComparison.Ordinal));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
     [Fact]
     public void IsTrustedMsBuildProjectReferenceTargetPath_UsesEvaluatedSdkPathForAnalyzers()
     {

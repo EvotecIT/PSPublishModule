@@ -95,6 +95,27 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach (string candidateProject in declarationProjects)
             {
                 string definingDirectory = Path.GetDirectoryName(candidateProject)!;
+                string[] identityBaseDirectories =
+                [
+                    Path.GetDirectoryName(declaringProjectPath)!,
+                    definingDirectory
+                ];
+                bool evaluatedIdentityMatchesReference = new[]
+                    {
+                        ReadItemText(item, "OriginalItemSpec"),
+                        ReadItemText(item, "Identity")
+                    }
+                    .Where(itemSpec => !string.IsNullOrWhiteSpace(itemSpec))
+                    .Any(itemSpec => identityBaseDirectories
+                        .Distinct(IsWindows()
+                            ? StringComparer.OrdinalIgnoreCase
+                            : StringComparer.Ordinal)
+                        .Any(baseDirectory =>
+                            TryResolveLiteralProjectReferencePath(
+                                baseDirectory,
+                                itemSpec,
+                                out string? identityPath) &&
+                            string.Equals(identityPath, referencedPath, comparison)));
                 XDocument document = XDocument.Load(candidateProject, LoadOptions.None);
                 foreach (XElement projectReference in document.Descendants().Where(element =>
                              element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase)))
@@ -118,7 +139,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                         baseDirectory,
                                         itemSpec,
                                         out string? declaredPath) &&
-                                    string.Equals(declaredPath, referencedPath, comparison)));
+                                    string.Equals(declaredPath, referencedPath, comparison)) ||
+                            (evaluatedIdentityMatchesReference && IsComputedProjectReferenceItemSpec(itemSpec)));
                     if (!matchesReference)
                     {
                         continue;
@@ -237,6 +259,14 @@ public sealed partial class DotNetPublishPipelineRunner
             : Path.Combine(definingDirectory, unescapedInclude!));
         return true;
     }
+
+    private static bool IsComputedProjectReferenceItemSpec(string? itemSpec)
+        => !string.IsNullOrWhiteSpace(itemSpec) &&
+           (itemSpec!.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+            itemSpec.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+            itemSpec.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
+            itemSpec.IndexOf('*') >= 0 ||
+            itemSpec.IndexOf('?') >= 0);
 
     private static bool TryReadLiteralProjectReferencePropertyTable(
         string? rawAssignments,
