@@ -19,12 +19,16 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string inputDirectory = Directory.CreateDirectory(Path.Combine(root, "inputs")).FullName;
             string appProject = Path.Combine(appDirectory, "App.csproj");
             string escapedSource = Path.Combine(inputDirectory, "EscapedEquals.cs");
-            File.WriteAllText(appProject, """
-                <Project Sdk="Microsoft.NET.Sdk">
+            File.WriteAllText(Path.Combine(root, "Directory.Build.props"), """
+                <Project>
                   <PropertyGroup>
-                    <TargetFramework>net8.0</TargetFramework>
                     <ReferenceProperties>Flavor=A%3BB%3DC</ReferenceProperties>
                   </PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
                   <ItemGroup>
                     <ProjectReference Include="../Library/Library.csproj"
                                       AdditionalProperties="$(ReferenceProperties)" />
@@ -128,6 +132,74 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 provenance.DirtyPaths.Any(path =>
                     path.Replace('\\', '/').EndsWith("inputs/NetTen.cs", StringComparison.Ordinal)),
                 string.Join(Environment.NewLine, provenance.DirtyReasons));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_FailsClosedForUnrecoverableAmbiguousProjectReferenceProperties()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "Library")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj"
+                                      AdditionalProperties="$(ReferenceProperties)" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.csproj"), """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { private static void Main() { } }");
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.cs"), "public static class Library { }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Targets =
+                [
+                    new DotNetPublishTargetPlan
+                    {
+                        Name = "App",
+                        ProjectPath = appProject,
+                        Combinations =
+                        [
+                            new DotNetPublishTargetCombination
+                            {
+                                Framework = "net8.0",
+                                Style = DotNetPublishStyle.FrameworkDependent
+                            }
+                        ]
+                    }
+                ]
+            };
+            plan.MsBuildProperties["ReferenceProperties"] = "Flavor=A;B=C";
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
+
+            Assert.True(provenance.Dirty);
+            Assert.Contains(
+                provenance.DirtyReasons,
+                reason => reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal));
         }
         finally
         {

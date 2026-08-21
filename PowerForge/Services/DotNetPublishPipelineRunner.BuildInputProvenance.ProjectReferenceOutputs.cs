@@ -44,12 +44,14 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryReadEvaluatedProjectReferences(
         JsonElement item,
         string declaringProjectPath,
+        IReadOnlyCollection<string> propertyDefinitionPaths,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
         out EvaluatedProjectReference[] references)
         => TryReadEvaluatedProjectReferences(
             item,
             declaringProjectPath,
             "FullPath",
+            propertyDefinitionPaths,
             taskWidePropertyRemovals,
             out references);
 
@@ -57,6 +59,7 @@ public sealed partial class DotNetPublishPipelineRunner
         JsonElement item,
         string declaringProjectPath,
         string projectPathMetadataName,
+        IReadOnlyCollection<string> propertyDefinitionPaths,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
         out EvaluatedProjectReference[] references)
     {
@@ -81,6 +84,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     item,
                     declaringProjectPath,
                     projectPathMetadataName,
+                    propertyDefinitionPaths,
                     "Properties",
                     projectProperties,
                     out propertyContexts))
@@ -97,6 +101,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         item,
                         declaringProjectPath,
                         projectPathMetadataName,
+                        propertyDefinitionPaths,
                         metadataName,
                         ReadItemText(item, metadataName),
                         out propertyContexts))
@@ -111,6 +116,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 item,
                 declaringProjectPath,
                 projectPathMetadataName,
+                propertyDefinitionPaths,
                 "AdditionalProperties",
                 ReadItemText(item, "AdditionalProperties"),
                 out propertyContexts))
@@ -142,6 +148,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryReadResolvedProjectReferences(
         JsonElement items,
         string declaringProjectPath,
+        IReadOnlyCollection<string> propertyDefinitionPaths,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
         out EvaluatedProjectReference[] references)
     {
@@ -160,6 +167,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!TryReadEvaluatedProjectReferences(
                     item,
                     declaringProjectPath,
+                    propertyDefinitionPaths,
                     taskWidePropertyRemovals,
                     out EvaluatedProjectReference[] itemReferences))
             {
@@ -274,6 +282,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? msBuildToolsPath,
         string? msBuildSdksPath,
         string declaringProjectPath,
+        IReadOnlyCollection<string> propertyDefinitionPaths,
         HashSet<string> embeddedResourceProjectReferences,
         HashSet<string> analyzerProjectReferences,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
@@ -308,6 +317,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 item,
                 declaringProjectPath,
                 "MSBuildSourceProjectFile",
+                propertyDefinitionPaths,
                 taskWidePropertyRemovals,
                 out EvaluatedProjectReference[] projectReferences) ||
             projectReferences.Length == 0)

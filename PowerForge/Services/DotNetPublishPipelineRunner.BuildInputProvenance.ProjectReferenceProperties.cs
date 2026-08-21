@@ -13,6 +13,7 @@ public sealed partial class DotNetPublishPipelineRunner
         JsonElement item,
         string declaringProjectPath,
         string projectPathMetadataName,
+        IReadOnlyCollection<string> propertyDefinitionPaths,
         string metadataName,
         string? assignments,
         out List<Dictionary<string, string>> results)
@@ -29,6 +30,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 item,
                 declaringProjectPath,
                 projectPathMetadataName,
+                propertyDefinitionPaths,
                 metadataName,
                 assignments!,
                 out Dictionary<string, string>[] overlays) &&
@@ -59,6 +61,7 @@ public sealed partial class DotNetPublishPipelineRunner
         JsonElement item,
         string declaringProjectPath,
         string projectPathMetadataName,
+        IReadOnlyCollection<string> propertyDefinitionPaths,
         string metadataName,
         string evaluatedAssignments,
         out Dictionary<string, string>[] tables)
@@ -78,7 +81,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 : StringComparison.Ordinal;
             var results = new List<Dictionary<string, string>>();
             var keys = new HashSet<string>(StringComparer.Ordinal);
-            string[] candidateProjects = new[]
+            string[] declarationProjects = new[]
                 {
                     ReadItemText(item, "DefiningProjectFullPath"),
                     declaringProjectPath
@@ -87,7 +90,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Select(path => Path.GetFullPath(path!))
                 .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .ToArray();
-            foreach (string candidateProject in candidateProjects)
+            string[] propertyProjects = declarationProjects
+                .Concat(propertyDefinitionPaths.Where(path =>
+                    !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
+                .Select(Path.GetFullPath)
+                .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                .ToArray();
+            foreach (string candidateProject in declarationProjects)
             {
                 string definingDirectory = Path.GetDirectoryName(candidateProject)!;
                 XDocument document = XDocument.Load(candidateProject, LoadOptions.None);
@@ -106,7 +115,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         ?? projectReference.Elements().FirstOrDefault(element =>
                             element.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase))?.Value;
                     foreach (string candidateAssignments in ReadLiteralProjectReferencePropertyAssignmentCandidates(
-                                 document,
+                                 propertyProjects,
                                  rawAssignments))
                     {
                         if (!TryReadLiteralProjectReferencePropertyTable(
@@ -132,23 +141,34 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static IEnumerable<string> ReadLiteralProjectReferencePropertyAssignmentCandidates(
-        XDocument document,
+    private static string[] ReadLiteralProjectReferencePropertyAssignmentCandidates(
+        IEnumerable<string> propertyDefinitionPaths,
         string? rawAssignments)
     {
         if (string.IsNullOrWhiteSpace(rawAssignments))
-            yield break;
+            return Array.Empty<string>();
 
-        yield return rawAssignments!;
+        var candidates = new List<string> { rawAssignments! };
         if (!TryReadSingleMsBuildPropertyExpression(rawAssignments!, out string? propertyName))
-            yield break;
+            return candidates.ToArray();
 
-        foreach (XElement property in document.Descendants().Where(element =>
-                     element.Parent?.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) == true &&
-                     element.Name.LocalName.Equals(propertyName, StringComparison.OrdinalIgnoreCase)))
+        foreach (string propertyDefinitionPath in propertyDefinitionPaths)
         {
-            yield return property.Value;
+            try
+            {
+                XDocument document = XDocument.Load(propertyDefinitionPath, LoadOptions.None);
+                candidates.AddRange(document.Descendants().Where(element =>
+                        element.Parent?.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) == true &&
+                        element.Name.LocalName.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+                    .Select(property => property.Value));
+            }
+            catch
+            {
+                // Only exact literal definitions that decode to the evaluated value are trusted.
+            }
         }
+
+        return candidates.Distinct(StringComparer.Ordinal).ToArray();
     }
 
     private static bool TryReadSingleMsBuildPropertyExpression(string value, out string? propertyName)
@@ -253,12 +273,19 @@ public sealed partial class DotNetPublishPipelineRunner
         string assignments,
         out Dictionary<string, string>[] tables)
     {
-        var table = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string segment in assignments.Split(new[] { ';' }))
+        string[] segments = assignments
+            .Split(new[] { ';' })
+            .Where(segment => !string.IsNullOrWhiteSpace(segment))
+            .ToArray();
+        if (segments.Length != 1)
         {
-            if (string.IsNullOrWhiteSpace(segment))
-                continue;
+            tables = Array.Empty<Dictionary<string, string>>();
+            return false;
+        }
 
+        var table = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string segment in segments)
+        {
             int separator = segment.IndexOf('=');
             if (separator <= 0)
             {

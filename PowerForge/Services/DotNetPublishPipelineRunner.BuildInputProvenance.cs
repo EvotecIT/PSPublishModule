@@ -577,6 +577,8 @@ public sealed partial class DotNetPublishPipelineRunner
             string[] taskWideProjectReferencePropertyRemovals = Array.Empty<string>();
             var packageRoots = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            var importPaths = new HashSet<string>(
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
                 AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
@@ -613,8 +615,6 @@ public sealed partial class DotNetPublishPipelineRunner
                         verifiedPackageArchives);
                 string[] trustedBuildInfrastructureRoots =
                     ReadTrustedBuildInfrastructureRoots(properties, Path.GetDirectoryName(request.ProjectPath)!);
-                var importPaths = new HashSet<string>(
-                    IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
                 AddSemicolonSeparatedPathValues(
                     properties,
                     "MSBuildAllProjects",
@@ -687,6 +687,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                 if (!TryReadEvaluatedProjectReferences(
                                         item,
                                         request.ProjectPath,
+                                        importPaths,
                                         taskWideProjectReferencePropertyRemovals,
                                         out EvaluatedProjectReference[] itemReferences) ||
                                     itemReferences.Length == 0)
@@ -707,6 +708,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                          msBuildToolsPath,
                                          msBuildSdksPath,
                                          request.ProjectPath,
+                                         importPaths,
                                          embeddedResourceProjectReferences,
                                          analyzerProjectReferences,
                                          taskWideProjectReferencePropertyRemovals,
@@ -744,6 +746,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     !TryReadResolvedProjectReferences(
                         resolvedItems,
                         request.ProjectPath,
+                        importPaths,
                         taskWideProjectReferencePropertyRemovals,
                         out EvaluatedProjectReference[] resolvedReferences))
                     return false;
