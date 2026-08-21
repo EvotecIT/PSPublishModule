@@ -33,7 +33,7 @@ public sealed class ModuleValidationServiceTests
                         Parameters =
                         {
                             new DocumentationParameterHelp { Name = "Name", Description = "Thing name." },
-                            new DocumentationParameterHelp { Name = "Mode", Description = string.Empty }
+                            new DocumentationParameterHelp { Name = "Mode", Description = "{{ Fill Mode Description }}" }
                         },
                         Inputs =
                         {
