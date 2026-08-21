@@ -380,7 +380,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             ProjectEvaluationRequest referencedProject = request.ForProject(output.ProjectReference);
             if (outputRootsByEvaluation.TryGetValue(referencedProject.BuildVisitKey(), out string[]? outputRoots) &&
-                IsBelowGeneratedBuildRoot(output.OutputPath, outputRoots))
+                IsTrustedGeneratedOutputPath(output.OutputPath, outputRoots))
             {
                 continue;
             }
@@ -506,6 +506,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:OutputPath",
             "-getProperty:OutDir",
             "-getProperty:TargetDir",
+            "-getProperty:_GlobalPropertiesToRemoveFromProjectReferences",
             "-getProperty:BaseIntermediateOutputPath",
             "-getProperty:MSBuildProjectExtensionsPath",
             "-getProperty:IntermediateOutputPath",
@@ -565,14 +566,13 @@ public sealed partial class DotNetPublishPipelineRunner
             var outputRoots = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var generatedProjectReferenceOutputs = new List<GeneratedProjectReferenceOutput>();
+            string[] taskWideProjectReferencePropertyRemovals = Array.Empty<string>();
             var packageRoots = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
                 AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "OutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
-                AddPropertyPath(properties, "OutDir", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
-                AddPropertyPath(properties, "TargetDir", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, outputRoots);
                 AddPropertyPath(properties, "OutputPath", Path.GetDirectoryName(request.ProjectPath)!, outputRoots);
                 AddPropertyPath(properties, "OutDir", Path.GetDirectoryName(request.ProjectPath)!, outputRoots);
@@ -580,6 +580,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 AddPropertyPath(properties, "BaseIntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "MSBuildProjectExtensionsPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "IntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
+                taskWideProjectReferencePropertyRemovals = ReadProjectReferencePropertyNames(
+                    ReadItemText(properties, "_GlobalPropertiesToRemoveFromProjectReferences"));
                 AddPropertyPath(properties, "NuGetPackageRoot", Path.GetDirectoryName(request.ProjectPath)!, packageRoots);
                 AddSemicolonSeparatedPathValues(
                     properties,
@@ -675,6 +677,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                 inputs.Add(fullPath);
                                 if (!TryReadEvaluatedProjectReference(
                                         item,
+                                        taskWideProjectReferencePropertyRemovals,
                                         out EvaluatedProjectReference? rawReference) ||
                                     rawReference is null)
                                 {
@@ -693,6 +696,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                          msBuildToolsPath,
                                          embeddedResourceProjectReferences,
                                          analyzerProjectReferences,
+                                         taskWideProjectReferencePropertyRemovals,
                                          out GeneratedProjectReferenceOutput? generatedProjectReferenceOutput))
                             {
                                 generatedProjectReferenceOutputs.Add(generatedProjectReferenceOutput!);
@@ -726,6 +730,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!root.TryGetProperty("Items", out JsonElement resolvedItems) ||
                     !TryReadResolvedProjectReferences(
                         resolvedItems,
+                        taskWideProjectReferencePropertyRemovals,
                         out EvaluatedProjectReference[] resolvedReferences))
                     return false;
                 foreach (EvaluatedProjectReference reference in resolvedReferences)
@@ -844,12 +849,14 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool TryReadEvaluatedProjectReference(
         JsonElement item,
+        IReadOnlyCollection<string> taskWidePropertyRemovals,
         out EvaluatedProjectReference? reference)
-        => TryReadEvaluatedProjectReference(item, "FullPath", out reference);
+        => TryReadEvaluatedProjectReference(item, "FullPath", taskWidePropertyRemovals, out reference);
 
     private static bool TryReadEvaluatedProjectReference(
         JsonElement item,
         string projectPathMetadataName,
+        IReadOnlyCollection<string> taskWidePropertyRemovals,
         out EvaluatedProjectReference? reference)
     {
         reference = null;
@@ -884,7 +891,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
         string[] undefineProperties = ReadProjectReferencePropertyNames(
             ReadItemText(item, "UndefineProperties"),
-            ReadItemText(item, "GlobalPropertiesToRemove"));
+            ReadItemText(item, "GlobalPropertiesToRemove"),
+            string.Join(";", taskWidePropertyRemovals));
 
         reference = new EvaluatedProjectReference(
             Path.GetFullPath(fullPathElement.GetString()!),
@@ -896,6 +904,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool TryReadResolvedProjectReferences(
         JsonElement items,
+        IReadOnlyCollection<string> taskWidePropertyRemovals,
         out EvaluatedProjectReference[] references)
     {
         references = Array.Empty<EvaluatedProjectReference>();
@@ -908,7 +917,10 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         references = resolvedReferences.EnumerateArray()
-            .Select(item => TryReadEvaluatedProjectReference(item, out EvaluatedProjectReference? reference)
+            .Select(item => TryReadEvaluatedProjectReference(
+                    item,
+                    taskWidePropertyRemovals,
+                    out EvaluatedProjectReference? reference)
                 ? reference
                 : null)
             .Where(static reference => reference is not null)

@@ -157,6 +157,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? msBuildToolsPath,
         HashSet<string> embeddedResourceProjectReferences,
         HashSet<string> analyzerProjectReferences,
+        IReadOnlyCollection<string> taskWidePropertyRemovals,
         out GeneratedProjectReferenceOutput? output)
     {
         output = null;
@@ -186,6 +187,7 @@ public sealed partial class DotNetPublishPipelineRunner
             !TryReadEvaluatedProjectReference(
                 item,
                 "MSBuildSourceProjectFile",
+                taskWidePropertyRemovals,
                 out EvaluatedProjectReference? projectReference) ||
             projectReference is null)
         {

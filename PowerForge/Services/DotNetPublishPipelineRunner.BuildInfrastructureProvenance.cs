@@ -39,6 +39,44 @@ public sealed partial class DotNetPublishPipelineRunner
         => (generatedBuildRoots ?? Array.Empty<string>())
             .Any(root => IsSameOrBelowBuildInputPath(path, root));
 
+    private static bool IsTrustedGeneratedOutputPath(
+        string path,
+        IEnumerable<string>? outputRoots)
+    {
+        foreach (string root in outputRoots ?? Array.Empty<string>())
+        {
+            try
+            {
+                if (!IsSameOrBelowBuildInputPath(path, root) ||
+                    IsReparsePointPath(root) ||
+                    HasReparsePointBelowRoot(path, root))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+            catch
+            {
+                // Generated outputs are trusted only when physical containment can be proven.
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsReparsePointPath(string path)
+    {
+        try
+        {
+            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
     private static void AddPropertyPath(
         JsonElement properties,
         string name,
