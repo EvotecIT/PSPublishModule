@@ -30,8 +30,8 @@ internal sealed class BinaryConflictDetectionService
             throw new DirectoryNotFoundException($"Module root not found: {root}");
 
         var edition = NormalizeEdition(powerShellEdition);
-        var assemblyRoot = ResolveAssemblyRoot(root, edition, out var relativeAssemblyRoot);
-        if (string.IsNullOrWhiteSpace(assemblyRoot) || !Directory.Exists(assemblyRoot))
+        var assemblyRoots = ResolveAssemblyRoots(root, edition);
+        if (assemblyRoots.Length == 0)
         {
             return new BinaryConflictDetectionResult(
                 edition,
@@ -42,7 +42,12 @@ internal sealed class BinaryConflictDetectionService
                 summary: "no binary payload");
         }
 
-        var payloadAssemblies = EnumerateManagedAssemblies(assemblyRoot)
+        var assemblyRoot = assemblyRoots.Length == 1 ? assemblyRoots[0] : Path.Combine(root, "Lib");
+        var relativeAssemblyRoot = string.Equals(assemblyRoot, root, StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : FrameworkCompatibility.GetRelativePath(root, assemblyRoot);
+        var payloadAssemblies = assemblyRoots
+            .SelectMany(EnumerateManagedAssemblies)
             .GroupBy(static asm => asm.SimpleName, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToArray(), StringComparer.OrdinalIgnoreCase);
 
@@ -238,21 +243,15 @@ internal sealed class BinaryConflictDetectionService
     private static string NormalizeEdition(string? edition)
         => string.Equals(edition?.Trim(), "Desktop", StringComparison.OrdinalIgnoreCase) ? "Desktop" : "Core";
 
-    private static string ResolveAssemblyRoot(string moduleRoot, string edition, out string relativeAssemblyRoot)
+    private static string[] ResolveAssemblyRoots(string moduleRoot, string edition)
     {
-        relativeAssemblyRoot = string.Empty;
-
         var libRoot = Path.Combine(moduleRoot, "Lib");
         if (!Directory.Exists(libRoot))
-            return moduleRoot;
+            return new[] { moduleRoot };
 
-        var selected = ModuleBinaryPayloadLayout.ResolveRuntimePayloadFolder(libRoot, edition);
-
-        if (string.IsNullOrWhiteSpace(selected))
-            return libRoot;
-
-        relativeAssemblyRoot = Path.Combine("Lib", selected);
-        return Path.Combine(libRoot, selected);
+        return ModuleBinaryPayloadLayout.ResolveValidationPayloadDirectories(libRoot, edition)
+            .Where(Directory.Exists)
+            .ToArray();
     }
 
     private static IEnumerable<DiscoveredAssembly> EnumerateManagedAssemblies(string assemblyRoot)

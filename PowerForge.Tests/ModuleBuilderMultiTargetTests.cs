@@ -6,6 +6,40 @@ namespace PowerForge.Tests;
 public sealed class ModuleBuilderMultiTargetTests
 {
     [Fact]
+    public void BuildInPlace_ValidatesPayloadLayoutBeforeReplacingExistingLib()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+        var projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "DemoModule"));
+        var projectPath = Path.Combine(projectRoot.FullName, "DemoModule.csproj");
+        var existingLib = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Lib", "Core"));
+        var sentinelPath = Path.Combine(existingLib.FullName, "known-good.dll");
+        File.WriteAllText(sentinelPath, "known-good");
+        File.WriteAllText(Path.Combine(moduleRoot.FullName, "DemoModule.psm1"), string.Empty);
+        File.WriteAllText(Path.Combine(moduleRoot.FullName, "DemoModule.psd1"), "@{ RootModule = 'DemoModule.psm1'; ModuleVersion = '1.0.0' }");
+        File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+
+        try
+        {
+            var builder = ModuleBuilderTestDependencies.Create();
+            Assert.Throws<InvalidOperationException>(() => builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = moduleRoot.FullName,
+                ModuleName = "DemoModule",
+                CsprojPath = projectPath,
+                Frameworks = new[] { "net8.0", "net10.0-windows" },
+                DisableBinaryCmdletScan = true,
+            }));
+
+            Assert.Equal("known-good", File.ReadAllText(sentinelPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     [Trait("Category", "Integration")]
     public void BuildInPlace_PreservesNet8AndNet10Payloads()
     {

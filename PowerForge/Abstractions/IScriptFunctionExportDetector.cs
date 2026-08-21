@@ -11,4 +11,9 @@ public interface IScriptFunctionExportDetector
     /// Detects top-level function names defined in the provided script files.
     /// </summary>
     IReadOnlyList<string> DetectScriptFunctions(IEnumerable<string> scriptFiles);
+
+    /// <summary>
+    /// Detects aliases declared by the provided script files.
+    /// </summary>
+    IReadOnlyList<string> DetectScriptAliases(IEnumerable<string> scriptFiles);
 }

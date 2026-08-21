@@ -7,6 +7,34 @@ namespace PowerForge.Tests;
 public sealed class ModulePipelineScriptExportDetectorTests
 {
     [Fact]
+    public void PowerShellDetector_FindsLiteralAndHashtableDrivenScriptAliases()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, """
+Set-Alias -Name LiteralAlias -Value Invoke-Literal
+$aliases = [ordered] @{
+    DynamicAlias = 'Invoke-Dynamic'
+    'Quoted-Alias' = 'Invoke-Quoted'
+}
+foreach ($alias in $aliases.GetEnumerator()) {
+    Set-Alias -Name $alias.Key -Value $alias.Value
+}
+""");
+
+        try
+        {
+            var aliases = new PowerShellScriptFunctionExportDetector().DetectScriptAliases(new[] { scriptPath });
+
+            Assert.Equal(new[] { "DynamicAlias", "LiteralAlias", "Quoted-Alias" }, aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void UpdateManifestForGeneratedDeliveryCommands_UsesInjectedScriptFunctionExportDetector()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -91,5 +119,8 @@ public sealed class ModulePipelineScriptExportDetectorTests
             Calls++;
             return _functions;
         }
+
+        public IReadOnlyList<string> DetectScriptAliases(IEnumerable<string> scriptFiles)
+            => Array.Empty<string>();
     }
 }
