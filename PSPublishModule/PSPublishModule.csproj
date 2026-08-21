@@ -27,9 +27,9 @@
     <PackageReference Include="System.Reflection.MetadataLoadContext" Version="10.0.11" />
     <PackageReference Include="Spectre.Console" Version="0.57.2" />
     <PackageReference Include="Spectre.Console.Json" Version="0.57.2" />
-    <PackageReference Include="HtmlForgeX" Version="0.54.0" />
-    <PackageReference Include="HtmlForgeX.Markdown" Version="0.54.0" />
-    <PackageReference Include="OfficeIMO.Markdown" Version="3.2.2" />
+    <PackageReference Include="HtmlForgeX" Version="0.56.0" />
+    <PackageReference Include="HtmlForgeX.Markdown" Version="0.56.0" />
+    <PackageReference Include="OfficeIMO.Markdown" Version="3.2.4" />
   </ItemGroup>
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'net8.0' ">
