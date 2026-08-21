@@ -170,7 +170,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal ProjectEvaluationRequest(
             string projectPath,
             string? targetFramework,
-            string configuration,
+            string? configuration,
             IReadOnlyDictionary<string, string>? globalProperties,
             IReadOnlyDictionary<string, string?>? environmentVariables)
         {
@@ -183,7 +183,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         internal string ProjectPath { get; }
         internal string? TargetFramework { get; }
-        internal string Configuration { get; }
+        internal string? Configuration { get; }
         internal IReadOnlyDictionary<string, string> GlobalProperties { get; }
         internal IReadOnlyDictionary<string, string?> EnvironmentVariables { get; }
 
@@ -211,10 +211,9 @@ public sealed partial class DotNetPublishPipelineRunner
             bool undefinesTargetFramework = projectReference.UndefineProperties.Contains(
                 "TargetFramework",
                 StringComparer.OrdinalIgnoreCase);
-            string configuration = undefinesConfiguration
-                ? string.Empty
-                : properties.TryGetValue("Configuration", out string? childConfiguration) &&
-                  !string.IsNullOrWhiteSpace(childConfiguration)
+            string? configuration = undefinesConfiguration
+                ? null
+                : properties.TryGetValue("Configuration", out string? childConfiguration)
                     ? childConfiguration
                     : Configuration;
             string? targetFramework = undefinesTargetFramework
@@ -236,9 +235,11 @@ public sealed partial class DotNetPublishPipelineRunner
             AppendProjectReferenceKeySegment(key, "ProjectPath");
             AppendProjectReferenceKeySegment(key, NormalizeProjectReferenceIdentityPath(ProjectPath));
             AppendProjectReferenceKeySegment(key, "TargetFramework");
+            AppendProjectReferenceKeySegment(key, TargetFramework is null ? "Undefined" : "Defined");
             AppendProjectReferenceKeySegment(key, TargetFramework ?? string.Empty);
             AppendProjectReferenceKeySegment(key, "Configuration");
-            AppendProjectReferenceKeySegment(key, Configuration);
+            AppendProjectReferenceKeySegment(key, Configuration is null ? "Undefined" : "Defined");
+            AppendProjectReferenceKeySegment(key, Configuration ?? string.Empty);
             foreach (KeyValuePair<string, string> property in GlobalProperties.OrderBy(
                          entry => entry.Key,
                          StringComparer.OrdinalIgnoreCase))

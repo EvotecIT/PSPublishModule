@@ -516,15 +516,15 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:NuGetLockFilePath",
             "-getProperty:MSBuildToolsPath"
         };
-        if (!string.IsNullOrWhiteSpace(request.Configuration))
-            arguments.Add("-p:Configuration=" + request.Configuration);
+        if (request.Configuration is not null)
+            arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
         foreach (string itemName in EvaluatedBuildItemNames)
             arguments.Add("-getItem:" + itemName);
-        if (!string.IsNullOrWhiteSpace(request.TargetFramework))
+        if (request.TargetFramework is not null)
         {
             arguments.Add("-target:ResolveReferences");
             arguments.Add("-getItem:_MSBuildProjectReferenceExistent");
-            arguments.Add("-p:TargetFramework=" + request.TargetFramework);
+            arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
         }
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
         {
@@ -534,7 +534,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 continue;
             }
-            arguments.Add("-p:" + property.Key + "=" + property.Value);
+            arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
         }
         arguments.Add("-p:BuildProjectReferences=false");
 
@@ -896,7 +896,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         reference = new EvaluatedProjectReference(
             Path.GetFullPath(fullPathElement.GetString()!),
-            string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework,
+            targetFramework,
             globalProperties,
             undefineProperties);
         return true;

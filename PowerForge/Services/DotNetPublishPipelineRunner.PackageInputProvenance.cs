@@ -26,12 +26,12 @@ public sealed partial class DotNetPublishPipelineRunner
             "-p:RestoreLockedMode=false",
             "-p:NuGetLockFilePath=" + temporaryLockFile
         };
-        if (!string.IsNullOrWhiteSpace(request.Configuration))
-            arguments.Add("-p:Configuration=" + request.Configuration);
-        if (!string.IsNullOrWhiteSpace(request.TargetFramework) &&
+        if (request.Configuration is not null)
+            arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
+        if (request.TargetFramework is not null &&
             !ProjectDeclaresTargetFramework(request.ProjectPath))
         {
-            arguments.Add("-p:TargetFramework=" + request.TargetFramework);
+            arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
         }
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
                      entry => entry.Key,
@@ -44,7 +44,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 continue;
             }
-            arguments.Add("-p:" + property.Key + "=" + property.Value);
+            arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
         }
 
         try
@@ -347,10 +347,10 @@ public sealed partial class DotNetPublishPipelineRunner
             "-verbosity:quiet",
             "-preprocess:" + outputPath
         };
-        if (!string.IsNullOrWhiteSpace(request.Configuration))
-            arguments.Add("-p:Configuration=" + request.Configuration);
-        if (!string.IsNullOrWhiteSpace(request.TargetFramework))
-            arguments.Add("-p:TargetFramework=" + request.TargetFramework);
+        if (request.Configuration is not null)
+            arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
+        if (request.TargetFramework is not null)
+            arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
                      entry => entry.Key,
                      StringComparer.OrdinalIgnoreCase))
@@ -360,7 +360,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 continue;
             }
-            arguments.Add("-p:" + property.Key + "=" + property.Value);
+            arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
         }
 
         try

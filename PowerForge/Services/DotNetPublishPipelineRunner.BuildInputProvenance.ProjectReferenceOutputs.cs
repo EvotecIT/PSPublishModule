@@ -9,18 +9,42 @@ public sealed partial class DotNetPublishPipelineRunner
         IDictionary<string, string> properties,
         string? assignments)
     {
-        foreach (string assignment in (assignments ?? string.Empty).Split(
-                     new[] { ';' },
-                     StringSplitOptions.RemoveEmptyEntries))
+        string? currentName = null;
+        var currentValue = new StringBuilder();
+        foreach (string segment in (assignments ?? string.Empty).Split(new[] { ';' }))
         {
-            int separator = assignment.IndexOf('=');
+            int separator = segment.IndexOf('=');
             if (separator <= 0)
+            {
+                if (currentName is not null && segment.Length > 0)
+                    currentValue.Append(';').Append(segment);
                 continue;
-            string name = assignment.Substring(0, separator).Trim();
+            }
+
+            AddCurrentProjectReferenceProperty(properties, currentName, currentValue);
+            string name = segment.Substring(0, separator).Trim();
             if (name.Length == 0)
+            {
+                currentName = null;
+                currentValue.Clear();
                 continue;
-            properties[name] = assignment.Substring(separator + 1).Trim();
+            }
+
+            currentName = name;
+            currentValue.Clear();
+            currentValue.Append(segment.Substring(separator + 1).Trim());
         }
+
+        AddCurrentProjectReferenceProperty(properties, currentName, currentValue);
+    }
+
+    private static void AddCurrentProjectReferenceProperty(
+        IDictionary<string, string> properties,
+        string? name,
+        StringBuilder value)
+    {
+        if (name is not null)
+            properties[name] = value.ToString();
     }
 
     private static string[] ReadProjectReferencePropertyNames(params string?[] values)
@@ -39,6 +63,7 @@ public sealed partial class DotNetPublishPipelineRunner
         AppendProjectReferenceKeySegment(key, "ProjectPath");
         AppendProjectReferenceKeySegment(key, NormalizeProjectReferenceIdentityPath(reference.ProjectPath));
         AppendProjectReferenceKeySegment(key, "TargetFramework");
+        AppendProjectReferenceKeySegment(key, reference.TargetFramework is null ? "Undefined" : "Defined");
         AppendProjectReferenceKeySegment(key, reference.TargetFramework ?? string.Empty);
         foreach (KeyValuePair<string, string> property in reference.GlobalProperties.OrderBy(
                      entry => entry.Key,

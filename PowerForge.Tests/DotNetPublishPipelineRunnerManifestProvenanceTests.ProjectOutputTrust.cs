@@ -128,6 +128,121 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void ReadSourceProvenance_PreservesMsBuildEscapedProjectReferencePropertyValues()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "Library")).FullName;
+            string inputDirectory = Directory.CreateDirectory(Path.Combine(root, "inputs")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string escapedSource = Path.Combine(inputDirectory, "Escaped.cs");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj"
+                                      AdditionalProperties="Flavor=A%3BB" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.csproj"), """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup Condition="'$(Flavor)' == 'A;B'">
+                    <Compile Include="../../inputs/Escaped.cs" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { private static void Main() { } }");
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.cs"), "public static class Library { }");
+            File.WriteAllText(escapedSource, "public static class EscapedInput { public const int Value = 1; }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            File.WriteAllText(escapedSource, "public static class EscapedInput { public const int Value = 2; }");
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [appProject],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+            Assert.True(
+                provenance.DirtyPaths.Any(path =>
+                    path.Replace('\\', '/').EndsWith("inputs/Escaped.cs", StringComparison.Ordinal)),
+                string.Join(Environment.NewLine, provenance.DirtyReasons));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_PreservesExplicitlyEmptyProjectReferenceConfiguration()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "Library")).FullName;
+            string inputDirectory = Directory.CreateDirectory(Path.Combine(root, "inputs")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string emptyConfigurationSource = Path.Combine(inputDirectory, "EmptyConfiguration.cs");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj"
+                                      Properties="Configuration=" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.csproj"), """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup Condition="'$(Configuration)' == ''">
+                    <Compile Include="../../inputs/EmptyConfiguration.cs" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { private static void Main() { } }");
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.cs"), "public static class Library { }");
+            File.WriteAllText(emptyConfigurationSource, "public static class EmptyConfigurationInput { public const int Value = 1; }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            File.WriteAllText(emptyConfigurationSource, "public static class EmptyConfigurationInput { public const int Value = 2; }");
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [appProject],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+            Assert.Contains(
+                provenance.DirtyPaths,
+                path => path.Replace('\\', '/').EndsWith("inputs/EmptyConfiguration.cs", StringComparison.Ordinal));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
     public void ReadSourceProvenance_TracksProjectReferenceOutputThroughDirectoryLink()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
