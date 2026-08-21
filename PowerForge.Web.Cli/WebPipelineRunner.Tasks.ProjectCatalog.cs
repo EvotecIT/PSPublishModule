@@ -2527,6 +2527,11 @@ internal static partial class WebPipelineRunner
         Add(project.Name);
         Add(project.GitHubRepo);
         Add(ExtractRepositoryName(project.GitHubRepo));
+        if (project.Aliases is { Length: > 0 })
+        {
+            foreach (var alias in project.Aliases)
+                Add(alias);
+        }
         return candidates;
     }
 

@@ -334,9 +334,10 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                   "generatedOn": "2026-03-02T00:00:00.0000000Z",
                   "projects": [
                     {
-                      "slug": "securitypolicy",
-                      "name": "SecurityPolicy",
-                      "githubRepo": "EvotecIT/SecurityPolicy",
+                      "slug": "securitypolicyx",
+                      "name": "SecurityPolicyX",
+                      "githubRepo": "EvotecIT/SecurityPolicyX",
+                      "aliases": ["SecurityPolicy"],
                       "links": {
                         "powerShellGallery": "https://www.powershellgallery.com/packages/SecurityPolicy"
                       },
@@ -473,9 +474,10 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                   "generatedOn": "2026-03-02T00:00:00.0000000Z",
                   "projects": [
                     {
-                      "slug": "securitypolicy",
-                      "name": "SecurityPolicy",
-                      "githubRepo": "EvotecIT/SecurityPolicy",
+                      "slug": "securitypolicyx",
+                      "name": "SecurityPolicyX",
+                      "githubRepo": "EvotecIT/SecurityPolicyX",
+                      "aliases": ["SecurityPolicy"],
                       "links": {
                         "powerShellGallery": "https://www.powershellgallery.com/packages/SecurityPolicy"
                       },
