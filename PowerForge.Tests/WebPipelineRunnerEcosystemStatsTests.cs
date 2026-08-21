@@ -482,7 +482,7 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                         "version": "1.0.0",
                         "totalDownloads": 200,
                         "packageUrl": "https://www.nuget.org/packages/SecurityPolicy.Core",
-                        "projectUrl": "https://github.com/EvotecIT/SecurityPolicy"
+                        "projectUrl": "https://github.com/EvotecIT/SecurityPolicy.git"
                       }
                     ]
                   },

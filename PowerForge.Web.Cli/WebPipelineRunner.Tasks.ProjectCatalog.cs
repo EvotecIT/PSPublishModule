@@ -457,14 +457,21 @@ internal static partial class WebPipelineRunner
 
         if (!Uri.TryCreate(sourceUrl, UriKind.Absolute, out var uri))
             return false;
-        if (!uri.Host.Contains("github.com", StringComparison.OrdinalIgnoreCase))
+        if (!uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) &&
+            !uri.Host.Equals("www.github.com", StringComparison.OrdinalIgnoreCase))
             return false;
 
         var segments = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length < 2)
             return false;
 
-        repo = $"{segments[0]}/{segments[1]}";
+        var repositoryName = segments[1];
+        if (repositoryName.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+            repositoryName = repositoryName[..^4];
+        if (string.IsNullOrWhiteSpace(repositoryName))
+            return false;
+
+        repo = $"{segments[0]}/{repositoryName}";
         return true;
     }
 
