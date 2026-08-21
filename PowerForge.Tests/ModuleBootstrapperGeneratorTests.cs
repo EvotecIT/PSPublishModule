@@ -1006,8 +1006,12 @@ public class ModuleBootstrapperGeneratorTests
             Assert.False(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
 
             var bootstrapper = File.ReadAllText(bootstrapperPath);
-            Assert.Contains("$Public  = @(", bootstrapper);
+            Assert.Contains("$Public  = [string[]]@(", bootstrapper);
             Assert.Contains("[IO.Path]::Combine($PSScriptRoot, 'Public', '*.ps1')", bootstrapper);
+            Assert.Contains("[Array]::Sort($Public, [StringComparer]::Ordinal)", bootstrapper);
+            Assert.Contains("[Array]::Sort($Private, [StringComparer]::Ordinal)", bootstrapper);
+            Assert.Contains("[Array]::Sort($Classes, [StringComparer]::Ordinal)", bootstrapper);
+            Assert.Contains("[Array]::Sort($Enums, [StringComparer]::Ordinal)", bootstrapper);
             Assert.True(
                 bootstrapper.IndexOf("$Enums + $Classes", StringComparison.Ordinal) >= 0,
                 "Enums must be dot-sourced before classes so class declarations can reference enum types.");

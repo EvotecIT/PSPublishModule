@@ -450,7 +450,14 @@ public sealed class ModuleBuilder
 
     private ScriptFileDiscovery DiscoverScriptFiles(string directory)
     {
-        try { return new ScriptFileDiscovery(_enumerateScriptFiles(directory), isComplete: true); }
+        try
+        {
+            var files = _enumerateScriptFiles(directory)
+                .Select(Path.GetFullPath)
+                .OrderBy(static path => path, StringComparer.Ordinal)
+                .ToArray();
+            return new ScriptFileDiscovery(files, isComplete: true);
+        }
         catch (DirectoryNotFoundException) { return new ScriptFileDiscovery(Array.Empty<string>(), isComplete: true); }
         catch { return new ScriptFileDiscovery(Array.Empty<string>(), isComplete: false); }
     }
