@@ -510,7 +510,7 @@ public class WebPipelineRunnerProjectCatalogTests
             File.WriteAllText(curationPath,
                 """
                 "slug","aliases","apiDocs.quickStartTypes","apiDocs.relatedContentManifest"
-                "beta","BetaLegacy;Beta.Classic","Invoke-Beta","./data/projects/beta-api-guides.json"
+                "beta","/projects/beta-legacy/;/projects/beta-classic/","Invoke-Beta","./data/projects/beta-api-guides.json"
                 """);
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
@@ -547,8 +547,8 @@ public class WebPipelineRunnerProjectCatalogTests
             Assert.Contains("\"relatedContentManifest\": \"./data/projects/alpha-api-guides.json\"", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"quickStartTypes\": \"Invoke-Beta\"", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"relatedContentManifest\": \"./data/projects/beta-api-guides.json\"", catalogText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("\"BetaLegacy\"", catalogText, StringComparison.Ordinal);
-            Assert.Contains("\"Beta.Classic\"", catalogText, StringComparison.Ordinal);
+            Assert.Contains("\"/projects/beta-legacy/\"", catalogText, StringComparison.Ordinal);
+            Assert.Contains("\"/projects/beta-classic/\"", catalogText, StringComparison.Ordinal);
         }
         finally
         {

@@ -337,7 +337,7 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "slug": "securitypolicyx",
                       "name": "SecurityPolicyX",
                       "githubRepo": "EvotecIT/SecurityPolicyX",
-                      "aliases": ["SecurityPolicy"],
+                      "aliases": ["/projects/securitypolicy/"],
                       "links": {
                         "powerShellGallery": "https://www.powershellgallery.com/packages/SecurityPolicy"
                       },
@@ -477,7 +477,7 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "slug": "securitypolicyx",
                       "name": "SecurityPolicyX",
                       "githubRepo": "EvotecIT/SecurityPolicyX",
-                      "aliases": ["SecurityPolicy"],
+                      "aliases": ["/projects/securitypolicy/"],
                       "links": {
                         "powerShellGallery": "https://www.powershellgallery.com/packages/SecurityPolicy"
                       },

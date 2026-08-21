@@ -2539,7 +2539,15 @@ internal static partial class WebPipelineRunner
         if (project.Aliases is { Length: > 0 })
         {
             foreach (var alias in project.Aliases)
+            {
                 Add(alias);
+                if (!string.IsNullOrWhiteSpace(alias) && alias.TrimStart().StartsWith("/", StringComparison.Ordinal))
+                {
+                    var segments = alias.Trim().Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+                    if (segments.Length > 0)
+                        Add(segments[^1]);
+                }
+            }
         }
         return candidates;
     }
