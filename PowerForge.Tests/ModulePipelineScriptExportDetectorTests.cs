@@ -633,6 +633,96 @@ si Alias:CreatedBySi Get-Four
     }
 
     [Fact]
+    public void PowerShellDetector_ReportsIncompleteSetForModuleScopeImportAlias()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, "Import-Alias -Path (Join-Path $PSScriptRoot 'aliases.csv')");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.False(analysis.IsComplete);
+            Assert.Empty(analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_IgnoresDeferredAndGlobalImportAliasCommands()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(
+            scriptPath,
+            "function Import-Later { Import-Alias -Path '.\\deferred.csv' }; Import-Alias -Path '.\\global.csv' -Scope Global");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.True(analysis.IsComplete);
+            Assert.Empty(analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_ConservativelyKeepsCreationsFromMultiCommandHashtableLoop()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(
+            scriptPath,
+            "$aliases = [ordered]@{ FirstAlias = 'Alias:\\SecondAlias'; SecondAlias = 'Alias:\\FirstAlias' }; " +
+            "foreach ($entry in $aliases.GetEnumerator()) { Set-Alias -Name $entry.Key -Value Get-Item; Remove-Item -LiteralPath $entry.Value }");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.False(analysis.IsComplete);
+            Assert.Contains("FirstAlias", analysis.Aliases);
+            Assert.Contains("SecondAlias", analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_ConservativelyKeepsProviderCreationsFromMultiCommandHashtableLoop()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(
+            scriptPath,
+            "$aliases = [ordered]@{ FirstAlias = 'Alias:\\SecondAlias'; SecondAlias = 'Alias:\\FirstAlias' }; " +
+            "foreach ($entry in $aliases.GetEnumerator()) { Set-Item -LiteralPath $entry.Value -Value Get-Item; Remove-Alias -Name $entry.Key }");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.False(analysis.IsComplete);
+            Assert.Contains("FirstAlias", analysis.Aliases);
+            Assert.Contains("SecondAlias", analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void FunctionDetectorContract_DoesNotRequireAliasDetection()
     {
         IScriptFunctionExportDetector detector = new RecordingScriptFunctionExportDetector("Invoke-Test");

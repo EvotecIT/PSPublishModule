@@ -88,6 +88,21 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
                         continue;
                     }
 
+                    if (IsAliasImportCommand(command.GetCommandName()))
+                    {
+                        var importScope = GetAliasScopeDisposition(ast, command);
+                        if (importScope == AliasScopeDisposition.OutsideModule)
+                            continue;
+
+                        isComplete = false;
+                        continue;
+                    }
+
+                    var isMultiCommandDeterministicAliasLoop =
+                        IsMultiCommandDeterministicAliasLoop(ast, command);
+                    if (isMultiCommandDeterministicAliasLoop)
+                        isComplete = false;
+
                     if (IsAliasRemovalCommand(command.GetCommandName()))
                     {
                         if (IsRemoveAliasCommand(command.GetCommandName()))
@@ -115,6 +130,9 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
                         }
 
                         if (!isRelevantRemoval)
+                            continue;
+
+                        if (isMultiCommandDeterministicAliasLoop)
                             continue;
 
                         if (!isDeterministicLoopRemoval && !IsUnconditionalModuleScopeCommand(command))
@@ -157,7 +175,9 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
 
                         if (!isRelevantCreation)
                             continue;
-                        if (!IsUnconditionalModuleScopeCommand(command))
+                        var hasDeterministicProviderLoop =
+                            TryResolveEnclosingHashtable(ast, command, out _, out _);
+                        if (!hasDeterministicProviderLoop && !IsUnconditionalModuleScopeCommand(command))
                         {
                             isComplete = false;
                             continue;
@@ -457,13 +477,14 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
 
     private static bool IsAliasLifecycleCommand(string? commandName)
         => IsAliasCreationCommand(commandName) ||
+           IsAliasImportCommand(commandName) ||
            IsAliasProviderCreationCommand(commandName) ||
            IsAliasRemovalCommand(commandName);
 
     private static bool IsPotentialNestedAliasLifecycleCommand(ScriptBlockAst script, CommandAst command)
     {
         var commandName = command.GetCommandName();
-        if (IsAliasCreationCommand(commandName) || IsRemoveAliasCommand(commandName))
+        if (IsAliasCreationCommand(commandName) || IsAliasImportCommand(commandName) || IsRemoveAliasCommand(commandName))
             return true;
         if (!IsAliasProviderCreationCommand(commandName) && !IsAliasRemovalCommand(commandName))
             return false;
@@ -493,6 +514,16 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
                string.Equals(leafName, "New-Alias", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(leafName, "sal", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(leafName, "nal", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAliasImportCommand(string? commandName)
+    {
+        if (string.IsNullOrWhiteSpace(commandName))
+            return false;
+
+        var leafName = commandName!.Substring(commandName.LastIndexOf('\\') + 1);
+        return string.Equals(leafName, "Import-Alias", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(leafName, "ipal", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsAliasProviderCreationCommand(string? commandName)
@@ -638,6 +669,64 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
         return TryGetDirectHashtableLiteral(assignments[0].Right, out hashtable);
     }
 
+    private static bool IsMultiCommandDeterministicAliasLoop(ScriptBlockAst script, CommandAst command)
+    {
+        if (!TryResolveEnclosingHashtable(script, command, out var hashtable, out _) ||
+            hashtable!.KeyValuePairs.Count < 2)
+        {
+            return false;
+        }
+
+        Ast? ancestor = command.Parent;
+        while (ancestor is not null && ancestor is not ForEachStatementAst)
+            ancestor = ancestor.Parent;
+        if (ancestor is not ForEachStatementAst forEach)
+            return false;
+
+        return forEach.Body
+            .FindAll(
+                node => node is CommandAst candidate &&
+                        IsDirectForeachBodyCommand(candidate, forEach) &&
+                        IsRelevantAliasLifecycleCommand(script, candidate),
+                searchNestedScriptBlocks: false)
+            .Take(2)
+            .Count() > 1;
+    }
+
+    private static bool IsRelevantAliasLifecycleCommand(ScriptBlockAst script, CommandAst command)
+    {
+        var commandName = command.GetCommandName();
+        if (IsAliasCreationCommand(commandName) ||
+            IsAliasImportCommand(commandName) ||
+            IsRemoveAliasCommand(commandName))
+        {
+            return true;
+        }
+
+        if (IsAliasProviderCreationCommand(commandName))
+        {
+            _ = TryGetProviderCreatedAliasNames(
+                script,
+                command,
+                out _,
+                out var isRelevantCreation);
+            return isRelevantCreation;
+        }
+
+        if (IsAliasRemovalCommand(commandName))
+        {
+            _ = TryGetRemovedAliasNames(
+                script,
+                command,
+                out _,
+                out var isRelevantRemoval,
+                out _);
+            return isRelevantRemoval;
+        }
+
+        return false;
+    }
+
     private static bool TryGetDirectHashtableLiteral(StatementAst statement, out HashtableAst? hashtable)
     {
         hashtable = null;
@@ -671,7 +760,31 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
         isRelevantCreation = false;
         if (!TryGetCommandArgument(command, new[] { "Path", "LiteralPath" }, out var expression))
             return true;
-        if (!TryResolveStringValues(script, command, expression, out var values))
+
+        IReadOnlyList<string>? deterministicLoopValues = null;
+        if (TryResolveEnclosingHashtable(script, command, out var loopHashtable, out var loopVariableName) &&
+            IsHashtableMemberExpression(expression, loopVariableName, "Value"))
+        {
+            var paths = new List<string>();
+            foreach (var pair in loopHashtable!.KeyValuePairs)
+            {
+                if (!TryGetDirectStringLiteral(pair.Item2, out var path))
+                {
+                    isRelevantCreation = true;
+                    return false;
+                }
+                paths.Add(path);
+            }
+
+            deterministicLoopValues = paths;
+        }
+
+        IReadOnlyList<string> values;
+        if (deterministicLoopValues is not null)
+        {
+            values = deterministicLoopValues;
+        }
+        else if (!TryResolveStringValues(script, command, expression, out values))
         {
             isRelevantCreation = ExpressionResemblesAliasProvider(script, command, expression);
             return false;
