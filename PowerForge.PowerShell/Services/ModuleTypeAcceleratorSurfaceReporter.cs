@@ -213,7 +213,7 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
                 return type;
         }
 
-        foreach (var file in Directory.EnumerateFiles(libraryDirectory, "*.dll", SearchOption.TopDirectoryOnly))
+        foreach (var file in ModuleBinaryFileLocator.Enumerate(libraryDirectory, SearchOption.TopDirectoryOnly))
         {
             var assembly = LoadAssembly(alc, file, loadedAssemblies, loadedPaths, warnings);
             if (assembly is null)
@@ -338,7 +338,7 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
         if (File.Exists(direct))
             return Path.GetFullPath(direct);
 
-        return Directory.EnumerateFiles(libraryDirectory, "*.dll", SearchOption.TopDirectoryOnly)
+        return ModuleBinaryFileLocator.Enumerate(libraryDirectory, SearchOption.TopDirectoryOnly)
             .FirstOrDefault(file => string.Equals(Path.GetFileNameWithoutExtension(file), trimmed, StringComparison.OrdinalIgnoreCase));
     }
 

@@ -1,11 +1,11 @@
 # Get library name, from the PSM1 file name
 $LibraryName = '{{LibraryName}}'
-$Library = "$LibraryName.dll"
+$Library = '{{LibraryFileName}}'
 $Class = "$LibraryName.Initialize"
 
 $LibRoot = [IO.Path]::Combine($PowerForgeModuleRoot, 'Lib')
 $AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction SilentlyContinue
-$Root = @(Get-ChildItem -LiteralPath $LibRoot -File -Filter '*.dll' -ErrorAction SilentlyContinue).Count -gt 0
+$Root = @(Get-ChildItem -LiteralPath $LibRoot -File -ErrorAction SilentlyContinue | Where-Object Extension -IEQ '.dll').Count -gt 0
 
 $Default = $false
 $Core = $false

@@ -4,7 +4,7 @@
 {{LibrariesByFolderMap}}
 
 $AssemblyFolders = Get-ChildItem -Path $PSScriptRoot\Lib -Directory -ErrorAction SilentlyContinue
-$Root = @(Get-ChildItem -Path $PSScriptRoot\Lib -File -Filter '*.dll' -ErrorAction SilentlyContinue).Count -gt 0
+$Root = @(Get-ChildItem -Path $PSScriptRoot\Lib -File -ErrorAction SilentlyContinue | Where-Object Extension -IEQ '.dll').Count -gt 0
 
 $Default = $false
 $Core = $false

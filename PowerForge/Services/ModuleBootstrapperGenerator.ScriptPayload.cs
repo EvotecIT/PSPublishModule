@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 
 namespace PowerForge;
 
@@ -24,6 +25,8 @@ internal static partial class ModuleBootstrapperGenerator
             throw new FileNotFoundException("Generated module bootstrapper was not found.", psm1Path);
 
         var scriptPreamble = ModuleMergeComposer.ExtractMergedScriptPreamble(mergedScriptContent, out var scriptPayload);
+        var authoritativeExportBlock = ModuleMergeComposer.ExtractTrailingExportBlock(scriptPayload, out scriptPayload);
+        var deferredScriptPayload = BuildDeferredScriptPayload(scriptPayload);
         var bootstrapper = File.ReadAllText(psm1Path);
         bootstrapper = ReplaceMarkedSection(
             bootstrapper,
@@ -35,10 +38,48 @@ internal static partial class ModuleBootstrapperGenerator
             bootstrapper,
             ScriptPayloadStartMarker,
             ScriptPayloadEndMarker,
-            scriptPayload,
+            deferredScriptPayload,
             psm1Path);
 
+        var generatedExportBlock = ModuleMergeComposer.ExtractTrailingExportBlock(inlinedBootstrapper, out var bootstrapperWithoutExportBlock);
+        if (string.IsNullOrWhiteSpace(generatedExportBlock))
+        {
+            throw new InvalidOperationException(
+                $"Cannot inline merged scripts because '{Path.GetFileName(psm1Path)}' does not contain a generated export block.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(authoritativeExportBlock))
+        {
+            inlinedBootstrapper = bootstrapperWithoutExportBlock.TrimEnd() +
+                                  Environment.NewLine + Environment.NewLine +
+                                  authoritativeExportBlock.TrimEnd() +
+                                  Environment.NewLine;
+        }
+
         WritePowerShellFile(psm1Path, inlinedBootstrapper);
+    }
+
+    private static string BuildDeferredScriptPayload(string scriptPayload)
+    {
+        if (string.IsNullOrWhiteSpace(scriptPayload))
+            return string.Empty;
+
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(scriptPayload));
+        var builder = new StringBuilder(encoded.Length + 512);
+        builder.AppendLine("$PowerForgeMergedScriptPayloadBase64 = @'");
+        for (var offset = 0; offset < encoded.Length; offset += 120)
+        {
+            var length = Math.Min(120, encoded.Length - offset);
+            builder.AppendLine(encoded.Substring(offset, length));
+        }
+        builder.AppendLine("'@");
+        builder.AppendLine("$PowerForgeMergedScriptPayload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PowerForgeMergedScriptPayloadBase64))");
+        builder.AppendLine("try {");
+        builder.AppendLine("    . ([scriptblock]::Create($PowerForgeMergedScriptPayload))");
+        builder.AppendLine("} finally {");
+        builder.AppendLine("    Remove-Variable -Name PowerForgeMergedScriptPayload, PowerForgeMergedScriptPayloadBase64 -ErrorAction SilentlyContinue");
+        builder.Append('}');
+        return builder.ToString();
     }
 
     private static string ReplaceMarkedSection(

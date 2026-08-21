@@ -226,8 +226,7 @@ public sealed partial class ModulePipelineRunner
             return false;
 
         var payloadPath = Path.Combine(stagingPath, "Lib", folderName);
-        return Directory.Exists(payloadPath) &&
-               Directory.EnumerateFiles(payloadPath, "*.dll", SearchOption.AllDirectories).Any();
+        return ModuleBinaryFileLocator.HasAny(payloadPath, SearchOption.AllDirectories);
     }
 
     private void RunTestsAfterMerge(

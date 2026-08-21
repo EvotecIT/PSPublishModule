@@ -43,8 +43,7 @@ internal static class ModuleMergeComposer
             ? BuildMergedScriptContent(ordered, exports, fixRelativePaths, conditionalFunctionDependencies, moduleName)
             : string.Empty;
         var libRoot = Path.Combine(root, "Lib");
-        var hasLib = Directory.Exists(libRoot) &&
-                     Directory.EnumerateFiles(libRoot, "*.dll", SearchOption.AllDirectories).Any();
+        var hasLib = ModuleBinaryFileLocator.HasAny(libRoot, SearchOption.AllDirectories);
 
         return new ModuleMergeSources(psm1, ordered, merged, hasLib);
     }
@@ -73,7 +72,8 @@ internal static class ModuleMergeComposer
             return;
 
         var existing = File.ReadAllText(psm1Path);
-        var withoutExportBlock = RemoveTrailingExportBlock(existing).TrimEnd();
+        ExtractTrailingExportBlock(existing, out var withoutExportBlock);
+        withoutExportBlock = withoutExportBlock.TrimEnd();
 
         var builder = new StringBuilder(withoutExportBlock);
         foreach (var script in generatedScripts)
@@ -429,10 +429,11 @@ internal static class ModuleMergeComposer
         return updated;
     }
 
-    private static string RemoveTrailingExportBlock(string content)
+    internal static string ExtractTrailingExportBlock(string content, out string body)
     {
+        body = content ?? string.Empty;
         if (string.IsNullOrWhiteSpace(content))
-            return content ?? string.Empty;
+            return string.Empty;
 
         var normalized = content.Replace("\r\n", "\n");
         // The generated export block is expected to be the tail of the merged PSM1, so syncing generated scripts
@@ -442,13 +443,14 @@ internal static class ModuleMergeComposer
             exportStart = 0;
 
         if (exportStart < 0)
-            return content;
+            return string.Empty;
 
         const string exportLine = "Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport";
         var exportLineIndex = normalized.IndexOf(exportLine, exportStart, System.StringComparison.Ordinal);
         if (exportLineIndex < 0)
-            return content;
+            return string.Empty;
 
-        return normalized.Substring(0, exportStart).TrimEnd('\n');
+        body = normalized.Substring(0, exportStart).TrimEnd('\n');
+        return normalized.Substring(exportStart).TrimStart('\n').TrimEnd('\n');
     }
 }

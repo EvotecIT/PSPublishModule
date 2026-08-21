@@ -37,8 +37,7 @@ internal static partial class ModuleBootstrapperGenerator
 
         var hasScriptFolders = HasAnyDirectory(root, "Public", "Private", "Classes", "Enums");
         var libRoot = Path.Combine(root, "Lib");
-        var hasLib = Directory.Exists(libRoot) &&
-                     Directory.EnumerateFiles(libRoot, "*.dll", SearchOption.AllDirectories).Any();
+        var hasLib = ModuleBinaryFileLocator.HasAny(libRoot, SearchOption.AllDirectories);
         var hasDevelopmentBinaryLoader = developmentBinaries?.Enabled == true;
 
         // Avoid overwriting "single file" script modules that keep all code in the PSM1 and do not use folder layout.
@@ -68,6 +67,7 @@ internal static partial class ModuleBootstrapperGenerator
         var psm1Content = BuildBootstrapperPsm1(
             moduleName,
             primaryLibraryName,
+            primaryAssemblyName,
             exports,
             includeBinaryLoader: hasLib,
             includeScriptLoader: hasScriptFolders,
@@ -195,7 +195,7 @@ internal static partial class ModuleBootstrapperGenerator
         string[] dllFiles;
         try
         {
-            dllFiles = Directory.EnumerateFiles(dir, "*.dll", SearchOption.TopDirectoryOnly)
+            dllFiles = ModuleBinaryFileLocator.Enumerate(dir, SearchOption.TopDirectoryOnly)
                 .Select(Path.GetFileName)
                 .Where(n => !string.IsNullOrWhiteSpace(n))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -247,6 +247,7 @@ internal static partial class ModuleBootstrapperGenerator
     private static string BuildBootstrapperPsm1(
         string moduleName,
         string libraryName,
+        string libraryFileName,
         ExportSet exports,
         bool includeBinaryLoader,
         bool includeScriptLoader,
@@ -273,6 +274,7 @@ internal static partial class ModuleBootstrapperGenerator
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["LibraryName"] = EscapePsSingleQuoted(libraryName),
+                    ["LibraryFileName"] = EscapePsSingleQuoted(libraryFileName),
                     ["ModuleName"] = EscapePsSingleQuoted(moduleName),
                     ["LoaderAssemblyName"] = EscapePsSingleQuoted(loaderIdentity?.AssemblyName ?? string.Empty),
                     ["LoaderTypeName"] = loaderIdentity?.TypeName ?? string.Empty,
@@ -476,7 +478,7 @@ internal static partial class ModuleBootstrapperGenerator
         if (byName.TryGetValue("Default", out var @default))
             return new[] { @default };
 
-        if (Directory.EnumerateFiles(libRoot, "*.dll", SearchOption.TopDirectoryOnly).Any())
+        if (ModuleBinaryFileLocator.HasAny(libRoot, SearchOption.TopDirectoryOnly))
             return new[] { libRoot };
 
         return Array.Empty<string>();
