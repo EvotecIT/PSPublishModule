@@ -224,6 +224,75 @@ public sealed class ModuleMergeComposerTests
     }
 
     [Fact]
+    public void BuildSources_IncludesLegacyIncludeToArrayScriptFolders()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMergeModule(root.FullName, moduleName);
+            Directory.CreateDirectory(Path.Combine(root.FullName, "LegacyScripts"));
+            File.WriteAllText(
+                Path.Combine(root.FullName, "LegacyScripts", "Get-Legacy.ps1"),
+                "function Get-Legacy { 'legacy' }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                moduleName,
+                information: new InformationConfiguration
+                {
+                    IncludeToArray = new[]
+                    {
+                        new IncludeToArrayEntry { Key = "IncludePS1", Values = new[] { "LegacyScripts" } }
+                    }
+                },
+                exports: new ExportSet(new[] { "Get-TestExample", "Get-Legacy" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: false);
+
+            Assert.Contains("function Get-Legacy", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains(sources.ScriptFiles, path => path.EndsWith("Get-Legacy.ps1", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void BuildSources_RequiresConfiguredPrimaryAssemblyForBinaryMerge()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMergeModule(root.FullName, moduleName);
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Lib"));
+            File.WriteAllText(Path.Combine(root.FullName, "Lib", "Auxiliary.DLL"), string.Empty);
+
+            var scriptOnly = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                moduleName,
+                information: null,
+                exports: new ExportSet(new[] { "Get-TestExample" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: false);
+            var configuredBinary = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                moduleName,
+                information: null,
+                exports: new ExportSet(new[] { "Get-TestExample" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: false,
+                exportAssemblies: new[] { "Auxiliary.dll" });
+
+            Assert.False(scriptOnly.HasLib);
+            Assert.True(configuredBinary.HasLib);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void SyncMergedPsm1WithGeneratedScripts_ReplacesTrailingExportBlock()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

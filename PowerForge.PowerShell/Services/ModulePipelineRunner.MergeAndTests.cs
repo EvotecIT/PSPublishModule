@@ -27,7 +27,8 @@ public sealed partial class ModulePipelineRunner
             buildResult.Exports,
             fixRelativePaths: !plan.DoNotAttemptToFixRelativePaths,
             conditionalFunctionDependencies: conditionalExportDependencies,
-            scriptFiles: scriptFiles);
+            scriptFiles: scriptFiles,
+            exportAssemblies: plan.BuildSpec.ExportAssemblies);
 
         if (!mergeInfo.HasScripts && !File.Exists(mergeInfo.Psm1Path))
         {
@@ -751,29 +752,7 @@ public sealed partial class ModulePipelineRunner
     }
 
     private static string[] ResolveScriptIncludeFolders(InformationConfiguration? information)
-    {
-        var includes = new List<string>();
-        if (information?.IncludePS1 is { Length: > 0 })
-            includes.AddRange(information.IncludePS1);
-
-        if (information?.IncludeToArray is { Length: > 0 })
-        {
-            foreach (var entry in information.IncludeToArray)
-            {
-                if (entry is null || !string.Equals(entry.Key, "IncludePS1", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                if (entry.Values is { Length: > 0 })
-                    includes.AddRange(entry.Values);
-            }
-        }
-
-        return includes
-            .Where(static include => !string.IsNullOrWhiteSpace(include))
-            .Select(static include => include.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
+        => ModuleMergeComposer.ResolveMergeDirectories(information);
 
     private static string? ResolveDevelopmentBinaryRoot(ModuleBuildSpec spec)
     {

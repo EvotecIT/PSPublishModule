@@ -824,6 +824,32 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void Generate_WithAuxiliaryLibraryOnly_KeepsScriptModuleBootstrapper()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-auxiliary-lib-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Public"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib"));
+        File.WriteAllText(Path.Combine(root, "Public", "Get-Demo.ps1"), "function Get-Demo {}");
+        File.WriteAllText(Path.Combine(root, "Lib", "Auxiliary.DLL"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(root, "DemoModule", exports, exportAssemblies: null, handleRuntimes: false);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$Public  = @(", bootstrapper, StringComparison.Ordinal);
+            Assert.DoesNotContain("$LibraryName =", bootstrapper, StringComparison.Ordinal);
+            Assert.False(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_WithScriptLayoutOnlyAndHandleRuntimes_DoesNotEmitBinaryRuntimeBlock()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-script-runtime-" + Guid.NewGuid().ToString("N"));

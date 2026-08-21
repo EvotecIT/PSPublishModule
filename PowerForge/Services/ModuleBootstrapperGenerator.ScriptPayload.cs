@@ -10,6 +10,8 @@ internal static partial class ModuleBootstrapperGenerator
     private const string ScriptPreambleEndMarker = "# PowerForge script preamble end";
     private const string ScriptPayloadStartMarker = "# PowerForge script payload begin";
     private const string ScriptPayloadEndMarker = "# PowerForge script payload end";
+    private const string DeferredPayloadStartMarker = "$PowerForgeMergedScriptPayloadBase64 = @'";
+    private const string DeferredPayloadEndMarker = "'@";
 
     /// <summary>
     /// Replaces the folder-based script loader in a generated binary-module bootstrapper with the
@@ -26,7 +28,7 @@ internal static partial class ModuleBootstrapperGenerator
 
         var scriptPreamble = ModuleMergeComposer.ExtractMergedScriptPreamble(mergedScriptContent, out var scriptPayload);
         var authoritativeExportBlock = ModuleMergeComposer.ExtractTrailingExportBlock(scriptPayload, out scriptPayload);
-        var deferredScriptPayload = BuildDeferredScriptPayload(scriptPayload);
+        var deferredScriptPayload = BuildDeferredScriptPayload(scriptPreamble, scriptPayload);
         var bootstrapper = File.ReadAllText(psm1Path);
         bootstrapper = ReplaceMarkedSection(
             bootstrapper,
@@ -59,27 +61,80 @@ internal static partial class ModuleBootstrapperGenerator
         WritePowerShellFile(psm1Path, inlinedBootstrapper);
     }
 
-    private static string BuildDeferredScriptPayload(string scriptPayload)
+    private static string BuildDeferredScriptPayload(string scriptPreamble, string scriptPayload)
     {
         if (string.IsNullOrWhiteSpace(scriptPayload))
             return string.Empty;
 
-        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(scriptPayload));
+        var deferredContent = string.IsNullOrWhiteSpace(scriptPreamble)
+            ? scriptPayload
+            : scriptPreamble.TrimEnd() + Environment.NewLine + Environment.NewLine + scriptPayload.TrimStart();
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(deferredContent));
         var builder = new StringBuilder(encoded.Length + 512);
-        builder.AppendLine("$PowerForgeMergedScriptPayloadBase64 = @'");
+        builder.AppendLine(DeferredPayloadStartMarker);
+        AppendWrappedBase64(builder, encoded);
+        builder.AppendLine(DeferredPayloadEndMarker);
+        builder.AppendLine("$PowerForgeMergedScriptPayload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PowerForgeMergedScriptPayloadBase64))");
+        builder.AppendLine("$PowerForgeMergedScriptAst = [System.Management.Automation.Language.Parser]::ParseInput($PowerForgeMergedScriptPayload, [ref] $null, [ref] $null)");
+        builder.AppendLine("$PowerForgeMergedScriptRootReferences = @($PowerForgeMergedScriptAst.FindAll({");
+        builder.AppendLine("    param([System.Management.Automation.Language.Ast] $Ast)");
+        builder.AppendLine("    $Ast -is [System.Management.Automation.Language.VariableExpressionAst] -and");
+        builder.AppendLine("        $Ast.VariablePath.UserPath -ieq 'PSScriptRoot'");
+        builder.AppendLine("}, $true))");
+        builder.AppendLine("if ($PowerForgeMergedScriptRootReferences.Count -gt 0) {");
+        builder.AppendLine("    $PowerForgeMergedScriptBuilder = [Text.StringBuilder]::new($PowerForgeMergedScriptPayload)");
+        builder.AppendLine("    foreach ($PowerForgeMergedScriptRootReference in @($PowerForgeMergedScriptRootReferences | Sort-Object { $_.Extent.StartOffset } -Descending)) {");
+        builder.AppendLine("        $PowerForgeMergedScriptRootReplacement = if ($PowerForgeMergedScriptRootReference.Extent.Text.StartsWith('${', [StringComparison]::Ordinal)) { '${PowerForgeModuleRoot}' } else { '$PowerForgeModuleRoot' }");
+        builder.AppendLine("        $null = $PowerForgeMergedScriptBuilder.Remove($PowerForgeMergedScriptRootReference.Extent.StartOffset, $PowerForgeMergedScriptRootReference.Extent.EndOffset - $PowerForgeMergedScriptRootReference.Extent.StartOffset)");
+        builder.AppendLine("        $null = $PowerForgeMergedScriptBuilder.Insert($PowerForgeMergedScriptRootReference.Extent.StartOffset, $PowerForgeMergedScriptRootReplacement)");
+        builder.AppendLine("    }");
+        builder.AppendLine("    $PowerForgeMergedScriptPayload = $PowerForgeMergedScriptBuilder.ToString()");
+        builder.AppendLine("}");
+        builder.AppendLine("try {");
+        builder.AppendLine("    . ([scriptblock]::Create($PowerForgeMergedScriptPayload))");
+        builder.AppendLine("} finally {");
+        builder.AppendLine("    Remove-Variable -Name PowerForgeMergedScriptAst, PowerForgeMergedScriptBuilder, PowerForgeMergedScriptPayload, PowerForgeMergedScriptPayloadBase64, PowerForgeMergedScriptRootReference, PowerForgeMergedScriptRootReferences, PowerForgeMergedScriptRootReplacement -ErrorAction SilentlyContinue");
+        builder.Append('}');
+        return builder.ToString();
+    }
+
+    internal static string RewriteDeferredScriptPayload(string moduleContent, Func<string, string> rewrite)
+    {
+        if (string.IsNullOrWhiteSpace(moduleContent) || rewrite is null)
+            return moduleContent ?? string.Empty;
+
+        var markerStart = moduleContent.IndexOf(DeferredPayloadStartMarker, StringComparison.Ordinal);
+        if (markerStart < 0)
+            return moduleContent;
+
+        var payloadStart = markerStart + DeferredPayloadStartMarker.Length;
+        var payloadEnd = moduleContent.IndexOf(DeferredPayloadEndMarker, payloadStart, StringComparison.Ordinal);
+        if (payloadEnd <= payloadStart)
+            return moduleContent;
+
+        var encoded = moduleContent.Substring(payloadStart, payloadEnd - payloadStart);
+        var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
+        var rewritten = rewrite(decoded) ?? string.Empty;
+        if (string.Equals(decoded, rewritten, StringComparison.Ordinal))
+            return moduleContent;
+
+        var updatedEncoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(rewritten));
+        var wrapped = new StringBuilder(updatedEncoded.Length + 64);
+        AppendWrappedBase64(wrapped, updatedEncoded);
+        return moduleContent.Substring(0, payloadStart) +
+               Environment.NewLine +
+               wrapped.ToString().TrimEnd('\r', '\n') +
+               Environment.NewLine +
+               moduleContent.Substring(payloadEnd);
+    }
+
+    private static void AppendWrappedBase64(StringBuilder builder, string encoded)
+    {
         for (var offset = 0; offset < encoded.Length; offset += 120)
         {
             var length = Math.Min(120, encoded.Length - offset);
             builder.AppendLine(encoded.Substring(offset, length));
         }
-        builder.AppendLine("'@");
-        builder.AppendLine("$PowerForgeMergedScriptPayload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PowerForgeMergedScriptPayloadBase64))");
-        builder.AppendLine("try {");
-        builder.AppendLine("    . ([scriptblock]::Create($PowerForgeMergedScriptPayload))");
-        builder.AppendLine("} finally {");
-        builder.AppendLine("    Remove-Variable -Name PowerForgeMergedScriptPayload, PowerForgeMergedScriptPayloadBase64 -ErrorAction SilentlyContinue");
-        builder.Append('}');
-        return builder.ToString();
     }
 
     private static string ReplaceMarkedSection(

@@ -37,15 +37,15 @@ internal static partial class ModuleBootstrapperGenerator
 
         var hasScriptFolders = HasAnyDirectory(root, "Public", "Private", "Classes", "Enums");
         var libRoot = Path.Combine(root, "Lib");
-        var hasLib = ModuleBinaryFileLocator.HasAny(libRoot, SearchOption.AllDirectories);
+        var exportAssemblyFileNames = ResolveExportAssemblyFileNames(moduleName, exportAssemblies);
+        var primaryAssemblyName = exportAssemblyFileNames.FirstOrDefault() ?? (moduleName + ".dll");
+        var hasLib = ModuleBinaryFileLocator.ContainsFileName(libRoot, primaryAssemblyName, SearchOption.AllDirectories);
         var hasDevelopmentBinaryLoader = developmentBinaries?.Enabled == true;
 
         // Avoid overwriting "single file" script modules that keep all code in the PSM1 and do not use folder layout.
         // If there is no Lib and no folder-based layout, leave the existing PSM1 intact.
         if (!hasLib && !hasScriptFolders && !hasDevelopmentBinaryLoader && !forceBootstrapperWrite) return;
 
-        var exportAssemblyFileNames = ResolveExportAssemblyFileNames(moduleName, exportAssemblies);
-        var primaryAssemblyName = exportAssemblyFileNames.FirstOrDefault() ?? (moduleName + ".dll");
         var primaryLibraryName = Path.GetFileNameWithoutExtension(primaryAssemblyName);
         if (string.IsNullOrWhiteSpace(primaryLibraryName)) primaryLibraryName = moduleName;
 

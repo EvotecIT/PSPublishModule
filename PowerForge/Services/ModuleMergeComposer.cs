@@ -31,7 +31,8 @@ internal static class ModuleMergeComposer
         ExportSet exports,
         bool fixRelativePaths,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null,
-        IReadOnlyList<string>? scriptFiles = null)
+        IReadOnlyList<string>? scriptFiles = null,
+        IReadOnlyList<string>? exportAssemblies = null)
     {
         var root = Path.GetFullPath(rootPath);
         var psm1 = Path.Combine(root, $"{moduleName}.psm1");
@@ -43,7 +44,8 @@ internal static class ModuleMergeComposer
             ? BuildMergedScriptContent(ordered, exports, fixRelativePaths, conditionalFunctionDependencies, moduleName)
             : string.Empty;
         var libRoot = Path.Combine(root, "Lib");
-        var hasLib = ModuleBinaryFileLocator.HasAny(libRoot, SearchOption.AllDirectories);
+        var primaryAssemblyName = ModuleBinaryFileLocator.ResolvePrimaryAssemblyFileName(moduleName, exportAssemblies);
+        var hasLib = ModuleBinaryFileLocator.ContainsFileName(libRoot, primaryAssemblyName, SearchOption.AllDirectories);
 
         return new ModuleMergeSources(psm1, ordered, merged, hasLib);
     }
@@ -196,7 +198,7 @@ internal static class ModuleMergeComposer
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-    private static string[] ResolveMergeDirectories(InformationConfiguration? information)
+    internal static string[] ResolveMergeDirectories(InformationConfiguration? information)
     {
         var ordered = new List<string> { "Classes", "Enums", "Private", "Public" };
 
@@ -209,6 +211,24 @@ internal static class ModuleMergeComposer
                 if (ordered.Any(existing => string.Equals(existing, entry, System.StringComparison.OrdinalIgnoreCase)))
                     continue;
                 ordered.Add(entry);
+            }
+        }
+
+        if (information?.IncludeToArray is { Length: > 0 })
+        {
+            foreach (var entry in information.IncludeToArray)
+            {
+                if (entry is null || !string.Equals(entry.Key, "IncludePS1", System.StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                foreach (var value in entry.Values ?? System.Array.Empty<string>())
+                {
+                    if (string.IsNullOrWhiteSpace(value))
+                        continue;
+                    if (ordered.Any(existing => string.Equals(existing, value, System.StringComparison.OrdinalIgnoreCase)))
+                        continue;
+                    ordered.Add(value);
+                }
             }
         }
 
@@ -431,11 +451,12 @@ internal static class ModuleMergeComposer
 
     internal static string ExtractTrailingExportBlock(string content, out string body)
     {
-        body = content ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(content))
+        var source = content ?? string.Empty;
+        body = source;
+        if (string.IsNullOrWhiteSpace(source))
             return string.Empty;
 
-        var normalized = content.Replace("\r\n", "\n");
+        var normalized = source.Replace("\r\n", "\n");
         // The generated export block is expected to be the tail of the merged PSM1, so syncing generated scripts
         // replaces that trailing block wholesale before appending a fresh one from the manifest.
         var exportStart = normalized.LastIndexOf("\n$FunctionsToExport = ", System.StringComparison.Ordinal);
