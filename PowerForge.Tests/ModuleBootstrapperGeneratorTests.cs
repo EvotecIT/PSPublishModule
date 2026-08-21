@@ -919,6 +919,9 @@ public class ModuleBootstrapperGeneratorTests
             var bootstrapper = File.ReadAllText(bootstrapperPath);
             Assert.Contains("$Public  = @(", bootstrapper);
             Assert.Contains("[IO.Path]::Combine($PSScriptRoot, 'Public', '*.ps1')", bootstrapper);
+            Assert.True(
+                bootstrapper.IndexOf("$Enums + $Classes", StringComparison.Ordinal) >= 0,
+                "Enums must be dot-sourced before classes so class declarations can reference enum types.");
             Assert.DoesNotContain("$PowerForgeModuleRoot", bootstrapper);
             Assert.DoesNotContain("$LibraryName =", bootstrapper);
         }

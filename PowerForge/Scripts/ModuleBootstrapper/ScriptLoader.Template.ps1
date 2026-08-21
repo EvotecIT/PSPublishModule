@@ -6,7 +6,7 @@ $Enums   = @(Get-ChildItem -Path ([IO.Path]::Combine({{ModuleRootExpression}}, '
 
 $FoundErrors = @(
     # Dot source the files (Classes/Enums first).
-    foreach ($Import in @($Classes + $Enums + $Private + $Public)) {
+    foreach ($Import in @($Enums + $Classes + $Private + $Public)) {
         try {
             . $Import.Fullname
         } catch {

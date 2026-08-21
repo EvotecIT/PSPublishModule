@@ -53,8 +53,13 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
         var isComplete = true;
         foreach (var file in scriptFiles ?? Array.Empty<string>())
         {
-            if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
+            if (string.IsNullOrWhiteSpace(file))
                 continue;
+            if (!File.Exists(file))
+            {
+                isComplete = false;
+                continue;
+            }
 
             try
             {

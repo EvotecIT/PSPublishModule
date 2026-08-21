@@ -171,6 +171,17 @@ nal -Name ShortNew -Value Get-Qux
     }
 
     [Fact]
+    public void PowerShellDetector_ReportsIncompleteSetWhenDiscoveredScriptDisappears()
+    {
+        var missingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"), "Missing.ps1");
+
+        var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { missingPath });
+
+        Assert.False(analysis.IsComplete);
+        Assert.Empty(analysis.Aliases);
+    }
+
+    [Fact]
     public void FunctionDetectorContract_DoesNotRequireAliasDetection()
     {
         IScriptFunctionExportDetector detector = new RecordingScriptFunctionExportDetector("Invoke-Test");
