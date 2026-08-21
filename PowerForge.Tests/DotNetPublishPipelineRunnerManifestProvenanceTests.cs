@@ -2444,9 +2444,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             CreateNoWindow = true
         });
         Assert.NotNull(process);
-        string output = process!.StandardOutput.ReadToEnd();
-        string error = process.StandardError.ReadToEnd();
+        Task<string> outputTask = process!.StandardOutput.ReadToEndAsync();
+        Task<string> errorTask = process.StandardError.ReadToEndAsync();
         Assert.True(process.WaitForExit(120000), $"dotnet {arguments} timed out");
+        Task.WhenAll(outputTask, errorTask).GetAwaiter().GetResult();
+        string output = outputTask.GetAwaiter().GetResult();
+        string error = errorTask.GetAwaiter().GetResult();
         Assert.True(process.ExitCode == 0, $"dotnet {arguments} failed: {output}{error}");
     }
 

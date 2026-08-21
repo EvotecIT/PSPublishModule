@@ -310,6 +310,8 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
         var visited = new HashSet<string>(comparison);
         var directories = new HashSet<string>(comparison);
+        var outputRootsByEvaluation = new Dictionary<string, string[]>(comparison);
+        var generatedProjectReferenceOutputs = new List<(ProjectEvaluationRequest Request, GeneratedProjectReferenceOutput Output)>();
         using var verifiedPackageArchives = new VerifiedPackageArchiveCache();
         buildInputs = new HashSet<string>(comparison);
         sourceInputs = new HashSet<string>(comparison);
@@ -350,6 +352,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     buildInputs.Add(input);
                 foreach (string input in evaluation.SourceInputs)
                     sourceInputs.Add(input);
+                outputRootsByEvaluation[visitKey] = evaluation.OutputRoots;
+                generatedProjectReferenceOutputs.AddRange(
+                    evaluation.GeneratedProjectReferenceOutputs.Select(output => (request, output)));
                 if (request.TargetFramework is null)
                 {
                     if (evaluation.TargetFrameworks.Length > 0)
@@ -360,15 +365,28 @@ public sealed partial class DotNetPublishPipelineRunner
                     else
                     {
                         foreach (EvaluatedProjectReference projectReference in evaluation.ProjectReferences)
-                            pending.Enqueue(request.ForProject(projectReference.ProjectPath, targetFramework: null));
+                            pending.Enqueue(request.ForProject(projectReference));
                     }
                 }
                 else
                 {
                     foreach (EvaluatedProjectReference projectReference in evaluation.ProjectReferences)
-                        pending.Enqueue(request.ForProject(projectReference.ProjectPath, projectReference.TargetFramework));
+                        pending.Enqueue(request.ForProject(projectReference));
                 }
             }
+        }
+
+        foreach ((ProjectEvaluationRequest request, GeneratedProjectReferenceOutput output) in generatedProjectReferenceOutputs)
+        {
+            ProjectEvaluationRequest referencedProject = request.ForProject(output.ProjectReference);
+            if (outputRootsByEvaluation.TryGetValue(referencedProject.BuildVisitKey(), out string[]? outputRoots) &&
+                IsBelowGeneratedBuildRoot(output.OutputPath, outputRoots))
+            {
+                continue;
+            }
+
+            buildInputs.Add(output.OutputPath);
+            sourceInputs.Add(output.OutputPath);
         }
 
         projectDirectories = directories.ToArray();
@@ -543,12 +561,17 @@ public sealed partial class DotNetPublishPipelineRunner
             var targetFrameworks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var generatedBuildRoots = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            var outputRoots = new HashSet<string>(
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            var generatedProjectReferenceOutputs = new List<GeneratedProjectReferenceOutput>();
             var packageRoots = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
                 AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "OutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
+                AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, outputRoots);
+                AddPropertyPath(properties, "OutputPath", Path.GetDirectoryName(request.ProjectPath)!, outputRoots);
                 AddPropertyPath(properties, "BaseIntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "MSBuildProjectExtensionsPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "IntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
@@ -647,17 +670,20 @@ public sealed partial class DotNetPublishPipelineRunner
                                 inputs.Add(fullPath);
                                 rawReferences.Add(fullPath);
                             }
-                            else if (IsGeneratedProjectReferenceOutput(
+                            else if (IsGeneratedProjectReferenceAssemblyReference(itemName, item))
+                            {
+                                continue;
+                            }
+                            else if (TryReadGeneratedProjectReferenceOutput(
                                          itemName,
                                          fullPath,
                                          item,
                                          msBuildToolsPath,
                                          embeddedResourceProjectReferences,
-                                         analyzerProjectReferences))
+                                         analyzerProjectReferences,
+                                         out GeneratedProjectReferenceOutput? generatedProjectReferenceOutput))
                             {
-                                // The referenced project's evaluated sources are queued below; its compiled
-                                // output (including analyzer/source-generator outputs) is generated state and
-                                // cannot become a release source input.
+                                generatedProjectReferenceOutputs.Add(generatedProjectReferenceOutput!);
                                 continue;
                             }
                             else if (!itemName.Equals("None", StringComparison.Ordinal) || IsOutputRelevantNoneItem(item))
@@ -681,7 +707,10 @@ public sealed partial class DotNetPublishPipelineRunner
             if (string.IsNullOrWhiteSpace(request.TargetFramework))
             {
                 foreach (string projectReference in rawReferences)
-                    references[projectReference] = new EvaluatedProjectReference(projectReference, targetFramework: null);
+                {
+                    var reference = new EvaluatedProjectReference(projectReference, targetFramework: null);
+                    references[BuildEvaluatedProjectReferenceKey(reference)] = reference;
+                }
             }
             else if (rawReferences.Count > 0)
             {
@@ -692,7 +721,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
                 foreach (EvaluatedProjectReference reference in resolvedReferences)
                 {
-                    references[reference.ProjectPath] = reference;
+                    references[BuildEvaluatedProjectReferenceKey(reference)] = reference;
                     inputs.Add(reference.ProjectPath);
                 }
             }
@@ -701,7 +730,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 inputs.ToArray(),
                 sourceInputs.ToArray(),
                 references.Values.ToArray(),
-                targetFrameworks.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
+                targetFrameworks.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray(),
+                outputRoots.ToArray(),
+                generatedProjectReferenceOutputs.ToArray());
             return true;
         }
         catch
@@ -805,30 +836,43 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryReadEvaluatedProjectReference(
         JsonElement item,
         out EvaluatedProjectReference? reference)
+        => TryReadEvaluatedProjectReference(item, "FullPath", out reference);
+
+    private static bool TryReadEvaluatedProjectReference(
+        JsonElement item,
+        string projectPathMetadataName,
+        out EvaluatedProjectReference? reference)
     {
         reference = null;
-        if (!item.TryGetProperty("FullPath", out JsonElement fullPathElement) ||
+        if (!item.TryGetProperty(projectPathMetadataName, out JsonElement fullPathElement) ||
             fullPathElement.ValueKind != JsonValueKind.String ||
             string.IsNullOrWhiteSpace(fullPathElement.GetString()))
         {
             return false;
         }
 
+        var globalProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        AddProjectReferenceProperties(globalProperties, ReadItemText(item, "AdditionalProperties"));
+        AddProjectReferenceProperties(globalProperties, ReadItemText(item, "SetConfiguration"));
+        AddProjectReferenceProperties(globalProperties, ReadItemText(item, "SetPlatform"));
+        AddProjectReferenceProperties(globalProperties, ReadItemText(item, "SetTargetFramework"));
+
         string? targetFramework = ReadItemText(item, "NearestTargetFramework");
-        if (string.IsNullOrWhiteSpace(targetFramework))
+        if (string.IsNullOrWhiteSpace(targetFramework) &&
+            globalProperties.TryGetValue("TargetFramework", out string? propertyTargetFramework))
         {
-            string? setTargetFramework = ReadItemText(item, "SetTargetFramework");
-            const string prefix = "TargetFramework=";
-            if (!string.IsNullOrWhiteSpace(setTargetFramework) &&
-                setTargetFramework!.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                targetFramework = setTargetFramework.Substring(prefix.Length).Trim();
-            }
+            targetFramework = propertyTargetFramework;
         }
+
+        string[] undefineProperties = ReadProjectReferencePropertyNames(
+            ReadItemText(item, "UndefineProperties"),
+            ReadItemText(item, "GlobalPropertiesToRemove"));
 
         reference = new EvaluatedProjectReference(
             Path.GetFullPath(fullPathElement.GetString()!),
-            string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework);
+            string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework,
+            globalProperties,
+            undefineProperties);
         return true;
     }
 

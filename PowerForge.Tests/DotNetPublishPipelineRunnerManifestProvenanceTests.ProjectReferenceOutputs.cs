@@ -168,7 +168,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     buildConfiguration: "Release",
                     buildPlan: plan);
 
-            Assert.False(provenance.Dirty);
+            Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
             Assert.Empty(provenance.DirtyPaths);
             Assert.Equal(outputSha256, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(libraryOutput))));
         }
@@ -240,6 +240,202 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             Assert.Contains(
                 provenance.DirtyPaths,
                 path => path.Replace('\\', '/').EndsWith("inputs/release-input.dll", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_IgnoresEmbeddedExecutableProjectReferenceOutput()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string toolDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "Tool")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string toolProject = Path.Combine(toolDirectory, "Tool.csproj");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Tool/Tool.csproj"
+                                      ReferenceOutputAssembly="false"
+                                      OutputItemType="EmbeddedResource"
+                                      LogicalName="App.Payloads.Tool.exe" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(toolProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <OutputType>Exe</OutputType>
+                    <TargetExt>.exe</TargetExt>
+                  </PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { private static void Main() { } }");
+            File.WriteAllText(Path.Combine(toolDirectory, "Program.cs"), "internal static class Program { private static void Main() { } }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add src/*/packages.lock.json");
+            RunGit(root, "commit -m \"lock approved dependencies\"");
+            RunDotNet(root, $"build \"{toolProject}\" -c Release --no-restore --nologo");
+            string toolOutput = Path.Combine(toolDirectory, "bin", "Release", "net8.0", "Tool.exe");
+            Assert.True(File.Exists(toolOutput));
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [appProject],
+                    buildConfiguration: "Release");
+
+            Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
+            Assert.Empty(provenance.DirtyPaths);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_UsesProjectReferenceAdditionalPropertiesForChildInputs()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "Library")).FullName;
+            string inputDirectory = Directory.CreateDirectory(Path.Combine(root, "inputs")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string libraryProject = Path.Combine(libraryDirectory, "Library.csproj");
+            string conditionalSource = Path.Combine(inputDirectory, "Signed.cs");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj"
+                                      AdditionalProperties="Flavor=Signed"
+                                      ReferenceOutputAssembly="false"
+                                      OutputItemType="EmbeddedResource"
+                                      LogicalName="App.Payloads.Library.dll" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(libraryProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup Condition="'$(Flavor)' == 'Signed'">
+                    <Compile Include="../../inputs/Signed.cs" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { private static void Main() { } }");
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.cs"), "public static class Library { }");
+            File.WriteAllText(conditionalSource, "public static class SignedInput { public const int Value = 1; }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            File.WriteAllText(conditionalSource, "public static class SignedInput { public const int Value = 2; }");
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [appProject],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+            Assert.Contains(
+                provenance.DirtyPaths,
+                path => path.Replace('\\', '/').EndsWith("inputs/Signed.cs", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_TracksProjectReferenceOutputOutsideEvaluatedOutputRoots()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "Library")).FullName;
+            string inputDirectory = Directory.CreateDirectory(Path.Combine(root, "inputs")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string libraryProject = Path.Combine(libraryDirectory, "Library.csproj");
+            string prebuiltOutput = Path.Combine(inputDirectory, "prebuilt.dll");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj"
+                                      ReferenceOutputAssembly="false"
+                                      OutputItemType="EmbeddedResource"
+                                      LogicalName="App.Payloads.Library.dll" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(libraryProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <TargetPath>$(MSBuildProjectDirectory)/../../inputs/prebuilt.dll</TargetPath>
+                  </PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { private static void Main() { } }");
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.cs"), "public static class Library { }");
+            File.WriteAllBytes(prebuiltOutput, [0x01, 0x02, 0x03]);
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            File.WriteAllBytes(prebuiltOutput, [0x04, 0x05, 0x06]);
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [appProject],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+            Assert.Contains(
+                provenance.DirtyPaths,
+                path => path.Replace('\\', '/').EndsWith("inputs/prebuilt.dll", StringComparison.Ordinal));
         }
         finally
         {

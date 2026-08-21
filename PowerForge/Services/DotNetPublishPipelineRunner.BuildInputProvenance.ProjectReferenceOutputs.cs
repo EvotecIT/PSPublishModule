@@ -4,6 +4,45 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    private static void AddProjectReferenceProperties(
+        IDictionary<string, string> properties,
+        string? assignments)
+    {
+        foreach (string assignment in (assignments ?? string.Empty).Split(
+                     new[] { ';' },
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            int separator = assignment.IndexOf('=');
+            if (separator <= 0)
+                continue;
+            string name = assignment.Substring(0, separator).Trim();
+            if (name.Length == 0)
+                continue;
+            properties[name] = assignment.Substring(separator + 1).Trim();
+        }
+    }
+
+    private static string[] ReadProjectReferencePropertyNames(params string?[] values)
+        => values
+            .SelectMany(value => (value ?? string.Empty).Split(
+                new[] { ';' },
+                StringSplitOptions.RemoveEmptyEntries))
+            .Select(value => value.Trim())
+            .Where(value => value.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static string BuildEvaluatedProjectReferenceKey(EvaluatedProjectReference reference)
+        => string.Join(
+            "|",
+            new[] { reference.ProjectPath, reference.TargetFramework ?? string.Empty }
+                .Concat(reference.GlobalProperties
+                    .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(entry => entry.Key + "=" + entry.Value))
+                .Concat(reference.UndefineProperties
+                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                    .Select(value => "-" + value)));
+
     private static HashSet<string> ReadProjectReferenceOutputKeys(
         JsonElement items,
         string outputItemType)
@@ -67,46 +106,64 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static bool IsGeneratedProjectReferenceOutput(
+    private static bool IsGeneratedProjectReferenceAssemblyReference(
+        string itemName,
+        JsonElement item)
+        => (itemName.Equals("ReferencePath", StringComparison.Ordinal) ||
+            itemName.Equals("ReferenceCopyLocalPaths", StringComparison.Ordinal)) &&
+           string.Equals(
+               ReadItemText(item, "ReferenceSourceTarget"),
+               "ProjectReference",
+               StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryReadGeneratedProjectReferenceOutput(
         string itemName,
         string fullPath,
         JsonElement item,
         string? msBuildToolsPath,
         HashSet<string> embeddedResourceProjectReferences,
-        HashSet<string> analyzerProjectReferences)
+        HashSet<string> analyzerProjectReferences,
+        out GeneratedProjectReferenceOutput? output)
     {
+        output = null;
         bool resolvedFromProjectReference = string.Equals(
             ReadItemText(item, "ReferenceSourceTarget"),
             "ProjectReference",
             StringComparison.OrdinalIgnoreCase);
-        if (itemName.Equals("ReferencePath", StringComparison.Ordinal) ||
-            itemName.Equals("ReferenceCopyLocalPaths", StringComparison.Ordinal))
+        string? outputItemType = null;
+        HashSet<string>? declaredOutputs = null;
+        if (itemName.Equals("EmbeddedResource", StringComparison.Ordinal) && resolvedFromProjectReference)
         {
-            return resolvedFromProjectReference;
+            outputItemType = "EmbeddedResource";
+            declaredOutputs = embeddedResourceProjectReferences;
+        }
+        else if (itemName.Equals("Analyzer", StringComparison.Ordinal))
+        {
+            outputItemType = "Analyzer";
+            declaredOutputs = analyzerProjectReferences;
         }
 
-        if (itemName.Equals("EmbeddedResource", StringComparison.Ordinal) &&
-            Path.GetExtension(fullPath).Equals(".dll", StringComparison.OrdinalIgnoreCase))
+        if (outputItemType is null ||
+            !IsDeclaredProjectReferenceOutput(
+                item,
+                outputItemType,
+                msBuildToolsPath,
+                declaredOutputs!) ||
+            !TryReadEvaluatedProjectReference(
+                item,
+                "MSBuildSourceProjectFile",
+                out EvaluatedProjectReference? projectReference) ||
+            projectReference is null)
         {
-            return resolvedFromProjectReference &&
-                   IsDeclaredProjectReferenceOutput(
-                       item,
-                       "EmbeddedResource",
-                       msBuildToolsPath,
-                       embeddedResourceProjectReferences);
+            return false;
         }
 
-        // An analyzer ProjectReference resolves to its compiled DLL even when project builds are
+        // An analyzer ProjectReference resolves to its compiled output even when project builds are
         // disabled. MSBuild stamps that direct target output with its source project but does not
         // guarantee ReferenceSourceTarget metadata. Other output item types can intentionally return
         // tracked source inputs and must remain in provenance.
-        return itemName.Equals("Analyzer", StringComparison.Ordinal) &&
-               Path.GetExtension(fullPath).Equals(".dll", StringComparison.OrdinalIgnoreCase) &&
-               IsDeclaredProjectReferenceOutput(
-                   item,
-                   "Analyzer",
-                   msBuildToolsPath,
-                   analyzerProjectReferences);
+        output = new GeneratedProjectReferenceOutput(fullPath, projectReference);
+        return true;
     }
 
     private static bool IsDeclaredProjectReferenceOutput(

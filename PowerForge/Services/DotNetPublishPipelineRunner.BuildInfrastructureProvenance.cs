@@ -157,6 +157,30 @@ public sealed partial class DotNetPublishPipelineRunner
                 GlobalProperties,
                 EnvironmentVariables);
 
+        internal ProjectEvaluationRequest ForProject(EvaluatedProjectReference projectReference)
+        {
+            var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> property in GlobalProperties)
+                properties[property.Key] = property.Value;
+            foreach (string propertyName in projectReference.UndefineProperties)
+                properties.Remove(propertyName);
+            foreach (KeyValuePair<string, string> property in projectReference.GlobalProperties)
+                properties[property.Key] = property.Value;
+
+            string configuration = properties.TryGetValue("Configuration", out string? childConfiguration) &&
+                                   !string.IsNullOrWhiteSpace(childConfiguration)
+                ? childConfiguration
+                : Configuration;
+            properties.Remove("Configuration");
+            properties.Remove("TargetFramework");
+            return new ProjectEvaluationRequest(
+                Path.GetFullPath(projectReference.ProjectPath),
+                projectReference.TargetFramework,
+                configuration,
+                properties,
+                EnvironmentVariables);
+        }
+
         internal string BuildVisitKey()
             => string.Join(
                 "|",
@@ -175,29 +199,55 @@ public sealed partial class DotNetPublishPipelineRunner
             string[] buildInputs,
             string[] sourceInputs,
             EvaluatedProjectReference[] projectReferences,
-            string[] targetFrameworks)
+            string[] targetFrameworks,
+            string[] outputRoots,
+            GeneratedProjectReferenceOutput[] generatedProjectReferenceOutputs)
         {
             BuildInputs = buildInputs;
             SourceInputs = sourceInputs;
             ProjectReferences = projectReferences;
             TargetFrameworks = targetFrameworks;
+            OutputRoots = outputRoots;
+            GeneratedProjectReferenceOutputs = generatedProjectReferenceOutputs;
         }
 
         internal string[] BuildInputs { get; }
         internal string[] SourceInputs { get; }
         internal EvaluatedProjectReference[] ProjectReferences { get; }
         internal string[] TargetFrameworks { get; }
+        internal string[] OutputRoots { get; }
+        internal GeneratedProjectReferenceOutput[] GeneratedProjectReferenceOutputs { get; }
     }
 
     private sealed class EvaluatedProjectReference
     {
-        internal EvaluatedProjectReference(string projectPath, string? targetFramework)
+        internal EvaluatedProjectReference(
+            string projectPath,
+            string? targetFramework,
+            IReadOnlyDictionary<string, string>? globalProperties = null,
+            string[]? undefineProperties = null)
         {
             ProjectPath = projectPath;
             TargetFramework = targetFramework;
+            GlobalProperties = globalProperties ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            UndefineProperties = undefineProperties ?? Array.Empty<string>();
         }
 
         internal string ProjectPath { get; }
         internal string? TargetFramework { get; }
+        internal IReadOnlyDictionary<string, string> GlobalProperties { get; }
+        internal string[] UndefineProperties { get; }
+    }
+
+    private sealed class GeneratedProjectReferenceOutput
+    {
+        internal GeneratedProjectReferenceOutput(string outputPath, EvaluatedProjectReference projectReference)
+        {
+            OutputPath = outputPath;
+            ProjectReference = projectReference;
+        }
+
+        internal string OutputPath { get; }
+        internal EvaluatedProjectReference ProjectReference { get; }
     }
 }
