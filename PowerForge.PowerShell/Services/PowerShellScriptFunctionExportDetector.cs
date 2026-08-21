@@ -6,7 +6,7 @@ namespace PowerForge;
 /// <summary>
 /// Detects exported PowerShell script functions using the PowerShell AST parser.
 /// </summary>
-public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExportDetector, IScriptAliasExportDetector
+public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExportDetector, IScriptAliasExportDetector, IScriptAliasExportAnalysisDetector
 {
     /// <inheritdoc />
     public IReadOnlyList<string> DetectScriptFunctions(IEnumerable<string> scriptFiles)
@@ -44,8 +44,13 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
 
     /// <inheritdoc />
     public IReadOnlyList<string> DetectScriptAliases(IEnumerable<string> scriptFiles)
+        => AnalyzeScriptAliases(scriptFiles).Aliases;
+
+    /// <inheritdoc />
+    public ScriptAliasExportAnalysis AnalyzeScriptAliases(IEnumerable<string> scriptFiles)
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var isComplete = true;
         foreach (var file in scriptFiles ?? Array.Empty<string>())
         {
             if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
@@ -57,43 +62,51 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
                 ParseError[] errors;
                 var ast = Parser.ParseFile(file, out tokens, out errors);
                 if (errors is { Length: > 0 })
+                {
+                    isComplete = false;
                     continue;
+                }
 
                 var commands = ast.FindAll(node => node is CommandAst, searchNestedScriptBlocks: false)
                     .Cast<CommandAst>()
-                    .Where(static command =>
-                        string.Equals(command.GetCommandName(), "Set-Alias", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(command.GetCommandName(), "New-Alias", StringComparison.OrdinalIgnoreCase))
+                    .Where(static command => IsAliasCommand(command.GetCommandName()))
                     .ToArray();
                 foreach (var command in commands)
                 {
-                    if (TryGetLiteralAliasName(command, out var alias))
+                    if (TryGetAliasName(ast, command, out var alias))
+                    {
                         result.Add(alias);
-                }
+                        continue;
+                    }
 
-                foreach (var command in commands)
-                {
+                    var resolvedHashtable = false;
                     foreach (var hashtable in ResolveAliasHashtables(ast, command))
                     {
+                        resolvedHashtable = true;
                         foreach (var pair in hashtable.KeyValuePairs)
                         {
-                            var alias = NormalizeHashtableKey(pair.Item1.Extent.Text);
-                            if (!string.IsNullOrWhiteSpace(alias))
-                                result.Add(alias);
+                            var hashtableAlias = NormalizeHashtableKey(pair.Item1.Extent.Text);
+                            if (!string.IsNullOrWhiteSpace(hashtableAlias))
+                                result.Add(hashtableAlias);
+                            else
+                                isComplete = false;
                         }
                     }
+
+                    if (!resolvedHashtable)
+                        isComplete = false;
                 }
             }
             catch
             {
-                // best effort
+                isComplete = false;
             }
         }
 
-        return result.OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+        return new ScriptAliasExportAnalysis(result, isComplete);
     }
 
-    private static bool TryGetLiteralAliasName(CommandAst command, out string alias)
+    private static bool TryGetAliasName(ScriptBlockAst script, CommandAst command, out string alias)
     {
         alias = string.Empty;
         for (var index = 1; index < command.CommandElements.Count; index++)
@@ -101,28 +114,76 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
             if (command.CommandElements[index] is CommandParameterAst parameter &&
                 string.Equals(parameter.ParameterName, "Name", StringComparison.OrdinalIgnoreCase))
             {
-                if (parameter.Argument is StringConstantExpressionAst inline)
-                {
-                    alias = inline.Value;
-                    return !string.IsNullOrWhiteSpace(alias);
-                }
+                if (TryResolveAliasExpression(script, command, parameter.Argument, out alias))
+                    return true;
 
                 if (index + 1 < command.CommandElements.Count &&
-                    command.CommandElements[index + 1] is StringConstantExpressionAst following)
-                {
-                    alias = following.Value;
-                    return !string.IsNullOrWhiteSpace(alias);
-                }
+                    TryResolveAliasExpression(script, command, command.CommandElements[index + 1], out alias))
+                    return true;
             }
         }
 
-        if (command.CommandElements.Count > 1 && command.CommandElements[1] is StringConstantExpressionAst positional)
+        if (command.CommandElements.Count > 1 &&
+            TryResolveAliasExpression(script, command, command.CommandElements[1], out alias))
+            return true;
+
+        return false;
+    }
+
+    private static bool TryResolveAliasExpression(ScriptBlockAst script, CommandAst command, Ast? expression, out string alias)
+    {
+        alias = string.Empty;
+        if (expression is StringConstantExpressionAst literal)
         {
-            alias = positional.Value;
+            alias = literal.Value;
             return !string.IsNullOrWhiteSpace(alias);
         }
 
-        return false;
+        if (expression is not VariableExpressionAst variable)
+            return false;
+
+        var assignments = script
+            .FindAll(node => node is AssignmentStatementAst, searchNestedScriptBlocks: false)
+            .Cast<AssignmentStatementAst>()
+            .Where(assignment =>
+                assignment.Extent.EndOffset <= command.Extent.StartOffset &&
+                assignment.Parent is NamedBlockAst &&
+                assignment.Left is VariableExpressionAst assignedVariable &&
+                string.Equals(assignedVariable.VariablePath.UserPath, variable.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (assignments.Length != 1)
+            return false;
+
+        if (!TryGetDirectStringLiteral(assignments[0].Right, out var assignedLiteral))
+            return false;
+
+        alias = assignedLiteral;
+        return !string.IsNullOrWhiteSpace(alias);
+    }
+
+    private static bool IsAliasCommand(string? commandName)
+    {
+        if (string.IsNullOrWhiteSpace(commandName))
+            return false;
+
+        var leafName = commandName!.Substring(commandName.LastIndexOf('\\') + 1);
+        return string.Equals(leafName, "Set-Alias", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(leafName, "New-Alias", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(leafName, "sal", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(leafName, "nal", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryGetDirectStringLiteral(StatementAst statement, out string value)
+    {
+        value = string.Empty;
+        if (statement is not CommandExpressionAst commandExpression ||
+            commandExpression.Expression is not StringConstantExpressionAst literal)
+        {
+            return false;
+        }
+
+        value = literal.Value;
+        return !string.IsNullOrWhiteSpace(value);
     }
 
     private static IEnumerable<HashtableAst> ResolveAliasHashtables(ScriptBlockAst script, CommandAst command)
@@ -152,18 +213,21 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
             yield break;
         var tableVariable = match.Groups["name"].Value;
 
-        foreach (var assignment in script.FindAll(node => node is AssignmentStatementAst, searchNestedScriptBlocks: false).Cast<AssignmentStatementAst>())
-        {
-            if (assignment.Left is not VariableExpressionAst variable ||
-                !string.Equals(variable.VariablePath.UserPath, tableVariable, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
+        var assignments = script
+            .FindAll(node => node is AssignmentStatementAst, searchNestedScriptBlocks: false)
+            .Cast<AssignmentStatementAst>()
+            .Where(assignment =>
+                assignment.Extent.EndOffset <= forEach.Extent.StartOffset &&
+                assignment.Parent is NamedBlockAst &&
+                assignment.Left is VariableExpressionAst variable &&
+                string.Equals(variable.VariablePath.UserPath, tableVariable, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (assignments.Length != 1)
+            yield break;
 
-            var hashtable = assignment.Right.Find(node => node is HashtableAst, searchNestedScriptBlocks: false) as HashtableAst;
-            if (hashtable is not null)
-                yield return hashtable;
-        }
+        var hashtable = assignments[0].Right.Find(node => node is HashtableAst, searchNestedScriptBlocks: false) as HashtableAst;
+        if (hashtable is not null)
+            yield return hashtable;
     }
 
     private static string NormalizeHashtableKey(string text)

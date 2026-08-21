@@ -10,6 +10,8 @@ internal static partial class ModuleBootstrapperGenerator
 {
     // net8.0 is the default modern PowerShell LTS baseline when the module build does not declare a Core TFM.
     private const string DefaultAssemblyLoadContextTargetFramework = "net8.0";
+    // PowerShell 7.0 runs on .NET Core 3.1; a helper built for that floor loads in every supported later Core host.
+    private const string PowerShell70AssemblyLoadContextTargetFramework = "netcoreapp3.1";
     private static readonly TimeSpan AssemblyLoadContextLoaderBuildTimeout = TimeSpan.FromMinutes(10);
 
     internal static void Generate(
@@ -418,6 +420,8 @@ internal static partial class ModuleBootstrapperGenerator
 
         EnsureDotNetSdkAvailable(moduleRoot);
 
+        targetFramework = ResolveAssemblyLoadContextTargetFrameworkForPayloads(targetFramework, targetDirectories);
+
         var buildRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "module-load-context", identity.AssemblyName + "_" + Guid.NewGuid().ToString("N"));
         var outputRoot = Path.Combine(buildRoot, "out");
 
@@ -492,6 +496,17 @@ internal static partial class ModuleBootstrapperGenerator
 
     internal static string[] ResolveAssemblyLoadContextTargetDirectories(string libRoot)
         => ModuleBinaryPayloadLayout.ResolveAssemblyLoadContextTargetDirectories(libRoot);
+
+    internal static string ResolveAssemblyLoadContextTargetFrameworkForPayloads(
+        string targetFramework,
+        IReadOnlyList<string>? targetDirectories)
+        => (targetDirectories ?? Array.Empty<string>()).Any(static directory =>
+                string.Equals(Path.GetFileName(directory), "Core", StringComparison.OrdinalIgnoreCase) ||
+                (Path.GetFileName(directory) ?? string.Empty).StartsWith("Core-", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(Path.GetFileName(directory), "Standard", StringComparison.OrdinalIgnoreCase) ||
+                (Path.GetFileName(directory) ?? string.Empty).StartsWith("Standard-", StringComparison.OrdinalIgnoreCase))
+            ? PowerShell70AssemblyLoadContextTargetFramework
+            : targetFramework;
 
     private static AssemblyLoadContextLoaderIdentity CreateAssemblyLoadContextLoaderIdentity(string moduleName)
     {

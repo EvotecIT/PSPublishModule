@@ -231,6 +231,14 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void ResolveAssemblyLoadContextTargetFramework_IncludesNetCoreAppBaselines()
+    {
+        var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFramework(new[] { "netcoreapp3.1", "net8.0" });
+
+        Assert.Equal("netcoreapp3.1", framework);
+    }
+
+    [Fact]
     public void ResolveAssemblyLoadContextTargetFramework_IgnoresNetCoreAppBeforeAssemblyDependencyResolver()
     {
         var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFramework(new[] { "netcoreapp2.1", "net8.0" });
@@ -303,6 +311,16 @@ public class ModuleBootstrapperGeneratorTests
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
         }
+    }
+
+    [Fact]
+    public void ResolveAssemblyLoadContextTargetFrameworkForPayloads_UsesPowerShell70RuntimeForAnyCorePayload()
+    {
+        var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFrameworkForPayloads(
+            "net8.0",
+            new[] { Path.Combine("Lib", "Core") });
+
+        Assert.Equal("netcoreapp3.1", framework);
     }
 
     [Fact]
@@ -421,6 +439,49 @@ public class ModuleBootstrapperGeneratorTests
 
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
             Assert.DoesNotContain("DemoModule.ModuleLoadContext.dll", libraries);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithAssemblyLoadContextAndStandardFallback_BuildsPowerShell70CompatibleLoader()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-standard-" + Guid.NewGuid().ToString("N"));
+        var libStandard = Directory.CreateDirectory(Path.Combine(root, "Lib", "Standard")).FullName;
+        var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core")).FullName;
+        File.WriteAllText(Path.Combine(libStandard, "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(libCore, "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>()),
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "netstandard2.0", "net8.0" });
+
+            foreach (var loaderPath in new[]
+                     {
+                         Path.Combine(libStandard, "DemoModule.ModuleLoadContext.dll"),
+                         Path.Combine(libCore, "DemoModule.ModuleLoadContext.dll")
+                     })
+            {
+                Assert.True(File.Exists(loaderPath));
+                var targetFramework = System.Reflection.Assembly.Load(File.ReadAllBytes(loaderPath))
+                    .GetCustomAttributesData()
+                    .Single(attribute => attribute.AttributeType == typeof(System.Runtime.Versioning.TargetFrameworkAttribute))
+                    .ConstructorArguments[0]
+                    .Value as string;
+                Assert.Equal(".NETCoreApp,Version=v3.1", targetFramework);
+            }
         }
         finally
         {

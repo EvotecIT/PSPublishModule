@@ -291,9 +291,7 @@ public sealed class ModuleBuilder
             .Concat(EnumerateExistingFile(Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psm1")))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var declaredAliases = aliasScripts.Length > 0 && _scriptFunctionExportDetector is IScriptAliasExportDetector aliasExportDetector
-            ? aliasExportDetector.DetectScriptAliases(aliasScripts)
-            : Array.Empty<string>();
+        var aliasAnalysis = AnalyzeScriptAliases(aliasScripts);
         if (!opts.DisableBinaryCmdletScan)
         {
             var binaryExportSurface = ModuleBinaryExportSurfaceValidator.Detect(
@@ -309,15 +307,18 @@ public sealed class ModuleBuilder
                 var detectedCmdlets = binaryExportSurface.Cmdlets;
                 var detectedAliases = binaryExportSurface.Aliases;
 
-                if (detectedCmdlets.Length == 0 && detectedAliases.Length == 0)
+                cmdletsToSet = detectedCmdlets;
+                var aliasesToPreserve = aliasAnalysis.IsComplete
+                    ? Array.Empty<string>()
+                    : ModuleManifestExportReader.ReadExports(psd1).Aliases;
+                if (!aliasAnalysis.IsComplete)
                 {
-                    _logger.Warn($"No cmdlets/aliases detected in export assemblies for '{opts.ModuleName}'; keeping existing CmdletsToExport/AliasesToExport.");
+                    _logger.Warn(
+                        $"Not every module-scope script alias for '{opts.ModuleName}' could be resolved statically; " +
+                        "preserving existing AliasesToExport entries while refreshing detected binary aliases.");
                 }
-                else
-                {
-                    if (detectedCmdlets.Length > 0) cmdletsToSet = detectedCmdlets;
-                    aliasesToSet = MergeDeclaredAliases(declaredAliases, detectedAliases);
-                }
+
+                aliasesToSet = MergeDeclaredAliases(aliasesToPreserve, aliasAnalysis.Aliases, detectedAliases);
             }
         }
 
@@ -327,11 +328,21 @@ public sealed class ModuleBuilder
             : Array.Empty<ModuleOwnerNote>();
     }
 
-    internal static string[] MergeDeclaredAliases(
-        IEnumerable<string>? declaredAliases,
-        IEnumerable<string>? detectedAliases)
-        => (declaredAliases ?? Array.Empty<string>())
-            .Concat(detectedAliases ?? Array.Empty<string>())
+    private ScriptAliasExportAnalysis AnalyzeScriptAliases(string[] aliasScripts)
+    {
+        if (aliasScripts.Length == 0)
+            return new ScriptAliasExportAnalysis(Array.Empty<string>(), isComplete: true);
+        if (_scriptFunctionExportDetector is IScriptAliasExportAnalysisDetector analysisDetector)
+            return analysisDetector.AnalyzeScriptAliases(aliasScripts);
+        if (_scriptFunctionExportDetector is IScriptAliasExportDetector aliasDetector)
+            return new ScriptAliasExportAnalysis(aliasDetector.DetectScriptAliases(aliasScripts), isComplete: false);
+
+        return new ScriptAliasExportAnalysis(Array.Empty<string>(), isComplete: false);
+    }
+
+    internal static string[] MergeDeclaredAliases(params IEnumerable<string>?[] aliasSets)
+        => (aliasSets ?? Array.Empty<IEnumerable<string>?>())
+            .SelectMany(static aliases => aliases ?? Array.Empty<string>())
             .Where(static alias => !string.IsNullOrWhiteSpace(alias))
             .Select(static alias => alias.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)

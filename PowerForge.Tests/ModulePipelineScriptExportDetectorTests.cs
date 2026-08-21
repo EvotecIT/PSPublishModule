@@ -66,6 +66,111 @@ function Invoke-DeferredSetup {
     }
 
     [Fact]
+    public void PowerShellDetector_ResolvesModuleScopeConstantVariableAlias()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, "$name = 'gfoo'; Set-Alias -Name $name -Value Get-Foo");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.True(analysis.IsComplete);
+            Assert.Equal(new[] { "gfoo" }, analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_ReportsIncompleteSetForUnresolvedModuleScopeAlias()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, "$name = Get-AliasName; New-Alias -Name $name -Value Get-Foo");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.False(analysis.IsComplete);
+            Assert.Empty(analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_ReportsIncompleteSetForReassignedAliasVariable()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, "$name = 'FirstAlias'; $name = 'SecondAlias'; Set-Alias -Name $name -Value Get-Foo");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.False(analysis.IsComplete);
+            Assert.Empty(analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_RecognizesQualifiedAndBuiltInAliasCommands()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, """
+Microsoft.PowerShell.Utility\Set-Alias -Name QualifiedSet -Value Get-Foo
+Microsoft.PowerShell.Utility\New-Alias -Name QualifiedNew -Value Get-Bar
+sal -Name ShortSet -Value Get-Baz
+nal -Name ShortNew -Value Get-Qux
+""");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.True(analysis.IsComplete);
+            Assert.Equal(new[] { "QualifiedNew", "QualifiedSet", "ShortNew", "ShortSet" }, analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_ReportsIncompleteSetForComputedLiteralAssignment()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, "$name = 'foo' + 1; Set-Alias -Name $name -Value Get-Foo");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.False(analysis.IsComplete);
+            Assert.Empty(analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void FunctionDetectorContract_DoesNotRequireAliasDetection()
     {
         IScriptFunctionExportDetector detector = new RecordingScriptFunctionExportDetector("Invoke-Test");

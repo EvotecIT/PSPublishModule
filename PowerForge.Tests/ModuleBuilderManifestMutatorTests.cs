@@ -174,6 +174,102 @@ public sealed class ModuleBuilderManifestMutatorTests
         }
     }
 
+    [Fact]
+    public void BuildInPlace_PreservesManifestAliasesWhenScriptAliasSetIsIncomplete()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PSPublishModule";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PSPublishModule.psm1'; CmdletsToExport = @(); AliasesToExport = @('DynamicScriptAlias') }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            var privateRoot = Directory.CreateDirectory(Path.Combine(root, "Private"));
+            File.WriteAllText(
+                Path.Combine(privateRoot.FullName, "Aliases.ps1"),
+                "$name = Get-DynamicAliasName; Set-Alias -Name $name -Value Invoke-DynamicAlias");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(PSPublishModule.NewConfigurationBuildCommand).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("DynamicScriptAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_ClearsStaleBinaryExportsWhenCurrentAssemblyExportsNothing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; CmdletsToExport = @('Get-Stale'); AliasesToExport = @('StaleAlias') }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var cmdletWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "CmdletsToExport");
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Empty(cmdletWrite.Values);
+            Assert.Empty(aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
     private sealed class RecordingManifestMutator : IModuleManifestMutator
     {
         public List<(string FilePath, string NewVersion)> TopLevelVersionWrites { get; } = new();
