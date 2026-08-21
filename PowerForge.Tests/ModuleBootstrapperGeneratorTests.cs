@@ -282,7 +282,7 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
-    public void ResolveAssemblyLoadContextTargetDirectories_PrefersStandardWhenAllLibLayoutsExist()
+    public void ResolveAssemblyLoadContextTargetDirectories_CoversEverySelectableModernLayout()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-layout-" + Guid.NewGuid().ToString("N"));
         var libRoot = Path.Combine(root, "Lib");
@@ -294,7 +294,9 @@ public class ModuleBootstrapperGeneratorTests
         {
             var directories = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetDirectories(libRoot);
 
-            Assert.Equal(new[] { Path.Combine(libRoot, "Standard") }, directories);
+            Assert.Equal(
+                new[] { Path.Combine(libRoot, "Core"), Path.Combine(libRoot, "Standard") },
+                directories);
         }
         finally
         {
@@ -304,7 +306,7 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
-    public void Generate_WithMultipleModernPayloads_WritesRuntimeSelectorAndLibraryMaps()
+    public void Generate_WithPrebuiltMultipleModernPayloads_DiscoversFoldersAndWritesLibraryMaps()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-multitfm-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
@@ -322,16 +324,17 @@ public class ModuleBootstrapperGeneratorTests
                 new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
                 new[] { "DemoModule.dll" },
                 handleRuntimes: false,
-                targetFrameworks: new[] { "net472", "net8.0", "net10.0" });
+                targetFrameworks: Array.Empty<string>());
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
 
             Assert.Contains("$PowerForgeRuntimeVersion = [Environment]::Version", bootstrapper);
-            Assert.Contains("$Framework = 'Core-net10.0'", bootstrapper);
+            Assert.Contains("foreach ($PowerForgeRuntimeFolder in @($AssemblyFolders.Name))", bootstrapper);
+            Assert.Contains("$Framework = $PowerForgeSelectedRuntimeFolder", bootstrapper);
             Assert.Contains("'Core-net10.0' = @(", libraries);
             Assert.Contains("Lib\\Core-net10.0\\DemoModule.dll", libraries);
-            Assert.Contains("$Framework = 'Core-net10.0'", libraries);
+            Assert.Contains("foreach ($PowerForgeRuntimeFolder in @($AssemblyFolders.Name))", libraries);
         }
         finally
         {

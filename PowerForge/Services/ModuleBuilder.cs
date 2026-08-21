@@ -179,6 +179,9 @@ public sealed class ModuleBuilder
                         tfm,
                         exportAssemblyFileNames,
                         new PublishCopyOptions(opts.ExcludeLibraryFilter, opts.DoNotCopyLibrariesRecursively));
+                    File.WriteAllText(
+                        Path.Combine(target, ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName),
+                        tfm);
                 }
             }
             finally

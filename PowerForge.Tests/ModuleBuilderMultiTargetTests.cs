@@ -40,6 +40,12 @@ public sealed class ModuleBuilderMultiTargetTests
 
             Assert.True(File.Exists(Path.Combine(moduleRoot.FullName, "Lib", "Core", "DemoModule.dll")));
             Assert.True(File.Exists(Path.Combine(moduleRoot.FullName, "Lib", "Core-net10.0", "DemoModule.dll")));
+            Assert.Equal(
+                "net8.0",
+                File.ReadAllText(Path.Combine(moduleRoot.FullName, "Lib", "Core", ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName)));
+            Assert.Equal(
+                "net10.0",
+                File.ReadAllText(Path.Combine(moduleRoot.FullName, "Lib", "Core-net10.0", ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName)));
         }
         finally
         {

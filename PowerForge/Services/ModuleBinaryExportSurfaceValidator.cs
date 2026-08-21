@@ -47,6 +47,23 @@ internal static class ModuleBinaryExportSurfaceValidator
         if (surfaces.Length == 0)
             return new ModuleBinaryExportSurface(false, Array.Empty<string>(), Array.Empty<string>());
 
+        if (surfaces.Length > 1)
+        {
+            var configuredAssemblyFileNames = ResolveExportAssemblyFileNames(moduleName, exportAssemblies);
+            foreach (var surface in surfaces)
+            {
+                var missingConfiguredAssemblies = configuredAssemblyFileNames
+                    .Except(surface.AssemblyFileNames, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                if (missingConfiguredAssemblies.Length > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Payload '{surface.Payload}' is missing configured export assemblies: {string.Join(", ", missingConfiguredAssemblies)}.");
+                }
+            }
+        }
+
         var baseline = surfaces[0];
         foreach (var candidate in surfaces.Skip(1))
         {
@@ -209,8 +226,9 @@ internal static class ModuleBinaryExportSurfaceValidator
 
     private static bool IsPathQualifiedEntry(string entry)
         => Path.IsPathRooted(entry) ||
-           entry.Contains(Path.DirectorySeparatorChar) ||
-           entry.Contains(Path.AltDirectorySeparatorChar);
+           entry.IndexOf('/') >= 0 ||
+           entry.IndexOf('\\') >= 0 ||
+           entry.Length >= 2 && char.IsLetter(entry[0]) && entry[1] == ':';
 
     private static bool IsPayloadFolder(string folder)
         => folder.Equals("Core", StringComparison.OrdinalIgnoreCase) ||

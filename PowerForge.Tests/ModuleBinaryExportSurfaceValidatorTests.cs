@@ -68,9 +68,35 @@ public sealed class ModuleBinaryExportSurfaceValidatorTests
         }
     }
 
+    [Fact]
+    public void Detect_RejectsConfiguredExportAssemblyMissingFromEveryPayload()
+    {
+        var root = CreateModulePayloads(
+            typeof(BinaryExportDetector).Assembly.Location,
+            typeof(BinaryExportDetector).Assembly.Location);
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => ModuleBinaryExportSurfaceValidator.Detect(
+                    root.FullName,
+                    "DemoModule",
+                    new[] { "DemoModule.dll", "Helpers.dll" }));
+
+            Assert.Contains("missing configured export assemblies", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("Helpers.dll", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData("subdirectory/DemoModule.dll")]
     [InlineData("subdirectory\\DemoModule.dll")]
+    [InlineData("C:DemoModule.dll")]
+    [InlineData("C:\\exports\\DemoModule.dll")]
     public void Detect_RejectsRelativeExportAssemblyPathsForSideBySidePayloads(string configuredPath)
     {
         var root = CreateModulePayloads(
