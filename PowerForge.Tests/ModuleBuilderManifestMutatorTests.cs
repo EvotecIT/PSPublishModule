@@ -282,6 +282,59 @@ public sealed class ModuleBuilderManifestMutatorTests
     }
 
     [Fact]
+    public void BuildInPlace_AnalyzesAliasesInBootstrapperExecutionOrder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; CmdletsToExport = @(); AliasesToExport = @() }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            var enumsRoot = Directory.CreateDirectory(Path.Combine(root, "Enums"));
+            File.WriteAllText(
+                Path.Combine(enumsRoot.FullName, "Aliases.ps1"),
+                "Set-Alias -Name TemporaryAlias -Value Get-Item");
+            var classesRoot = Directory.CreateDirectory(Path.Combine(root, "Classes"));
+            File.WriteAllText(
+                Path.Combine(classesRoot.FullName, "Aliases.ps1"),
+                "Remove-Alias -Name TemporaryAlias");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.DoesNotContain("TemporaryAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
     public void BuildInPlace_IgnoresGeneratedAliasBridgeWhenRefreshingBinaryAliases()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -438,6 +491,57 @@ public sealed class ModuleBuilderManifestMutatorTests
             var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
             Assert.Contains("ExistingAlias", aliasWrite.Values);
             Assert.DoesNotContain("RootAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_PreservesRootAliasesForFunctionOnlyCustomDetector()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; FunctionsToExport = @(); CmdletsToExport = @(); AliasesToExport = @('ExistingAlias') }");
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psm1"),
+                "Set-Alias -Name ExistingAlias -Value Get-Item");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(
+                new NullLogger(),
+                mutator,
+                new RecordingScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+                RootModuleScriptWillBeReplaced = true,
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("ExistingAlias", aliasWrite.Values);
         }
         finally
         {

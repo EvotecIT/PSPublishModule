@@ -51,7 +51,7 @@ if ($Standard -and $Core -and $Default) {
 }
 
 {{RuntimePayloadSelectorBlock}}
-if ($PSEdition -eq 'Core' -and $HasNamedCorePayload -and [string]::IsNullOrWhiteSpace($Framework)) {
+if ($PSEdition -eq 'Core' -and $HasNamedCorePayload -and ($Framework -eq 'Default' -or [string]::IsNullOrWhiteSpace($Framework))) {
     Write-Error -Message 'No compatible PowerShell Core assemblies found'
     return
 }

@@ -431,6 +431,40 @@ public class ModuleBootstrapperGeneratorTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Generate_WithDefaultAndNamedCorePayload_RejectsIncompatibleCoreRuntime(bool useAssemblyLoadContext)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-default-named-core-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core-net10.0"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Default", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Core-net10.0", "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: useAssemblyLoadContext);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains(
+                "$HasNamedCorePayload -and ($Framework -eq 'Default' -or [string]::IsNullOrWhiteSpace($Framework))",
+                bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     [Fact]
     [Trait("Category", "Integration")]
     public void Generate_WithAssemblyLoadContext_WritesAlcBootstrapperAndKeepsDesktopLibrariesScript()
