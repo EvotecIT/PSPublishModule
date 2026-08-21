@@ -334,9 +334,10 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                   "generatedOn": "2026-03-02T00:00:00.0000000Z",
                   "projects": [
                     {
-                      "slug": "securitypolicy",
-                      "name": "SecurityPolicy",
-                      "githubRepo": "EvotecIT/SecurityPolicy",
+                      "slug": "securitypolicyx",
+                      "name": "SecurityPolicyX",
+                      "githubRepo": "EvotecIT/SecurityPolicyX",
+                      "aliases": ["https://legacy.evotec.example/projects/securitypolicy.html?ref=legacy"],
                       "links": {
                         "powerShellGallery": "https://www.powershellgallery.com/packages/SecurityPolicy"
                       },
@@ -464,6 +465,27 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       }
                     ]
                   },
+                  "nuget": {
+                    "owner": "EvotecIT",
+                    "packageCount": 2,
+                    "totalDownloads": 300,
+                    "packages": [
+                      {
+                        "id": "SecurityPolicy",
+                        "version": "1.0.0",
+                        "totalDownloads": 100,
+                        "packageUrl": "https://www.nuget.org/packages/SecurityPolicy",
+                        "projectUrl": "https://github.com/EvotecIT/SecurityPolicy"
+                      },
+                      {
+                        "id": "SecurityPolicy.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 200,
+                        "packageUrl": "https://www.nuget.org/packages/SecurityPolicy.Core",
+                        "projectUrl": "https://github.com/EvotecIT/SecurityPolicy.git"
+                      }
+                    ]
+                  },
                   "warnings": []
                 }
                 """);
@@ -473,9 +495,10 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                   "generatedOn": "2026-03-02T00:00:00.0000000Z",
                   "projects": [
                     {
-                      "slug": "securitypolicy",
-                      "name": "SecurityPolicy",
-                      "githubRepo": "EvotecIT/SecurityPolicy",
+                      "slug": "securitypolicyx",
+                      "name": "SecurityPolicyX",
+                      "githubRepo": "EvotecIT/SecurityPolicyX",
+                      "aliases": ["/projects/securitypolicy/index.html?ref=legacy"],
                       "links": {
                         "powerShellGallery": "https://www.powershellgallery.com/packages/SecurityPolicy"
                       },
@@ -511,7 +534,291 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
             var project = catalog.RootElement.GetProperty("projects")[0];
             Assert.Equal(42, project.GetProperty("metrics").GetProperty("github").GetProperty("stars").GetInt32());
             Assert.Equal(123456L, project.GetProperty("metrics").GetProperty("powerShellGallery").GetProperty("totalDownloads").GetInt64());
-            Assert.Equal(123456L, project.GetProperty("metrics").GetProperty("downloads").GetProperty("total").GetInt64());
+            Assert.Equal(2, project.GetProperty("metrics").GetProperty("nuget").GetProperty("packageCount").GetInt32());
+            Assert.Equal(300L, project.GetProperty("metrics").GetProperty("nuget").GetProperty("totalDownloads").GetInt64());
+            Assert.Equal(123756L, project.GetProperty("metrics").GetProperty("downloads").GetProperty("total").GetInt64());
+            Assert.True(File.Exists(publishedCatalogPath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void SyncProjectCatalogTelemetryFromStats_DoesNotAggregateNuGetRepositoryNameCollisions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-ecosystem-catalog-repo-collisions-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var statsPath = Path.Combine(root, "stats.json");
+            var catalogPath = Path.Combine(root, "catalog.json");
+            var publishedCatalogPath = Path.Combine(root, "published-catalog.json");
+            File.WriteAllText(statsPath,
+                """
+                {
+                  "gitHub": {
+                    "organization": "EvotecIT",
+                    "repositoryCount": 3,
+                    "totalStars": 60,
+                    "totalForks": 6,
+                    "repositories": [
+                      {
+                        "name": "CurrentRepo",
+                        "fullName": "EvotecIT/CurrentRepo",
+                        "url": "https://github.com/EvotecIT/CurrentRepo",
+                        "stars": 30,
+                        "forks": 3,
+                        "watchers": 4,
+                        "openIssues": 1
+                      },
+                      {
+                        "name": "SharedRepo",
+                        "fullName": "OwnerA/SharedRepo",
+                        "url": "https://github.com/OwnerA/SharedRepo",
+                        "stars": 10,
+                        "forks": 1,
+                        "watchers": 2,
+                        "openIssues": 1
+                      },
+                      {
+                        "name": "SharedRepo",
+                        "fullName": "OwnerB/SharedRepo",
+                        "url": "https://github.com/OwnerB/SharedRepo",
+                        "stars": 20,
+                        "forks": 2,
+                        "watchers": 3,
+                        "openIssues": 1
+                      }
+                    ]
+                  },
+                  "nuget": {
+                    "owner": "EvotecIT",
+                    "packageCount": 12,
+                    "totalDownloads": 10400,
+                    "packages": [
+                      {
+                        "id": "Current.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 400,
+                        "packageUrl": "https://www.nuget.org/packages/Current.Core",
+                        "projectUrl": "https://github.com/EvotecIT/CurrentRepo"
+                      },
+                      {
+                        "id": "Collision.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 800,
+                        "packageUrl": "https://www.nuget.org/packages/Collision.Core",
+                        "projectUrl": "https://github.com/OtherOwner/LegacyRepo"
+                      },
+                      {
+                        "id": "SharedRepo",
+                        "version": "1.0.0",
+                        "totalDownloads": 100,
+                        "packageUrl": "https://www.nuget.org/packages/SharedRepo",
+                        "projectUrl": "https://github.com/OwnerA/SharedRepo"
+                      },
+                      {
+                        "id": "SharedRepo.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 200,
+                        "packageUrl": "https://www.nuget.org/packages/SharedRepo.Core",
+                        "projectUrl": "https://github.com/OwnerB/SharedRepo"
+                      },
+                      {
+                        "id": "FooDash.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 500,
+                        "packageUrl": "https://www.nuget.org/packages/FooDash.Core",
+                        "projectUrl": "https://github.com/Owner/Foo-Bar"
+                      },
+                      {
+                        "id": "FooDot.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 600,
+                        "packageUrl": "https://www.nuget.org/packages/FooDot.Core",
+                        "projectUrl": "https://github.com/Owner/Foo.Bar"
+                      },
+                      {
+                        "id": "Slashless.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 700,
+                        "packageUrl": "https://www.nuget.org/packages/Slashless.Core",
+                        "projectUrl": "https://github.com/Owner/Slashless"
+                      },
+                      {
+                        "id": "TargetPackage",
+                        "version": "1.0.0",
+                        "totalDownloads": 1100,
+                        "packageUrl": "https://www.nuget.org/packages/TargetPackage"
+                      },
+                      {
+                        "id": "Target.Package",
+                        "version": "1.0.0",
+                        "totalDownloads": 1200,
+                        "packageUrl": "https://www.nuget.org/packages/Target.Package"
+                      },
+                      {
+                        "id": "Security Policy",
+                        "version": "1.0.0",
+                        "totalDownloads": 1500,
+                        "packageUrl": "https://www.nuget.org/packages/Security%20Policy"
+                      },
+                      {
+                        "id": "Ambiguous-One",
+                        "version": "1.0.0",
+                        "totalDownloads": 1600,
+                        "packageUrl": "https://www.nuget.org/packages/Ambiguous-One"
+                      },
+                      {
+                        "id": "Ambiguous.One",
+                        "version": "1.0.0",
+                        "totalDownloads": 1700,
+                        "packageUrl": "https://www.nuget.org/packages/Ambiguous.One"
+                      }
+                    ]
+                  },
+                  "powerShellGallery": {
+                    "owner": "Przemyslaw.Klys",
+                    "moduleCount": 4,
+                    "totalDownloads": 6400,
+                    "modules": [
+                      {
+                        "id": "TargetModule",
+                        "version": "1.0.0",
+                        "downloadCount": 1300,
+                        "galleryUrl": "https://www.powershellgallery.com/packages/TargetModule"
+                      },
+                      {
+                        "id": "Target.Module",
+                        "version": "1.0.0",
+                        "downloadCount": 1400,
+                        "galleryUrl": "https://www.powershellgallery.com/packages/Target.Module"
+                      },
+                      {
+                        "id": "Ambiguous-One",
+                        "version": "1.0.0",
+                        "downloadCount": 1800,
+                        "galleryUrl": "https://www.powershellgallery.com/packages/Ambiguous-One"
+                      },
+                      {
+                        "id": "Ambiguous.One",
+                        "version": "1.0.0",
+                        "downloadCount": 1900,
+                        "galleryUrl": "https://www.powershellgallery.com/packages/Ambiguous.One"
+                      }
+                    ]
+                  },
+                  "warnings": []
+                }
+                """);
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "legacyrepo",
+                      "name": "Current Product",
+                      "githubRepo": "EvotecIT/CurrentRepo"
+                    },
+                    {
+                      "slug": "renamed",
+                      "name": "Renamed Product",
+                      "githubRepo": "EvotecIT/RenamedRepo",
+                      "aliases": ["/projects/sharedrepo/"]
+                    },
+                    {
+                      "slug": "renamed-separators",
+                      "name": "Renamed Separator Product",
+                      "githubRepo": "EvotecIT/RenamedSeparatorRepo",
+                      "aliases": ["/projects/foo-bar/"]
+                    },
+                    {
+                      "slug": "renamed-slashless",
+                      "name": "Renamed Slashless Product",
+                      "githubRepo": "EvotecIT/RenamedSlashlessRepo",
+                      "aliases": ["slashless.html"]
+                    },
+                    {
+                      "slug": "renamed-exact-variants",
+                      "name": "Renamed Exact Variant Product",
+                      "githubRepo": "EvotecIT/RenamedExactVariantRepo",
+                      "aliases": ["/projects/target-package/", "/projects/target-module/"]
+                    },
+                    {
+                      "slug": "renamed-literal-priority",
+                      "name": "TargetPackage",
+                      "githubRepo": "EvotecIT/RenamedLiteralPriorityRepo",
+                      "aliases": ["/projects/target-package/"]
+                    },
+                    {
+                      "slug": "renamed-percent-encoded",
+                      "name": "Renamed Percent Encoded Product",
+                      "githubRepo": "EvotecIT/RenamedPercentEncodedRepo",
+                      "aliases": ["/projects/security%20policy/"]
+                    },
+                    {
+                      "slug": "renamed-compact-ambiguous",
+                      "name": "Renamed Compact Ambiguous Product",
+                      "githubRepo": "EvotecIT/RenamedCompactAmbiguousRepo",
+                      "aliases": ["/projects/ambiguous_one/"]
+                    }
+                  ]
+                }
+                """);
+
+            var syncMethod = typeof(WebPipelineRunner)
+                .GetMethod("SyncProjectCatalogTelemetryFromStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            Assert.NotNull(syncMethod);
+
+            var args = new object?[] { statsPath, catalogPath, publishedCatalogPath, null };
+            var merged = Assert.IsType<int>(syncMethod!.Invoke(null, args));
+            Assert.Equal(7, merged);
+            Assert.Null(args[3]);
+
+            using var catalog = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            var projects = catalog.RootElement.GetProperty("projects");
+            var projectsBySlug = projects.EnumerateArray()
+                .ToDictionary(
+                    static project => project.GetProperty("slug").GetString()!,
+                    static project => project,
+                    StringComparer.OrdinalIgnoreCase);
+            var current = projectsBySlug["legacyrepo"].GetProperty("metrics").GetProperty("nuget");
+            Assert.Equal(1, current.GetProperty("packageCount").GetInt32());
+            Assert.Equal(400L, current.GetProperty("totalDownloads").GetInt64());
+            Assert.Equal(30, projectsBySlug["legacyrepo"].GetProperty("metrics").GetProperty("github").GetProperty("stars").GetInt32());
+
+            var renamedMetrics = projectsBySlug["renamed"].GetProperty("metrics");
+            var renamed = renamedMetrics.GetProperty("nuget");
+            Assert.Equal(1, renamed.GetProperty("packageCount").GetInt32());
+            Assert.Equal(100L, renamed.GetProperty("totalDownloads").GetInt64());
+            Assert.Equal(JsonValueKind.Null, renamedMetrics.GetProperty("github").ValueKind);
+
+            var renamedSeparators = projectsBySlug["renamed-separators"].GetProperty("metrics").GetProperty("nuget");
+            Assert.Equal(1, renamedSeparators.GetProperty("packageCount").GetInt32());
+            Assert.Equal(500L, renamedSeparators.GetProperty("totalDownloads").GetInt64());
+
+            var renamedSlashless = projectsBySlug["renamed-slashless"].GetProperty("metrics").GetProperty("nuget");
+            Assert.Equal(1, renamedSlashless.GetProperty("packageCount").GetInt32());
+            Assert.Equal(700L, renamedSlashless.GetProperty("totalDownloads").GetInt64());
+
+            var renamedExactVariants = projectsBySlug["renamed-exact-variants"].GetProperty("metrics");
+            Assert.Equal("Target.Package", renamedExactVariants.GetProperty("nuget").GetProperty("id").GetString());
+            Assert.Equal(1200L, renamedExactVariants.GetProperty("nuget").GetProperty("totalDownloads").GetInt64());
+            Assert.Equal("Target.Module", renamedExactVariants.GetProperty("powerShellGallery").GetProperty("id").GetString());
+            Assert.Equal(1400L, renamedExactVariants.GetProperty("powerShellGallery").GetProperty("totalDownloads").GetInt64());
+
+            var renamedLiteralPriority = projectsBySlug["renamed-literal-priority"].GetProperty("metrics").GetProperty("nuget");
+            Assert.Equal("TargetPackage", renamedLiteralPriority.GetProperty("id").GetString());
+            Assert.Equal(1100L, renamedLiteralPriority.GetProperty("totalDownloads").GetInt64());
+
+            var renamedPercentEncoded = projectsBySlug["renamed-percent-encoded"].GetProperty("metrics").GetProperty("nuget");
+            Assert.Equal("Security Policy", renamedPercentEncoded.GetProperty("id").GetString());
+            Assert.Equal(1500L, renamedPercentEncoded.GetProperty("totalDownloads").GetInt64());
+
+            Assert.Equal(JsonValueKind.Null, projectsBySlug["renamed-compact-ambiguous"].GetProperty("metrics").ValueKind);
             Assert.True(File.Exists(publishedCatalogPath));
         }
         finally

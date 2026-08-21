@@ -457,14 +457,21 @@ internal static partial class WebPipelineRunner
 
         if (!Uri.TryCreate(sourceUrl, UriKind.Absolute, out var uri))
             return false;
-        if (!uri.Host.Contains("github.com", StringComparison.OrdinalIgnoreCase))
+        if (!uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) &&
+            !uri.Host.Equals("www.github.com", StringComparison.OrdinalIgnoreCase))
             return false;
 
         var segments = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length < 2)
             return false;
 
-        repo = $"{segments[0]}/{segments[1]}";
+        var repositoryName = segments[1];
+        if (repositoryName.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+            repositoryName = repositoryName[..^4];
+        if (string.IsNullOrWhiteSpace(repositoryName))
+            return false;
+
+        repo = $"{segments[0]}/{repositoryName}";
         return true;
     }
 
@@ -482,6 +489,7 @@ internal static partial class WebPipelineRunner
         var listedIndex = Array.FindIndex(header, h => h.Equals("listed", StringComparison.OrdinalIgnoreCase));
         var modeIndex = FindCsvColumnIndex(header, "mode", "projectMode", "project_mode");
         var externalUrlIndex = FindCsvColumnIndex(header, "externalUrl", "external_url", "external-url", "url");
+        var aliasesIndex = FindCsvColumnIndex(header, "aliases", "alias");
 
         var linkColumns = BuildCsvPrefixedColumnMap(header, "links.");
         foreach (var pair in BuildCsvPrefixedColumnMap(header, "link."))
@@ -509,6 +517,7 @@ internal static partial class WebPipelineRunner
             listedIndex >= 0 ||
             modeIndex >= 0 ||
             externalUrlIndex >= 0 ||
+            aliasesIndex >= 0 ||
             linkColumns.Count > 0 ||
             surfaceColumns.Count > 0 ||
             apiDocsColumns.Count > 0;
@@ -547,6 +556,13 @@ internal static partial class WebPipelineRunner
             if (externalUrlIndex >= 0 && externalUrlIndex < parts.Length && !string.IsNullOrWhiteSpace(parts[externalUrlIndex]))
             {
                 project.ExternalUrl = parts[externalUrlIndex].Trim();
+                updates++;
+            }
+            if (aliasesIndex >= 0 && aliasesIndex < parts.Length &&
+                !string.IsNullOrWhiteSpace(parts[aliasesIndex]) &&
+                TryParseCurationAliases(parts[aliasesIndex], out var aliases))
+            {
+                project.Aliases = aliases;
                 updates++;
             }
 
@@ -749,15 +765,17 @@ internal static partial class WebPipelineRunner
         for (var i = 0; i < line.Length; i++)
         {
             var c = line[i];
-            if (c == '"' && (i + 1 >= line.Length || line[i + 1] != '"'))
+            if (c == '"')
             {
-                inQuotes = !inQuotes;
-                continue;
-            }
-            if (c == '"' && i + 1 < line.Length && line[i + 1] == '"')
-            {
-                sb.Append('"');
-                i++;
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    sb.Append('"');
+                    i++;
+                }
+                else
+                {
+                    inQuotes = !inQuotes;
+                }
                 continue;
             }
             if (c == ',' && !inQuotes)
@@ -770,6 +788,34 @@ internal static partial class WebPipelineRunner
         }
         values.Add(sb.ToString());
         return values.ToArray();
+    }
+
+    private static bool TryParseCurationAliases(string value, out string[] aliases)
+    {
+        aliases = Array.Empty<string>();
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var token = value.Trim();
+        if (token.StartsWith("[", StringComparison.Ordinal))
+        {
+            try
+            {
+                aliases = JsonSerializer.Deserialize<string[]>(token)?
+                    .Where(static alias => !string.IsNullOrWhiteSpace(alias))
+                    .Select(static alias => alias.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray() ?? Array.Empty<string>();
+                return true;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        aliases = new[] { token };
+        return true;
     }
 
     private static bool TryParseBoolean(string? value, out bool parsed)
@@ -2082,24 +2128,42 @@ internal static partial class WebPipelineRunner
 
         var githubByFullName = new Dictionary<string, WebEcosystemGitHubRepository>(StringComparer.OrdinalIgnoreCase);
         var githubByRepoName = new Dictionary<string, WebEcosystemGitHubRepository>(StringComparer.OrdinalIgnoreCase);
+        var ambiguousGitHubRepoNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (stats.GitHub?.Repositories is { Count: > 0 })
         {
+            void IndexRepositoryName(string? name, WebEcosystemGitHubRepository repository)
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                    return;
+
+                if (githubByRepoName.TryGetValue(name, out var existing))
+                {
+                    if (!string.Equals(existing.FullName, repository.FullName, StringComparison.OrdinalIgnoreCase))
+                        ambiguousGitHubRepoNames.Add(name);
+                    return;
+                }
+
+                githubByRepoName[name] = repository;
+            }
+
             foreach (var repository in stats.GitHub.Repositories)
             {
                 if (!string.IsNullOrWhiteSpace(repository.FullName) && !githubByFullName.ContainsKey(repository.FullName))
                     githubByFullName[repository.FullName] = repository;
 
                 var shortName = ExtractRepositoryName(repository.FullName);
-                if (!string.IsNullOrWhiteSpace(shortName) && !githubByRepoName.ContainsKey(shortName))
-                    githubByRepoName[shortName] = repository;
-                if (!string.IsNullOrWhiteSpace(repository.Name) && !githubByRepoName.ContainsKey(repository.Name))
-                    githubByRepoName[repository.Name] = repository;
+                IndexRepositoryName(shortName, repository);
+                IndexRepositoryName(repository.Name, repository);
             }
         }
 
         var nugetById = new Dictionary<string, WebEcosystemNuGetPackage>(StringComparer.OrdinalIgnoreCase);
         var nugetByCompactId = new Dictionary<string, WebEcosystemNuGetPackage>(StringComparer.OrdinalIgnoreCase);
+        var ambiguousNuGetCompactIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var nugetByGitHubProject = new Dictionary<string, List<WebEcosystemNuGetPackage>>(StringComparer.OrdinalIgnoreCase);
+        var nugetByGitHubProjectName = new Dictionary<string, List<WebEcosystemNuGetPackage>>(StringComparer.OrdinalIgnoreCase);
+        var nugetGitHubProjectByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var ambiguousNuGetGitHubProjectNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (stats.NuGet?.Items is { Count: > 0 })
         {
             foreach (var package in stats.NuGet.Items)
@@ -2108,8 +2172,18 @@ internal static partial class WebPipelineRunner
                     nugetById[package.Id] = package;
 
                 var compact = CompactToken(package.Id);
-                if (!string.IsNullOrWhiteSpace(compact) && !nugetByCompactId.ContainsKey(compact))
-                    nugetByCompactId[compact] = package;
+                if (!string.IsNullOrWhiteSpace(compact))
+                {
+                    if (nugetByCompactId.TryGetValue(compact, out var compactPackage))
+                    {
+                        if (!string.Equals(compactPackage.Id, package.Id, StringComparison.OrdinalIgnoreCase))
+                            ambiguousNuGetCompactIds.Add(compact);
+                    }
+                    else
+                    {
+                        nugetByCompactId[compact] = package;
+                    }
+                }
 
                 if (!string.IsNullOrWhiteSpace(package.ProjectUrl) &&
                     TryExtractGitHubRepo(package.ProjectUrl!, out var packageRepo))
@@ -2121,12 +2195,34 @@ internal static partial class WebPipelineRunner
                     }
 
                     projectPackages.Add(package);
+                    var packageRepoName = ExtractRepositoryName(packageRepo);
+                    if (!string.IsNullOrWhiteSpace(packageRepoName))
+                    {
+                        if (nugetGitHubProjectByName.TryGetValue(packageRepoName, out var knownPackageRepo) &&
+                            !string.Equals(knownPackageRepo, packageRepo, StringComparison.OrdinalIgnoreCase))
+                        {
+                            ambiguousNuGetGitHubProjectNames.Add(packageRepoName);
+                        }
+                        else
+                        {
+                            nugetGitHubProjectByName[packageRepoName] = packageRepo;
+                        }
+
+                        if (!nugetByGitHubProjectName.TryGetValue(packageRepoName, out var projectNamePackages))
+                        {
+                            projectNamePackages = new List<WebEcosystemNuGetPackage>();
+                            nugetByGitHubProjectName[packageRepoName] = projectNamePackages;
+                        }
+
+                        projectNamePackages.Add(package);
+                    }
                 }
             }
         }
 
         var psgalleryById = new Dictionary<string, WebEcosystemPowerShellGalleryModule>(StringComparer.OrdinalIgnoreCase);
         var psgalleryByCompactId = new Dictionary<string, WebEcosystemPowerShellGalleryModule>(StringComparer.OrdinalIgnoreCase);
+        var ambiguousPowerShellGalleryCompactIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (stats.PowerShellGallery?.Modules is { Count: > 0 })
         {
             foreach (var module in stats.PowerShellGallery.Modules)
@@ -2135,8 +2231,18 @@ internal static partial class WebPipelineRunner
                     psgalleryById[module.Id] = module;
 
                 var compact = CompactToken(module.Id);
-                if (!string.IsNullOrWhiteSpace(compact) && !psgalleryByCompactId.ContainsKey(compact))
-                    psgalleryByCompactId[compact] = module;
+                if (!string.IsNullOrWhiteSpace(compact))
+                {
+                    if (psgalleryByCompactId.TryGetValue(compact, out var compactModule))
+                    {
+                        if (!string.Equals(compactModule.Id, module.Id, StringComparison.OrdinalIgnoreCase))
+                            ambiguousPowerShellGalleryCompactIds.Add(compact);
+                    }
+                    else
+                    {
+                        psgalleryByCompactId[compact] = module;
+                    }
+                }
             }
         }
 
@@ -2154,7 +2260,8 @@ internal static partial class WebPipelineRunner
             {
                 foreach (var candidate in candidates)
                 {
-                    if (githubByRepoName.TryGetValue(candidate, out var repository))
+                    if (!ambiguousGitHubRepoNames.Contains(candidate) &&
+                        githubByRepoName.TryGetValue(candidate, out var repository))
                     {
                         github = repository;
                         break;
@@ -2170,12 +2277,20 @@ internal static partial class WebPipelineRunner
                     nuget = package;
                     break;
                 }
+            }
 
-                var compact = CompactToken(candidate);
-                if (!string.IsNullOrWhiteSpace(compact) && nugetByCompactId.TryGetValue(compact, out package))
+            if (nuget is null)
+            {
+                foreach (var candidate in candidates)
                 {
-                    nuget = package;
-                    break;
+                    var compact = CompactToken(candidate);
+                    if (!string.IsNullOrWhiteSpace(compact) &&
+                        !ambiguousNuGetCompactIds.Contains(compact) &&
+                        nugetByCompactId.TryGetValue(compact, out var package))
+                    {
+                        nuget = package;
+                        break;
+                    }
                 }
             }
 
@@ -2186,6 +2301,18 @@ internal static partial class WebPipelineRunner
                 nugetByGitHubProject.TryGetValue(project.GitHubRepo.Trim(), out var projectNuGetPackages))
             {
                 foreach (var package in projectNuGetPackages)
+                {
+                    if (!nugetPackages.Any(existing => string.Equals(existing.Id, package.Id, StringComparison.OrdinalIgnoreCase)))
+                        nugetPackages.Add(package);
+                }
+            }
+            foreach (var candidate in BuildProjectAliasIdentifierCandidates(project, includeSeparatorVariants: false))
+            {
+                if (ambiguousNuGetGitHubProjectNames.Contains(candidate) ||
+                    !nugetByGitHubProjectName.TryGetValue(candidate, out var aliasProjectPackages))
+                    continue;
+
+                foreach (var package in aliasProjectPackages)
                 {
                     if (!nugetPackages.Any(existing => string.Equals(existing.Id, package.Id, StringComparison.OrdinalIgnoreCase)))
                         nugetPackages.Add(package);
@@ -2208,12 +2335,20 @@ internal static partial class WebPipelineRunner
                     module = found;
                     break;
                 }
+            }
 
-                var compact = CompactToken(candidate);
-                if (!string.IsNullOrWhiteSpace(compact) && psgalleryByCompactId.TryGetValue(compact, out found))
+            if (module is null)
+            {
+                foreach (var candidate in candidates)
                 {
-                    module = found;
-                    break;
+                    var compact = CompactToken(candidate);
+                    if (!string.IsNullOrWhiteSpace(compact) &&
+                        !ambiguousPowerShellGalleryCompactIds.Contains(compact) &&
+                        psgalleryByCompactId.TryGetValue(compact, out var found))
+                    {
+                        module = found;
+                        break;
+                    }
                 }
             }
 
@@ -2501,33 +2636,127 @@ internal static partial class WebPipelineRunner
         return sb.ToString();
     }
 
-    private static HashSet<string> BuildProjectIdentifierCandidates(ProjectCatalogEntry project)
+    private static string[] BuildProjectIdentifierCandidates(ProjectCatalogEntry project)
     {
-        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var literalCandidates = new List<string?>
+        {
+            project.Slug,
+            project.Name,
+            project.GitHubRepo,
+            ExtractRepositoryName(project.GitHubRepo)
+        };
+        literalCandidates.AddRange(BuildProjectAliasIdentifierCandidates(project, includeSeparatorVariants: false));
+        return BuildIdentifierCandidateSequence(literalCandidates, includeSeparatorVariants: true);
+    }
 
-        void Add(string? value)
+    private static string[] BuildProjectAliasIdentifierCandidates(
+        ProjectCatalogEntry project,
+        bool includeSeparatorVariants)
+    {
+        var literalCandidates = new List<string?>();
+
+        if (project.Aliases is { Length: > 0 })
+        {
+            foreach (var alias in project.Aliases)
+            {
+                if (string.IsNullOrWhiteSpace(alias))
+                    continue;
+
+                var aliasToken = alias.Trim();
+                var isRouteAlias = false;
+                if (Uri.TryCreate(aliasToken, UriKind.Absolute, out var absoluteAlias))
+                {
+                    aliasToken = absoluteAlias.AbsolutePath;
+                    isRouteAlias = true;
+                }
+                else
+                {
+                    var delimiterIndex = aliasToken.IndexOfAny(new[] { '?', '#' });
+                    if (delimiterIndex >= 0)
+                        aliasToken = aliasToken[..delimiterIndex];
+                    isRouteAlias = aliasToken.Contains('/', StringComparison.Ordinal);
+                }
+
+                if (isRouteAlias)
+                {
+                    var segments = aliasToken.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+                    if (segments.Length > 0)
+                    {
+                        var identitySegment = segments[^1];
+                        identitySegment = DecodeAliasPathSegment(identitySegment);
+                        if (segments.Length > 1 && IsLegacyDefaultDocument(identitySegment))
+                            identitySegment = DecodeAliasPathSegment(segments[^2]);
+                        literalCandidates.Add(RemoveLegacyRouteFileSuffix(identitySegment));
+                    }
+                }
+                else
+                {
+                    literalCandidates.Add(RemoveLegacyRouteFileSuffix(DecodeAliasPathSegment(aliasToken)));
+                }
+            }
+        }
+        return BuildIdentifierCandidateSequence(literalCandidates, includeSeparatorVariants);
+    }
+
+    private static string[] BuildIdentifierCandidateSequence(
+        IEnumerable<string?> values,
+        bool includeSeparatorVariants)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var literals = new List<string>();
+        foreach (var value in values)
         {
             if (string.IsNullOrWhiteSpace(value))
-                return;
+                continue;
 
             var token = value.Trim();
-            if (string.IsNullOrWhiteSpace(token))
-                return;
-
-            candidates.Add(token);
-            var dotVariant = token.Replace("-", ".", StringComparison.Ordinal);
-            if (!string.Equals(dotVariant, token, StringComparison.Ordinal))
-                candidates.Add(dotVariant);
-            var dashVariant = token.Replace(".", "-", StringComparison.Ordinal);
-            if (!string.Equals(dashVariant, token, StringComparison.Ordinal))
-                candidates.Add(dashVariant);
+            if (!string.IsNullOrWhiteSpace(token) && seen.Add(token))
+                literals.Add(token);
         }
 
-        Add(project.Slug);
-        Add(project.Name);
-        Add(project.GitHubRepo);
-        Add(ExtractRepositoryName(project.GitHubRepo));
-        return candidates;
+        if (!includeSeparatorVariants)
+            return literals.ToArray();
+
+        var candidates = new List<string>(literals);
+        foreach (var literal in literals)
+        {
+            var dotVariant = literal.Replace("-", ".", StringComparison.Ordinal);
+            if (!string.Equals(dotVariant, literal, StringComparison.Ordinal) && seen.Add(dotVariant))
+                candidates.Add(dotVariant);
+            var dashVariant = literal.Replace(".", "-", StringComparison.Ordinal);
+            if (!string.Equals(dashVariant, literal, StringComparison.Ordinal) && seen.Add(dashVariant))
+                candidates.Add(dashVariant);
+        }
+        return candidates.ToArray();
+    }
+
+    private static string DecodeAliasPathSegment(string value)
+    {
+        try
+        {
+            return Uri.UnescapeDataString(value);
+        }
+        catch (UriFormatException)
+        {
+            return value;
+        }
+    }
+
+    private static bool IsLegacyDefaultDocument(string value)
+    {
+        return value.Equals("index.html", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("index.htm", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("default.html", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("default.htm", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string RemoveLegacyRouteFileSuffix(string value)
+    {
+        if (value.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+            return value[..^5];
+        if (value.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
+            return value[..^4];
+        return value;
     }
 
     private static void AppendProjectFrontMatterExtensions(
