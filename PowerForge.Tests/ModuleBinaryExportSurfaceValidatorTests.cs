@@ -25,6 +25,116 @@ public sealed class ModuleBinaryExportSurfaceValidatorTests
     }
 
     [Fact]
+    public void Detect_IgnoresPayloadLikeDirectoriesThatRuntimeSelectionCannotUse()
+    {
+        var root = CreateModulePayloads(
+            typeof(InvokePowerForgePluginExportCommand).Assembly.Location,
+            typeof(InvokePowerForgePluginExportCommand).Assembly.Location);
+        Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core-backup"));
+
+        try
+        {
+            var surface = ModuleBinaryExportSurfaceValidator.Detect(root.FullName, "DemoModule", Array.Empty<string>());
+
+            Assert.True(surface.HasAssemblies);
+            Assert.Contains("Invoke-PowerForgePluginExport", surface.Cmdlets);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ValidateConfiguredAssemblies_DoesNotLetArchivePayloadSatisfySelectableCorePayload()
+    {
+        var root = CreateModulePayloads(
+            typeof(BinaryExportDetector).Assembly.Location,
+            typeof(BinaryExportDetector).Assembly.Location);
+        var libRoot = Path.Combine(root.FullName, "Lib");
+        Directory.Delete(Path.Combine(libRoot, "Core-net10.0"), recursive: true);
+        File.Delete(Path.Combine(libRoot, "Core", "DemoModule.dll"));
+        var archive = Directory.CreateDirectory(Path.Combine(libRoot, "Core-backup"));
+        File.Copy(typeof(BinaryExportDetector).Assembly.Location, Path.Combine(archive.FullName, "DemoModule.dll"));
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => ModuleBinaryExportSurfaceValidator.ValidateConfiguredAssemblies(root.FullName, "DemoModule", Array.Empty<string>()));
+
+            Assert.Contains("Core", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("DemoModule.dll", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Detect_IgnoresLoneArchivePayload()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var archive = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core-backup"));
+        File.Copy(typeof(BinaryExportDetector).Assembly.Location, Path.Combine(archive.FullName, "DemoModule.dll"));
+
+        try
+        {
+            var surface = ModuleBinaryExportSurfaceValidator.Detect(root.FullName, "DemoModule", Array.Empty<string>());
+
+            Assert.False(surface.HasAssemblies);
+            Assert.Empty(surface.Cmdlets);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Detect_RejectsEmptySelectablePayload()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => ModuleBinaryExportSurfaceValidator.Detect(root.FullName, "DemoModule", Array.Empty<string>()));
+
+            Assert.Contains("Core", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("DemoModule.dll", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ValidateConfiguredAssemblies_RejectsEmptySelectablePayloadButIgnoresLoneArchive()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var core = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
+
+        try
+        {
+            Assert.Throws<InvalidOperationException>(
+                () => ModuleBinaryExportSurfaceValidator.ValidateConfiguredAssemblies(root.FullName, "DemoModule", Array.Empty<string>()));
+
+            Directory.Delete(core.FullName, recursive: true);
+            var archive = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core-backup"));
+            File.Copy(typeof(BinaryExportDetector).Assembly.Location, Path.Combine(archive.FullName, "DemoModule.dll"));
+
+            ModuleBinaryExportSurfaceValidator.ValidateConfiguredAssemblies(root.FullName, "DemoModule", Array.Empty<string>());
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Detect_RejectsDivergentSideBySidePayloadSurfaces()
     {
         var root = CreateModulePayloads(
@@ -60,6 +170,55 @@ public sealed class ModuleBinaryExportSurfaceValidatorTests
                 () => ModuleBinaryExportSurfaceValidator.Detect(root.FullName, "DemoModule", Array.Empty<string>()));
 
             Assert.Contains("export assemblies", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("DemoModule.dll", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ValidateConfiguredAssemblies_RejectsNestedAssemblyWithoutPayloadRootAssembly()
+    {
+        var root = CreateModulePayloads(
+            typeof(BinaryExportDetector).Assembly.Location,
+            typeof(BinaryExportDetector).Assembly.Location);
+        var newerRoot = Path.Combine(root.FullName, "Lib", "Core-net10.0");
+        File.Delete(Path.Combine(newerRoot, "DemoModule.dll"));
+        var nestedRoot = Directory.CreateDirectory(Path.Combine(newerRoot, "runtimes", "win-x64", "lib", "net10.0"));
+        File.Copy(typeof(BinaryExportDetector).Assembly.Location, Path.Combine(nestedRoot.FullName, "DemoModule.dll"));
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => ModuleBinaryExportSurfaceValidator.ValidateConfiguredAssemblies(root.FullName, "DemoModule", Array.Empty<string>()));
+
+            Assert.Contains("Core-net10.0", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("DemoModule.dll", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ValidateConfiguredAssemblies_RejectsPayloadRootAssemblyWithWrongCasing()
+    {
+        var root = CreateModulePayloads(
+            typeof(BinaryExportDetector).Assembly.Location,
+            typeof(BinaryExportDetector).Assembly.Location);
+        var newerRoot = Path.Combine(root.FullName, "Lib", "Core-net10.0");
+        File.Delete(Path.Combine(newerRoot, "DemoModule.dll"));
+        File.Copy(typeof(BinaryExportDetector).Assembly.Location, Path.Combine(newerRoot, "demomodule.dll"));
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => ModuleBinaryExportSurfaceValidator.ValidateConfiguredAssemblies(root.FullName, "DemoModule", Array.Empty<string>()));
+
+            Assert.Contains("Core-net10.0", exception.Message, StringComparison.Ordinal);
             Assert.Contains("DemoModule.dll", exception.Message, StringComparison.Ordinal);
         }
         finally

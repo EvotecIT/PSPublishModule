@@ -144,6 +144,8 @@ public sealed class ModuleBuilder
         /// Pipelines that generate a bootstrapper after the in-place build can defer this check until the final staged module exists.
         /// </summary>
         public bool EmitBinaryConflictOwnerNotes { get; set; }
+
+        internal bool RootModuleScriptWillBeReplaced { get; set; }
     }
 
     /// <summary>
@@ -277,21 +279,47 @@ public sealed class ModuleBuilder
         if (!string.IsNullOrWhiteSpace(opts.ProjectUri)) _manifestMutator.TrySetPsDataString(psd1, "ProjectUri", opts.ProjectUri!);
 
         // 3) Exports
+        var existingExports = ModuleManifestExportReader.ReadExports(psd1);
+        var rootModuleScriptPath = Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psm1");
+        var rootModuleDiscovery = DiscoverAuthoredRootModuleScript(rootModuleScriptPath);
+        if (opts.RootModuleScriptWillBeReplaced && !rootModuleDiscovery.IsComplete)
+        {
+            throw new InvalidOperationException(
+                $"Unable to inspect the authored root module script for '{opts.ModuleName}' before replacing it.");
+        }
+
+        var rootFunctionsToRemove = opts.RootModuleScriptWillBeReplaced
+            ? _scriptFunctionExportDetector
+                .DetectScriptFunctions(rootModuleDiscovery.Files)
+                .Where(functionName => !IsGeneratedDevelopmentBinaryHelper(functionName, opts.ModuleName))
+                .ToArray()
+            : Array.Empty<string>();
+
         IEnumerable<string>? functionsToSet = null;
         var publicFolder = Path.Combine(opts.ProjectRoot, "Public");
         var publicDiscovery = DiscoverScriptFiles(publicFolder);
         var scripts = publicDiscovery.Files;
         if (!publicDiscovery.IsComplete)
         {
-            _logger.Warn($"Unable to enumerate every Public script for '{opts.ModuleName}'; keeping existing FunctionsToExport.");
+            if (opts.RootModuleScriptWillBeReplaced)
+            {
+                functionsToSet = existingExports.Functions
+                    .Except(rootFunctionsToRemove, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                _logger.Warn(
+                    $"Unable to enumerate every Public script for '{opts.ModuleName}'; preserving existing non-root FunctionsToExport while removing exports from the replaced root module script.");
+            }
+            else
+            {
+                _logger.Warn($"Unable to enumerate every Public script for '{opts.ModuleName}'; keeping existing FunctionsToExport.");
+            }
         }
         else
         {
             if (scripts.Length == 0)
             {
-                var rootPsm1 = Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psm1");
-                if (File.Exists(rootPsm1))
-                    scripts = new[] { rootPsm1 };
+                if (!opts.RootModuleScriptWillBeReplaced && File.Exists(rootModuleScriptPath))
+                    scripts = new[] { rootModuleScriptPath };
             }
 
             if (scripts.Length > 0)
@@ -301,13 +329,33 @@ public sealed class ModuleBuilder
                     .Where(functionName => !IsGeneratedDevelopmentBinaryHelper(functionName, opts.ModuleName))
                     .ToArray();
             }
+            else if (opts.RootModuleScriptWillBeReplaced)
+            {
+                functionsToSet = Array.Empty<string>();
+            }
         }
 
         IEnumerable<string>? cmdletsToSet = null;
         IEnumerable<string>? aliasesToSet = null;
+        var rootAliasAnalysis = opts.RootModuleScriptWillBeReplaced
+            ? AnalyzeScriptAliases(rootModuleDiscovery.Files)
+            : new ScriptAliasExportAnalysis(Array.Empty<string>(), isComplete: true);
+        if (opts.RootModuleScriptWillBeReplaced &&
+            !rootAliasAnalysis.IsComplete &&
+            existingExports.Aliases.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Unable to resolve every alias in the authored root module script for '{opts.ModuleName}' before replacing it.");
+        }
+
+        var existingAliasesWithoutReplacedRoot = opts.RootModuleScriptWillBeReplaced
+            ? existingExports.Aliases.Except(rootAliasAnalysis.Aliases, StringComparer.OrdinalIgnoreCase).ToArray()
+            : existingExports.Aliases;
         var aliasDiscoveries = BootstrapperScriptFolders
             .Select(folder => DiscoverScriptFiles(Path.Combine(opts.ProjectRoot, folder)))
-            .Concat(new[] { DiscoverAuthoredRootModuleScript(Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psm1")) })
+            .Concat(opts.RootModuleScriptWillBeReplaced
+                ? Array.Empty<ScriptFileDiscovery>()
+                : new[] { rootModuleDiscovery })
             .ToArray();
         var aliasScripts = aliasDiscoveries
             .SelectMany(static discovery => discovery.Files)
@@ -316,7 +364,18 @@ public sealed class ModuleBuilder
         var aliasAnalysis = AnalyzeScriptAliases(aliasScripts);
         if (aliasDiscoveries.Any(static discovery => !discovery.IsComplete) && aliasAnalysis.IsComplete)
             aliasAnalysis = new ScriptAliasExportAnalysis(aliasAnalysis.Aliases, isComplete: false);
-        if (!opts.DisableBinaryCmdletScan)
+        if (opts.DisableBinaryCmdletScan)
+        {
+            ModuleBinaryExportSurfaceValidator.ValidateConfiguredAssemblies(
+                opts.ProjectRoot,
+                opts.ModuleName,
+                opts.ExportAssemblies);
+            if (opts.RootModuleScriptWillBeReplaced)
+            {
+                aliasesToSet = MergeDeclaredAliases(existingAliasesWithoutReplacedRoot, aliasAnalysis.Aliases);
+            }
+        }
+        else
         {
             var binaryExportSurface = ModuleBinaryExportSurfaceValidator.Detect(
                 opts.ProjectRoot,
@@ -324,7 +383,15 @@ public sealed class ModuleBuilder
                 opts.ExportAssemblies);
             if (!binaryExportSurface.HasAssemblies)
             {
-                _logger.Warn($"No export assemblies found for '{opts.ModuleName}' under staging; keeping existing CmdletsToExport/AliasesToExport.");
+                if (opts.RootModuleScriptWillBeReplaced)
+                {
+                    aliasesToSet = MergeDeclaredAliases(existingAliasesWithoutReplacedRoot, aliasAnalysis.Aliases);
+                    _logger.Warn($"No export assemblies found for '{opts.ModuleName}' under staging; keeping existing CmdletsToExport and removing aliases owned by the replaced root module script.");
+                }
+                else
+                {
+                    _logger.Warn($"No export assemblies found for '{opts.ModuleName}' under staging; keeping existing CmdletsToExport/AliasesToExport.");
+                }
             }
             else
             {
@@ -334,7 +401,7 @@ public sealed class ModuleBuilder
                 cmdletsToSet = detectedCmdlets;
                 var aliasesToPreserve = aliasAnalysis.IsComplete
                     ? Array.Empty<string>()
-                    : ModuleManifestExportReader.ReadExports(psd1).Aliases;
+                    : existingAliasesWithoutReplacedRoot;
                 if (!aliasAnalysis.IsComplete)
                 {
                     _logger.Warn(

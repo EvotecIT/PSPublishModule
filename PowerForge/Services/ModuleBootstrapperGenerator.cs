@@ -39,12 +39,12 @@ internal static partial class ModuleBootstrapperGenerator
 
         var hasScriptFolders = HasAnyDirectory(root, "Public", "Private", "Classes", "Enums");
         var libRoot = Path.Combine(root, "Lib");
-        var hasLib = Directory.Exists(libRoot) && Directory.EnumerateDirectories(libRoot).Any();
+        var hasLib = HasSelectableBinaryPayload(libRoot);
         var hasDevelopmentBinaryLoader = developmentBinaries?.Enabled == true;
 
         // Avoid overwriting "single file" script modules that keep all code in the PSM1 and do not use folder layout.
         // If there is no Lib and no folder-based layout, leave the existing PSM1 intact.
-        if (!hasLib && !hasScriptFolders && !hasDevelopmentBinaryLoader && !forceBootstrapperWrite) return;
+        if (!ShouldWriteBootstrapper(hasLib, hasScriptFolders, hasDevelopmentBinaryLoader, forceBootstrapperWrite)) return;
 
         var exportAssemblyFileNames = ResolveExportAssemblyFileNames(moduleName, exportAssemblies);
         var primaryAssemblyName = exportAssemblyFileNames.FirstOrDefault() ?? (moduleName + ".dll");
@@ -90,6 +90,28 @@ internal static partial class ModuleBootstrapperGenerator
             targetFrameworks: targetFrameworks);
         WritePowerShellFile(psm1Path, psm1Content);
     }
+
+    internal static bool ShouldWriteBootstrapper(string moduleRoot, bool forceBootstrapperWrite = false)
+    {
+        var root = Path.GetFullPath(moduleRoot);
+        var hasScriptFolders = HasAnyDirectory(root, "Public", "Private", "Classes", "Enums");
+        var libRoot = Path.Combine(root, "Lib");
+        var hasLib = HasSelectableBinaryPayload(libRoot);
+        return ShouldWriteBootstrapper(hasLib, hasScriptFolders, hasDevelopmentBinaryLoader: false, forceBootstrapperWrite);
+    }
+
+    private static bool HasSelectableBinaryPayload(string libRoot)
+        => Directory.Exists(libRoot) &&
+           Directory.EnumerateDirectories(libRoot)
+               .Select(Path.GetFileName)
+               .Any(ModuleBinaryPayloadLayout.IsSelectablePayloadFolderName);
+
+    private static bool ShouldWriteBootstrapper(
+        bool hasLib,
+        bool hasScriptFolders,
+        bool hasDevelopmentBinaryLoader,
+        bool forceBootstrapperWrite)
+        => hasLib || hasScriptFolders || hasDevelopmentBinaryLoader || forceBootstrapperWrite;
 
     private static bool HasAnyDirectory(string root, params string[] directoryNames)
         => (directoryNames ?? Array.Empty<string>())
@@ -500,13 +522,63 @@ internal static partial class ModuleBootstrapperGenerator
     internal static string ResolveAssemblyLoadContextTargetFrameworkForPayloads(
         string targetFramework,
         IReadOnlyList<string>? targetDirectories)
-        => (targetDirectories ?? Array.Empty<string>()).Any(static directory =>
-                string.Equals(Path.GetFileName(directory), "Core", StringComparison.OrdinalIgnoreCase) ||
-                (Path.GetFileName(directory) ?? string.Empty).StartsWith("Core-", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(Path.GetFileName(directory), "Standard", StringComparison.OrdinalIgnoreCase) ||
-                (Path.GetFileName(directory) ?? string.Empty).StartsWith("Standard-", StringComparison.OrdinalIgnoreCase))
+    {
+        var candidates = new[] { targetFramework }
+            .Concat((targetDirectories ?? Array.Empty<string>()).Select(ResolvePayloadAssemblyLoadContextTargetFramework))
+            .Where(static framework => !string.IsNullOrWhiteSpace(framework))
+            .Select(static framework => framework!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static framework => GetNetTfmVersion(framework), Comparer<Version>.Create(static (left, right) => left.CompareTo(right)))
+            .ToArray();
+        return candidates.FirstOrDefault() ?? targetFramework;
+    }
+
+    private static string? ResolvePayloadAssemblyLoadContextTargetFramework(string directory)
+    {
+        var folderName = Path.GetFileName(directory) ?? string.Empty;
+        var markerPath = Path.Combine(directory, ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName);
+        try
+        {
+            if (File.Exists(markerPath))
+            {
+                var markerFramework = NormalizePayloadAssemblyLoadContextTargetFramework(File.ReadAllText(markerPath).Trim());
+                if (!string.IsNullOrWhiteSpace(markerFramework))
+                    return markerFramework;
+            }
+        }
+        catch
+        {
+            // Fall back to the deterministic folder contract below.
+        }
+
+        foreach (var prefix in new[] { "Core-", "Standard-", "Default-" })
+        {
+            if (folderName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return NormalizePayloadAssemblyLoadContextTargetFramework(folderName.Substring(prefix.Length));
+        }
+
+        return folderName.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
+               folderName.Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
+               folderName.Equals("Default", StringComparison.OrdinalIgnoreCase)
             ? PowerShell70AssemblyLoadContextTargetFramework
-            : targetFramework;
+            : null;
+    }
+
+    private static string? NormalizePayloadAssemblyLoadContextTargetFramework(string? framework)
+    {
+        var normalized = framework?.Trim() ?? string.Empty;
+        if (normalized.StartsWith("netcoreapp", StringComparison.OrdinalIgnoreCase) &&
+            TryGetNetTfmVersion(normalized, out var coreVersion) &&
+            coreVersion < new Version(3, 1))
+        {
+            return PowerShell70AssemblyLoadContextTargetFramework;
+        }
+
+        return normalized.Equals("netstandard2.0", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Equals("netstandard2.1", StringComparison.OrdinalIgnoreCase)
+            ? PowerShell70AssemblyLoadContextTargetFramework
+            : NormalizeAssemblyLoadContextTargetFramework(normalized);
+    }
 
     private static AssemblyLoadContextLoaderIdentity CreateAssemblyLoadContextLoaderIdentity(string moduleName)
     {

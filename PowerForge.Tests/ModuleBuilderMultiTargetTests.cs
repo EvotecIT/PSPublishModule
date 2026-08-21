@@ -40,6 +40,38 @@ public sealed class ModuleBuilderMultiTargetTests
     }
 
     [Fact]
+    public void BuildInPlace_ValidatesEveryPayloadWhenBinaryCmdletScanIsDisabled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+        var core = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Lib", "Core"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Lib", "Core-net10.0"));
+        File.Copy(typeof(ModuleBuilder).Assembly.Location, Path.Combine(core.FullName, "DemoModule.dll"));
+        File.WriteAllText(Path.Combine(moduleRoot.FullName, "DemoModule.psm1"), string.Empty);
+        File.WriteAllText(
+            Path.Combine(moduleRoot.FullName, "DemoModule.psd1"),
+            "@{ RootModule = 'DemoModule.psm1'; ModuleVersion = '1.0.0'; CmdletsToExport = @(); AliasesToExport = @() }");
+
+        try
+        {
+            var builder = ModuleBuilderTestDependencies.Create();
+            var exception = Assert.Throws<InvalidOperationException>(() => builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = moduleRoot.FullName,
+                ModuleName = "DemoModule",
+                DisableBinaryCmdletScan = true,
+            }));
+
+            Assert.Contains("Core-net10.0", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("DemoModule.dll", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     [Trait("Category", "Integration")]
     public void BuildInPlace_PreservesNet8AndNet10Payloads()
     {

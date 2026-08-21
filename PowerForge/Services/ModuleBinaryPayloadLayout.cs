@@ -102,12 +102,10 @@ internal static class ModuleBinaryPayloadLayout
         var coreAndStandard = directories
             .Where(static item =>
                 item.Name!.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
-                item.Name.StartsWith("Core-", StringComparison.OrdinalIgnoreCase) ||
                 item.Name.Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
-                item.Name.StartsWith("Standard-", StringComparison.OrdinalIgnoreCase))
+                IsPortableNamedCorePayload(item.Name))
             .OrderBy(static item => item.Name!.Equals("Core", StringComparison.OrdinalIgnoreCase) ? 0 :
-                                    item.Name.StartsWith("Core-", StringComparison.OrdinalIgnoreCase) ? 1 :
-                                    item.Name.Equals("Standard", StringComparison.OrdinalIgnoreCase) ? 2 : 3)
+                                    IsPortableNamedCorePayload(item.Name) ? 1 : 2)
             .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
             .Select(static item => item.Path)
             .ToArray();
@@ -115,8 +113,7 @@ internal static class ModuleBinaryPayloadLayout
             return coreAndStandard;
 
         return directories
-            .Where(static item => item.Name!.Equals("Default", StringComparison.OrdinalIgnoreCase) ||
-                                  item.Name.StartsWith("Default-", StringComparison.OrdinalIgnoreCase))
+            .Where(static item => item.Name!.Equals("Default", StringComparison.OrdinalIgnoreCase))
             .OrderBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
             .Select(static item => item.Path)
             .ToArray();
@@ -313,6 +310,30 @@ internal static class ModuleBinaryPayloadLayout
 
         var framework = folderName.Substring(prefix.Length);
         return !HasPlatformQualifier(framework) && TryParseModernFrameworkVersion(framework, out _);
+    }
+
+    internal static bool IsSelectablePayloadFolderName(string? folderName)
+    {
+        if (folderName is null || folderName.Trim().Length == 0)
+            return false;
+
+        return folderName.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
+               folderName.Equals("Default", StringComparison.OrdinalIgnoreCase) ||
+               folderName.Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
+               IsPortableNamedCorePayload(folderName);
+    }
+
+    internal static bool IsPayloadLikeFolderName(string? folderName)
+    {
+        if (folderName is null || folderName.Trim().Length == 0)
+            return false;
+
+        return folderName.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
+               folderName.StartsWith("Core-", StringComparison.OrdinalIgnoreCase) ||
+               folderName.Equals("Default", StringComparison.OrdinalIgnoreCase) ||
+               folderName.StartsWith("Default-", StringComparison.OrdinalIgnoreCase) ||
+               folderName.Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
+               folderName.StartsWith("Standard-", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryParseVersionSuffix(string framework, IReadOnlyList<string> prefixes, out Version version)

@@ -27,6 +27,14 @@ internal static class ModuleBinaryExportSurfaceValidator
         IReadOnlyList<string>? exportAssemblies)
     {
         var assembliesByPayload = ResolveAssembliesByPayload(projectRoot, moduleName, exportAssemblies);
+        var hasSelectablePayloads = !assembliesByPayload.ContainsKey("module");
+        var hasAssemblies = assembliesByPayload.Values.Any(static assemblies => assemblies.Length > 0);
+        if (hasSelectablePayloads)
+            ValidateConfiguredAssemblies(assembliesByPayload, moduleName, exportAssemblies);
+        else if (!hasAssemblies)
+            return new ModuleBinaryExportSurface(false, Array.Empty<string>(), Array.Empty<string>());
+        else
+            ValidateConfiguredAssemblies(assembliesByPayload, moduleName, exportAssemblies);
         var surfaces = assembliesByPayload
             .Select(pair => new
             {
@@ -46,23 +54,6 @@ internal static class ModuleBinaryExportSurfaceValidator
 
         if (surfaces.Length == 0)
             return new ModuleBinaryExportSurface(false, Array.Empty<string>(), Array.Empty<string>());
-
-        if (surfaces.Length > 1)
-        {
-            var configuredAssemblyFileNames = ResolveExportAssemblyFileNames(moduleName, exportAssemblies);
-            foreach (var surface in surfaces)
-            {
-                var missingConfiguredAssemblies = configuredAssemblyFileNames
-                    .Except(surface.AssemblyFileNames, StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                if (missingConfiguredAssemblies.Length > 0)
-                {
-                    throw new InvalidOperationException(
-                        $"Payload '{surface.Payload}' is missing configured export assemblies: {string.Join(", ", missingConfiguredAssemblies)}.");
-                }
-            }
-        }
 
         var baseline = surfaces[0];
         foreach (var candidate in surfaces.Skip(1))
@@ -93,6 +84,48 @@ internal static class ModuleBinaryExportSurfaceValidator
             baseline.Aliases);
     }
 
+    internal static void ValidateConfiguredAssemblies(
+        string projectRoot,
+        string moduleName,
+        IReadOnlyList<string>? exportAssemblies)
+    {
+        var assembliesByPayload = ResolveAssembliesByPayload(projectRoot, moduleName, exportAssemblies);
+        var hasSelectablePayloads = !assembliesByPayload.ContainsKey("module");
+        var hasAssemblies = assembliesByPayload.Values.Any(static assemblies => assemblies.Length > 0);
+        if (!hasSelectablePayloads && !hasAssemblies)
+            return;
+
+        ValidateConfiguredAssemblies(
+            assembliesByPayload,
+            moduleName,
+            exportAssemblies);
+    }
+
+    private static void ValidateConfiguredAssemblies(
+        IReadOnlyDictionary<string, string[]> assembliesByPayload,
+        string moduleName,
+        IReadOnlyList<string>? exportAssemblies)
+    {
+        var configuredAssemblyFileNames = ResolveExportAssemblyFileNames(moduleName, exportAssemblies);
+        foreach (var payload in assembliesByPayload)
+        {
+            var availableAssemblyFileNames = payload.Value
+                .Select(Path.GetFileName)
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(static name => name!)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            var missingConfiguredAssemblies = configuredAssemblyFileNames
+                .Except(availableAssemblyFileNames, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (missingConfiguredAssemblies.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Payload '{payload.Key}' is missing configured export assemblies: {string.Join(", ", missingConfiguredAssemblies)}.");
+            }
+        }
+    }
+
     private static IReadOnlyDictionary<string, string[]> ResolveAssembliesByPayload(
         string projectRoot,
         string moduleName,
@@ -104,11 +137,11 @@ internal static class ModuleBinaryExportSurfaceValidator
         {
             var payloadDirectories = Directory.EnumerateDirectories(libRoot)
                 .Select(path => new { Path = path, Name = Path.GetFileName(path) })
-                .Where(static item => !string.IsNullOrWhiteSpace(item.Name) && IsPayloadFolder(item.Name!))
+                .Where(static item => ModuleBinaryPayloadLayout.IsSelectablePayloadFolderName(item.Name))
                 .OrderBy(static item => GetPayloadFolderSortOrder(item.Name!))
                 .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            if (payloadDirectories.Length > 1)
+            if (payloadDirectories.Length > 0)
             {
                 var pathQualifiedEntries = ResolveConfiguredEntries(moduleName, exportAssemblies)
                     .Where(IsPathQualifiedEntry)
@@ -172,7 +205,28 @@ internal static class ModuleBinaryExportSurfaceValidator
             }
         }
 
-        return paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        return paths
+            .Where(path => !IsUnderUnselectablePayloadLikeDirectory(projectRoot, path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool IsUnderUnselectablePayloadLikeDirectory(string projectRoot, string assemblyPath)
+    {
+        var libRoot = Path.GetFullPath(Path.Combine(projectRoot, "Lib"))
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var fullPath = Path.GetFullPath(assemblyPath);
+        if (!fullPath.StartsWith(libRoot, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var relativePath = fullPath.Substring(libRoot.Length);
+        var separatorIndex = relativePath.IndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
+        if (separatorIndex <= 0)
+            return false;
+
+        var firstDirectory = relativePath.Substring(0, separatorIndex);
+        return ModuleBinaryPayloadLayout.IsPayloadLikeFolderName(firstDirectory) &&
+               !ModuleBinaryPayloadLayout.IsSelectablePayloadFolderName(firstDirectory);
     }
 
     private static string[] ResolveMatchingAssemblies(string root, ISet<string> fileNames)
@@ -182,8 +236,9 @@ internal static class ModuleBinaryExportSurfaceValidator
 
         try
         {
-            return Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories)
-                .Where(path => fileNames.Contains(Path.GetFileName(path)))
+            return Directory.EnumerateFiles(root, "*.dll", SearchOption.TopDirectoryOnly)
+                .Where(path => fileNames.Any(expected =>
+                    string.Equals(expected, Path.GetFileName(path), StringComparison.Ordinal)))
                 .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         }
@@ -229,14 +284,6 @@ internal static class ModuleBinaryExportSurfaceValidator
            entry.IndexOf('/') >= 0 ||
            entry.IndexOf('\\') >= 0 ||
            entry.Length >= 2 && char.IsLetter(entry[0]) && entry[1] == ':';
-
-    private static bool IsPayloadFolder(string folder)
-        => folder.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
-           folder.StartsWith("Core-", StringComparison.OrdinalIgnoreCase) ||
-           folder.Equals("Default", StringComparison.OrdinalIgnoreCase) ||
-           folder.StartsWith("Default-", StringComparison.OrdinalIgnoreCase) ||
-           folder.Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
-           folder.StartsWith("Standard-", StringComparison.OrdinalIgnoreCase);
 
     private static int GetPayloadFolderSortOrder(string folder)
     {

@@ -175,6 +175,9 @@ public sealed class ModuleBinaryPayloadLayoutTests
         var core = Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core"));
         var net10 = Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core-net10.0"));
         Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Default"));
+        Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Core-backup"));
+        Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Standard-backup"));
+        Directory.CreateDirectory(Path.Combine(libRoot.FullName, "Default-backup"));
 
         try
         {

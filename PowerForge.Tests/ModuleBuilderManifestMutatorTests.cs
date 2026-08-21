@@ -389,6 +389,71 @@ public sealed class ModuleBuilderManifestMutatorTests
     }
 
     [Fact]
+    public void BuildInPlace_RemovesReplacedRootExportsWhenFolderDiscoveryIsIncomplete()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; FunctionsToExport = @('Invoke-RootOnly', 'Invoke-PublicExisting'); CmdletsToExport = @(); AliasesToExport = @('RootAlias', 'ExistingAlias') }");
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psm1"),
+                "function Invoke-RootOnly { 'root' }; Set-Alias -Name RootAlias -Value Invoke-RootOnly");
+            Directory.CreateDirectory(Path.Combine(root, "Classes"));
+            Directory.CreateDirectory(Path.Combine(root, "Public"));
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            IEnumerable<string> EnumerateScripts(string directory)
+            {
+                var folder = Path.GetFileName(directory);
+                if (folder is "Classes" or "Public")
+                    throw new IOException("Simulated recursive discovery failure.");
+                return Directory.EnumerateFiles(directory, "*.ps1", SearchOption.AllDirectories);
+            }
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(
+                new NullLogger(),
+                mutator,
+                new PowerShellScriptFunctionExportDetector(),
+                EnumerateScripts);
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+                RootModuleScriptWillBeReplaced = true,
+            });
+
+            var functionWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "FunctionsToExport");
+            Assert.Equal(new[] { "Invoke-PublicExisting" }, functionWrite.Values);
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("ExistingAlias", aliasWrite.Values);
+            Assert.DoesNotContain("RootAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
     public void BuildInPlace_ClearsStaleBinaryExportsWhenCurrentAssemblyExportsNothing()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));

@@ -171,6 +171,56 @@ nal -Name ShortNew -Value Get-Qux
     }
 
     [Fact]
+    public void PowerShellDetector_ReportsIncompleteSetForControlFlowAlias()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, "if ($false) { Set-Alias -Name ConditionalAlias -Value Get-Foo }");
+
+        try
+        {
+            var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+            Assert.False(analysis.IsComplete);
+            Assert.Empty(analysis.Aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_ReportsIncompleteSetForGatedHashtableAliases()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var sources = new[]
+        {
+            "$aliases = @{ GatedAlias = 'Get-Foo' }; if ($IsWindows) { foreach ($alias in $aliases.GetEnumerator()) { Set-Alias -Name $alias.Key -Value $alias.Value } }",
+            "$aliases = @{ NestedAlias = 'Get-Bar' }; foreach ($alias in $aliases.GetEnumerator()) { if ($true) { Set-Alias -Name $alias.Key -Value $alias.Value } }",
+            "$aliases = @{ ExpressionAlias = 'Get-Baz' }; foreach ($alias in $aliases.GetEnumerator()) { $false -and (Set-Alias -Name $alias.Key -Value $alias.Value) }",
+        };
+
+        try
+        {
+            foreach (var source in sources)
+            {
+                var scriptPath = Path.Combine(root.FullName, Guid.NewGuid().ToString("N") + ".ps1");
+                File.WriteAllText(scriptPath, source);
+
+                var analysis = new PowerShellScriptFunctionExportDetector().AnalyzeScriptAliases(new[] { scriptPath });
+
+                Assert.False(analysis.IsComplete);
+                Assert.Empty(analysis.Aliases);
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void PowerShellDetector_ReportsIncompleteSetWhenDiscoveredScriptDisappears()
     {
         var missingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"), "Missing.ps1");

@@ -78,12 +78,6 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
                     .ToArray();
                 foreach (var command in commands)
                 {
-                    if (TryGetAliasName(ast, command, out var alias))
-                    {
-                        result.Add(alias);
-                        continue;
-                    }
-
                     var resolvedHashtable = false;
                     foreach (var hashtable in ResolveAliasHashtables(ast, command))
                     {
@@ -98,8 +92,22 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
                         }
                     }
 
-                    if (!resolvedHashtable)
+                    if (resolvedHashtable)
+                        continue;
+
+                    if (!IsUnconditionalModuleScopeCommand(command))
+                    {
                         isComplete = false;
+                        continue;
+                    }
+
+                    if (TryGetAliasName(ast, command, out var alias))
+                    {
+                        result.Add(alias);
+                        continue;
+                    }
+
+                    isComplete = false;
                 }
             }
             catch
@@ -109,6 +117,19 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
         }
 
         return new ScriptAliasExportAnalysis(result, isComplete);
+    }
+
+    private static bool IsUnconditionalModuleScopeCommand(CommandAst command)
+    {
+        for (Ast? current = command.Parent; current is not null; current = current.Parent)
+        {
+            if (current is NamedBlockAst)
+                return true;
+            if (current is StatementBlockAst or ScriptBlockAst or FunctionDefinitionAst)
+                return false;
+        }
+
+        return false;
     }
 
     private static bool TryGetAliasName(ScriptBlockAst script, CommandAst command, out string alias)
@@ -205,7 +226,9 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
         while (ancestor is not null && ancestor is not ForEachStatementAst)
             ancestor = ancestor.Parent;
         if (ancestor is not ForEachStatementAst forEach ||
-            !string.Equals(forEach.Variable.VariablePath.UserPath, loopVariable.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(forEach.Variable.VariablePath.UserPath, loopVariable.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase) ||
+            !IsUnconditionalModuleScopeStatement(forEach) ||
+            !IsDirectForeachBodyCommand(command, forEach))
         {
             yield break;
         }
@@ -233,6 +256,25 @@ public sealed class PowerShellScriptFunctionExportDetector : IScriptFunctionExpo
         var hashtable = assignments[0].Right.Find(node => node is HashtableAst, searchNestedScriptBlocks: false) as HashtableAst;
         if (hashtable is not null)
             yield return hashtable;
+    }
+
+    private static bool IsUnconditionalModuleScopeStatement(StatementAst statement)
+    {
+        for (Ast? current = statement.Parent; current is not null; current = current.Parent)
+        {
+            if (current is NamedBlockAst)
+                return true;
+            if (current is StatementBlockAst or ScriptBlockAst or FunctionDefinitionAst)
+                return false;
+        }
+
+        return false;
+    }
+
+    private static bool IsDirectForeachBodyCommand(CommandAst command, ForEachStatementAst forEach)
+    {
+        return command.Parent is PipelineAst pipeline &&
+               ReferenceEquals(pipeline.Parent, forEach.Body);
     }
 
     private static string NormalizeHashtableKey(string text)
