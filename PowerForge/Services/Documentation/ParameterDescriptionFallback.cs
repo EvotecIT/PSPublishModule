@@ -42,9 +42,16 @@ internal static class ParameterDescriptionFallback
             return true;
 
         var value = description!.Trim();
-        return value.StartsWith("{{", StringComparison.Ordinal) &&
-               value.EndsWith("}}", StringComparison.Ordinal) &&
-               value.IndexOf("Fill", StringComparison.OrdinalIgnoreCase) >= 0;
+        if (!value.StartsWith("{{", StringComparison.Ordinal) ||
+            !value.EndsWith("}}", StringComparison.Ordinal))
+            return false;
+
+        var inner = value.Substring(2, value.Length - 4).Trim();
+        const string prefix = "Fill ";
+        const string suffix = " Description";
+        return inner.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+               inner.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) &&
+               inner.Length > prefix.Length + suffix.Length;
     }
 
     private static string Create(string parameterName, string? parameterType)
@@ -52,22 +59,23 @@ internal static class ParameterDescriptionFallback
         var words = SplitIdentifier(parameterName).ToLowerInvariant();
         var type = parameterType ?? string.Empty;
 
-        if (type.IndexOf("SwitchParameter", StringComparison.OrdinalIgnoreCase) >= 0)
+        if (IsCollectionType(type))
+            return $"Specifies one or more values for {words}.";
+
+        if (type.Equals("SwitchParameter", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("System.Management.Automation.SwitchParameter", StringComparison.OrdinalIgnoreCase))
             return $"Specifies the {words} switch.";
 
         if (type.Equals("Boolean", StringComparison.OrdinalIgnoreCase) ||
             type.Equals("Bool", StringComparison.OrdinalIgnoreCase))
             return $"Specifies a Boolean value for {words}.";
 
-        if (IsCollectionType(type))
-            return $"Specifies one or more values for {words}.";
-
         return $"Specifies a value for {words}.";
     }
 
     private static bool IsCollectionType(string type)
     {
-        if (type.EndsWith("[]", StringComparison.Ordinal))
+        if (HasArraySuffix(type))
             return true;
 
         var simpleNameIndex = type.LastIndexOf('.');
@@ -75,6 +83,25 @@ internal static class ParameterDescriptionFallback
         var genericMarker = simpleName.IndexOfAny(new[] { '`', '<' });
         var baseName = genericMarker > 0 ? simpleName.Substring(0, genericMarker) : simpleName;
         return CollectionTypeNames.Contains(baseName);
+    }
+
+    private static bool HasArraySuffix(string type)
+    {
+        if (!type.EndsWith("]", StringComparison.Ordinal))
+            return false;
+
+        var openingBracket = type.LastIndexOf('[');
+        if (openingBracket <= 0)
+            return false;
+
+        for (var index = openingBracket + 1; index < type.Length - 1; index++)
+        {
+            var marker = type[index];
+            if (marker != ',' && marker != '*' && !char.IsWhiteSpace(marker))
+                return false;
+        }
+
+        return true;
     }
 
     private static string SplitIdentifier(string value)
