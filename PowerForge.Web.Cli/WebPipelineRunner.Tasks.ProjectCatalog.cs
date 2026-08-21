@@ -756,15 +756,17 @@ internal static partial class WebPipelineRunner
         for (var i = 0; i < line.Length; i++)
         {
             var c = line[i];
-            if (c == '"' && (i + 1 >= line.Length || line[i + 1] != '"'))
+            if (c == '"')
             {
-                inQuotes = !inQuotes;
-                continue;
-            }
-            if (c == '"' && i + 1 < line.Length && line[i + 1] == '"')
-            {
-                sb.Append('"');
-                i++;
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    sb.Append('"');
+                    i++;
+                }
+                else
+                {
+                    inQuotes = !inQuotes;
+                }
                 continue;
             }
             if (c == ',' && !inQuotes)

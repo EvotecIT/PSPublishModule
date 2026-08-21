@@ -6,6 +6,18 @@ using Xunit;
 public class WebPipelineRunnerProjectCatalogTests
 {
     [Fact]
+    public void SplitCsvLine_ParsesQuotedEmptyCells()
+    {
+        var splitMethod = typeof(WebPipelineRunner)
+            .GetMethod("SplitCsvLine", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(splitMethod);
+
+        var cells = Assert.IsType<string[]>(splitMethod!.Invoke(null, new object?[] { "\"eventviewerx\",\"\",\"PSEventViewer\"" }));
+
+        Assert.Equal(new[] { "eventviewerx", string.Empty, "PSEventViewer" }, cells);
+    }
+
+    [Fact]
     public void RunPipeline_ProjectCatalog_AllowsDedicatedExternalSurfaceWhenExternalUrlCanBackfillLinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-catalog-surface-warn-" + Guid.NewGuid().ToString("N"));
