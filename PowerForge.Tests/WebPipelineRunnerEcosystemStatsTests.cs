@@ -561,8 +561,8 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                 {
                   "nuget": {
                     "owner": "EvotecIT",
-                    "packageCount": 6,
-                    "totalDownloads": 2600,
+                    "packageCount": 7,
+                    "totalDownloads": 3300,
                     "packages": [
                       {
                         "id": "Current.Core",
@@ -605,6 +605,13 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                         "totalDownloads": 600,
                         "packageUrl": "https://www.nuget.org/packages/FooDot.Core",
                         "projectUrl": "https://github.com/Owner/Foo.Bar"
+                      },
+                      {
+                        "id": "Slashless.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 700,
+                        "packageUrl": "https://www.nuget.org/packages/Slashless.Core",
+                        "projectUrl": "https://github.com/Owner/Slashless"
                       }
                     ]
                   },
@@ -631,6 +638,12 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "name": "Renamed Separator Product",
                       "githubRepo": "EvotecIT/RenamedSeparatorRepo",
                       "aliases": ["/projects/foo-bar/"]
+                    },
+                    {
+                      "slug": "renamed-slashless",
+                      "name": "Renamed Slashless Product",
+                      "githubRepo": "EvotecIT/RenamedSlashlessRepo",
+                      "aliases": ["slashless.html"]
                     }
                   ]
                 }
@@ -642,7 +655,7 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
 
             var args = new object?[] { statsPath, catalogPath, publishedCatalogPath, null };
             var merged = Assert.IsType<int>(syncMethod!.Invoke(null, args));
-            Assert.Equal(3, merged);
+            Assert.Equal(4, merged);
             Assert.Null(args[3]);
 
             using var catalog = JsonDocument.Parse(File.ReadAllText(catalogPath));
@@ -658,6 +671,10 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
             var renamedSeparators = projects[2].GetProperty("metrics").GetProperty("nuget");
             Assert.Equal(1, renamedSeparators.GetProperty("packageCount").GetInt32());
             Assert.Equal(500L, renamedSeparators.GetProperty("totalDownloads").GetInt64());
+
+            var renamedSlashless = projects[3].GetProperty("metrics").GetProperty("nuget");
+            Assert.Equal(1, renamedSlashless.GetProperty("packageCount").GetInt32());
+            Assert.Equal(700L, renamedSlashless.GetProperty("totalDownloads").GetInt64());
             Assert.True(File.Exists(publishedCatalogPath));
         }
         finally

@@ -2668,7 +2668,7 @@ internal static partial class WebPipelineRunner
                 }
                 else
                 {
-                    Add(aliasToken);
+                    Add(RemoveLegacyRouteFileSuffix(aliasToken));
                 }
             }
         }
