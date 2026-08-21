@@ -126,7 +126,7 @@ public sealed class ModuleBuilder
         /// When true, returns binary conflict owner notes from <see cref="BuildInPlace"/>.
         /// Pipelines that generate a bootstrapper after the in-place build can defer this check until the final staged module exists.
         /// </summary>
-        public bool EmitBinaryConflictOwnerNotes { get; set; } = true;
+        public bool EmitBinaryConflictOwnerNotes { get; set; }
     }
 
     /// <summary>
@@ -147,15 +147,13 @@ public sealed class ModuleBuilder
         if (hasCsproj)
         {
             var frameworks = opts.Frameworks.Count > 0 ? opts.Frameworks : new[] { "net472", "net8.0" };
+            var payloads = ModuleBinaryPayloadLayout.ResolveBuildPayloads(frameworks);
 
             var libRoot = Path.Combine(opts.ProjectRoot, "Lib");
-            var coreDir = Path.Combine(libRoot, "Core");
-            var defDir  = Path.Combine(libRoot, "Default");
             if (Directory.Exists(libRoot)) Directory.Delete(libRoot, recursive: true);
-            Directory.CreateDirectory(coreDir);
-            Directory.CreateDirectory(defDir);
+            Directory.CreateDirectory(libRoot);
 
-            // 1) Build libraries (dotnet publish) per framework and copy to Lib/<Core|Default>
+            // 1) Build libraries (dotnet publish) per framework and copy to the resolved Lib payload folder.
             var publisher = new DotnetPublisher(_logger);
             var exportAssemblyFileNames = ResolveExportAssemblyFileNames(opts.ModuleName, opts.ExportAssemblies);
 
@@ -167,26 +165,13 @@ public sealed class ModuleBuilder
             {
                 var publishes = publisher.Publish(opts.CsprojPath, opts.Configuration, frameworks, opts.ModuleVersion, artifactsRoot, opts.NuGetRestoreSources);
 
-                var usedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var tfm in frameworks)
+                foreach (var payload in payloads)
                 {
+                    var tfm = payload.Framework;
                     if (!publishes.TryGetValue(tfm, out var src)) continue;
 
-                    var target = IsCore(tfm) ? coreDir : defDir;
-
-                    // We currently support one "Core" and one "Default" payload per build output.
-                    // If multiple TFMs map to the same target folder (e.g., net10.0 + net8.0 -> Core),
-                    // clear the previous payload to avoid mixing dependencies across TFMs.
-                    if (!usedTargets.Add(target))
-                    {
-                        _logger.Warn($"Multiple frameworks map to '{Path.GetFileName(target)}'. Clearing '{target}' before copying '{tfm}' to avoid mixed outputs.");
-                        try
-                        {
-                            if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
-                        }
-                        catch { /* best effort */ }
-                        Directory.CreateDirectory(target);
-                    }
+                    var target = Path.Combine(libRoot, payload.FolderName);
+                    Directory.CreateDirectory(target);
 
                     CopyPublishOutputBinaries(
                         src,
@@ -194,6 +179,9 @@ public sealed class ModuleBuilder
                         tfm,
                         exportAssemblyFileNames,
                         new PublishCopyOptions(opts.ExcludeLibraryFilter, opts.DoNotCopyLibrariesRecursively));
+                    File.WriteAllText(
+                        Path.Combine(target, ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName),
+                        tfm);
                 }
             }
             finally
@@ -298,26 +286,37 @@ public sealed class ModuleBuilder
 
         IEnumerable<string>? cmdletsToSet = null;
         IEnumerable<string>? aliasesToSet = null;
+        var aliasScripts = scripts
+            .Concat(EnumerateScriptFiles(Path.Combine(opts.ProjectRoot, "Private")))
+            .Concat(EnumerateExistingFile(Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psm1")))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var declaredAliases = aliasScripts.Length > 0 && _scriptFunctionExportDetector is IScriptAliasExportDetector aliasExportDetector
+            ? aliasExportDetector.DetectScriptAliases(aliasScripts)
+            : Array.Empty<string>();
         if (!opts.DisableBinaryCmdletScan)
         {
-            var exportDlls = ResolveExportAssemblies(opts.ProjectRoot, opts.ModuleName, opts.ExportAssemblies);
-            if (exportDlls.Length == 0)
+            var binaryExportSurface = ModuleBinaryExportSurfaceValidator.Detect(
+                opts.ProjectRoot,
+                opts.ModuleName,
+                opts.ExportAssemblies);
+            if (!binaryExportSurface.HasAssemblies)
             {
                 _logger.Warn($"No export assemblies found for '{opts.ModuleName}' under staging; keeping existing CmdletsToExport/AliasesToExport.");
             }
             else
             {
-                var detectedCmdlets = BinaryExportDetector.DetectBinaryCmdlets(exportDlls);
-                var detectedAliases = BinaryExportDetector.DetectBinaryAliases(exportDlls);
+                var detectedCmdlets = binaryExportSurface.Cmdlets;
+                var detectedAliases = binaryExportSurface.Aliases;
 
-                if (detectedCmdlets.Count == 0 && detectedAliases.Count == 0)
+                if (detectedCmdlets.Length == 0 && detectedAliases.Length == 0)
                 {
                     _logger.Warn($"No cmdlets/aliases detected in export assemblies for '{opts.ModuleName}'; keeping existing CmdletsToExport/AliasesToExport.");
                 }
                 else
                 {
-                    if (detectedCmdlets.Count > 0) cmdletsToSet = detectedCmdlets;
-                    if (detectedAliases.Count > 0) aliasesToSet = detectedAliases;
+                    if (detectedCmdlets.Length > 0) cmdletsToSet = detectedCmdlets;
+                    aliasesToSet = MergeDeclaredAliases(declaredAliases, detectedAliases);
                 }
             }
         }
@@ -327,6 +326,28 @@ public sealed class ModuleBuilder
             ? WarnOnInstalledBinaryConflicts(opts)
             : Array.Empty<ModuleOwnerNote>();
     }
+
+    internal static string[] MergeDeclaredAliases(
+        IEnumerable<string>? declaredAliases,
+        IEnumerable<string>? detectedAliases)
+        => (declaredAliases ?? Array.Empty<string>())
+            .Concat(detectedAliases ?? Array.Empty<string>())
+            .Where(static alias => !string.IsNullOrWhiteSpace(alias))
+            .Select(static alias => alias.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static IEnumerable<string> EnumerateScriptFiles(string directory)
+    {
+        if (!Directory.Exists(directory))
+            return Array.Empty<string>();
+
+        try { return Directory.EnumerateFiles(directory, "*.ps1", SearchOption.AllDirectories).ToArray(); }
+        catch { return Array.Empty<string>(); }
+    }
+
+    private static IEnumerable<string> EnumerateExistingFile(string path)
+        => File.Exists(path) ? new[] { path } : Array.Empty<string>();
 
     internal ModuleOwnerNote[] AnalyzeInstalledBinaryConflicts(Options opts)
     {
@@ -385,27 +406,9 @@ public sealed class ModuleBuilder
         return string.Equals(trimmedFunctionName, expected, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsCore(string tfm)
-    {
-        if (string.IsNullOrWhiteSpace(tfm)) return false;
-
-        var value = tfm.Trim();
-        if (value.StartsWith("netcoreapp", StringComparison.OrdinalIgnoreCase)) return true;
-        if (value.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase)) return true;
-
-        // net472/net48/etc are .NET Framework TFMs and should be treated as "Default".
-        // Modern TFMs (net5.0+ and future) include a dot and should go to "Core".
-        if (!value.StartsWith("net", StringComparison.OrdinalIgnoreCase)) return false;
-        if (!value.Contains('.')) return false;
-
-        var suffix = value.Substring(3);
-        int digits = 0;
-        while (digits < suffix.Length && char.IsDigit(suffix[digits])) digits++;
-        if (digits == 0) return false;
-
-        if (!int.TryParse(suffix.Substring(0, digits), out var major)) return false;
-        return major >= 5;
-    }
+    // Kept as a compatibility seam for callers and tests that historically inspected the module builder's TFM classifier.
+    private static bool IsCore(string? tfm)
+        => ModuleBinaryPayloadLayout.IsCoreFramework(tfm);
 
     private sealed class PublishCopyPlan
     {
@@ -1367,44 +1370,6 @@ public sealed class ModuleBuilder
         return ext.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
                ext.Equals(".so", StringComparison.OrdinalIgnoreCase) ||
                ext.Equals(".dylib", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string[] ResolveExportAssemblies(string projectRoot, string moduleName, IReadOnlyList<string>? exportAssemblies)
-    {
-        var list = new List<string>();
-
-        var specified = (exportAssemblies ?? Array.Empty<string>())
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Select(s => s.Trim().Trim('"'))
-            .ToArray();
-
-        var patterns = specified.Length > 0 ? specified : new[] { moduleName + ".dll" };
-        foreach (var p in patterns)
-        {
-            if (string.IsNullOrWhiteSpace(p)) continue;
-            var name = p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? p : p + ".dll";
-
-            try
-            {
-                if (Path.IsPathRooted(name))
-                {
-                    if (File.Exists(name)) list.Add(Path.GetFullPath(name));
-                    continue;
-                }
-
-                if (name.Contains(Path.DirectorySeparatorChar) || name.Contains(Path.AltDirectorySeparatorChar))
-                {
-                    var rel = Path.GetFullPath(Path.Combine(projectRoot, name));
-                    if (File.Exists(rel)) list.Add(rel);
-                    continue;
-                }
-
-                list.AddRange(Directory.EnumerateFiles(projectRoot, name, SearchOption.AllDirectories));
-            }
-            catch { }
-        }
-
-        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     internal sealed class BinaryConflictAdvisorySummary

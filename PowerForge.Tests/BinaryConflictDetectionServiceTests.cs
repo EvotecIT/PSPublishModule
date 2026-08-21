@@ -108,6 +108,43 @@ public sealed class BinaryConflictDetectionServiceTests
     }
 
     [Fact]
+    public void Analyze_CoreChecksBaselineAndNewerPayloads()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var baselineAssembly = BuildLibrary(root.FullName, "SharedAuth", "2.0.0", projectFolderName: "SharedAuth_Baseline");
+            var newerAssembly = BuildLibrary(root.FullName, "SharedAuth", "3.0.0", projectFolderName: "SharedAuth_Newer");
+            var installedAssembly = BuildLibrary(root.FullName, "SharedAuth", "3.0.0", projectFolderName: "SharedAuth_Installed");
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var baseline = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Lib", "Core"));
+            var newer = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Lib", "Core-net10.0"));
+            File.Copy(baselineAssembly, Path.Combine(baseline.FullName, "SharedAuth.dll"), overwrite: true);
+            File.Copy(newerAssembly, Path.Combine(newer.FullName, "SharedAuth.dll"), overwrite: true);
+
+            var moduleSearchRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "PSModules"));
+            var installedModuleDir = Directory.CreateDirectory(Path.Combine(moduleSearchRoot.FullName, "OtherModule", "1.0.0", "bin"));
+            File.Copy(installedAssembly, Path.Combine(installedModuleDir.FullName, "SharedAuth.dll"), overwrite: true);
+
+            var result = new BinaryConflictDetectionService(new NullLogger()).Analyze(
+                moduleRoot.FullName,
+                "Core",
+                currentModuleName: "TestModule",
+                searchRoots: new[] { moduleSearchRoot.FullName });
+
+            var issue = Assert.Single(result.Issues);
+            Assert.Equal("2.0.0.0", issue.PayloadAssemblyVersion);
+            Assert.Equal("3.0.0.0", issue.InstalledAssemblyVersion);
+            Assert.Equal("Lib", result.AssemblyRootRelativePath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Analyze_FindsVersionMismatchAcrossDirectModulePaths()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

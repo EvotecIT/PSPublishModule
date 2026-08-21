@@ -7,6 +7,74 @@ namespace PowerForge.Tests;
 public sealed class ModulePipelineScriptExportDetectorTests
 {
     [Fact]
+    public void PowerShellDetector_FindsLiteralAndHashtableDrivenScriptAliases()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, """
+Set-Alias -Name LiteralAlias -Value Invoke-Literal
+$aliases = [ordered] @{
+    DynamicAlias = 'Invoke-Dynamic'
+    'Quoted-Alias' = 'Invoke-Quoted'
+}
+foreach ($alias in $aliases.GetEnumerator()) {
+    Set-Alias -Name $alias.Key -Value $alias.Value
+}
+""");
+
+        try
+        {
+            var aliases = new PowerShellScriptFunctionExportDetector().DetectScriptAliases(new[] { scriptPath });
+
+            Assert.Equal(new[] { "DynamicAlias", "LiteralAlias", "Quoted-Alias" }, aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PowerShellDetector_IgnoresAliasesDeclaredInsideFunctionBodies()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var scriptPath = Path.Combine(root.FullName, "Aliases.ps1");
+        File.WriteAllText(scriptPath, """
+Set-Alias -Name ModuleAlias -Value Invoke-ModuleCommand
+
+function Invoke-DeferredSetup {
+    Set-Alias -Name DeferredLiteralAlias -Value Invoke-DeferredLiteral
+    $aliases = @{
+        DeferredTableAlias = 'Invoke-DeferredTable'
+    }
+    foreach ($alias in $aliases.GetEnumerator()) {
+        New-Alias -Name $alias.Key -Value $alias.Value
+    }
+}
+""");
+
+        try
+        {
+            var aliases = new PowerShellScriptFunctionExportDetector().DetectScriptAliases(new[] { scriptPath });
+
+            Assert.Equal(new[] { "ModuleAlias" }, aliases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void FunctionDetectorContract_DoesNotRequireAliasDetection()
+    {
+        IScriptFunctionExportDetector detector = new RecordingScriptFunctionExportDetector("Invoke-Test");
+
+        Assert.Equal(new[] { "Invoke-Test" }, detector.DetectScriptFunctions(Array.Empty<string>()));
+        Assert.False(detector is IScriptAliasExportDetector);
+    }
+
+    [Fact]
     public void UpdateManifestForGeneratedDeliveryCommands_UsesInjectedScriptFunctionExportDetector()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -91,5 +159,6 @@ public sealed class ModulePipelineScriptExportDetectorTests
             Calls++;
             return _functions;
         }
+
     }
 }

@@ -114,6 +114,12 @@ public sealed class ModuleBuildSpec
     public string? BinaryConflictReportRoot { get; set; }
 
     /// <summary>
+    /// When true, scans installed module roots for binary conflict advisories immediately after staging.
+    /// The normal module pipeline performs conflict validation as an explicit ordered validation step, so this is opt-in.
+    /// </summary>
+    public bool AnalyzeInstalledBinaryConflictsDuringBuild { get; set; }
+
+    /// <summary>
     /// Optional filters used to exclude copied binary libraries by package id, target key, relative path, or file name.
     /// </summary>
     public string[] ExcludeLibraryFilter { get; set; } = Array.Empty<string>();
