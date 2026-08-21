@@ -330,8 +330,11 @@ public sealed class ProjectBuildGitHubPublisher
             summary.Results.Add(new ProjectBuildGitHubResult
             {
                 ProjectName = project.ProjectName,
+                Owner = publishResult.Owner,
+                Repository = publishResult.Repository,
                 Success = publishResult.Success,
                 TagName = publishResult.TagName,
+                ReleaseId = publishResult.ReleaseId,
                 ReleaseUrl = publishResult.ReleaseUrl,
                 ErrorMessage = publishResult.ErrorMessage
             });
@@ -353,6 +356,8 @@ public sealed class ProjectBuildGitHubPublisher
         ProjectBuildGitHubResult result,
         IGitHubReleaseProgressReporter? progress)
     {
+        result.Owner = request.Owner;
+        result.Repository = request.Repository;
         try
         {
             var publishResult = _publishRelease(new GitHubReleasePublishRequest
@@ -371,6 +376,7 @@ public sealed class ProjectBuildGitHubPublisher
 
             result.Success = publishResult.Succeeded;
             result.TagName = tag;
+            result.ReleaseId = publishResult.ReleaseId;
             result.ReleaseUrl = publishResult.HtmlUrl;
             result.ErrorMessage = null;
             WriteGitHubPublishNotes(tag, publishResult);

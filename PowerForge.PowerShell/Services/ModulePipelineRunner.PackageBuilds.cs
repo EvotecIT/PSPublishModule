@@ -74,7 +74,10 @@ public sealed partial class ModulePipelineRunner
 
             var operationKey = CreateProjectBuildPublishOperationFingerprint(plan, segment, destination);
             if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
+            {
+                RestoreSynchronizedGitHubReleaseResults(state, segment, destination, operationKey);
                 continue;
+            }
 
             var useDuplicateTolerantNuGetRetry = destination == PackageBuildPublishDestination.NuGet &&
                 state.IsResumingSynchronizedRelease &&
@@ -92,7 +95,10 @@ public sealed partial class ModulePipelineRunner
                     remotePublishAttempted,
                     coordinatedReleaseCheckpointActive))
             {
-                MarkSynchronizedReleaseOperationCompleted(state, operationKey);
+                MarkSynchronizedReleaseOperationCompleted(
+                    state,
+                    operationKey,
+                    ResolveSynchronizedGitHubReleaseCheckpoints(state, segment, destination, operationKey));
                 continue;
             }
 
@@ -105,7 +111,10 @@ public sealed partial class ModulePipelineRunner
                 useDuplicateTolerantNuGetRetry,
                 remotePublishAttempted,
                 coordinatedReleaseCheckpointActive);
-            MarkSynchronizedReleaseOperationCompleted(state, operationKey);
+            MarkSynchronizedReleaseOperationCompleted(
+                state,
+                operationKey,
+                ResolveSynchronizedGitHubReleaseCheckpoints(state, segment, destination, operationKey));
         }
 
         foreach (var segment in plan.PackageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>())
@@ -115,7 +124,10 @@ public sealed partial class ModulePipelineRunner
 
             var operationKey = CreatePackageBuildPublishOperationFingerprint(plan, segment, destination);
             if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
+            {
+                RestoreSynchronizedGitHubReleaseResults(state, segment, destination, operationKey);
                 continue;
+            }
 
             var useDuplicateTolerantNuGetRetry = destination == PackageBuildPublishDestination.NuGet &&
                 state.IsResumingSynchronizedRelease &&
@@ -133,7 +145,10 @@ public sealed partial class ModulePipelineRunner
                     remotePublishAttempted,
                     coordinatedReleaseCheckpointActive))
             {
-                MarkSynchronizedReleaseOperationCompleted(state, operationKey);
+                MarkSynchronizedReleaseOperationCompleted(
+                    state,
+                    operationKey,
+                    ResolveSynchronizedGitHubReleaseCheckpoints(state, segment, destination, operationKey));
                 continue;
             }
 
@@ -146,7 +161,105 @@ public sealed partial class ModulePipelineRunner
                 useDuplicateTolerantNuGetRetry,
                 remotePublishAttempted,
                 coordinatedReleaseCheckpointActive);
-            MarkSynchronizedReleaseOperationCompleted(state, operationKey);
+            MarkSynchronizedReleaseOperationCompleted(
+                state,
+                operationKey,
+                ResolveSynchronizedGitHubReleaseCheckpoints(state, segment, destination, operationKey));
+        }
+    }
+
+    private static SynchronizedGitHubReleaseCheckpoint[] ResolveSynchronizedGitHubReleaseCheckpoints(
+        ModulePipelineRunState state,
+        object segment,
+        PackageBuildPublishDestination destination,
+        string operationKey)
+    {
+        if (destination != PackageBuildPublishDestination.GitHub ||
+            state.SynchronizedReleaseCheckpoint is null)
+        {
+            return Array.Empty<SynchronizedGitHubReleaseCheckpoint>();
+        }
+
+        if (!state.PackageBuildResultsBySegment.TryGetValue(segment, out var result))
+        {
+            throw new InvalidOperationException(
+                "A successful coordinated package GitHub publish did not retain its project build result.");
+        }
+
+        var publishedReleases = result.Result.GitHub.ToArray();
+        if (publishedReleases.Length == 0 ||
+            publishedReleases.Any(static release =>
+                !release.Success ||
+                release.ReleaseId <= 0 ||
+                string.IsNullOrWhiteSpace(release.Owner) ||
+                string.IsNullOrWhiteSpace(release.Repository) ||
+                string.IsNullOrWhiteSpace(release.TagName)))
+        {
+            throw new InvalidOperationException(
+                "A successful coordinated package GitHub publish did not return complete release identities. Preserve the checkpoint and inspect the remote release before retrying.");
+        }
+
+        return publishedReleases
+            .Select(release => new SynchronizedGitHubReleaseCheckpoint
+            {
+                OperationKey = operationKey,
+                ProjectName = release.ProjectName,
+                Owner = release.Owner.Trim(),
+                Repository = release.Repository.Trim(),
+                TagName = release.TagName!.Trim(),
+                ReleaseId = release.ReleaseId
+            })
+            .GroupBy(CreateSynchronizedGitHubReleaseCheckpointIdentity, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .ToArray();
+    }
+
+    private static void RestoreSynchronizedGitHubReleaseResults(
+        ModulePipelineRunState state,
+        object segment,
+        PackageBuildPublishDestination destination,
+        string operationKey)
+    {
+        if (destination != PackageBuildPublishDestination.GitHub)
+            return;
+
+        var releases = state.SynchronizedReleaseCheckpoint?.GitHubReleases
+            .Where(release => string.Equals(release.OperationKey, operationKey, StringComparison.OrdinalIgnoreCase))
+            .ToArray() ?? Array.Empty<SynchronizedGitHubReleaseCheckpoint>();
+        if (releases.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "The completed coordinated package GitHub operation has no exact release identities. Preserve or abandon the incomplete checkpoint before retrying.");
+        }
+
+        if (!state.PackageBuildResultsBySegment.TryGetValue(segment, out var result))
+        {
+            throw new InvalidOperationException(
+                "The resumed coordinated package GitHub operation has no project build result to restore.");
+        }
+
+        foreach (var release in releases)
+        {
+            if (result.Result.GitHub.Any(existing =>
+                    existing.ReleaseId == release.ReleaseId &&
+                    string.Equals(existing.ProjectName, release.ProjectName, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(existing.Owner, release.Owner, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(existing.Repository, release.Repository, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(existing.TagName, release.TagName, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            result.Result.GitHub.Add(new ProjectBuildGitHubResult
+            {
+                ProjectName = release.ProjectName,
+                Owner = release.Owner,
+                Repository = release.Repository,
+                Success = true,
+                TagName = release.TagName,
+                ReleaseId = release.ReleaseId,
+                ReleaseUrl = $"https://github.com/{release.Owner}/{release.Repository}/releases/tag/{release.TagName}"
+            });
         }
     }
 
@@ -648,6 +761,20 @@ public sealed partial class ModulePipelineRunner
 
         if (mode is PackageBuildExecutionMode.PublishNuGet or PackageBuildExecutionMode.PublishGitHub)
         {
+            if (mode == PackageBuildExecutionMode.PublishGitHub)
+            {
+                if (state.PackageBuildResultsBySegment.TryGetValue(segment, out var existing))
+                {
+                    existing.Result.GitHub.AddRange(result.Result.GitHub);
+                    existing.Result.Success = result.Result.Success;
+                    existing.Result.ErrorMessage = result.Result.ErrorMessage;
+                }
+                else
+                {
+                    state.PackageBuildResultsBySegment[segment] = result;
+                }
+            }
+
             state.ReleaseCoordinationResult = null;
             return;
         }

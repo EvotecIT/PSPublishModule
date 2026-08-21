@@ -140,6 +140,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.False(gitHubRequest.IsPreRelease);
             Assert.True(gitHubRequest.GenerateReleaseNotes);
             Assert.False(gitHubRequest.ReuseExistingReleaseOnConflict);
+            Assert.False(gitHubRequest.RequireExpectedExistingRelease);
+            Assert.Null(gitHubRequest.ExpectedExistingReleaseId);
             Assert.False(gitHubRequest.ReplaceExistingAssets);
             Assert.NotNull(gitHubRequest.Progress);
             Assert.Equal("1.2.3", result.Plan.ResolvedVersion);

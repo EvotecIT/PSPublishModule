@@ -49,9 +49,53 @@ public sealed class GitHubReleasePublisherTests
 
             await server.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.True(result.Succeeded);
+            Assert.Equal(42, result.ReleaseId);
             var request = JsonNode.Parse(requestBody!)!.AsObject();
             Assert.Equal(metadata, request["body"]!.GetValue<string>());
             Assert.True(request["generate_release_notes"]!.GetValue<bool>());
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+        }
+    }
+
+    [Fact]
+    public async Task PublishRelease_RejectsSuccessfulResponseWithoutReleaseId()
+    {
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var server = Task.Run(async () =>
+        {
+            var context = await listener.GetContextAsync();
+            var responseBody = Encoding.UTF8.GetBytes(
+                $$"""{"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}"}""");
+            context.Response.StatusCode = 201;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = responseBody.Length;
+            await context.Response.OutputStream.WriteAsync(responseBody);
+            context.Response.Close();
+        });
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new GitHubReleasePublisher(new NullLogger()).PublishRelease(
+                    new GitHubReleasePublishRequest
+                    {
+                        Owner = "EvotecIT",
+                        Repository = "example",
+                        Token = "token",
+                        ApiBaseUrl = apiBaseUrl,
+                        TagName = "v1.2.3"
+                    }));
+
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("invalid release identifier", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

@@ -26,6 +26,7 @@ public sealed class ProjectBuildGitHubPublisherTests
                 return new GitHubReleasePublishResult
                 {
                     Succeeded = true,
+                    ReleaseId = 42,
                     HtmlUrl = $"https://example.test/{request.TagName}"
                 };
             },
@@ -78,6 +79,9 @@ public sealed class ProjectBuildGitHubPublisherTests
             Assert.True(summary.Success);
             Assert.True(summary.PerProject);
             Assert.Equal(2, summary.Results.Count);
+            Assert.All(summary.Results, result => Assert.Equal(42, result.ReleaseId));
+            Assert.All(summary.Results, result => Assert.Equal("EvotecIT", result.Owner));
+            Assert.All(summary.Results, result => Assert.Equal("PSPublishModule", result.Repository));
             Assert.Collection(
                 requests.OrderBy(request => request.TagName, StringComparer.OrdinalIgnoreCase),
                 first =>

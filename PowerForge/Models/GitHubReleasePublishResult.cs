@@ -13,6 +13,9 @@ public sealed class GitHubReleasePublishResult
     /// <summary>True when release creation or reuse succeeded.</summary>
     public bool ReleaseCreationSucceeded { get; set; }
 
+    /// <summary>Numeric GitHub release identifier returned by the API.</summary>
+    public long ReleaseId { get; set; }
+
     /// <summary>True when all asset uploads succeeded; null when no assets were requested.</summary>
     public bool? AllAssetUploadsSucceeded { get; set; }
 

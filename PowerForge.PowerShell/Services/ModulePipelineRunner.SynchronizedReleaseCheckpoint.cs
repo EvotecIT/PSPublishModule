@@ -424,13 +424,48 @@ public sealed partial class ModulePipelineRunner
 
     private void MarkSynchronizedReleaseOperationCompleted(
         ModulePipelineRunState state,
-        string operationKey)
+        string operationKey,
+        IReadOnlyCollection<SynchronizedGitHubReleaseCheckpoint>? gitHubReleases = null)
     {
         var checkpoint = state.SynchronizedReleaseCheckpoint;
         if (checkpoint is null)
             return;
 
         EnsureSynchronizedReleaseOperationIsPlanned(checkpoint, operationKey);
+        var releaseStateChanged = false;
+        foreach (var release in gitHubReleases ?? Array.Empty<SynchronizedGitHubReleaseCheckpoint>())
+        {
+            if (release.ReleaseId <= 0 ||
+                string.IsNullOrWhiteSpace(release.Owner) ||
+                string.IsNullOrWhiteSpace(release.Repository) ||
+                string.IsNullOrWhiteSpace(release.TagName) ||
+                !string.Equals(release.OperationKey, operationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "A coordinated GitHub release identity is incomplete or belongs to a different publish operation.");
+            }
+
+            var identity = CreateSynchronizedGitHubReleaseCheckpointIdentity(release);
+            if (checkpoint.GitHubReleases.Any(existing =>
+                    string.Equals(
+                        CreateSynchronizedGitHubReleaseCheckpointIdentity(existing),
+                        identity,
+                        StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            checkpoint.GitHubReleases = checkpoint.GitHubReleases
+                .Append(release)
+                .OrderBy(static value => value.OperationKey, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static value => value.Owner, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static value => value.Repository, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static value => value.TagName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static value => value.ReleaseId)
+                .ToArray();
+            releaseStateChanged = true;
+        }
+
         if (!checkpoint.AttemptedOperations.Contains(operationKey, StringComparer.OrdinalIgnoreCase))
         {
             checkpoint.AttemptedOperations = checkpoint.AttemptedOperations
@@ -439,7 +474,11 @@ public sealed partial class ModulePipelineRunner
                 .ToArray();
         }
         if (checkpoint.CompletedOperations.Contains(operationKey, StringComparer.OrdinalIgnoreCase))
+        {
+            if (releaseStateChanged)
+                SaveSynchronizedReleaseCheckpoint(state);
             return;
+        }
 
         checkpoint.CompletedOperations = checkpoint.CompletedOperations
             .Append(operationKey)
@@ -648,6 +687,7 @@ public sealed partial class ModulePipelineRunner
             checkpoint.PlannedLanes.Length == 0 ||
             checkpoint.AttemptedLanes is null ||
             checkpoint.Lanes is null ||
+            checkpoint.GitHubReleases is null ||
             checkpoint.Lanes.Any(static lane =>
                 lane is null ||
                 string.IsNullOrWhiteSpace(lane.Label) ||
@@ -701,6 +741,7 @@ public sealed partial class ModulePipelineRunner
                         storedPlanned.Contains(operation, StringComparer.OrdinalIgnoreCase)) &&
                     checkpoint.CompletedOperations.All(operation =>
                         checkpoint.AttemptedOperations.Contains(operation, StringComparer.OrdinalIgnoreCase)) &&
+                    IsValidSynchronizedGitHubReleaseCheckpoints(checkpoint) &&
                     (hasBoundPayload ||
                      (hasNoBoundPayload && checkpoint.AttemptedOperations.Length == 0)) &&
                     (hasExactVersion ||

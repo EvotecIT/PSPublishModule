@@ -426,6 +426,13 @@ public sealed partial class ModulePipelineRunner
         var tag = ModulePublisher.GetGitHubTag(publish, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease);
         var versionText = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
         var isPreRelease = !string.IsNullOrWhiteSpace(plan.PreRelease) && !publish.DoNotMarkAsPreRelease;
+        var coordinatedReleaseId = ResolveSynchronizedGitHubReleaseId(state, owner, repo, tag);
+
+        if (coordinatedReleaseId.HasValue)
+        {
+            _logger.Info(
+                $"Reusing package-created GitHub release {coordinatedReleaseId.Value} for coordinated tag '{tag}'.");
+        }
 
         _logger.Info($"Publishing unified GitHub release {owner}/{repo} tag '{tag}' with {release.AssetPaths.Length} asset(s).");
         remotePublishAttempted();
@@ -439,7 +446,9 @@ public sealed partial class ModulePipelineRunner
             GenerateReleaseNotes = publish.GenerateReleaseNotes,
             IsDraft = false,
             IsPreRelease = isPreRelease,
-            ReuseExistingReleaseOnConflict = publish.ReuseExistingRelease,
+            ReuseExistingReleaseOnConflict = publish.ReuseExistingRelease || coordinatedReleaseId.HasValue,
+            RequireExpectedExistingRelease = coordinatedReleaseId.HasValue,
+            ExpectedExistingReleaseId = coordinatedReleaseId,
             ReplaceExistingAssets = publish.ReuseExistingRelease && publish.ReplaceExistingAssets,
             AssetFilePaths = release.AssetPaths,
             Progress = gitHubProgress
@@ -464,6 +473,30 @@ public sealed partial class ModulePipelineRunner
             releaseUrl: releaseUrl,
             succeeded: true,
             errorMessage: null);
+    }
+
+    private static long? ResolveSynchronizedGitHubReleaseId(
+        ModulePipelineRunState state,
+        string owner,
+        string repository,
+        string tag)
+    {
+        var releaseIds = state.SynchronizedReleaseCheckpoint?.GitHubReleases
+            .Where(release =>
+                string.Equals(release.Owner, owner, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(release.Repository, repository, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(release.TagName, tag, StringComparison.OrdinalIgnoreCase))
+            .Select(static release => release.ReleaseId)
+            .Distinct()
+            .ToArray() ?? Array.Empty<long>();
+
+        return releaseIds.Length switch
+        {
+            0 => null,
+            1 => releaseIds[0],
+            _ => throw new InvalidOperationException(
+                $"Coordinated release {owner}/{repository} tag '{tag}' is bound to multiple GitHub release identifiers. Preserve the checkpoint and inspect the incomplete release before retrying.")
+        };
     }
 
     private static bool ShouldPublishUnifiedGitHubRelease(ModulePipelinePlan plan, PublishConfiguration publish)
