@@ -128,6 +128,176 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             reason => reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void ReadSourceProvenance_RecoversProjectReferenceItemDefinitionMetadata()
+    {
+        DotNetPublishPipelineRunner.SourceProvenance provenance = ReadProjectReferencePropertyRecoveryFixture(
+            appProjectXml: """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemDefinitionGroup>
+                    <ProjectReference>
+                      <AdditionalProperties>A=1;B=2</AdditionalProperties>
+                    </ProjectReference>
+                  </ItemDefinitionGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj" />
+                  </ItemGroup>
+                </Project>
+                """,
+            libraryProjectXml: """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup Condition="'$(A)' == '1' and '$(B)' == '2'">
+                    <Compile Include="../../inputs/Selected.cs" />
+                  </ItemGroup>
+                </Project>
+                """,
+            repositoryFiles: new Dictionary<string, string>
+            {
+                ["inputs/Selected.cs"] = "public static class SelectedInput { public const int Value = 1; }"
+            },
+            mutatedPath: "inputs/Selected.cs");
+
+        Assert.True(provenance.Dirty);
+        Assert.Contains(
+            provenance.DirtyPaths,
+            path => path.Replace('\\', '/').EndsWith("inputs/Selected.cs", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            provenance.DirtyReasons,
+            reason => reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_ExpandsEvaluatedProjectPropertiesInMetadataTables()
+    {
+        const string environmentName = "POWERFORGE_PR797_TEST_FLAVOR";
+        string? previousValue = Environment.GetEnvironmentVariable(environmentName);
+        try
+        {
+            Environment.SetEnvironmentVariable(environmentName, "EnvironmentValue");
+            DotNetPublishPipelineRunner.SourceProvenance provenance = ReadProjectReferencePropertyRecoveryFixture(
+                appProjectXml: """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                      <ItemGroup>
+                        <ProjectReference Include="../Library/Library.csproj"
+                                          AdditionalProperties="ConfigurationValue=$(Configuration);ProjectValue=$(MSBuildProjectName);EnvironmentValue=$(POWERFORGE_PR797_TEST_FLAVOR)" />
+                      </ItemGroup>
+                    </Project>
+                    """,
+                libraryProjectXml: """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                      <ItemGroup Condition="'$(ConfigurationValue)' == 'Release' and '$(ProjectValue)' == 'App' and '$(EnvironmentValue)' == 'EnvironmentValue'">
+                        <Compile Include="../../inputs/Selected.cs" />
+                      </ItemGroup>
+                    </Project>
+                    """,
+                repositoryFiles: new Dictionary<string, string>
+                {
+                    ["inputs/Selected.cs"] = "public static class SelectedInput { public const int Value = 1; }"
+                },
+                mutatedPath: "inputs/Selected.cs");
+
+            Assert.True(provenance.Dirty);
+            Assert.Contains(
+                provenance.DirtyPaths,
+                path => path.Replace('\\', '/').EndsWith("inputs/Selected.cs", StringComparison.Ordinal));
+            Assert.DoesNotContain(
+                provenance.DirtyReasons,
+                reason => reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(environmentName, previousValue);
+        }
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_HonorsFirstMatchingChooseBranch()
+    {
+        DotNetPublishPipelineRunner.SourceProvenance provenance = ReadProjectReferencePropertyRecoveryFixture(
+            appProjectXml: """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <Choose>
+                    <When Condition="'$(Configuration)' == 'Release'">
+                      <ItemGroup>
+                        <ProjectReference Include="../Library/Library.csproj"
+                                          AdditionalProperties="Flavor=A%3BB%3DC" />
+                      </ItemGroup>
+                    </When>
+                    <When Condition="'$(Configuration)' == 'Release'">
+                      <ItemGroup>
+                        <ProjectReference Include="../Library/Library.csproj"
+                                          AdditionalProperties="Flavor=A;B=C" />
+                      </ItemGroup>
+                    </When>
+                  </Choose>
+                </Project>
+                """,
+            libraryProjectXml: """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup Condition="'$(Flavor)' == 'A;B=C'">
+                    <Compile Include="../../inputs/Active.cs" />
+                  </ItemGroup>
+                  <ItemGroup Condition="'$(Flavor)' == 'A' and '$(B)' == 'C'">
+                    <Compile Include="../../inputs/Inactive.cs" />
+                  </ItemGroup>
+                </Project>
+                """,
+            repositoryFiles: new Dictionary<string, string>
+            {
+                ["inputs/Active.cs"] = "public static class ActiveInput { public const int Value = 1; }",
+                ["inputs/Inactive.cs"] = "public static class InactiveInput { public const int Value = 1; }"
+            },
+            mutatedPath: "inputs/Inactive.cs");
+
+        Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
+        Assert.DoesNotContain(
+            provenance.DirtyPaths,
+            path => path.Replace('\\', '/').EndsWith("inputs/Inactive.cs", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_KeepsItemMetadataConditionsEligibleWhenUnresolved()
+    {
+        DotNetPublishPipelineRunner.SourceProvenance provenance = ReadProjectReferencePropertyRecoveryFixture(
+            appProjectXml: """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj">
+                      <AdditionalProperties Condition="'%(Filename)' == 'Library'">A=1;B=2</AdditionalProperties>
+                    </ProjectReference>
+                  </ItemGroup>
+                </Project>
+                """,
+            libraryProjectXml: """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup Condition="'$(A)' == '1' and '$(B)' == '2'">
+                    <Compile Include="../../inputs/Selected.cs" />
+                  </ItemGroup>
+                </Project>
+                """,
+            repositoryFiles: new Dictionary<string, string>
+            {
+                ["inputs/Selected.cs"] = "public static class SelectedInput { public const int Value = 1; }"
+            },
+            mutatedPath: "inputs/Selected.cs");
+
+        Assert.True(provenance.Dirty);
+        Assert.Contains(
+            provenance.DirtyPaths,
+            path => path.Replace('\\', '/').EndsWith("inputs/Selected.cs", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            provenance.DirtyReasons,
+            reason => reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal));
+    }
+
     private static DotNetPublishPipelineRunner.SourceProvenance ReadProjectReferencePropertyRecoveryFixture(
         string appProjectXml,
         string libraryProjectXml,

@@ -103,12 +103,20 @@ public sealed partial class DotNetPublishPipelineRunner
                         AddConditionPropertyNames(condition, names);
                     }
 
-                    foreach (XElement otherwise in projectReference.Ancestors()
-                                 .Where(element => element.Name.LocalName.Equals(
-                                     "Otherwise",
-                                     StringComparison.OrdinalIgnoreCase)))
+                    foreach (string expression in projectReference.Attributes()
+                                 .Select(attribute => attribute.Value)
+                                 .Concat(projectReference.Descendants().Select(element => element.Value))
+                                 .Where(value => !string.IsNullOrWhiteSpace(value)))
                     {
-                        foreach (string whenCondition in otherwise.ElementsBeforeSelf()
+                        AddConditionPropertyNames(expression, names);
+                    }
+
+                    foreach (XElement branch in projectReference.Ancestors()
+                                 .Where(element =>
+                                     element.Name.LocalName.Equals("When", StringComparison.OrdinalIgnoreCase) ||
+                                     element.Name.LocalName.Equals("Otherwise", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        foreach (string whenCondition in branch.ElementsBeforeSelf()
                                      .Where(element => element.Name.LocalName.Equals(
                                          "When",
                                          StringComparison.OrdinalIgnoreCase))
@@ -136,8 +144,7 @@ public sealed partial class DotNetPublishPipelineRunner
                      @"\$\(([A-Za-z_][A-Za-z0-9_.-]*)\)",
                      RegexOptions.CultureInvariant))
         {
-            if (!match.Groups[1].Value.StartsWith("MSBuildThisFile", StringComparison.OrdinalIgnoreCase))
-                names.Add(match.Groups[1].Value);
+            names.Add(match.Groups[1].Value);
         }
     }
 
@@ -153,12 +160,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 return true;
         }
 
-        foreach (XElement otherwise in element.AncestorsAndSelf()
-                     .Where(candidate => candidate.Name.LocalName.Equals(
-                         "Otherwise",
-                         StringComparison.OrdinalIgnoreCase)))
+        foreach (XElement branch in element.AncestorsAndSelf()
+                     .Where(candidate =>
+                         candidate.Name.LocalName.Equals("When", StringComparison.OrdinalIgnoreCase) ||
+                         candidate.Name.LocalName.Equals("Otherwise", StringComparison.OrdinalIgnoreCase)))
         {
-            foreach (string whenCondition in otherwise.ElementsBeforeSelf()
+            foreach (string whenCondition in branch.ElementsBeforeSelf()
                          .Where(candidate => candidate.Name.LocalName.Equals(
                              "When",
                              StringComparison.OrdinalIgnoreCase))
@@ -185,7 +192,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 ? value
                 : match.Value,
             RegexOptions.CultureInvariant);
-        if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0)
+        if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+            expanded.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+            expanded.IndexOf("%(", StringComparison.Ordinal) >= 0)
         {
             result = false;
             return false;

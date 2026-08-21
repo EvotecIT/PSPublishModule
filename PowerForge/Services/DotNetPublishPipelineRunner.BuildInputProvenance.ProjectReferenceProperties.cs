@@ -130,7 +130,10 @@ public sealed partial class DotNetPublishPipelineRunner
                         continue;
                     }
 
-                    bool matchesReference = projectReference.Attributes()
+                    bool isItemDefinition = projectReference.Parent?.Name.LocalName.Equals(
+                        "ItemDefinitionGroup",
+                        StringComparison.OrdinalIgnoreCase) == true;
+                    bool matchesReference = isItemDefinition || projectReference.Attributes()
                         .Where(attribute =>
                             attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
                             attribute.Name.LocalName.Equals("Update", StringComparison.OrdinalIgnoreCase))
@@ -225,9 +228,15 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!propertyDefinitions.TryGetValue(propertyName!, out string[]? values))
             {
                 values = ReadLiteralMsBuildPropertyDefinitions(
-                    propertyDefinitionPaths,
-                    evaluatedConditionProperties,
-                    propertyName!);
+                        propertyDefinitionPaths,
+                        evaluatedConditionProperties,
+                        propertyName!)
+                    .Concat(evaluatedConditionProperties.TryGetValue(propertyName!, out string? evaluatedValue)
+                            && IsSafeEvaluatedProjectReferencePropertyExpansion(evaluatedValue)
+                        ? new[] { evaluatedValue }
+                        : Array.Empty<string>())
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
                 propertyDefinitions[propertyName!] = values;
             }
 
@@ -245,6 +254,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
         return candidates.ToArray();
     }
+
+    private static bool IsSafeEvaluatedProjectReferencePropertyExpansion(string value)
+        => value.IndexOf(';') < 0 && value.IndexOf('=') < 0;
 
     private static string[] ReadLiteralMsBuildPropertyDefinitions(
         IEnumerable<string> propertyDefinitionPaths,
