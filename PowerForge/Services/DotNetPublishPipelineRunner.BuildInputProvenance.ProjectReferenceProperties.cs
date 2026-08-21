@@ -14,6 +14,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string declaringProjectPath,
         string projectPathMetadataName,
         IReadOnlyCollection<string> propertyDefinitionPaths,
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         string metadataName,
         string? assignments,
         out List<Dictionary<string, string>> results)
@@ -31,6 +32,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 declaringProjectPath,
                 projectPathMetadataName,
                 propertyDefinitionPaths,
+                evaluatedConditionProperties,
                 metadataName,
                 assignments!,
                 out Dictionary<string, string>[] overlays) &&
@@ -62,6 +64,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string declaringProjectPath,
         string projectPathMetadataName,
         IReadOnlyCollection<string> propertyDefinitionPaths,
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         string metadataName,
         string evaluatedAssignments,
         out Dictionary<string, string>[] tables)
@@ -120,6 +123,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (XElement projectReference in document.Descendants().Where(element =>
                              element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase)))
                 {
+                    if (IsDefinitelyInactiveMsBuildElement(
+                            projectReference,
+                            evaluatedConditionProperties))
+                    {
+                        continue;
+                    }
+
                     bool matchesReference = projectReference.Attributes()
                         .Where(attribute =>
                             attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
@@ -146,18 +156,22 @@ public sealed partial class DotNetPublishPipelineRunner
                         continue;
                     }
 
-                    IEnumerable<string> rawAssignmentValues = projectReference.Attributes()
+                    IEnumerable<(string Value, XElement Declaration)> rawAssignmentValues = projectReference.Attributes()
                         .Where(attribute =>
                             attribute.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase))
-                        .Select(attribute => attribute.Value)
+                        .Select(attribute => (attribute.Value, projectReference))
                         .Concat(projectReference.Elements()
                             .Where(element =>
                                 element.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase))
-                            .Select(element => element.Value));
-                    foreach (string rawAssignments in rawAssignmentValues)
+                            .Select(element => (element.Value, element)));
+                    foreach ((string rawAssignments, XElement declaration) in rawAssignmentValues)
                     {
+                        if (IsDefinitelyInactiveMsBuildElement(declaration, evaluatedConditionProperties))
+                            continue;
+
                         foreach (string candidateAssignments in ReadLiteralProjectReferencePropertyAssignmentCandidates(
                                      declarationProjects,
+                                     evaluatedConditionProperties,
                                      rawAssignments))
                         {
                             if (!TryReadLiteralProjectReferencePropertyTable(
@@ -186,24 +200,70 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static string[] ReadLiteralProjectReferencePropertyAssignmentCandidates(
         IEnumerable<string> propertyDefinitionPaths,
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         string? rawAssignments)
     {
         if (string.IsNullOrWhiteSpace(rawAssignments))
             return Array.Empty<string>();
 
-        var candidates = new List<string> { rawAssignments! };
-        if (!TryReadSingleMsBuildPropertyExpression(rawAssignments!, out string? propertyName))
-            return candidates.ToArray();
+        var propertyDefinitions = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        var pending = new Queue<string>();
+        var candidates = new HashSet<string>(StringComparer.Ordinal) { rawAssignments! };
+        pending.Enqueue(rawAssignments!);
+        while (pending.Count > 0 && candidates.Count <= MaximumProjectReferencePropertyContexts)
+        {
+            string candidate = pending.Dequeue();
+            if (!TryFindSimpleMsBuildPropertyExpression(
+                    candidate,
+                    out int expressionStart,
+                    out int expressionLength,
+                    out string? propertyName))
+            {
+                continue;
+            }
 
+            if (!propertyDefinitions.TryGetValue(propertyName!, out string[]? values))
+            {
+                values = ReadLiteralMsBuildPropertyDefinitions(
+                    propertyDefinitionPaths,
+                    evaluatedConditionProperties,
+                    propertyName!);
+                propertyDefinitions[propertyName!] = values;
+            }
+
+            foreach (string value in values)
+            {
+                string expanded = candidate.Substring(0, expressionStart) +
+                                  value +
+                                  candidate.Substring(expressionStart + expressionLength);
+                if (candidates.Add(expanded))
+                    pending.Enqueue(expanded);
+                if (candidates.Count > MaximumProjectReferencePropertyContexts)
+                    return [rawAssignments!];
+            }
+        }
+
+        return candidates.ToArray();
+    }
+
+    private static string[] ReadLiteralMsBuildPropertyDefinitions(
+        IEnumerable<string> propertyDefinitionPaths,
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
+        string propertyName)
+    {
+        var values = new HashSet<string>(StringComparer.Ordinal);
         foreach (string propertyDefinitionPath in propertyDefinitionPaths)
         {
             try
             {
                 XDocument document = XDocument.Load(propertyDefinitionPath, LoadOptions.None);
-                candidates.AddRange(document.Descendants().Where(element =>
-                        element.Parent?.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) == true &&
-                        element.Name.LocalName.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
-                    .Select(property => property.Value));
+                foreach (XElement property in document.Descendants().Where(element =>
+                             element.Parent?.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) == true &&
+                             element.Name.LocalName.Equals(propertyName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (!IsDefinitelyInactiveMsBuildElement(property, evaluatedConditionProperties))
+                        values.Add(property.Value);
+                }
             }
             catch
             {
@@ -211,22 +271,26 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
-        return candidates.Distinct(StringComparer.Ordinal).ToArray();
+        return values.ToArray();
     }
 
-    private static bool TryReadSingleMsBuildPropertyExpression(string value, out string? propertyName)
+    private static bool TryFindSimpleMsBuildPropertyExpression(
+        string value,
+        out int expressionStart,
+        out int expressionLength,
+        out string? propertyName)
     {
+        expressionStart = value.IndexOf("$(", StringComparison.Ordinal);
+        expressionLength = 0;
         propertyName = null;
-        string trimmed = value.Trim();
-        if (trimmed.Length < 4 ||
-            !trimmed.StartsWith("$(", StringComparison.Ordinal) ||
-            !trimmed.EndsWith(")", StringComparison.Ordinal) ||
-            trimmed.IndexOf("$(", 2, StringComparison.Ordinal) >= 0)
-        {
+        if (expressionStart < 0)
             return false;
-        }
 
-        string candidate = trimmed.Substring(2, trimmed.Length - 3).Trim();
+        int expressionEnd = value.IndexOf(')', expressionStart + 2);
+        if (expressionEnd < 0)
+            return false;
+
+        string candidate = value.Substring(expressionStart + 2, expressionEnd - expressionStart - 2).Trim();
         if (candidate.Length == 0 ||
             candidate.IndexOfAny(new[] { '$', '(', ')', ';', '=' }) >= 0)
         {
@@ -234,6 +298,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         propertyName = candidate;
+        expressionLength = expressionEnd - expressionStart + 1;
         return true;
     }
 
@@ -290,6 +355,9 @@ public sealed partial class DotNetPublishPipelineRunner
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (string segment in rawAssignments.Split(new[] { ';' }))
         {
+            if (string.IsNullOrWhiteSpace(segment))
+                continue;
+
             int separator = segment.IndexOf('=');
             if (separator <= 0 ||
                 !TryUnescapeMsBuildLiteral(segment.Substring(0, separator).Trim(), out string? name) ||

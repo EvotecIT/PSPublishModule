@@ -592,6 +592,8 @@ public sealed partial class DotNetPublishPipelineRunner
             string[] recordedGeneratedOutputPaths = Array.Empty<string>();
             var generatedProjectReferenceOutputs = new List<GeneratedProjectReferenceOutput>();
             string[] taskWideProjectReferencePropertyRemovals = Array.Empty<string>();
+            IReadOnlyDictionary<string, string> evaluatedProjectReferenceConditionProperties =
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var packageRoots = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var importPaths = new HashSet<string>(
@@ -659,6 +661,14 @@ public sealed partial class DotNetPublishPipelineRunner
 
                 if (root.TryGetProperty("Items", out JsonElement items))
                 {
+                    if (items.TryGetProperty("ProjectReference", out JsonElement projectReferenceItems) &&
+                        projectReferenceItems.ValueKind == JsonValueKind.Array &&
+                        projectReferenceItems.GetArrayLength() > 0)
+                    {
+                        evaluatedProjectReferenceConditionProperties =
+                            ReadEvaluatedProjectReferenceConditionProperties(request, importPaths);
+                    }
+
                     HashSet<string> embeddedResourceProjectReferences =
                         ReadProjectReferenceOutputKeys(items, "EmbeddedResource");
                     HashSet<string> analyzerProjectReferences =
@@ -707,6 +717,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                         item,
                                         request.ProjectPath,
                                         importPaths,
+                                        evaluatedProjectReferenceConditionProperties,
                                         taskWideProjectReferencePropertyRemovals,
                                         out EvaluatedProjectReference[] itemReferences) ||
                                     itemReferences.Length == 0)
@@ -728,6 +739,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                          msBuildSdksPath,
                                          request.ProjectPath,
                                          importPaths,
+                                         evaluatedProjectReferenceConditionProperties,
                                          embeddedResourceProjectReferences,
                                          analyzerProjectReferences,
                                          taskWideProjectReferencePropertyRemovals,
@@ -766,6 +778,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         resolvedItems,
                         request.ProjectPath,
                         importPaths,
+                        evaluatedProjectReferenceConditionProperties,
                         taskWideProjectReferencePropertyRemovals,
                         out EvaluatedProjectReference[] resolvedReferences))
                     return false;
