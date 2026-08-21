@@ -142,21 +142,29 @@ public sealed partial class DotNetPublishPipelineRunner
 
         try
         {
-            string expectedRelativeTarget = outputItemType.Equals(
-                "Analyzer",
-                StringComparison.OrdinalIgnoreCase)
-                ? Path.Combine(
-                    "Sdks",
-                    "Microsoft.NET.Sdk",
-                    "targets",
-                    "Microsoft.NET.ConflictResolution.targets")
-                : "Microsoft.Common.CurrentVersion.targets";
-            string expectedTarget = Path.GetFullPath(Path.Combine(msBuildToolsPath, expectedRelativeTarget));
             string actualTarget = Path.GetFullPath(definingProject);
+            string commonTarget = Path.GetFullPath(Path.Combine(
+                msBuildToolsPath,
+                "Microsoft.Common.CurrentVersion.targets"));
+            StringComparison comparison = IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            if (string.Equals(actualTarget, commonTarget, comparison))
+                return true;
+
+            if (!outputItemType.Equals("Analyzer", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            string analyzerConflictTarget = Path.GetFullPath(Path.Combine(
+                msBuildToolsPath,
+                "Sdks",
+                "Microsoft.NET.Sdk",
+                "targets",
+                "Microsoft.NET.ConflictResolution.targets"));
             return string.Equals(
                 actualTarget,
-                expectedTarget,
-                IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+                analyzerConflictTarget,
+                comparison);
         }
         catch
         {
