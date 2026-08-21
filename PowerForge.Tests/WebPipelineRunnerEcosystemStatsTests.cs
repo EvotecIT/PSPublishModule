@@ -337,7 +337,7 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "slug": "securitypolicyx",
                       "name": "SecurityPolicyX",
                       "githubRepo": "EvotecIT/SecurityPolicyX",
-                      "aliases": ["/projects/securitypolicy/"],
+                      "aliases": ["/projects/securitypolicy/?ref=legacy"],
                       "links": {
                         "powerShellGallery": "https://www.powershellgallery.com/packages/SecurityPolicy"
                       },
@@ -465,6 +465,27 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       }
                     ]
                   },
+                  "nuget": {
+                    "owner": "EvotecIT",
+                    "packageCount": 2,
+                    "totalDownloads": 300,
+                    "packages": [
+                      {
+                        "id": "SecurityPolicy",
+                        "version": "1.0.0",
+                        "totalDownloads": 100,
+                        "packageUrl": "https://www.nuget.org/packages/SecurityPolicy",
+                        "projectUrl": "https://github.com/EvotecIT/SecurityPolicy"
+                      },
+                      {
+                        "id": "SecurityPolicy.Core",
+                        "version": "1.0.0",
+                        "totalDownloads": 200,
+                        "packageUrl": "https://www.nuget.org/packages/SecurityPolicy.Core",
+                        "projectUrl": "https://github.com/EvotecIT/SecurityPolicy"
+                      }
+                    ]
+                  },
                   "warnings": []
                 }
                 """);
@@ -477,7 +498,7 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "slug": "securitypolicyx",
                       "name": "SecurityPolicyX",
                       "githubRepo": "EvotecIT/SecurityPolicyX",
-                      "aliases": ["/projects/securitypolicy/"],
+                      "aliases": ["/projects/securitypolicy/?ref=legacy"],
                       "links": {
                         "powerShellGallery": "https://www.powershellgallery.com/packages/SecurityPolicy"
                       },
@@ -513,7 +534,9 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
             var project = catalog.RootElement.GetProperty("projects")[0];
             Assert.Equal(42, project.GetProperty("metrics").GetProperty("github").GetProperty("stars").GetInt32());
             Assert.Equal(123456L, project.GetProperty("metrics").GetProperty("powerShellGallery").GetProperty("totalDownloads").GetInt64());
-            Assert.Equal(123456L, project.GetProperty("metrics").GetProperty("downloads").GetProperty("total").GetInt64());
+            Assert.Equal(2, project.GetProperty("metrics").GetProperty("nuget").GetProperty("packageCount").GetInt32());
+            Assert.Equal(300L, project.GetProperty("metrics").GetProperty("nuget").GetProperty("totalDownloads").GetInt64());
+            Assert.Equal(123756L, project.GetProperty("metrics").GetProperty("downloads").GetProperty("total").GetInt64());
             Assert.True(File.Exists(publishedCatalogPath));
         }
         finally
