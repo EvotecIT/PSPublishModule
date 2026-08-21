@@ -311,6 +311,8 @@ public sealed partial class DotNetPublishPipelineRunner
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var directories = new HashSet<string>(comparison);
         var outputRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var expectedOutputPathsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var recordedGeneratedOutputPathsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var generatedProjectReferenceOutputs = new List<(ProjectEvaluationRequest Request, GeneratedProjectReferenceOutput Output)>();
         using var verifiedPackageArchives = new VerifiedPackageArchiveCache();
         buildInputs = new HashSet<string>(comparison);
@@ -353,6 +355,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (string input in evaluation.SourceInputs)
                     sourceInputs.Add(input);
                 outputRootsByEvaluation[visitKey] = evaluation.OutputRoots;
+                expectedOutputPathsByEvaluation[visitKey] = evaluation.ExpectedOutputPaths;
+                recordedGeneratedOutputPathsByEvaluation[visitKey] = evaluation.RecordedGeneratedOutputPaths;
                 generatedProjectReferenceOutputs.AddRange(
                     evaluation.GeneratedProjectReferenceOutputs.Select(output => (request, output)));
                 if (string.IsNullOrEmpty(request.TargetFramework))
@@ -380,9 +384,17 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             ProjectEvaluationRequest referencedProject = request.ForProject(output.ProjectReference);
             if (outputRootsByEvaluation.TryGetValue(referencedProject.BuildVisitKey(), out string[]? outputRoots) &&
+                expectedOutputPathsByEvaluation.TryGetValue(
+                    referencedProject.BuildVisitKey(),
+                    out string[]? expectedOutputPaths) &&
+                recordedGeneratedOutputPathsByEvaluation.TryGetValue(
+                    referencedProject.BuildVisitKey(),
+                    out string[]? recordedGeneratedOutputPaths) &&
                 IsTrustedGeneratedOutputPath(
                     output.OutputPath,
                     outputRoots,
+                    expectedOutputPaths,
+                    recordedGeneratedOutputPaths,
                     Path.GetDirectoryName(referencedProject.ProjectPath)!,
                     directories))
             {
@@ -510,10 +522,12 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:OutputPath",
             "-getProperty:OutDir",
             "-getProperty:TargetDir",
+            "-getProperty:TargetPath",
             "-getProperty:_GlobalPropertiesToRemoveFromProjectReferences",
             "-getProperty:BaseIntermediateOutputPath",
             "-getProperty:MSBuildProjectExtensionsPath",
             "-getProperty:IntermediateOutputPath",
+            "-getProperty:CleanFile",
             "-getProperty:NuGetPackageRoot",
             "-getProperty:NuGetPackageFolders",
             "-getProperty:ProjectAssetsFile",
@@ -573,6 +587,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var outputRoots = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            var expectedOutputPaths = new HashSet<string>(
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            string[] recordedGeneratedOutputPaths = Array.Empty<string>();
             var generatedProjectReferenceOutputs = new List<GeneratedProjectReferenceOutput>();
             string[] taskWideProjectReferencePropertyRemovals = Array.Empty<string>();
             var packageRoots = new HashSet<string>(
@@ -587,6 +604,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 AddPropertyPath(properties, "OutputPath", Path.GetDirectoryName(request.ProjectPath)!, outputRoots);
                 AddPropertyPath(properties, "OutDir", Path.GetDirectoryName(request.ProjectPath)!, outputRoots);
                 AddPropertyPath(properties, "TargetDir", Path.GetDirectoryName(request.ProjectPath)!, outputRoots);
+                AddPropertyPath(properties, "TargetPath", Path.GetDirectoryName(request.ProjectPath)!, expectedOutputPaths);
+                recordedGeneratedOutputPaths = ReadRecordedGeneratedOutputPaths(properties, request.ProjectPath);
                 AddPropertyPath(properties, "BaseIntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "MSBuildProjectExtensionsPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "IntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
@@ -763,6 +782,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 references.Values.ToArray(),
                 targetFrameworks.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray(),
                 outputRoots.ToArray(),
+                expectedOutputPaths.ToArray(),
+                recordedGeneratedOutputPaths,
                 generatedProjectReferenceOutputs.ToArray());
             return true;
         }

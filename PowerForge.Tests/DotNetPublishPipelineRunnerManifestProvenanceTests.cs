@@ -1391,7 +1391,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void ReadSourceProvenance_DoesNotBuildProjectReferenceOutputsDuringEvaluation()
+    public void ReadSourceProvenance_DoesNotBuildProjectReferenceOutputsAndFailsClosedWithoutBuildEvidence()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -1461,8 +1461,11 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     buildConfiguration: "Release",
                     buildPlan: plan);
 
-            Assert.False(provenance.Dirty);
+            Assert.True(provenance.Dirty);
             Assert.Empty(provenance.DirtyPaths);
+            Assert.Contains(
+                provenance.DirtyReasons,
+                reason => reason.Contains("Generator.dll", StringComparison.OrdinalIgnoreCase));
             Assert.Equal("stale generated library", File.ReadAllText(libraryOutput));
             Assert.Equal("stale generated analyzer", File.ReadAllText(generatorOutput));
         }

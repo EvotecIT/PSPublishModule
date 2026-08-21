@@ -129,6 +129,69 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void ReadSourceProvenance_TracksUntrackedProjectReferencePayloadUnderArbitraryOutputRoot()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "Library")).FullName;
+            string assetsDirectory = Directory.CreateDirectory(Path.Combine(root, "assets")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string payloadPath = Path.Combine(assetsDirectory, "Payload.dll");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj"
+                                      ReferenceOutputAssembly="false"
+                                      OutputItemType="EmbeddedResource"
+                                      LogicalName="App.Payloads.Payload.dll" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.csproj"), """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <OutDir>$(MSBuildProjectDirectory)/../../assets/</OutDir>
+                    <PayloadPath>$(OutDir)Payload.dll</PayloadPath>
+                    <TargetPath>$(PayloadPath)</TargetPath>
+                  </PropertyGroup>
+                  <Target Name="Build" Returns="$(PayloadPath)" />
+                  <Target Name="GetTargetPath" Returns="$(PayloadPath)" />
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { private static void Main() { } }");
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.cs"), "public static class Library { }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\nassets/\n");
+            File.WriteAllText(payloadPath, "source payload");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [appProject],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+            Assert.True(
+                provenance.DirtyReasons.Any(reason =>
+                    reason.Replace('\\', '/').Contains("assets/Payload.dll", StringComparison.Ordinal)),
+                string.Join(Environment.NewLine, provenance.DirtyReasons));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
     public void ReadSourceProvenance_TracksProjectReferenceOutputUnderBroadOutputRoot()
     {
         string root = Directory.CreateTempSubdirectory().FullName;

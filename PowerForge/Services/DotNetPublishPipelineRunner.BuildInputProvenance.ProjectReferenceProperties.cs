@@ -87,13 +87,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     declaringProjectPath
                 }
                 .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-                .Select(path => Path.GetFullPath(path!))
-                .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
-                .ToArray();
-            string[] propertyProjects = declarationProjects
                 .Concat(propertyDefinitionPaths.Where(path =>
                     !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
-                .Select(Path.GetFullPath)
+                .Select(path => Path.GetFullPath(path!))
                 .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .ToArray();
             foreach (string candidateProject in declarationProjects)
@@ -103,31 +99,56 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (XElement projectReference in document.Descendants().Where(element =>
                              element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase)))
                 {
-                    string? include = projectReference.Attribute("Include")?.Value;
-                    if (!TryResolveLiteralProjectReferencePath(definingDirectory, include, out string? declaredPath) ||
-                        !string.Equals(declaredPath, referencedPath, comparison))
+                    bool matchesReference = projectReference.Attributes()
+                        .Where(attribute =>
+                            attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
+                            attribute.Name.LocalName.Equals("Update", StringComparison.OrdinalIgnoreCase))
+                        .Select(attribute => attribute.Value)
+                        .Any(itemSpec =>
+                            new[]
+                                {
+                                    Path.GetDirectoryName(declaringProjectPath)!,
+                                    definingDirectory
+                                }
+                                .Distinct(IsWindows()
+                                    ? StringComparer.OrdinalIgnoreCase
+                                    : StringComparer.Ordinal)
+                                .Any(baseDirectory =>
+                                    TryResolveLiteralProjectReferencePath(
+                                        baseDirectory,
+                                        itemSpec,
+                                        out string? declaredPath) &&
+                                    string.Equals(declaredPath, referencedPath, comparison)));
+                    if (!matchesReference)
                     {
                         continue;
                     }
 
-                    string? rawAssignments = projectReference.Attributes().FirstOrDefault(attribute =>
-                            attribute.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase))?.Value
-                        ?? projectReference.Elements().FirstOrDefault(element =>
-                            element.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase))?.Value;
-                    foreach (string candidateAssignments in ReadLiteralProjectReferencePropertyAssignmentCandidates(
-                                 propertyProjects,
-                                 rawAssignments))
+                    IEnumerable<string> rawAssignmentValues = projectReference.Attributes()
+                        .Where(attribute =>
+                            attribute.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase))
+                        .Select(attribute => attribute.Value)
+                        .Concat(projectReference.Elements()
+                            .Where(element =>
+                                element.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase))
+                            .Select(element => element.Value));
+                    foreach (string rawAssignments in rawAssignmentValues)
                     {
-                        if (!TryReadLiteralProjectReferencePropertyTable(
-                                candidateAssignments,
-                                evaluatedAssignments,
-                                out Dictionary<string, string>? table))
+                        foreach (string candidateAssignments in ReadLiteralProjectReferencePropertyAssignmentCandidates(
+                                     declarationProjects,
+                                     rawAssignments))
                         {
-                            continue;
-                        }
+                            if (!TryReadLiteralProjectReferencePropertyTable(
+                                    candidateAssignments,
+                                    evaluatedAssignments,
+                                    out Dictionary<string, string>? table))
+                            {
+                                continue;
+                            }
 
-                        if (keys.Add(BuildProjectReferencePropertyTableKey(table!)))
-                            results.Add(table!);
+                            if (keys.Add(BuildProjectReferencePropertyTableKey(table!)))
+                                results.Add(table!);
+                        }
                     }
                 }
             }

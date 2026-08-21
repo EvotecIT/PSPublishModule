@@ -42,9 +42,30 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool IsTrustedGeneratedOutputPath(
         string path,
         IEnumerable<string>? outputRoots,
+        IEnumerable<string>? expectedOutputPaths,
+        IEnumerable<string>? recordedGeneratedOutputPaths,
         string referencedProjectDirectory,
         IEnumerable<string> evaluatedProjectDirectories)
     {
+        try
+        {
+            string fullPath = Path.GetFullPath(path);
+            StringComparison comparison = IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            if (!(expectedOutputPaths ?? Array.Empty<string>()).Any(expectedPath =>
+                    string.Equals(Path.GetFullPath(expectedPath), fullPath, comparison)) ||
+                !(recordedGeneratedOutputPaths ?? Array.Empty<string>()).Any(recordedPath =>
+                    string.Equals(Path.GetFullPath(recordedPath), fullPath, comparison)))
+            {
+                return false;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
         foreach (string root in outputRoots ?? Array.Empty<string>())
         {
             try
@@ -72,6 +93,47 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return false;
+    }
+
+    private static string[] ReadRecordedGeneratedOutputPaths(
+        JsonElement properties,
+        string projectPath)
+    {
+        try
+        {
+            string projectDirectory = Path.GetDirectoryName(projectPath)!;
+            string? intermediateOutputPath = ReadEvaluatedPath(
+                properties,
+                "IntermediateOutputPath",
+                projectDirectory);
+            if (string.IsNullOrWhiteSpace(intermediateOutputPath))
+                return Array.Empty<string>();
+
+            string cleanFile = ReadItemText(properties, "CleanFile") ??
+                Path.GetFileName(projectPath) + ".FileListAbsolute.txt";
+            if (string.IsNullOrWhiteSpace(cleanFile))
+                return Array.Empty<string>();
+
+            string recordPath = Path.GetFullPath(Path.IsPathRooted(cleanFile)
+                ? cleanFile
+                : Path.Combine(intermediateOutputPath!, cleanFile));
+            if (!File.Exists(recordPath))
+                return Array.Empty<string>();
+
+            return File.ReadLines(recordPath)
+                .Where(line => !string.IsNullOrWhiteSpace(line))
+                .Select(line => Path.GetFullPath(Path.IsPathRooted(line)
+                    ? line
+                    : Path.Combine(projectDirectory, line)))
+                .Where(File.Exists)
+                .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                .ToArray();
+        }
+        catch
+        {
+            // Missing or unreadable build-write evidence fails closed.
+            return Array.Empty<string>();
+        }
     }
 
     private static bool IsTrackedProjectOutputPath(string path, string projectDirectory)
@@ -341,6 +403,8 @@ public sealed partial class DotNetPublishPipelineRunner
             EvaluatedProjectReference[] projectReferences,
             string[] targetFrameworks,
             string[] outputRoots,
+            string[] expectedOutputPaths,
+            string[] recordedGeneratedOutputPaths,
             GeneratedProjectReferenceOutput[] generatedProjectReferenceOutputs)
         {
             BuildInputs = buildInputs;
@@ -348,6 +412,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ProjectReferences = projectReferences;
             TargetFrameworks = targetFrameworks;
             OutputRoots = outputRoots;
+            ExpectedOutputPaths = expectedOutputPaths;
+            RecordedGeneratedOutputPaths = recordedGeneratedOutputPaths;
             GeneratedProjectReferenceOutputs = generatedProjectReferenceOutputs;
         }
 
@@ -356,6 +422,8 @@ public sealed partial class DotNetPublishPipelineRunner
         internal EvaluatedProjectReference[] ProjectReferences { get; }
         internal string[] TargetFrameworks { get; }
         internal string[] OutputRoots { get; }
+        internal string[] ExpectedOutputPaths { get; }
+        internal string[] RecordedGeneratedOutputPaths { get; }
         internal GeneratedProjectReferenceOutput[] GeneratedProjectReferenceOutputs { get; }
     }
 
