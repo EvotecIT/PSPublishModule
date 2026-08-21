@@ -308,9 +308,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 configuration,
                 buildPlan)
             .ToArray();
-        var visited = new HashSet<string>(comparison);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
         var directories = new HashSet<string>(comparison);
-        var outputRootsByEvaluation = new Dictionary<string, string[]>(comparison);
+        var outputRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var generatedProjectReferenceOutputs = new List<(ProjectEvaluationRequest Request, GeneratedProjectReferenceOutput Output)>();
         using var verifiedPackageArchives = new VerifiedPackageArchiveCache();
         buildInputs = new HashSet<string>(comparison);
@@ -504,6 +504,8 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:MSBuildAllProjects",
             "-getProperty:BaseOutputPath",
             "-getProperty:OutputPath",
+            "-getProperty:OutDir",
+            "-getProperty:TargetDir",
             "-getProperty:BaseIntermediateOutputPath",
             "-getProperty:MSBuildProjectExtensionsPath",
             "-getProperty:IntermediateOutputPath",
@@ -511,9 +513,10 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:NuGetPackageFolders",
             "-getProperty:ProjectAssetsFile",
             "-getProperty:NuGetLockFilePath",
-            "-getProperty:MSBuildToolsPath",
-            "-p:Configuration=" + request.Configuration
+            "-getProperty:MSBuildToolsPath"
         };
+        if (!string.IsNullOrWhiteSpace(request.Configuration))
+            arguments.Add("-p:Configuration=" + request.Configuration);
         foreach (string itemName in EvaluatedBuildItemNames)
             arguments.Add("-getItem:" + itemName);
         if (!string.IsNullOrWhiteSpace(request.TargetFramework))
@@ -554,10 +557,8 @@ public sealed partial class DotNetPublishPipelineRunner
             JsonElement root = document.RootElement;
             var inputs = new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var sourceInputs = new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-            var references = new Dictionary<string, EvaluatedProjectReference>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-            var rawReferences = new HashSet<string>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            var references = new Dictionary<string, EvaluatedProjectReference>(StringComparer.Ordinal);
+            var rawReferences = new Dictionary<string, EvaluatedProjectReference>(StringComparer.Ordinal);
             var targetFrameworks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var generatedBuildRoots = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -570,8 +571,12 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "OutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
+                AddPropertyPath(properties, "OutDir", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
+                AddPropertyPath(properties, "TargetDir", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, outputRoots);
                 AddPropertyPath(properties, "OutputPath", Path.GetDirectoryName(request.ProjectPath)!, outputRoots);
+                AddPropertyPath(properties, "OutDir", Path.GetDirectoryName(request.ProjectPath)!, outputRoots);
+                AddPropertyPath(properties, "TargetDir", Path.GetDirectoryName(request.ProjectPath)!, outputRoots);
                 AddPropertyPath(properties, "BaseIntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "MSBuildProjectExtensionsPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
                 AddPropertyPath(properties, "IntermediateOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
@@ -668,7 +673,14 @@ public sealed partial class DotNetPublishPipelineRunner
                             if (itemName.Equals("ProjectReference", StringComparison.Ordinal))
                             {
                                 inputs.Add(fullPath);
-                                rawReferences.Add(fullPath);
+                                if (!TryReadEvaluatedProjectReference(
+                                        item,
+                                        out EvaluatedProjectReference? rawReference) ||
+                                    rawReference is null)
+                                {
+                                    return false;
+                                }
+                                rawReferences[BuildEvaluatedProjectReferenceKey(rawReference)] = rawReference;
                             }
                             else if (IsGeneratedProjectReferenceAssemblyReference(itemName, item))
                             {
@@ -706,11 +718,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
             if (string.IsNullOrWhiteSpace(request.TargetFramework))
             {
-                foreach (string projectReference in rawReferences)
-                {
-                    var reference = new EvaluatedProjectReference(projectReference, targetFramework: null);
-                    references[BuildEvaluatedProjectReferenceKey(reference)] = reference;
-                }
+                foreach (EvaluatedProjectReference projectReference in rawReferences.Values)
+                    references[BuildEvaluatedProjectReferenceKey(projectReference)] = projectReference;
             }
             else if (rawReferences.Count > 0)
             {
@@ -852,17 +861,26 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         var globalProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        AddProjectReferenceProperties(globalProperties, ReadItemText(item, "AdditionalProperties"));
-        AddProjectReferenceProperties(globalProperties, ReadItemText(item, "SetConfiguration"));
-        AddProjectReferenceProperties(globalProperties, ReadItemText(item, "SetPlatform"));
-        AddProjectReferenceProperties(globalProperties, ReadItemText(item, "SetTargetFramework"));
-
-        string? targetFramework = ReadItemText(item, "NearestTargetFramework");
-        if (string.IsNullOrWhiteSpace(targetFramework) &&
-            globalProperties.TryGetValue("TargetFramework", out string? propertyTargetFramework))
+        string? projectProperties = ReadItemText(item, "Properties");
+        if (!string.IsNullOrWhiteSpace(projectProperties))
         {
-            targetFramework = propertyTargetFramework;
+            // MSBuild item-level Properties replaces the task-wide property table.
+            AddProjectReferenceProperties(globalProperties, projectProperties);
         }
+        else
+        {
+            AddProjectReferenceProperties(globalProperties, ReadItemText(item, "SetConfiguration"));
+            AddProjectReferenceProperties(globalProperties, ReadItemText(item, "SetPlatform"));
+            AddProjectReferenceProperties(globalProperties, ReadItemText(item, "SetTargetFramework"));
+        }
+        // Per-item AdditionalProperties overlays either the replacement or task-wide table.
+        AddProjectReferenceProperties(globalProperties, ReadItemText(item, "AdditionalProperties"));
+
+        string? targetFramework = globalProperties.TryGetValue(
+            "TargetFramework",
+            out string? propertyTargetFramework)
+            ? propertyTargetFramework
+            : ReadItemText(item, "NearestTargetFramework");
 
         string[] undefineProperties = ReadProjectReferencePropertyNames(
             ReadItemText(item, "UndefineProperties"),

@@ -22,11 +22,12 @@ public sealed partial class DotNetPublishPipelineRunner
             "--force-evaluate",
             "--no-cache",
             "--nologo",
-            "-p:Configuration=" + request.Configuration,
             "-p:RestorePackagesWithLockFile=true",
             "-p:RestoreLockedMode=false",
             "-p:NuGetLockFilePath=" + temporaryLockFile
         };
+        if (!string.IsNullOrWhiteSpace(request.Configuration))
+            arguments.Add("-p:Configuration=" + request.Configuration);
         if (!string.IsNullOrWhiteSpace(request.TargetFramework) &&
             !ProjectDeclaresTargetFramework(request.ProjectPath))
         {
@@ -344,9 +345,10 @@ public sealed partial class DotNetPublishPipelineRunner
             request.ProjectPath,
             "-nologo",
             "-verbosity:quiet",
-            "-preprocess:" + outputPath,
-            "-p:Configuration=" + request.Configuration
+            "-preprocess:" + outputPath
         };
+        if (!string.IsNullOrWhiteSpace(request.Configuration))
+            arguments.Add("-p:Configuration=" + request.Configuration);
         if (!string.IsNullOrWhiteSpace(request.TargetFramework))
             arguments.Add("-p:TargetFramework=" + request.TargetFramework);
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(

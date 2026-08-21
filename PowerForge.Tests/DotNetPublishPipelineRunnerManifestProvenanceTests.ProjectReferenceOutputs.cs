@@ -337,6 +337,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
                   <ItemGroup>
                     <ProjectReference Include="../Library/Library.csproj"
+                                      Properties="Flavor=Unsigned"
                                       AdditionalProperties="Flavor=Signed"
                                       ReferenceOutputAssembly="false"
                                       OutputItemType="EmbeddedResource"

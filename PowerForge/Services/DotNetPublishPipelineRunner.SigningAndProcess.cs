@@ -634,43 +634,23 @@ public sealed partial class DotNetPublishPipelineRunner
             p);
         if (timeout.HasValue && timeout.Value > TimeSpan.Zero && timeout.Value != Timeout.InfiniteTimeSpan)
         {
-            var stdoutBuilder = new StringBuilder();
-            var stderrBuilder = new StringBuilder();
-            using var stdoutDone = new ManualResetEventSlim(false);
-            using var stderrDone = new ManualResetEventSlim(false);
-            p.OutputDataReceived += (_, e) =>
-            {
-                if (e.Data is null)
-                    stdoutDone.Set();
-                else
-                    stdoutBuilder.AppendLine(e.Data);
-            };
-            p.ErrorDataReceived += (_, e) =>
-            {
-                if (e.Data is null)
-                    stderrDone.Set();
-                else
-                    stderrBuilder.AppendLine(e.Data);
-            };
-            p.BeginOutputReadLine();
-            p.BeginErrorReadLine();
+            Task<string> stdoutRead = ReadRedirectedOutputAsync(p.StandardOutput);
+            Task<string> stderrRead = ReadRedirectedOutputAsync(p.StandardError);
 
             var timeoutMs = ToTimeoutMilliseconds(timeout.Value);
-            if (!p.WaitForExit(timeoutMs))
-            {
+            bool exited = p.WaitForExit(timeoutMs);
+            if (!exited)
                 TryKillProcessTree(p);
-                var timeoutMessage = $"Process timed out after {Math.Ceiling(timeout.Value.TotalSeconds)} second(s).";
-                if (stderrBuilder.Length > 0)
-                    stderrBuilder.AppendLine();
-                stderrBuilder.Append(timeoutMessage);
-                return (-1, stdoutBuilder.ToString(), stderrBuilder.ToString(), true);
-            }
 
-            p.WaitForExit();
-            stdoutDone.Wait(TimeSpan.FromSeconds(5));
-            stderrDone.Wait(TimeSpan.FromSeconds(5));
+            DrainRedirectedOutputReads(p, stdoutRead, stderrRead, TimeSpan.FromMilliseconds(500));
+            string timedStdout = ReadCompletedOutput(stdoutRead);
+            string timedStderr = ReadCompletedOutput(stderrRead);
+            if (!exited)
+                timedStderr = AppendProcessTimeoutMessage(timedStderr, timeout.Value);
             cancellationToken.ThrowIfCancellationRequested();
-            return (p.ExitCode, stdoutBuilder.ToString(), stderrBuilder.ToString(), false);
+            return exited
+                ? (p.ExitCode, timedStdout, timedStderr, false)
+                : (-1, timedStdout, timedStderr, true);
         }
 
         var stdout = p.StandardOutput.ReadToEnd();
@@ -678,6 +658,79 @@ public sealed partial class DotNetPublishPipelineRunner
         p.WaitForExit();
         cancellationToken.ThrowIfCancellationRequested();
         return (p.ExitCode, stdout, stderr, false);
+    }
+
+    private static void DrainRedirectedOutputReads(
+        Process process,
+        Task<string> stdoutRead,
+        Task<string> stderrRead,
+        TimeSpan timeout)
+    {
+        var reads = Task.WhenAll(stdoutRead, stderrRead);
+        try
+        {
+            if (reads.Wait(timeout))
+                return;
+        }
+        catch (AggregateException)
+        {
+            return;
+        }
+
+        if (!stdoutRead.IsCompleted)
+            process.StandardOutput.Dispose();
+        if (!stderrRead.IsCompleted)
+            process.StandardError.Dispose();
+        try
+        {
+            reads.Wait(TimeSpan.FromMilliseconds(500));
+        }
+        catch (AggregateException)
+        {
+            // A disposed redirected stream can fault its outstanding read.
+        }
+    }
+
+    private static Task<string> ReadRedirectedOutputAsync(StreamReader reader)
+        => Task.Run(async () =>
+        {
+            var output = new StringBuilder();
+            try
+            {
+                string? line;
+                while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) is not null)
+                    output.AppendLine(line);
+            }
+            catch (IOException)
+            {
+                // Disposing an inherited redirected stream ends the bounded read.
+            }
+            catch (ObjectDisposedException)
+            {
+                // Disposing an inherited redirected stream ends the bounded read.
+            }
+            catch (InvalidOperationException)
+            {
+                // The asynchronous reader can report disposal as an invalid operation.
+            }
+            return output.ToString();
+        });
+
+    private static string ReadCompletedOutput(Task<string> read)
+    {
+        if (read.Status == TaskStatus.RanToCompletion)
+            return read.Result;
+        if (read.IsFaulted)
+            _ = read.Exception;
+        return string.Empty;
+    }
+
+    private static string AppendProcessTimeoutMessage(string stderr, TimeSpan timeout)
+    {
+        string timeoutMessage = $"Process timed out after {Math.Ceiling(timeout.TotalSeconds)} second(s).";
+        return string.IsNullOrEmpty(stderr)
+            ? timeoutMessage
+            : stderr.TrimEnd() + Environment.NewLine + timeoutMessage;
     }
 
     private static int ToTimeoutMilliseconds(TimeSpan timeout)

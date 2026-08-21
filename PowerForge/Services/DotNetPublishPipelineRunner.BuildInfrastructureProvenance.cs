@@ -162,35 +162,63 @@ public sealed partial class DotNetPublishPipelineRunner
             var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (KeyValuePair<string, string> property in GlobalProperties)
                 properties[property.Key] = property.Value;
-            foreach (string propertyName in projectReference.UndefineProperties)
-                properties.Remove(propertyName);
             foreach (KeyValuePair<string, string> property in projectReference.GlobalProperties)
                 properties[property.Key] = property.Value;
+            foreach (string propertyName in projectReference.UndefineProperties)
+                properties.Remove(propertyName);
 
-            string configuration = properties.TryGetValue("Configuration", out string? childConfiguration) &&
-                                   !string.IsNullOrWhiteSpace(childConfiguration)
-                ? childConfiguration
-                : Configuration;
+            bool undefinesConfiguration = projectReference.UndefineProperties.Contains(
+                "Configuration",
+                StringComparer.OrdinalIgnoreCase);
+            bool undefinesTargetFramework = projectReference.UndefineProperties.Contains(
+                "TargetFramework",
+                StringComparer.OrdinalIgnoreCase);
+            string configuration = undefinesConfiguration
+                ? string.Empty
+                : properties.TryGetValue("Configuration", out string? childConfiguration) &&
+                  !string.IsNullOrWhiteSpace(childConfiguration)
+                    ? childConfiguration
+                    : Configuration;
+            string? targetFramework = undefinesTargetFramework
+                ? null
+                : projectReference.TargetFramework;
             properties.Remove("Configuration");
             properties.Remove("TargetFramework");
             return new ProjectEvaluationRequest(
                 Path.GetFullPath(projectReference.ProjectPath),
-                projectReference.TargetFramework,
+                targetFramework,
                 configuration,
                 properties,
                 EnvironmentVariables);
         }
 
         internal string BuildVisitKey()
-            => string.Join(
-                "|",
-                new[] { ProjectPath, TargetFramework ?? string.Empty, Configuration }
-                    .Concat(GlobalProperties
-                        .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
-                        .Select(entry => entry.Key + "=" + entry.Value))
-                    .Concat(EnvironmentVariables
-                        .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
-                        .Select(entry => entry.Key + "=" + entry.Value)));
+        {
+            var key = new System.Text.StringBuilder();
+            AppendProjectReferenceKeySegment(key, "ProjectPath");
+            AppendProjectReferenceKeySegment(key, NormalizeProjectReferenceIdentityPath(ProjectPath));
+            AppendProjectReferenceKeySegment(key, "TargetFramework");
+            AppendProjectReferenceKeySegment(key, TargetFramework ?? string.Empty);
+            AppendProjectReferenceKeySegment(key, "Configuration");
+            AppendProjectReferenceKeySegment(key, Configuration);
+            foreach (KeyValuePair<string, string> property in GlobalProperties.OrderBy(
+                         entry => entry.Key,
+                         StringComparer.OrdinalIgnoreCase))
+            {
+                AppendProjectReferenceKeySegment(key, "Property");
+                AppendProjectReferenceKeySegment(key, NormalizeMsBuildPropertyIdentityName(property.Key));
+                AppendProjectReferenceKeySegment(key, property.Value);
+            }
+            foreach (KeyValuePair<string, string?> environmentVariable in EnvironmentVariables.OrderBy(
+                         entry => entry.Key,
+                         StringComparer.OrdinalIgnoreCase))
+            {
+                AppendProjectReferenceKeySegment(key, "Environment");
+                AppendProjectReferenceKeySegment(key, NormalizeEnvironmentIdentityName(environmentVariable.Key));
+                AppendProjectReferenceKeySegment(key, environmentVariable.Value ?? string.Empty);
+            }
+            return key.ToString();
+        }
     }
 
     private sealed class EvaluatedProjectInputs

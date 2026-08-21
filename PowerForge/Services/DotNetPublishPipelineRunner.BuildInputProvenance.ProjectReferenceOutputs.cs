@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 
 namespace PowerForge;
@@ -33,22 +34,50 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
 
     private static string BuildEvaluatedProjectReferenceKey(EvaluatedProjectReference reference)
-        => string.Join(
-            "|",
-            new[] { reference.ProjectPath, reference.TargetFramework ?? string.Empty }
-                .Concat(reference.GlobalProperties
-                    .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
-                    .Select(entry => entry.Key + "=" + entry.Value))
-                .Concat(reference.UndefineProperties
-                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-                    .Select(value => "-" + value)));
+    {
+        var key = new StringBuilder();
+        AppendProjectReferenceKeySegment(key, "ProjectPath");
+        AppendProjectReferenceKeySegment(key, NormalizeProjectReferenceIdentityPath(reference.ProjectPath));
+        AppendProjectReferenceKeySegment(key, "TargetFramework");
+        AppendProjectReferenceKeySegment(key, reference.TargetFramework ?? string.Empty);
+        foreach (KeyValuePair<string, string> property in reference.GlobalProperties.OrderBy(
+                     entry => entry.Key,
+                     StringComparer.OrdinalIgnoreCase))
+        {
+            AppendProjectReferenceKeySegment(key, "Property");
+            AppendProjectReferenceKeySegment(key, NormalizeMsBuildPropertyIdentityName(property.Key));
+            AppendProjectReferenceKeySegment(key, property.Value);
+        }
+        foreach (string propertyName in reference.UndefineProperties.OrderBy(
+                     value => value,
+                     StringComparer.OrdinalIgnoreCase))
+        {
+            AppendProjectReferenceKeySegment(key, "Undefine");
+            AppendProjectReferenceKeySegment(key, NormalizeMsBuildPropertyIdentityName(propertyName));
+        }
+        return key.ToString();
+    }
+
+    private static void AppendProjectReferenceKeySegment(StringBuilder key, string value)
+        => key.Append(value.Length).Append(':').Append(value);
+
+    private static string NormalizeProjectReferenceIdentityPath(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        return IsWindows() ? fullPath.ToUpperInvariant() : fullPath;
+    }
+
+    private static string NormalizeMsBuildPropertyIdentityName(string name)
+        => name.ToUpperInvariant();
+
+    private static string NormalizeEnvironmentIdentityName(string name)
+        => IsWindows() ? name.ToUpperInvariant() : name;
 
     private static HashSet<string> ReadProjectReferenceOutputKeys(
         JsonElement items,
         string outputItemType)
     {
-        var keys = new HashSet<string>(
-            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var keys = new HashSet<string>(StringComparer.Ordinal);
         if (!items.TryGetProperty("ProjectReference", out JsonElement projectReferences) ||
             projectReferences.ValueKind != JsonValueKind.Array)
         {
@@ -93,11 +122,16 @@ public sealed partial class DotNetPublishPipelineRunner
 
         try
         {
-            key = string.Join(
-                "\n",
-                Path.GetFullPath(projectPath),
-                ReadItemText(item, "AdditionalProperties") ?? string.Empty,
-                ReadItemText(item, "LogicalName") ?? string.Empty);
+            var value = new StringBuilder();
+            AppendProjectReferenceKeySegment(value, "ProjectPath");
+            AppendProjectReferenceKeySegment(value, NormalizeProjectReferenceIdentityPath(projectPath!));
+            AppendProjectReferenceKeySegment(value, "Properties");
+            AppendProjectReferenceKeySegment(value, ReadItemText(item, "Properties") ?? string.Empty);
+            AppendProjectReferenceKeySegment(value, "AdditionalProperties");
+            AppendProjectReferenceKeySegment(value, ReadItemText(item, "AdditionalProperties") ?? string.Empty);
+            AppendProjectReferenceKeySegment(value, "LogicalName");
+            AppendProjectReferenceKeySegment(value, ReadItemText(item, "LogicalName") ?? string.Empty);
+            key = value.ToString();
             return true;
         }
         catch
