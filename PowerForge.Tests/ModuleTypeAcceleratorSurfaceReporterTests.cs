@@ -29,7 +29,7 @@ public sealed class ModuleTypeAcceleratorSurfaceReporterTests
                     CsprojPath = Path.Combine(tempRoot.FullName, assemblyName, assemblyName + ".csproj"),
                     Version = "1.0.0",
                     Frameworks = new[] { "net8.0" },
-                    ExportAssemblies = new[] { assemblyName + ".dll" },
+                    ExportAssemblies = new[] { assemblyName },
                     DisableBinaryCmdletScan = true,
                     AssemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.Enums,
                     AssemblyTypeAcceleratorAssemblies = new[] { assemblyName }
@@ -146,7 +146,7 @@ public sealed class ModuleTypeAcceleratorSurfaceReporterTests
                     SourcePath = projectRoot,
                     StagingPath = staging,
                     Version = "1.0.0",
-                    ExportAssemblies = new[] { assemblyName + ".dll" },
+                    ExportAssemblies = new[] { assemblyName },
                     AssemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.Enums,
                     AssemblyTypeAcceleratorAssemblies = new[] { assemblyName }
                 },

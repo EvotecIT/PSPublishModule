@@ -34,9 +34,12 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
 
         var requestedTypes = Normalize(plan.BuildSpec.AssemblyTypeAccelerators);
         var requestedAssemblies = Normalize(plan.BuildSpec.AssemblyTypeAcceleratorAssemblies);
+        var exportAssemblyReferences = plan.BuildSpec.ExportAssemblies.Any(static entry => !string.IsNullOrWhiteSpace(entry))
+            ? ModuleBinaryFileLocator.ResolveAssemblyReferences(plan.ModuleName, plan.BuildSpec.ExportAssemblies)
+            : Array.Empty<string>();
         var libraryDirectory = ResolveAssemblyLoadContextLibraryDirectory(
             buildResult.StagingPath,
-            plan.BuildSpec.ExportAssemblies);
+            exportAssemblyReferences);
 
         ModuleTypeAcceleratorSurfaceReport report;
         if (string.IsNullOrWhiteSpace(libraryDirectory) || !Directory.Exists(libraryDirectory))
