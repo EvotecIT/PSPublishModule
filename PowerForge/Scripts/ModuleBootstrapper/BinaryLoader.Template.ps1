@@ -9,6 +9,7 @@ $AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction S
 $Default = $false
 $Core = $false
 $Standard = $false
+$HasNamedCorePayload = $false
 foreach ($A in $AssemblyFolders.Name) {
     if ($A -eq 'Default') {
         $Default = $true
@@ -16,6 +17,8 @@ foreach ($A in $AssemblyFolders.Name) {
         $Core = $true
     } elseif ($A -eq 'Standard') {
         $Standard = $true
+    } elseif ($A -match '^Core-(?:net|netcoreapp)\d+\.\d+$') {
+        $HasNamedCorePayload = $true
     }
 }
 if ($Standard -and $Core -and $Default) {
@@ -39,11 +42,19 @@ if ($Standard -and $Core -and $Default) {
 } elseif ($Default) {
     $Framework = ''
     $FrameworkNet = 'Default'
+} elseif ($HasNamedCorePayload -and $PSEdition -eq 'Core') {
+    $Framework = ''
+    $FrameworkNet = ''
 } else {
     Write-Error -Message 'No assemblies found'
     return
 }
 
+{{RuntimePayloadSelectorBlock}}
+if ($PSEdition -eq 'Core' -and $HasNamedCorePayload -and ($Framework -eq 'Default' -or [string]::IsNullOrWhiteSpace($Framework))) {
+    Write-Error -Message 'No compatible PowerShell Core assemblies found'
+    return
+}
 if ($PSEdition -eq 'Core') {
     $LibFolder = $Framework
 } else {

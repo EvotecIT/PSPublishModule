@@ -1056,6 +1056,7 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
                 ExportAssemblies = new[] { "SharedAuth.dll" },
                 DisableBinaryCmdletScan = true,
                 UseAssemblyLoadContext = true,
+                AnalyzeInstalledBinaryConflictsDuringBuild = true,
                 BinaryConflictSearchRoots = new[] { moduleSearchRoot.FullName }
             });
 
@@ -1088,6 +1089,7 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             var installedAssembly = BuildLibrary(tempRoot.FullName, "SharedAuth", "1.0.0", projectFolderName: "SharedAuth_DesktopOther");
 
             WriteMinimalBinaryModule(source, moduleName);
+            File.Copy(stagedAssembly, Path.Combine(source, "Lib", "Core", "SharedAuth.dll"), overwrite: true);
             Directory.CreateDirectory(Path.Combine(source, "Lib", "Default"));
             File.Copy(stagedAssembly, Path.Combine(source, "Lib", "Default", "SharedAuth.dll"), overwrite: true);
 
@@ -1106,6 +1108,7 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
                 ExportAssemblies = new[] { "SharedAuth.dll" },
                 DisableBinaryCmdletScan = true,
                 UseAssemblyLoadContext = true,
+                AnalyzeInstalledBinaryConflictsDuringBuild = true,
                 BinaryConflictSearchRoots = new[] { moduleSearchRoot.FullName }
             });
 

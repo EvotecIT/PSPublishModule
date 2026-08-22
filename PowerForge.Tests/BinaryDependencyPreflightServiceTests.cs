@@ -57,6 +57,35 @@ public sealed class BinaryDependencyPreflightServiceTests
     }
 
     [Fact]
+    public void Analyze_CoreChecksBaselineAndNewerPayloadsIndependently()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var paths = CreateDependencyFixture(root.FullName);
+            BuildProject(paths.ConsumerProjectPath);
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var baseline = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Lib", "Core"));
+            var newer = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Lib", "Core-net10.0"));
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(baseline.FullName, "Consumer.dll"), overwrite: true);
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(newer.FullName, "Consumer.dll"), overwrite: true);
+            File.Copy(paths.DependencyAssemblyPath, Path.Combine(newer.FullName, "Dependency.dll"), overwrite: true);
+
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(moduleRoot.FullName, "Core");
+
+            var issue = Assert.Single(result.Issues, issue =>
+                string.Equals(issue.MissingDependencyName, "Dependency", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("Core/Consumer.dll", issue.AssemblyFileName);
+            Assert.Equal("Lib", result.AssemblyRootRelativePath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Analyze_WithManifestScopedScriptModule_IgnoresDeliveryInternalsDlls()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

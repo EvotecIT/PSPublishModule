@@ -9,6 +9,36 @@ namespace PowerForge.Tests;
 public sealed class ModulePipelineBinaryConflictOrderingTests
 {
     [Fact]
+    public void Plan_PreservesInstalledConflictAnalysisOptIn()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    AnalyzeInstalledBinaryConflictsDuringBuild = true,
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.True(plan.BuildSpec.AnalyzeInstalledBinaryConflictsDuringBuild);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_ReordersRequiredModules_WhenPreferBinaryConflictOrderEnabled()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

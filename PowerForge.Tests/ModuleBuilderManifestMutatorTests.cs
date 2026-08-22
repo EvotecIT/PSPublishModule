@@ -8,6 +8,26 @@ namespace PowerForge.Tests;
 public sealed class ModuleBuilderManifestMutatorTests
 {
     [Fact]
+    public void MergeDeclaredAliases_PreservesScriptAliasesAndAddsDetectedBinaryAliases()
+    {
+        var aliases = ModuleBuilder.MergeDeclaredAliases(
+            new[] { "New-HeroImage", "TeamsMessage" },
+            new[] { "TeamsMessage", "TeamsSection" });
+
+        Assert.Equal(new[] { "New-HeroImage", "TeamsMessage", "TeamsSection" }, aliases);
+    }
+
+    [Fact]
+    public void MergeDeclaredAliases_CombinesOnlyProvenScriptAndCurrentBinaryAliases()
+    {
+        var aliases = ModuleBuilder.MergeDeclaredAliases(
+            new[] { "ScriptAlias" },
+            new[] { "CurrentAlias" });
+
+        Assert.Equal(new[] { "ScriptAlias", "CurrentAlias" }, aliases);
+    }
+
+    [Fact]
     public void BuildInPlace_UsesManifestMutatorForManifestUpdates()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -106,6 +126,867 @@ public sealed class ModuleBuilderManifestMutatorTests
         }
     }
 
+    [Fact]
+    public void BuildInPlace_PreservesAliasesDeclaredInPrivateScripts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PSPublishModule";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PSPublishModule.psm1'; CmdletsToExport = @(); AliasesToExport = @('StaleBinaryAlias') }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            var privateRoot = Directory.CreateDirectory(Path.Combine(root, "Private"));
+            File.WriteAllText(Path.Combine(privateRoot.FullName, "Aliases.ps1"), "Set-Alias -Name ScriptAlias -Value Invoke-ScriptAlias");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(PSPublishModule.NewConfigurationBuildCommand).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("ScriptAlias", aliasWrite.Values);
+            Assert.DoesNotContain("StaleBinaryAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_PreservesManifestAliasesWhenScriptAliasSetIsIncomplete()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PSPublishModule";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PSPublishModule.psm1'; CmdletsToExport = @(); AliasesToExport = @('DynamicScriptAlias') }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            var privateRoot = Directory.CreateDirectory(Path.Combine(root, "Private"));
+            File.WriteAllText(
+                Path.Combine(privateRoot.FullName, "Aliases.ps1"),
+                "$name = Get-DynamicAliasName; Set-Alias -Name $name -Value Invoke-DynamicAlias");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(PSPublishModule.NewConfigurationBuildCommand).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("DynamicScriptAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_DetectsAliasesFromEveryBootstrapperScriptFolder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PSPublishModule";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PSPublishModule.psm1'; CmdletsToExport = @(); AliasesToExport = @() }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), "Set-Alias -Name RootAlias -Value Get-Root");
+
+            foreach (var folder in new[] { "Classes", "Enums", "Private", "Public" })
+            {
+                var scriptRoot = Directory.CreateDirectory(Path.Combine(root, folder, "Nested"));
+                File.WriteAllText(
+                    Path.Combine(scriptRoot.FullName, "Aliases.ps1"),
+                    $"Set-Alias -Name {folder}Alias -Value Get-{folder}");
+            }
+
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(PSPublishModule.NewConfigurationBuildCommand).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("RootAlias", aliasWrite.Values);
+            Assert.Contains("ClassesAlias", aliasWrite.Values);
+            Assert.Contains("EnumsAlias", aliasWrite.Values);
+            Assert.Contains("PrivateAlias", aliasWrite.Values);
+            Assert.Contains("PublicAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_AnalyzesAliasesInBootstrapperExecutionOrder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; CmdletsToExport = @(); AliasesToExport = @() }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            var enumsRoot = Directory.CreateDirectory(Path.Combine(root, "Enums"));
+            File.WriteAllText(
+                Path.Combine(enumsRoot.FullName, "Aliases.ps1"),
+                "Set-Alias -Name TemporaryAlias -Value Get-Item");
+            var classesRoot = Directory.CreateDirectory(Path.Combine(root, "Classes"));
+            File.WriteAllText(
+                Path.Combine(classesRoot.FullName, "Aliases.ps1"),
+                "Remove-Alias -Name TemporaryAlias");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.DoesNotContain("TemporaryAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_AnalyzesScriptsInOrdinalPathOrderWithinFolder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; CmdletsToExport = @(); AliasesToExport = @() }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            var privateRoot = Directory.CreateDirectory(Path.Combine(root, "Private"));
+            var creationPath = Path.Combine(privateRoot.FullName, "01-Create.ps1");
+            var removalPath = Path.Combine(privateRoot.FullName, "02-Remove.ps1");
+            File.WriteAllText(creationPath, "Set-Alias -Name TemporaryAlias -Value Get-Item");
+            File.WriteAllText(removalPath, "Remove-Alias -Name TemporaryAlias");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            IEnumerable<string> EnumerateScripts(string directory)
+            {
+                if (Path.GetFileName(directory).Equals("Private", StringComparison.OrdinalIgnoreCase))
+                    return new[] { removalPath, creationPath };
+                return Directory.EnumerateFiles(directory, "*.ps1", SearchOption.AllDirectories);
+            }
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(
+                new NullLogger(),
+                mutator,
+                new PowerShellScriptFunctionExportDetector(),
+                EnumerateScripts);
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.DoesNotContain("TemporaryAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_PreservesExportsContributedByNestedModules()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; NestedModules = @('Nested.psm1', 'Nested.dll'); FunctionsToExport = @('Invoke-NestedFunction'); CmdletsToExport = @('Find-ManagedModule'); AliasesToExport = @('NestedAlias') }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(root, "Nested.psm1"),
+                "function Invoke-NestedFunction { }; Set-Alias -Name NestedAlias -Value Get-Item");
+            File.Copy(
+                typeof(PSPublishModule.FindManagedModuleCommand).Assembly.Location,
+                Path.Combine(root, "Nested.dll"),
+                overwrite: true);
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var functionWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "FunctionsToExport");
+            var cmdletWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "CmdletsToExport");
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("Invoke-NestedFunction", functionWrite.Values);
+            Assert.Contains("Find-ManagedModule", cmdletWrite.Values);
+            Assert.Contains("NestedAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_PreservesSharedNestedFunctionsWhenReplacingAuthoredRootScript()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; NestedModules = @('Nested.psm1'); FunctionsToExport = @('Invoke-RootOnly', 'Invoke-SharedFunction', 'Invoke-NestedFunction'); CmdletsToExport = @(); AliasesToExport = @('RootOnlyAlias', 'SharedAlias', 'NestedAlias') }");
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psm1"),
+                "function Invoke-RootOnly { }; function Invoke-SharedFunction { }; Set-Alias RootOnlyAlias Get-Item; Set-Alias SharedAlias Get-Item");
+            File.WriteAllText(
+                Path.Combine(root, "Nested.psm1"),
+                "function Invoke-SharedFunction { }; function Invoke-NestedFunction { }; Set-Alias SharedAlias Get-Item; Set-Alias NestedAlias Get-Item");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+                RootModuleScriptWillBeReplaced = true,
+            });
+
+            var functionWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "FunctionsToExport");
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("Invoke-NestedFunction", functionWrite.Values);
+            Assert.Contains("Invoke-SharedFunction", functionWrite.Values);
+            Assert.DoesNotContain("Invoke-RootOnly", functionWrite.Values);
+            Assert.Contains("NestedAlias", aliasWrite.Values);
+            Assert.Contains("SharedAlias", aliasWrite.Values);
+            Assert.DoesNotContain("RootOnlyAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_PreservesAmbiguousFunctionsFromUnresolvedNestedModule()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; NestedModules = @('External.Module'); FunctionsToExport = @('Invoke-AmbiguousFunction'); CmdletsToExport = @(); AliasesToExport = @('AmbiguousAlias') }");
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psm1"),
+                "function Invoke-AmbiguousFunction { }; Set-Alias AmbiguousAlias Get-Item");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+                RootModuleScriptWillBeReplaced = true,
+            });
+
+            var functionWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "FunctionsToExport");
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("Invoke-AmbiguousFunction", functionWrite.Values);
+            Assert.Contains("AmbiguousAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_PreservesManifestAliasesWhenBootstrapperScriptDotSourcesExternalHelper()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; CmdletsToExport = @(); AliasesToExport = @('HelperAlias') }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            var publicRoot = Directory.CreateDirectory(Path.Combine(root, "Public"));
+            File.WriteAllText(
+                Path.Combine(publicRoot.FullName, "Init.ps1"),
+                ". (Join-Path $PSScriptRoot '..\\Helpers\\Aliases.ps1')");
+            var helpersRoot = Directory.CreateDirectory(Path.Combine(root, "Helpers"));
+            File.WriteAllText(
+                Path.Combine(helpersRoot.FullName, "Aliases.ps1"),
+                "Set-Alias -Name HelperAlias -Value Get-Item");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("HelperAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_PreservesAliasesWithUnresolvedRetainedOwnershipWhenReplacingRootScript()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; CmdletsToExport = @(); AliasesToExport = @('SharedAlias', 'AmbiguousRootAlias') }");
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psm1"),
+                "Set-Alias -Name SharedAlias -Value Get-Item; Set-Alias -Name AmbiguousRootAlias -Value Get-Item");
+            var publicRoot = Directory.CreateDirectory(Path.Combine(root, "Public"));
+            File.WriteAllText(
+                Path.Combine(publicRoot.FullName, "Init.ps1"),
+                ". (Join-Path $PSScriptRoot '..\\Helpers\\Aliases.ps1')");
+            var helpersRoot = Directory.CreateDirectory(Path.Combine(root, "Helpers"));
+            File.WriteAllText(
+                Path.Combine(helpersRoot.FullName, "Aliases.ps1"),
+                "Set-Alias -Name SharedAlias -Value Get-Item");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+                RootModuleScriptWillBeReplaced = true,
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("SharedAlias", aliasWrite.Values);
+            Assert.Contains("AmbiguousRootAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_PreservesAliasesFromImmediatelyInvokedScriptBlocks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; CmdletsToExport = @(); AliasesToExport = @('InvokedAlias') }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            var privateRoot = Directory.CreateDirectory(Path.Combine(root, "Private"));
+            File.WriteAllText(
+                Path.Combine(privateRoot.FullName, "Aliases.ps1"),
+                "1 | ForEach-Object { Set-Alias -Scope Script InvokedAlias Get-Item }");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("InvokedAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_IgnoresGeneratedAliasBridgeWhenRefreshingBinaryAliases()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; CmdletsToExport = @(); AliasesToExport = @('RemovedBinaryAlias') }");
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psm1"),
+                "# PowerForge bootstrapper\n# Auto-generated by PowerForge. Do not edit.\nSet-Alias -Name $Alias.Name -Value $AliasTarget");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Empty(aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_PreservesExportsWhenScriptDiscoveryIsIncomplete()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; FunctionsToExport = @('ExistingFunction'); CmdletsToExport = @(); AliasesToExport = @('ExistingAlias') }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            Directory.CreateDirectory(Path.Combine(root, "Classes"));
+            Directory.CreateDirectory(Path.Combine(root, "Public"));
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            IEnumerable<string> EnumerateScripts(string directory)
+            {
+                var folder = Path.GetFileName(directory);
+                if (folder is "Classes" or "Public")
+                    throw new IOException("Simulated recursive discovery failure.");
+                return Directory.EnumerateFiles(directory, "*.ps1", SearchOption.AllDirectories);
+            }
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(
+                new NullLogger(),
+                mutator,
+                new PowerShellScriptFunctionExportDetector(),
+                EnumerateScripts);
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            Assert.DoesNotContain(mutator.TopLevelStringArrayWrites, static write => write.Key == "FunctionsToExport");
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("ExistingAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_PreservesAmbiguousRootAliasesWhenFolderDiscoveryIsIncomplete()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; FunctionsToExport = @('Invoke-RootOnly', 'Invoke-PublicExisting'); CmdletsToExport = @(); AliasesToExport = @('RootAlias', 'ExistingAlias') }");
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psm1"),
+                "function Invoke-RootOnly { 'root' }; Set-Alias -Name RootAlias -Value Invoke-RootOnly");
+            Directory.CreateDirectory(Path.Combine(root, "Classes"));
+            Directory.CreateDirectory(Path.Combine(root, "Public"));
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            IEnumerable<string> EnumerateScripts(string directory)
+            {
+                var folder = Path.GetFileName(directory);
+                if (folder is "Classes" or "Public")
+                    throw new IOException("Simulated recursive discovery failure.");
+                return Directory.EnumerateFiles(directory, "*.ps1", SearchOption.AllDirectories);
+            }
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(
+                new NullLogger(),
+                mutator,
+                new PowerShellScriptFunctionExportDetector(),
+                EnumerateScripts);
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+                RootModuleScriptWillBeReplaced = true,
+            });
+
+            var functionWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "FunctionsToExport");
+            Assert.Equal(new[] { "Invoke-PublicExisting" }, functionWrite.Values);
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("ExistingAlias", aliasWrite.Values);
+            Assert.Contains("RootAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_PreservesRootAliasesForFunctionOnlyCustomDetector()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; FunctionsToExport = @(); CmdletsToExport = @(); AliasesToExport = @('ExistingAlias') }");
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psm1"),
+                "Set-Alias -Name ExistingAlias -Value Get-Item");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(
+                new NullLogger(),
+                mutator,
+                new RecordingScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+                RootModuleScriptWillBeReplaced = true,
+            });
+
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Contains("ExistingAlias", aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_ClearsStaleBinaryExportsWhenCurrentAssemblyExportsNothing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; CmdletsToExport = @('Get-Stale'); AliasesToExport = @('StaleAlias') }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+            });
+
+            var cmdletWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "CmdletsToExport");
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
+            Assert.Empty(cmdletWrite.Values);
+            Assert.Empty(aliasWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
     private sealed class RecordingManifestMutator : IModuleManifestMutator
     {
         public List<(string FilePath, string NewVersion)> TopLevelVersionWrites { get; } = new();
@@ -167,5 +1048,6 @@ public sealed class ModuleBuilderManifestMutatorTests
 
         public IReadOnlyList<string> DetectScriptFunctions(IEnumerable<string> scriptFiles)
             => _functions;
+
     }
 }
