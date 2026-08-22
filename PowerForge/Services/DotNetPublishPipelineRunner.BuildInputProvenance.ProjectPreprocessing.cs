@@ -85,9 +85,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase) &&
                 element.Ancestors().Any(ancestor =>
                     ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)));
-            HashSet<string> scheduledTargetNames = hasTargetTimeProjectReferences
-                ? ReadScheduledProjectReferenceTargetNames(request, document)
-                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            ScheduledProjectReferenceTargetGraph scheduledTargets = hasTargetTimeProjectReferences
+                ? ReadScheduledProjectReferenceTargets(request, document)
+                : ScheduledProjectReferenceTargetGraph.Empty;
             var declarationSources = new Stack<string>();
             declarationSources.Push(Path.GetFullPath(request.ProjectPath));
             var propertyDefinitions = new List<PreprocessedProjectPropertyDefinition>();
@@ -95,6 +95,7 @@ public sealed partial class DotNetPublishPipelineRunner
             var declarationElements = new List<(
                 XElement Element,
                 string DefiningProjectPath,
+                XElement? ContainingTarget,
                 IReadOnlyList<PreprocessedProjectPropertyDefinition> TargetPropertyDefinitions,
                 bool IsTargetTime,
                 bool RunsBeforeResolveReferences)>();
@@ -126,7 +127,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 bool runsBeforeResolveReferences =
                     !string.IsNullOrEmpty(request.TargetFramework) &&
                     containingTarget is not null &&
-                    scheduledTargetNames.Contains(containingTarget.Attribute("Name")?.Value ?? string.Empty);
+                    scheduledTargets.Contains(containingTarget);
 
                 if (element.Parent?.Name.LocalName.Equals(
                         "PropertyGroup",
@@ -159,6 +160,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     declarationElements.Add((
                         element,
                         declarationSources.Peek(),
+                        containingTarget,
                         containingTarget is not null &&
                         targetPropertyDefinitions.TryGetValue(
                             containingTarget,
@@ -174,7 +176,18 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Select(declaration => new PreprocessedProjectReferenceDeclaration(
                     declaration.Element,
                     declaration.DefiningProjectPath,
-                    propertyDefinitions.Concat(declaration.TargetPropertyDefinitions).ToArray(),
+                    propertyDefinitions
+                        .Concat(declaration.ContainingTarget is null
+                            ? Array.Empty<PreprocessedProjectPropertyDefinition>()
+                            : scheduledTargets.ReadPredecessors(declaration.ContainingTarget)
+                                .SelectMany(target => targetPropertyDefinitions.TryGetValue(
+                                    target,
+                                    out List<PreprocessedProjectPropertyDefinition>? definitions)
+                                        ? (IEnumerable<PreprocessedProjectPropertyDefinition>)definitions
+                                        : Array.Empty<PreprocessedProjectPropertyDefinition>()))
+                        .Concat(declaration.TargetPropertyDefinitions)
+                        .Distinct()
+                        .ToArray(),
                     declaration.IsTargetTime,
                     declaration.RunsBeforeResolveReferences))
                 .ToArray();
@@ -198,16 +211,20 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static HashSet<string> ReadScheduledProjectReferenceTargetNames(
+    private static ScheduledProjectReferenceTargetGraph ReadScheduledProjectReferenceTargets(
         ProjectEvaluationRequest request,
         XDocument document)
     {
-        XElement[] targets = document.Descendants().Where(element =>
-                element.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(element.Attribute("Name")?.Value))
-            .ToArray();
+        var effectiveTargets = new Dictionary<string, XElement>(StringComparer.OrdinalIgnoreCase);
+        foreach (XElement target in document.Descendants().Where(element =>
+                     element.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase) &&
+                     !string.IsNullOrWhiteSpace(element.Attribute("Name")?.Value)))
+        {
+            effectiveTargets[target.Attribute("Name")!.Value.Trim()] = target;
+        }
+
         var propertyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string expression in targets.SelectMany(target => new[]
+        foreach (string expression in effectiveTargets.Values.SelectMany(target => new[]
                  {
                      target.Attribute("DependsOnTargets")?.Value,
                      target.Attribute("BeforeTargets")?.Value
@@ -218,37 +235,99 @@ public sealed partial class DotNetPublishPipelineRunner
 
         IReadOnlyDictionary<string, string> evaluatedProperties =
             ReadEvaluatedProjectProperties(request, propertyNames);
-        var scheduled = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        var predecessors = effectiveTargets.Values.ToDictionary(
+            target => target,
+            _ => new List<XElement>());
+        foreach (XElement target in effectiveTargets.Values)
         {
-            "ResolveReferences"
-        };
-        bool changed;
-        do
-        {
-            changed = false;
-            foreach (XElement target in targets)
+            foreach (string dependency in ReadExpandedMsBuildTargetList(
+                         target.Attribute("DependsOnTargets")?.Value,
+                         evaluatedProperties))
             {
-                string targetName = target.Attribute("Name")!.Value.Trim();
-                if (scheduled.Contains(targetName))
-                {
-                    foreach (string dependency in ReadExpandedMsBuildTargetList(
-                                 target.Attribute("DependsOnTargets")?.Value,
-                                 evaluatedProperties))
-                    {
-                        changed |= scheduled.Add(dependency);
-                    }
-                }
-
-                if (ReadExpandedMsBuildTargetList(
-                        target.Attribute("BeforeTargets")?.Value,
-                        evaluatedProperties).Any(scheduled.Contains))
-                {
-                    changed |= scheduled.Add(targetName);
-                }
+                if (effectiveTargets.TryGetValue(dependency, out XElement? dependencyTarget))
+                    AddDistinctTarget(predecessors[target], dependencyTarget);
             }
-        } while (changed);
 
-        return scheduled;
+            foreach (string destination in ReadExpandedMsBuildTargetList(
+                         target.Attribute("BeforeTargets")?.Value,
+                         evaluatedProperties))
+            {
+                if (effectiveTargets.TryGetValue(destination, out XElement? destinationTarget))
+                    AddDistinctTarget(predecessors[destinationTarget], target);
+            }
+        }
+
+        if (!effectiveTargets.TryGetValue("ResolveReferences", out XElement? resolveReferences))
+            return ScheduledProjectReferenceTargetGraph.Empty;
+
+        var scheduled = new HashSet<XElement>();
+        AddScheduledTargetAndPredecessors(resolveReferences, predecessors, scheduled);
+        return new ScheduledProjectReferenceTargetGraph(scheduled, predecessors);
+    }
+
+    private static void AddScheduledTargetAndPredecessors(
+        XElement target,
+        IReadOnlyDictionary<XElement, List<XElement>> predecessors,
+        HashSet<XElement> scheduled)
+    {
+        if (!scheduled.Add(target) || !predecessors.TryGetValue(target, out List<XElement>? direct))
+            return;
+
+        foreach (XElement predecessor in direct)
+            AddScheduledTargetAndPredecessors(predecessor, predecessors, scheduled);
+    }
+
+    private static void AddDistinctTarget(List<XElement> targets, XElement target)
+    {
+        if (!targets.Contains(target))
+            targets.Add(target);
+    }
+
+    private sealed class ScheduledProjectReferenceTargetGraph
+    {
+        internal static ScheduledProjectReferenceTargetGraph Empty { get; } = new(
+            new HashSet<XElement>(),
+            new Dictionary<XElement, List<XElement>>());
+
+        private readonly HashSet<XElement> _scheduled;
+        private readonly IReadOnlyDictionary<XElement, List<XElement>> _predecessors;
+
+        internal ScheduledProjectReferenceTargetGraph(
+            HashSet<XElement> scheduled,
+            IReadOnlyDictionary<XElement, List<XElement>> predecessors)
+        {
+            _scheduled = scheduled;
+            _predecessors = predecessors;
+        }
+
+        internal bool Contains(XElement target) => _scheduled.Contains(target);
+
+        internal IEnumerable<XElement> ReadPredecessors(XElement target)
+        {
+            var visited = new HashSet<XElement>();
+            var ordered = new List<XElement>();
+            AddOrderedPredecessors(target, target, visited, ordered);
+            return ordered;
+        }
+
+        private void AddOrderedPredecessors(
+            XElement root,
+            XElement target,
+            HashSet<XElement> visited,
+            List<XElement> ordered)
+        {
+            if (!visited.Add(target))
+                return;
+
+            if (_predecessors.TryGetValue(target, out List<XElement>? direct))
+            {
+                foreach (XElement predecessor in direct)
+                    AddOrderedPredecessors(root, predecessor, visited, ordered);
+            }
+
+            if (!ReferenceEquals(target, root) && _scheduled.Contains(target))
+                ordered.Add(target);
+        }
     }
 
     private static IEnumerable<string> ReadExpandedMsBuildTargetList(

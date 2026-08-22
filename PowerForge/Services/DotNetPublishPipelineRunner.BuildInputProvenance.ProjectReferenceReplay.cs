@@ -310,8 +310,17 @@ public sealed partial class DotNetPublishPipelineRunner
             if (character == '*')
             {
                 bool recursive = index + 1 < pattern.Length && pattern[index + 1] == '*';
-                expression.Append(recursive ? ".*" : "[^/]*");
-                if (recursive)
+                bool followedBySeparator = recursive &&
+                    index + 2 < pattern.Length &&
+                    pattern[index + 2] == '/';
+                expression.Append(followedBySeparator
+                    ? "(?:.*/)?"
+                    : recursive
+                        ? ".*"
+                        : "[^/]*");
+                if (followedBySeparator)
+                    index += 2;
+                else if (recursive)
                     index++;
             }
             else if (character == '?')

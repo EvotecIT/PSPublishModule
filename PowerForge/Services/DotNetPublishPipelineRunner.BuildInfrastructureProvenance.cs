@@ -77,6 +77,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluatedProjectDirectories.Any(projectDirectory =>
                         IsSameOrBelowBuildInputPath(projectDirectory, root)) ||
                     IsTrackedProjectOutputPath(path, referencedProjectDirectory) ||
+                    !HasSinglePhysicalLink(path) ||
                     IsReparsePointPath(root) ||
                     IsReparsePointPath(traversalBoundary) ||
                     HasReparsePointBelowRoot(path, traversalBoundary))
@@ -93,6 +94,18 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return false;
+    }
+
+    private static bool HasSinglePhysicalLink(string path)
+    {
+        try
+        {
+            return ExistingFilePathIdentityResolver.ResolveHardLinkCounts(new[] { path })[0] == 1;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string[] ReadRecordedGeneratedOutputPaths(

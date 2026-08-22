@@ -315,4 +315,64 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             try { Directory.Delete(externalRoot, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void ReadSourceProvenance_TracksGeneratedProjectReferenceOutputWithMultipleHardLinks()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "Library")).FullName;
+            string inputsDirectory = Directory.CreateDirectory(Path.Combine(root, "inputs")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string libraryProject = Path.Combine(libraryDirectory, "Library.csproj");
+            string trackedPayload = Path.Combine(inputsDirectory, "Tracked.dll");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj"
+                                      ReferenceOutputAssembly="false"
+                                      OutputItemType="EmbeddedResource"
+                                      LogicalName="App.Payloads.Library.dll" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(libraryProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { private static void Main() { } }");
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.cs"), "public static class Library { }");
+            File.WriteAllText(trackedPayload, "approved payload");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            RunDotNet(root, $"build \"{libraryProject}\" -c Release --no-restore --nologo");
+
+            string outputPath = Path.Combine(libraryDirectory, "bin", "Release", "net8.0", "Library.dll");
+            Assert.True(File.Exists(outputPath));
+            File.Delete(outputPath);
+            TestFileLink.CreateHardLink(outputPath, trackedPayload);
+            File.WriteAllText(trackedPayload, "modified payload");
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [appProject],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
 }
