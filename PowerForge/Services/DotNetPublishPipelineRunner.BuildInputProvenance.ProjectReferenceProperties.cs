@@ -206,13 +206,19 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (PreprocessedProjectPropertyDefinition definition in propertyDefinitions.Where(definition =>
                      definition.Element.Name.LocalName.Equals(propertyName, StringComparison.OrdinalIgnoreCase)))
         {
-            if (IsDefinitelyInactiveMsBuildElement(definition.Element, evaluatedConditionProperties))
+            if (IsDefinitelyInactiveMsBuildElement(
+                    definition.Element,
+                    evaluatedConditionProperties,
+                    definition.DefiningProjectPath))
                 continue;
 
             string value = ExpandMsBuildThisFileProperties(
                 definition.Element.Value,
                 definition.DefiningProjectPath);
-            if (IsDefinitelyActiveMsBuildElement(definition.Element, evaluatedConditionProperties))
+            if (IsDefinitelyActiveMsBuildElement(
+                    definition.Element,
+                    evaluatedConditionProperties,
+                    definition.DefiningProjectPath))
             {
                 values.Clear();
                 values.Add(value);

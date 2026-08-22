@@ -19,10 +19,16 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (PreprocessedProjectPropertyDefinition definition in runtimePropertyDefinitions)
         {
             string propertyName = definition.Element.Name.LocalName;
-            if (IsDefinitelyInactiveMsBuildElement(definition.Element, properties))
+            if (IsDefinitelyInactiveMsBuildElement(
+                    definition.Element,
+                    properties,
+                    definition.DefiningProjectPath))
                 continue;
 
-            if (!IsDefinitelyActiveMsBuildElement(definition.Element, properties) ||
+            if (!IsDefinitelyActiveMsBuildElement(
+                    definition.Element,
+                    properties,
+                    definition.DefiningProjectPath) ||
                 !TryExpandTargetTimePropertyValue(definition.Element.Value, properties, out string? value))
             {
                 properties.Remove(propertyName);
@@ -152,13 +158,17 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool IsDefinitelyInactiveMsBuildElement(
         XElement element,
-        IReadOnlyDictionary<string, string> evaluatedProperties)
+        IReadOnlyDictionary<string, string> evaluatedProperties,
+        string? definingProjectPath = null)
     {
         foreach (XAttribute condition in element.AncestorsAndSelf()
                      .Select(candidate => candidate.Attribute("Condition"))
                      .OfType<XAttribute>())
         {
-            if (TryEvaluateSimpleMsBuildCondition(condition.Value, evaluatedProperties, out bool active) && !active)
+            string conditionValue = definingProjectPath is null
+                ? condition.Value
+                : ExpandMsBuildThisFileProperties(condition.Value, definingProjectPath);
+            if (TryEvaluateSimpleMsBuildCondition(conditionValue, evaluatedProperties, out bool active) && !active)
                 return true;
         }
 
@@ -174,7 +184,10 @@ public sealed partial class DotNetPublishPipelineRunner
                          .Select(candidate => candidate.Attribute("Condition")?.Value)
                          .Where(value => !string.IsNullOrWhiteSpace(value))!)
             {
-                if (TryEvaluateSimpleMsBuildCondition(whenCondition, evaluatedProperties, out bool selected) && selected)
+                string conditionValue = definingProjectPath is null
+                    ? whenCondition
+                    : ExpandMsBuildThisFileProperties(whenCondition, definingProjectPath);
+                if (TryEvaluateSimpleMsBuildCondition(conditionValue, evaluatedProperties, out bool selected) && selected)
                     return true;
             }
         }
@@ -184,13 +197,17 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool IsDefinitelyActiveMsBuildElement(
         XElement element,
-        IReadOnlyDictionary<string, string> evaluatedProperties)
+        IReadOnlyDictionary<string, string> evaluatedProperties,
+        string? definingProjectPath = null)
     {
         foreach (XAttribute condition in element.AncestorsAndSelf()
                      .Select(candidate => candidate.Attribute("Condition"))
                      .OfType<XAttribute>())
         {
-            if (!TryEvaluateSimpleMsBuildCondition(condition.Value, evaluatedProperties, out bool active) ||
+            string conditionValue = definingProjectPath is null
+                ? condition.Value
+                : ExpandMsBuildThisFileProperties(condition.Value, definingProjectPath);
+            if (!TryEvaluateSimpleMsBuildCondition(conditionValue, evaluatedProperties, out bool active) ||
                 !active)
             {
                 return false;
@@ -209,7 +226,10 @@ public sealed partial class DotNetPublishPipelineRunner
                          .Select(candidate => candidate.Attribute("Condition")?.Value)
                          .Where(value => !string.IsNullOrWhiteSpace(value))!)
             {
-                if (!TryEvaluateSimpleMsBuildCondition(whenCondition, evaluatedProperties, out bool selected) ||
+                string conditionValue = definingProjectPath is null
+                    ? whenCondition
+                    : ExpandMsBuildThisFileProperties(whenCondition, definingProjectPath);
+                if (!TryEvaluateSimpleMsBuildCondition(conditionValue, evaluatedProperties, out bool selected) ||
                     selected)
                 {
                     return false;

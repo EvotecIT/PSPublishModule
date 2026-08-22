@@ -26,6 +26,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string definingProjectPath,
             IReadOnlyList<PreprocessedProjectPropertyDefinition> propertyDefinitions,
             IReadOnlyList<PreprocessedProjectPropertyDefinition> runtimePropertyDefinitions,
+            IReadOnlyDictionary<string, string[]> evaluatedItemLists,
             bool isTargetTime,
             bool runsBeforeResolveReferences)
         {
@@ -33,6 +34,7 @@ public sealed partial class DotNetPublishPipelineRunner
             DefiningProjectPath = definingProjectPath;
             PropertyDefinitions = propertyDefinitions;
             RuntimePropertyDefinitions = runtimePropertyDefinitions;
+            EvaluatedItemLists = evaluatedItemLists;
             IsTargetTime = isTargetTime;
             RunsBeforeResolveReferences = runsBeforeResolveReferences;
         }
@@ -44,6 +46,8 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyList<PreprocessedProjectPropertyDefinition> PropertyDefinitions { get; }
 
         internal IReadOnlyList<PreprocessedProjectPropertyDefinition> RuntimePropertyDefinitions { get; }
+
+        internal IReadOnlyDictionary<string, string[]> EvaluatedItemLists { get; }
 
         internal bool IsTargetTime { get; }
 
@@ -103,7 +107,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     declaration.RuntimePropertyDefinitions);
             if (IsDefinitelyInactiveMsBuildElement(
                     declaration.Element,
-                    declarationConditionProperties))
+                    declarationConditionProperties,
+                    declaration.DefiningProjectPath))
             {
                 continue;
             }
@@ -118,7 +123,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
             defaults = IsDefinitelyActiveMsBuildElement(
                 declaration.Element,
-                declarationConditionProperties)
+                declarationConditionProperties,
+                declaration.DefiningProjectPath)
                 ? declaredAssignments
                 : MergeLiteralProjectReferenceMetadataAssignments(defaults, declaredAssignments);
         }
@@ -134,7 +140,10 @@ public sealed partial class DotNetPublishPipelineRunner
             if ((!includeTargetTime && declaration.IsTargetTime) ||
                 (declaration.IsTargetTime && !declaration.RunsBeforeResolveReferences) ||
                 IsProjectReferenceItemDefinition(projectReference) ||
-                IsDefinitelyInactiveMsBuildElement(projectReference, declarationConditionProperties) ||
+                IsDefinitelyInactiveMsBuildElement(
+                    projectReference,
+                    declarationConditionProperties,
+                    declaration.DefiningProjectPath) ||
                 !DoesProjectReferenceDeclarationMatch(
                     declaringProjectPath,
                     referencedPath,
@@ -149,7 +158,8 @@ public sealed partial class DotNetPublishPipelineRunner
             bool isRemove = HasMsBuildAttribute(projectReference, "Remove");
             bool definitelyActive = IsDefinitelyActiveMsBuildElement(
                 projectReference,
-                declarationConditionProperties);
+                declarationConditionProperties,
+                declaration.DefiningProjectPath);
             List<LiteralProjectReferenceMetadataAssignment> declaredAssignments =
                 ReadActiveLiteralProjectReferenceMetadataAssignments(
                     declaration,
@@ -266,31 +276,50 @@ public sealed partial class DotNetPublishPipelineRunner
                          new[] { ';' },
                          StringSplitOptions.RemoveEmptyEntries))
             {
-                foreach (string baseDirectory in identityBaseDirectories.Distinct(
-                             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+                foreach (string expandedItemSpec in ExpandEvaluatedProjectItemList(
+                             individualItemSpec,
+                             declaration.EvaluatedItemLists))
                 {
-                    if (TryResolveLiteralProjectReferencePath(
-                            baseDirectory,
-                            individualItemSpec,
-                            out string? declaredPath) &&
-                        string.Equals(declaredPath, referencedPath, comparison))
+                    foreach (string baseDirectory in identityBaseDirectories.Distinct(
+                                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
                     {
-                        return true;
-                    }
+                        if (TryResolveLiteralProjectReferencePath(
+                                baseDirectory,
+                                expandedItemSpec,
+                                out string? declaredPath) &&
+                            string.Equals(declaredPath, referencedPath, comparison))
+                        {
+                            return true;
+                        }
 
-                    if (TryMatchProjectReferenceGlob(
-                            baseDirectory,
-                            individualItemSpec,
-                            referencedPath,
-                            comparison))
-                    {
-                        return true;
+                        if (TryMatchProjectReferenceGlob(
+                                baseDirectory,
+                                expandedItemSpec,
+                                referencedPath,
+                                comparison))
+                        {
+                            return true;
+                        }
                     }
                 }
             }
         }
 
         return false;
+    }
+
+    private static IEnumerable<string> ExpandEvaluatedProjectItemList(
+        string itemSpec,
+        IReadOnlyDictionary<string, string[]> evaluatedItemLists)
+    {
+        Match itemList = Regex.Match(
+            itemSpec.Trim(),
+            @"^@\(([A-Za-z_][A-Za-z0-9_.-]*)\)$",
+            RegexOptions.CultureInvariant);
+        return itemList.Success &&
+               evaluatedItemLists.TryGetValue(itemList.Groups[1].Value, out string[]? paths)
+            ? paths
+            : new[] { itemSpec };
     }
 
     private static bool TryMatchProjectReferenceGlob(
@@ -374,13 +403,19 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToList();
         foreach (XElement element in projectReference.Elements().Where(element =>
                      element.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase) &&
-                     !IsDefinitelyInactiveMsBuildElement(element, evaluatedConditionProperties)))
+                     !IsDefinitelyInactiveMsBuildElement(
+                         element,
+                         evaluatedConditionProperties,
+                         declaration.DefiningProjectPath)))
         {
             var assignment = new LiteralProjectReferenceMetadataAssignment(
                 element.Value,
                 declaration,
                 evaluatedConditionProperties);
-            assignments = IsDefinitelyActiveMsBuildElement(element, evaluatedConditionProperties)
+            assignments = IsDefinitelyActiveMsBuildElement(
+                element,
+                evaluatedConditionProperties,
+                declaration.DefiningProjectPath)
                 ? [assignment]
                 : MergeLiteralProjectReferenceMetadataAssignments(assignments, [assignment]);
         }

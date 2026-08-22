@@ -90,6 +90,13 @@ public sealed partial class DotNetPublishPipelineRunner
             ScheduledProjectReferenceTargetGraph scheduledTargets = hasTargetTimeProjectReferences
                 ? ReadScheduledProjectReferenceTargets(request, document)
                 : ScheduledProjectReferenceTargetGraph.Empty;
+            IReadOnlyDictionary<string, string[]> evaluatedItemLists =
+                ReadEvaluatedProjectItemPaths(
+                    request,
+                    ReadProjectReferenceItemListNames(document));
+            HashSet<string> immutableGlobalProperties = ReadImmutableGlobalPropertyNames(
+                request,
+                document.Root);
             var declarationSources = new Stack<string>();
             declarationSources.Push(Path.GetFullPath(request.ProjectPath));
             var propertyDefinitions = new List<PreprocessedProjectPropertyDefinition>();
@@ -135,6 +142,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         "PropertyGroup",
                         StringComparison.OrdinalIgnoreCase) == true)
                 {
+                    if (immutableGlobalProperties.Contains(element.Name.LocalName))
+                        continue;
+
                     var definition = new PreprocessedProjectPropertyDefinition(
                         element,
                         declarationSources.Peek());
@@ -194,6 +204,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         declaration.DefiningProjectPath,
                         propertyDefinitions.Concat(runtimePropertyDefinitions).ToArray(),
                         runtimePropertyDefinitions,
+                        evaluatedItemLists,
                         declaration.IsTargetTime,
                         declaration.RunsBeforeResolveReferences);
                 })
@@ -216,6 +227,31 @@ public sealed partial class DotNetPublishPipelineRunner
                 // The provenance result already fails closed if preprocessing did not complete.
             }
         }
+    }
+
+    private static HashSet<string> ReadImmutableGlobalPropertyNames(
+        ProjectEvaluationRequest request,
+        XElement project)
+    {
+        var immutable = new HashSet<string>(
+            request.GlobalProperties.Keys,
+            StringComparer.OrdinalIgnoreCase)
+        {
+            "BuildProjectReferences"
+        };
+        if (request.Configuration is not null)
+            immutable.Add("Configuration");
+        if (request.TargetFramework is not null)
+            immutable.Add("TargetFramework");
+
+        foreach (string propertyName in (project.Attribute("TreatAsLocalProperty")?.Value ?? string.Empty)
+                     .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                     .Select(value => value.Trim())
+                     .Where(value => value.Length > 0))
+        {
+            immutable.Remove(propertyName);
+        }
+        return immutable;
     }
 
     private static ScheduledProjectReferenceTargetGraph ReadScheduledProjectReferenceTargets(
