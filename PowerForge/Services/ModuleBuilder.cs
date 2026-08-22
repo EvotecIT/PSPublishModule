@@ -280,9 +280,9 @@ public sealed class ModuleBuilder
 
         // 3) Exports
         var existingExports = ModuleManifestExportReader.ReadExports(psd1);
-        var hasNestedModules = ModuleManifestValueReader
-            .ReadTopLevelModuleReferencePaths(psd1, "NestedModules")
-            .Length > 0;
+        var nestedModuleReferences = ModuleManifestValueReader
+            .ReadTopLevelModuleReferencePaths(psd1, "NestedModules");
+        var hasNestedModules = nestedModuleReferences.Length > 0;
         var rootModuleScriptPath = Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psm1");
         var rootModuleDiscovery = DiscoverAuthoredRootModuleScript(rootModuleScriptPath);
         if (opts.RootModuleScriptWillBeReplaced && !rootModuleDiscovery.IsComplete)
@@ -340,9 +340,13 @@ public sealed class ModuleBuilder
 
         if (hasNestedModules && functionsToSet is not null)
         {
-            var functionsToPreserve = opts.RootModuleScriptWillBeReplaced
-                ? existingExports.Functions.Except(rootFunctionsToRemove, StringComparer.OrdinalIgnoreCase)
-                : existingExports.Functions;
+            var nestedFunctionDiscovery = new NestedModuleFunctionExportDetector(_scriptFunctionExportDetector)
+                .Analyze(opts.ProjectRoot, nestedModuleReferences);
+            var rootOnlyFunctions = opts.RootModuleScriptWillBeReplaced && nestedFunctionDiscovery.IsComplete
+                ? rootFunctionsToRemove.Except(nestedFunctionDiscovery.Functions, StringComparer.OrdinalIgnoreCase)
+                : Array.Empty<string>();
+            var functionsToPreserve = existingExports.Functions
+                .Except(rootOnlyFunctions, StringComparer.OrdinalIgnoreCase);
             functionsToSet = MergeDeclaredExports(functionsToPreserve, functionsToSet);
         }
 

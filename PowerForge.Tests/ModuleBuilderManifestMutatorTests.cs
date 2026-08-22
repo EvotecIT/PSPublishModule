@@ -452,7 +452,7 @@ public sealed class ModuleBuilderManifestMutatorTests
     }
 
     [Fact]
-    public void BuildInPlace_PreservesNestedFunctionsWhenReplacingAuthoredRootScript()
+    public void BuildInPlace_PreservesSharedNestedFunctionsWhenReplacingAuthoredRootScript()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -462,13 +462,13 @@ public sealed class ModuleBuilderManifestMutatorTests
             const string moduleName = "PowerForge";
             File.WriteAllText(
                 Path.Combine(root, $"{moduleName}.psd1"),
-                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; NestedModules = @('Nested.psm1'); FunctionsToExport = @('Invoke-RootOnly', 'Invoke-NestedFunction'); CmdletsToExport = @(); AliasesToExport = @() }");
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; NestedModules = @('Nested.psm1'); FunctionsToExport = @('Invoke-RootOnly', 'Invoke-SharedFunction', 'Invoke-NestedFunction'); CmdletsToExport = @(); AliasesToExport = @() }");
             File.WriteAllText(
                 Path.Combine(root, $"{moduleName}.psm1"),
-                "function Invoke-RootOnly { }");
+                "function Invoke-RootOnly { }; function Invoke-SharedFunction { }");
             File.WriteAllText(
                 Path.Combine(root, "Nested.psm1"),
-                "function Invoke-NestedFunction { }");
+                "function Invoke-SharedFunction { }; function Invoke-NestedFunction { }");
             var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
             File.Copy(
                 typeof(ModuleBuilder).Assembly.Location,
@@ -487,7 +487,56 @@ public sealed class ModuleBuilderManifestMutatorTests
 
             var functionWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "FunctionsToExport");
             Assert.Contains("Invoke-NestedFunction", functionWrite.Values);
+            Assert.Contains("Invoke-SharedFunction", functionWrite.Values);
             Assert.DoesNotContain("Invoke-RootOnly", functionWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildInPlace_PreservesAmbiguousFunctionsFromUnresolvedNestedModule()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "PowerForge";
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psd1"),
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; NestedModules = @('External.Module'); FunctionsToExport = @('Invoke-AmbiguousFunction'); CmdletsToExport = @(); AliasesToExport = @() }");
+            File.WriteAllText(
+                Path.Combine(root, $"{moduleName}.psm1"),
+                "function Invoke-AmbiguousFunction { }");
+            var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+            File.Copy(
+                typeof(ModuleBuilder).Assembly.Location,
+                Path.Combine(libCore.FullName, moduleName + ".dll"),
+                overwrite: true);
+
+            var mutator = new RecordingManifestMutator();
+            var builder = new ModuleBuilder(new NullLogger(), mutator, new PowerShellScriptFunctionExportDetector());
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0",
+                RootModuleScriptWillBeReplaced = true,
+            });
+
+            var functionWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "FunctionsToExport");
+            Assert.Contains("Invoke-AmbiguousFunction", functionWrite.Values);
         }
         finally
         {
