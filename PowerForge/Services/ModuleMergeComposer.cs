@@ -44,8 +44,8 @@ internal static class ModuleMergeComposer
             ? BuildMergedScriptContent(ordered, exports, fixRelativePaths, conditionalFunctionDependencies, moduleName)
             : string.Empty;
         var libRoot = Path.Combine(root, "Lib");
-        var primaryAssemblyName = ModuleBinaryFileLocator.ResolvePrimaryAssemblyFileName(moduleName, exportAssemblies);
-        var hasLib = ModuleBinaryFileLocator.ContainsFileName(libRoot, primaryAssemblyName, SearchOption.AllDirectories);
+        var assemblyFileNames = ModuleBinaryFileLocator.ResolveAssemblyFileNames(moduleName, exportAssemblies);
+        var hasLib = ModuleBinaryFileLocator.ContainsAnyFileName(libRoot, assemblyFileNames, SearchOption.AllDirectories);
 
         return new ModuleMergeSources(psm1, ordered, merged, hasLib);
     }

@@ -37,9 +37,9 @@ internal static partial class ModuleBootstrapperGenerator
 
         var hasScriptFolders = HasAnyDirectory(root, "Public", "Private", "Classes", "Enums");
         var libRoot = Path.Combine(root, "Lib");
-        var exportAssemblyFileNames = ResolveExportAssemblyFileNames(moduleName, exportAssemblies);
+        var exportAssemblyFileNames = ModuleBinaryFileLocator.ResolveAssemblyFileNames(moduleName, exportAssemblies);
         var primaryAssemblyName = exportAssemblyFileNames.FirstOrDefault() ?? (moduleName + ".dll");
-        var hasLib = ModuleBinaryFileLocator.ContainsFileName(libRoot, primaryAssemblyName, SearchOption.AllDirectories);
+        var hasLib = ModuleBinaryFileLocator.ContainsAnyFileName(libRoot, exportAssemblyFileNames, SearchOption.AllDirectories);
         var hasDevelopmentBinaryLoader = developmentBinaries?.Enabled == true;
 
         // Avoid overwriting "single file" script modules that keep all code in the PSM1 and do not use folder layout.
@@ -54,7 +54,7 @@ internal static partial class ModuleBootstrapperGenerator
             : null;
 
         if (hasLib && useAssemblyLoadContext && assemblyLoadContextLoaderIdentity is not null)
-            BuildAssemblyLoadContextLoader(root, assemblyLoadContextLoaderIdentity, ResolveAssemblyLoadContextTargetFramework(targetFrameworks), log);
+            BuildAssemblyLoadContextLoader(root, exportAssemblyFileNames, assemblyLoadContextLoaderIdentity, ResolveAssemblyLoadContextTargetFramework(targetFrameworks), log);
 
         if (hasLib)
         {
@@ -67,7 +67,7 @@ internal static partial class ModuleBootstrapperGenerator
         var psm1Content = BuildBootstrapperPsm1(
             moduleName,
             primaryLibraryName,
-            primaryAssemblyName,
+            exportAssemblyFileNames,
             exports,
             includeBinaryLoader: hasLib,
             includeScriptLoader: hasScriptFolders,
@@ -87,30 +87,6 @@ internal static partial class ModuleBootstrapperGenerator
         => (directoryNames ?? Array.Empty<string>())
             .Where(d => !string.IsNullOrWhiteSpace(d))
             .Any(d => Directory.Exists(Path.Combine(root, d)));
-
-    private static string[] ResolveExportAssemblyFileNames(string moduleName, IReadOnlyList<string>? exportAssemblies)
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var ordered = new List<string>();
-
-        var specified = (exportAssemblies ?? Array.Empty<string>())
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Select(s => s.Trim().Trim('"'))
-            .ToArray();
-
-        var entries = specified.Length > 0 ? specified : new[] { moduleName + ".dll" };
-        foreach (var entry in entries)
-        {
-            if (string.IsNullOrWhiteSpace(entry)) continue;
-            var name = entry.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? entry : entry + ".dll";
-            name = Path.GetFileName(name);
-            if (string.IsNullOrWhiteSpace(name)) continue;
-            if (seen.Add(name))
-                ordered.Add(name);
-        }
-
-        return ordered.ToArray();
-    }
 
     private static void WritePowerShellFile(string path, string content)
     {
@@ -247,7 +223,7 @@ internal static partial class ModuleBootstrapperGenerator
     private static string BuildBootstrapperPsm1(
         string moduleName,
         string libraryName,
-        string libraryFileName,
+        IReadOnlyList<string> libraryFileNames,
         ExportSet exports,
         bool includeBinaryLoader,
         bool includeScriptLoader,
@@ -273,8 +249,14 @@ internal static partial class ModuleBootstrapperGenerator
                     : "Scripts/ModuleBootstrapper/BinaryLoader.Template.ps1",
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["LibraryName"] = EscapePsSingleQuoted(libraryName),
-                    ["LibraryFileName"] = EscapePsSingleQuoted(libraryFileName),
+                    ["LibraryFileNames"] = BuildPowerShellArrayLiteral(libraryFileNames),
+                    ["BinaryAssemblyResolverBlock"] = RenderModuleBootstrapperTemplate(
+                        "BinaryAssemblyResolver",
+                        "Scripts/ModuleBootstrapper/BinaryAssemblyResolver.Template.ps1",
+                        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["LibraryFileNames"] = BuildPowerShellArrayLiteral(libraryFileNames)
+                        }).TrimEnd(),
                     ["ModuleName"] = EscapePsSingleQuoted(moduleName),
                     ["LoaderAssemblyName"] = EscapePsSingleQuoted(loaderIdentity?.AssemblyName ?? string.Empty),
                     ["LoaderTypeName"] = loaderIdentity?.TypeName ?? string.Empty,
@@ -295,9 +277,9 @@ internal static partial class ModuleBootstrapperGenerator
                             assemblyTypeAcceleratorMode,
                             assemblyTypeAccelerators,
                             assemblyTypeAcceleratorAssemblies,
-                            "[IO.Path]::Combine($LibRoot, $LibFolder)",
+                            "$PowerForgeDesktopBinaryDirectory",
                             ignoreLibrariesOnLoad).TrimEnd(),
-                        4)
+                        8)
                 })
             : string.Empty;
 
@@ -367,6 +349,7 @@ internal static partial class ModuleBootstrapperGenerator
 
     private static void BuildAssemblyLoadContextLoader(
         string moduleRoot,
+        IReadOnlyList<string> exportAssemblyFileNames,
         AssemblyLoadContextLoaderIdentity identity,
         string targetFramework,
         Action<string>? log)
@@ -378,7 +361,7 @@ internal static partial class ModuleBootstrapperGenerator
             return;
         }
 
-        var targetDirectories = ResolveAssemblyLoadContextTargetDirectories(libRoot);
+        var targetDirectories = ResolveAssemblyLoadContextTargetDirectories(libRoot, exportAssemblyFileNames);
         if (targetDirectories.Length == 0)
         {
             log?.Invoke("UseAssemblyLoadContext is set but no compatible Lib directory was found; skipping ALC loader generation.");
@@ -459,8 +442,28 @@ internal static partial class ModuleBootstrapperGenerator
         }
     }
 
-    internal static string[] ResolveAssemblyLoadContextTargetDirectories(string libRoot)
+    internal static string[] ResolveAssemblyLoadContextTargetDirectories(
+        string libRoot,
+        IReadOnlyList<string>? exportAssemblyFileNames = null)
     {
+        if (exportAssemblyFileNames is { Count: > 0 })
+        {
+            var expected = new HashSet<string>(exportAssemblyFileNames, StringComparer.OrdinalIgnoreCase);
+            var candidates = new[]
+            {
+                Path.Combine(libRoot, "Standard"),
+                Path.Combine(libRoot, "Core"),
+                Path.Combine(libRoot, "Default"),
+                libRoot
+            };
+            return candidates
+                .Where(Directory.Exists)
+                .Where(directory => ModuleBinaryFileLocator.Enumerate(directory, SearchOption.TopDirectoryOnly)
+                    .Any(path => expected.Contains(Path.GetFileName(path))))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
         var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var directory in Directory.EnumerateDirectories(libRoot))
         {

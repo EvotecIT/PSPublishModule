@@ -19,26 +19,55 @@ internal static class ModuleBinaryFileLocator
             .Where(static path => string.Equals(Path.GetExtension(path), ".dll", StringComparison.OrdinalIgnoreCase));
     }
 
-    internal static bool ContainsFileName(string directory, string fileName, SearchOption searchOption)
+    internal static bool ContainsAnyFileName(
+        string directory,
+        IReadOnlyList<string>? fileNames,
+        SearchOption searchOption)
     {
-        if (string.IsNullOrWhiteSpace(fileName))
+        var expected = new HashSet<string>(
+            (fileNames ?? Array.Empty<string>())
+                .Where(static fileName => !string.IsNullOrWhiteSpace(fileName))
+                .Select(Path.GetFileName)
+                .Where(static fileName => !string.IsNullOrWhiteSpace(fileName))!,
+            StringComparer.OrdinalIgnoreCase);
+        if (expected.Count == 0)
             return false;
 
-        var expected = Path.GetFileName(fileName);
         return Enumerate(directory, searchOption)
-            .Any(path => string.Equals(Path.GetFileName(path), expected, StringComparison.OrdinalIgnoreCase));
+            .Any(path => expected.Contains(Path.GetFileName(path)));
     }
 
-    internal static string ResolvePrimaryAssemblyFileName(
+    internal static string[] ResolveAssemblyFileNames(
         string moduleName,
         IReadOnlyList<string>? exportAssemblies)
     {
-        var configured = (exportAssemblies ?? Array.Empty<string>())
-            .FirstOrDefault(static entry => !string.IsNullOrWhiteSpace(entry));
-        var candidate = string.IsNullOrWhiteSpace(configured) ? moduleName + ".dll" : configured!.Trim().Trim('"');
-        if (!candidate.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-            candidate += ".dll";
+        var configured = NormalizeAssemblyFileNames(exportAssemblies);
+        if (configured.Length == 0)
+            return new[] { moduleName + ".dll" };
 
-        return Path.GetFileName(candidate);
+        var moduleAssembly = moduleName + ".dll";
+        return configured
+            .OrderBy(entry => string.Equals(entry, moduleAssembly, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ToArray();
+    }
+
+    private static string[] NormalizeAssemblyFileNames(IReadOnlyList<string>? exportAssemblies)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var normalized = new List<string>();
+        foreach (var entry in exportAssemblies ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(entry))
+                continue;
+
+            var candidate = entry.Trim().Trim('"');
+            if (!candidate.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                candidate += ".dll";
+            candidate = Path.GetFileName(candidate);
+            if (!string.IsNullOrWhiteSpace(candidate) && seen.Add(candidate))
+                normalized.Add(candidate);
+        }
+
+        return normalized.ToArray();
     }
 }

@@ -1,58 +1,4 @@
-﻿# Get library name, from the PSM1 file name
-$LibraryName = '{{LibraryName}}'
-$Library = '{{LibraryFileName}}'
-$Class = "$LibraryName.Initialize"
-
-$LibRoot = [IO.Path]::Combine($PowerForgeModuleRoot, 'Lib')
-$AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction SilentlyContinue
-$Root = @(Get-ChildItem -LiteralPath $LibRoot -File -ErrorAction SilentlyContinue | Where-Object Extension -IEQ '.dll').Count -gt 0
-
-$Default = $false
-$Core = $false
-$Standard = $false
-foreach ($A in $AssemblyFolders.Name) {
-    if ($A -eq 'Default') {
-        $Default = $true
-    } elseif ($A -eq 'Core') {
-        $Core = $true
-    } elseif ($A -eq 'Standard') {
-        $Standard = $true
-    }
-}
-if ($Standard -and $Core -and $Default) {
-    $FrameworkNet = 'Default'
-    $Framework = 'Standard'
-} elseif ($Standard -and $Core) {
-    $Framework = 'Standard'
-    $FrameworkNet = 'Standard'
-} elseif ($Core -and $Default) {
-    $Framework = 'Core'
-    $FrameworkNet = 'Default'
-} elseif ($Standard -and $Default) {
-    $Framework = 'Standard'
-    $FrameworkNet = 'Default'
-} elseif ($Standard) {
-    $Framework = 'Standard'
-    $FrameworkNet = 'Standard'
-} elseif ($Core) {
-    $Framework = 'Core'
-    $FrameworkNet = ''
-} elseif ($Default) {
-    $Framework = ''
-    $FrameworkNet = 'Default'
-} elseif ($Root) {
-    $Framework = ''
-    $FrameworkNet = ''
-} else {
-    Write-Error -Message 'No assemblies found'
-    return
-}
-
-if ($PSEdition -eq 'Core') {
-    $LibFolder = $Framework
-} else {
-    $LibFolder = $FrameworkNet
-}
+{{BinaryAssemblyResolverBlock}}
 
 {{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}$PowerForgeDesktopLibrariesLoaded = $false
 if ($PSEdition -ne 'Core') {
@@ -71,12 +17,18 @@ if ($PSEdition -ne 'Core') {
 }
 try {
     $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
+    foreach ($Library in $LibraryFileNames) {
+        $ResolvedModuleAssembly = & $ResolvePowerForgeModuleAssembly -LibraryFileName $Library
+        $ModuleAssemblyPath = $ResolvedModuleAssembly.Path
+        $LibraryName = [IO.Path]::GetFileNameWithoutExtension($ModuleAssemblyPath)
+        $Class = "$LibraryName.Initialize"
 
-    if (-not ($Class -as [type])) {
-        & $ImportModule ([IO.Path]::Combine($LibRoot, $LibFolder, $Library)) -ErrorAction Stop
-    } else {
-        $Type = "$Class" -as [Type]
-        & $importModule -Force -Assembly ($Type.Assembly)
+        if (-not ($Class -as [type])) {
+            & $ImportModule $ModuleAssemblyPath -ErrorAction Stop
+        } else {
+            $Type = "$Class" -as [Type]
+            & $ImportModule -Force -Assembly ($Type.Assembly)
+        }
     }
 } catch {
     if ($ErrorActionPreference -eq 'Stop') {

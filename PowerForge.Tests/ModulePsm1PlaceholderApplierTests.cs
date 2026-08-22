@@ -133,6 +133,48 @@ public sealed class ModulePsm1PlaceholderApplierTests
     }
 
     [Fact]
+    public void Apply_DoesNotReplaceShortTokensInsideReencodedDeferredBase64()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var logger = new CollectingLogger();
+            var libCore = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
+            File.WriteAllText(Path.Combine(libCore.FullName, moduleName + ".dll"), string.Empty);
+            ModuleBootstrapperGenerator.Generate(
+                root.FullName,
+                moduleName,
+                new ExportSet(new[] { "Get-Test" }, Array.Empty<string>(), Array.Empty<string>()),
+                new[] { moduleName + ".dll" },
+                handleRuntimes: false);
+            var psm1Path = Path.Combine(root.FullName, moduleName + ".psm1");
+            var payload = new StringBuilder();
+            for (var index = 0; index <= 100; index++)
+                payload.AppendLine($"function Get-Test{index} {{ param([string] $Value) return $Value }}");
+            ModuleBootstrapperGenerator.InlineMergedScriptPayload(psm1Path, payload.ToString());
+            Assert.Contains("lu", ExtractDeferredEncodedPayload(File.ReadAllText(psm1Path)), StringComparison.Ordinal);
+
+            ModulePsm1PlaceholderApplier.Apply(
+                logger,
+                psm1Path,
+                moduleName,
+                moduleVersion: "1.2.3",
+                preRelease: null,
+                replacements: new[] { new PlaceHolderReplacement { Find = "lu", Replace = "XX" } },
+                options: null);
+
+            var content = File.ReadAllText(psm1Path);
+            Assert.Contains("$VaXXe", DecodeDeferredPayload(content), StringComparison.Ordinal);
+            Assert.Empty(logger.Warnings);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Apply_ReturnsSilentlyWhenFileDoesNotExist()
     {
         var logger = new CollectingLogger();
@@ -172,6 +214,9 @@ public sealed class ModulePsm1PlaceholderApplierTests
     }
 
     private static string DecodeDeferredPayload(string bootstrapper)
+        => Encoding.UTF8.GetString(Convert.FromBase64String(ExtractDeferredEncodedPayload(bootstrapper)));
+
+    private static string ExtractDeferredEncodedPayload(string bootstrapper)
     {
         const string startMarker = "$PowerForgeMergedScriptPayloadBase64 = @'";
         const string endMarker = "'@";
@@ -180,7 +225,7 @@ public sealed class ModulePsm1PlaceholderApplierTests
         start += startMarker.Length;
         var end = bootstrapper.IndexOf(endMarker, start, StringComparison.Ordinal);
         Assert.True(end > start);
-        return Encoding.UTF8.GetString(Convert.FromBase64String(bootstrapper.Substring(start, end - start)));
+        return bootstrapper.Substring(start, end - start);
     }
 
     private sealed class CollectingLogger : ILogger

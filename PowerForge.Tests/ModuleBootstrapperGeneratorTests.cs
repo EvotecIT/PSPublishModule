@@ -348,7 +348,7 @@ public class ModuleBootstrapperGeneratorTests
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
             Assert.Contains("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
             Assert.Contains("DemoModule.ModuleLoadContext.dll", bootstrapper);
-            Assert.Contains("LoadModule($ModuleAssemblyPath, 'DemoModule')", bootstrapper);
+            Assert.Contains("LoadModule($ModuleAssemblyPath, 'DemoModule.' + $LibraryName)", bootstrapper);
             Assert.Contains("-PassThru -ErrorAction Stop", bootstrapper);
             Assert.Contains("AddExportedCmdlet", bootstrapper);
             Assert.Contains("AddExportedAlias", bootstrapper);
@@ -371,7 +371,7 @@ public class ModuleBootstrapperGeneratorTests
                 "Desktop dependencies must load before the exported binary module.");
 
             Assert.True(File.Exists(Path.Combine(root, "Lib", "Core", "DemoModule.ModuleLoadContext.dll")));
-            Assert.False(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
+            Assert.True(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
             Assert.True(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
 
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
@@ -639,11 +639,74 @@ public class ModuleBootstrapperGeneratorTests
                 useAssemblyLoadContext: true);
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
-            Assert.Contains("$Framework = 'Default'", bootstrapper);
+            Assert.Contains("@('Standard', 'Core', '', 'Default')", bootstrapper);
             Assert.True(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
 
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
             Assert.DoesNotContain("DemoModule.ModuleLoadContext.dll", libraries);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithRootPrimaryAndNestedAuxiliary_WritesAlcLoaderBesidePrimaryAssembly()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-root-primary-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        File.WriteAllText(Path.Combine(root, "Lib", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Core", "Dependency.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true);
+
+            Assert.True(File.Exists(Path.Combine(root, "Lib", "DemoModule.ModuleLoadContext.dll")));
+            Assert.False(File.Exists(Path.Combine(root, "Lib", "Core", "DemoModule.ModuleLoadContext.dll")));
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$LoaderAssemblyPath = [IO.Path]::Combine($LibraryDirectory", bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithMultipleConfiguredAssemblies_ImportsEveryAssemblyAndPrefersModuleName()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-multiple-exports-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib"));
+        File.WriteAllText(Path.Combine(root, "Lib", "DemoModule.DLL"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Auxiliary.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "Auxiliary.dll", "DemoModule.dll" },
+                handleRuntimes: false);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$LibraryFileNames = @('DemoModule.dll', 'Auxiliary.dll')", bootstrapper);
+            Assert.Contains("foreach ($Library in $LibraryFileNames)", bootstrapper);
+            Assert.Contains("Where-Object { $_.Name -ieq $LibraryFileName }", bootstrapper);
+            Assert.Contains("$ModuleAssemblyPath = $ResolvedModuleAssembly.Path", bootstrapper);
         }
         finally
         {

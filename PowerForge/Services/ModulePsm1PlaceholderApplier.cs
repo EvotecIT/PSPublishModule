@@ -43,8 +43,8 @@ internal static class ModulePsm1PlaceholderApplier
 
         var updated = ModuleBootstrapperGenerator.RewriteDeferredScriptPayload(
             content,
-            payload => ApplyReplacements(payload, resolvedReplacements));
-        updated = ApplyReplacements(updated, resolvedReplacements);
+            payload => ApplyReplacements(payload, resolvedReplacements),
+            outerContent => ApplyReplacements(outerContent, resolvedReplacements));
 
         if (string.Equals(content, updated, StringComparison.Ordinal))
             return;

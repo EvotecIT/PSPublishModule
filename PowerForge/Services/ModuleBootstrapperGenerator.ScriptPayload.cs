@@ -99,33 +99,47 @@ internal static partial class ModuleBootstrapperGenerator
     }
 
     internal static string RewriteDeferredScriptPayload(string moduleContent, Func<string, string> rewrite)
+        => RewriteDeferredScriptPayload(moduleContent, rewrite, rewriteOuterContent: null);
+
+    internal static string RewriteDeferredScriptPayload(
+        string moduleContent,
+        Func<string, string> rewritePayload,
+        Func<string, string>? rewriteOuterContent)
     {
-        if (string.IsNullOrWhiteSpace(moduleContent) || rewrite is null)
+        if (string.IsNullOrWhiteSpace(moduleContent) || rewritePayload is null)
             return moduleContent ?? string.Empty;
 
         var markerStart = moduleContent.IndexOf(DeferredPayloadStartMarker, StringComparison.Ordinal);
         if (markerStart < 0)
-            return moduleContent;
+            return rewriteOuterContent?.Invoke(moduleContent) ?? moduleContent;
 
         var payloadStart = markerStart + DeferredPayloadStartMarker.Length;
         var payloadEnd = moduleContent.IndexOf(DeferredPayloadEndMarker, payloadStart, StringComparison.Ordinal);
         if (payloadEnd <= payloadStart)
-            return moduleContent;
+            return rewriteOuterContent?.Invoke(moduleContent) ?? moduleContent;
 
         var encoded = moduleContent.Substring(payloadStart, payloadEnd - payloadStart);
         var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
-        var rewritten = rewrite(decoded) ?? string.Empty;
-        if (string.Equals(decoded, rewritten, StringComparison.Ordinal))
+        var rewritten = rewritePayload(decoded) ?? string.Empty;
+        var prefix = moduleContent.Substring(0, payloadStart);
+        var suffix = moduleContent.Substring(payloadEnd);
+        var rewrittenPrefix = rewriteOuterContent?.Invoke(prefix) ?? prefix;
+        var rewrittenSuffix = rewriteOuterContent?.Invoke(suffix) ?? suffix;
+        if (string.Equals(decoded, rewritten, StringComparison.Ordinal) &&
+            string.Equals(prefix, rewrittenPrefix, StringComparison.Ordinal) &&
+            string.Equals(suffix, rewrittenSuffix, StringComparison.Ordinal))
+        {
             return moduleContent;
+        }
 
         var updatedEncoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(rewritten));
         var wrapped = new StringBuilder(updatedEncoded.Length + 64);
         AppendWrappedBase64(wrapped, updatedEncoded);
-        return moduleContent.Substring(0, payloadStart) +
+        return rewrittenPrefix +
                Environment.NewLine +
                wrapped.ToString().TrimEnd('\r', '\n') +
                Environment.NewLine +
-               moduleContent.Substring(payloadEnd);
+               rewrittenSuffix;
     }
 
     private static void AppendWrappedBase64(StringBuilder builder, string encoded)
