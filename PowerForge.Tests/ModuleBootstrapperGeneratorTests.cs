@@ -1064,7 +1064,7 @@ public class ModuleBootstrapperGeneratorTests
 
         try
         {
-            var configuredReference = Path.Combine("Lib", "Plugins", "DemoModule.dll");
+            var configuredReference = "Lib\\Plugins\\DemoModule.dll";
             ModuleBootstrapperGenerator.Generate(
                 root,
                 "DemoModule",

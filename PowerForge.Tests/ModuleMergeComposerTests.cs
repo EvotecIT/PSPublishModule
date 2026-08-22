@@ -275,6 +275,48 @@ public sealed class ModuleMergeComposerTests
     }
 
     [Fact]
+    public void BuildSources_LoadsEnumsBeforeClassesAndRebasesRelativeUsingPaths()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Enums"));
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Classes"));
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Lib"));
+            File.WriteAllText(Path.Combine(root.FullName, "Types.psm1"), "class SharedType {}");
+            File.WriteAllText(Path.Combine(root.FullName, "Lib", "Demo.dll"), string.Empty);
+            File.WriteAllText(Path.Combine(root.FullName, "Enums", "DemoKind.ps1"), "enum DemoKind { One }");
+            File.WriteAllText(
+                Path.Combine(root.FullName, "Classes", "DemoRecord.ps1"),
+                "using module ../Types.psm1" + Environment.NewLine +
+                "using assembly ../Lib/Demo.dll" + Environment.NewLine +
+                "class DemoRecord { [DemoKind] $Kind }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                "DemoModule",
+                information: new InformationConfiguration
+                {
+                    IncludePS1 = new[] { "Private", "Public", "Enums", "Classes" }
+                },
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: false);
+
+            Assert.True(
+                sources.MergedScriptContent.IndexOf("enum DemoKind", StringComparison.Ordinal) <
+                sources.MergedScriptContent.IndexOf("class DemoRecord", StringComparison.Ordinal));
+            Assert.StartsWith(
+                "using assembly ./Lib/Demo.dll" + Environment.NewLine + "using module ./Types.psm1",
+                sources.MergedScriptContent,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void BuildSources_RequiresConfiguredPrimaryAssemblyForBinaryMerge()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

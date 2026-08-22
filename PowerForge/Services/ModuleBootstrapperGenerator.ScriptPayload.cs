@@ -28,7 +28,8 @@ internal static partial class ModuleBootstrapperGenerator
 
         var scriptPreamble = ModuleMergeComposer.ExtractMergedScriptPreamble(mergedScriptContent, out var scriptPayload);
         var authoritativeExportBlock = ModuleMergeComposer.ExtractTrailingExportBlock(scriptPayload, out scriptPayload);
-        var deferredScriptPayload = BuildDeferredScriptPayload(scriptPreamble, scriptPayload);
+        ModuleMergeComposer.TryResolveMergedSourceMarkers(scriptPayload, out var sourceStartMarker, out var sourceEndMarker);
+        var deferredScriptPayload = BuildDeferredScriptPayload(scriptPreamble, scriptPayload, sourceStartMarker, sourceEndMarker);
         var bootstrapper = File.ReadAllText(psm1Path);
         bootstrapper = ReplaceMarkedSection(
             bootstrapper,
@@ -61,7 +62,11 @@ internal static partial class ModuleBootstrapperGenerator
         WritePowerShellFile(psm1Path, inlinedBootstrapper);
     }
 
-    private static string BuildDeferredScriptPayload(string scriptPreamble, string scriptPayload)
+    private static string BuildDeferredScriptPayload(
+        string scriptPreamble,
+        string scriptPayload,
+        string sourceStartMarker,
+        string sourceEndMarker)
     {
         if (string.IsNullOrWhiteSpace(scriptPayload))
             return string.Empty;
@@ -90,8 +95,8 @@ internal static partial class ModuleBootstrapperGenerator
         builder.AppendLine("    }");
         builder.AppendLine("    $PowerForgeMergedScriptPayload = $PowerForgeMergedScriptBuilder.ToString()");
         builder.AppendLine("}");
-        builder.AppendLine("$PowerForgeMergedScriptSourceStartMarker = '" + EscapePsSingleQuoted(ModuleMergeComposer.MergedSourceStartMarker) + "'");
-        builder.AppendLine("$PowerForgeMergedScriptSourceEndMarker = '" + EscapePsSingleQuoted(ModuleMergeComposer.MergedSourceEndMarker) + "'");
+        builder.AppendLine("$PowerForgeMergedScriptSourceStartMarker = '" + EscapePsSingleQuoted(sourceStartMarker) + "'");
+        builder.AppendLine("$PowerForgeMergedScriptSourceEndMarker = '" + EscapePsSingleQuoted(sourceEndMarker) + "'");
         builder.AppendLine("$PowerForgeMergedScriptSegments = [Collections.Generic.List[string]]::new()");
         builder.AppendLine("$PowerForgeMergedScriptFirstSource = $PowerForgeMergedScriptPayload.IndexOf($PowerForgeMergedScriptSourceStartMarker, [StringComparison]::Ordinal)");
         builder.AppendLine("if ($PowerForgeMergedScriptFirstSource -lt 0) {");

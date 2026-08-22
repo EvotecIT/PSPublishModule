@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace PowerForge;
@@ -44,7 +45,7 @@ internal static class ModuleMergeComposer
             : NormalizeScriptFiles(scriptFiles);
 
         var merged = ordered.Length > 0
-            ? BuildMergedScriptContent(ordered, exports, fixRelativePaths, conditionalFunctionDependencies, moduleName)
+            ? BuildMergedScriptContent(root, ordered, exports, fixRelativePaths, conditionalFunctionDependencies, moduleName)
             : string.Empty;
         var libRoot = Path.Combine(root, "Lib");
         var assemblyFileNames = ModuleBinaryFileLocator.ResolveAssemblyFileNames(moduleName, exportAssemblies);
@@ -188,7 +189,8 @@ internal static class ModuleMergeComposer
             {
                 files.AddRange(
                     Directory.EnumerateFiles(full, "*", SearchOption.AllDirectories)
-                        .Where(static file => string.Equals(Path.GetExtension(file), ".ps1", StringComparison.OrdinalIgnoreCase)));
+                        .Where(static file => string.Equals(Path.GetExtension(file), ".ps1", StringComparison.OrdinalIgnoreCase))
+                        .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase));
             }
             catch
             {
@@ -200,18 +202,20 @@ internal static class ModuleMergeComposer
     }
 
     private static string[] NormalizeScriptFiles(IEnumerable<string> files)
-        => files
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return files
             .Where(static file => !string.IsNullOrWhiteSpace(file))
             .Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
+            .Where(seen.Add)
             .ToArray();
+    }
 
     internal static string[] ResolveMergeDirectories(InformationConfiguration? information)
     {
         IEnumerable<string> configured = information?.IncludePS1 is { Length: > 0 }
             ? information.IncludePS1
-            : new[] { "Classes", "Enums", "Private", "Public" };
+            : new[] { "Enums", "Classes", "Private", "Public" };
 
         if (information?.IncludeToArray is { Length: > 0 })
         {
@@ -224,14 +228,35 @@ internal static class ModuleMergeComposer
             }
         }
 
-        return configured
+        var normalized = configured
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .Select(static value => value.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+        return normalized.All(IsStandardMergeDirectory)
+            ? normalized.OrderBy(GetStandardMergeDirectoryPriority).ToArray()
+            : normalized;
+    }
+
+    private static bool IsStandardMergeDirectory(string directory)
+        => GetStandardMergeDirectoryPriority(directory) < int.MaxValue;
+
+    private static int GetStandardMergeDirectoryPriority(string directory)
+    {
+        if (string.Equals(directory, "Enums", System.StringComparison.OrdinalIgnoreCase))
+            return 0;
+        if (string.Equals(directory, "Classes", System.StringComparison.OrdinalIgnoreCase))
+            return 1;
+        if (string.Equals(directory, "Private", System.StringComparison.OrdinalIgnoreCase))
+            return 2;
+        if (string.Equals(directory, "Public", System.StringComparison.OrdinalIgnoreCase))
+            return 3;
+        return int.MaxValue;
     }
 
     private static string BuildMergedScriptContent(
+        string rootPath,
         IReadOnlyList<string> files,
         ExportSet exports,
         bool fixRelativePaths,
@@ -240,7 +265,7 @@ internal static class ModuleMergeComposer
     {
         var requires = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var usingLines = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var body = new StringBuilder(8192);
+        var sourceBlocks = new List<string>();
 
         foreach (var file in files)
         {
@@ -258,7 +283,12 @@ internal static class ModuleMergeComposer
             }
 
             var block = new List<string>();
-            var directiveLineReplacements = ExtractPreambleDirectives(lines, requires, usingLines);
+            var directiveLineReplacements = ExtractPreambleDirectives(
+                lines,
+                requires,
+                usingLines,
+                file,
+                rootPath);
             for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
             {
                 var line = lines[lineIndex];
@@ -276,11 +306,18 @@ internal static class ModuleMergeComposer
             if (block.Count == 0)
                 continue;
 
-            body.AppendLine(MergedSourceStartMarker);
-            foreach (var line in block)
-                body.AppendLine(line);
-            body.AppendLine(MergedSourceEndMarker);
+            sourceBlocks.Add(string.Join(System.Environment.NewLine, block));
+        }
 
+        var body = new StringBuilder(8192);
+        var boundaryToken = ComputeMergedSourceBoundaryToken(sourceBlocks);
+        var sourceStartMarker = MergedSourceStartMarker + " " + boundaryToken;
+        var sourceEndMarker = MergedSourceEndMarker + " " + boundaryToken;
+        foreach (var block in sourceBlocks)
+        {
+            body.AppendLine(sourceStartMarker);
+            body.AppendLine(block);
+            body.AppendLine(sourceEndMarker);
             body.AppendLine();
         }
 
@@ -313,7 +350,9 @@ internal static class ModuleMergeComposer
     private static Dictionary<int, string> ExtractPreambleDirectives(
         IReadOnlyList<string> lines,
         ISet<string> requires,
-        ISet<string> usingLines)
+        ISet<string> usingLines,
+        string sourcePath,
+        string moduleRoot)
     {
         // PowerShell using statements are valid only in the script preamble. Restricting extraction to that region
         // prevents embedded languages in here-strings and block comments from being mistaken for module directives.
@@ -335,7 +374,10 @@ internal static class ModuleMergeComposer
 
             if (kind == PreambleLineKind.Using)
             {
-                usingLines.Add(lines[index].Substring(directiveStart));
+                usingLines.Add(RebaseUsingDirective(
+                    lines[index].Substring(directiveStart),
+                    sourcePath,
+                    moduleRoot));
                 lineReplacements[index] = lines[index].Substring(0, directiveStart).TrimEnd();
                 continue;
             }
@@ -344,6 +386,120 @@ internal static class ModuleMergeComposer
         }
 
         return lineReplacements;
+    }
+
+    internal static bool TryResolveMergedSourceMarkers(
+        string? content,
+        out string startMarker,
+        out string endMarker)
+    {
+        startMarker = MergedSourceStartMarker;
+        endMarker = MergedSourceEndMarker;
+        if (content is null || string.IsNullOrWhiteSpace(content))
+            return false;
+
+        var normalized = content.Replace("\r\n", "\n").Replace('\r', '\n');
+        var prefix = MergedSourceStartMarker + " ";
+        foreach (var line in normalized.Split('\n'))
+        {
+            if (!line.StartsWith(prefix, System.StringComparison.Ordinal))
+                continue;
+
+            var token = line.Substring(prefix.Length).Trim();
+            if (token.Length == 0)
+                continue;
+
+            var candidateEnd = MergedSourceEndMarker + " " + token;
+            if (normalized.IndexOf(candidateEnd, System.StringComparison.Ordinal) < 0)
+                continue;
+
+            startMarker = line;
+            endMarker = candidateEnd;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string ComputeMergedSourceBoundaryToken(IReadOnlyList<string> sourceBlocks)
+    {
+        var content = string.Join("\u001f", sourceBlocks ?? Array.Empty<string>());
+        using var sha256 = SHA256.Create();
+        var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(content));
+        return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static string RebaseUsingDirective(string directive, string sourcePath, string moduleRoot)
+    {
+        if (string.IsNullOrWhiteSpace(directive) || string.IsNullOrWhiteSpace(moduleRoot))
+            return directive;
+
+        var index = "using".Length;
+        while (index < directive.Length && char.IsWhiteSpace(directive[index]))
+            index++;
+
+        var kindStart = index;
+        while (index < directive.Length && !char.IsWhiteSpace(directive[index]))
+            index++;
+        var kind = directive.Substring(kindStart, index - kindStart);
+        if (!string.Equals(kind, "assembly", System.StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(kind, "module", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return directive;
+        }
+
+        while (index < directive.Length && char.IsWhiteSpace(directive[index]))
+            index++;
+        if (index >= directive.Length || directive[index] == '@')
+            return directive;
+
+        var quote = directive[index] is '\'' or '"' ? directive[index++] : '\0';
+        var pathStart = index;
+        var pathEnd = quote == '\0'
+            ? FindUnquotedPathEnd(directive, pathStart)
+            : directive.IndexOf(quote, pathStart);
+        if (pathEnd < pathStart)
+            return directive;
+
+        var usingPath = directive.Substring(pathStart, pathEnd - pathStart);
+        if (!IsRelativeUsingPath(usingPath))
+            return directive;
+
+        var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath));
+        if (string.IsNullOrWhiteSpace(sourceDirectory))
+            return directive;
+
+        var normalizedPath = usingPath.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+        var absolutePath = Path.GetFullPath(Path.Combine(sourceDirectory, normalizedPath));
+        var rebased = FrameworkCompatibility.GetRelativePath(moduleRoot, absolutePath).Replace('\\', '/');
+        if (!rebased.StartsWith(".", System.StringComparison.Ordinal))
+            rebased = "./" + rebased;
+
+        return directive.Substring(0, pathStart) + rebased + directive.Substring(pathEnd);
+    }
+
+    private static int FindUnquotedPathEnd(string directive, int start)
+    {
+        var index = start;
+        while (index < directive.Length && !char.IsWhiteSpace(directive[index]) && directive[index] != ';')
+            index++;
+        return index;
+    }
+
+    private static bool IsRelativeUsingPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) ||
+            Path.IsPathRooted(path) ||
+            path.StartsWith("\\\\", System.StringComparison.Ordinal) ||
+            path.StartsWith("//", System.StringComparison.Ordinal) ||
+            (path.Length > 2 && path[1] == ':' && (path[2] == '\\' || path[2] == '/')))
+        {
+            return false;
+        }
+
+        return path.StartsWith(".", System.StringComparison.Ordinal) ||
+               path.IndexOf('\\') >= 0 ||
+               path.IndexOf('/') >= 0;
     }
 
     private static PreambleLineKind ClassifyPreambleLine(

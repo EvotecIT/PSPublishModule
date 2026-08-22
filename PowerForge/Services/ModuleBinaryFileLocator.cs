@@ -65,7 +65,7 @@ internal static class ModuleBinaryFileLocator
             var candidate = entry.Trim().Trim('"');
             if (!candidate.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 candidate += ".dll";
-            candidate = candidate.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            candidate = NormalizePathSeparators(candidate);
             var libPrefix = "Lib" + Path.DirectorySeparatorChar;
             if (!Path.IsPathRooted(candidate) && candidate.StartsWith(libPrefix, StringComparison.OrdinalIgnoreCase))
                 candidate = candidate.Substring(libPrefix.Length);
@@ -94,11 +94,16 @@ internal static class ModuleBinaryFileLocator
             var candidate = entry.Trim().Trim('"');
             if (!candidate.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 candidate += ".dll";
-            candidate = Path.GetFileName(candidate);
+            candidate = Path.GetFileName(NormalizePathSeparators(candidate));
             if (!string.IsNullOrWhiteSpace(candidate) && seen.Add(candidate))
                 normalized.Add(candidate);
         }
 
         return normalized.ToArray();
     }
+
+    private static string NormalizePathSeparators(string path)
+        => path
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
 }

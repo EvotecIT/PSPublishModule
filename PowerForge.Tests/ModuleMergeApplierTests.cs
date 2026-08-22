@@ -141,7 +141,12 @@ public sealed class ModuleMergeApplierTests
             var libCore = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
             File.WriteAllText(Path.Combine(libCore.FullName, moduleName + ".dll"), string.Empty);
             File.WriteAllText(Path.Combine(publicRoot.FullName, "00-Guard.ps1"), "return" + Environment.NewLine + "function Get-NeverLoaded { 'no' }");
-            File.WriteAllText(Path.Combine(publicRoot.FullName, "01-Later.ps1"), "function Get-Later { 'later' }");
+            File.WriteAllText(
+                Path.Combine(publicRoot.FullName, "01-Later.ps1"),
+                "$MarkerText = @'" + Environment.NewLine +
+                ModuleMergeComposer.MergedSourceEndMarker + Environment.NewLine +
+                "'@" + Environment.NewLine +
+                "function Get-Later { 'later' }");
 
             var exports = new ExportSet(new[] { "Get-Later" }, Array.Empty<string>(), Array.Empty<string>());
             ModuleBootstrapperGenerator.Generate(
@@ -182,6 +187,65 @@ public sealed class ModuleMergeApplierTests
             Assert.False(powerShell.HadErrors);
             Assert.Empty(powerShell.Streams.Error);
             Assert.Equal("later", output[0].BaseObject);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Apply_LoadsEnumSegmentsBeforeDependentClassSegments()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var enumRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Enums"));
+            var classRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Classes"));
+            var libCore = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
+            File.WriteAllText(Path.Combine(libCore.FullName, moduleName + ".dll"), string.Empty);
+            File.WriteAllText(Path.Combine(enumRoot.FullName, "SegmentKind.ps1"), "enum SegmentKind { Ready }");
+            File.WriteAllText(Path.Combine(classRoot.FullName, "SegmentRecord.ps1"), "class SegmentRecord { [SegmentKind] $Kind = [SegmentKind]::Ready }");
+
+            var exports = new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root.FullName,
+                moduleName,
+                exports,
+                new[] { moduleName + ".dll" },
+                handleRuntimes: false);
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                moduleName,
+                information: null,
+                exports,
+                fixRelativePaths: false,
+                exportAssemblies: new[] { moduleName + ".dll" });
+
+            var outcome = ModuleMergeApplier.Apply(
+                new CollectingLogger(),
+                CreatePlan(root.FullName, mergeModule: true, mergeMissing: false),
+                sources,
+                missingReport: null);
+            var bootstrapper = File.ReadAllText(Path.Combine(root.FullName, moduleName + ".psm1"));
+            var embeddedPayloadBlock = ExtractMarkedSection(
+                bootstrapper,
+                "# PowerForge script payload begin",
+                "# PowerForge script payload end");
+
+            Assert.True(outcome.MergedModule);
+            using var powerShell = PowerShell.Create();
+            var expectedRoot = root.FullName.Replace("'", "''", StringComparison.Ordinal);
+            powerShell.AddScript(
+                "$PowerForgeModuleRoot = '" + expectedRoot + "'" + Environment.NewLine +
+                embeddedPayloadBlock + Environment.NewLine +
+                "[SegmentRecord]::new().Kind.ToString()");
+            var output = powerShell.Invoke();
+
+            Assert.False(powerShell.HadErrors);
+            Assert.Empty(powerShell.Streams.Error);
+            Assert.Equal("Ready", output[0].BaseObject);
         }
         finally
         {
