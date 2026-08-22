@@ -393,7 +393,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         string appProjectXml,
         string libraryProjectXml,
         IReadOnlyDictionary<string, string> repositoryFiles,
-        string mutatedPath)
+        string mutatedPath,
+        IReadOnlyDictionary<string, string>? appFiles = null,
+        IReadOnlyDictionary<string, string>? buildProperties = null,
+        string? buildFramework = null)
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -412,6 +415,13 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(
                 Path.Combine(libraryDirectory, "Library.cs"),
                 "public static class Library { }");
+            foreach (KeyValuePair<string, string> file in appFiles ??
+                     new Dictionary<string, string>())
+            {
+                string path = Path.Combine(appDirectory, file.Key.Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, file.Value);
+            }
             foreach (KeyValuePair<string, string> file in repositoryFiles)
             {
                 string path = Path.Combine(root, file.Key.Replace('/', Path.DirectorySeparatorChar));
@@ -425,10 +435,40 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string mutatedFile = Path.Combine(root, mutatedPath.Replace('/', Path.DirectorySeparatorChar));
             File.AppendAllText(mutatedFile, Environment.NewLine + "// changed");
 
-            return DotNetPublishPipelineRunner.ReadSourceProvenance(
-                root,
-                buildProjectPaths: [appProject],
-                buildConfiguration: "Release");
+            if (buildProperties is null && buildFramework is null)
+            {
+                return DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [appProject],
+                    buildConfiguration: "Release");
+            }
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Targets =
+                [
+                    new DotNetPublishTargetPlan
+                    {
+                        Name = "App",
+                        ProjectPath = appProject,
+                        Combinations =
+                        [
+                            new DotNetPublishTargetCombination
+                            {
+                                Framework = buildFramework ?? string.Empty,
+                                Style = DotNetPublishStyle.FrameworkDependent
+                            }
+                        ]
+                    }
+                ]
+            };
+            foreach (KeyValuePair<string, string> property in buildProperties ??
+                     new Dictionary<string, string>())
+            {
+                plan.MsBuildProperties[property.Key] = property.Value;
+            }
+            return DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
         }
         finally
         {

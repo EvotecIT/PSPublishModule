@@ -72,6 +72,17 @@ public sealed partial class DotNetPublishPipelineRunner
             ConditionProperties = conditionProperties;
         }
 
+        internal LiteralProjectReferenceMetadataAssignment(
+            string value,
+            LiteralProjectReferenceMetadataAssignment source)
+        {
+            Value = value;
+            DefiningProjectPath = source.DefiningProjectPath;
+            PropertyDefinitions = source.PropertyDefinitions;
+            InitialProperties = source.InitialProperties;
+            ConditionProperties = source.ConditionProperties;
+        }
+
         internal string Value { get; }
 
         internal string DefiningProjectPath { get; }
@@ -81,16 +92,6 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyDictionary<string, string> InitialProperties { get; }
 
         internal IReadOnlyDictionary<string, string> ConditionProperties { get; }
-    }
-
-    private sealed class LiteralProjectReferenceItemState
-    {
-        internal LiteralProjectReferenceItemState(IEnumerable<LiteralProjectReferenceMetadataAssignment> assignments)
-        {
-            Assignments = assignments.ToList();
-        }
-
-        internal List<LiteralProjectReferenceMetadataAssignment> Assignments { get; set; }
     }
 
     private static LiteralProjectReferenceMetadataAssignment[]
@@ -181,8 +182,15 @@ public sealed partial class DotNetPublishPipelineRunner
 
             if (isInclude)
             {
+                List<LiteralProjectReferenceMetadataAssignment> effectiveAssignments =
+                    declaredAssignments.Count > 0
+                        ? ExpandCurrentProjectReferenceItemMetadata(
+                            declaredAssignments,
+                            defaults,
+                            metadataName)
+                        : defaults;
                 states.Add(new LiteralProjectReferenceItemState(
-                    declaredAssignments.Count > 0 ? declaredAssignments : defaults));
+                    effectiveAssignments));
                 continue;
             }
 
@@ -190,11 +198,16 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 foreach (LiteralProjectReferenceItemState state in states)
                 {
+                    List<LiteralProjectReferenceMetadataAssignment> effectiveAssignments =
+                        ExpandCurrentProjectReferenceItemMetadata(
+                            declaredAssignments,
+                            state.Assignments,
+                            metadataName);
                     state.Assignments = definitelyActive
-                        ? new List<LiteralProjectReferenceMetadataAssignment>(declaredAssignments)
+                        ? effectiveAssignments
                         : MergeLiteralProjectReferenceMetadataAssignments(
                             state.Assignments,
-                            declaredAssignments);
+                            effectiveAssignments);
                 }
             }
         }
@@ -205,11 +218,6 @@ public sealed partial class DotNetPublishPipelineRunner
             .Select(group => group.First())
             .ToArray();
     }
-
-    private static bool IsProjectReferenceItemDefinition(XElement projectReference)
-        => projectReference.Parent?.Name.LocalName.Equals(
-            "ItemDefinitionGroup",
-            StringComparison.OrdinalIgnoreCase) == true;
 
     private static bool HasMsBuildAttribute(XElement element, string attributeName)
         => element.Attributes().Any(attribute => attribute.Name.LocalName.Equals(

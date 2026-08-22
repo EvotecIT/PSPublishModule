@@ -52,8 +52,11 @@ public sealed partial class DotNetPublishPipelineRunner
             if (process.ExitCode != 0 || process.TimedOut || !File.Exists(outputPath))
                 return false;
 
-            var resolved = new HashSet<string>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            StringComparer importComparer = IsWindows()
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+            var resolved = new List<string>();
+            var seenImports = new HashSet<string>(importComparer);
             bool inComment = false;
             bool describesImport = false;
             foreach (string line in File.ReadLines(outputPath))
@@ -69,7 +72,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     string candidate = line.Trim();
                     if (Path.IsPathRooted(candidate) && File.Exists(candidate))
-                        resolved.Add(Path.GetFullPath(candidate));
+                    {
+                        string resolvedPath = Path.GetFullPath(candidate);
+                        if (seenImports.Add(resolvedPath))
+                            resolved.Add(resolvedPath);
+                    }
                 }
                 if (line.Contains("-->", StringComparison.Ordinal))
                 {
@@ -87,8 +94,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase) &&
                 element.Ancestors().Any(ancestor =>
                     ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)));
+            string[] initialTargetExpressions = hasTargetTimeProjectReferences
+                ? ReadProjectInitialTargetExpressions(request.ProjectPath, imports)
+                : Array.Empty<string>();
             ScheduledProjectReferenceTargetGraph scheduledTargets = hasTargetTimeProjectReferences
-                ? ReadScheduledProjectReferenceTargets(request, document)
+                ? ReadScheduledProjectReferenceTargets(request, document, initialTargetExpressions)
                 : ScheduledProjectReferenceTargetGraph.Empty;
             IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItemLists =
                 ReadEvaluatedProjectItemPaths(
@@ -188,6 +198,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 BuildInitialProjectReferenceProperties(request);
 
             projectReferenceDeclarations = declarationElements
+                .OrderBy(declaration => declaration.IsTargetTime ? 1 : 0)
+                .ThenBy(declaration => declaration.ContainingTarget is null
+                    ? -1
+                    : scheduledTargets.ReadExecutionIndex(declaration.ContainingTarget))
                 .Select(declaration =>
                 {
                     PreprocessedProjectPropertyDefinition[] runtimePropertyDefinitions =
@@ -233,34 +247,10 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static HashSet<string> ReadImmutableGlobalPropertyNames(
-        ProjectEvaluationRequest request,
-        XElement project)
-    {
-        var immutable = new HashSet<string>(
-            request.GlobalProperties.Keys,
-            StringComparer.OrdinalIgnoreCase)
-        {
-            "BuildProjectReferences"
-        };
-        if (request.Configuration is not null)
-            immutable.Add("Configuration");
-        if (request.TargetFramework is not null)
-            immutable.Add("TargetFramework");
-
-        foreach (string propertyName in (project.Attribute("TreatAsLocalProperty")?.Value ?? string.Empty)
-                     .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                     .Select(value => value.Trim())
-                     .Where(value => value.Length > 0))
-        {
-            immutable.Remove(propertyName);
-        }
-        return immutable;
-    }
-
     private static ScheduledProjectReferenceTargetGraph ReadScheduledProjectReferenceTargets(
         ProjectEvaluationRequest request,
-        XDocument document)
+        XDocument document,
+        IReadOnlyCollection<string> initialTargetExpressions)
     {
         var effectiveTargets = new Dictionary<string, XElement>(StringComparer.OrdinalIgnoreCase);
         foreach (XElement target in document.Descendants().Where(element =>
@@ -277,7 +267,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 target.Attribute("BeforeTargets")?.Value,
                 target.Attribute("AfterTargets")?.Value
             })
-            .Append(document.Root?.Attribute("InitialTargets")?.Value);
+            .Concat(initialTargetExpressions);
         foreach (string expression in targetExpressions.Where(value => !string.IsNullOrWhiteSpace(value))!)
         {
             AddConditionPropertyNames(expression, propertyNames);
@@ -318,9 +308,8 @@ public sealed partial class DotNetPublishPipelineRunner
         var executionOrder = new List<XElement>();
         var visiting = new HashSet<XElement>();
         var executed = new HashSet<XElement>();
-        foreach (string initialTargetName in ReadExpandedMsBuildTargetList(
-                     document.Root?.Attribute("InitialTargets")?.Value,
-                     evaluatedProperties))
+        foreach (string initialTargetName in initialTargetExpressions.SelectMany(expression =>
+                     ReadExpandedMsBuildTargetList(expression, evaluatedProperties)))
         {
             if (effectiveTargets.TryGetValue(initialTargetName, out XElement? initialTarget))
             {
@@ -451,6 +440,11 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         internal bool Contains(XElement target) => _executionIndexes.ContainsKey(target);
+
+        internal int ReadExecutionIndex(XElement target)
+            => _executionIndexes.TryGetValue(target, out int index)
+                ? index
+                : int.MaxValue;
 
         internal IEnumerable<XElement> ReadPredecessors(XElement target)
         {

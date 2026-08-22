@@ -111,10 +111,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 results[itemName] = values.EnumerateArray()
                     .Select(value => ReadEvaluatedProjectItem(value, projectDirectory))
                     .OfType<EvaluatedProjectItem>()
-                    .GroupBy(
-                        item => item.FullPath,
-                        IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
-                    .Select(group => group.First())
                     .ToArray();
             }
             return results;

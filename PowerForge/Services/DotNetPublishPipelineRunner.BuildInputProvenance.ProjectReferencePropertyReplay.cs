@@ -1,13 +1,39 @@
+using System.Xml.Linq;
+
 namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    private static HashSet<string> ReadImmutableGlobalPropertyNames(
+        ProjectEvaluationRequest request,
+        XElement project)
+    {
+        var immutable = new HashSet<string>(
+            request.GlobalProperties.Keys,
+            StringComparer.OrdinalIgnoreCase)
+        {
+            "BuildProjectReferences"
+        };
+        if (request.Configuration is not null)
+            immutable.Add("Configuration");
+        if (request.TargetFramework is not null)
+            immutable.Add("TargetFramework");
+
+        foreach (string propertyName in (project.Attribute("TreatAsLocalProperty")?.Value ?? string.Empty)
+                     .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                     .Select(value => value.Trim())
+                     .Where(value => value.Length > 0))
+        {
+            immutable.Remove(propertyName);
+        }
+        return immutable;
+    }
+
     private static IReadOnlyDictionary<string, string> BuildInitialProjectReferenceProperties(
         ProjectEvaluationRequest request)
     {
         var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (KeyValuePair<string, string> property in request.GlobalProperties.Where(property =>
-                     IsSafeEvaluatedProjectReferencePropertyExpansion(property.Value)))
+        foreach (KeyValuePair<string, string> property in request.GlobalProperties)
         {
             properties[property.Key] = property.Value;
         }

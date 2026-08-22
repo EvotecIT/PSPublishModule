@@ -191,7 +191,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     }
                 ]
             };
-            plan.MsBuildProperties["ReferenceProperties"] = "Flavor=A;B=C";
+            plan.EnvironmentVariables["ReferenceProperties"] = "Flavor=A;B=C";
 
             DotNetPublishPipelineRunner.SourceProvenance provenance =
                 DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);

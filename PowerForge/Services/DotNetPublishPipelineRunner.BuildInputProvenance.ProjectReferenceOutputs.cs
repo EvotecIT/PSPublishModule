@@ -139,12 +139,18 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
 
-        string[] undefineProperties = preferEffectiveLiteralAssignments
-            ? Array.Empty<string>()
-            : ReadProjectReferencePropertyNames(
-                ReadItemText(item, "UndefineProperties"),
-                ReadItemText(item, "GlobalPropertiesToRemove"),
-                string.Join(";", taskWidePropertyRemovals));
+        if (!TryReadEffectiveProjectReferencePropertyRemovals(
+                item,
+                declaringProjectPath,
+                projectPathMetadataName,
+                projectReferenceDeclarations,
+                evaluatedConditionProperties,
+                taskWidePropertyRemovals,
+                preferEffectiveLiteralAssignments,
+                out string[] undefineProperties))
+        {
+            return false;
+        }
 
         string projectPath = Path.GetFullPath(fullPathElement.GetString()!);
         string? nearestTargetFramework = preferEffectiveLiteralAssignments
