@@ -85,7 +85,7 @@ public sealed class ModuleMergeApplierTests
             Assert.Contains("function Get-TestRoot { $PSScriptRoot }", deferredPayload, StringComparison.Ordinal);
             Assert.StartsWith("#requires -Version 5.1" + Environment.NewLine + "using namespace System.Text", deferredPayload, StringComparison.Ordinal);
             Assert.DoesNotContain("class BinaryBackedType", mergedBootstrapper, StringComparison.Ordinal);
-            Assert.Contains(". ([scriptblock]::Create($PowerForgeMergedScriptPayload))", mergedBootstrapper, StringComparison.Ordinal);
+            Assert.Contains(". ([scriptblock]::Create($PowerForgeMergedScriptSegment))", mergedBootstrapper, StringComparison.Ordinal);
             Assert.Contains("$PowerForgeMergedScriptAst.FindAll({", mergedBootstrapper, StringComparison.Ordinal);
             Assert.DoesNotContain("'Public', '*.ps1'", mergedBootstrapper, StringComparison.Ordinal);
             Assert.True(
@@ -104,6 +104,7 @@ public sealed class ModuleMergeApplierTests
             powerShell.AddScript("Add-Type -TypeDefinition 'namespace TestModule.Models { public sealed class Widget {} }'");
             _ = powerShell.Invoke();
             Assert.False(powerShell.HadErrors);
+            Assert.Empty(powerShell.Streams.Error);
             powerShell.Commands.Clear();
             powerShell.Streams.Error.Clear();
             var embeddedPayloadBlock = ExtractMarkedSection(
@@ -117,10 +118,70 @@ public sealed class ModuleMergeApplierTests
                 "@((Get-Test), (Get-TestRoot))");
             var output = powerShell.Invoke();
             Assert.False(powerShell.HadErrors);
+            Assert.Empty(powerShell.Streams.Error);
             Assert.Equal(2, output.Count);
             Assert.Equal("ok", output[0].BaseObject);
             Assert.Equal(root.FullName, output[1].BaseObject);
             Assert.Contains(logger.Infos, static message => message.Contains("binary module bootstrapper", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Apply_PreservesTopLevelReturnBoundaryBetweenMergedSourceFiles()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var publicRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            var libCore = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
+            File.WriteAllText(Path.Combine(libCore.FullName, moduleName + ".dll"), string.Empty);
+            File.WriteAllText(Path.Combine(publicRoot.FullName, "00-Guard.ps1"), "return" + Environment.NewLine + "function Get-NeverLoaded { 'no' }");
+            File.WriteAllText(Path.Combine(publicRoot.FullName, "01-Later.ps1"), "function Get-Later { 'later' }");
+
+            var exports = new ExportSet(new[] { "Get-Later" }, Array.Empty<string>(), Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root.FullName,
+                moduleName,
+                exports,
+                new[] { moduleName + ".dll" },
+                handleRuntimes: false);
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                moduleName,
+                information: null,
+                exports,
+                fixRelativePaths: false,
+                exportAssemblies: new[] { moduleName + ".dll" });
+
+            var outcome = ModuleMergeApplier.Apply(
+                new CollectingLogger(),
+                CreatePlan(root.FullName, mergeModule: true, mergeMissing: false),
+                sources,
+                missingReport: null);
+            var bootstrapper = File.ReadAllText(Path.Combine(root.FullName, moduleName + ".psm1"));
+            var embeddedPayloadBlock = ExtractMarkedSection(
+                bootstrapper,
+                "# PowerForge script payload begin",
+                "# PowerForge script payload end");
+
+            Assert.True(outcome.MergedModule);
+            Assert.Equal(2, CountOccurrences(DecodeDeferredPayload(bootstrapper), ModuleMergeComposer.MergedSourceStartMarker));
+            using var powerShell = PowerShell.Create();
+            var expectedRoot = root.FullName.Replace("'", "''", StringComparison.Ordinal);
+            powerShell.AddScript(
+                "$PowerForgeModuleRoot = '" + expectedRoot + "'" + Environment.NewLine +
+                embeddedPayloadBlock + Environment.NewLine +
+                "Get-Later");
+            var output = powerShell.Invoke();
+
+            Assert.False(powerShell.HadErrors);
+            Assert.Empty(powerShell.Streams.Error);
+            Assert.Equal("later", output[0].BaseObject);
         }
         finally
         {

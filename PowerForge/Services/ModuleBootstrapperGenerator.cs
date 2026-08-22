@@ -39,7 +39,7 @@ internal static partial class ModuleBootstrapperGenerator
 
         var hasScriptFolders = HasAnyDirectory(root, "Public", "Private", "Classes", "Enums");
         var libRoot = Path.Combine(root, "Lib");
-        var exportAssemblyFileNames = ModuleBinaryFileLocator.ResolveAssemblyFileNames(moduleName, exportAssemblies);
+        var exportAssemblyFileNames = ModuleBinaryFileLocator.ResolveAssemblyReferences(moduleName, exportAssemblies);
         var primaryAssemblyName = exportAssemblyFileNames.FirstOrDefault() ?? (moduleName + ".dll");
         var hasLib = ModuleBinaryFileLocator.ContainsAnyFileName(libRoot, exportAssemblyFileNames, SearchOption.AllDirectories);
         var hasDevelopmentBinaryLoader = developmentBinaries?.Enabled == true;
@@ -246,7 +246,12 @@ internal static partial class ModuleBootstrapperGenerator
         foreach (var ignored in ignoredLibraryFileNames)
             excluded.Add(ignored);
 
-        var exportLast = new HashSet<string>(exportAssemblyFileNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var exportLast = new HashSet<string>(
+            (exportAssemblyFileNames ?? Array.Empty<string>())
+                .Select(Path.GetFileName)
+                .OfType<string>()
+                .Where(static fileName => !string.IsNullOrWhiteSpace(fileName)),
+            StringComparer.OrdinalIgnoreCase);
         foreach (var name in OrderManagedLibrariesForDesktopPreload(dir, dllFiles, excluded, exportLast))
             list.Add(RelativeLibPath(folderName, name));
 
@@ -514,17 +519,22 @@ internal static partial class ModuleBootstrapperGenerator
         {
             foreach (var assemblyFileName in exportAssemblyFileNames)
             {
+                var qualifiedAssemblyPath = ResolveQualifiedAssemblyPath(libRoot, assemblyFileName);
+                if (!string.IsNullOrWhiteSpace(qualifiedAssemblyPath))
+                    return new[] { Path.GetDirectoryName(qualifiedAssemblyPath!)! };
+
+                var configuredFileName = Path.GetFileName(assemblyFileName);
                 var targetDirectories = runtimeCandidates.Where(directory =>
                     Directory.Exists(directory) &&
                     ModuleBinaryFileLocator.Enumerate(directory, SearchOption.TopDirectoryOnly)
-                        .Any(path => string.Equals(Path.GetFileName(path), assemblyFileName, StringComparison.OrdinalIgnoreCase)))
+                        .Any(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
                     .ToArray();
                 if (targetDirectories.Length > 0)
                     return targetDirectories;
 
                 if (Directory.Exists(libRoot) &&
                     ModuleBinaryFileLocator.Enumerate(libRoot, SearchOption.TopDirectoryOnly)
-                        .Any(path => string.Equals(Path.GetFileName(path), assemblyFileName, StringComparison.OrdinalIgnoreCase)))
+                        .Any(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
                 {
                     return new[] { libRoot };
                 }
@@ -539,6 +549,39 @@ internal static partial class ModuleBootstrapperGenerator
         return ModuleBinaryFileLocator.HasAny(libRoot, SearchOption.TopDirectoryOnly)
             ? new[] { libRoot }
             : Array.Empty<string>();
+    }
+
+    private static string? ResolveQualifiedAssemblyPath(string libRoot, string assemblyReference)
+    {
+        if (string.IsNullOrWhiteSpace(assemblyReference) ||
+            assemblyReference.IndexOf(Path.DirectorySeparatorChar) < 0 &&
+            assemblyReference.IndexOf(Path.AltDirectorySeparatorChar) < 0)
+        {
+            return null;
+        }
+
+        if (Path.IsPathRooted(assemblyReference))
+            return File.Exists(assemblyReference) ? Path.GetFullPath(assemblyReference) : null;
+
+        var normalizedReference = assemblyReference
+            .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+            .TrimStart(Path.DirectorySeparatorChar);
+        var libPrefix = "Lib" + Path.DirectorySeparatorChar;
+        if (normalizedReference.StartsWith(libPrefix, StringComparison.OrdinalIgnoreCase))
+            normalizedReference = normalizedReference.Substring(libPrefix.Length);
+
+        var normalizedLibRoot = Path.GetFullPath(libRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        foreach (var candidate in ModuleBinaryFileLocator.Enumerate(normalizedLibRoot, SearchOption.AllDirectories))
+        {
+            var relativeCandidate = Path.GetFullPath(candidate).Substring(normalizedLibRoot.Length)
+                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            if (string.Equals(relativeCandidate, normalizedReference, StringComparison.OrdinalIgnoreCase))
+                return candidate;
+        }
+
+        return null;
     }
 
     internal static string ResolveAssemblyLoadContextTargetFrameworkForPayloads(

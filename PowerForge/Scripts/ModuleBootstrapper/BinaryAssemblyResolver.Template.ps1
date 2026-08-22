@@ -38,6 +38,37 @@ $PowerForgePreferredBinaryFolders = @($PowerForgePreferredBinaryFolders |
 $ResolvePowerForgeModuleAssembly = {
     param([Parameter(Mandatory = $true)][string] $LibraryFileName)
 
+    if ([IO.Path]::IsPathRooted($LibraryFileName)) {
+        $AbsoluteMatch = Get-Item -LiteralPath $LibraryFileName -ErrorAction SilentlyContinue
+        if ($null -ne $AbsoluteMatch -and -not $AbsoluteMatch.PSIsContainer) {
+            return [pscustomobject]@{
+                Path = $AbsoluteMatch.FullName
+                Folder = $AbsoluteMatch.DirectoryName
+                Directory = $AbsoluteMatch.DirectoryName
+            }
+        }
+    } elseif ($LibraryFileName.IndexOfAny([char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)) -ge 0) {
+        $RelativeReference = $LibraryFileName.Replace([IO.Path]::AltDirectorySeparatorChar, [IO.Path]::DirectorySeparatorChar)
+        $LibPrefix = 'Lib' + [IO.Path]::DirectorySeparatorChar
+        if ($RelativeReference.StartsWith($LibPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            $RelativeReference = $RelativeReference.Substring($LibPrefix.Length)
+        }
+
+        $QualifiedMatch = @(Get-ChildItem -LiteralPath $LibRoot -File -Recurse -ErrorAction SilentlyContinue |
+            Where-Object {
+                $RelativeCandidate = $_.FullName.Substring($LibRoot.Length).TrimStart([char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar))
+                $RelativeCandidate -ieq $RelativeReference
+            } |
+            Select-Object -First 1)[0]
+        if ($null -ne $QualifiedMatch) {
+            return [pscustomobject]@{
+                Path = $QualifiedMatch.FullName
+                Folder = [IO.Path]::GetDirectoryName($RelativeReference)
+                Directory = [IO.Path]::GetDirectoryName($QualifiedMatch.FullName)
+            }
+        }
+    }
+
     foreach ($Folder in $PowerForgePreferredBinaryFolders) {
         $Directory = if ([string]::IsNullOrWhiteSpace($Folder)) {
             $LibRoot

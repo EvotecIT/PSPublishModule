@@ -1056,6 +1056,39 @@ public class ModuleBootstrapperGeneratorTests
 
     [Fact]
     [Trait("Category", "Integration")]
+    public void Generate_WithPathQualifiedExportAssembly_PreservesRelativeLocation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-qualified-export-" + Guid.NewGuid().ToString("N"));
+        var pluginRoot = Directory.CreateDirectory(Path.Combine(root, "Lib", "Plugins")).FullName;
+        File.WriteAllText(Path.Combine(pluginRoot, "DemoModule.DLL"), string.Empty);
+
+        try
+        {
+            var configuredReference = Path.Combine("Lib", "Plugins", "DemoModule.dll");
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { configuredReference },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0" });
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            var expectedReference = Path.Combine("Plugins", "DemoModule.dll");
+            Assert.Contains("$LibraryFileNames = @('" + expectedReference + "')", bootstrapper);
+            Assert.Contains("$RelativeCandidate -ieq $RelativeReference", bootstrapper);
+            Assert.True(File.Exists(Path.Combine(pluginRoot, "DemoModule.ModuleLoadContext.dll")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public void Generate_WithAssemblyLoadContextTypeAccelerators_WritesAllowListedRegistrationBlock()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-types-" + Guid.NewGuid().ToString("N"));

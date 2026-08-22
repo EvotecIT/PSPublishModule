@@ -24,6 +24,9 @@ internal sealed class ModuleMergeSources
 
 internal static class ModuleMergeComposer
 {
+    internal const string MergedSourceStartMarker = "# PowerForge merged source begin";
+    internal const string MergedSourceEndMarker = "# PowerForge merged source end";
+
     internal static ModuleMergeSources BuildSources(
         string rootPath,
         string moduleName,
@@ -273,8 +276,10 @@ internal static class ModuleMergeComposer
             if (block.Count == 0)
                 continue;
 
+            body.AppendLine(MergedSourceStartMarker);
             foreach (var line in block)
                 body.AppendLine(line);
+            body.AppendLine(MergedSourceEndMarker);
 
             body.AppendLine();
         }

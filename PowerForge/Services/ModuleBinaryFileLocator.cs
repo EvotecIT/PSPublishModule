@@ -51,6 +51,37 @@ internal static class ModuleBinaryFileLocator
             .ToArray();
     }
 
+    internal static string[] ResolveAssemblyReferences(
+        string moduleName,
+        IReadOnlyList<string>? exportAssemblies)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var normalized = new List<string>();
+        foreach (var entry in exportAssemblies ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(entry))
+                continue;
+
+            var candidate = entry.Trim().Trim('"');
+            if (!candidate.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                candidate += ".dll";
+            candidate = candidate.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            var libPrefix = "Lib" + Path.DirectorySeparatorChar;
+            if (!Path.IsPathRooted(candidate) && candidate.StartsWith(libPrefix, StringComparison.OrdinalIgnoreCase))
+                candidate = candidate.Substring(libPrefix.Length);
+            if (seen.Add(candidate))
+                normalized.Add(candidate);
+        }
+
+        if (normalized.Count == 0)
+            return new[] { moduleName + ".dll" };
+
+        var moduleAssembly = moduleName + ".dll";
+        return normalized
+            .OrderBy(entry => string.Equals(Path.GetFileName(entry), moduleAssembly, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ToArray();
+    }
+
     private static string[] NormalizeAssemblyFileNames(IReadOnlyList<string>? exportAssemblies)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
