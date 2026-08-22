@@ -9,6 +9,143 @@ namespace PowerForge;
 
 internal static partial class ModuleMergeComposer
 {
+    private static void RebaseLateRequiresAssemblyDirectives(
+        IReadOnlyList<string> lines,
+        IDictionary<int, string> lineReplacements,
+        string sourcePath,
+        string moduleRoot)
+    {
+        var blockCommentDepth = 0;
+        var state = PowerShellLexicalState.Normal;
+
+        for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
+        {
+            var line = lines[lineIndex] ?? string.Empty;
+            var hasCode = state is PowerShellLexicalState.SingleQuotedString or PowerShellLexicalState.DoubleQuotedString;
+
+            if (state is PowerShellLexicalState.SingleQuotedHereString or PowerShellLexicalState.DoubleQuotedHereString)
+            {
+                var terminator = state == PowerShellLexicalState.SingleQuotedHereString ? "'@" : "\"@";
+                var trimmed = line.TrimStart();
+                if (!trimmed.StartsWith(terminator, StringComparison.Ordinal))
+                    continue;
+
+                var suffix = trimmed.Substring(terminator.Length);
+                if (suffix.Length > 0 && !string.IsNullOrWhiteSpace(suffix) && !suffix.TrimStart().StartsWith("#", StringComparison.Ordinal))
+                    continue;
+
+                state = PowerShellLexicalState.Normal;
+                continue;
+            }
+
+            for (var characterIndex = 0; characterIndex < line.Length; characterIndex++)
+            {
+                var current = line[characterIndex];
+                var next = characterIndex + 1 < line.Length ? line[characterIndex + 1] : '\0';
+
+                if (blockCommentDepth > 0)
+                {
+                    if (current == '<' && next == '#')
+                    {
+                        blockCommentDepth++;
+                        characterIndex++;
+                    }
+                    else if (current == '#' && next == '>')
+                    {
+                        blockCommentDepth--;
+                        characterIndex++;
+                    }
+                    continue;
+                }
+
+                if (state == PowerShellLexicalState.SingleQuotedString)
+                {
+                    if (current != '\'')
+                        continue;
+                    if (next == '\'')
+                    {
+                        characterIndex++;
+                        continue;
+                    }
+
+                    state = PowerShellLexicalState.Normal;
+                    continue;
+                }
+
+                if (state == PowerShellLexicalState.DoubleQuotedString)
+                {
+                    if (current == '`')
+                    {
+                        characterIndex++;
+                        continue;
+                    }
+                    if (current == '"')
+                        state = PowerShellLexicalState.Normal;
+                    continue;
+                }
+
+                if (char.IsWhiteSpace(current))
+                    continue;
+                if (current == '<' && next == '#')
+                {
+                    blockCommentDepth++;
+                    characterIndex++;
+                    continue;
+                }
+                if (current == '#')
+                {
+                    if (!hasCode &&
+                        !lineReplacements.ContainsKey(lineIndex) &&
+                        StartsWithDirective(line, characterIndex, "#requires"))
+                    {
+                        var directive = line.Substring(characterIndex);
+                        var rebased = RebaseRequiresAssemblyDirective(directive, sourcePath, moduleRoot);
+                        if (!string.Equals(directive, rebased, StringComparison.Ordinal))
+                            lineReplacements[lineIndex] = line.Substring(0, characterIndex) + rebased;
+                    }
+
+                    break;
+                }
+                if (current == '@' && next is '\'' or '"')
+                {
+                    state = next == '\''
+                        ? PowerShellLexicalState.SingleQuotedHereString
+                        : PowerShellLexicalState.DoubleQuotedHereString;
+                    break;
+                }
+                if (current == '\'')
+                {
+                    state = PowerShellLexicalState.SingleQuotedString;
+                    hasCode = true;
+                    continue;
+                }
+                if (current == '"')
+                {
+                    state = PowerShellLexicalState.DoubleQuotedString;
+                    hasCode = true;
+                    continue;
+                }
+                if (current == '`')
+                {
+                    hasCode = true;
+                    characterIndex++;
+                    continue;
+                }
+
+                hasCode = true;
+            }
+        }
+    }
+
+    private enum PowerShellLexicalState
+    {
+        Normal,
+        SingleQuotedString,
+        DoubleQuotedString,
+        SingleQuotedHereString,
+        DoubleQuotedHereString
+    }
+
     private static string RebaseRequiresAssemblyDirective(string directive, string sourcePath, string moduleRoot)
         => Regex.Replace(
             directive ?? string.Empty,

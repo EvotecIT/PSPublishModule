@@ -4,7 +4,7 @@ public partial class ModuleBootstrapperGeneratorTests
 {
     [Fact]
     [Trait("Category", "Integration")]
-    public void InlineMergedScriptPayload_LoadsRebasedRequiredAssemblyBeforeCompilingSource()
+    public void InlineMergedScriptPayload_LoadsLateRebasedRequiredAssemblyBeforeCompilingSource()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-required-assembly-" + Guid.NewGuid().ToString("N"));
         var moduleRoot = Path.Combine(root, "Module");
@@ -27,6 +27,7 @@ public partial class ModuleBootstrapperGeneratorTests
             File.Copy(requiredAssembly, Path.Combine(libRoot, "RequiredTypes.dll"), overwrite: true);
             File.WriteAllText(
                 Path.Combine(publicRoot, "Get-RequiredType.ps1"),
+                "$script:RequirementAppearsAfterCode = $true" + Environment.NewLine +
                 "#requires -Assembly ../Lib/RequiredTypes.dll" + Environment.NewLine +
                 "class PowerForgeRequiredDerived : RequiredTypes.Base { }" + Environment.NewLine +
                 "function Get-RequiredType { [PowerForgeRequiredDerived]::new().Read() }");

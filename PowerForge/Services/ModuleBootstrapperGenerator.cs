@@ -679,6 +679,13 @@ internal static partial class ModuleBootstrapperGenerator
         return new AssemblyLoadContextLoaderIdentity(assemblyName, ns, ns + ".ModuleAssemblyLoadContext");
     }
 
+    internal static string[] GetAssemblyLoadContextLoaderFileNames(string moduleName)
+        => new[]
+        {
+            CreateAssemblyLoadContextLoaderIdentity(moduleName).AssemblyName + ".dll",
+            CreateDevelopmentAssemblyLoadContextLoaderIdentity(moduleName).AssemblyName + ".dll"
+        };
+
     private static string SanitizeAssemblyName(string value)
     {
         var chars = (value ?? string.Empty).Select(ch => char.IsLetterOrDigit(ch) || ch is '.' or '_' or '-' ? ch : '_').ToArray();

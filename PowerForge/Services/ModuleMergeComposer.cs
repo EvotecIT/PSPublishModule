@@ -302,6 +302,8 @@ internal static partial class ModuleMergeComposer
                 file,
                 rootPath,
                 fixRelativePaths);
+            if (fixRelativePaths)
+                RebaseLateRequiresAssemblyDirectives(lines, directiveLineReplacements, file, rootPath);
             for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
             {
                 var line = lines[lineIndex];

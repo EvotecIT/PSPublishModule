@@ -408,6 +408,40 @@ public sealed class ModuleMergeComposerTests
     }
 
     [Fact]
+    public void BuildSources_RebasesLateRequiresAssemblyWithoutTouchingHereStringContent()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var publicRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Lib"));
+            File.WriteAllText(
+                Path.Combine(publicRoot.FullName, "Get-Demo.ps1"),
+                "$text = @'" + Environment.NewLine +
+                "#requires -Assembly ../DoNotTouch.dll" + Environment.NewLine +
+                "'@" + Environment.NewLine +
+                "$script:BeforeRequirement = $true" + Environment.NewLine +
+                "#requires -Assembly ../Lib/RequiredTypes.dll" + Environment.NewLine +
+                "function Get-Demo { $text }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                "DemoModule",
+                information: null,
+                exports: new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: true);
+
+            Assert.Contains("#requires -Assembly ./Lib/RequiredTypes.dll", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("#requires -Assembly ../DoNotTouch.dll", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("#requires -Assembly ./DoNotTouch.dll", sources.MergedScriptContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void BuildSources_PreservesRelativeUsingPathsWhenPathFixesAreDisabled()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
