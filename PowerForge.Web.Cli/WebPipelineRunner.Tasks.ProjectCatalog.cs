@@ -490,6 +490,8 @@ internal static partial class WebPipelineRunner
         var modeIndex = FindCsvColumnIndex(header, "mode", "projectMode", "project_mode");
         var externalUrlIndex = FindCsvColumnIndex(header, "externalUrl", "external_url", "external-url", "url");
         var aliasesIndex = FindCsvColumnIndex(header, "aliases", "alias");
+        var nuGetPackageAliasesIndex = FindCsvColumnIndex(header, "packageAliases.nuget", "package-aliases.nuget");
+        var powerShellGalleryPackageAliasesIndex = FindCsvColumnIndex(header, "packageAliases.powerShellGallery", "package-aliases.powerShellGallery");
 
         var linkColumns = BuildCsvPrefixedColumnMap(header, "links.");
         foreach (var pair in BuildCsvPrefixedColumnMap(header, "link."))
@@ -518,6 +520,8 @@ internal static partial class WebPipelineRunner
             modeIndex >= 0 ||
             externalUrlIndex >= 0 ||
             aliasesIndex >= 0 ||
+            nuGetPackageAliasesIndex >= 0 ||
+            powerShellGalleryPackageAliasesIndex >= 0 ||
             linkColumns.Count > 0 ||
             surfaceColumns.Count > 0 ||
             apiDocsColumns.Count > 0;
@@ -563,6 +567,22 @@ internal static partial class WebPipelineRunner
                 TryParseCurationAliases(parts[aliasesIndex], out var aliases))
             {
                 project.Aliases = aliases;
+                updates++;
+            }
+            if (nuGetPackageAliasesIndex >= 0 && nuGetPackageAliasesIndex < parts.Length &&
+                !string.IsNullOrWhiteSpace(parts[nuGetPackageAliasesIndex]) &&
+                TryParseCurationAliases(parts[nuGetPackageAliasesIndex], out var nuGetPackageAliases))
+            {
+                project.PackageAliases ??= new ProjectCatalogPackageAliases();
+                project.PackageAliases.NuGet = nuGetPackageAliases;
+                updates++;
+            }
+            if (powerShellGalleryPackageAliasesIndex >= 0 && powerShellGalleryPackageAliasesIndex < parts.Length &&
+                !string.IsNullOrWhiteSpace(parts[powerShellGalleryPackageAliasesIndex]) &&
+                TryParseCurationAliases(parts[powerShellGalleryPackageAliasesIndex], out var powerShellGalleryPackageAliases))
+            {
+                project.PackageAliases ??= new ProjectCatalogPackageAliases();
+                project.PackageAliases.PowerShellGallery = powerShellGalleryPackageAliases;
                 updates++;
             }
 
@@ -2250,6 +2270,10 @@ internal static partial class WebPipelineRunner
         foreach (var project in projects)
         {
             var candidates = BuildProjectIdentifierCandidates(project);
+            var nuGetCandidates = BuildProjectIdentifierCandidates(project, includeProjectAliases: false);
+            var nuGetPackageAliasCandidates = BuildPackageAliasIdentifierCandidates(project.PackageAliases?.NuGet);
+            var powerShellGalleryCandidates = BuildProjectIdentifierCandidates(project, includeProjectAliases: false);
+            var powerShellGalleryPackageAliasCandidates = BuildPackageAliasIdentifierCandidates(project.PackageAliases?.PowerShellGallery);
 
             WebEcosystemGitHubRepository? github = null;
             if (!string.IsNullOrWhiteSpace(project.GitHubRepo) && githubByFullName.TryGetValue(project.GitHubRepo, out var byFullName))
@@ -2270,7 +2294,7 @@ internal static partial class WebPipelineRunner
             }
 
             WebEcosystemNuGetPackage? nuget = null;
-            foreach (var candidate in candidates)
+            foreach (var candidate in nuGetCandidates)
             {
                 if (nugetById.TryGetValue(candidate, out var package))
                 {
@@ -2281,7 +2305,19 @@ internal static partial class WebPipelineRunner
 
             if (nuget is null)
             {
-                foreach (var candidate in candidates)
+                foreach (var candidate in nuGetPackageAliasCandidates)
+                {
+                    if (nugetById.TryGetValue(candidate, out var package))
+                    {
+                        nuget = package;
+                        break;
+                    }
+                }
+            }
+
+            if (nuget is null)
+            {
+                foreach (var candidate in nuGetCandidates)
                 {
                     var compact = CompactToken(candidate);
                     if (!string.IsNullOrWhiteSpace(compact) &&
@@ -2306,8 +2342,14 @@ internal static partial class WebPipelineRunner
                         nugetPackages.Add(package);
                 }
             }
-            foreach (var candidate in BuildProjectAliasIdentifierCandidates(project, includeSeparatorVariants: false))
+            foreach (var candidate in nuGetPackageAliasCandidates)
             {
+                if (nugetById.TryGetValue(candidate, out var aliasPackage) &&
+                    !nugetPackages.Any(existing => string.Equals(existing.Id, aliasPackage.Id, StringComparison.OrdinalIgnoreCase)))
+                {
+                    nugetPackages.Add(aliasPackage);
+                }
+
                 if (ambiguousNuGetGitHubProjectNames.Contains(candidate) ||
                     !nugetByGitHubProjectName.TryGetValue(candidate, out var aliasProjectPackages))
                     continue;
@@ -2328,7 +2370,7 @@ internal static partial class WebPipelineRunner
             }
 
             WebEcosystemPowerShellGalleryModule? module = null;
-            foreach (var candidate in candidates)
+            foreach (var candidate in powerShellGalleryCandidates)
             {
                 if (psgalleryById.TryGetValue(candidate, out var found))
                 {
@@ -2339,7 +2381,19 @@ internal static partial class WebPipelineRunner
 
             if (module is null)
             {
-                foreach (var candidate in candidates)
+                foreach (var candidate in powerShellGalleryPackageAliasCandidates)
+                {
+                    if (psgalleryById.TryGetValue(candidate, out var found))
+                    {
+                        module = found;
+                        break;
+                    }
+                }
+            }
+
+            if (module is null)
+            {
+                foreach (var candidate in powerShellGalleryCandidates)
                 {
                     var compact = CompactToken(candidate);
                     if (!string.IsNullOrWhiteSpace(compact) &&
@@ -2350,6 +2404,18 @@ internal static partial class WebPipelineRunner
                         break;
                     }
                 }
+            }
+
+            var powerShellGalleryModules = new List<WebEcosystemPowerShellGalleryModule>();
+            if (module is not null)
+                powerShellGalleryModules.Add(module);
+            foreach (var candidate in powerShellGalleryPackageAliasCandidates)
+            {
+                if (!psgalleryById.TryGetValue(candidate, out var aliasModule))
+                    continue;
+
+                if (!powerShellGalleryModules.Any(existing => string.Equals(existing.Id, aliasModule.Id, StringComparison.OrdinalIgnoreCase)))
+                    powerShellGalleryModules.Add(aliasModule);
             }
 
             var hasAnyMetrics = github is not null || nuget is not null || module is not null;
@@ -2392,7 +2458,9 @@ internal static partial class WebPipelineRunner
                 {
                     Id = module.Id,
                     Version = module.Version,
-                    TotalDownloads = module.DownloadCount,
+                    TotalDownloads = powerShellGalleryModules.Count > 1
+                        ? powerShellGalleryModules.Sum(static galleryModule => Math.Max(0, galleryModule.DownloadCount))
+                        : module.DownloadCount,
                     GalleryUrl = module.GalleryUrl,
                     ProjectUrl = module.ProjectUrl
                 };
@@ -2636,7 +2704,9 @@ internal static partial class WebPipelineRunner
         return sb.ToString();
     }
 
-    private static string[] BuildProjectIdentifierCandidates(ProjectCatalogEntry project)
+    private static string[] BuildProjectIdentifierCandidates(
+        ProjectCatalogEntry project,
+        bool includeProjectAliases = true)
     {
         var literalCandidates = new List<string?>
         {
@@ -2645,9 +2715,15 @@ internal static partial class WebPipelineRunner
             project.GitHubRepo,
             ExtractRepositoryName(project.GitHubRepo)
         };
-        literalCandidates.AddRange(BuildProjectAliasIdentifierCandidates(project, includeSeparatorVariants: false));
+        if (includeProjectAliases)
+            literalCandidates.AddRange(BuildProjectAliasIdentifierCandidates(project, includeSeparatorVariants: false));
         return BuildIdentifierCandidateSequence(literalCandidates, includeSeparatorVariants: true);
     }
+
+    private static string[] BuildPackageAliasIdentifierCandidates(IEnumerable<string?>? aliases) =>
+        aliases is null
+            ? Array.Empty<string>()
+            : BuildIdentifierCandidateSequence(aliases, includeSeparatorVariants: false);
 
     private static string[] BuildProjectAliasIdentifierCandidates(
         ProjectCatalogEntry project,
@@ -2964,6 +3040,13 @@ internal static partial class WebPipelineRunner
             Version = NormalizeOptionalString(project.Version),
             ManifestCommit = NormalizeOptionalString(project.ManifestCommit),
             Aliases = NormalizeStringArray(project.Aliases),
+            PackageAliases = project.PackageAliases is null
+                ? null
+                : new
+                {
+                    NuGet = NormalizeStringArray(project.PackageAliases.NuGet),
+                    PowerShellGallery = NormalizeStringArray(project.PackageAliases.PowerShellGallery)
+                },
             Brand = project.Brand,
             Product = project.Product,
             Links = NormalizeStringDictionary(project.Links),
@@ -3338,6 +3421,10 @@ internal static partial class WebPipelineRunner
         [JsonPropertyName("aliases")]
         public string[]? Aliases { get; set; }
 
+        [JsonPropertyName("packageAliases")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public ProjectCatalogPackageAliases? PackageAliases { get; set; }
+
         [JsonPropertyName("links")]
         public Dictionary<string, string?>? Links { get; set; }
 
@@ -3360,6 +3447,17 @@ internal static partial class WebPipelineRunner
 
         [JsonExtensionData]
         public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+    }
+
+    private sealed class ProjectCatalogPackageAliases
+    {
+        [JsonPropertyName("nuget")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string[]? NuGet { get; set; }
+
+        [JsonPropertyName("powerShellGallery")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string[]? PowerShellGallery { get; set; }
     }
 
     private sealed class ProjectCatalogMetrics
