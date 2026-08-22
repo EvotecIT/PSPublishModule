@@ -61,9 +61,6 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             if (!string.IsNullOrWhiteSpace(declaredVersion))
                 return declaredVersion!;
-
-            warning = "WhatIf cannot resolve a project version without evaluating MSBuild because no version tag was declared.";
-            return string.Empty;
         }
 
         var projectDirectory = Path.GetDirectoryName(project.CsprojPath) ?? spec.RootPath;

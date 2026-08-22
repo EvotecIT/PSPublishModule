@@ -79,8 +79,7 @@ internal sealed class ProjectBuildWorkflowService
             preflightErrors.Add(plan.ErrorMessage ?? "Plan/preflight validation failed.");
         else if (plan.ResolvedVersionsByProject.Count > 0)
         {
-            spec.ExpectedVersion = null;
-            spec.ExpectedVersionsByProject = new Dictionary<string, string>(
+            spec.PlannedVersionsByProject = new Dictionary<string, string>(
                 plan.ResolvedVersionsByProject,
                 StringComparer.OrdinalIgnoreCase);
             _logger.Info($"Reusing {plan.ResolvedVersionsByProject.Count} resolved project version(s) from the plan for release execution.");

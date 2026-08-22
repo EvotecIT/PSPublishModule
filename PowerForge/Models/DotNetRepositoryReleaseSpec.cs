@@ -9,6 +9,7 @@ public sealed class DotNetRepositoryReleaseSpec
     internal string? ReleaseVersionFloor { get; set; }
     internal string? ReleaseVersionFloorProject { get; set; }
     internal string? ResolvedReleaseVersionFloorProject { get; set; }
+    internal IReadOnlyDictionary<string, string>? PlannedVersionsByProject { get; set; }
 
     /// <summary>Root path of the repository to scan for projects.</summary>
     public string RootPath { get; set; } = string.Empty;
