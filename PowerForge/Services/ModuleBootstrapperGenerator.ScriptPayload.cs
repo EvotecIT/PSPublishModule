@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Linq;
 using System.Text;
 
 namespace PowerForge;
@@ -28,16 +27,22 @@ internal static partial class ModuleBootstrapperGenerator
             throw new FileNotFoundException("Generated module bootstrapper was not found.", psm1Path);
 
         var scriptPreamble = ModuleMergeComposer.ExtractMergedScriptPreamble(mergedScriptContent, out var scriptPayload);
-        var deferredScriptPreamble = RemoveRequiresDirectives(scriptPreamble);
         var authoritativeExportBlock = ModuleMergeComposer.ExtractTrailingExportBlock(scriptPayload, out scriptPayload);
-        ModuleMergeComposer.TryResolveMergedSourceMarkers(scriptPayload, out var sourceStartMarker, out var sourceEndMarker);
+        var hasFramedSources = ModuleMergeComposer.TryResolveMergedSourceMarkers(
+            scriptPayload,
+            out var sourceStartMarker,
+            out var sourceEndMarker);
+        // BuildSources stores every source's directives in its own framed metadata. Re-emitting the
+        // unioned preamble here would let one host-specific source fail the outer module parse before
+        // its per-source #requires gate can run. Legacy/unframed payloads retain their single preamble.
+        var deferredScriptPreamble = hasFramedSources ? string.Empty : scriptPreamble;
         var deferredScriptPayload = BuildDeferredScriptPayload(deferredScriptPreamble, scriptPayload, sourceStartMarker, sourceEndMarker);
         var bootstrapper = File.ReadAllText(psm1Path);
         bootstrapper = ReplaceMarkedSection(
             bootstrapper,
             ScriptPreambleStartMarker,
             ScriptPreambleEndMarker,
-            deferredScriptPreamble,
+            string.Empty,
             psm1Path);
         var inlinedBootstrapper = ReplaceMarkedSection(
             bootstrapper,
@@ -62,21 +67,6 @@ internal static partial class ModuleBootstrapperGenerator
         }
 
         WritePowerShellFile(psm1Path, inlinedBootstrapper);
-    }
-
-    private static string RemoveRequiresDirectives(string scriptPreamble)
-    {
-        if (string.IsNullOrWhiteSpace(scriptPreamble))
-            return string.Empty;
-
-        return string.Join(
-                Environment.NewLine,
-                scriptPreamble
-                    .Replace("\r\n", "\n")
-                    .Replace('\r', '\n')
-                    .Split('\n')
-                    .Where(static line => !line.TrimStart().StartsWith("#requires", StringComparison.OrdinalIgnoreCase)))
-            .Trim();
     }
 
     private static string BuildDeferredScriptPayload(

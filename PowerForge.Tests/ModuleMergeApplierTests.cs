@@ -96,15 +96,13 @@ public sealed class ModuleMergeApplierTests
             Assert.Contains("function Get-TestInvocationPath { $MyInvocation.MyCommand.Path }", deferredPayload, StringComparison.Ordinal);
             Assert.StartsWith("#requires -Version 5.1" + Environment.NewLine + "using namespace System.Text", deferredPayload, StringComparison.Ordinal);
             Assert.DoesNotContain("class BinaryBackedType", mergedBootstrapper, StringComparison.Ordinal);
-            Assert.Contains(". ([scriptblock]::Create($PowerForgeMergedScriptSegment))", mergedBootstrapper, StringComparison.Ordinal);
+            Assert.Contains("$PowerForgeMergedScriptSegmentBlock = [scriptblock]::Create($PowerForgeMergedScriptSegment)", mergedBootstrapper, StringComparison.Ordinal);
             Assert.Contains("$PowerForgeMergedScriptAst.FindAll({", mergedBootstrapper, StringComparison.Ordinal);
             Assert.DoesNotContain("'Public', '*.ps1'", mergedBootstrapper, StringComparison.Ordinal);
-            Assert.True(
-                mergedBootstrapper.IndexOf("using namespace System.Text", StringComparison.Ordinal) <
-                mergedBootstrapper.IndexOf("$PowerForgeModuleRoot", StringComparison.Ordinal));
+            Assert.DoesNotContain("using namespace System.Text", mergedBootstrapper, StringComparison.Ordinal);
             Assert.True(
                 mergedBootstrapper.IndexOf("$ImportModule = Get-Command", StringComparison.Ordinal) <
-                mergedBootstrapper.IndexOf(". ([scriptblock]::Create", StringComparison.Ordinal));
+                mergedBootstrapper.IndexOf("$PowerForgeMergedScriptSegmentBlock = [scriptblock]::Create", StringComparison.Ordinal));
             Assert.Equal(1, CountOccurrences(mergedBootstrapper.Replace("\r\n", "\n"), "\n$FunctionsToExport = "));
             Assert.Equal(1, CountOccurrences(mergedBootstrapper, "Export-ModuleMember -Function $FunctionsToExport"));
             Assert.Equal(1, CountOccurrences(mergedBootstrapper, "$PowerForgeCommandModuleDependencies = @{"));
