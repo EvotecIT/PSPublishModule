@@ -86,7 +86,8 @@ public sealed partial class DotNetPublishPipelineRunner
             var declarationElements = new List<(
                 XElement Element,
                 string DefiningProjectPath,
-                bool IsTargetTime)>();
+                bool IsTargetTime,
+                bool RunsBeforeResolveReferences)>();
             foreach (XNode node in document.Root.DescendantNodes())
             {
                 if (node is XComment comment)
@@ -109,8 +110,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (node is not XElement element)
                     continue;
 
-                bool isTargetTime = element.Ancestors().Any(ancestor =>
+                XElement? containingTarget = element.Ancestors().FirstOrDefault(ancestor =>
                     ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase));
+                bool isTargetTime = containingTarget is not null;
+                bool runsBeforeResolveReferences =
+                    !string.IsNullOrEmpty(request.TargetFramework) &&
+                    containingTarget is not null &&
+                    ContainsMsBuildListEntry(
+                        containingTarget.Attribute("BeforeTargets")?.Value,
+                        "ResolveReferences");
 
                 if (!isTargetTime &&
                     element.Parent?.Name.LocalName.Equals(
@@ -126,7 +134,11 @@ public sealed partial class DotNetPublishPipelineRunner
                     (element.Parent?.Name.LocalName.Equals("ItemGroup", StringComparison.OrdinalIgnoreCase) == true ||
                      element.Parent?.Name.LocalName.Equals("ItemDefinitionGroup", StringComparison.OrdinalIgnoreCase) == true))
                 {
-                    declarationElements.Add((element, declarationSources.Peek(), isTargetTime));
+                    declarationElements.Add((
+                        element,
+                        declarationSources.Peek(),
+                        isTargetTime,
+                        runsBeforeResolveReferences));
                 }
             }
 
@@ -135,7 +147,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     declaration.Element,
                     declaration.DefiningProjectPath,
                     propertyDefinitions,
-                    declaration.IsTargetTime))
+                    declaration.IsTargetTime,
+                    declaration.RunsBeforeResolveReferences))
                 .ToArray();
             return true;
         }
@@ -155,6 +168,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 // The provenance result already fails closed if preprocessing did not complete.
             }
         }
+    }
+
+    private static bool ContainsMsBuildListEntry(string? value, string expected)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        return value!.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Any(entry => entry.Trim().Equals(expected, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool TryReadPreprocessedImportPath(string comment, out string? importPath)

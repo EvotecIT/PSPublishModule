@@ -25,12 +25,14 @@ public sealed partial class DotNetPublishPipelineRunner
             XElement element,
             string definingProjectPath,
             IReadOnlyList<PreprocessedProjectPropertyDefinition> propertyDefinitions,
-            bool isTargetTime)
+            bool isTargetTime,
+            bool runsBeforeResolveReferences)
         {
             Element = element;
             DefiningProjectPath = definingProjectPath;
             PropertyDefinitions = propertyDefinitions;
             IsTargetTime = isTargetTime;
+            RunsBeforeResolveReferences = runsBeforeResolveReferences;
         }
 
         internal XElement Element { get; }
@@ -40,6 +42,8 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyList<PreprocessedProjectPropertyDefinition> PropertyDefinitions { get; }
 
         internal bool IsTargetTime { get; }
+
+        internal bool RunsBeforeResolveReferences { get; }
     }
 
     private sealed class LiteralProjectReferenceMetadataAssignment
@@ -82,6 +86,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var defaults = new List<LiteralProjectReferenceMetadataAssignment>();
         foreach (PreprocessedProjectReferenceDeclaration declaration in declarations.Where(declaration =>
                      (includeTargetTime || !declaration.IsTargetTime) &&
+                     (!declaration.IsTargetTime || declaration.RunsBeforeResolveReferences) &&
                      IsProjectReferenceItemDefinition(declaration.Element) &&
                      !IsDefinitelyInactiveMsBuildElement(
                          declaration.Element,
@@ -107,6 +112,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             XElement projectReference = declaration.Element;
             if ((!includeTargetTime && declaration.IsTargetTime) ||
+                (declaration.IsTargetTime && !declaration.RunsBeforeResolveReferences) ||
                 IsProjectReferenceItemDefinition(projectReference) ||
                 IsDefinitelyInactiveMsBuildElement(projectReference, evaluatedConditionProperties) ||
                 !DoesProjectReferenceDeclarationMatch(

@@ -89,7 +89,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     metadataName,
                     includeTargetTime: false);
             AddLiteralPropertyTables(effectiveAssignments);
-            if (results.Count == 0 && projectReferenceDeclarations.Any(declaration => declaration.IsTargetTime))
+            if (projectReferenceDeclarations.Any(declaration =>
+                    declaration.IsTargetTime && declaration.RunsBeforeResolveReferences))
             {
                 effectiveAssignments = ReadEffectiveLiteralProjectReferenceMetadataAssignments(
                     declaringProjectPath,
@@ -98,6 +99,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluatedConditionProperties,
                     metadataName,
                     includeTargetTime: true);
+                results.Clear();
+                keys.Clear();
                 AddLiteralPropertyTables(effectiveAssignments);
             }
 
