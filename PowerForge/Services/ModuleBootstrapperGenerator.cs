@@ -448,20 +448,25 @@ internal static partial class ModuleBootstrapperGenerator
     {
         if (exportAssemblyFileNames is { Count: > 0 })
         {
-            var expected = new HashSet<string>(exportAssemblyFileNames, StringComparer.OrdinalIgnoreCase);
             var candidates = new[]
             {
                 Path.Combine(libRoot, "Standard"),
                 Path.Combine(libRoot, "Core"),
-                Path.Combine(libRoot, "Default"),
-                libRoot
+                libRoot,
+                Path.Combine(libRoot, "Default")
             };
-            return candidates
-                .Where(Directory.Exists)
-                .Where(directory => ModuleBinaryFileLocator.Enumerate(directory, SearchOption.TopDirectoryOnly)
-                    .Any(path => expected.Contains(Path.GetFileName(path))))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+            var targetDirectories = new List<string>();
+            foreach (var assemblyFileName in exportAssemblyFileNames)
+            {
+                var targetDirectory = candidates.FirstOrDefault(directory =>
+                    Directory.Exists(directory) &&
+                    ModuleBinaryFileLocator.Enumerate(directory, SearchOption.TopDirectoryOnly)
+                        .Any(path => string.Equals(Path.GetFileName(path), assemblyFileName, StringComparison.OrdinalIgnoreCase)));
+                if (targetDirectory is not null && !targetDirectories.Contains(targetDirectory, StringComparer.OrdinalIgnoreCase))
+                    targetDirectories.Add(targetDirectory);
+            }
+
+            return targetDirectories.ToArray();
         }
 
         var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

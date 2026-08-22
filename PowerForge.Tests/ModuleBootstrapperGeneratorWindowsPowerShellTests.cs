@@ -176,6 +176,97 @@ try {
         }
     }
 
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void GeneratedCoreBootstrapperPrependsResolvedNativeRuntimeBeforeImport()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var powerShell7 = FindExecutableOnPath("pwsh.exe");
+        if (powerShell7 is null)
+        {
+            return;
+        }
+
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "pf-bootstrapper-native-runtime-" + Guid.NewGuid().ToString("N"));
+        var libCore = Path.Combine(root, "Lib", "Core");
+        Directory.CreateDirectory(libCore);
+
+        try
+        {
+            var moduleAssembly = BuildDesktopFixture(root);
+            File.Copy(
+                moduleAssembly,
+                Path.Combine(libCore, "DemoModule.dll"),
+                overwrite: true);
+
+            foreach (var rid in new[] { "win-x64", "win-x86", "win-arm64" })
+            {
+                Directory.CreateDirectory(Path.Combine(libCore, "runtimes", rid, "native"));
+            }
+
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>()),
+                new[] { "DemoModule.dll" },
+                handleRuntimes: true,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0" });
+
+            var proofScript = Path.Combine(root, "Validate-NativeRuntimeOrder.ps1");
+            File.WriteAllText(
+                proofScript,
+                """
+$ErrorActionPreference = 'Stop'
+$originalPath = $env:PATH
+try {
+    Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force
+    $archFolder = switch ([string][System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture) {
+        'X64' { 'win-x64' }
+        'X86' { 'win-x86' }
+        'Arm64' { 'win-arm64' }
+        default { throw "Unsupported test architecture: $_" }
+    }
+    $expected = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "Lib\Core\runtimes\$archFolder\native"))
+    $firstPathEntry = @($env:PATH -split [IO.Path]::PathSeparator)[0]
+    if ($firstPathEntry -ne $expected) {
+        throw "Native runtime path was not prepended before import. Expected '$expected', got '$firstPathEntry'."
+    }
+    'NATIVE_RUNTIME_ORDER_OK'
+} finally {
+    $env:PATH = $originalPath
+}
+""");
+
+            var result = RunProcess(
+                powerShell7,
+                $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{proofScript}\"",
+                root,
+                timeoutMilliseconds: 30000);
+
+            Assert.True(
+                result.ExitCode == 0,
+                $"PowerShell Core native runtime proof failed.{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}{result.StandardError}");
+            Assert.Contains("NATIVE_RUNTIME_ORDER_OK", result.StandardOutput);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static string BuildDesktopFixture(string root)
     {
         var projectRoot = Directory.CreateDirectory(Path.Combine(root, "Fixture"));

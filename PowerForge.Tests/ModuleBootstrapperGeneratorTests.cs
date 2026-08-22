@@ -190,10 +190,11 @@ public class ModuleBootstrapperGeneratorTests
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
             Assert.Contains("ProcessArchitecture", bootstrapper);
             Assert.Contains("IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)", bootstrapper);
-            Assert.Contains("Lib\\{0}\\runtimes\\{1}\\native", bootstrapper);
-            Assert.Contains("$NativeLibraryFolders = @(", bootstrapper);
+            Assert.Contains("$ResolvedLibrary = & $ResolvePowerForgeModuleAssembly -LibraryFileName $LibraryFileName", bootstrapper);
+            Assert.Contains("$NativeLibraryDirectories = @(", bootstrapper);
             Assert.Contains("Get-ChildItem -LiteralPath $LibraryRoot -Directory", bootstrapper);
-            Assert.Contains("foreach ($NativeLibraryFolder in $NativeLibraryFolders)", bootstrapper);
+            Assert.Contains("foreach ($NativeLibraryDirectory in $NativeLibraryDirectories)", bootstrapper);
+            Assert.Contains("Join-Path -Path $NativeLibraryDirectory -ChildPath (\"runtimes\\{0}\\native\" -f $ArchFolder)", bootstrapper);
             Assert.Contains("[array] $NativePaths = foreach", bootstrapper);
             Assert.Contains("$PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }", bootstrapper);
             Assert.Contains("[array] $RemainingPathEntries = foreach ($PathEntry in $PathEntries)", bootstrapper);
@@ -205,6 +206,14 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("'AMD64' { 'win-x64' }", bootstrapper);
             Assert.Contains("if ([IntPtr]::Size -eq 4) { 'win-x86' } else { 'win-x64' }", bootstrapper);
             Assert.Contains("Unknown Windows architecture", bootstrapper);
+            Assert.True(
+                bootstrapper.IndexOf("$ResolvedLibrary = & $ResolvePowerForgeModuleAssembly", StringComparison.Ordinal) <
+                bootstrapper.IndexOf("$env:PATH =", StringComparison.Ordinal),
+                "The managed assembly directory must be resolved before native PATH probing.");
+            Assert.True(
+                bootstrapper.IndexOf("$env:PATH =", StringComparison.Ordinal) <
+                bootstrapper.IndexOf("foreach ($Library in $LibraryFileNames)", StringComparison.Ordinal),
+                "Native PATH probing must complete before the binary module import loop.");
             Assert.DoesNotContain("\r\n\r\ntry {", bootstrapper);
         }
         finally
@@ -324,6 +333,32 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void ResolveAssemblyLoadContextTargetDirectories_UsesCoreRuntimeSelectionPerConfiguredAssembly()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-configured-layout-" + Guid.NewGuid().ToString("N"));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib")).FullName;
+        var coreRoot = Directory.CreateDirectory(Path.Combine(libRoot, "Core")).FullName;
+        var defaultRoot = Directory.CreateDirectory(Path.Combine(libRoot, "Default")).FullName;
+        File.WriteAllText(Path.Combine(coreRoot, "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(defaultRoot, "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(libRoot, "ExtraModule.dll"), string.Empty);
+
+        try
+        {
+            var directories = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetDirectories(
+                libRoot,
+                new[] { "DemoModule.dll", "ExtraModule.dll" });
+
+            Assert.Equal(new[] { coreRoot, libRoot }, directories);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     [Trait("Category", "Integration")]
     public void Generate_WithAssemblyLoadContext_WritesAlcBootstrapperAndKeepsDesktopLibrariesScript()
     {
@@ -371,7 +406,7 @@ public class ModuleBootstrapperGeneratorTests
                 "Desktop dependencies must load before the exported binary module.");
 
             Assert.True(File.Exists(Path.Combine(root, "Lib", "Core", "DemoModule.ModuleLoadContext.dll")));
-            Assert.True(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
+            Assert.False(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
             Assert.True(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
 
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
