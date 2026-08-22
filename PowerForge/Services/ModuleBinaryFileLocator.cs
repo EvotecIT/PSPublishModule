@@ -88,6 +88,7 @@ internal static class ModuleBinaryFileLocator
                     candidate = Path.GetFileName(candidate);
                 }
             }
+            candidate = candidate.Replace(Path.DirectorySeparatorChar, '/');
             if (seen.Add(candidate))
                 normalized.Add(candidate);
         }

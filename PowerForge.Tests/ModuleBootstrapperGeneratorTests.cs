@@ -1076,7 +1076,7 @@ public class ModuleBootstrapperGeneratorTests
                 targetFrameworks: new[] { "net8.0" });
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
-            var expectedReference = Path.Combine("Plugins", "DemoModule.dll");
+            const string expectedReference = "Plugins/DemoModule.dll";
             Assert.Contains("$LibraryFileNames = @('" + expectedReference + "')", bootstrapper);
             Assert.Contains("$RelativeCandidate -ieq $RelativeReference", bootstrapper);
             Assert.True(File.Exists(Path.Combine(pluginRoot, "DemoModule.ModuleLoadContext.dll")));

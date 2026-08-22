@@ -172,6 +172,83 @@ public sealed class ModuleTypeAcceleratorSurfaceReporterTests
     }
 
     [Fact]
+    public void WriteReport_InspectsEveryConfiguredExportDirectory()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            const string primaryAssemblyName = "PrimaryTypes";
+            const string pluginAssemblyName = "PluginTypes";
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "project")).FullName;
+            var staging = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "staging")).FullName;
+            var primaryRoot = Directory.CreateDirectory(Path.Combine(staging, "Lib", "Primary")).FullName;
+            var pluginRoot = Directory.CreateDirectory(Path.Combine(staging, "Lib", "Plugins")).FullName;
+            var primaryAssembly = BuildTypeFixtureLibrary(
+                tempRoot.FullName,
+                primaryAssemblyName,
+                projectFolderName: "PrimaryFixture",
+                firstEnumName: "PrimaryMode");
+            var pluginAssembly = BuildTypeFixtureLibrary(
+                tempRoot.FullName,
+                pluginAssemblyName,
+                projectFolderName: "PluginFixture",
+                firstEnumName: "PluginMode");
+            File.Copy(primaryAssembly, Path.Combine(primaryRoot, primaryAssemblyName + ".dll"), overwrite: true);
+            File.Copy(pluginAssembly, Path.Combine(pluginRoot, pluginAssemblyName + ".dll"), overwrite: true);
+            WriteMinimalManifest(projectRoot, moduleName);
+            WriteMinimalManifest(staging, moduleName);
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot,
+                    StagingPath = staging,
+                    Version = "1.0.0",
+                    ExportAssemblies = new[]
+                    {
+                        "Lib/Primary/" + primaryAssemblyName + ".dll",
+                        "Lib/Plugins/" + pluginAssemblyName + ".dll"
+                    },
+                    AssemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.Enums,
+                    AssemblyTypeAcceleratorAssemblies = new[] { primaryAssemblyName, pluginAssemblyName }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            });
+            var buildResult = new ModuleBuildResult(
+                staging,
+                Path.Combine(staging, moduleName + ".psd1"),
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+            var reportPath = Path.Combine(projectRoot, "Artefacts", "Reports", "TypeAccelerators.Core.txt");
+
+            var report = new ModuleTypeAcceleratorSurfaceReporter(new NullLogger())
+                .WriteReport(plan, buildResult, reportPath);
+
+            Assert.NotNull(report);
+            Assert.Equal(2, report!.Assemblies.Length);
+            Assert.Contains(
+                report.Assemblies,
+                assembly => string.Equals(assembly.AssemblyName, primaryAssemblyName, StringComparison.Ordinal) &&
+                            assembly.AssemblyPath is not null &&
+                            assembly.AssemblyPath.StartsWith(primaryRoot, StringComparison.OrdinalIgnoreCase) &&
+                            assembly.RegisteredTypes.Contains("DemoTypes.PrimaryMode", StringComparer.Ordinal));
+            Assert.Contains(
+                report.Assemblies,
+                assembly => string.Equals(assembly.AssemblyName, pluginAssemblyName, StringComparison.Ordinal) &&
+                            assembly.AssemblyPath is not null &&
+                            assembly.AssemblyPath.StartsWith(pluginRoot, StringComparison.OrdinalIgnoreCase) &&
+                            assembly.RegisteredTypes.Contains("DemoTypes.PluginMode", StringComparer.Ordinal));
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void WriteReport_UsesSameLibraryFolderPreferenceAsBootstrapper()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

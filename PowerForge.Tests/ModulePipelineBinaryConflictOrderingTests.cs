@@ -165,7 +165,7 @@ public sealed class Marker
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"build \"{projectPath}\" -c Release -nologo --verbosity quiet",
+            Arguments = $"build \"{projectPath}\" -c Release -nologo --verbosity quiet -nr:false",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
