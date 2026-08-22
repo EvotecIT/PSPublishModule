@@ -6,6 +6,58 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    private static IReadOnlyDictionary<string, string> BuildTargetTimeConditionProperties(
+        IReadOnlyDictionary<string, string> evaluatedProperties,
+        IReadOnlyList<PreprocessedProjectPropertyDefinition> runtimePropertyDefinitions)
+    {
+        if (runtimePropertyDefinitions.Count == 0)
+            return evaluatedProperties;
+
+        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, string> property in evaluatedProperties)
+            properties[property.Key] = property.Value;
+        foreach (PreprocessedProjectPropertyDefinition definition in runtimePropertyDefinitions)
+        {
+            string propertyName = definition.Element.Name.LocalName;
+            if (IsDefinitelyInactiveMsBuildElement(definition.Element, properties))
+                continue;
+
+            if (!IsDefinitelyActiveMsBuildElement(definition.Element, properties) ||
+                !TryExpandTargetTimePropertyValue(definition.Element.Value, properties, out string? value))
+            {
+                properties.Remove(propertyName);
+                continue;
+            }
+
+            properties[propertyName] = value!;
+        }
+        return properties;
+    }
+
+    private static bool TryExpandTargetTimePropertyValue(
+        string value,
+        IReadOnlyDictionary<string, string> properties,
+        out string? expanded)
+    {
+        expanded = Regex.Replace(
+            value,
+            @"\$\(([A-Za-z_][A-Za-z0-9_.-]*)\)",
+            match => properties.TryGetValue(match.Groups[1].Value, out string? propertyValue)
+                ? propertyValue
+                : match.Value,
+            RegexOptions.CultureInvariant);
+        if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+            expanded.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+            expanded.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
+            !TryUnescapeMsBuildLiteral(expanded, out string? unescaped))
+        {
+            expanded = null;
+            return false;
+        }
+        expanded = unescaped;
+        return true;
+    }
+
     private static IReadOnlyDictionary<string, string> ReadEvaluatedProjectReferenceConditionProperties(
         ProjectEvaluationRequest request,
         IReadOnlyCollection<string> propertyDefinitionPaths)

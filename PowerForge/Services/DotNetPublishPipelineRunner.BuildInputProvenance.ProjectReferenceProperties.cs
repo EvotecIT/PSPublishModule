@@ -114,7 +114,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     foreach (string candidateAssignments in ReadLiteralProjectReferencePropertyAssignmentCandidates(
                                  assignment.PropertyDefinitions,
-                                 evaluatedConditionProperties,
+                                 assignment.ConditionProperties,
                                  assignment.DefiningProjectPath,
                                  assignment.Value))
                     {

@@ -25,12 +25,14 @@ public sealed partial class DotNetPublishPipelineRunner
             XElement element,
             string definingProjectPath,
             IReadOnlyList<PreprocessedProjectPropertyDefinition> propertyDefinitions,
+            IReadOnlyList<PreprocessedProjectPropertyDefinition> runtimePropertyDefinitions,
             bool isTargetTime,
             bool runsBeforeResolveReferences)
         {
             Element = element;
             DefiningProjectPath = definingProjectPath;
             PropertyDefinitions = propertyDefinitions;
+            RuntimePropertyDefinitions = runtimePropertyDefinitions;
             IsTargetTime = isTargetTime;
             RunsBeforeResolveReferences = runsBeforeResolveReferences;
         }
@@ -41,6 +43,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
         internal IReadOnlyList<PreprocessedProjectPropertyDefinition> PropertyDefinitions { get; }
 
+        internal IReadOnlyList<PreprocessedProjectPropertyDefinition> RuntimePropertyDefinitions { get; }
+
         internal bool IsTargetTime { get; }
 
         internal bool RunsBeforeResolveReferences { get; }
@@ -50,11 +54,13 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         internal LiteralProjectReferenceMetadataAssignment(
             string value,
-            PreprocessedProjectReferenceDeclaration declaration)
+            PreprocessedProjectReferenceDeclaration declaration,
+            IReadOnlyDictionary<string, string> conditionProperties)
         {
             Value = value;
             DefiningProjectPath = declaration.DefiningProjectPath;
             PropertyDefinitions = declaration.PropertyDefinitions;
+            ConditionProperties = conditionProperties;
         }
 
         internal string Value { get; }
@@ -62,6 +68,8 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string DefiningProjectPath { get; }
 
         internal IReadOnlyList<PreprocessedProjectPropertyDefinition> PropertyDefinitions { get; }
+
+        internal IReadOnlyDictionary<string, string> ConditionProperties { get; }
     }
 
     private sealed class LiteralProjectReferenceItemState
@@ -87,22 +95,30 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (PreprocessedProjectReferenceDeclaration declaration in declarations.Where(declaration =>
                      (includeTargetTime || !declaration.IsTargetTime) &&
                      (!declaration.IsTargetTime || declaration.RunsBeforeResolveReferences) &&
-                     IsProjectReferenceItemDefinition(declaration.Element) &&
-                     !IsDefinitelyInactiveMsBuildElement(
-                         declaration.Element,
-                         evaluatedConditionProperties)))
+                     IsProjectReferenceItemDefinition(declaration.Element)))
         {
+            IReadOnlyDictionary<string, string> declarationConditionProperties =
+                BuildTargetTimeConditionProperties(
+                    evaluatedConditionProperties,
+                    declaration.RuntimePropertyDefinitions);
+            if (IsDefinitelyInactiveMsBuildElement(
+                    declaration.Element,
+                    declarationConditionProperties))
+            {
+                continue;
+            }
+
             List<LiteralProjectReferenceMetadataAssignment> declaredAssignments =
                 ReadActiveLiteralProjectReferenceMetadataAssignments(
                     declaration,
-                    evaluatedConditionProperties,
+                    declarationConditionProperties,
                     metadataName);
             if (declaredAssignments.Count == 0)
                 continue;
 
             defaults = IsDefinitelyActiveMsBuildElement(
                 declaration.Element,
-                evaluatedConditionProperties)
+                declarationConditionProperties)
                 ? declaredAssignments
                 : MergeLiteralProjectReferenceMetadataAssignments(defaults, declaredAssignments);
         }
@@ -111,15 +127,19 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (PreprocessedProjectReferenceDeclaration declaration in declarations)
         {
             XElement projectReference = declaration.Element;
+            IReadOnlyDictionary<string, string> declarationConditionProperties =
+                BuildTargetTimeConditionProperties(
+                    evaluatedConditionProperties,
+                    declaration.RuntimePropertyDefinitions);
             if ((!includeTargetTime && declaration.IsTargetTime) ||
                 (declaration.IsTargetTime && !declaration.RunsBeforeResolveReferences) ||
                 IsProjectReferenceItemDefinition(projectReference) ||
-                IsDefinitelyInactiveMsBuildElement(projectReference, evaluatedConditionProperties) ||
+                IsDefinitelyInactiveMsBuildElement(projectReference, declarationConditionProperties) ||
                 !DoesProjectReferenceDeclarationMatch(
                     declaringProjectPath,
                     referencedPath,
                     declaration,
-                    evaluatedConditionProperties))
+                    declarationConditionProperties))
             {
                 continue;
             }
@@ -129,11 +149,11 @@ public sealed partial class DotNetPublishPipelineRunner
             bool isRemove = HasMsBuildAttribute(projectReference, "Remove");
             bool definitelyActive = IsDefinitelyActiveMsBuildElement(
                 projectReference,
-                evaluatedConditionProperties);
+                declarationConditionProperties);
             List<LiteralProjectReferenceMetadataAssignment> declaredAssignments =
                 ReadActiveLiteralProjectReferenceMetadataAssignments(
                     declaration,
-                    evaluatedConditionProperties,
+                    declarationConditionProperties,
                     metadataName);
             if (isRemove)
             {
@@ -349,13 +369,17 @@ public sealed partial class DotNetPublishPipelineRunner
                 StringComparison.OrdinalIgnoreCase))
             .Select(attribute => new LiteralProjectReferenceMetadataAssignment(
                 attribute.Value,
-                declaration))
+                declaration,
+                evaluatedConditionProperties))
             .ToList();
         foreach (XElement element in projectReference.Elements().Where(element =>
                      element.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase) &&
                      !IsDefinitelyInactiveMsBuildElement(element, evaluatedConditionProperties)))
         {
-            var assignment = new LiteralProjectReferenceMetadataAssignment(element.Value, declaration);
+            var assignment = new LiteralProjectReferenceMetadataAssignment(
+                element.Value,
+                declaration,
+                evaluatedConditionProperties);
             assignments = IsDefinitelyActiveMsBuildElement(element, evaluatedConditionProperties)
                 ? [assignment]
                 : MergeLiteralProjectReferenceMetadataAssignments(assignments, [assignment]);
