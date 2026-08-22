@@ -194,8 +194,12 @@ public sealed class ModuleBuildPipeline
             : Path.GetFullPath(spec.CsprojPath);
         var forceBootstrapperWrite = ShouldCleanReplaceSingleFileBinaryPayload(spec);
         var rootModuleScriptWillBeReplaced = !spec.RefreshManifestOnly &&
-                                             (!string.IsNullOrWhiteSpace(resolvedCsprojPath) ||
-                                              ModuleBootstrapperGenerator.ShouldWriteBootstrapper(staging, forceBootstrapperWrite));
+                                              (!string.IsNullOrWhiteSpace(resolvedCsprojPath) ||
+                                               ModuleBootstrapperGenerator.ShouldWriteBootstrapper(
+                                                   staging,
+                                                   spec.Name,
+                                                   spec.ExportAssemblies,
+                                                   forceBootstrapperWrite));
 
         var builder = new ModuleBuilder(
             _logger,

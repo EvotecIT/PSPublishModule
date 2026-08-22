@@ -1027,6 +1027,52 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
     }
 
     [Fact]
+    public void BuildToStaging_AuxiliaryDllOnly_PreservesSingleFileScriptExports()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var source = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+            var staging = Path.Combine(tempRoot.FullName, "staging");
+            Directory.CreateDirectory(Path.Combine(source.FullName, "Lib"));
+            File.WriteAllText(Path.Combine(source.FullName, "Lib", "Auxiliary.dll"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(source.FullName, moduleName + ".psm1"),
+                "function Get-Demo { 'demo' }");
+            File.WriteAllText(
+                Path.Combine(source.FullName, moduleName + ".psd1"),
+                "@{" + Environment.NewLine +
+                "    RootModule = 'DemoModule.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "    FunctionsToExport = @('Get-Demo')" + Environment.NewLine +
+                "    CmdletsToExport = @()" + Environment.NewLine +
+                "    AliasesToExport = @()" + Environment.NewLine +
+                "}");
+
+            var result = ModuleBuildPipelineFactory.Create(new NullLogger()).BuildToStaging(new ModuleBuildSpec
+            {
+                Name = moduleName,
+                SourcePath = source.FullName,
+                StagingPath = staging,
+                Version = "1.0.0",
+                SkipDotNetBuild = true,
+                DisableBinaryCmdletScan = true
+            });
+
+            var stagedPsm1 = File.ReadAllText(Path.Combine(result.StagingPath, moduleName + ".psm1"));
+            var exports = ModuleManifestExportReader.ReadExports(Path.Combine(result.StagingPath, moduleName + ".psd1"));
+            Assert.Contains("function Get-Demo", stagedPsm1, StringComparison.Ordinal);
+            Assert.Contains("Get-Demo", exports.Functions);
+            Assert.DoesNotContain("$LibraryName =", stagedPsm1, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void BuildToStaging_WithAssemblyLoadContext_DefersBinaryConflictNotesUntilBootstrapperExists()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

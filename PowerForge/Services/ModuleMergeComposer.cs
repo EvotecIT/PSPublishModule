@@ -23,7 +23,7 @@ internal sealed class ModuleMergeSources
     internal bool HasScripts => ScriptFiles.Length > 0;
 }
 
-internal static class ModuleMergeComposer
+internal static partial class ModuleMergeComposer
 {
     internal const string MergedSourceStartMarker = "# PowerForge merged source begin";
     internal const string MergedSourceEndMarker = "# PowerForge merged source end";
@@ -374,11 +374,23 @@ internal static class ModuleMergeComposer
 
             if (kind == PreambleLineKind.Using)
             {
+                var directiveEnd = FindUsingDirectiveEnd(lines, index, directiveStart);
+                var directive = new StringBuilder(lines[index].Substring(directiveStart));
+                for (var directiveLine = index + 1; directiveLine <= directiveEnd; directiveLine++)
+                    directive.AppendLine().Append(lines[directiveLine]);
+
                 usingLines.Add(RebaseUsingDirective(
-                    lines[index].Substring(directiveStart),
+                    directive.ToString(),
                     sourcePath,
                     moduleRoot));
-                lineReplacements[index] = lines[index].Substring(0, directiveStart).TrimEnd();
+                for (var directiveLine = index; directiveLine <= directiveEnd; directiveLine++)
+                {
+                    lineReplacements[directiveLine] = directiveLine == index
+                        ? lines[index].Substring(0, directiveStart).TrimEnd()
+                        : string.Empty;
+                }
+
+                index = directiveEnd;
                 continue;
             }
 
@@ -427,79 +439,6 @@ internal static class ModuleMergeComposer
         using var sha256 = SHA256.Create();
         var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(content));
         return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
-    }
-
-    private static string RebaseUsingDirective(string directive, string sourcePath, string moduleRoot)
-    {
-        if (string.IsNullOrWhiteSpace(directive) || string.IsNullOrWhiteSpace(moduleRoot))
-            return directive;
-
-        var index = "using".Length;
-        while (index < directive.Length && char.IsWhiteSpace(directive[index]))
-            index++;
-
-        var kindStart = index;
-        while (index < directive.Length && !char.IsWhiteSpace(directive[index]))
-            index++;
-        var kind = directive.Substring(kindStart, index - kindStart);
-        if (!string.Equals(kind, "assembly", System.StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(kind, "module", System.StringComparison.OrdinalIgnoreCase))
-        {
-            return directive;
-        }
-
-        while (index < directive.Length && char.IsWhiteSpace(directive[index]))
-            index++;
-        if (index >= directive.Length || directive[index] == '@')
-            return directive;
-
-        var quote = directive[index] is '\'' or '"' ? directive[index++] : '\0';
-        var pathStart = index;
-        var pathEnd = quote == '\0'
-            ? FindUnquotedPathEnd(directive, pathStart)
-            : directive.IndexOf(quote, pathStart);
-        if (pathEnd < pathStart)
-            return directive;
-
-        var usingPath = directive.Substring(pathStart, pathEnd - pathStart);
-        if (!IsRelativeUsingPath(usingPath))
-            return directive;
-
-        var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath));
-        if (string.IsNullOrWhiteSpace(sourceDirectory))
-            return directive;
-
-        var normalizedPath = usingPath.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
-        var absolutePath = Path.GetFullPath(Path.Combine(sourceDirectory, normalizedPath));
-        var rebased = FrameworkCompatibility.GetRelativePath(moduleRoot, absolutePath).Replace('\\', '/');
-        if (!rebased.StartsWith(".", System.StringComparison.Ordinal))
-            rebased = "./" + rebased;
-
-        return directive.Substring(0, pathStart) + rebased + directive.Substring(pathEnd);
-    }
-
-    private static int FindUnquotedPathEnd(string directive, int start)
-    {
-        var index = start;
-        while (index < directive.Length && !char.IsWhiteSpace(directive[index]) && directive[index] != ';')
-            index++;
-        return index;
-    }
-
-    private static bool IsRelativeUsingPath(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path) ||
-            Path.IsPathRooted(path) ||
-            path.StartsWith("\\\\", System.StringComparison.Ordinal) ||
-            path.StartsWith("//", System.StringComparison.Ordinal) ||
-            (path.Length > 2 && path[1] == ':' && (path[2] == '\\' || path[2] == '/')))
-        {
-            return false;
-        }
-
-        return path.StartsWith(".", System.StringComparison.Ordinal) ||
-               path.IndexOf('\\') >= 0 ||
-               path.IndexOf('/') >= 0;
     }
 
     private static PreambleLineKind ClassifyPreambleLine(

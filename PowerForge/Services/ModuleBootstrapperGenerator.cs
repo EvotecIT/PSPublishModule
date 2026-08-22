@@ -92,21 +92,19 @@ internal static partial class ModuleBootstrapperGenerator
         WritePowerShellFile(psm1Path, psm1Content);
     }
 
-    internal static bool ShouldWriteBootstrapper(string moduleRoot, bool forceBootstrapperWrite = false)
+    internal static bool ShouldWriteBootstrapper(
+        string moduleRoot,
+        string moduleName,
+        IReadOnlyList<string>? exportAssemblies,
+        bool forceBootstrapperWrite = false)
     {
         var root = Path.GetFullPath(moduleRoot);
         var hasScriptFolders = HasAnyDirectory(root, "Public", "Private", "Classes", "Enums");
         var libRoot = Path.Combine(root, "Lib");
-        var hasLib = HasSelectableBinaryPayload(libRoot);
+        var assemblyReferences = ModuleBinaryFileLocator.ResolveAssemblyReferences(moduleName, exportAssemblies);
+        var hasLib = ModuleBinaryFileLocator.ContainsAnyFileName(libRoot, assemblyReferences, SearchOption.AllDirectories);
         return ShouldWriteBootstrapper(hasLib, hasScriptFolders, hasDevelopmentBinaryLoader: false, forceBootstrapperWrite);
     }
-
-    private static bool HasSelectableBinaryPayload(string libRoot)
-        => Directory.Exists(libRoot) &&
-           (ModuleBinaryFileLocator.HasAny(libRoot, SearchOption.TopDirectoryOnly) ||
-            Directory.EnumerateDirectories(libRoot)
-                .Select(Path.GetFileName)
-                .Any(ModuleBinaryPayloadLayout.IsSelectablePayloadFolderName));
 
     private static bool ShouldWriteBootstrapper(
         bool hasLib,

@@ -317,6 +317,47 @@ public sealed class ModuleMergeComposerTests
     }
 
     [Fact]
+    public void BuildSources_HoistsCompleteMultilineUsingModuleSpecification()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            File.WriteAllText(Path.Combine(root.FullName, "Types.psm1"), "class SharedType {}");
+            File.WriteAllText(
+                Path.Combine(root.FullName, "Public", "Get-Demo.ps1"),
+                "using module @{" + Environment.NewLine +
+                "    ModuleName = '../Types.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "}" + Environment.NewLine + Environment.NewLine +
+                "function Get-Demo { [SharedType]::new() }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                "DemoModule",
+                information: null,
+                exports: new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: false);
+
+            var expectedDirective =
+                "using module @{" + Environment.NewLine +
+                "    ModuleName = './Types.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "}";
+            Assert.StartsWith(expectedDirective, sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Equal(1, CountOccurrences(sources.MergedScriptContent, "ModuleName = './Types.psm1'"));
+            Assert.True(
+                sources.MergedScriptContent.IndexOf(expectedDirective, StringComparison.Ordinal) <
+                sources.MergedScriptContent.IndexOf(ModuleMergeComposer.MergedSourceStartMarker, StringComparison.Ordinal));
+            Assert.Contains("function Get-Demo", sources.MergedScriptContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void BuildSources_RequiresConfiguredPrimaryAssemblyForBinaryMerge()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
