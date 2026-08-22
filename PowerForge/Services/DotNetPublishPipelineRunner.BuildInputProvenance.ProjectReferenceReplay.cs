@@ -193,44 +193,78 @@ public sealed partial class DotNetPublishPipelineRunner
             Path.GetDirectoryName(declaringProjectPath)!,
             Path.GetDirectoryName(declaration.DefiningProjectPath)!
         ];
-        foreach (string itemSpec in declaration.Element.Attributes()
-                     .Where(attribute =>
-                         attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
-                         attribute.Name.LocalName.Equals("Update", StringComparison.OrdinalIgnoreCase) ||
-                         attribute.Name.LocalName.Equals("Remove", StringComparison.OrdinalIgnoreCase))
-                     .Select(attribute => attribute.Value))
+        foreach (XAttribute identity in declaration.Element.Attributes().Where(attribute =>
+                     attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
+                     attribute.Name.LocalName.Equals("Update", StringComparison.OrdinalIgnoreCase) ||
+                     attribute.Name.LocalName.Equals("Remove", StringComparison.OrdinalIgnoreCase)))
         {
-            string[] candidates = IsComputedProjectReferenceItemSpec(itemSpec)
-                ? ReadLiteralProjectReferencePropertyAssignmentCandidates(
-                    declaration.PropertyDefinitions,
+            if (!DoesProjectReferenceItemSpecMatch(
+                    referencedPath,
+                    declaration,
                     evaluatedConditionProperties,
-                    declaration.DefiningProjectPath,
-                    itemSpec)
-                : [itemSpec];
-            foreach (string candidate in candidates)
+                    identityBaseDirectories,
+                    comparison,
+                    identity.Value))
             {
-                foreach (string individualItemSpec in candidate.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
-                {
-                    foreach (string baseDirectory in identityBaseDirectories.Distinct(
-                                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
-                    {
-                        if (TryResolveLiteralProjectReferencePath(
-                                baseDirectory,
-                                individualItemSpec,
-                                out string? declaredPath) &&
-                            string.Equals(declaredPath, referencedPath, comparison))
-                        {
-                            return true;
-                        }
+                continue;
+            }
 
-                        if (TryMatchProjectReferenceGlob(
-                                baseDirectory,
-                                individualItemSpec,
-                                referencedPath,
-                                comparison))
-                        {
-                            return true;
-                        }
+            XAttribute? exclude = declaration.Element.Attributes().FirstOrDefault(attribute =>
+                attribute.Name.LocalName.Equals("Exclude", StringComparison.OrdinalIgnoreCase));
+            return !identity.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
+                   exclude is null ||
+                   !DoesProjectReferenceItemSpecMatch(
+                       referencedPath,
+                       declaration,
+                       evaluatedConditionProperties,
+                       identityBaseDirectories,
+                       comparison,
+                       exclude.Value);
+        }
+
+        return false;
+    }
+
+    private static bool DoesProjectReferenceItemSpecMatch(
+        string referencedPath,
+        PreprocessedProjectReferenceDeclaration declaration,
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
+        IEnumerable<string> identityBaseDirectories,
+        StringComparison comparison,
+        string itemSpec)
+    {
+        string[] candidates = IsComputedProjectReferenceItemSpec(itemSpec)
+            ? ReadLiteralProjectReferencePropertyAssignmentCandidates(
+                declaration.PropertyDefinitions,
+                evaluatedConditionProperties,
+                declaration.DefiningProjectPath,
+                itemSpec)
+            : [itemSpec];
+        foreach (string candidate in candidates)
+        {
+            foreach (string individualItemSpec in candidate.Split(
+                         new[] { ';' },
+                         StringSplitOptions.RemoveEmptyEntries))
+            {
+                foreach (string baseDirectory in identityBaseDirectories.Distinct(
+                             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+                {
+                    if (TryResolveLiteralProjectReferencePath(
+                            baseDirectory,
+                            individualItemSpec,
+                            out string? declaredPath) &&
+                        string.Equals(declaredPath, referencedPath, comparison))
+                    {
+                        return true;
+                    }
+
+                    if (TryMatchProjectReferenceGlob(
+                            baseDirectory,
+                            individualItemSpec,
+                            referencedPath,
+                            comparison))
+                    {
+                        return true;
                     }
                 }
             }

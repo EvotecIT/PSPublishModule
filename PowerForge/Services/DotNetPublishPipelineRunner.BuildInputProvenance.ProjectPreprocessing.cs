@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -80,12 +81,21 @@ public sealed partial class DotNetPublishPipelineRunner
             if (document.Root is null)
                 return false;
 
+            bool hasTargetTimeProjectReferences = document.Descendants().Any(element =>
+                element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase) &&
+                element.Ancestors().Any(ancestor =>
+                    ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)));
+            HashSet<string> scheduledTargetNames = hasTargetTimeProjectReferences
+                ? ReadScheduledProjectReferenceTargetNames(request, document)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var declarationSources = new Stack<string>();
             declarationSources.Push(Path.GetFullPath(request.ProjectPath));
             var propertyDefinitions = new List<PreprocessedProjectPropertyDefinition>();
+            var targetPropertyDefinitions = new Dictionary<XElement, List<PreprocessedProjectPropertyDefinition>>();
             var declarationElements = new List<(
                 XElement Element,
                 string DefiningProjectPath,
+                IReadOnlyList<PreprocessedProjectPropertyDefinition> TargetPropertyDefinitions,
                 bool IsTargetTime,
                 bool RunsBeforeResolveReferences)>();
             foreach (XNode node in document.Root.DescendantNodes())
@@ -116,18 +126,30 @@ public sealed partial class DotNetPublishPipelineRunner
                 bool runsBeforeResolveReferences =
                     !string.IsNullOrEmpty(request.TargetFramework) &&
                     containingTarget is not null &&
-                    ContainsMsBuildListEntry(
-                        containingTarget.Attribute("BeforeTargets")?.Value,
-                        "ResolveReferences");
+                    scheduledTargetNames.Contains(containingTarget.Attribute("Name")?.Value ?? string.Empty);
 
-                if (!isTargetTime &&
-                    element.Parent?.Name.LocalName.Equals(
+                if (element.Parent?.Name.LocalName.Equals(
                         "PropertyGroup",
                         StringComparison.OrdinalIgnoreCase) == true)
                 {
-                    propertyDefinitions.Add(new PreprocessedProjectPropertyDefinition(
+                    var definition = new PreprocessedProjectPropertyDefinition(
                         element,
-                        declarationSources.Peek()));
+                        declarationSources.Peek());
+                    if (!isTargetTime)
+                    {
+                        propertyDefinitions.Add(definition);
+                    }
+                    else if (runsBeforeResolveReferences)
+                    {
+                        if (!targetPropertyDefinitions.TryGetValue(
+                                containingTarget!,
+                                out List<PreprocessedProjectPropertyDefinition>? definitions))
+                        {
+                            definitions = new List<PreprocessedProjectPropertyDefinition>();
+                            targetPropertyDefinitions[containingTarget!] = definitions;
+                        }
+                        definitions.Add(definition);
+                    }
                 }
 
                 if (element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase) &&
@@ -137,6 +159,12 @@ public sealed partial class DotNetPublishPipelineRunner
                     declarationElements.Add((
                         element,
                         declarationSources.Peek(),
+                        containingTarget is not null &&
+                        targetPropertyDefinitions.TryGetValue(
+                            containingTarget,
+                            out List<PreprocessedProjectPropertyDefinition>? definitions)
+                            ? definitions.ToArray()
+                            : Array.Empty<PreprocessedProjectPropertyDefinition>(),
                         isTargetTime,
                         runsBeforeResolveReferences));
                 }
@@ -146,7 +174,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Select(declaration => new PreprocessedProjectReferenceDeclaration(
                     declaration.Element,
                     declaration.DefiningProjectPath,
-                    propertyDefinitions,
+                    propertyDefinitions.Concat(declaration.TargetPropertyDefinitions).ToArray(),
                     declaration.IsTargetTime,
                     declaration.RunsBeforeResolveReferences))
                 .ToArray();
@@ -170,13 +198,77 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static bool ContainsMsBuildListEntry(string? value, string expected)
+    private static HashSet<string> ReadScheduledProjectReferenceTargetNames(
+        ProjectEvaluationRequest request,
+        XDocument document)
+    {
+        XElement[] targets = document.Descendants().Where(element =>
+                element.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(element.Attribute("Name")?.Value))
+            .ToArray();
+        var propertyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string expression in targets.SelectMany(target => new[]
+                 {
+                     target.Attribute("DependsOnTargets")?.Value,
+                     target.Attribute("BeforeTargets")?.Value
+                 }).Where(value => !string.IsNullOrWhiteSpace(value))!)
+        {
+            AddConditionPropertyNames(expression, propertyNames);
+        }
+
+        IReadOnlyDictionary<string, string> evaluatedProperties =
+            ReadEvaluatedProjectProperties(request, propertyNames);
+        var scheduled = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "ResolveReferences"
+        };
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (XElement target in targets)
+            {
+                string targetName = target.Attribute("Name")!.Value.Trim();
+                if (scheduled.Contains(targetName))
+                {
+                    foreach (string dependency in ReadExpandedMsBuildTargetList(
+                                 target.Attribute("DependsOnTargets")?.Value,
+                                 evaluatedProperties))
+                    {
+                        changed |= scheduled.Add(dependency);
+                    }
+                }
+
+                if (ReadExpandedMsBuildTargetList(
+                        target.Attribute("BeforeTargets")?.Value,
+                        evaluatedProperties).Any(scheduled.Contains))
+                {
+                    changed |= scheduled.Add(targetName);
+                }
+            }
+        } while (changed);
+
+        return scheduled;
+    }
+
+    private static IEnumerable<string> ReadExpandedMsBuildTargetList(
+        string? value,
+        IReadOnlyDictionary<string, string> evaluatedProperties)
     {
         if (string.IsNullOrWhiteSpace(value))
-            return false;
+            return Array.Empty<string>();
 
-        return value!.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-            .Any(entry => entry.Trim().Equals(expected, StringComparison.OrdinalIgnoreCase));
+        string expanded = Regex.Replace(
+            value!,
+            @"\$\(([A-Za-z_][A-Za-z0-9_.-]*)\)",
+            match => evaluatedProperties.TryGetValue(match.Groups[1].Value, out string? propertyValue)
+                ? propertyValue
+                : match.Value,
+            RegexOptions.CultureInvariant);
+        return expanded.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(entry => entry.Trim())
+            .Where(entry => entry.Length > 0 && entry.IndexOf("$(", StringComparison.Ordinal) < 0)
+            .ToArray();
     }
 
     private static bool TryReadPreprocessedImportPath(string comment, out string? importPath)

@@ -12,7 +12,14 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         string[] propertyNames = ReadProjectReferenceConditionPropertyNames(
             propertyDefinitionPaths.Append(request.ProjectPath));
-        if (propertyNames.Length == 0)
+        return ReadEvaluatedProjectProperties(request, propertyNames);
+    }
+
+    private static IReadOnlyDictionary<string, string> ReadEvaluatedProjectProperties(
+        ProjectEvaluationRequest request,
+        IReadOnlyCollection<string> propertyNames)
+    {
+        if (propertyNames.Count == 0)
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         var arguments = new List<string>
@@ -78,63 +85,6 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
-    }
-
-    private static string[] ReadProjectReferenceConditionPropertyNames(IEnumerable<string> projectPaths)
-    {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string projectPath in projectPaths
-                     .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-                     .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
-        {
-            try
-            {
-                XDocument document = XDocument.Load(projectPath, LoadOptions.None);
-                foreach (XElement projectReference in document.Descendants().Where(element =>
-                             element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase)))
-                {
-                    IEnumerable<XElement> conditionOwners = projectReference
-                        .AncestorsAndSelf()
-                        .Concat(projectReference.Descendants());
-                    foreach (string condition in conditionOwners
-                                 .Select(element => element.Attribute("Condition")?.Value)
-                                 .Where(value => !string.IsNullOrWhiteSpace(value))!)
-                    {
-                        AddConditionPropertyNames(condition, names);
-                    }
-
-                    foreach (string expression in projectReference.Attributes()
-                                 .Select(attribute => attribute.Value)
-                                 .Concat(projectReference.Descendants().Select(element => element.Value))
-                                 .Where(value => !string.IsNullOrWhiteSpace(value)))
-                    {
-                        AddConditionPropertyNames(expression, names);
-                    }
-
-                    foreach (XElement branch in projectReference.Ancestors()
-                                 .Where(element =>
-                                     element.Name.LocalName.Equals("When", StringComparison.OrdinalIgnoreCase) ||
-                                     element.Name.LocalName.Equals("Otherwise", StringComparison.OrdinalIgnoreCase)))
-                    {
-                        foreach (string whenCondition in branch.ElementsBeforeSelf()
-                                     .Where(element => element.Name.LocalName.Equals(
-                                         "When",
-                                         StringComparison.OrdinalIgnoreCase))
-                                     .Select(element => element.Attribute("Condition")?.Value)
-                                     .Where(value => !string.IsNullOrWhiteSpace(value))!)
-                        {
-                            AddConditionPropertyNames(whenCondition, names);
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                // Unknown conditions stay eligible so provenance remains fail closed.
-            }
-        }
-
-        return names.OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static void AddConditionPropertyNames(string condition, ISet<string> names)
