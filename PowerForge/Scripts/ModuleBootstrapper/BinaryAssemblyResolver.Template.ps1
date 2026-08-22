@@ -91,5 +91,20 @@ $ResolvePowerForgeModuleAssembly = {
         }
     }
 
+    $RecursiveMatches = @(Get-ChildItem -LiteralPath $LibRoot -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -ieq $LibraryFileName })
+    if ($RecursiveMatches.Count -eq 1) {
+        $RecursiveMatch = $RecursiveMatches[0]
+        $RelativeDirectory = $RecursiveMatch.DirectoryName.Substring($LibRoot.Length).TrimStart([char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar))
+        return [pscustomobject]@{
+            Path = $RecursiveMatch.FullName
+            Folder = $RelativeDirectory
+            Directory = $RecursiveMatch.DirectoryName
+        }
+    }
+    if ($RecursiveMatches.Count -gt 1) {
+        throw "Configured binary module '$LibraryFileName' matched multiple nested Lib payloads. Use a path-qualified ExportAssemblies entry."
+    }
+
     throw "Configured binary module '$LibraryFileName' was not found in a compatible Lib layout."
 }

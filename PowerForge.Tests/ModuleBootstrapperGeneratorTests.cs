@@ -1088,6 +1088,69 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithUnqualifiedNestedExportAssembly_ResolvesUniqueRecursiveMatch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-unqualified-nested-export-" + Guid.NewGuid().ToString("N"));
+        var fixtureRoot = Path.Combine(root, "Fixture");
+        var moduleRoot = Path.Combine(root, "Module");
+        var pluginRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "Plugins")).FullName;
+
+        try
+        {
+            var fixtureAssembly = BuildFixtureProject(
+                fixtureRoot,
+                "NestedBinaryFixture",
+                "DemoModule",
+                "namespace NestedBinaryFixture; public static class Marker { public static string Value => \"nested\"; }");
+            File.Copy(fixtureAssembly, Path.Combine(pluginRoot, "DemoModule.dll"), overwrite: true);
+
+            ModuleBootstrapperGenerator.Generate(
+                moduleRoot,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false);
+
+            var bootstrapperPath = Path.Combine(moduleRoot, "DemoModule.psm1");
+            var bootstrapper = File.ReadAllText(bootstrapperPath);
+            Assert.Contains("$RecursiveMatches = @(Get-ChildItem -LiteralPath $LibRoot -File -Recurse", bootstrapper);
+            Assert.Contains("matched multiple nested Lib payloads", bootstrapper);
+
+            var processStartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "pwsh",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            processStartInfo.ArgumentList.Add("-NoLogo");
+            processStartInfo.ArgumentList.Add("-NoProfile");
+            processStartInfo.ArgumentList.Add("-NonInteractive");
+            processStartInfo.ArgumentList.Add("-ExecutionPolicy");
+            processStartInfo.ArgumentList.Add("Bypass");
+            processStartInfo.ArgumentList.Add("-Command");
+            processStartInfo.ArgumentList.Add(
+                "Import-Module -Name '" + bootstrapperPath.Replace("'", "''", StringComparison.Ordinal) + "' -Force -ErrorAction Stop");
+
+            using var process = System.Diagnostics.Process.Start(processStartInfo)!;
+            var standardOutput = process.StandardOutput.ReadToEnd();
+            var standardError = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.True(
+                process.ExitCode == 0,
+                $"Generated module import failed.{Environment.NewLine}{standardOutput}{Environment.NewLine}{standardError}");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_WithAbsoluteExportAssembly_UsesPackagedFileName()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-absolute-export-" + Guid.NewGuid().ToString("N"));
