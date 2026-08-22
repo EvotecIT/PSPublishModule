@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace PowerForge;
@@ -31,11 +33,14 @@ internal static partial class ModuleMergeComposer
         var pathStart = index;
         var pathEnd = quote == '\0'
             ? FindUnquotedPathEnd(directive, pathStart)
-            : directive.IndexOf(quote, pathStart);
+            : FindQuotedPathEnd(directive, pathStart, quote);
         if (pathEnd < pathStart)
             return directive;
 
-        var usingPath = directive.Substring(pathStart, pathEnd - pathStart);
+        var encodedUsingPath = directive.Substring(pathStart, pathEnd - pathStart);
+        var usingPath = quote == '\0'
+            ? encodedUsingPath
+            : DecodeUsingPathLiteral(encodedUsingPath, quote);
         var rebased = RebaseUsingPath(
             usingPath,
             sourcePath,
@@ -44,7 +49,10 @@ internal static partial class ModuleMergeComposer
         if (string.Equals(usingPath, rebased, System.StringComparison.Ordinal))
             return directive;
 
-        return directive.Substring(0, pathStart) + rebased + directive.Substring(pathEnd);
+        var encodedRebased = quote == '\0'
+            ? FormatUnquotedUsingPath(rebased)
+            : EncodeUsingPathLiteral(rebased, quote);
+        return directive.Substring(0, pathStart) + encodedRebased + directive.Substring(pathEnd);
     }
 
     private static int FindUsingDirectiveEnd(
@@ -187,17 +195,149 @@ internal static partial class ModuleMergeComposer
         string moduleRoot)
         => Regex.Replace(
             directive,
-            @"(?im)(\bModuleName\s*=\s*)(?<quote>['""])(?<path>[^'""\r\n]+)\k<quote>",
+            @"(?im)(\bModuleName\s*=\s*)(?:(?<single>')(?<singlePath>(?:''|[^'\r\n])*)'|(?<double>"")(?<doublePath>(?:`[^\r\n]|[^`""\r\n])*)"")",
             match =>
             {
-                var path = match.Groups["path"].Value;
+                var quote = match.Groups["single"].Success ? '\'' : '"';
+                var encodedPath = match.Groups["single"].Success
+                    ? match.Groups["singlePath"].Value
+                    : match.Groups["doublePath"].Value;
+                var path = DecodeUsingPathLiteral(encodedPath, quote);
                 var rebased = RebaseUsingPath(path, sourcePath, moduleRoot, treatBareNameAsPath: false);
                 if (string.Equals(path, rebased, System.StringComparison.Ordinal))
                     return match.Value;
 
-                var quote = match.Groups["quote"].Value;
-                return match.Groups[1].Value + quote + rebased + quote;
+                return match.Groups[1].Value + quote + EncodeUsingPathLiteral(rebased, quote) + quote;
             });
+
+    private static int FindQuotedPathEnd(string directive, int start, char quote)
+    {
+        for (var index = start; index < directive.Length; index++)
+        {
+            if (quote == '\'' && directive[index] == '\'')
+            {
+                if (index + 1 < directive.Length && directive[index + 1] == '\'')
+                {
+                    index++;
+                    continue;
+                }
+
+                return index;
+            }
+
+            if (quote == '"' && directive[index] == '`')
+            {
+                index++;
+                continue;
+            }
+
+            if (directive[index] == quote)
+                return index;
+        }
+
+        return -1;
+    }
+
+    private static string DecodeUsingPathLiteral(string value, char quote)
+    {
+        if (quote == '\'')
+            return value.Replace("''", "'");
+        if (quote != '"' || value.IndexOf('`') < 0)
+            return value;
+
+        var builder = new StringBuilder(value.Length);
+        for (var index = 0; index < value.Length; index++)
+        {
+            var current = value[index];
+            if (current != '`' || index + 1 >= value.Length)
+            {
+                builder.Append(current);
+                continue;
+            }
+
+            var escaped = value[++index];
+            if (escaped == 'u' && index + 2 < value.Length && value[index + 1] == '{')
+            {
+                var unicodeEnd = value.IndexOf('}', index + 2);
+                var unicodeLength = unicodeEnd - index - 2;
+                if (unicodeEnd > index + 2 &&
+                    unicodeLength <= 6 &&
+                    int.TryParse(
+                        value.Substring(index + 2, unicodeLength),
+                        NumberStyles.AllowHexSpecifier,
+                        CultureInfo.InvariantCulture,
+                        out var codePoint) &&
+                    codePoint <= 0x10ffff &&
+                    (codePoint < 0xd800 || codePoint > 0xdfff))
+                {
+                    builder.Append(char.ConvertFromUtf32(codePoint));
+                    index = unicodeEnd;
+                    continue;
+                }
+            }
+
+            builder.Append(escaped switch
+            {
+                '0' => '\0',
+                'a' => '\a',
+                'b' => '\b',
+                'e' => '\u001b',
+                'f' => '\f',
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                'v' => '\v',
+                _ => escaped
+            });
+        }
+
+        return builder.ToString();
+    }
+
+    private static string EncodeUsingPathLiteral(string value, char quote)
+    {
+        if (quote == '\'')
+            return value.Replace("'", "''");
+        if (quote != '"')
+            return value;
+
+        var builder = new StringBuilder(value.Length);
+        foreach (var current in value)
+        {
+            builder.Append(current switch
+            {
+                '`' => "``",
+                '$' => "`$",
+                '"' => "`\"",
+                '\0' => "`0",
+                '\a' => "`a",
+                '\b' => "`b",
+                '\u001b' => "`e",
+                '\f' => "`f",
+                '\n' => "`n",
+                '\r' => "`r",
+                '\t' => "`t",
+                '\v' => "`v",
+                _ => current.ToString()
+            });
+        }
+
+        return builder.ToString();
+    }
+
+    private static string FormatUnquotedUsingPath(string value)
+    {
+        for (var index = 0; index < value.Length; index++)
+        {
+            var current = value[index];
+            if (char.IsLetterOrDigit(current) || current is '_' or '-' or '.' or '/' or '\\' or ':')
+                continue;
+
+            return "'" + EncodeUsingPathLiteral(value, '\'') + "'";
+        }
+
+        return value;
+    }
 
     private static string RebaseUsingPath(
         string usingPath,
