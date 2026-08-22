@@ -22,15 +22,16 @@ public sealed partial class DotNetPublishPipelineRunner
             "--force-evaluate",
             "--no-cache",
             "--nologo",
-            "-p:Configuration=" + request.Configuration,
             "-p:RestorePackagesWithLockFile=true",
             "-p:RestoreLockedMode=false",
             "-p:NuGetLockFilePath=" + temporaryLockFile
         };
-        if (!string.IsNullOrWhiteSpace(request.TargetFramework) &&
+        if (request.Configuration is not null)
+            arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
+        if (request.TargetFramework is not null &&
             !ProjectDeclaresTargetFramework(request.ProjectPath))
         {
-            arguments.Add("-p:TargetFramework=" + request.TargetFramework);
+            arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
         }
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
                      entry => entry.Key,
@@ -43,7 +44,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 continue;
             }
-            arguments.Add("-p:" + property.Key + "=" + property.Value);
+            arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
         }
 
         try
@@ -327,94 +328,6 @@ public sealed partial class DotNetPublishPipelineRunner
                  trustedBuildInfrastructureRoots))))
         {
             sourceInputs.Add(fullPath);
-        }
-    }
-
-    private static bool TryReadPreprocessedProjectImports(
-        ProjectEvaluationRequest request,
-        out string[] imports)
-    {
-        imports = Array.Empty<string>();
-        string outputPath = Path.Combine(
-            Path.GetTempPath(),
-            "powerforge-msbuild-imports-" + Guid.NewGuid().ToString("N") + ".xml");
-        var arguments = new List<string>
-        {
-            "msbuild",
-            request.ProjectPath,
-            "-nologo",
-            "-verbosity:quiet",
-            "-preprocess:" + outputPath,
-            "-p:Configuration=" + request.Configuration
-        };
-        if (!string.IsNullOrWhiteSpace(request.TargetFramework))
-            arguments.Add("-p:TargetFramework=" + request.TargetFramework);
-        foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
-                     entry => entry.Key,
-                     StringComparer.OrdinalIgnoreCase))
-        {
-            if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
-                property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-            arguments.Add("-p:" + property.Key + "=" + property.Value);
-        }
-
-        try
-        {
-            var process = RunBuildInputEvaluationProcess(
-                "dotnet",
-                Path.GetDirectoryName(request.ProjectPath)!,
-                arguments,
-                request.EnvironmentVariables,
-                TimeSpan.FromMinutes(2));
-            if (process.ExitCode != 0 || process.TimedOut || !File.Exists(outputPath))
-                return false;
-
-            var resolved = new HashSet<string>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-            bool inComment = false;
-            bool describesImport = false;
-            foreach (string line in File.ReadLines(outputPath))
-            {
-                if (line.Contains("<!--", StringComparison.Ordinal))
-                {
-                    inComment = true;
-                    describesImport = false;
-                }
-                if (inComment && line.Contains("<Import", StringComparison.Ordinal))
-                    describesImport = true;
-                if (inComment && describesImport)
-                {
-                    string candidate = line.Trim();
-                    if (Path.IsPathRooted(candidate) && File.Exists(candidate))
-                        resolved.Add(Path.GetFullPath(candidate));
-                }
-                if (line.Contains("-->", StringComparison.Ordinal))
-                {
-                    inComment = false;
-                    describesImport = false;
-                }
-            }
-            imports = resolved.ToArray();
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            try
-            {
-                if (File.Exists(outputPath))
-                    File.Delete(outputPath);
-            }
-            catch
-            {
-                // The provenance result already fails closed if preprocessing did not complete.
-            }
         }
     }
 

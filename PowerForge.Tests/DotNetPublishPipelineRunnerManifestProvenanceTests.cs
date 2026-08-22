@@ -9,7 +9,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
+public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
     public void EnumerateBundleSourceInputs_IncludesFileValuedScriptArguments()
@@ -1391,7 +1391,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void ReadSourceProvenance_DoesNotBuildProjectReferenceOutputsDuringEvaluation()
+    public void ReadSourceProvenance_DoesNotBuildProjectReferenceOutputsAndFailsClosedWithoutBuildEvidence()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -1461,8 +1461,11 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                     buildConfiguration: "Release",
                     buildPlan: plan);
 
-            Assert.False(provenance.Dirty);
+            Assert.True(provenance.Dirty);
             Assert.Empty(provenance.DirtyPaths);
+            Assert.Contains(
+                provenance.DirtyReasons,
+                reason => reason.Contains("Generator.dll", StringComparison.OrdinalIgnoreCase));
             Assert.Equal("stale generated library", File.ReadAllText(libraryOutput));
             Assert.Equal("stale generated analyzer", File.ReadAllText(generatorOutput));
         }
@@ -1623,7 +1626,11 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(projectPath, """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-                  <ItemGroup><Analyzer Include="../../tools/Rules.dll" /></ItemGroup>
+                  <ItemGroup>
+                    <Analyzer Include="../../tools/Rules.dll">
+                      <MSBuildSourceProjectFile>../Generator/Generator.csproj</MSBuildSourceProjectFile>
+                    </Analyzer>
+                  </ItemGroup>
                 </Project>
                 """);
             File.WriteAllBytes(analyzerPath, [0x01, 0x02, 0x03]);
@@ -2440,9 +2447,12 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             CreateNoWindow = true
         });
         Assert.NotNull(process);
-        string output = process!.StandardOutput.ReadToEnd();
-        string error = process.StandardError.ReadToEnd();
+        Task<string> outputTask = process!.StandardOutput.ReadToEndAsync();
+        Task<string> errorTask = process.StandardError.ReadToEndAsync();
         Assert.True(process.WaitForExit(120000), $"dotnet {arguments} timed out");
+        Task.WhenAll(outputTask, errorTask).GetAwaiter().GetResult();
+        string output = outputTask.GetAwaiter().GetResult();
+        string error = errorTask.GetAwaiter().GetResult();
         Assert.True(process.ExitCode == 0, $"dotnet {arguments} failed: {output}{error}");
     }
 

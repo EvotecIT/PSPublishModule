@@ -634,43 +634,25 @@ public sealed partial class DotNetPublishPipelineRunner
             p);
         if (timeout.HasValue && timeout.Value > TimeSpan.Zero && timeout.Value != Timeout.InfiniteTimeSpan)
         {
-            var stdoutBuilder = new StringBuilder();
-            var stderrBuilder = new StringBuilder();
-            using var stdoutDone = new ManualResetEventSlim(false);
-            using var stderrDone = new ManualResetEventSlim(false);
-            p.OutputDataReceived += (_, e) =>
-            {
-                if (e.Data is null)
-                    stdoutDone.Set();
-                else
-                    stdoutBuilder.AppendLine(e.Data);
-            };
-            p.ErrorDataReceived += (_, e) =>
-            {
-                if (e.Data is null)
-                    stderrDone.Set();
-                else
-                    stderrBuilder.AppendLine(e.Data);
-            };
-            p.BeginOutputReadLine();
-            p.BeginErrorReadLine();
+            var stdoutCapture = new RedirectedOutputCapture();
+            var stderrCapture = new RedirectedOutputCapture();
+            Task stdoutRead = ReadRedirectedOutputAsync(p.StandardOutput, stdoutCapture);
+            Task stderrRead = ReadRedirectedOutputAsync(p.StandardError, stderrCapture);
 
             var timeoutMs = ToTimeoutMilliseconds(timeout.Value);
-            if (!p.WaitForExit(timeoutMs))
-            {
+            bool exited = p.WaitForExit(timeoutMs);
+            if (!exited)
                 TryKillProcessTree(p);
-                var timeoutMessage = $"Process timed out after {Math.Ceiling(timeout.Value.TotalSeconds)} second(s).";
-                if (stderrBuilder.Length > 0)
-                    stderrBuilder.AppendLine();
-                stderrBuilder.Append(timeoutMessage);
-                return (-1, stdoutBuilder.ToString(), stderrBuilder.ToString(), true);
-            }
 
-            p.WaitForExit();
-            stdoutDone.Wait(TimeSpan.FromSeconds(5));
-            stderrDone.Wait(TimeSpan.FromSeconds(5));
+            DrainRedirectedOutputReads(p, stdoutRead, stderrRead, TimeSpan.FromMilliseconds(500));
+            string timedStdout = stdoutCapture.Snapshot();
+            string timedStderr = stderrCapture.Snapshot();
+            if (!exited)
+                timedStderr = AppendProcessTimeoutMessage(timedStderr, timeout.Value);
             cancellationToken.ThrowIfCancellationRequested();
-            return (p.ExitCode, stdoutBuilder.ToString(), stderrBuilder.ToString(), false);
+            return exited
+                ? (p.ExitCode, timedStdout, timedStderr, false)
+                : (-1, timedStdout, timedStderr, true);
         }
 
         var stdout = p.StandardOutput.ReadToEnd();
@@ -678,6 +660,14 @@ public sealed partial class DotNetPublishPipelineRunner
         p.WaitForExit();
         cancellationToken.ThrowIfCancellationRequested();
         return (p.ExitCode, stdout, stderr, false);
+    }
+
+    private static string AppendProcessTimeoutMessage(string stderr, TimeSpan timeout)
+    {
+        string timeoutMessage = $"Process timed out after {Math.Ceiling(timeout.TotalSeconds)} second(s).";
+        return string.IsNullOrEmpty(stderr)
+            ? timeoutMessage
+            : stderr.TrimEnd() + Environment.NewLine + timeoutMessage;
     }
 
     private static int ToTimeoutMilliseconds(TimeSpan timeout)
