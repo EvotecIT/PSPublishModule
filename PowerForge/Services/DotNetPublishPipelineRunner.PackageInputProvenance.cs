@@ -333,9 +333,11 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool TryReadPreprocessedProjectImports(
         ProjectEvaluationRequest request,
-        out string[] imports)
+        out string[] imports,
+        out PreprocessedProjectReferenceDeclaration[] projectReferenceDeclarations)
     {
         imports = Array.Empty<string>();
+        projectReferenceDeclarations = Array.Empty<PreprocessedProjectReferenceDeclaration>();
         string outputPath = Path.Combine(
             Path.GetTempPath(),
             "powerforge-msbuild-imports-" + Guid.NewGuid().ToString("N") + ".xml");
@@ -400,6 +402,47 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
             }
             imports = resolved.ToArray();
+
+            XDocument document = XDocument.Load(outputPath, LoadOptions.PreserveWhitespace);
+            if (document.Root is null)
+                return false;
+
+            var declarationSources = new Stack<string>();
+            declarationSources.Push(Path.GetFullPath(request.ProjectPath));
+            var declarations = new List<PreprocessedProjectReferenceDeclaration>();
+            foreach (XNode node in document.Root.DescendantNodes())
+            {
+                if (node is XComment comment)
+                {
+                    if (comment.Value.Contains("</Import>", StringComparison.Ordinal))
+                    {
+                        if (declarationSources.Count > 1)
+                            declarationSources.Pop();
+                        continue;
+                    }
+
+                    if (comment.Value.Contains("<Import", StringComparison.Ordinal) &&
+                        TryReadPreprocessedImportPath(comment.Value, out string? importedPath))
+                    {
+                        declarationSources.Push(importedPath!);
+                    }
+                    continue;
+                }
+
+                if (node is XElement element &&
+                    element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase) &&
+                    (element.Parent?.Name.LocalName.Equals("ItemGroup", StringComparison.OrdinalIgnoreCase) == true ||
+                     element.Parent?.Name.LocalName.Equals("ItemDefinitionGroup", StringComparison.OrdinalIgnoreCase) == true) &&
+                    !element.Ancestors().Any(ancestor =>
+                        ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)))
+                {
+                    declarations.Add(new PreprocessedProjectReferenceDeclaration(
+                        element,
+                        declarationSources.Peek()));
+                }
+            }
+
+            projectReferenceDeclarations = declarations.ToArray();
             return true;
         }
         catch
@@ -418,6 +461,19 @@ public sealed partial class DotNetPublishPipelineRunner
                 // The provenance result already fails closed if preprocessing did not complete.
             }
         }
+    }
+
+    private static bool TryReadPreprocessedImportPath(string comment, out string? importPath)
+    {
+        importPath = comment
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .FirstOrDefault(candidate => Path.IsPathRooted(candidate) && File.Exists(candidate));
+        if (importPath is null)
+            return false;
+
+        importPath = Path.GetFullPath(importPath);
+        return true;
     }
 
     private sealed class VerifiedPackageInputCatalog

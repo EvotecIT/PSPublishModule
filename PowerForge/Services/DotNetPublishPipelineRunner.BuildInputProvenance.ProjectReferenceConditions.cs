@@ -180,6 +180,44 @@ public sealed partial class DotNetPublishPipelineRunner
         return false;
     }
 
+    private static bool IsDefinitelyActiveMsBuildElement(
+        XElement element,
+        IReadOnlyDictionary<string, string> evaluatedProperties)
+    {
+        foreach (XAttribute condition in element.AncestorsAndSelf()
+                     .Select(candidate => candidate.Attribute("Condition"))
+                     .OfType<XAttribute>())
+        {
+            if (!TryEvaluateSimpleMsBuildCondition(condition.Value, evaluatedProperties, out bool active) ||
+                !active)
+            {
+                return false;
+            }
+        }
+
+        foreach (XElement branch in element.AncestorsAndSelf()
+                     .Where(candidate =>
+                         candidate.Name.LocalName.Equals("When", StringComparison.OrdinalIgnoreCase) ||
+                         candidate.Name.LocalName.Equals("Otherwise", StringComparison.OrdinalIgnoreCase)))
+        {
+            foreach (string whenCondition in branch.ElementsBeforeSelf()
+                         .Where(candidate => candidate.Name.LocalName.Equals(
+                             "When",
+                             StringComparison.OrdinalIgnoreCase))
+                         .Select(candidate => candidate.Attribute("Condition")?.Value)
+                         .Where(value => !string.IsNullOrWhiteSpace(value))!)
+            {
+                if (!TryEvaluateSimpleMsBuildCondition(whenCondition, evaluatedProperties, out bool selected) ||
+                    selected)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     private static bool TryEvaluateSimpleMsBuildCondition(
         string condition,
         IReadOnlyDictionary<string, string> evaluatedProperties,

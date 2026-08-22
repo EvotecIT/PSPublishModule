@@ -598,6 +598,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var importPaths = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            PreprocessedProjectReferenceDeclaration[] projectReferenceDeclarations =
+                Array.Empty<PreprocessedProjectReferenceDeclaration>();
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
                 AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
@@ -641,7 +643,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     "MSBuildAllProjects",
                     Path.GetDirectoryName(request.ProjectPath)!,
                     importPaths);
-                if (!TryReadPreprocessedProjectImports(request, out string[] preprocessedImports))
+                if (!TryReadPreprocessedProjectImports(
+                        request,
+                        out string[] preprocessedImports,
+                        out projectReferenceDeclarations))
                     return false;
                 importPaths.UnionWith(preprocessedImports);
                 importPaths.UnionWith(ReadDeclaredBuildInputCandidates(
@@ -717,6 +722,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                         item,
                                         request.ProjectPath,
                                         importPaths,
+                                        projectReferenceDeclarations,
                                         evaluatedProjectReferenceConditionProperties,
                                         taskWideProjectReferencePropertyRemovals,
                                         out EvaluatedProjectReference[] itemReferences) ||
@@ -739,6 +745,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                          msBuildSdksPath,
                                          request.ProjectPath,
                                          importPaths,
+                                         projectReferenceDeclarations,
                                          evaluatedProjectReferenceConditionProperties,
                                          embeddedResourceProjectReferences,
                                          analyzerProjectReferences,
@@ -778,6 +785,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         resolvedItems,
                         request.ProjectPath,
                         importPaths,
+                        projectReferenceDeclarations,
                         evaluatedProjectReferenceConditionProperties,
                         taskWideProjectReferencePropertyRemovals,
                         out EvaluatedProjectReference[] resolvedReferences))

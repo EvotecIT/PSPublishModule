@@ -45,6 +45,7 @@ public sealed partial class DotNetPublishPipelineRunner
         JsonElement item,
         string declaringProjectPath,
         IReadOnlyCollection<string> propertyDefinitionPaths,
+        IReadOnlyList<PreprocessedProjectReferenceDeclaration> projectReferenceDeclarations,
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
         out EvaluatedProjectReference[] references)
@@ -53,6 +54,7 @@ public sealed partial class DotNetPublishPipelineRunner
             declaringProjectPath,
             "FullPath",
             propertyDefinitionPaths,
+            projectReferenceDeclarations,
             evaluatedConditionProperties,
             taskWidePropertyRemovals,
             out references);
@@ -62,6 +64,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string declaringProjectPath,
         string projectPathMetadataName,
         IReadOnlyCollection<string> propertyDefinitionPaths,
+        IReadOnlyList<PreprocessedProjectReferenceDeclaration> projectReferenceDeclarations,
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
         out EvaluatedProjectReference[] references)
@@ -88,6 +91,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     declaringProjectPath,
                     projectPathMetadataName,
                     propertyDefinitionPaths,
+                    projectReferenceDeclarations,
                     evaluatedConditionProperties,
                     "Properties",
                     projectProperties,
@@ -106,6 +110,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         declaringProjectPath,
                         projectPathMetadataName,
                         propertyDefinitionPaths,
+                        projectReferenceDeclarations,
                         evaluatedConditionProperties,
                         metadataName,
                         ReadItemText(item, metadataName),
@@ -122,6 +127,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 declaringProjectPath,
                 projectPathMetadataName,
                 propertyDefinitionPaths,
+                projectReferenceDeclarations,
                 evaluatedConditionProperties,
                 "AdditionalProperties",
                 ReadItemText(item, "AdditionalProperties"),
@@ -155,6 +161,7 @@ public sealed partial class DotNetPublishPipelineRunner
         JsonElement items,
         string declaringProjectPath,
         IReadOnlyCollection<string> propertyDefinitionPaths,
+        IReadOnlyList<PreprocessedProjectReferenceDeclaration> projectReferenceDeclarations,
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
         out EvaluatedProjectReference[] references)
@@ -175,6 +182,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     item,
                     declaringProjectPath,
                     propertyDefinitionPaths,
+                    projectReferenceDeclarations,
                     evaluatedConditionProperties,
                     taskWidePropertyRemovals,
                     out EvaluatedProjectReference[] itemReferences))
@@ -291,6 +299,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? msBuildSdksPath,
         string declaringProjectPath,
         IReadOnlyCollection<string> propertyDefinitionPaths,
+        IReadOnlyList<PreprocessedProjectReferenceDeclaration> projectReferenceDeclarations,
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         HashSet<string> embeddedResourceProjectReferences,
         HashSet<string> analyzerProjectReferences,
@@ -327,6 +336,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 declaringProjectPath,
                 "MSBuildSourceProjectFile",
                 propertyDefinitionPaths,
+                projectReferenceDeclarations,
                 evaluatedConditionProperties,
                 taskWidePropertyRemovals,
                 out EvaluatedProjectReference[] projectReferences) ||
