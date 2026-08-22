@@ -16,6 +16,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         string metadataName,
         string? assignments,
+        bool preferEffectiveLiteralAssignments,
         out List<Dictionary<string, string>> results)
     {
         results = new List<Dictionary<string, string>>();
@@ -26,7 +27,7 @@ public sealed partial class DotNetPublishPipelineRunner
             return true;
         }
 
-        if (!TryReadLiteralProjectReferencePropertyTables(
+        bool readLiteralTables = TryReadLiteralProjectReferencePropertyTables(
                 item,
                 declaringProjectPath,
                 projectPathMetadataName,
@@ -34,8 +35,20 @@ public sealed partial class DotNetPublishPipelineRunner
                 evaluatedConditionProperties,
                 metadataName,
                 assignments!,
-                out Dictionary<string, string>[] overlays) &&
-            !TryReadProjectReferencePropertyTables(assignments!, out overlays))
+                preferEffectiveLiteralAssignments,
+                out Dictionary<string, string>[] overlays,
+                out bool hadEffectiveAssignments);
+        if (!readLiteralTables &&
+            preferEffectiveLiteralAssignments &&
+            !hadEffectiveAssignments)
+        {
+            results.AddRange(propertyContexts.Select(context =>
+                new Dictionary<string, string>(context, StringComparer.OrdinalIgnoreCase)));
+            return true;
+        }
+        if (!readLiteralTables &&
+            (preferEffectiveLiteralAssignments ||
+             !TryReadProjectReferencePropertyTables(assignments!, out overlays)))
         {
             return false;
         }
@@ -66,9 +79,12 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         string metadataName,
         string evaluatedAssignments,
-        out Dictionary<string, string>[] tables)
+        bool preferEffectiveLiteralAssignments,
+        out Dictionary<string, string>[] tables,
+        out bool hadEffectiveAssignments)
     {
         tables = Array.Empty<Dictionary<string, string>>();
+        hadEffectiveAssignments = false;
         string? referencedProject = ReadItemText(item, projectPathMetadataName);
         if (string.IsNullOrWhiteSpace(referencedProject))
         {
@@ -80,6 +96,12 @@ public sealed partial class DotNetPublishPipelineRunner
             string referencedPath = Path.GetFullPath(referencedProject!);
             var results = new List<Dictionary<string, string>>();
             var keys = new HashSet<string>(StringComparer.Ordinal);
+            bool hasPostResolveAssignments = HasPostResolveProjectReferenceMetadataAssignment(
+                declaringProjectPath,
+                referencedPath,
+                projectReferenceDeclarations,
+                evaluatedConditionProperties,
+                metadataName);
             LiteralProjectReferenceMetadataAssignment[] effectiveAssignments =
                 ReadEffectiveLiteralProjectReferenceMetadataAssignments(
                     declaringProjectPath,
@@ -104,6 +126,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 AddLiteralPropertyTables(effectiveAssignments);
             }
 
+            hadEffectiveAssignments = effectiveAssignments.Length > 0;
             tables = results.ToArray();
             return tables.Length > 0;
 
@@ -114,14 +137,26 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     foreach (string candidateAssignments in ReadLiteralProjectReferencePropertyAssignmentCandidates(
                                  assignment.PropertyDefinitions,
+                                 assignment.InitialProperties,
                                  assignment.ConditionProperties,
                                  assignment.DefiningProjectPath,
                                  assignment.Value))
                     {
-                        if (!TryReadLiteralProjectReferencePropertyTable(
+                        bool parsed = preferEffectiveLiteralAssignments
+                            ? candidateAssignments.IndexOf("$(", StringComparison.Ordinal) >= 0 &&
+                              !hasPostResolveAssignments
+                                ? TryReadLiteralProjectReferencePropertyTable(
+                                    candidateAssignments,
+                                    evaluatedAssignments,
+                                    out Dictionary<string, string>? table)
+                                : TryReadDeclaredProjectReferencePropertyTable(
+                                    candidateAssignments,
+                                    out table)
+                            : TryReadLiteralProjectReferencePropertyTable(
                                 candidateAssignments,
                                 evaluatedAssignments,
-                                out Dictionary<string, string>? table))
+                                out table);
+                        if (!parsed)
                         {
                             continue;
                         }
@@ -138,8 +173,47 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    private static bool HasPostResolveProjectReferenceMetadataAssignment(
+        string declaringProjectPath,
+        string referencedPath,
+        IReadOnlyList<PreprocessedProjectReferenceDeclaration> declarations,
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
+        string metadataName)
+    {
+        foreach (PreprocessedProjectReferenceDeclaration declaration in declarations.Where(declaration =>
+                     declaration.IsTargetTime && !declaration.RunsBeforeResolveReferences))
+        {
+            IReadOnlyDictionary<string, string> conditionProperties = BuildTargetTimeConditionProperties(
+                evaluatedConditionProperties,
+                declaration.RuntimePropertyDefinitions);
+            if (IsDefinitelyInactiveMsBuildElement(
+                    declaration.Element,
+                    conditionProperties,
+                    declaration.DefiningProjectPath) ||
+                !DoesProjectReferenceDeclarationMatch(
+                    declaringProjectPath,
+                    referencedPath,
+                    declaration,
+                    conditionProperties))
+            {
+                continue;
+            }
+
+            if (ReadActiveLiteralProjectReferenceMetadataAssignments(
+                    declaration,
+                    conditionProperties,
+                    metadataName).Count > 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static string[] ReadLiteralProjectReferencePropertyAssignmentCandidates(
         IReadOnlyList<PreprocessedProjectPropertyDefinition> propertyDefinitions,
+        IReadOnlyDictionary<string, string> initialProperties,
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         string metadataDefinitionPath,
         string? rawAssignments)
@@ -168,6 +242,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 values = ReadLiteralMsBuildPropertyDefinitions(
                         propertyDefinitions,
+                        initialProperties,
                         evaluatedConditionProperties,
                         propertyName!)
                     .Concat(evaluatedConditionProperties.TryGetValue(propertyName!, out string? evaluatedValue)
@@ -196,93 +271,6 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool IsSafeEvaluatedProjectReferencePropertyExpansion(string value)
         => value.IndexOf(';') < 0 && value.IndexOf('=') < 0;
-
-    private static string[] ReadLiteralMsBuildPropertyDefinitions(
-        IReadOnlyList<PreprocessedProjectPropertyDefinition> propertyDefinitions,
-        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
-        string propertyName)
-    {
-        var values = new List<string>();
-        foreach (PreprocessedProjectPropertyDefinition definition in propertyDefinitions.Where(definition =>
-                     definition.Element.Name.LocalName.Equals(propertyName, StringComparison.OrdinalIgnoreCase)))
-        {
-            if (IsDefinitelyInactiveMsBuildElement(
-                    definition.Element,
-                    evaluatedConditionProperties,
-                    definition.DefiningProjectPath))
-                continue;
-
-            string value = ExpandMsBuildThisFileProperties(
-                definition.Element.Value,
-                definition.DefiningProjectPath);
-            if (IsDefinitelyActiveMsBuildElement(
-                    definition.Element,
-                    evaluatedConditionProperties,
-                    definition.DefiningProjectPath))
-            {
-                values.Clear();
-                values.Add(value);
-            }
-            else if (!values.Contains(value, StringComparer.Ordinal))
-            {
-                values.Add(value);
-            }
-        }
-
-        return values.Distinct(StringComparer.Ordinal).ToArray();
-    }
-
-    private static string ExpandMsBuildThisFileProperties(string value, string definingProjectPath)
-    {
-        string fullPath = Path.GetFullPath(definingProjectPath);
-        string directory = Path.GetDirectoryName(fullPath)! + Path.DirectorySeparatorChar;
-        string root = Path.GetPathRoot(directory) ?? string.Empty;
-        var replacements = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["MSBuildThisFileFullPath"] = fullPath,
-            ["MSBuildThisFileDirectory"] = directory,
-            ["MSBuildThisFileDirectoryNoRoot"] = directory.Substring(root.Length),
-            ["MSBuildThisFile"] = Path.GetFileName(fullPath),
-            ["MSBuildThisFileName"] = Path.GetFileNameWithoutExtension(fullPath),
-            ["MSBuildThisFileExtension"] = Path.GetExtension(fullPath)
-        };
-        foreach (KeyValuePair<string, string> replacement in replacements)
-        {
-            value = ReplaceOrdinalIgnoreCase(
-                value,
-                "$(" + replacement.Key + ")",
-                replacement.Value);
-        }
-        return value;
-    }
-
-    private static bool TryFindSimpleMsBuildPropertyExpression(
-        string value,
-        out int expressionStart,
-        out int expressionLength,
-        out string? propertyName)
-    {
-        expressionStart = value.IndexOf("$(", StringComparison.Ordinal);
-        expressionLength = 0;
-        propertyName = null;
-        if (expressionStart < 0)
-            return false;
-
-        int expressionEnd = value.IndexOf(')', expressionStart + 2);
-        if (expressionEnd < 0)
-            return false;
-
-        string candidate = value.Substring(expressionStart + 2, expressionEnd - expressionStart - 2).Trim();
-        if (candidate.Length == 0 ||
-            candidate.IndexOfAny(new[] { '$', '(', ')', ';', '=' }) >= 0)
-        {
-            return false;
-        }
-
-        propertyName = candidate;
-        expressionLength = expressionEnd - expressionStart + 1;
-        return true;
-    }
 
     private static bool TryResolveLiteralProjectReferencePath(
         string definingDirectory,
@@ -339,6 +327,22 @@ public sealed partial class DotNetPublishPipelineRunner
                 decodedAssignments!.Trim(),
                 evaluatedAssignments.Trim(),
                 StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return TryReadDeclaredProjectReferencePropertyTable(rawAssignments, out table);
+    }
+
+    private static bool TryReadDeclaredProjectReferencePropertyTable(
+        string? rawAssignments,
+        out Dictionary<string, string>? table)
+    {
+        table = null;
+        if (string.IsNullOrEmpty(rawAssignments) ||
+            rawAssignments!.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+            rawAssignments.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+            rawAssignments.IndexOf("%(", StringComparison.Ordinal) >= 0)
         {
             return false;
         }

@@ -90,7 +90,7 @@ public sealed partial class DotNetPublishPipelineRunner
             ScheduledProjectReferenceTargetGraph scheduledTargets = hasTargetTimeProjectReferences
                 ? ReadScheduledProjectReferenceTargets(request, document)
                 : ScheduledProjectReferenceTargetGraph.Empty;
-            IReadOnlyDictionary<string, string[]> evaluatedItemLists =
+            IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItemLists =
                 ReadEvaluatedProjectItemPaths(
                     request,
                     ReadProjectReferenceItemListNames(document));
@@ -184,6 +184,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
             }
 
+            IReadOnlyDictionary<string, string> initialProperties =
+                BuildInitialProjectReferenceProperties(request);
+
             projectReferenceDeclarations = declarationElements
                 .Select(declaration =>
                 {
@@ -204,6 +207,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         declaration.DefiningProjectPath,
                         propertyDefinitions.Concat(runtimePropertyDefinitions).ToArray(),
                         runtimePropertyDefinitions,
+                        initialProperties,
                         evaluatedItemLists,
                         declaration.IsTargetTime,
                         declaration.RunsBeforeResolveReferences);
@@ -267,12 +271,14 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         var propertyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string expression in effectiveTargets.Values.SelectMany(target => new[]
-                 {
-                     target.Attribute("DependsOnTargets")?.Value,
-                     target.Attribute("BeforeTargets")?.Value,
-                     target.Attribute("AfterTargets")?.Value
-                 }).Where(value => !string.IsNullOrWhiteSpace(value))!)
+        IEnumerable<string?> targetExpressions = effectiveTargets.Values.SelectMany(target => new[]
+            {
+                target.Attribute("DependsOnTargets")?.Value,
+                target.Attribute("BeforeTargets")?.Value,
+                target.Attribute("AfterTargets")?.Value
+            })
+            .Append(document.Root?.Attribute("InitialTargets")?.Value);
+        foreach (string expression in targetExpressions.Where(value => !string.IsNullOrWhiteSpace(value))!)
         {
             AddConditionPropertyNames(expression, propertyNames);
         }
@@ -310,14 +316,33 @@ public sealed partial class DotNetPublishPipelineRunner
             return ScheduledProjectReferenceTargetGraph.Empty;
 
         var executionOrder = new List<XElement>();
+        var visiting = new HashSet<XElement>();
+        var executed = new HashSet<XElement>();
+        foreach (string initialTargetName in ReadExpandedMsBuildTargetList(
+                     document.Root?.Attribute("InitialTargets")?.Value,
+                     evaluatedProperties))
+        {
+            if (effectiveTargets.TryGetValue(initialTargetName, out XElement? initialTarget))
+            {
+                AddTargetExecutionOrder(
+                    initialTarget,
+                    effectiveTargets,
+                    beforeTargets,
+                    afterTargets,
+                    evaluatedProperties,
+                    visiting,
+                    executed,
+                    executionOrder);
+            }
+        }
         AddTargetExecutionOrder(
             resolveReferences,
             effectiveTargets,
             beforeTargets,
             afterTargets,
             evaluatedProperties,
-            new HashSet<XElement>(),
-            new HashSet<XElement>(),
+            visiting,
+            executed,
             executionOrder);
         int resolveReferencesIndex = executionOrder.IndexOf(resolveReferences);
         return resolveReferencesIndex < 0

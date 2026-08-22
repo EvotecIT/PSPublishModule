@@ -6,6 +6,19 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    private sealed class EvaluatedProjectItem
+    {
+        internal EvaluatedProjectItem(string fullPath, IReadOnlyDictionary<string, string> metadata)
+        {
+            FullPath = fullPath;
+            Metadata = metadata;
+        }
+
+        internal string FullPath { get; }
+
+        internal IReadOnlyDictionary<string, string> Metadata { get; }
+    }
+
     private static string[] ReadProjectReferenceItemListNames(XDocument document)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -21,7 +34,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             foreach (Match match in Regex.Matches(
                          itemSpec,
-                         @"@\(([A-Za-z_][A-Za-z0-9_.-]*)\)",
+                         @"@\(\s*([A-Za-z_][A-Za-z0-9_.-]*?)(?=\s*(?:->|,|\)))",
                          RegexOptions.CultureInvariant))
             {
                 names.Add(match.Groups[1].Value);
@@ -30,12 +43,12 @@ public sealed partial class DotNetPublishPipelineRunner
         return names.ToArray();
     }
 
-    private static IReadOnlyDictionary<string, string[]> ReadEvaluatedProjectItemPaths(
+    private static IReadOnlyDictionary<string, EvaluatedProjectItem[]> ReadEvaluatedProjectItemPaths(
         ProjectEvaluationRequest request,
         IReadOnlyCollection<string> itemNames)
     {
         if (itemNames.Count == 0)
-            return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            return new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
 
         var arguments = new List<string>
         {
@@ -73,20 +86,20 @@ public sealed partial class DotNetPublishPipelineRunner
                 request.EnvironmentVariables,
                 TimeSpan.FromMinutes(2));
             if (process.ExitCode != 0 || process.TimedOut)
-                return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+                return new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
 
             int jsonStart = process.StdOut.IndexOf('{');
             int jsonEnd = process.StdOut.LastIndexOf('}');
             if (jsonStart < 0 || jsonEnd < jsonStart)
-                return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+                return new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
 
             using JsonDocument document = JsonDocument.Parse(
                 process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
             if (!document.RootElement.TryGetProperty("Items", out JsonElement items))
-                return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+                return new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
 
             string projectDirectory = Path.GetDirectoryName(request.ProjectPath)!;
-            var results = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            var results = new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
             foreach (string itemName in itemNames)
             {
                 if (!items.TryGetProperty(itemName, out JsonElement values) ||
@@ -96,19 +109,41 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
 
                 results[itemName] = values.EnumerateArray()
-                    .Select(value => ReadItemText(value, "FullPath") ?? ReadItemText(value, "Identity"))
-                    .Where(value => !string.IsNullOrWhiteSpace(value))
-                    .Select(value => Path.GetFullPath(Path.IsPathRooted(value!)
-                        ? value!
-                        : Path.Combine(projectDirectory, value!)))
-                    .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                    .Select(value => ReadEvaluatedProjectItem(value, projectDirectory))
+                    .OfType<EvaluatedProjectItem>()
+                    .GroupBy(
+                        item => item.FullPath,
+                        IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                    .Select(group => group.First())
                     .ToArray();
             }
             return results;
         }
         catch
         {
-            return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            return new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
         }
+    }
+
+    private static EvaluatedProjectItem? ReadEvaluatedProjectItem(
+        JsonElement item,
+        string projectDirectory)
+    {
+        string? path = ReadItemText(item, "FullPath") ?? ReadItemText(item, "Identity");
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        string fullPath = Path.GetFullPath(Path.IsPathRooted(path!)
+            ? path!
+            : Path.Combine(projectDirectory, path!));
+        var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (JsonProperty property in item.EnumerateObject())
+        {
+            string? value = ReadItemText(item, property.Name);
+            if (value is not null)
+                metadata[property.Name] = value;
+        }
+        metadata["FullPath"] = fullPath;
+        return new EvaluatedProjectItem(fullPath, metadata);
     }
 }

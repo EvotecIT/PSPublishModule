@@ -26,7 +26,8 @@ public sealed partial class DotNetPublishPipelineRunner
             string definingProjectPath,
             IReadOnlyList<PreprocessedProjectPropertyDefinition> propertyDefinitions,
             IReadOnlyList<PreprocessedProjectPropertyDefinition> runtimePropertyDefinitions,
-            IReadOnlyDictionary<string, string[]> evaluatedItemLists,
+            IReadOnlyDictionary<string, string> initialProperties,
+            IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItemLists,
             bool isTargetTime,
             bool runsBeforeResolveReferences)
         {
@@ -34,6 +35,7 @@ public sealed partial class DotNetPublishPipelineRunner
             DefiningProjectPath = definingProjectPath;
             PropertyDefinitions = propertyDefinitions;
             RuntimePropertyDefinitions = runtimePropertyDefinitions;
+            InitialProperties = initialProperties;
             EvaluatedItemLists = evaluatedItemLists;
             IsTargetTime = isTargetTime;
             RunsBeforeResolveReferences = runsBeforeResolveReferences;
@@ -47,7 +49,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
         internal IReadOnlyList<PreprocessedProjectPropertyDefinition> RuntimePropertyDefinitions { get; }
 
-        internal IReadOnlyDictionary<string, string[]> EvaluatedItemLists { get; }
+        internal IReadOnlyDictionary<string, string> InitialProperties { get; }
+
+        internal IReadOnlyDictionary<string, EvaluatedProjectItem[]> EvaluatedItemLists { get; }
 
         internal bool IsTargetTime { get; }
 
@@ -64,6 +68,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Value = value;
             DefiningProjectPath = declaration.DefiningProjectPath;
             PropertyDefinitions = declaration.PropertyDefinitions;
+            InitialProperties = declaration.InitialProperties;
             ConditionProperties = conditionProperties;
         }
 
@@ -72,6 +77,8 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string DefiningProjectPath { get; }
 
         internal IReadOnlyList<PreprocessedProjectPropertyDefinition> PropertyDefinitions { get; }
+
+        internal IReadOnlyDictionary<string, string> InitialProperties { get; }
 
         internal IReadOnlyDictionary<string, string> ConditionProperties { get; }
     }
@@ -264,9 +271,10 @@ public sealed partial class DotNetPublishPipelineRunner
         string itemSpec)
     {
         string[] candidates = IsComputedProjectReferenceItemSpec(itemSpec)
-            ? ReadLiteralProjectReferencePropertyAssignmentCandidates(
-                declaration.PropertyDefinitions,
-                evaluatedConditionProperties,
+             ? ReadLiteralProjectReferencePropertyAssignmentCandidates(
+                 declaration.PropertyDefinitions,
+                 declaration.InitialProperties,
+                 evaluatedConditionProperties,
                 declaration.DefiningProjectPath,
                 itemSpec)
             : [itemSpec];
@@ -310,16 +318,54 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static IEnumerable<string> ExpandEvaluatedProjectItemList(
         string itemSpec,
-        IReadOnlyDictionary<string, string[]> evaluatedItemLists)
+        IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItemLists)
     {
         Match itemList = Regex.Match(
             itemSpec.Trim(),
-            @"^@\(([A-Za-z_][A-Za-z0-9_.-]*)\)$",
-            RegexOptions.CultureInvariant);
-        return itemList.Success &&
-               evaluatedItemLists.TryGetValue(itemList.Groups[1].Value, out string[]? paths)
-            ? paths
-            : new[] { itemSpec };
+            @"^@\(\s*(?<name>[A-Za-z_][A-Za-z0-9_.-]*)\s*(?:->\s*(?<quote>['""])(?<transform>.*?)\k<quote>)?\s*(?:,\s*(?<separatorQuote>['""])(?<separator>.*?)\k<separatorQuote>)?\s*\)$",
+            RegexOptions.CultureInvariant | RegexOptions.Singleline);
+        if (!itemList.Success ||
+            !evaluatedItemLists.TryGetValue(
+                itemList.Groups["name"].Value,
+                out EvaluatedProjectItem[]? items))
+        {
+            return new[] { itemSpec };
+        }
+
+        if (!itemList.Groups["transform"].Success)
+            return items.Select(item => item.FullPath).ToArray();
+        if (itemList.Groups["separator"].Success &&
+            (!TryUnescapeMsBuildLiteral(itemList.Groups["separator"].Value, out string? separator) ||
+             !string.Equals(separator, ";", StringComparison.Ordinal)))
+        {
+            return new[] { itemSpec };
+        }
+
+        var expanded = new List<string>();
+        foreach (EvaluatedProjectItem item in items)
+        {
+            string value = Regex.Replace(
+                itemList.Groups["transform"].Value,
+                @"%\((?:(?<item>[A-Za-z_][A-Za-z0-9_.-]*)\.)?(?<metadata>[A-Za-z_][A-Za-z0-9_.-]*)\)",
+                match => (!match.Groups["item"].Success ||
+                          match.Groups["item"].Value.Equals(
+                              itemList.Groups["name"].Value,
+                              StringComparison.OrdinalIgnoreCase)) &&
+                         item.Metadata.TryGetValue(
+                        match.Groups["metadata"].Value,
+                        out string? metadataValue)
+                    ? metadataValue
+                    : match.Value,
+                RegexOptions.CultureInvariant);
+            if (value.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+                value.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+                value.IndexOf("%(", StringComparison.Ordinal) >= 0)
+            {
+                return new[] { itemSpec };
+            }
+            expanded.Add(value);
+        }
+        return expanded;
     }
 
     private static bool TryMatchProjectReferenceGlob(

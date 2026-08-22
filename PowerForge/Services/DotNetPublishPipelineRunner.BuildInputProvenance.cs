@@ -725,6 +725,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                         projectReferenceDeclarations,
                                         evaluatedProjectReferenceConditionProperties,
                                         taskWideProjectReferencePropertyRemovals,
+                                        preferEffectiveLiteralAssignments: projectReferenceDeclarations.Any(
+                                            declaration => declaration.IsTargetTime),
                                         out EvaluatedProjectReference[] itemReferences) ||
                                     itemReferences.Length == 0)
                                 {

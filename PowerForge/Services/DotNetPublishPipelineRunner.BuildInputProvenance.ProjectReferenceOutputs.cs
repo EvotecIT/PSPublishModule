@@ -48,6 +48,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyList<PreprocessedProjectReferenceDeclaration> projectReferenceDeclarations,
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
+        bool preferEffectiveLiteralAssignments,
         out EvaluatedProjectReference[] references)
         => TryReadEvaluatedProjectReferences(
             item,
@@ -57,6 +58,7 @@ public sealed partial class DotNetPublishPipelineRunner
             projectReferenceDeclarations,
             evaluatedConditionProperties,
             taskWidePropertyRemovals,
+            preferEffectiveLiteralAssignments,
             out references);
 
     private static bool TryReadEvaluatedProjectReferences(
@@ -67,6 +69,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyList<PreprocessedProjectReferenceDeclaration> projectReferenceDeclarations,
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
+        bool preferEffectiveLiteralAssignments,
         out EvaluatedProjectReference[] references)
     {
         references = Array.Empty<EvaluatedProjectReference>();
@@ -94,6 +97,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluatedConditionProperties,
                     "Properties",
                     projectProperties,
+                    preferEffectiveLiteralAssignments,
                     out propertyContexts))
             {
                 return false;
@@ -112,6 +116,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         evaluatedConditionProperties,
                         metadataName,
                         ReadItemText(item, metadataName),
+                        preferEffectiveLiteralAssignments,
                         out propertyContexts))
                 {
                     return false;
@@ -128,18 +133,23 @@ public sealed partial class DotNetPublishPipelineRunner
                 evaluatedConditionProperties,
                 "AdditionalProperties",
                 ReadItemText(item, "AdditionalProperties"),
+                preferEffectiveLiteralAssignments,
                 out propertyContexts))
         {
             return false;
         }
 
-        string[] undefineProperties = ReadProjectReferencePropertyNames(
-            ReadItemText(item, "UndefineProperties"),
-            ReadItemText(item, "GlobalPropertiesToRemove"),
-            string.Join(";", taskWidePropertyRemovals));
+        string[] undefineProperties = preferEffectiveLiteralAssignments
+            ? Array.Empty<string>()
+            : ReadProjectReferencePropertyNames(
+                ReadItemText(item, "UndefineProperties"),
+                ReadItemText(item, "GlobalPropertiesToRemove"),
+                string.Join(";", taskWidePropertyRemovals));
 
         string projectPath = Path.GetFullPath(fullPathElement.GetString()!);
-        string? nearestTargetFramework = ReadItemText(item, "NearestTargetFramework");
+        string? nearestTargetFramework = preferEffectiveLiteralAssignments
+            ? null
+            : ReadItemText(item, "NearestTargetFramework");
         references = propertyContexts
             .Select(globalProperties => new EvaluatedProjectReference(
                 projectPath,
@@ -182,62 +192,21 @@ public sealed partial class DotNetPublishPipelineRunner
                     projectReferenceDeclarations,
                     evaluatedConditionProperties,
                     taskWidePropertyRemovals,
+                    preferEffectiveLiteralAssignments: false,
                     out EvaluatedProjectReference[] itemReferences))
             {
                 return false;
             }
 
             foreach (EvaluatedProjectReference itemReference in itemReferences)
+            {
                 resolved[BuildEvaluatedProjectReferenceKey(itemReference)] = itemReference;
+            }
         }
         references = resolved.Values.ToArray();
         // An empty resolved item list is a valid result for a conditional
         // ProjectReference that does not participate in this target framework.
         return true;
-    }
-
-    private static EvaluatedProjectReference[] MergeResolvedProjectReferenceContexts(
-        IEnumerable<EvaluatedProjectReference> rawReferences,
-        IEnumerable<EvaluatedProjectReference> resolvedReferences)
-    {
-        StringComparison comparison = IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        EvaluatedProjectReference[] raw = rawReferences.ToArray();
-        var results = new Dictionary<string, EvaluatedProjectReference>(StringComparer.Ordinal);
-        foreach (EvaluatedProjectReference resolved in resolvedReferences)
-        {
-            EvaluatedProjectReference[] matchingRaw = raw
-                .Where(reference => string.Equals(
-                    Path.GetFullPath(reference.ProjectPath),
-                    Path.GetFullPath(resolved.ProjectPath),
-                    comparison))
-                .ToArray();
-            if (matchingRaw.Length == 0)
-            {
-                results[BuildEvaluatedProjectReferenceKey(resolved)] = resolved;
-                continue;
-            }
-
-            foreach (EvaluatedProjectReference rawReference in matchingRaw)
-            {
-                var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (KeyValuePair<string, string> property in resolved.GlobalProperties)
-                    properties[property.Key] = property.Value;
-                foreach (KeyValuePair<string, string> property in rawReference.GlobalProperties)
-                    properties[property.Key] = property.Value;
-                var merged = new EvaluatedProjectReference(
-                    resolved.ProjectPath,
-                    rawReference.TargetFramework ?? resolved.TargetFramework,
-                    properties,
-                    resolved.UndefineProperties
-                        .Concat(rawReference.UndefineProperties)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToArray());
-                results[BuildEvaluatedProjectReferenceKey(merged)] = merged;
-            }
-        }
-        return results.Values.ToArray();
     }
 
     private static void AppendProjectReferenceKeySegment(StringBuilder key, string value)
@@ -380,6 +349,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 projectReferenceDeclarations,
                 evaluatedConditionProperties,
                 taskWidePropertyRemovals,
+                preferEffectiveLiteralAssignments: false,
                 out EvaluatedProjectReference[] projectReferences) ||
             projectReferences.Length == 0)
         {

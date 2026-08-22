@@ -160,8 +160,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     private static void AssertSelectedInputIsDirty(DotNetPublishPipelineRunner.SourceProvenance provenance)
     {
         Assert.True(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
-        Assert.Contains(
-            provenance.DirtyPaths,
-            path => path.Replace('\\', '/').EndsWith("inputs/Selected.cs", StringComparison.Ordinal));
+        Assert.True(
+            provenance.DirtyPaths.Any(path =>
+                path.Replace('\\', '/').EndsWith("inputs/Selected.cs", StringComparison.Ordinal)),
+            string.Join(Environment.NewLine, provenance.DirtyReasons));
     }
 }
