@@ -8,6 +8,40 @@ namespace PowerForge.Tests;
 public sealed class DotNetRepositoryReleaseServiceVersioningTests
 {
     [Fact]
+    public void Execute_DoesNotResolveAlignedFeedsWhenPlanCoversSelection()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            WritePackableProject(root.FullName, "Suite.Core", "Suite.Core");
+            WritePackableProject(root.FullName, "Suite.Rendering", "Suite.Rendering");
+            var logger = new InfoRecordingLogger();
+
+            var result = new DotNetRepositoryReleaseService(logger).Execute(new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                ExpectedVersion = "1.0.X",
+                AlignPackageVersions = true,
+                UpdateVersions = true,
+                Pack = false,
+                PlannedVersionsByProject = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Suite.Core"] = "1.0.1",
+                    ["Suite.Rendering"] = "1.0.1"
+                }
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.All(result.ResolvedVersionsByProject.Values, version => Assert.Equal("1.0.1", version));
+            Assert.DoesNotContain(logger.InfoMessages, message => message.StartsWith("Aligned ", StringComparison.Ordinal));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Execute_AlignsXPatternProjectsAfterHighestCurrentPackageVersion()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -610,5 +644,18 @@ public sealed class DotNetRepositoryReleaseServiceVersioningTests
             "  </PropertyGroup>",
             "</Project>"
         }));
+    }
+
+    private sealed class InfoRecordingLogger : ILogger
+    {
+        public List<string> InfoMessages { get; } = new();
+
+        public bool IsVerbose => false;
+
+        public void Info(string message) => InfoMessages.Add(message);
+        public void Success(string message) { }
+        public void Warn(string message) { }
+        public void Error(string message) { }
+        public void Verbose(string message) { }
     }
 }

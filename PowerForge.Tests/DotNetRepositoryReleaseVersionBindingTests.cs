@@ -124,6 +124,75 @@ public sealed class DotNetRepositoryReleaseVersionBindingTests
         }
     }
 
+    [Fact]
+    public void Execute_refreshes_inherited_package_versions_after_binding_updates()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-release-binding-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var propsPath = Path.Combine(root.FullName, "Directory.Build.props");
+            File.WriteAllText(propsPath, """
+                <Project>
+                  <PropertyGroup>
+                    <VersionPrefix>1.0.0</VersionPrefix>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var primaryDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Example.Primary"));
+            File.WriteAllText(Path.Combine(primaryDirectory.FullName, "Example.Primary.csproj"), """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <VersionPrefix>1.0.0</VersionPrefix>
+                    <IsPackable>true</IsPackable>
+                  </PropertyGroup>
+                </Project>
+                """);
+            var inheritedDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Example.Inherited"));
+            var inheritedPath = Path.Combine(inheritedDirectory.FullName, "Example.Inherited.csproj");
+            var inheritedSource = """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <IsPackable>true</IsPackable>
+                  </PropertyGroup>
+                </Project>
+                """;
+            File.WriteAllText(inheritedPath, inheritedSource);
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                ExpectedVersionsByProject = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Example.Primary"] = "1.1.0"
+                },
+                UpdateVersions = true,
+                Pack = false,
+                VersionBindings = new[]
+                {
+                    new ProjectVersionBinding
+                    {
+                        Path = "Directory.Build.props",
+                        Project = "Example.Primary",
+                        Pattern = @"(?<=<VersionPrefix>)\d+\.\d+\.\d+(?=</VersionPrefix>)"
+                    }
+                }
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("1.1.0", result.ResolvedVersionsByProject["Example.Primary"]);
+            Assert.Equal("1.1.0", result.ResolvedVersionsByProject["Example.Inherited"]);
+            Assert.Contains("<VersionPrefix>1.1.0</VersionPrefix>", File.ReadAllText(propsPath), StringComparison.Ordinal);
+            Assert.Equal(inheritedSource, File.ReadAllText(inheritedPath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static DotNetRepositoryReleaseResult Execute(DirectoryInfo root, string pattern)
         => new DotNetRepositoryReleaseService(new NullLogger()).Execute(new DotNetRepositoryReleaseSpec
         {

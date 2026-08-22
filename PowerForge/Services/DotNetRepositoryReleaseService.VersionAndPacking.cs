@@ -57,12 +57,6 @@ public sealed partial class DotNetRepositoryReleaseService
                 declaredExactVersion = exact;
         }
 
-        if (spec.WhatIf)
-        {
-            if (!string.IsNullOrWhiteSpace(declaredVersion))
-                return declaredVersion!;
-        }
-
         var projectDirectory = Path.GetDirectoryName(project.CsprojPath) ?? spec.RootPath;
         var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
         var exitCode = RunDotnetMsBuildGetProperty(
@@ -109,7 +103,73 @@ public sealed partial class DotNetRepositoryReleaseService
                     : $"Project version '{declaredVersion}' did not evaluate to a package version.";
         }
 
-        return declaredExactVersion ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(declaredExactVersion))
+            return declaredExactVersion!;
+
+        return spec.WhatIf && !string.IsNullOrWhiteSpace(declaredVersion)
+            ? declaredVersion!
+            : string.Empty;
+    }
+
+    private bool TryRefreshEffectiveVersionsAfterBindings(
+        IReadOnlyList<DotNetRepositoryProjectResult> projects,
+        DotNetRepositoryReleaseResult result,
+        DotNetRepositoryReleaseSpec spec,
+        IReadOnlyList<ProjectVersionBinding>? bindings,
+        out string? error)
+    {
+        error = null;
+        var bindingSources = new HashSet<string>(
+            (bindings ?? Array.Empty<ProjectVersionBinding>())
+                .Where(static binding => binding is not null && !string.IsNullOrWhiteSpace(binding.Project))
+                .Select(static binding => binding.Project.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+        var sourceVersionsBeforeRefresh = result.ResolvedVersionsByProject
+            .Where(pair => bindingSources.Contains(pair.Key))
+            .ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var project in projects)
+        {
+            var effectiveVersion = ResolveCurrentProjectVersion(project, spec, out var warning);
+            if (!string.IsNullOrWhiteSpace(warning))
+                _logger.Warn($"{project.ProjectName}: {warning}");
+            if (string.IsNullOrWhiteSpace(effectiveVersion) ||
+                !PackageVersionUtility.TryNormalizeExact(effectiveVersion, out var normalizedVersion))
+            {
+                project.ErrorMessage = "Unable to re-evaluate the effective package version after applying version bindings.";
+                error = $"{project.ProjectName}: {project.ErrorMessage}";
+                _logger.Warn(error);
+                return false;
+            }
+
+            if (!string.Equals(project.NewVersion, normalizedVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.Info(
+                    $"{project.ProjectName}: effective package version changed from {project.NewVersion} to {normalizedVersion} after version bindings.");
+            }
+
+            result.ResolvedVersionsByProject[project.ProjectName] = normalizedVersion;
+            project.NewVersion = normalizedVersion;
+        }
+
+        foreach (var source in sourceVersionsBeforeRefresh)
+        {
+            if (result.ResolvedVersionsByProject.TryGetValue(source.Key, out var refreshed) &&
+                string.Equals(source.Value, refreshed, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var project = projects.First(item =>
+                string.Equals(item.ProjectName, source.Key, StringComparison.OrdinalIgnoreCase));
+            project.ErrorMessage =
+                $"Version binding source '{source.Key}' changed its effective package version after the binding was applied.";
+            error = project.ErrorMessage;
+            _logger.Warn(error);
+            return false;
+        }
+
+        return true;
     }
 
     private static DotNetPackResult PackProject(

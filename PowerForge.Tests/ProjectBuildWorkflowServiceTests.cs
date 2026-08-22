@@ -513,6 +513,62 @@ public sealed class ProjectBuildWorkflowServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_reuses_evaluated_package_version_instead_of_literal_project_version()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.props"), """
+                <Project>
+                  <PropertyGroup>
+                    <PackageVersion>2.3.4</PackageVersion>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.EffectiveVersion"));
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.EffectiveVersion.csproj");
+            const string projectSource = """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <PackageId>Sample.EffectiveVersion</PackageId>
+                    <VersionPrefix>1.0.0</VersionPrefix>
+                    <IsPackable>true</IsPackable>
+                  </PropertyGroup>
+                </Project>
+                """;
+            File.WriteAllText(projectPath, projectSource);
+
+            var workflow = new ProjectBuildWorkflowService(new NullLogger()).Execute(
+                new ProjectBuildConfiguration(),
+                root.FullName,
+                new ProjectBuildPreparedContext
+                {
+                    RootPath = root.FullName,
+                    Spec = new DotNetRepositoryReleaseSpec
+                    {
+                        RootPath = root.FullName,
+                        Pack = false,
+                        Publish = false,
+                        UpdateVersions = false,
+                        SignAssemblies = false,
+                        SignPackages = false
+                    }
+                },
+                executeBuild: true);
+
+            Assert.True(workflow.Result.Success, workflow.Result.ErrorMessage);
+            Assert.Equal("2.3.4", workflow.Result.Release!.ResolvedVersionsByProject["Sample.EffectiveVersion"]);
+            Assert.Equal(projectSource, File.ReadAllText(projectPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static DotNetRepositoryReleaseResult CreateMixedVersionRelease()
         => new()
         {

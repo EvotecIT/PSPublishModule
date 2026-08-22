@@ -260,4 +260,92 @@ public sealed class DotNetRepositoryReleaseCentralVersionTests
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
+
+    [Fact]
+    public void Execute_WhatIf_PrefersEvaluatedPackageVersionOverLiteralProjectVersion()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.props"), """
+                <Project>
+                  <PropertyGroup>
+                    <PackageVersion>2.3.4</PackageVersion>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.EffectiveVersion"));
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.EffectiveVersion.csproj");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <PackageId>Sample.EffectiveVersion</PackageId>
+                    <VersionPrefix>1.0.0</VersionPrefix>
+                    <IsPackable>true</IsPackable>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Pack = false,
+                Publish = false,
+                UpdateVersions = false,
+                WhatIf = true,
+                SignAssemblies = false,
+                SignPackages = false
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("2.3.4", result.ResolvedVersionsByProject["Sample.EffectiveVersion"]);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_NormalizesReusedPlannedVersion()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.PlannedVersion"));
+            File.WriteAllText(Path.Combine(projectDirectory.FullName, "Sample.PlannedVersion.csproj"), """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <PackageId>Sample.PlannedVersion</PackageId>
+                    <VersionPrefix>1.0.0</VersionPrefix>
+                    <IsPackable>true</IsPackable>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Pack = false,
+                Publish = false,
+                UpdateVersions = false,
+                PlannedVersionsByProject = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Sample.PlannedVersion"] = "1.00.0"
+                },
+                SignAssemblies = false,
+                SignPackages = false
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("1.0.0", result.ResolvedVersionsByProject["Sample.PlannedVersion"]);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
 }
