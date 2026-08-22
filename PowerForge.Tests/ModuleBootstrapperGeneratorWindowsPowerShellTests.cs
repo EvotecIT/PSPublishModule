@@ -267,6 +267,84 @@ try {
         }
     }
 
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void GeneratedDesktopBootstrapperPreloadsDependenciesFromNestedExportDirectory()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var windowsPowerShell = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "WindowsPowerShell",
+            "v1.0",
+            "powershell.exe");
+        if (!File.Exists(windowsPowerShell))
+        {
+            return;
+        }
+
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "pf-bootstrapper-nested-desktop-dependency-" + Guid.NewGuid().ToString("N"));
+        var nestedLib = Path.Combine(root, "Lib", "Plugins", "Deferred");
+        Directory.CreateDirectory(nestedLib);
+
+        try
+        {
+            var fixture = BuildNestedDesktopFixture(root);
+            File.Copy(fixture.ModuleAssembly, Path.Combine(nestedLib, "DemoModule.dll"), overwrite: true);
+            File.Copy(fixture.DependencyAssembly, Path.Combine(nestedLib, "NestedDependency.dll"), overwrite: true);
+
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "Plugins/Deferred/DemoModule.dll" },
+                handleRuntimes: false);
+
+            var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
+            Assert.Contains("'Plugins/Deferred' = @(", libraries, StringComparison.Ordinal);
+            Assert.True(
+                libraries.IndexOf("NestedDependency.dll", StringComparison.Ordinal) <
+                libraries.IndexOf("DemoModule.dll", StringComparison.Ordinal),
+                "The nested dependency must be preloaded before its configured export assembly.");
+
+            var proofScript = Path.Combine(root, "Validate-NestedDependency.ps1");
+            File.WriteAllText(
+                proofScript,
+                """
+$ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force
+$module = Get-Module DemoModule
+$resolverState = & $module { $PowerForgeDesktopAssemblyResolverState }
+if ($resolverState.Registered) { throw 'The Desktop resolver remained registered after bootstrap.' }
+if ([DemoModule.Initialize]::Read() -ne 'nested-dependency') { throw 'The deferred nested dependency was unavailable.' }
+'NESTED_DEPENDENCY_PRELOADED'
+""");
+
+            var result = RunProcess(
+                windowsPowerShell,
+                $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{proofScript}\"",
+                root,
+                timeoutMilliseconds: 30000);
+
+            Assert.True(
+                result.ExitCode == 0,
+                $"Windows PowerShell nested dependency proof failed.{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}{result.StandardError}");
+            Assert.Contains("NESTED_DEPENDENCY_PRELOADED", result.StandardOutput);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static string BuildDesktopFixture(string root)
     {
         var projectRoot = Directory.CreateDirectory(Path.Combine(root, "Fixture"));
@@ -310,6 +388,62 @@ namespace DemoModule
             "DemoModule.dll");
         Assert.True(File.Exists(assemblyPath), $"Built assembly not found: {assemblyPath}");
         return assemblyPath;
+    }
+
+    private static (string ModuleAssembly, string DependencyAssembly) BuildNestedDesktopFixture(string root)
+    {
+        var fixtureRoot = Directory.CreateDirectory(Path.Combine(root, "NestedFixture"));
+        var dependencyRoot = Directory.CreateDirectory(Path.Combine(fixtureRoot.FullName, "NestedDependency"));
+        var moduleRoot = Directory.CreateDirectory(Path.Combine(fixtureRoot.FullName, "DemoModule"));
+        var dependencyProject = Path.Combine(dependencyRoot.FullName, "NestedDependency.csproj");
+        var moduleProject = Path.Combine(moduleRoot.FullName, "DemoModule.csproj");
+        File.WriteAllText(
+            dependencyProject,
+            """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>NestedDependency</AssemblyName>
+  </PropertyGroup>
+</Project>
+""");
+        File.WriteAllText(
+            Path.Combine(dependencyRoot.FullName, "Marker.cs"),
+            "namespace NestedDependency { public static class Marker { public static string Value { get { return \"nested-dependency\"; } } } }");
+        File.WriteAllText(
+            moduleProject,
+            $"""
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>DemoModule</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="{dependencyProject}" />
+  </ItemGroup>
+</Project>
+""");
+        File.WriteAllText(
+            Path.Combine(moduleRoot.FullName, "Initialize.cs"),
+            "namespace DemoModule { public static class Initialize { public static string Read() { return NestedDependency.Marker.Value; } } }");
+
+        var result = RunProcess(
+            "dotnet",
+            $"build \"{moduleProject}\" -c Release -nologo --verbosity quiet",
+            moduleRoot.FullName,
+            timeoutMilliseconds: 60000);
+        Assert.True(
+            result.ExitCode == 0,
+            $"dotnet build failed for the nested Desktop fixture.{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}{result.StandardError}");
+
+        var outputRoot = Path.Combine(moduleRoot.FullName, "bin", "Release", "netstandard2.0");
+        var moduleAssembly = Path.Combine(outputRoot, "DemoModule.dll");
+        var dependencyAssembly = Path.Combine(outputRoot, "NestedDependency.dll");
+        Assert.True(File.Exists(moduleAssembly), $"Built module assembly not found: {moduleAssembly}");
+        Assert.True(File.Exists(dependencyAssembly), $"Built dependency assembly not found: {dependencyAssembly}");
+        return (moduleAssembly, dependencyAssembly);
     }
 
     private static ProcessResult RunProcess(

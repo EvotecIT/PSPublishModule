@@ -293,12 +293,12 @@ internal static partial class ModuleMergeComposer
             }
 
             var block = new List<string>();
-            var sourceUsingLines = new List<string>();
+            var sourcePreambleLines = new List<string>();
             var directiveLineReplacements = ExtractPreambleDirectives(
                 lines,
                 requires,
                 usingLines,
-                sourceUsingLines,
+                sourcePreambleLines,
                 file,
                 rootPath,
                 fixRelativePaths);
@@ -320,15 +320,15 @@ internal static partial class ModuleMergeComposer
                 continue;
 
             var sourceBlock = string.Join(System.Environment.NewLine, block);
-            if (sourceUsingLines.Count > 0)
+            if (sourcePreambleLines.Count > 0)
             {
-                var sourcePreamble = string.Join(System.Environment.NewLine, sourceUsingLines);
+                var sourcePreamble = string.Join(System.Environment.NewLine, sourcePreambleLines);
                 var encodedPreamble = System.Convert.ToBase64String(Encoding.UTF8.GetBytes(sourcePreamble));
                 sourceBlock = MergedSourcePreambleMarker + encodedPreamble +
                               System.Environment.NewLine + sourceBlock;
             }
             sourceBlocks.Add(sourceBlock);
-            sourceBlockHasPreamble.Add(sourceUsingLines.Count > 0);
+            sourceBlockHasPreamble.Add(sourcePreambleLines.Count > 0);
         }
 
         var body = new StringBuilder(8192);
@@ -377,7 +377,7 @@ internal static partial class ModuleMergeComposer
         IReadOnlyList<string> lines,
         ISet<string> requires,
         ISet<string> usingLines,
-        ICollection<string> sourceUsingLines,
+        ICollection<string> sourcePreambleLines,
         string sourcePath,
         string moduleRoot,
         bool fixRelativePaths)
@@ -395,7 +395,9 @@ internal static partial class ModuleMergeComposer
 
             if (kind == PreambleLineKind.Requires)
             {
-                requires.Add(lines[index].Substring(directiveStart));
+                var directive = lines[index].Substring(directiveStart);
+                requires.Add(directive);
+                sourcePreambleLines.Add(directive);
                 lineReplacements[index] = lines[index].Substring(0, directiveStart).TrimEnd();
                 continue;
             }
@@ -414,7 +416,7 @@ internal static partial class ModuleMergeComposer
                         moduleRoot)
                     : directive.ToString();
                 usingLines.Add(rebasedDirective);
-                sourceUsingLines.Add(rebasedDirective);
+                sourcePreambleLines.Add(rebasedDirective);
                 for (var directiveLine = index; directiveLine <= directiveEnd; directiveLine++)
                 {
                     lineReplacements[directiveLine] = directiveLine == index

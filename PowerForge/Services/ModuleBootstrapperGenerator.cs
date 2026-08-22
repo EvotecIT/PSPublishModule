@@ -136,10 +136,10 @@ internal static partial class ModuleBootstrapperGenerator
         var libRoot = Path.Combine(moduleRoot, "Lib");
         var ignored = NormalizeFileNameSet(ignoreLibrariesOnLoad);
         var byFolder = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var folder in Directory.EnumerateDirectories(libRoot)
-                     .Select(Path.GetFileName)
+        foreach (var folder in Directory.EnumerateDirectories(libRoot, "*", SearchOption.AllDirectories)
+                     .Select(path => path.Substring(libRoot.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
                      .Where(static folder => !string.IsNullOrWhiteSpace(folder))
-                     .Select(static folder => folder!)
+                     .Select(static folder => folder.Replace('\\', '/'))
                      .OrderBy(GetPayloadFolderSortOrder)
                      .ThenBy(static folder => folder, StringComparer.OrdinalIgnoreCase))
         {

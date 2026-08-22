@@ -4,6 +4,101 @@ public partial class ModuleBootstrapperGeneratorTests
 {
     [Theory]
     [Trait("Category", "Integration")]
+    [InlineData("#requires -PSEdition Desktop")]
+    [InlineData("#requires -Version 99.0")]
+    public void InlineMergedScriptPayload_KeepsRequiresScopedToItsSource(string requiresDirective)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-source-requires-" + Guid.NewGuid().ToString("N"));
+        var fixtureRoot = Path.Combine(root, "Fixture");
+        var moduleRoot = Path.Combine(root, "Module");
+        var libRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "Core")).FullName;
+        var publicRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Public")).FullName;
+
+        try
+        {
+            var fixtureAssembly = BuildFixtureProject(
+                fixtureRoot,
+                "SourceRequiresFixture",
+                "DemoModule",
+                "namespace SourceRequiresFixture; public static class Marker { public static string Value => \"binary\"; }");
+            File.Copy(fixtureAssembly, Path.Combine(libRoot, "DemoModule.dll"), overwrite: true);
+            File.WriteAllText(
+                Path.Combine(publicRoot, "A-DesktopOnly.ps1"),
+                requiresDirective + Environment.NewLine +
+                "function Get-DesktopOnlySource { 'desktop' }");
+            File.WriteAllText(
+                Path.Combine(publicRoot, "B-CoreCompatible.ps1"),
+                "function Get-CoreCompatibleSource { 'core' }");
+
+            var exports = new ExportSet(
+                new[] { "Get-DesktopOnlySource", "Get-CoreCompatibleSource" },
+                Array.Empty<string>(),
+                Array.Empty<string>());
+            var sources = ModuleMergeComposer.BuildSources(
+                moduleRoot,
+                "DemoModule",
+                information: null,
+                exports,
+                fixRelativePaths: false,
+                exportAssemblies: new[] { "DemoModule.dll" });
+
+            ModuleBootstrapperGenerator.Generate(
+                moduleRoot,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: false);
+            var bootstrapperPath = Path.Combine(moduleRoot, "DemoModule.psm1");
+            ModuleBootstrapperGenerator.InlineMergedScriptPayload(bootstrapperPath, sources.MergedScriptContent);
+            var bootstrapper = File.ReadAllText(bootstrapperPath);
+            var globalPreamble = bootstrapper.Substring(
+                bootstrapper.IndexOf("# PowerForge script preamble begin", StringComparison.Ordinal),
+                bootstrapper.IndexOf("# PowerForge script preamble end", StringComparison.Ordinal) -
+                bootstrapper.IndexOf("# PowerForge script preamble begin", StringComparison.Ordinal));
+            Assert.DoesNotContain("#requires", globalPreamble, StringComparison.OrdinalIgnoreCase);
+
+            var processStartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "pwsh",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            processStartInfo.ArgumentList.Add("-NoLogo");
+            processStartInfo.ArgumentList.Add("-NoProfile");
+            processStartInfo.ArgumentList.Add("-NonInteractive");
+            processStartInfo.ArgumentList.Add("-ExecutionPolicy");
+            processStartInfo.ArgumentList.Add("Bypass");
+            processStartInfo.ArgumentList.Add("-Command");
+            processStartInfo.ArgumentList.Add(
+                "Import-Module -Name '" + bootstrapperPath.Replace("'", "''", StringComparison.Ordinal) +
+                "' -Force -ErrorAction Continue; " +
+                "if ((Get-CoreCompatibleSource) -ne 'core') { throw 'The compatible source was not loaded.' }; " +
+                "if (Get-Command Get-DesktopOnlySource -ErrorAction SilentlyContinue) { throw 'The incompatible source unexpectedly loaded.' }; " +
+                "'source-requires-scoped'");
+
+            using var process = System.Diagnostics.Process.Start(processStartInfo)!;
+            var standardOutput = process.StandardOutput.ReadToEnd();
+            var standardError = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.True(
+                process.ExitCode == 0,
+                $"Generated module import failed.{Environment.NewLine}{standardOutput}{Environment.NewLine}{standardError}");
+            Assert.Contains("source-requires-scoped", standardOutput, StringComparison.Ordinal);
+            Assert.Contains("Failed to import merged module source", standardError, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Theory]
+    [Trait("Category", "Integration")]
     [InlineData("throw 'expected merged source failure'")]
     [InlineData("function Invoke-BrokenSource {")]
     public void InlineMergedScriptPayload_ContinuesAfterPerSourceImportFailure(string failingSource)

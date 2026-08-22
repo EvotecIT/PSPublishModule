@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace PowerForge;
@@ -27,15 +28,16 @@ internal static partial class ModuleBootstrapperGenerator
             throw new FileNotFoundException("Generated module bootstrapper was not found.", psm1Path);
 
         var scriptPreamble = ModuleMergeComposer.ExtractMergedScriptPreamble(mergedScriptContent, out var scriptPayload);
+        var deferredScriptPreamble = RemoveRequiresDirectives(scriptPreamble);
         var authoritativeExportBlock = ModuleMergeComposer.ExtractTrailingExportBlock(scriptPayload, out scriptPayload);
         ModuleMergeComposer.TryResolveMergedSourceMarkers(scriptPayload, out var sourceStartMarker, out var sourceEndMarker);
-        var deferredScriptPayload = BuildDeferredScriptPayload(scriptPreamble, scriptPayload, sourceStartMarker, sourceEndMarker);
+        var deferredScriptPayload = BuildDeferredScriptPayload(deferredScriptPreamble, scriptPayload, sourceStartMarker, sourceEndMarker);
         var bootstrapper = File.ReadAllText(psm1Path);
         bootstrapper = ReplaceMarkedSection(
             bootstrapper,
             ScriptPreambleStartMarker,
             ScriptPreambleEndMarker,
-            scriptPreamble,
+            deferredScriptPreamble,
             psm1Path);
         var inlinedBootstrapper = ReplaceMarkedSection(
             bootstrapper,
@@ -60,6 +62,21 @@ internal static partial class ModuleBootstrapperGenerator
         }
 
         WritePowerShellFile(psm1Path, inlinedBootstrapper);
+    }
+
+    private static string RemoveRequiresDirectives(string scriptPreamble)
+    {
+        if (string.IsNullOrWhiteSpace(scriptPreamble))
+            return string.Empty;
+
+        return string.Join(
+                Environment.NewLine,
+                scriptPreamble
+                    .Replace("\r\n", "\n")
+                    .Replace('\r', '\n')
+                    .Split('\n')
+                    .Where(static line => !line.TrimStart().StartsWith("#requires", StringComparison.OrdinalIgnoreCase)))
+            .Trim();
     }
 
     private static string BuildDeferredScriptPayload(
@@ -235,11 +252,50 @@ internal static partial class ModuleBootstrapperGenerator
         builder.AppendLine("        $PowerForgeMergedScriptCursor = $PowerForgeMergedScriptSourceEnd + $PowerForgeMergedScriptSourceEndMarker.Length");
         builder.AppendLine("    }");
         builder.AppendLine("}");
+        builder.AppendLine("$PowerForgeMergedScriptAssertRequirements = {");
+        builder.AppendLine("    param([System.Management.Automation.Language.ScriptRequirements] $Requirements)");
+        builder.AppendLine("    if ($null -eq $Requirements) { return }");
+        builder.AppendLine("    if ($null -ne $Requirements.RequiredPSVersion -and $PSVersionTable.PSVersion -lt $Requirements.RequiredPSVersion) {");
+        builder.AppendLine("        throw \"The merged source requires PowerShell $($Requirements.RequiredPSVersion) or later.\"");
+        builder.AppendLine("    }");
+        builder.AppendLine("    if ($Requirements.RequiredPSEditions.Count -gt 0 -and $PSEdition -notin $Requirements.RequiredPSEditions) {");
+        builder.AppendLine("        throw \"The merged source requires PowerShell edition $($Requirements.RequiredPSEditions -join ', ').\"");
+        builder.AppendLine("    }");
+        builder.AppendLine("    if (-not [string]::IsNullOrWhiteSpace($Requirements.RequiredApplicationId) -and $ShellId -ine $Requirements.RequiredApplicationId) {");
+        builder.AppendLine("        throw \"The merged source requires shell id '$($Requirements.RequiredApplicationId)'.\"");
+        builder.AppendLine("    }");
+        builder.AppendLine("    if ($Requirements.IsElevationRequired) {");
+        builder.AppendLine("        if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {");
+        builder.AppendLine("            throw 'The merged source requires an elevated Windows PowerShell session.'");
+        builder.AppendLine("        }");
+        builder.AppendLine("        $PowerForgeMergedScriptIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()");
+        builder.AppendLine("        $PowerForgeMergedScriptPrincipal = [Security.Principal.WindowsPrincipal]::new($PowerForgeMergedScriptIdentity)");
+        builder.AppendLine("        if (-not $PowerForgeMergedScriptPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {");
+        builder.AppendLine("            throw 'The merged source requires an elevated PowerShell session.'");
+        builder.AppendLine("        }");
+        builder.AppendLine("    }");
+        builder.AppendLine("    foreach ($PowerForgeMergedScriptRequiredAssembly in $Requirements.RequiredAssemblies) {");
+        builder.AppendLine("        $PowerForgeMergedScriptRequiredAssemblyPath = [string]$PowerForgeMergedScriptRequiredAssembly");
+        builder.AppendLine("        if (-not [IO.Path]::IsPathRooted($PowerForgeMergedScriptRequiredAssemblyPath) -and $PowerForgeMergedScriptRequiredAssemblyPath.IndexOfAny([char[]]@('\\', '/')) -ge 0) {");
+        builder.AppendLine("            $PowerForgeMergedScriptRequiredAssemblyPath = [IO.Path]::GetFullPath([IO.Path]::Combine($PowerForgeModuleRoot, $PowerForgeMergedScriptRequiredAssemblyPath.Replace('\\', [IO.Path]::DirectorySeparatorChar).Replace('/', [IO.Path]::DirectorySeparatorChar)))");
+        builder.AppendLine("        }");
+        builder.AppendLine("        if ([IO.File]::Exists($PowerForgeMergedScriptRequiredAssemblyPath)) {");
+        builder.AppendLine("            Add-Type -Path $PowerForgeMergedScriptRequiredAssemblyPath -ErrorAction Stop");
+        builder.AppendLine("        } else {");
+        builder.AppendLine("            Add-Type -AssemblyName $PowerForgeMergedScriptRequiredAssemblyPath -ErrorAction Stop");
+        builder.AppendLine("        }");
+        builder.AppendLine("    }");
+        builder.AppendLine("}");
         builder.AppendLine("$PowerForgeMergedScriptErrors = [Collections.Generic.List[System.Management.Automation.ErrorRecord]]::new()");
         builder.AppendLine("try {");
         builder.AppendLine("    foreach ($PowerForgeMergedScriptSegment in $PowerForgeMergedScriptSegments) {");
         builder.AppendLine("        try {");
-        builder.AppendLine("            . ([scriptblock]::Create($PowerForgeMergedScriptSegment))");
+        builder.AppendLine("            $PowerForgeMergedScriptSegmentBlock = [scriptblock]::Create($PowerForgeMergedScriptSegment)");
+        builder.AppendLine("            & $PowerForgeMergedScriptAssertRequirements $PowerForgeMergedScriptSegmentBlock.Ast.ScriptRequirements");
+        builder.AppendLine("            foreach ($PowerForgeMergedScriptRequiredModule in $PowerForgeMergedScriptSegmentBlock.Ast.ScriptRequirements.RequiredModules) {");
+        builder.AppendLine("                Import-Module -FullyQualifiedName $PowerForgeMergedScriptRequiredModule -ErrorAction Stop");
+        builder.AppendLine("            }");
+        builder.AppendLine("            . $PowerForgeMergedScriptSegmentBlock");
         builder.AppendLine("        } catch {");
         builder.AppendLine("            $PowerForgeMergedScriptErrors.Add($_)");
         builder.AppendLine("        }");
@@ -251,7 +307,7 @@ internal static partial class ModuleBootstrapperGenerator
         builder.AppendLine("        Write-Warning 'Importing merged module sources failed. Fix errors before continuing.'");
         builder.AppendLine("    }");
         builder.AppendLine("} finally {");
-        builder.AppendLine("    $PowerForgeMergedScriptVariablesToRemove = @('PowerForgeMergedScriptAbsoluteUsingPath', 'PowerForgeMergedScriptAst', 'PowerForgeMergedScriptBuilder', 'PowerForgeMergedScriptContentStart', 'PowerForgeMergedScriptCursor', 'PowerForgeMergedScriptError', 'PowerForgeMergedScriptErrors', 'PowerForgeMergedScriptFirstSource', 'PowerForgeMergedScriptIsRelativeUsingPath', 'PowerForgeMergedScriptModuleSpecificationEntry', 'PowerForgeMergedScriptModuleSpecificationValue', 'PowerForgeMergedScriptMyCommandReference', 'PowerForgeMergedScriptPathReference', 'PowerForgeMergedScriptPathReferences', 'PowerForgeMergedScriptPathReplacement', 'PowerForgeMergedScriptPayload', 'PowerForgeMergedScriptPayloadBase64', 'PowerForgeMergedScriptRelativeUsingPath', 'PowerForgeMergedScriptSegment', 'PowerForgeMergedScriptSegmentAbsoluteUsingPath', 'PowerForgeMergedScriptSegmentAst', 'PowerForgeMergedScriptSegmentBuilder', 'PowerForgeMergedScriptSegmentModuleSpecificationEntry', 'PowerForgeMergedScriptSegmentModuleSpecificationValue', 'PowerForgeMergedScriptSegmentRelativeUsingPath', 'PowerForgeMergedScriptSegments', 'PowerForgeMergedScriptSegmentTreatBareUsingNameAsPath', 'PowerForgeMergedScriptSegmentUsingPathReference', 'PowerForgeMergedScriptSegmentUsingPathReferences', 'PowerForgeMergedScriptSegmentUsingPathReplacement', 'PowerForgeMergedScriptSegmentUsingStatement', 'PowerForgeMergedScriptSegmentUsingStatements', 'PowerForgeMergedScriptSourceEnd', 'PowerForgeMergedScriptSourceEndMarker', 'PowerForgeMergedScriptSourcePreamble', 'PowerForgeMergedScriptSourcePreambleBase64', 'PowerForgeMergedScriptSourcePreambleEnd', 'PowerForgeMergedScriptSourcePreambleMarker', 'PowerForgeMergedScriptSourceStart', 'PowerForgeMergedScriptSourceStartMarker', 'PowerForgeMergedScriptTreatBareUsingNameAsPath', 'PowerForgeMergedScriptUsingPathReference', 'PowerForgeMergedScriptUsingPathReferences', 'PowerForgeMergedScriptUsingPathReplacement', 'PowerForgeMergedScriptUsingStatement', 'PowerForgeMergedScriptUsingStatements')");
+        builder.AppendLine("    $PowerForgeMergedScriptVariablesToRemove = @('PowerForgeMergedScriptAbsoluteUsingPath', 'PowerForgeMergedScriptAssertRequirements', 'PowerForgeMergedScriptAst', 'PowerForgeMergedScriptBuilder', 'PowerForgeMergedScriptContentStart', 'PowerForgeMergedScriptCursor', 'PowerForgeMergedScriptError', 'PowerForgeMergedScriptErrors', 'PowerForgeMergedScriptFirstSource', 'PowerForgeMergedScriptIsRelativeUsingPath', 'PowerForgeMergedScriptModuleSpecificationEntry', 'PowerForgeMergedScriptModuleSpecificationValue', 'PowerForgeMergedScriptMyCommandReference', 'PowerForgeMergedScriptPathReference', 'PowerForgeMergedScriptPathReferences', 'PowerForgeMergedScriptPathReplacement', 'PowerForgeMergedScriptPayload', 'PowerForgeMergedScriptPayloadBase64', 'PowerForgeMergedScriptRelativeUsingPath', 'PowerForgeMergedScriptRequiredModule', 'PowerForgeMergedScriptSegment', 'PowerForgeMergedScriptSegmentAbsoluteUsingPath', 'PowerForgeMergedScriptSegmentAst', 'PowerForgeMergedScriptSegmentBlock', 'PowerForgeMergedScriptSegmentBuilder', 'PowerForgeMergedScriptSegmentModuleSpecificationEntry', 'PowerForgeMergedScriptSegmentModuleSpecificationValue', 'PowerForgeMergedScriptSegmentRelativeUsingPath', 'PowerForgeMergedScriptSegments', 'PowerForgeMergedScriptSegmentTreatBareUsingNameAsPath', 'PowerForgeMergedScriptSegmentUsingPathReference', 'PowerForgeMergedScriptSegmentUsingPathReferences', 'PowerForgeMergedScriptSegmentUsingPathReplacement', 'PowerForgeMergedScriptSegmentUsingStatement', 'PowerForgeMergedScriptSegmentUsingStatements', 'PowerForgeMergedScriptSourceEnd', 'PowerForgeMergedScriptSourceEndMarker', 'PowerForgeMergedScriptSourcePreamble', 'PowerForgeMergedScriptSourcePreambleBase64', 'PowerForgeMergedScriptSourcePreambleEnd', 'PowerForgeMergedScriptSourcePreambleMarker', 'PowerForgeMergedScriptSourceStart', 'PowerForgeMergedScriptSourceStartMarker', 'PowerForgeMergedScriptTreatBareUsingNameAsPath', 'PowerForgeMergedScriptUsingPathReference', 'PowerForgeMergedScriptUsingPathReferences', 'PowerForgeMergedScriptUsingPathReplacement', 'PowerForgeMergedScriptUsingStatement', 'PowerForgeMergedScriptUsingStatements')");
         builder.AppendLine("    foreach ($PowerForgeMergedScriptVariableToRemove in $PowerForgeMergedScriptVariablesToRemove) {");
         builder.AppendLine("        if ($null -ne $ExecutionContext.SessionState.PSVariable.Get($PowerForgeMergedScriptVariableToRemove)) {");
         builder.AppendLine("            Remove-Variable -Name $PowerForgeMergedScriptVariableToRemove -Force");
