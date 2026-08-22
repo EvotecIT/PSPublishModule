@@ -426,12 +426,12 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                   "summary": {
                     "repositoryCount": 1,
                     "nuGetPackageCount": 0,
-                    "powerShellGalleryModuleCount": 2,
+                    "powerShellGalleryModuleCount": 3,
                     "gitHubStars": 42,
                     "gitHubForks": 5,
                     "nuGetDownloads": 0,
-                    "powerShellGalleryDownloads": 124456,
-                    "totalDownloads": 124456
+                    "powerShellGalleryDownloads": 10124456,
+                    "totalDownloads": 10124456
                   },
                   "gitHub": {
                     "organization": "EvotecIT",
@@ -453,8 +453,8 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                   },
                   "powerShellGallery": {
                     "owner": "Przemyslaw.Klys",
-                    "moduleCount": 2,
-                    "totalDownloads": 124456,
+                    "moduleCount": 3,
+                    "totalDownloads": 10124456,
                     "modules": [
                       {
                         "id": "SecurityPolicy",
@@ -469,6 +469,13 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                         "downloadCount": 1000,
                         "galleryUrl": "https://www.powershellgallery.com/packages/SecurityPolicyLegacy",
                         "projectUrl": "https://github.com/EvotecIT/SecurityPolicy"
+                      },
+                      {
+                        "id": "UnrelatedModule",
+                        "version": "9.0.0",
+                        "downloadCount": 10000000,
+                        "galleryUrl": "https://www.powershellgallery.com/packages/UnrelatedModule",
+                        "projectUrl": "https://github.com/EvotecIT/UnrelatedModule"
                       }
                     ]
                   },
@@ -505,7 +512,11 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "slug": "securitypolicyx",
                       "name": "SecurityPolicyX",
                       "githubRepo": "EvotecIT/SecurityPolicyX",
-                      "aliases": ["/projects/securitypolicy/index.html?ref=legacy", "SecurityPolicyLegacy"],
+                      "aliases": ["/projects/securitypolicy/index.html?ref=legacy", "/projects/unrelatedmodule/"],
+                      "packageAliases": {
+                        "nuget": ["SecurityPolicy"],
+                        "powerShellGallery": ["SecurityPolicy", "SecurityPolicyLegacy"]
+                      },
                       "links": {
                         "powerShellGallery": "https://www.powershellgallery.com/packages/SecurityPolicy"
                       },
@@ -731,28 +742,47 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "githubRepo": "EvotecIT/CurrentRepo"
                     },
                     {
+                      "slug": "route-alias-only",
+                      "name": "Current.Core",
+                      "githubRepo": "EvotecIT/RouteAliasOnly",
+                      "aliases": ["/projects/target-package/"]
+                    },
+                    {
                       "slug": "renamed",
                       "name": "Renamed Product",
                       "githubRepo": "EvotecIT/RenamedRepo",
-                      "aliases": ["/projects/sharedrepo/"]
+                      "aliases": ["/projects/sharedrepo/"],
+                      "packageAliases": {
+                        "nuget": ["SharedRepo"]
+                      }
                     },
                     {
                       "slug": "renamed-separators",
                       "name": "Renamed Separator Product",
                       "githubRepo": "EvotecIT/RenamedSeparatorRepo",
-                      "aliases": ["/projects/foo-bar/"]
+                      "aliases": ["/projects/foo-bar/"],
+                      "packageAliases": {
+                        "nuget": ["Foo-Bar"]
+                      }
                     },
                     {
                       "slug": "renamed-slashless",
                       "name": "Renamed Slashless Product",
                       "githubRepo": "EvotecIT/RenamedSlashlessRepo",
-                      "aliases": ["slashless.html"]
+                      "aliases": ["slashless.html"],
+                      "packageAliases": {
+                        "nuget": ["Slashless"]
+                      }
                     },
                     {
                       "slug": "renamed-exact-variants",
                       "name": "Renamed Exact Variant Product",
                       "githubRepo": "EvotecIT/RenamedExactVariantRepo",
-                      "aliases": ["/projects/target-package/", "/projects/target-module/"]
+                      "aliases": ["/projects/target-package/", "/projects/target-module/"],
+                      "packageAliases": {
+                        "nuget": ["Target.Package"],
+                        "powerShellGallery": ["Target.Module"]
+                      }
                     },
                     {
                       "slug": "renamed-literal-priority",
@@ -764,7 +794,10 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "slug": "renamed-percent-encoded",
                       "name": "Renamed Percent Encoded Product",
                       "githubRepo": "EvotecIT/RenamedPercentEncodedRepo",
-                      "aliases": ["/projects/security%20policy/"]
+                      "aliases": ["/projects/security%20policy/"],
+                      "packageAliases": {
+                        "nuget": ["Security Policy"]
+                      }
                     },
                     {
                       "slug": "renamed-compact-ambiguous",
@@ -782,7 +815,7 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
 
             var args = new object?[] { statsPath, catalogPath, publishedCatalogPath, null };
             var merged = Assert.IsType<int>(syncMethod!.Invoke(null, args));
-            Assert.Equal(7, merged);
+            Assert.Equal(8, merged);
             Assert.Null(args[3]);
 
             using var catalog = JsonDocument.Parse(File.ReadAllText(catalogPath));
@@ -796,6 +829,11 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
             Assert.Equal(1, current.GetProperty("packageCount").GetInt32());
             Assert.Equal(400L, current.GetProperty("totalDownloads").GetInt64());
             Assert.Equal(30, projectsBySlug["legacyrepo"].GetProperty("metrics").GetProperty("github").GetProperty("stars").GetInt32());
+
+            var routeAliasOnly = projectsBySlug["route-alias-only"].GetProperty("metrics").GetProperty("nuget");
+            Assert.Equal("Current.Core", routeAliasOnly.GetProperty("id").GetString());
+            Assert.Equal(1, routeAliasOnly.GetProperty("packageCount").GetInt32());
+            Assert.Equal(400L, routeAliasOnly.GetProperty("totalDownloads").GetInt64());
 
             var renamedMetrics = projectsBySlug["renamed"].GetProperty("metrics");
             var renamed = renamedMetrics.GetProperty("nuget");

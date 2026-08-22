@@ -522,9 +522,9 @@ public class WebPipelineRunnerProjectCatalogTests
             var curationPath = Path.Combine(root, "data", "projects", "curation.csv");
             File.WriteAllText(curationPath,
                 """
-                "slug","aliases","apiDocs.quickStartTypes","apiDocs.relatedContentManifest"
-                "beta","[""/projects/beta-legacy/?ids=one,two"",""/projects/beta-classic/?mode=a;b#details""]","Invoke-Beta","./data/projects/beta-api-guides.json"
-                "gamma","[malformed","",""
+                "slug","aliases","packageAliases.nuget","packageAliases.powerShellGallery","apiDocs.quickStartTypes","apiDocs.relatedContentManifest"
+                "beta","[""/projects/beta-legacy/?ids=one,two"",""/projects/beta-classic/?mode=a;b#details""]","[""Beta.Core"",""Beta.Extensions""]","[""Beta"",""BetaLegacy""]","Invoke-Beta","./data/projects/beta-api-guides.json"
+                "gamma","[malformed","","","",""
                 """);
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
@@ -563,6 +563,9 @@ public class WebPipelineRunnerProjectCatalogTests
             Assert.Contains("\"relatedContentManifest\": \"./data/projects/beta-api-guides.json\"", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"/projects/beta-legacy/?ids=one,two\"", catalogText, StringComparison.Ordinal);
             Assert.Contains("\"/projects/beta-classic/?mode=a;b#details\"", catalogText, StringComparison.Ordinal);
+            Assert.Contains("\"packageAliases\":", catalogText, StringComparison.Ordinal);
+            Assert.Contains("\"Beta.Extensions\"", catalogText, StringComparison.Ordinal);
+            Assert.Contains("\"BetaLegacy\"", catalogText, StringComparison.Ordinal);
             Assert.Contains("\"/projects/gamma-legacy/\"", catalogText, StringComparison.Ordinal);
             Assert.DoesNotContain("\"aliases\": []", catalogText, StringComparison.Ordinal);
         }
