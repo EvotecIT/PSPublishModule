@@ -367,15 +367,6 @@ public sealed class ModuleBuilder
                 $"Unable to resolve every alias in the authored root module script for '{opts.ModuleName}' before replacing it.");
         }
 
-        var rootOnlyAliases = opts.RootModuleScriptWillBeReplaced &&
-                              supportsCompleteAliasAnalysis &&
-                              rootAliasAnalysis.IsComplete &&
-                              nestedExportDiscovery.IsAliasComplete
-            ? rootAliasAnalysis.Aliases.Except(nestedExportDiscovery.Aliases, StringComparer.OrdinalIgnoreCase)
-            : Array.Empty<string>();
-        var existingAliasesWithoutReplacedRoot = existingExports.Aliases
-            .Except(rootOnlyAliases, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
         var aliasDiscoveries = BootstrapperScriptFolders
             .Select(folder => DiscoverScriptFiles(Path.Combine(opts.ProjectRoot, folder)))
             .Concat(opts.RootModuleScriptWillBeReplaced
@@ -401,6 +392,15 @@ public sealed class ModuleBuilder
                 MergeDeclaredAliases(aliasAnalysis.Aliases, nestedExportDiscovery.Aliases),
                 aliasAnalysis.IsComplete && nestedExportDiscovery.IsAliasComplete);
         }
+        var rootOnlyAliases = opts.RootModuleScriptWillBeReplaced &&
+                              supportsCompleteAliasAnalysis &&
+                              rootAliasAnalysis.IsComplete &&
+                              aliasAnalysis.IsComplete
+            ? rootAliasAnalysis.Aliases.Except(aliasAnalysis.Aliases, StringComparer.OrdinalIgnoreCase)
+            : Array.Empty<string>();
+        var existingAliasesWithoutReplacedRoot = existingExports.Aliases
+            .Except(rootOnlyAliases, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         if (opts.DisableBinaryCmdletScan)
         {
             ModuleBinaryExportSurfaceValidator.ValidateConfiguredAssemblies(
