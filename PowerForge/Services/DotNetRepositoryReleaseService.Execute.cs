@@ -193,7 +193,11 @@ public sealed partial class DotNetRepositoryReleaseService
             }
 
             PrepareReleaseVersionFloor(packable, expectedGlobal, expectedMap, spec);
-            var alignedVersions = ResolveAlignedPackageVersions(packable, expectedGlobal, expectedMap, spec);
+            var plannedVersionsCoverSelection = spec.PlannedVersionsByProject is not null &&
+                packable.All(project => spec.PlannedVersionsByProject.ContainsKey(project.ProjectName));
+            var alignedVersions = plannedVersionsCoverSelection
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                : ResolveAlignedPackageVersions(packable, expectedGlobal, expectedMap, spec);
             var detailedProgress = progress as IProjectBuildProgressReporterV2;
             var versionItems = CreateVersionProgressItems(packable, detailedProgress);
             progress?.PhaseStarted(ProjectBuildProgressPhase.Versioning, packable.Length, "Resolving project versions");
@@ -220,7 +224,17 @@ public sealed partial class DotNetRepositoryReleaseService
                 string? resolutionWarning;
                 try
                 {
-                    if (alignedVersions.TryGetValue(project.ProjectName, out var alignedVersion))
+                    if (spec.PlannedVersionsByProject is not null &&
+                        spec.PlannedVersionsByProject.TryGetValue(project.ProjectName, out var plannedVersion))
+                    {
+                        if (!PackageVersionUtility.TryNormalizeExact(plannedVersion, out resolvedVersion))
+                        {
+                            throw new InvalidOperationException(
+                                $"Planned version '{plannedVersion}' is not a valid exact package version.");
+                        }
+                        resolutionWarning = null;
+                    }
+                    else if (alignedVersions.TryGetValue(project.ProjectName, out var alignedVersion))
                     {
                         resolvedVersion = alignedVersion;
                         resolutionWarning = null;
@@ -356,9 +370,22 @@ public sealed partial class DotNetRepositoryReleaseService
                     }
 
                     versionBindingService.LogApplied(versionBindingPlan);
+
+                    if (versionBindingPlan.Any(static item => item.HasChanges) &&
+                        !TryRefreshEffectiveVersionsAfterBindings(
+                            packable,
+                            result,
+                            spec,
+                            spec.VersionBindings,
+                            out var refreshError))
+                    {
+                        result.Success = false;
+                        progress?.PhaseFailed(ProjectBuildProgressPhase.Versioning, refreshError);
+                    }
                 }
 
-                progress?.PhaseCompleted(ProjectBuildProgressPhase.Versioning, $"{packable.Length} project version(s) resolved");
+                if (!packable.Any(project => !string.IsNullOrWhiteSpace(project.ErrorMessage)))
+                    progress?.PhaseCompleted(ProjectBuildProgressPhase.Versioning, $"{packable.Length} project version(s) resolved");
             }
             if (spec.Pack)
             {

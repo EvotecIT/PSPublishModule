@@ -77,13 +77,16 @@ internal sealed class ProjectBuildWorkflowService
         var preflightErrors = new List<string>();
         if (!plan.Success)
             preflightErrors.Add(plan.ErrorMessage ?? "Plan/preflight validation failed.");
+        else if (TryCreateReusablePlanVersions(plan.ResolvedVersionsByProject, out var reusablePlanVersions) &&
+                 (spec.VersionBindings is null || spec.VersionBindings.Count == 0))
+        {
+            spec.PlannedVersionsByProject = reusablePlanVersions;
+            _logger.Info($"Reusing {plan.ResolvedVersionsByProject.Count} resolved project version(s) from the plan for release execution.");
+        }
         else if (plan.ResolvedVersionsByProject.Count > 0)
         {
-            spec.ExpectedVersion = null;
-            spec.ExpectedVersionsByProject = new Dictionary<string, string>(
-                plan.ResolvedVersionsByProject,
-                StringComparer.OrdinalIgnoreCase);
-            _logger.Info($"Reusing {plan.ResolvedVersionsByProject.Count} resolved project version(s) from the plan for release execution.");
+            spec.PlannedVersionsByProject = null;
+            _logger.Info("Release execution will re-evaluate effective project versions because the plan cannot be reused safely.");
         }
 
         if (!executeBuild || preparation.PlanOnly)
@@ -230,6 +233,28 @@ internal sealed class ProjectBuildWorkflowService
             Result = result,
             GitHubPublishSummary = publishSummary
         };
+    }
+
+    private static bool TryCreateReusablePlanVersions(
+        IReadOnlyDictionary<string, string> resolvedVersions,
+        out Dictionary<string, string> reusableVersions)
+    {
+        reusableVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (resolvedVersions.Count == 0)
+            return false;
+
+        foreach (var pair in resolvedVersions)
+        {
+            if (!PackageVersionUtility.TryNormalizeExact(pair.Value, out var normalized))
+            {
+                reusableVersions.Clear();
+                return false;
+            }
+
+            reusableVersions[pair.Key] = normalized;
+        }
+
+        return true;
     }
 
     private static ProjectBuildResult CreateResult(IReadOnlyCollection<string> errors, DotNetRepositoryReleaseResult plan)
