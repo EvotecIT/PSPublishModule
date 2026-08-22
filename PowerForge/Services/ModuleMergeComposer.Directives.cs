@@ -9,6 +9,31 @@ namespace PowerForge;
 
 internal static partial class ModuleMergeComposer
 {
+    private static string RebaseRequiresAssemblyDirective(string directive, string sourcePath, string moduleRoot)
+        => Regex.Replace(
+            directive ?? string.Empty,
+            @"(?i)(?<prefix>(?:^|\s)-Assembly\s+)(?:(?<single>')(?<singlePath>(?:''|[^'\r\n])*)'|(?<double>"")(?<doublePath>(?:`[^\r\n]|[^`""\r\n])*)""|(?<bare>[^\s;]+))",
+            match =>
+            {
+                var quote = match.Groups["single"].Success
+                    ? '\''
+                    : match.Groups["double"].Success ? '"' : '\0';
+                var encodedPath = match.Groups["single"].Success
+                    ? match.Groups["singlePath"].Value
+                    : match.Groups["double"].Success
+                        ? match.Groups["doublePath"].Value
+                        : match.Groups["bare"].Value;
+                var path = quote == '\0' ? encodedPath : DecodeUsingPathLiteral(encodedPath, quote);
+                var rebased = RebaseUsingPath(path, sourcePath, moduleRoot, treatBareNameAsPath: true);
+                if (string.Equals(path, rebased, StringComparison.Ordinal))
+                    return match.Value;
+
+                var encodedRebased = quote == '\0'
+                    ? FormatUnquotedUsingPath(rebased)
+                    : quote + EncodeUsingPathLiteral(rebased, quote) + quote;
+                return match.Groups["prefix"].Value + encodedRebased;
+            });
+
     private static string RebaseUsingDirective(string directive, string sourcePath, string moduleRoot)
     {
         if (string.IsNullOrWhiteSpace(directive) || string.IsNullOrWhiteSpace(moduleRoot))

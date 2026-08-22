@@ -396,6 +396,8 @@ internal static partial class ModuleMergeComposer
             if (kind == PreambleLineKind.Requires)
             {
                 var directive = lines[index].Substring(directiveStart);
+                if (fixRelativePaths)
+                    directive = RebaseRequiresAssemblyDirective(directive, sourcePath, moduleRoot);
                 requires.Add(directive);
                 sourcePreambleLines.Add(directive);
                 lineReplacements[index] = lines[index].Substring(0, directiveStart).TrimEnd();

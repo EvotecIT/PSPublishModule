@@ -335,6 +335,97 @@ if ([DemoModule.Initialize]::Read() -ne 'nested-dependency') { throw 'The deferr
                 result.ExitCode == 0,
                 $"Windows PowerShell nested dependency proof failed.{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}{result.StandardError}");
             Assert.Contains("NESTED_DEPENDENCY_PRELOADED", result.StandardOutput);
+
+            var powerShell7 = FindExecutableOnPath("pwsh.exe");
+            if (powerShell7 is not null)
+            {
+                var coreResult = RunProcess(
+                    powerShell7,
+                    $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{proofScript}\"",
+                    root,
+                    timeoutMilliseconds: 30000);
+                Assert.True(
+                    coreResult.ExitCode == 0,
+                    $"PowerShell Core nested dependency proof failed.{Environment.NewLine}{coreResult.StandardOutput}{Environment.NewLine}{coreResult.StandardError}");
+                Assert.Contains("NESTED_DEPENDENCY_PRELOADED", coreResult.StandardOutput);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void MergedDesktopSourceEnforcesAndLoadsRequiredSnapIn()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var windowsPowerShell = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "WindowsPowerShell",
+            "v1.0",
+            "powershell.exe");
+        if (!File.Exists(windowsPowerShell))
+        {
+            return;
+        }
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-source-snapin-" + Guid.NewGuid().ToString("N"));
+        var libDefault = Directory.CreateDirectory(Path.Combine(root, "Lib", "Default")).FullName;
+        var publicRoot = Directory.CreateDirectory(Path.Combine(root, "Public")).FullName;
+
+        try
+        {
+            var moduleAssembly = BuildDesktopFixture(root);
+            File.Copy(moduleAssembly, Path.Combine(libDefault, "DemoModule.dll"), overwrite: true);
+            File.WriteAllText(
+                Path.Combine(publicRoot, "Get-SnapInSource.ps1"),
+                "#requires -PSSnapin Microsoft.PowerShell.Core -Version 3.0" + Environment.NewLine +
+                "function Get-SnapInSource { (Get-PSSnapin -Name Microsoft.PowerShell.Core).Name }");
+            var exports = new ExportSet(new[] { "Get-SnapInSource" }, Array.Empty<string>(), Array.Empty<string>());
+            var sources = ModuleMergeComposer.BuildSources(
+                root,
+                "DemoModule",
+                information: null,
+                exports,
+                fixRelativePaths: false,
+                exportAssemblies: new[] { "DemoModule.dll" });
+
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false);
+            var bootstrapperPath = Path.Combine(root, "DemoModule.psm1");
+            ModuleBootstrapperGenerator.InlineMergedScriptPayload(bootstrapperPath, sources.MergedScriptContent);
+            var proofScript = Path.Combine(root, "Validate-SnapInRequirement.ps1");
+            File.WriteAllText(
+                proofScript,
+                """
+$ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force
+if ((Get-SnapInSource) -ne 'Microsoft.PowerShell.Core') { throw 'The required snap-in was unavailable to the merged source.' }
+'SNAPIN_REQUIREMENT_OK'
+""");
+
+            var result = RunProcess(
+                windowsPowerShell,
+                $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{proofScript}\"",
+                root,
+                timeoutMilliseconds: 30000);
+            Assert.True(
+                result.ExitCode == 0,
+                $"Windows PowerShell snap-in requirement proof failed.{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}{result.StandardError}");
+            Assert.Contains("SNAPIN_REQUIREMENT_OK", result.StandardOutput);
         }
         finally
         {

@@ -15,9 +15,9 @@ if ($PSEdition -ne 'Core') {
         }
     }
 }
-try {
-    $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
-    foreach ($Library in $LibraryFileNames) {
+$ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
+foreach ($Library in $LibraryFileNames) {
+    try {
         $ResolvedModuleAssembly = & $ResolvePowerForgeModuleAssembly -LibraryFileName $Library
         $ModuleAssemblyPath = $ResolvedModuleAssembly.Path
         $LibraryName = [IO.Path]::GetFileNameWithoutExtension($ModuleAssemblyPath)
@@ -29,15 +29,15 @@ try {
             $Type = "$Class" -as [Type]
             & $ImportModule -Force -Assembly ($Type.Assembly)
         }
-    }
-} catch {
-    if ($ErrorActionPreference -eq 'Stop') {
-        if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
-            & $UnregisterPowerForgeDesktopAssemblyResolver
+    } catch {
+        if ($ErrorActionPreference -eq 'Stop') {
+            if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
+                & $UnregisterPowerForgeDesktopAssemblyResolver
+            }
+            throw
+        } else {
+            Write-Warning -Message "Importing module $Library failed. Fix errors before continuing. Error: $($_.Exception.Message)"
         }
-        throw
-    } else {
-        Write-Warning -Message "Importing module $Library failed. Fix errors before continuing. Error: $($_.Exception.Message)"
     }
 }
 

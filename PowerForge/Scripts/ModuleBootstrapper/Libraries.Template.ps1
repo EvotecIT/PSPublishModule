@@ -55,7 +55,7 @@ if ($PSEdition -eq 'Core') {
 }
 
 $LibraryFoldersToLoad = @($LibFolder)
-if ($PSEdition -ne 'Core' -and $null -ne $ResolvePowerForgeModuleAssembly) {
+if ($null -ne $ResolvePowerForgeModuleAssembly) {
     $PowerForgeLibrariesRoot = [IO.Path]::GetFullPath($LibRoot)
     $PowerForgeLibrariesRootPrefix = $PowerForgeLibrariesRoot
     if (-not $PowerForgeLibrariesRootPrefix.EndsWith([IO.Path]::DirectorySeparatorChar.ToString(), [StringComparison]::Ordinal)) {
