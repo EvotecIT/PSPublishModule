@@ -148,6 +148,28 @@ public sealed class ModuleMergeComposerTests
     }
 
     [Fact]
+    public void PrependFunctions_PreservesPowerShellPreamble()
+    {
+        var content = "#requires -Version 5.1" + Environment.NewLine +
+                      "using namespace System.Text" + Environment.NewLine + Environment.NewLine +
+                      "function Get-Test { [StringBuilder]::new() }";
+
+        var merged = ModuleMergeComposer.PrependFunctions(
+            new[] { "function Invoke-Hidden { 'ok' }" },
+            content);
+
+        Assert.StartsWith(
+            "#requires -Version 5.1" + Environment.NewLine + "using namespace System.Text",
+            merged,
+            StringComparison.Ordinal);
+        Assert.True(
+            merged.IndexOf("using namespace System.Text", StringComparison.Ordinal) <
+            merged.IndexOf("function Invoke-Hidden", StringComparison.Ordinal));
+        Parser.ParseInput(merged, out _, out var errors);
+        Assert.Empty(errors);
+    }
+
+    [Fact]
     public void BuildSources_RewritesLegacyPSScriptRootParentPathsByDefault()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -202,6 +224,292 @@ public sealed class ModuleMergeComposerTests
     }
 
     [Fact]
+    public void BuildSources_IncludesLegacyIncludeToArrayScriptFolders()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMergeModule(root.FullName, moduleName);
+            Directory.CreateDirectory(Path.Combine(root.FullName, "LegacyScripts"));
+            File.WriteAllText(
+                Path.Combine(root.FullName, "LegacyScripts", "Get-Legacy.PS1"),
+                "function Get-Legacy { 'legacy' }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                moduleName,
+                information: new InformationConfiguration
+                {
+                    IncludeToArray = new[]
+                    {
+                        new IncludeToArrayEntry { Key = "IncludePS1", Values = new[] { "LegacyScripts" } }
+                    }
+                },
+                exports: new ExportSet(new[] { "Get-TestExample", "Get-Legacy" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: false);
+
+            Assert.Contains("function Get-Legacy", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains(sources.ScriptFiles, path => path.EndsWith("Get-Legacy.ps1", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ResolveMergeDirectories_LegacyIncludePs1OverridesModernAndDefaultFolders()
+    {
+        var directories = ModuleMergeComposer.ResolveMergeDirectories(
+            new InformationConfiguration
+            {
+                IncludePS1 = new[] { "ModernScripts" },
+                IncludeToArray = new[]
+                {
+                    new IncludeToArrayEntry { Key = "IncludePS1", Values = new[] { "LegacyScripts", "legacyscripts" } }
+                }
+            });
+
+        Assert.Equal(new[] { "LegacyScripts" }, directories);
+    }
+
+    [Fact]
+    public void BuildSources_LoadsEnumsBeforeClassesAndRebasesRelativeUsingPaths()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Enums"));
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Classes"));
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Lib"));
+            File.WriteAllText(Path.Combine(root.FullName, "Types.psm1"), "class SharedType {}");
+            File.WriteAllText(Path.Combine(root.FullName, "Lib", "Demo.dll"), string.Empty);
+            File.WriteAllText(Path.Combine(root.FullName, "Enums", "DemoKind.ps1"), "enum DemoKind { One }");
+            File.WriteAllText(
+                Path.Combine(root.FullName, "Classes", "DemoRecord.ps1"),
+                "using module ../Types.psm1" + Environment.NewLine +
+                "using assembly ../Lib/Demo.dll" + Environment.NewLine +
+                "class DemoRecord { [DemoKind] $Kind }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                "DemoModule",
+                information: new InformationConfiguration
+                {
+                    IncludePS1 = new[] { "Private", "Public", "Enums", "Classes" }
+                },
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: true);
+
+            Assert.True(
+                sources.MergedScriptContent.IndexOf("enum DemoKind", StringComparison.Ordinal) <
+                sources.MergedScriptContent.IndexOf("class DemoRecord", StringComparison.Ordinal));
+            Assert.StartsWith(
+                "using assembly ./Lib/Demo.dll" + Environment.NewLine + "using module ./Types.psm1",
+                sources.MergedScriptContent,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void BuildSources_HoistsCompleteMultilineUsingModuleSpecification()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            File.WriteAllText(Path.Combine(root.FullName, "Types.psm1"), "class SharedType {}");
+            File.WriteAllText(
+                Path.Combine(root.FullName, "Public", "Get-Demo.ps1"),
+                "using module @{" + Environment.NewLine +
+                "    ModuleName = '../Types.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "}" + Environment.NewLine + Environment.NewLine +
+                "function Get-Demo { [SharedType]::new() }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                "DemoModule",
+                information: null,
+                exports: new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: true);
+
+            var expectedDirective =
+                "using module @{" + Environment.NewLine +
+                "    ModuleName = './Types.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "}";
+            Assert.StartsWith(expectedDirective, sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Equal(1, CountOccurrences(sources.MergedScriptContent, "ModuleName = './Types.psm1'"));
+            Assert.True(
+                sources.MergedScriptContent.IndexOf(expectedDirective, StringComparison.Ordinal) <
+                sources.MergedScriptContent.IndexOf(ModuleMergeComposer.MergedSourceStartMarker, StringComparison.Ordinal));
+            Assert.Contains("function Get-Demo", sources.MergedScriptContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ExtractMergedScriptPreamble_ConsumesCompleteMultilineUsingModuleSpecification()
+    {
+        var content =
+            "#requires -Version 5.1" + Environment.NewLine +
+            "using module @{" + Environment.NewLine +
+            "    ModuleName = './Types.psm1'" + Environment.NewLine +
+            "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+            "}" + Environment.NewLine + Environment.NewLine +
+            "function Get-Demo { [SharedType]::new() }";
+
+        var preamble = ModuleMergeComposer.ExtractMergedScriptPreamble(content, out var body);
+
+        Assert.Equal(
+            "#requires -Version 5.1" + Environment.NewLine +
+            "using module @{" + Environment.NewLine +
+            "    ModuleName = './Types.psm1'" + Environment.NewLine +
+            "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+            "}",
+            preamble);
+        Assert.Equal("function Get-Demo { [SharedType]::new() }", body);
+    }
+
+    [Fact]
+    public void BuildSources_RebasesBareUsingAssemblyFileNameFromSourceDirectory()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var publicRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            File.WriteAllText(
+                Path.Combine(publicRoot.FullName, "Get-Demo.ps1"),
+                "using assembly 'Helper.dll'" + Environment.NewLine +
+                "function Get-Demo { 'ok' }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                "DemoModule",
+                information: null,
+                exports: new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: true);
+
+            Assert.StartsWith("using assembly './Public/Helper.dll'", sources.MergedScriptContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void BuildSources_RebasesLateRequiresAssemblyWithoutTouchingHereStringContent()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var publicRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Lib"));
+            File.WriteAllText(
+                Path.Combine(publicRoot.FullName, "Get-Demo.ps1"),
+                "$text = @'" + Environment.NewLine +
+                "#requires -Assembly ../DoNotTouch.dll" + Environment.NewLine +
+                "'@" + Environment.NewLine +
+                "$script:BeforeRequirement = $true" + Environment.NewLine +
+                "#requires -Assembly ../Lib/RequiredTypes.dll" + Environment.NewLine +
+                "function Get-Demo { $text }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                "DemoModule",
+                information: null,
+                exports: new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: true);
+
+            Assert.Contains("#requires -Assembly ./Lib/RequiredTypes.dll", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("#requires -Assembly ../DoNotTouch.dll", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("#requires -Assembly ./DoNotTouch.dll", sources.MergedScriptContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void BuildSources_PreservesRelativeUsingPathsWhenPathFixesAreDisabled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var publicRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            File.WriteAllText(
+                Path.Combine(publicRoot.FullName, "Get-Demo.ps1"),
+                "using assembly '../External/Types.dll'" + Environment.NewLine +
+                "using module '../External/Types.psm1'" + Environment.NewLine +
+                "function Get-Demo { 'ok' }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                "DemoModule",
+                information: null,
+                exports: new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: false);
+
+            Assert.StartsWith(
+                "using assembly '../External/Types.dll'" + Environment.NewLine +
+                "using module '../External/Types.psm1'",
+                sources.MergedScriptContent,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("using assembly './External/", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("using module './External/", sources.MergedScriptContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void BuildSources_RequiresConfiguredPrimaryAssemblyForBinaryMerge()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMergeModule(root.FullName, moduleName);
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Lib"));
+            File.WriteAllText(Path.Combine(root.FullName, "Lib", "Auxiliary.DLL"), string.Empty);
+
+            var scriptOnly = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                moduleName,
+                information: null,
+                exports: new ExportSet(new[] { "Get-TestExample" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: false);
+            var configuredBinary = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                moduleName,
+                information: null,
+                exports: new ExportSet(new[] { "Get-TestExample" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: false,
+                exportAssemblies: new[] { "Auxiliary.dll" });
+
+            Assert.False(scriptOnly.HasLib);
+            Assert.True(configuredBinary.HasLib);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void SyncMergedPsm1WithGeneratedScripts_ReplacesTrailingExportBlock()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -236,7 +544,15 @@ public sealed class ModuleMergeComposerTests
                 """);
             File.WriteAllText(generatedPath, "function Install-TestModule { 'install' }");
 
-            ModuleMergeComposer.SyncMergedPsm1WithGeneratedScripts(manifestPath, root.FullName, moduleName, new[] { generatedPath });
+            ModuleMergeComposer.SyncMergedPsm1WithGeneratedScripts(
+                manifestPath,
+                root.FullName,
+                moduleName,
+                new[] { generatedPath },
+                new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Contoso.Optional"] = new[] { "Get-TestExample" }
+                });
 
             var merged = File.ReadAllText(psm1Path);
 
@@ -246,6 +562,8 @@ public sealed class ModuleMergeComposerTests
                 1,
                 CountOccurrences(merged, "Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport"));
             Assert.Contains("$FunctionsToExport = @('Get-TestExample', 'Install-TestModule')", merged, StringComparison.Ordinal);
+            Assert.Equal(1, CountOccurrences(merged, "$PowerForgeCommandModuleDependencies = @{"));
+            Assert.Contains("'Contoso.Optional' = @('Get-TestExample')", merged, StringComparison.Ordinal);
         }
         finally
         {

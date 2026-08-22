@@ -5,6 +5,7 @@
 
 $LibRoot = [IO.Path]::Combine($PSScriptRoot, 'Lib')
 $AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction SilentlyContinue
+$Root = @(Get-ChildItem -LiteralPath $LibRoot -File -ErrorAction SilentlyContinue | Where-Object Extension -IEQ '.dll').Count -gt 0
 
 $Default = $false
 $Core = $false
@@ -39,6 +40,9 @@ if ($Standard -and $Core -and $Default) {
 } elseif ($Default) {
     $Framework = ''
     $FrameworkNet = 'Default'
+} elseif ($Root) {
+    $Framework = ''
+    $FrameworkNet = ''
 } else {
     #Write-Error -Message 'No assemblies found'
 }
@@ -50,8 +54,36 @@ if ($PSEdition -eq 'Core') {
     $LibFolder = $FrameworkNet
 }
 
-$LibrariesToLoad = $LibrariesByFolder[$LibFolder]
-if ($null -eq $LibrariesToLoad) { $LibrariesToLoad = @() }
+$LibraryFoldersToLoad = @($LibFolder)
+if ($null -ne $ResolvePowerForgeModuleAssembly) {
+    $PowerForgeLibrariesRoot = [IO.Path]::GetFullPath($LibRoot)
+    $PowerForgeLibrariesRootPrefix = $PowerForgeLibrariesRoot
+    if (-not $PowerForgeLibrariesRootPrefix.EndsWith([IO.Path]::DirectorySeparatorChar.ToString(), [StringComparison]::Ordinal)) {
+        $PowerForgeLibrariesRootPrefix += [IO.Path]::DirectorySeparatorChar
+    }
+    foreach ($PowerForgeLibraryFileName in $LibraryFileNames) {
+        $PowerForgeResolvedLibrary = & $ResolvePowerForgeModuleAssembly -LibraryFileName $PowerForgeLibraryFileName
+        $PowerForgeResolvedLibraryDirectory = [IO.Path]::GetFullPath($PowerForgeResolvedLibrary.Directory)
+        $PowerForgeResolvedLibraryFolder = if ($PowerForgeResolvedLibraryDirectory -ieq $PowerForgeLibrariesRoot) {
+            ''
+        } elseif ($PowerForgeResolvedLibraryDirectory.StartsWith($PowerForgeLibrariesRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            $PowerForgeResolvedLibraryDirectory.Substring($PowerForgeLibrariesRootPrefix.Length).Replace('\\', '/').Trim('/')
+        }
+        if ($null -ne $PowerForgeResolvedLibraryFolder -and
+            $LibrariesByFolder.ContainsKey($PowerForgeResolvedLibraryFolder) -and
+            $PowerForgeResolvedLibraryFolder -notin $LibraryFoldersToLoad) {
+            $LibraryFoldersToLoad += $PowerForgeResolvedLibraryFolder
+        }
+    }
+}
+
+$LibrariesToLoad = @(
+    foreach ($LibraryFolderToLoad in $LibraryFoldersToLoad) {
+        if ($LibrariesByFolder.ContainsKey($LibraryFolderToLoad)) {
+            $LibrariesByFolder[$LibraryFolderToLoad]
+        }
+    }
+) | Select-Object -Unique
 foreach ($L in $LibrariesToLoad) {
     try {
         $LibraryPathParts = @($PSScriptRoot) + @($L -split '[\\/]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })

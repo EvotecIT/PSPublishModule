@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace PowerForge;
@@ -22,8 +23,12 @@ internal sealed class ModuleMergeSources
     internal bool HasScripts => ScriptFiles.Length > 0;
 }
 
-internal static class ModuleMergeComposer
+internal static partial class ModuleMergeComposer
 {
+    internal const string MergedSourceStartMarker = "# PowerForge merged source begin";
+    internal const string MergedSourceEndMarker = "# PowerForge merged source end";
+    internal const string MergedSourcePreambleMarker = "# PowerForge merged source preamble ";
+
     internal static ModuleMergeSources BuildSources(
         string rootPath,
         string moduleName,
@@ -31,7 +36,8 @@ internal static class ModuleMergeComposer
         ExportSet exports,
         bool fixRelativePaths,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null,
-        IReadOnlyList<string>? scriptFiles = null)
+        IReadOnlyList<string>? scriptFiles = null,
+        IReadOnlyList<string>? exportAssemblies = null)
     {
         var root = Path.GetFullPath(rootPath);
         var psm1 = Path.Combine(root, $"{moduleName}.psm1");
@@ -40,10 +46,11 @@ internal static class ModuleMergeComposer
             : NormalizeScriptFiles(scriptFiles);
 
         var merged = ordered.Length > 0
-            ? BuildMergedScriptContent(ordered, exports, fixRelativePaths, conditionalFunctionDependencies, moduleName)
+            ? BuildMergedScriptContent(root, ordered, exports, fixRelativePaths, conditionalFunctionDependencies, moduleName)
             : string.Empty;
         var libRoot = Path.Combine(root, "Lib");
-        var hasLib = Directory.Exists(libRoot) && Directory.EnumerateDirectories(libRoot).Any();
+        var assemblyFileNames = ModuleBinaryFileLocator.ResolveAssemblyFileNames(moduleName, exportAssemblies);
+        var hasLib = ModuleBinaryFileLocator.ContainsAnyFileName(libRoot, assemblyFileNames, SearchOption.AllDirectories);
 
         return new ModuleMergeSources(psm1, ordered, merged, hasLib);
     }
@@ -52,7 +59,8 @@ internal static class ModuleMergeComposer
         string manifestPath,
         string stagingPath,
         string moduleName,
-        IEnumerable<string> scriptPaths)
+        IEnumerable<string> scriptPaths,
+        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null)
     {
         if (string.IsNullOrWhiteSpace(manifestPath) || string.IsNullOrWhiteSpace(stagingPath) || string.IsNullOrWhiteSpace(moduleName))
             return;
@@ -72,7 +80,8 @@ internal static class ModuleMergeComposer
             return;
 
         var existing = File.ReadAllText(psm1Path);
-        var withoutExportBlock = RemoveTrailingExportBlock(existing).TrimEnd();
+        ExtractTrailingExportBlock(existing, out var withoutExportBlock);
+        withoutExportBlock = withoutExportBlock.TrimEnd();
 
         var builder = new StringBuilder(withoutExportBlock);
         foreach (var script in generatedScripts)
@@ -83,7 +92,10 @@ internal static class ModuleMergeComposer
             builder.Append(script.TrimEnd());
         }
 
-        var exportBlock = ModuleConditionalExportBlockBuilder.BuildExportBlock(ModuleManifestExportReader.ReadExports(manifestPath)).TrimEnd();
+        var exportBlock = ModuleConditionalExportBlockBuilder.BuildExportBlock(
+            ModuleManifestExportReader.ReadExports(manifestPath),
+            conditionalFunctionDependencies,
+            moduleName).TrimEnd();
         if (!string.IsNullOrWhiteSpace(exportBlock))
         {
             if (builder.Length > 0)
@@ -103,9 +115,58 @@ internal static class ModuleMergeComposer
             return content;
 
         var prefix = string.Join(System.Environment.NewLine, block);
-        return string.IsNullOrWhiteSpace(content)
+        var preamble = ExtractMergedScriptPreamble(content, out var body);
+        var updatedBody = string.IsNullOrWhiteSpace(body)
             ? prefix
-            : prefix + System.Environment.NewLine + System.Environment.NewLine + content;
+            : prefix + System.Environment.NewLine + System.Environment.NewLine + body;
+        return string.IsNullOrWhiteSpace(preamble)
+            ? updatedBody
+            : preamble + System.Environment.NewLine + System.Environment.NewLine + updatedBody;
+    }
+
+    internal static string ExtractMergedScriptPreamble(string? content, out string body)
+    {
+        body = content ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(body))
+            return string.Empty;
+
+        var normalized = body.Replace("\r\n", "\n").Replace('\r', '\n');
+        var lines = normalized.Split('\n');
+        var preamble = new List<string>();
+        var index = 0;
+        for (; index < lines.Length; index++)
+        {
+            var line = lines[index];
+            var directiveStart = 0;
+            while (directiveStart < line.Length && char.IsWhiteSpace(line[directiveStart]))
+                directiveStart++;
+
+            if (StartsWithDirective(line, directiveStart, "#requires"))
+            {
+                preamble.Add(line);
+                continue;
+            }
+
+            if (StartsWithDirective(line, directiveStart, "using"))
+            {
+                var directiveEnd = FindUsingDirectiveEnd(lines, index, directiveStart);
+                for (; index <= directiveEnd; index++)
+                    preamble.Add(lines[index]);
+                index--;
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(line) && preamble.Count > 0)
+                continue;
+
+            break;
+        }
+
+        if (preamble.Count == 0)
+            return string.Empty;
+
+        body = string.Join(System.Environment.NewLine, lines.Skip(index)).TrimStart('\r', '\n');
+        return string.Join(System.Environment.NewLine, preamble);
     }
 
     internal static void WriteMergedPsm1(string path, string content)
@@ -135,7 +196,10 @@ internal static class ModuleMergeComposer
 
             try
             {
-                files.AddRange(Directory.EnumerateFiles(full, "*.ps1", SearchOption.AllDirectories));
+                files.AddRange(
+                    Directory.EnumerateFiles(full, "*", SearchOption.AllDirectories)
+                        .Where(static file => string.Equals(Path.GetExtension(file), ".ps1", StringComparison.OrdinalIgnoreCase))
+                        .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase));
             }
             catch
             {
@@ -147,33 +211,61 @@ internal static class ModuleMergeComposer
     }
 
     private static string[] NormalizeScriptFiles(IEnumerable<string> files)
-        => files
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return files
             .Where(static file => !string.IsNullOrWhiteSpace(file))
             .Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
+            .Where(seen.Add)
             .ToArray();
+    }
 
-    private static string[] ResolveMergeDirectories(InformationConfiguration? information)
+    internal static string[] ResolveMergeDirectories(InformationConfiguration? information)
     {
-        var ordered = new List<string> { "Classes", "Enums", "Private", "Public" };
+        IEnumerable<string> configured = information?.IncludePS1 is { Length: > 0 }
+            ? information.IncludePS1
+            : new[] { "Enums", "Classes", "Private", "Public" };
 
-        if (information?.IncludePS1 is { Length: > 0 })
+        if (information?.IncludeToArray is { Length: > 0 })
         {
-            foreach (var entry in information.IncludePS1)
+            foreach (var entry in information.IncludeToArray)
             {
-                if (string.IsNullOrWhiteSpace(entry))
+                if (entry is null || !string.Equals(entry.Key, "IncludePS1", System.StringComparison.OrdinalIgnoreCase))
                     continue;
-                if (ordered.Any(existing => string.Equals(existing, entry, System.StringComparison.OrdinalIgnoreCase)))
-                    continue;
-                ordered.Add(entry);
+                if (entry.Values is { Length: > 0 })
+                    configured = entry.Values;
             }
         }
 
-        return ordered.ToArray();
+        var normalized = configured
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return normalized.All(IsStandardMergeDirectory)
+            ? normalized.OrderBy(GetStandardMergeDirectoryPriority).ToArray()
+            : normalized;
+    }
+
+    private static bool IsStandardMergeDirectory(string directory)
+        => GetStandardMergeDirectoryPriority(directory) < int.MaxValue;
+
+    private static int GetStandardMergeDirectoryPriority(string directory)
+    {
+        if (string.Equals(directory, "Enums", System.StringComparison.OrdinalIgnoreCase))
+            return 0;
+        if (string.Equals(directory, "Classes", System.StringComparison.OrdinalIgnoreCase))
+            return 1;
+        if (string.Equals(directory, "Private", System.StringComparison.OrdinalIgnoreCase))
+            return 2;
+        if (string.Equals(directory, "Public", System.StringComparison.OrdinalIgnoreCase))
+            return 3;
+        return int.MaxValue;
     }
 
     private static string BuildMergedScriptContent(
+        string rootPath,
         IReadOnlyList<string> files,
         ExportSet exports,
         bool fixRelativePaths,
@@ -182,7 +274,8 @@ internal static class ModuleMergeComposer
     {
         var requires = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var usingLines = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var body = new StringBuilder(8192);
+        var sourceBlocks = new List<string>();
+        var sourceBlockHasPreamble = new List<bool>();
 
         foreach (var file in files)
         {
@@ -200,7 +293,17 @@ internal static class ModuleMergeComposer
             }
 
             var block = new List<string>();
-            var directiveLineReplacements = ExtractPreambleDirectives(lines, requires, usingLines);
+            var sourcePreambleLines = new List<string>();
+            var directiveLineReplacements = ExtractPreambleDirectives(
+                lines,
+                requires,
+                usingLines,
+                sourcePreambleLines,
+                file,
+                rootPath,
+                fixRelativePaths);
+            if (fixRelativePaths)
+                RebaseLateRequiresAssemblyDirectives(lines, directiveLineReplacements, file, rootPath);
             for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
             {
                 var line = lines[lineIndex];
@@ -215,12 +318,34 @@ internal static class ModuleMergeComposer
                 block.Add(fixRelativePaths ? NormalizeMergedRelativePathReferences(line) : line);
             }
 
-            if (block.Count == 0)
+            if (block.Count == 0 && sourcePreambleLines.Count == 0)
                 continue;
 
-            foreach (var line in block)
-                body.AppendLine(line);
+            var sourceBlock = string.Join(System.Environment.NewLine, block);
+            if (sourcePreambleLines.Count > 0)
+            {
+                var sourcePreamble = string.Join(System.Environment.NewLine, sourcePreambleLines);
+                var encodedPreamble = System.Convert.ToBase64String(Encoding.UTF8.GetBytes(sourcePreamble));
+                sourceBlock = MergedSourcePreambleMarker + encodedPreamble +
+                              System.Environment.NewLine + sourceBlock;
+            }
+            sourceBlocks.Add(sourceBlock);
+            sourceBlockHasPreamble.Add(sourcePreambleLines.Count > 0);
+        }
 
+        var body = new StringBuilder(8192);
+        var boundaryToken = ComputeMergedSourceBoundaryToken(sourceBlocks);
+        var sourceStartMarker = MergedSourceStartMarker + " " + boundaryToken;
+        var sourceEndMarker = MergedSourceEndMarker + " " + boundaryToken;
+        var sourcePreambleMarker = MergedSourcePreambleMarker + boundaryToken + " ";
+        for (var sourceIndex = 0; sourceIndex < sourceBlocks.Count; sourceIndex++)
+        {
+            var block = sourceBlocks[sourceIndex];
+            if (sourceBlockHasPreamble[sourceIndex])
+                block = sourcePreambleMarker + block.Substring(MergedSourcePreambleMarker.Length);
+            body.AppendLine(sourceStartMarker);
+            body.AppendLine(block);
+            body.AppendLine(sourceEndMarker);
             body.AppendLine();
         }
 
@@ -253,7 +378,11 @@ internal static class ModuleMergeComposer
     private static Dictionary<int, string> ExtractPreambleDirectives(
         IReadOnlyList<string> lines,
         ISet<string> requires,
-        ISet<string> usingLines)
+        ISet<string> usingLines,
+        ICollection<string> sourcePreambleLines,
+        string sourcePath,
+        string moduleRoot,
+        bool fixRelativePaths)
     {
         // PowerShell using statements are valid only in the script preamble. Restricting extraction to that region
         // prevents embedded languages in here-strings and block comments from being mistaken for module directives.
@@ -268,15 +397,38 @@ internal static class ModuleMergeComposer
 
             if (kind == PreambleLineKind.Requires)
             {
-                requires.Add(lines[index].Substring(directiveStart));
+                var directive = lines[index].Substring(directiveStart);
+                if (fixRelativePaths)
+                    directive = RebaseRequiresAssemblyDirective(directive, sourcePath, moduleRoot);
+                requires.Add(directive);
+                sourcePreambleLines.Add(directive);
                 lineReplacements[index] = lines[index].Substring(0, directiveStart).TrimEnd();
                 continue;
             }
 
             if (kind == PreambleLineKind.Using)
             {
-                usingLines.Add(lines[index].Substring(directiveStart));
-                lineReplacements[index] = lines[index].Substring(0, directiveStart).TrimEnd();
+                var directiveEnd = FindUsingDirectiveEnd(lines, index, directiveStart);
+                var directive = new StringBuilder(lines[index].Substring(directiveStart));
+                for (var directiveLine = index + 1; directiveLine <= directiveEnd; directiveLine++)
+                    directive.AppendLine().Append(lines[directiveLine]);
+
+                var rebasedDirective = fixRelativePaths
+                    ? RebaseUsingDirective(
+                        directive.ToString(),
+                        sourcePath,
+                        moduleRoot)
+                    : directive.ToString();
+                usingLines.Add(rebasedDirective);
+                sourcePreambleLines.Add(rebasedDirective);
+                for (var directiveLine = index; directiveLine <= directiveEnd; directiveLine++)
+                {
+                    lineReplacements[directiveLine] = directiveLine == index
+                        ? lines[index].Substring(0, directiveStart).TrimEnd()
+                        : string.Empty;
+                }
+
+                index = directiveEnd;
                 continue;
             }
 
@@ -284,6 +436,47 @@ internal static class ModuleMergeComposer
         }
 
         return lineReplacements;
+    }
+
+    internal static bool TryResolveMergedSourceMarkers(
+        string? content,
+        out string startMarker,
+        out string endMarker)
+    {
+        startMarker = MergedSourceStartMarker;
+        endMarker = MergedSourceEndMarker;
+        if (content is null || string.IsNullOrWhiteSpace(content))
+            return false;
+
+        var normalized = content.Replace("\r\n", "\n").Replace('\r', '\n');
+        var prefix = MergedSourceStartMarker + " ";
+        foreach (var line in normalized.Split('\n'))
+        {
+            if (!line.StartsWith(prefix, System.StringComparison.Ordinal))
+                continue;
+
+            var token = line.Substring(prefix.Length).Trim();
+            if (token.Length == 0)
+                continue;
+
+            var candidateEnd = MergedSourceEndMarker + " " + token;
+            if (normalized.IndexOf(candidateEnd, System.StringComparison.Ordinal) < 0)
+                continue;
+
+            startMarker = line;
+            endMarker = candidateEnd;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string ComputeMergedSourceBoundaryToken(IReadOnlyList<string> sourceBlocks)
+    {
+        var content = string.Join("\u001f", sourceBlocks ?? Array.Empty<string>());
+        using var sha256 = SHA256.Create();
+        var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(content));
+        return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
     }
 
     private static PreambleLineKind ClassifyPreambleLine(
@@ -387,12 +580,14 @@ internal static class ModuleMergeComposer
         return updated;
     }
 
-    private static string RemoveTrailingExportBlock(string content)
+    internal static string ExtractTrailingExportBlock(string content, out string body)
     {
-        if (string.IsNullOrWhiteSpace(content))
-            return content ?? string.Empty;
+        var source = content ?? string.Empty;
+        body = source;
+        if (string.IsNullOrWhiteSpace(source))
+            return string.Empty;
 
-        var normalized = content.Replace("\r\n", "\n");
+        var normalized = source.Replace("\r\n", "\n");
         // The generated export block is expected to be the tail of the merged PSM1, so syncing generated scripts
         // replaces that trailing block wholesale before appending a fresh one from the manifest.
         var exportStart = normalized.LastIndexOf("\n$FunctionsToExport = ", System.StringComparison.Ordinal);
@@ -400,13 +595,14 @@ internal static class ModuleMergeComposer
             exportStart = 0;
 
         if (exportStart < 0)
-            return content;
+            return string.Empty;
 
         const string exportLine = "Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport";
         var exportLineIndex = normalized.IndexOf(exportLine, exportStart, System.StringComparison.Ordinal);
         if (exportLineIndex < 0)
-            return content;
+            return string.Empty;
 
-        return normalized.Substring(0, exportStart).TrimEnd('\n');
+        body = normalized.Substring(0, exportStart).TrimEnd('\n');
+        return normalized.Substring(exportStart).TrimStart('\n').TrimEnd('\n');
     }
 }

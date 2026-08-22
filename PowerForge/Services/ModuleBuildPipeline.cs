@@ -140,9 +140,7 @@ public sealed class ModuleBuildPipeline
             return;
 
         var libPath = Path.Combine(stagingPath, "Lib");
-        var dlls = Directory.Exists(libPath)
-            ? Directory.GetFiles(libPath, "*.dll", SearchOption.AllDirectories)
-            : Array.Empty<string>();
+        var dlls = ModuleBinaryFileLocator.Enumerate(libPath, SearchOption.AllDirectories).ToArray();
         if (dlls.Length == 0)
         {
             throw new InvalidOperationException(
@@ -196,8 +194,12 @@ public sealed class ModuleBuildPipeline
             : Path.GetFullPath(spec.CsprojPath);
         var forceBootstrapperWrite = ShouldCleanReplaceSingleFileBinaryPayload(spec);
         var rootModuleScriptWillBeReplaced = !spec.RefreshManifestOnly &&
-                                             (!string.IsNullOrWhiteSpace(resolvedCsprojPath) ||
-                                              ModuleBootstrapperGenerator.ShouldWriteBootstrapper(staging, forceBootstrapperWrite));
+                                              (!string.IsNullOrWhiteSpace(resolvedCsprojPath) ||
+                                               ModuleBootstrapperGenerator.ShouldWriteBootstrapper(
+                                                   staging,
+                                                   spec.Name,
+                                                   spec.ExportAssemblies,
+                                                   forceBootstrapperWrite));
 
         var builder = new ModuleBuilder(
             _logger,

@@ -176,6 +176,266 @@ try {
         }
     }
 
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void GeneratedCoreBootstrapperPrependsResolvedNativeRuntimeBeforeImport()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var powerShell7 = FindExecutableOnPath("pwsh.exe");
+        if (powerShell7 is null)
+        {
+            return;
+        }
+
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "pf-bootstrapper-native-runtime-" + Guid.NewGuid().ToString("N"));
+        var libCore = Path.Combine(root, "Lib", "Core");
+        Directory.CreateDirectory(libCore);
+
+        try
+        {
+            var moduleAssembly = BuildDesktopFixture(root);
+            File.Copy(
+                moduleAssembly,
+                Path.Combine(libCore, "DemoModule.dll"),
+                overwrite: true);
+
+            foreach (var rid in new[] { "win-x64", "win-x86", "win-arm64" })
+            {
+                Directory.CreateDirectory(Path.Combine(libCore, "runtimes", rid, "native"));
+            }
+
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>()),
+                new[] { "DemoModule.dll" },
+                handleRuntimes: true,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0" });
+
+            var proofScript = Path.Combine(root, "Validate-NativeRuntimeOrder.ps1");
+            File.WriteAllText(
+                proofScript,
+                """
+$ErrorActionPreference = 'Stop'
+$originalPath = $env:PATH
+try {
+    Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force
+    $archFolder = switch ([string][System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture) {
+        'X64' { 'win-x64' }
+        'X86' { 'win-x86' }
+        'Arm64' { 'win-arm64' }
+        default { throw "Unsupported test architecture: $_" }
+    }
+    $expected = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "Lib\Core\runtimes\$archFolder\native"))
+    $firstPathEntry = @($env:PATH -split [IO.Path]::PathSeparator)[0]
+    if ($firstPathEntry -ne $expected) {
+        throw "Native runtime path was not prepended before import. Expected '$expected', got '$firstPathEntry'."
+    }
+    'NATIVE_RUNTIME_ORDER_OK'
+} finally {
+    $env:PATH = $originalPath
+}
+""");
+
+            var result = RunProcess(
+                powerShell7,
+                $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{proofScript}\"",
+                root,
+                timeoutMilliseconds: 30000);
+
+            Assert.True(
+                result.ExitCode == 0,
+                $"PowerShell Core native runtime proof failed.{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}{result.StandardError}");
+            Assert.Contains("NATIVE_RUNTIME_ORDER_OK", result.StandardOutput);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void GeneratedDesktopBootstrapperPreloadsDependenciesFromNestedExportDirectory()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var windowsPowerShell = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "WindowsPowerShell",
+            "v1.0",
+            "powershell.exe");
+        if (!File.Exists(windowsPowerShell))
+        {
+            return;
+        }
+
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "pf-bootstrapper-nested-desktop-dependency-" + Guid.NewGuid().ToString("N"));
+        var nestedLib = Path.Combine(root, "Lib", "Plugins", "Deferred");
+        Directory.CreateDirectory(nestedLib);
+
+        try
+        {
+            var fixture = BuildNestedDesktopFixture(root);
+            File.Copy(fixture.ModuleAssembly, Path.Combine(nestedLib, "DemoModule.dll"), overwrite: true);
+            File.Copy(fixture.DependencyAssembly, Path.Combine(nestedLib, "NestedDependency.dll"), overwrite: true);
+
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "Plugins/Deferred/DemoModule.dll" },
+                handleRuntimes: false);
+
+            var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
+            Assert.Contains("'Plugins/Deferred' = @(", libraries, StringComparison.Ordinal);
+            Assert.True(
+                libraries.IndexOf("NestedDependency.dll", StringComparison.Ordinal) <
+                libraries.IndexOf("DemoModule.dll", StringComparison.Ordinal),
+                "The nested dependency must be preloaded before its configured export assembly.");
+
+            var proofScript = Path.Combine(root, "Validate-NestedDependency.ps1");
+            File.WriteAllText(
+                proofScript,
+                """
+$ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force
+$module = Get-Module DemoModule
+$resolverState = & $module { $PowerForgeDesktopAssemblyResolverState }
+if ($resolverState.Registered) { throw 'The Desktop resolver remained registered after bootstrap.' }
+if ([DemoModule.Initialize]::Read() -ne 'nested-dependency') { throw 'The deferred nested dependency was unavailable.' }
+'NESTED_DEPENDENCY_PRELOADED'
+""");
+
+            var result = RunProcess(
+                windowsPowerShell,
+                $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{proofScript}\"",
+                root,
+                timeoutMilliseconds: 30000);
+
+            Assert.True(
+                result.ExitCode == 0,
+                $"Windows PowerShell nested dependency proof failed.{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}{result.StandardError}");
+            Assert.Contains("NESTED_DEPENDENCY_PRELOADED", result.StandardOutput);
+
+            var powerShell7 = FindExecutableOnPath("pwsh.exe");
+            if (powerShell7 is not null)
+            {
+                var coreResult = RunProcess(
+                    powerShell7,
+                    $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{proofScript}\"",
+                    root,
+                    timeoutMilliseconds: 30000);
+                Assert.True(
+                    coreResult.ExitCode == 0,
+                    $"PowerShell Core nested dependency proof failed.{Environment.NewLine}{coreResult.StandardOutput}{Environment.NewLine}{coreResult.StandardError}");
+                Assert.Contains("NESTED_DEPENDENCY_PRELOADED", coreResult.StandardOutput);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void MergedDesktopSourceEnforcesAndLoadsRequiredSnapIn()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var windowsPowerShell = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "WindowsPowerShell",
+            "v1.0",
+            "powershell.exe");
+        if (!File.Exists(windowsPowerShell))
+        {
+            return;
+        }
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-source-snapin-" + Guid.NewGuid().ToString("N"));
+        var libDefault = Directory.CreateDirectory(Path.Combine(root, "Lib", "Default")).FullName;
+        var publicRoot = Directory.CreateDirectory(Path.Combine(root, "Public")).FullName;
+
+        try
+        {
+            var moduleAssembly = BuildDesktopFixture(root);
+            File.Copy(moduleAssembly, Path.Combine(libDefault, "DemoModule.dll"), overwrite: true);
+            File.WriteAllText(
+                Path.Combine(publicRoot, "Get-SnapInSource.ps1"),
+                "#requires -PSSnapin Microsoft.PowerShell.Core -Version 3.0" + Environment.NewLine +
+                "function Get-SnapInSource { (Get-PSSnapin -Name Microsoft.PowerShell.Core).Name }");
+            var exports = new ExportSet(new[] { "Get-SnapInSource" }, Array.Empty<string>(), Array.Empty<string>());
+            var sources = ModuleMergeComposer.BuildSources(
+                root,
+                "DemoModule",
+                information: null,
+                exports,
+                fixRelativePaths: false,
+                exportAssemblies: new[] { "DemoModule.dll" });
+
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false);
+            var bootstrapperPath = Path.Combine(root, "DemoModule.psm1");
+            ModuleBootstrapperGenerator.InlineMergedScriptPayload(bootstrapperPath, sources.MergedScriptContent);
+            var proofScript = Path.Combine(root, "Validate-SnapInRequirement.ps1");
+            File.WriteAllText(
+                proofScript,
+                """
+$ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force
+if ((Get-SnapInSource) -ne 'Microsoft.PowerShell.Core') { throw 'The required snap-in was unavailable to the merged source.' }
+'SNAPIN_REQUIREMENT_OK'
+""");
+
+            var result = RunProcess(
+                windowsPowerShell,
+                $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{proofScript}\"",
+                root,
+                timeoutMilliseconds: 30000);
+            Assert.True(
+                result.ExitCode == 0,
+                $"Windows PowerShell snap-in requirement proof failed.{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}{result.StandardError}");
+            Assert.Contains("SNAPIN_REQUIREMENT_OK", result.StandardOutput);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static string BuildDesktopFixture(string root)
     {
         var projectRoot = Directory.CreateDirectory(Path.Combine(root, "Fixture"));
@@ -219,6 +479,62 @@ namespace DemoModule
             "DemoModule.dll");
         Assert.True(File.Exists(assemblyPath), $"Built assembly not found: {assemblyPath}");
         return assemblyPath;
+    }
+
+    private static (string ModuleAssembly, string DependencyAssembly) BuildNestedDesktopFixture(string root)
+    {
+        var fixtureRoot = Directory.CreateDirectory(Path.Combine(root, "NestedFixture"));
+        var dependencyRoot = Directory.CreateDirectory(Path.Combine(fixtureRoot.FullName, "NestedDependency"));
+        var moduleRoot = Directory.CreateDirectory(Path.Combine(fixtureRoot.FullName, "DemoModule"));
+        var dependencyProject = Path.Combine(dependencyRoot.FullName, "NestedDependency.csproj");
+        var moduleProject = Path.Combine(moduleRoot.FullName, "DemoModule.csproj");
+        File.WriteAllText(
+            dependencyProject,
+            """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>NestedDependency</AssemblyName>
+  </PropertyGroup>
+</Project>
+""");
+        File.WriteAllText(
+            Path.Combine(dependencyRoot.FullName, "Marker.cs"),
+            "namespace NestedDependency { public static class Marker { public static string Value { get { return \"nested-dependency\"; } } } }");
+        File.WriteAllText(
+            moduleProject,
+            $"""
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>DemoModule</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="{dependencyProject}" />
+  </ItemGroup>
+</Project>
+""");
+        File.WriteAllText(
+            Path.Combine(moduleRoot.FullName, "Initialize.cs"),
+            "namespace DemoModule { public static class Initialize { public static string Read() { return NestedDependency.Marker.Value; } } }");
+
+        var result = RunProcess(
+            "dotnet",
+            $"build \"{moduleProject}\" -c Release -nologo --verbosity quiet",
+            moduleRoot.FullName,
+            timeoutMilliseconds: 60000);
+        Assert.True(
+            result.ExitCode == 0,
+            $"dotnet build failed for the nested Desktop fixture.{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}{result.StandardError}");
+
+        var outputRoot = Path.Combine(moduleRoot.FullName, "bin", "Release", "netstandard2.0");
+        var moduleAssembly = Path.Combine(outputRoot, "DemoModule.dll");
+        var dependencyAssembly = Path.Combine(outputRoot, "NestedDependency.dll");
+        Assert.True(File.Exists(moduleAssembly), $"Built module assembly not found: {moduleAssembly}");
+        Assert.True(File.Exists(dependencyAssembly), $"Built dependency assembly not found: {dependencyAssembly}");
+        return (moduleAssembly, dependencyAssembly);
     }
 
     private static ProcessResult RunProcess(

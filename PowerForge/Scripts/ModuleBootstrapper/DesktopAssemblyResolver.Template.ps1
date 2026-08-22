@@ -1,9 +1,31 @@
 $UnregisterPowerForgeDesktopAssemblyResolver = $null
-if ($PSEdition -ne 'Core' -and $LibFolder) {
-    $PowerForgeDesktopAssemblyRoot = [IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder))
-    $PowerForgeDesktopAssemblyRootPrefix = $PowerForgeDesktopAssemblyRoot
-    if (-not $PowerForgeDesktopAssemblyRootPrefix.EndsWith([IO.Path]::DirectorySeparatorChar.ToString(), [StringComparison]::Ordinal)) {
-        $PowerForgeDesktopAssemblyRootPrefix += [IO.Path]::DirectorySeparatorChar
+$PowerForgeDesktopAssemblyRoots = @()
+if ($PSEdition -ne 'Core') {
+    if ($null -ne $ResolvePowerForgeModuleAssembly -and $LibraryFileNames.Count -gt 0) {
+        foreach ($PowerForgeDesktopLibraryFileName in $LibraryFileNames) {
+            $PowerForgeDesktopResolvedModule = & $ResolvePowerForgeModuleAssembly -LibraryFileName $PowerForgeDesktopLibraryFileName
+            if ($PowerForgeDesktopResolvedModule.Directory -notin $PowerForgeDesktopAssemblyRoots) {
+                $PowerForgeDesktopAssemblyRoots += $PowerForgeDesktopResolvedModule.Directory
+            }
+        }
+    } elseif ($LibFolder -or $Root) {
+        $PowerForgeDesktopAssemblyRoots += if ($LibFolder) {
+            [IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder))
+        } else {
+            [IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, 'Lib'))
+        }
+    }
+}
+if ($PSEdition -ne 'Core' -and $PowerForgeDesktopAssemblyRoots.Count -gt 0) {
+    $PowerForgeDesktopAssemblyRootPrefixes = @($PowerForgeDesktopAssemblyRoots | ForEach-Object {
+        $PowerForgeDesktopAssemblyRootPrefix = [IO.Path]::GetFullPath($_)
+        if (-not $PowerForgeDesktopAssemblyRootPrefix.EndsWith([IO.Path]::DirectorySeparatorChar.ToString(), [StringComparison]::Ordinal)) {
+            $PowerForgeDesktopAssemblyRootPrefix += [IO.Path]::DirectorySeparatorChar
+        }
+        $PowerForgeDesktopAssemblyRootPrefix
+    })
+    if ($PowerForgeDesktopAssemblyRootPrefixes.Count -eq 0) {
+        $PowerForgeDesktopAssemblyRoots = @()
     }
     $PowerForgeDesktopAssemblyResolverState = [pscustomobject]@{
         BootstrapActive = $true
@@ -30,7 +52,10 @@ if ($PSEdition -ne 'Core' -and $LibFolder) {
                 }
             } else {
                 $PowerForgeRequestingAssemblyPath = [IO.Path]::GetFullPath($EventArgs.RequestingAssembly.Location)
-                if (-not $PowerForgeRequestingAssemblyPath.StartsWith($PowerForgeDesktopAssemblyRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                $PowerForgeRequestFromModuleRoot = @($PowerForgeDesktopAssemblyRootPrefixes | Where-Object {
+                    $PowerForgeRequestingAssemblyPath.StartsWith($_, [StringComparison]::OrdinalIgnoreCase)
+                }).Count -gt 0
+                if (-not $PowerForgeRequestFromModuleRoot) {
                     return $null
                 }
             }
@@ -48,17 +73,23 @@ if ($PSEdition -ne 'Core' -and $LibFolder) {
                 return $null
             }
 
-            $PowerForgeAssemblyCandidate = [IO.Path]::GetFullPath(
-                [IO.Path]::Combine($PowerForgeDesktopAssemblyRoot, $PowerForgeRequestedAssemblyName + '.dll'))
-            if (-not $PowerForgeAssemblyCandidate.StartsWith($PowerForgeDesktopAssemblyRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-                return $null
+            foreach ($PowerForgeDesktopAssemblyRoot in $PowerForgeDesktopAssemblyRoots) {
+                $PowerForgeAssemblyCandidate = [IO.Path]::GetFullPath(
+                    [IO.Path]::Combine($PowerForgeDesktopAssemblyRoot, $PowerForgeRequestedAssemblyName + '.dll'))
+                $PowerForgeDesktopAssemblyRootPrefix = [IO.Path]::GetFullPath($PowerForgeDesktopAssemblyRoot)
+                if (-not $PowerForgeDesktopAssemblyRootPrefix.EndsWith([IO.Path]::DirectorySeparatorChar.ToString(), [StringComparison]::Ordinal)) {
+                    $PowerForgeDesktopAssemblyRootPrefix += [IO.Path]::DirectorySeparatorChar
+                }
+                if (-not $PowerForgeAssemblyCandidate.StartsWith($PowerForgeDesktopAssemblyRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                    continue
+                }
+
+                if ([IO.File]::Exists($PowerForgeAssemblyCandidate)) {
+                    return [Reflection.Assembly]::LoadFrom($PowerForgeAssemblyCandidate)
+                }
             }
 
-            if (-not [IO.File]::Exists($PowerForgeAssemblyCandidate)) {
-                return $null
-            }
-
-            return [Reflection.Assembly]::LoadFrom($PowerForgeAssemblyCandidate)
+            return $null
         } catch {
             return $null
         }

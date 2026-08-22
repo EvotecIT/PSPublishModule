@@ -202,7 +202,7 @@ if ($PSEdition -ne 'Core') {
                 }
             }
 
-            foreach ($File in Get-ChildItem -LiteralPath $LibraryDirectory -Filter '*.dll' -File -ErrorAction SilentlyContinue) {
+            foreach ($File in Get-ChildItem -LiteralPath $LibraryDirectory -File -ErrorAction SilentlyContinue | Where-Object Extension -IEQ '.dll') {
                 if ($IgnoredLibraryFileNames -contains $File.Name) {
                     continue
                 }

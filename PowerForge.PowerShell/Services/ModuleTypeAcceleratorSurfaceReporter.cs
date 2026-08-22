@@ -34,10 +34,15 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
 
         var requestedTypes = Normalize(plan.BuildSpec.AssemblyTypeAccelerators);
         var requestedAssemblies = Normalize(plan.BuildSpec.AssemblyTypeAcceleratorAssemblies);
-        var libraryDirectory = ResolveAssemblyLoadContextLibraryDirectory(buildResult.StagingPath);
+        var exportAssemblyReferences = plan.BuildSpec.ExportAssemblies.Any(static entry => !string.IsNullOrWhiteSpace(entry))
+            ? ModuleBinaryFileLocator.ResolveAssemblyReferences(plan.ModuleName, plan.BuildSpec.ExportAssemblies)
+            : Array.Empty<string>();
+        var libraryDirectories = ResolveAssemblyLoadContextLibraryDirectories(
+            buildResult.StagingPath,
+            exportAssemblyReferences);
 
         ModuleTypeAcceleratorSurfaceReport report;
-        if (string.IsNullOrWhiteSpace(libraryDirectory) || !Directory.Exists(libraryDirectory))
+        if (libraryDirectories.Length == 0)
         {
             report = new ModuleTypeAcceleratorSurfaceReport(
                 mode,
@@ -48,10 +53,10 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
         }
         else
         {
-            report = InspectSurface(mode, requestedTypes, requestedAssemblies, libraryDirectory!, Path.GetFullPath(reportPath));
+            report = InspectSurface(mode, requestedTypes, requestedAssemblies, libraryDirectories, Path.GetFullPath(reportPath));
         }
 
-        WriteTextReport(report, libraryDirectory);
+        WriteTextReport(report, libraryDirectories);
         return report;
     }
 
@@ -59,7 +64,7 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
         AssemblyTypeAcceleratorExportMode mode,
         string[] requestedTypes,
         string[] requestedAssemblies,
-        string libraryDirectory,
+        IReadOnlyList<string> libraryDirectories,
         string reportPath)
     {
 #if NET8_0_OR_GREATER
@@ -71,7 +76,7 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
         var alc = new AssemblyLoadContext("PowerForge.TypeAcceleratorSurfaceReport." + Guid.NewGuid().ToString("N"), isCollectible: true);
         alc.Resolving += (_, name) =>
         {
-            var resolved = ResolveAssemblyPath(libraryDirectory, name.Name);
+            var resolved = ResolveAssemblyPath(libraryDirectories, name.Name);
             return resolved is null ? null : LoadAssembly(alc, resolved, loadedAssemblies, loadedPaths, warnings);
         };
 
@@ -82,12 +87,12 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
             {
                 foreach (var assemblyName in requestedAssemblies)
                 {
-                    var assemblyPath = ResolveAssemblyPath(libraryDirectory, assemblyName);
+                    var assemblyPath = ResolveAssemblyPath(libraryDirectories, assemblyName);
                     if (assemblyPath is null)
                     {
                         assemblyReports.Add(new ModuleTypeAcceleratorAssemblyReport(
                             assemblyName,
-                            error: $"Assembly '{assemblyName}' was not found in '{libraryDirectory}'."));
+                            error: $"Assembly '{assemblyName}' was not found in '{string.Join("', '", libraryDirectories)}'."));
                         continue;
                     }
 
@@ -126,7 +131,7 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
             var explicitMissing = new List<string>();
             foreach (var requestedType in requestedTypes)
             {
-                var type = FindType(alc, libraryDirectory, requestedType, loadedAssemblies, loadedPaths, warnings);
+                var type = FindType(alc, libraryDirectories, requestedType, loadedAssemblies, loadedPaths, warnings);
                 if (type is null)
                     explicitMissing.Add(requestedType);
                 else if (!string.IsNullOrWhiteSpace(type.FullName))
@@ -200,7 +205,7 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
 
     private static Type? FindType(
         AssemblyLoadContext alc,
-        string libraryDirectory,
+        IReadOnlyList<string> libraryDirectories,
         string typeName,
         Dictionary<string, Assembly> loadedAssemblies,
         HashSet<string> loadedPaths,
@@ -213,7 +218,8 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
                 return type;
         }
 
-        foreach (var file in Directory.EnumerateFiles(libraryDirectory, "*.dll", SearchOption.TopDirectoryOnly))
+        foreach (var file in libraryDirectories.SelectMany(
+                     directory => ModuleBinaryFileLocator.Enumerate(directory, SearchOption.TopDirectoryOnly)))
         {
             var assembly = LoadAssembly(alc, file, loadedAssemblies, loadedPaths, warnings);
             if (assembly is null)
@@ -249,7 +255,7 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
     }
 #endif
 
-    private void WriteTextReport(ModuleTypeAcceleratorSurfaceReport report, string? libraryDirectory)
+    private void WriteTextReport(ModuleTypeAcceleratorSurfaceReport report, IReadOnlyList<string> libraryDirectories)
     {
         var directory = Path.GetDirectoryName(report.ReportPath);
         if (!string.IsNullOrWhiteSpace(directory))
@@ -259,7 +265,7 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
         builder.AppendLine("ALC Type Accelerator Surface");
         builder.AppendLine("============================");
         builder.AppendLine($"Mode: {report.Mode}");
-        builder.AppendLine($"Library directory: {(string.IsNullOrWhiteSpace(libraryDirectory) ? "(not found)" : libraryDirectory)}");
+        builder.AppendLine($"Library directories: {(libraryDirectories.Count == 0 ? "(not found)" : string.Join(", ", libraryDirectories))}");
         builder.AppendLine($"Registered accelerator names: {report.TotalRegisteredTypeCount}");
         builder.AppendLine($"Assembly-contributed names: {report.AssemblyRegisteredTypeCount}");
         builder.AppendLine($"Explicit requested types found: {report.ExplicitTypesFound.Length}");
@@ -319,27 +325,63 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
         builder.AppendLine();
     }
 
-    private static string? ResolveAssemblyLoadContextLibraryDirectory(string stagingPath)
+    private static string[] ResolveAssemblyLoadContextLibraryDirectories(
+        string stagingPath,
+        IReadOnlyList<string>? exportAssemblyFileNames)
     {
         var libRoot = Path.Combine(stagingPath, "Lib");
         if (!Directory.Exists(libRoot))
-            return null;
+            return Array.Empty<string>();
 
-        return ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetDirectories(libRoot).FirstOrDefault();
+        var runtimeFolder = ModuleBinaryPayloadLayout.ResolveRuntimePayloadFolder(libRoot, "Core");
+        var runtimeDirectory = string.IsNullOrWhiteSpace(runtimeFolder)
+            ? null
+            : Path.Combine(libRoot, runtimeFolder);
+        var resolved = new List<string>();
+        var references = exportAssemblyFileNames is { Count: > 0 }
+            ? exportAssemblyFileNames
+            : new[] { string.Empty };
+        foreach (var assemblyReference in references)
+        {
+            var candidates = ModuleBootstrapperGenerator
+                .ResolveAssemblyLoadContextTargetDirectories(
+                    libRoot,
+                    string.IsNullOrWhiteSpace(assemblyReference) ? null : new[] { assemblyReference })
+                .ToArray();
+            if (candidates.Length == 0)
+                continue;
+
+            var selected = runtimeDirectory is null
+                ? null
+                : candidates.FirstOrDefault(
+                    candidate => string.Equals(candidate, runtimeDirectory, StringComparison.OrdinalIgnoreCase));
+            selected ??= candidates[0];
+            if (!resolved.Contains(selected, StringComparer.OrdinalIgnoreCase))
+                resolved.Add(selected);
+        }
+
+        return resolved.ToArray();
     }
 
-    private static string? ResolveAssemblyPath(string libraryDirectory, string? assemblyName)
+    private static string? ResolveAssemblyPath(IReadOnlyList<string> libraryDirectories, string? assemblyName)
     {
         if (string.IsNullOrWhiteSpace(assemblyName))
             return null;
 
         var trimmed = assemblyName!.Trim();
-        var direct = Path.Combine(libraryDirectory, trimmed + ".dll");
-        if (File.Exists(direct))
-            return Path.GetFullPath(direct);
+        foreach (var libraryDirectory in libraryDirectories)
+        {
+            var direct = Path.Combine(libraryDirectory, trimmed + ".dll");
+            if (File.Exists(direct))
+                return Path.GetFullPath(direct);
 
-        return Directory.EnumerateFiles(libraryDirectory, "*.dll", SearchOption.TopDirectoryOnly)
-            .FirstOrDefault(file => string.Equals(Path.GetFileNameWithoutExtension(file), trimmed, StringComparison.OrdinalIgnoreCase));
+            var matched = ModuleBinaryFileLocator.Enumerate(libraryDirectory, SearchOption.TopDirectoryOnly)
+                .FirstOrDefault(file => string.Equals(Path.GetFileNameWithoutExtension(file), trimmed, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(matched))
+                return matched;
+        }
+
+        return null;
     }
 
     private static string[] Normalize(IEnumerable<string>? values)

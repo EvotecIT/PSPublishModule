@@ -817,7 +817,19 @@ public sealed partial class ModulePipelineRunner
             }
 
             if (packageWithoutScriptFolders)
-                SyncMergedPsm1WithGeneratedScripts(buildResult.ManifestPath, buildResult.StagingPath, plan.ModuleName, generated.Select(static g => g.ScriptPath));
+            {
+                var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
+                var conditionalExportDependencies = ResolveConditionalExportDependencies(
+                    plan,
+                    ModuleMergeComposer.ResolveScriptFiles(buildResult.StagingPath, plan.Information),
+                    exports);
+                SyncMergedPsm1WithGeneratedScripts(
+                    buildResult.ManifestPath,
+                    buildResult.StagingPath,
+                    plan.ModuleName,
+                    generated.Select(static g => g.ScriptPath),
+                    conditionalExportDependencies);
+            }
         }
         catch (Exception ex)
         {

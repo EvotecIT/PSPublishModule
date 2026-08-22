@@ -360,6 +360,40 @@ public sealed class BinaryDependencyPreflightServiceTests
     }
 
     [Fact]
+    public void Analyze_DesktopIgnoresGeneratedCoreLoadContextHelper()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var paths = CreateDependencyFixture(root.FullName);
+            BuildProject(paths.ConsumerProjectPath);
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var defaultRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Lib", "Default"));
+            var manifestPath = Path.Combine(moduleRoot.FullName, "TestModule.psd1");
+            File.WriteAllText(manifestPath, "@{ ModuleVersion = '1.0.0'; RootModule = 'TestModule.psm1' }");
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psm1"), "# generated binary bootstrapper");
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(defaultRoot.FullName, "TestModule.ModuleLoadContext.dll"), overwrite: true);
+
+            var desktop = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
+                moduleRoot.FullName,
+                "Desktop",
+                manifestPath);
+            var core = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
+                moduleRoot.FullName,
+                "Core",
+                manifestPath);
+
+            Assert.False(desktop.HasIssues);
+            Assert.Contains(core.Issues, issue => string.Equals(issue.MissingDependencyName, "Dependency", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void BuildFailureMessage_IncludesClearHint()
     {
         var result = new BinaryDependencyPreflightResult(
