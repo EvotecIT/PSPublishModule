@@ -86,30 +86,48 @@ public sealed partial class DotNetPublishPipelineRunner
                     referencedPath,
                     projectReferenceDeclarations,
                     evaluatedConditionProperties,
-                    metadataName);
-            foreach (LiteralProjectReferenceMetadataAssignment assignment in effectiveAssignments)
+                    metadataName,
+                    includeTargetTime: false);
+            AddLiteralPropertyTables(effectiveAssignments);
+            if (results.Count == 0 && projectReferenceDeclarations.Any(declaration => declaration.IsTargetTime))
             {
-                foreach (string candidateAssignments in ReadLiteralProjectReferencePropertyAssignmentCandidates(
-                             assignment.PropertyDefinitions,
-                             evaluatedConditionProperties,
-                             assignment.DefiningProjectPath,
-                             assignment.Value))
-                {
-                    if (!TryReadLiteralProjectReferencePropertyTable(
-                            candidateAssignments,
-                            evaluatedAssignments,
-                            out Dictionary<string, string>? table))
-                    {
-                        continue;
-                    }
-
-                    if (keys.Add(BuildProjectReferencePropertyTableKey(table!)))
-                        results.Add(table!);
-                }
+                effectiveAssignments = ReadEffectiveLiteralProjectReferenceMetadataAssignments(
+                    declaringProjectPath,
+                    referencedPath,
+                    projectReferenceDeclarations,
+                    evaluatedConditionProperties,
+                    metadataName,
+                    includeTargetTime: true);
+                AddLiteralPropertyTables(effectiveAssignments);
             }
 
             tables = results.ToArray();
             return tables.Length > 0;
+
+            void AddLiteralPropertyTables(
+                IEnumerable<LiteralProjectReferenceMetadataAssignment> assignments)
+            {
+                foreach (LiteralProjectReferenceMetadataAssignment assignment in assignments)
+                {
+                    foreach (string candidateAssignments in ReadLiteralProjectReferencePropertyAssignmentCandidates(
+                                 assignment.PropertyDefinitions,
+                                 evaluatedConditionProperties,
+                                 assignment.DefiningProjectPath,
+                                 assignment.Value))
+                    {
+                        if (!TryReadLiteralProjectReferencePropertyTable(
+                                candidateAssignments,
+                                evaluatedAssignments,
+                                out Dictionary<string, string>? table))
+                        {
+                            continue;
+                        }
+
+                        if (keys.Add(BuildProjectReferencePropertyTableKey(table!)))
+                            results.Add(table!);
+                    }
+                }
+            }
         }
         catch
         {
@@ -294,9 +312,18 @@ public sealed partial class DotNetPublishPipelineRunner
         out Dictionary<string, string>? table)
     {
         table = null;
-        if (string.IsNullOrEmpty(rawAssignments) ||
-            rawAssignments!.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
-            rawAssignments.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+        if (string.IsNullOrEmpty(rawAssignments))
+            return false;
+
+        if (rawAssignments!.IndexOf("$(", StringComparison.Ordinal) >= 0)
+        {
+            return TryReadEvaluatedProjectReferencePropertyFunctionTable(
+                rawAssignments,
+                evaluatedAssignments,
+                out table);
+        }
+
+        if (rawAssignments.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
             rawAssignments.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
             !TryUnescapeMsBuildLiteral(rawAssignments, out string? decodedAssignments) ||
             !string.Equals(
@@ -327,6 +354,67 @@ public sealed partial class DotNetPublishPipelineRunner
 
         table = result;
         return result.Count > 0;
+    }
+
+    private static bool TryReadEvaluatedProjectReferencePropertyFunctionTable(
+        string rawAssignments,
+        string evaluatedAssignments,
+        out Dictionary<string, string>? table)
+    {
+        table = null;
+        if (rawAssignments.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+            rawAssignments.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
+            !TryReadProjectReferencePropertySegments(rawAssignments, out string[] rawNames, out _) ||
+            !TryReadProjectReferencePropertySegments(
+                evaluatedAssignments,
+                out string[] evaluatedNames,
+                out string[] evaluatedValues) ||
+            rawNames.Length != evaluatedNames.Length)
+        {
+            return false;
+        }
+
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        for (int index = 0; index < rawNames.Length; index++)
+        {
+            if (!string.Equals(rawNames[index], evaluatedNames[index], StringComparison.OrdinalIgnoreCase))
+                return false;
+            result[rawNames[index]] = evaluatedValues[index];
+        }
+
+        table = result;
+        return result.Count > 0;
+    }
+
+    private static bool TryReadProjectReferencePropertySegments(
+        string assignments,
+        out string[] names,
+        out string[] values)
+    {
+        var parsedNames = new List<string>();
+        var parsedValues = new List<string>();
+        foreach (string segment in assignments.Split(new[] { ';' }))
+        {
+            if (string.IsNullOrWhiteSpace(segment))
+                continue;
+
+            int separator = segment.IndexOf('=');
+            if (separator <= 0 ||
+                !TryUnescapeMsBuildLiteral(segment.Substring(0, separator).Trim(), out string? name) ||
+                string.IsNullOrWhiteSpace(name))
+            {
+                names = Array.Empty<string>();
+                values = Array.Empty<string>();
+                return false;
+            }
+
+            parsedNames.Add(name!.Trim());
+            parsedValues.Add(segment.Substring(separator + 1).Trim());
+        }
+
+        names = parsedNames.ToArray();
+        values = parsedValues.ToArray();
+        return names.Length > 0;
     }
 
     private static bool TryUnescapeMsBuildLiteral(string value, out string? unescaped)

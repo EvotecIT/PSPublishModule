@@ -83,7 +83,10 @@ public sealed partial class DotNetPublishPipelineRunner
             var declarationSources = new Stack<string>();
             declarationSources.Push(Path.GetFullPath(request.ProjectPath));
             var propertyDefinitions = new List<PreprocessedProjectPropertyDefinition>();
-            var declarationElements = new List<(XElement Element, string DefiningProjectPath)>();
+            var declarationElements = new List<(
+                XElement Element,
+                string DefiningProjectPath,
+                bool IsTargetTime)>();
             foreach (XNode node in document.Root.DescendantNodes())
             {
                 if (node is XComment comment)
@@ -103,14 +106,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     continue;
                 }
 
-                if (node is not XElement element ||
-                    element.Ancestors().Any(ancestor =>
-                        ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)))
-                {
+                if (node is not XElement element)
                     continue;
-                }
 
-                if (element.Parent?.Name.LocalName.Equals(
+                bool isTargetTime = element.Ancestors().Any(ancestor =>
+                    ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase));
+
+                if (!isTargetTime &&
+                    element.Parent?.Name.LocalName.Equals(
                         "PropertyGroup",
                         StringComparison.OrdinalIgnoreCase) == true)
                 {
@@ -123,7 +126,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     (element.Parent?.Name.LocalName.Equals("ItemGroup", StringComparison.OrdinalIgnoreCase) == true ||
                      element.Parent?.Name.LocalName.Equals("ItemDefinitionGroup", StringComparison.OrdinalIgnoreCase) == true))
                 {
-                    declarationElements.Add((element, declarationSources.Peek()));
+                    declarationElements.Add((element, declarationSources.Peek(), isTargetTime));
                 }
             }
 
@@ -131,7 +134,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Select(declaration => new PreprocessedProjectReferenceDeclaration(
                     declaration.Element,
                     declaration.DefiningProjectPath,
-                    propertyDefinitions))
+                    propertyDefinitions,
+                    declaration.IsTargetTime))
                 .ToArray();
             return true;
         }

@@ -790,7 +790,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         taskWideProjectReferencePropertyRemovals,
                         out EvaluatedProjectReference[] resolvedReferences))
                     return false;
-                foreach (EvaluatedProjectReference reference in resolvedReferences)
+                foreach (EvaluatedProjectReference reference in MergeResolvedProjectReferenceContexts(
+                             rawReferences.Values,
+                             resolvedReferences))
                 {
                     references[BuildEvaluatedProjectReferenceKey(reference)] = reference;
                     inputs.Add(reference.ProjectPath);

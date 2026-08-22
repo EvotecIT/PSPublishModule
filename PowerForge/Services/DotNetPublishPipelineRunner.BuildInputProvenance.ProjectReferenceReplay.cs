@@ -24,11 +24,13 @@ public sealed partial class DotNetPublishPipelineRunner
         internal PreprocessedProjectReferenceDeclaration(
             XElement element,
             string definingProjectPath,
-            IReadOnlyList<PreprocessedProjectPropertyDefinition> propertyDefinitions)
+            IReadOnlyList<PreprocessedProjectPropertyDefinition> propertyDefinitions,
+            bool isTargetTime)
         {
             Element = element;
             DefiningProjectPath = definingProjectPath;
             PropertyDefinitions = propertyDefinitions;
+            IsTargetTime = isTargetTime;
         }
 
         internal XElement Element { get; }
@@ -36,6 +38,8 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string DefiningProjectPath { get; }
 
         internal IReadOnlyList<PreprocessedProjectPropertyDefinition> PropertyDefinitions { get; }
+
+        internal bool IsTargetTime { get; }
     }
 
     private sealed class LiteralProjectReferenceMetadataAssignment
@@ -72,10 +76,12 @@ public sealed partial class DotNetPublishPipelineRunner
             string referencedPath,
             IReadOnlyList<PreprocessedProjectReferenceDeclaration> declarations,
             IReadOnlyDictionary<string, string> evaluatedConditionProperties,
-            string metadataName)
+            string metadataName,
+            bool includeTargetTime)
     {
         var defaults = new List<LiteralProjectReferenceMetadataAssignment>();
         foreach (PreprocessedProjectReferenceDeclaration declaration in declarations.Where(declaration =>
+                     (includeTargetTime || !declaration.IsTargetTime) &&
                      IsProjectReferenceItemDefinition(declaration.Element) &&
                      !IsDefinitelyInactiveMsBuildElement(
                          declaration.Element,
@@ -100,7 +106,8 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (PreprocessedProjectReferenceDeclaration declaration in declarations)
         {
             XElement projectReference = declaration.Element;
-            if (IsProjectReferenceItemDefinition(projectReference) ||
+            if ((!includeTargetTime && declaration.IsTargetTime) ||
+                IsProjectReferenceItemDefinition(projectReference) ||
                 IsDefinitelyInactiveMsBuildElement(projectReference, evaluatedConditionProperties) ||
                 !DoesProjectReferenceDeclarationMatch(
                     declaringProjectPath,
