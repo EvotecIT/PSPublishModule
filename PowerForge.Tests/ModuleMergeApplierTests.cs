@@ -353,6 +353,75 @@ public sealed class ModuleMergeApplierTests
     }
 
     [Fact]
+    public void Apply_PreservesPerSourceUsingNamespaceScopes()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var publicRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            var libCore = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
+            File.WriteAllText(Path.Combine(libCore.FullName, moduleName + ".dll"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(publicRoot.FullName, "Get-ThreadingTimerType.ps1"),
+                "using namespace System.Threading" + Environment.NewLine +
+                "function Get-ThreadingTimerType { [Timer].FullName }");
+            File.WriteAllText(
+                Path.Combine(publicRoot.FullName, "Get-TimersTimerType.ps1"),
+                "using namespace System.Timers" + Environment.NewLine +
+                "function Get-TimersTimerType { [Timer].FullName }");
+
+            var exports = new ExportSet(
+                new[] { "Get-ThreadingTimerType", "Get-TimersTimerType" },
+                Array.Empty<string>(),
+                Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root.FullName,
+                moduleName,
+                exports,
+                new[] { moduleName + ".dll" },
+                handleRuntimes: false);
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                moduleName,
+                information: null,
+                exports,
+                fixRelativePaths: false,
+                exportAssemblies: new[] { moduleName + ".dll" });
+
+            var outcome = ModuleMergeApplier.Apply(
+                new CollectingLogger(),
+                CreatePlan(root.FullName, mergeModule: true, mergeMissing: false),
+                sources,
+                missingReport: null);
+            var bootstrapper = File.ReadAllText(Path.Combine(root.FullName, moduleName + ".psm1"));
+            var embeddedPayloadBlock = ExtractMarkedSection(
+                bootstrapper,
+                "# PowerForge script payload begin",
+                "# PowerForge script payload end");
+
+            Assert.True(outcome.MergedModule);
+            using var powerShell = PowerShell.Create();
+            var expectedRoot = root.FullName.Replace("'", "''", StringComparison.Ordinal);
+            powerShell.AddScript(
+                "$PowerForgeModuleRoot = '" + expectedRoot + "'" + Environment.NewLine +
+                embeddedPayloadBlock + Environment.NewLine +
+                "@((Get-ThreadingTimerType), (Get-TimersTimerType))");
+            var output = powerShell.Invoke();
+
+            Assert.False(
+                powerShell.HadErrors,
+                string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
+            Assert.Equal("System.Threading.Timer", output[0].BaseObject);
+            Assert.Equal("System.Timers.Timer", output[1].BaseObject);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Apply_WritesMergedPsm1AndPrependsMissingFunctions_WhenMergeMissingIsEnabled()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

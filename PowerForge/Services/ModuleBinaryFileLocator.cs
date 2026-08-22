@@ -66,6 +66,9 @@ internal static class ModuleBinaryFileLocator
             if (!candidate.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 candidate += ".dll";
             candidate = NormalizePathSeparators(candidate);
+            var currentDirectoryPrefix = "." + Path.DirectorySeparatorChar;
+            while (candidate.StartsWith(currentDirectoryPrefix, StringComparison.Ordinal))
+                candidate = candidate.Substring(currentDirectoryPrefix.Length);
             if (IsPortableRootedPath(candidate))
             {
                 // Absolute configuration paths identify a build-time input. The generated module must

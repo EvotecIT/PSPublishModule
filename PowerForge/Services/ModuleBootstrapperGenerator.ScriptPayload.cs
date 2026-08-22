@@ -74,6 +74,14 @@ internal static partial class ModuleBootstrapperGenerator
         var deferredContent = string.IsNullOrWhiteSpace(scriptPreamble)
             ? scriptPayload
             : scriptPreamble.TrimEnd() + Environment.NewLine + Environment.NewLine + scriptPayload.TrimStart();
+        var sourcePreambleMarker = ModuleMergeComposer.MergedSourcePreambleMarker;
+        var sourceMarkerPrefix = ModuleMergeComposer.MergedSourceStartMarker + " ";
+        if (sourceStartMarker.StartsWith(sourceMarkerPrefix, StringComparison.Ordinal))
+        {
+            var boundaryToken = sourceStartMarker.Substring(sourceMarkerPrefix.Length).Trim();
+            if (boundaryToken.Length > 0)
+                sourcePreambleMarker += boundaryToken + " ";
+        }
         var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(deferredContent));
         var builder = new StringBuilder(encoded.Length + 512);
         builder.AppendLine(DeferredPayloadStartMarker);
@@ -150,12 +158,12 @@ internal static partial class ModuleBootstrapperGenerator
         builder.AppendLine("}");
         builder.AppendLine("$PowerForgeMergedScriptSourceStartMarker = '" + EscapePsSingleQuoted(sourceStartMarker) + "'");
         builder.AppendLine("$PowerForgeMergedScriptSourceEndMarker = '" + EscapePsSingleQuoted(sourceEndMarker) + "'");
+        builder.AppendLine("$PowerForgeMergedScriptSourcePreambleMarker = '" + EscapePsSingleQuoted(sourcePreambleMarker) + "'");
         builder.AppendLine("$PowerForgeMergedScriptSegments = [Collections.Generic.List[string]]::new()");
         builder.AppendLine("$PowerForgeMergedScriptFirstSource = $PowerForgeMergedScriptPayload.IndexOf($PowerForgeMergedScriptSourceStartMarker, [StringComparison]::Ordinal)");
         builder.AppendLine("if ($PowerForgeMergedScriptFirstSource -lt 0) {");
         builder.AppendLine("    $PowerForgeMergedScriptSegments.Add($PowerForgeMergedScriptPayload)");
         builder.AppendLine("} else {");
-        builder.AppendLine("    $PowerForgeMergedScriptPreamble = $PowerForgeMergedScriptPayload.Substring(0, $PowerForgeMergedScriptFirstSource).Trim()");
         builder.AppendLine("    $PowerForgeMergedScriptCursor = $PowerForgeMergedScriptFirstSource");
         builder.AppendLine("    while ($PowerForgeMergedScriptCursor -lt $PowerForgeMergedScriptPayload.Length) {");
         builder.AppendLine("        $PowerForgeMergedScriptSourceStart = $PowerForgeMergedScriptPayload.IndexOf($PowerForgeMergedScriptSourceStartMarker, $PowerForgeMergedScriptCursor, [StringComparison]::Ordinal)");
@@ -165,8 +173,46 @@ internal static partial class ModuleBootstrapperGenerator
         builder.AppendLine("        if ($PowerForgeMergedScriptSourceEnd -lt 0) { throw 'Merged script source boundary is incomplete.' }");
         builder.AppendLine("        $PowerForgeMergedScriptSegment = $PowerForgeMergedScriptPayload.Substring($PowerForgeMergedScriptContentStart, $PowerForgeMergedScriptSourceEnd - $PowerForgeMergedScriptContentStart).Trim()");
         builder.AppendLine("        if (-not [string]::IsNullOrWhiteSpace($PowerForgeMergedScriptSegment)) {");
-        builder.AppendLine("            if (-not [string]::IsNullOrWhiteSpace($PowerForgeMergedScriptPreamble)) {");
-        builder.AppendLine("                $PowerForgeMergedScriptSegment = $PowerForgeMergedScriptPreamble + [Environment]::NewLine + [Environment]::NewLine + $PowerForgeMergedScriptSegment");
+        builder.AppendLine("            if ($PowerForgeMergedScriptSegment.StartsWith($PowerForgeMergedScriptSourcePreambleMarker, [StringComparison]::Ordinal)) {");
+        builder.AppendLine("                $PowerForgeMergedScriptSourcePreambleEnd = $PowerForgeMergedScriptSegment.IndexOf([char]10)");
+        builder.AppendLine("                if ($PowerForgeMergedScriptSourcePreambleEnd -lt 0) { throw 'Merged script source preamble is incomplete.' }");
+        builder.AppendLine("                $PowerForgeMergedScriptSourcePreambleBase64 = $PowerForgeMergedScriptSegment.Substring($PowerForgeMergedScriptSourcePreambleMarker.Length, $PowerForgeMergedScriptSourcePreambleEnd - $PowerForgeMergedScriptSourcePreambleMarker.Length).Trim()");
+        builder.AppendLine("                $PowerForgeMergedScriptSourcePreamble = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PowerForgeMergedScriptSourcePreambleBase64))");
+        builder.AppendLine("                $PowerForgeMergedScriptSegment = $PowerForgeMergedScriptSourcePreamble + [Environment]::NewLine + [Environment]::NewLine + $PowerForgeMergedScriptSegment.Substring($PowerForgeMergedScriptSourcePreambleEnd + 1).TrimStart()");
+        builder.AppendLine("                $PowerForgeMergedScriptSegmentAst = [System.Management.Automation.Language.Parser]::ParseInput($PowerForgeMergedScriptSegment, [ref] $null, [ref] $null)");
+        builder.AppendLine("                $PowerForgeMergedScriptSegmentUsingPathReferences = [Collections.Generic.List[object]]::new()");
+        builder.AppendLine("                $PowerForgeMergedScriptSegmentUsingStatements = @($PowerForgeMergedScriptSegmentAst.FindAll({");
+        builder.AppendLine("                    param([System.Management.Automation.Language.Ast] $Ast)");
+        builder.AppendLine("                    $Ast -is [System.Management.Automation.Language.UsingStatementAst] -and $Ast.UsingStatementKind -iin @('Assembly', 'Module')");
+        builder.AppendLine("                }, $true))");
+        builder.AppendLine("                foreach ($PowerForgeMergedScriptSegmentUsingStatement in $PowerForgeMergedScriptSegmentUsingStatements) {");
+        builder.AppendLine("                    $PowerForgeMergedScriptSegmentUsingPathReference = $PowerForgeMergedScriptSegmentUsingStatement.Name");
+        builder.AppendLine("                    if ($null -eq $PowerForgeMergedScriptSegmentUsingPathReference -and $null -ne $PowerForgeMergedScriptSegmentUsingStatement.ModuleSpecification) {");
+        builder.AppendLine("                        foreach ($PowerForgeMergedScriptSegmentModuleSpecificationEntry in $PowerForgeMergedScriptSegmentUsingStatement.ModuleSpecification.KeyValuePairs) {");
+        builder.AppendLine("                            if ($PowerForgeMergedScriptSegmentModuleSpecificationEntry.Item1.Value -ine 'ModuleName') { continue }");
+        builder.AppendLine("                            $PowerForgeMergedScriptSegmentModuleSpecificationValue = $PowerForgeMergedScriptSegmentModuleSpecificationEntry.Item2.PipelineElements[0]");
+        builder.AppendLine("                            if ($PowerForgeMergedScriptSegmentModuleSpecificationValue -is [System.Management.Automation.Language.CommandExpressionAst] -and $PowerForgeMergedScriptSegmentModuleSpecificationValue.Expression -is [System.Management.Automation.Language.StringConstantExpressionAst]) {");
+        builder.AppendLine("                                $PowerForgeMergedScriptSegmentUsingPathReference = $PowerForgeMergedScriptSegmentModuleSpecificationValue.Expression");
+        builder.AppendLine("                            }");
+        builder.AppendLine("                            break");
+        builder.AppendLine("                        }");
+        builder.AppendLine("                    }");
+        builder.AppendLine("                    $PowerForgeMergedScriptSegmentTreatBareUsingNameAsPath = $PowerForgeMergedScriptSegmentUsingStatement.UsingStatementKind -eq [System.Management.Automation.Language.UsingStatementKind]::Assembly");
+        builder.AppendLine("                    if ($null -ne $PowerForgeMergedScriptSegmentUsingPathReference -and (& $PowerForgeMergedScriptIsRelativeUsingPath $PowerForgeMergedScriptSegmentUsingPathReference.Value $PowerForgeMergedScriptSegmentTreatBareUsingNameAsPath)) {");
+        builder.AppendLine("                        $PowerForgeMergedScriptSegmentUsingPathReferences.Add($PowerForgeMergedScriptSegmentUsingPathReference)");
+        builder.AppendLine("                    }");
+        builder.AppendLine("                }");
+        builder.AppendLine("                if ($PowerForgeMergedScriptSegmentUsingPathReferences.Count -gt 0) {");
+        builder.AppendLine("                    $PowerForgeMergedScriptSegmentBuilder = [Text.StringBuilder]::new($PowerForgeMergedScriptSegment)");
+        builder.AppendLine("                    foreach ($PowerForgeMergedScriptSegmentUsingPathReference in @($PowerForgeMergedScriptSegmentUsingPathReferences | Sort-Object { $_.Extent.StartOffset } -Descending)) {");
+        builder.AppendLine("                        $PowerForgeMergedScriptSegmentRelativeUsingPath = $PowerForgeMergedScriptSegmentUsingPathReference.Value.Replace('\\', [IO.Path]::DirectorySeparatorChar).Replace('/', [IO.Path]::DirectorySeparatorChar)");
+        builder.AppendLine("                        $PowerForgeMergedScriptSegmentAbsoluteUsingPath = [IO.Path]::GetFullPath([IO.Path]::Combine($PowerForgeModuleRoot, $PowerForgeMergedScriptSegmentRelativeUsingPath))");
+        builder.AppendLine("                        $PowerForgeMergedScriptSegmentUsingPathReplacement = \"'\" + $PowerForgeMergedScriptSegmentAbsoluteUsingPath.Replace(\"'\", \"''\") + \"'\"");
+        builder.AppendLine("                        $null = $PowerForgeMergedScriptSegmentBuilder.Remove($PowerForgeMergedScriptSegmentUsingPathReference.Extent.StartOffset, $PowerForgeMergedScriptSegmentUsingPathReference.Extent.EndOffset - $PowerForgeMergedScriptSegmentUsingPathReference.Extent.StartOffset)");
+        builder.AppendLine("                        $null = $PowerForgeMergedScriptSegmentBuilder.Insert($PowerForgeMergedScriptSegmentUsingPathReference.Extent.StartOffset, $PowerForgeMergedScriptSegmentUsingPathReplacement)");
+        builder.AppendLine("                    }");
+        builder.AppendLine("                    $PowerForgeMergedScriptSegment = $PowerForgeMergedScriptSegmentBuilder.ToString()");
+        builder.AppendLine("                }");
         builder.AppendLine("            }");
         builder.AppendLine("            $PowerForgeMergedScriptSegments.Add($PowerForgeMergedScriptSegment)");
         builder.AppendLine("        }");
@@ -178,7 +224,7 @@ internal static partial class ModuleBootstrapperGenerator
         builder.AppendLine("        . ([scriptblock]::Create($PowerForgeMergedScriptSegment))");
         builder.AppendLine("    }");
         builder.AppendLine("} finally {");
-        builder.AppendLine("    $PowerForgeMergedScriptVariablesToRemove = @('PowerForgeMergedScriptAbsoluteUsingPath', 'PowerForgeMergedScriptAst', 'PowerForgeMergedScriptBuilder', 'PowerForgeMergedScriptContentStart', 'PowerForgeMergedScriptCursor', 'PowerForgeMergedScriptFirstSource', 'PowerForgeMergedScriptIsRelativeUsingPath', 'PowerForgeMergedScriptModuleSpecificationEntry', 'PowerForgeMergedScriptModuleSpecificationValue', 'PowerForgeMergedScriptMyCommandReference', 'PowerForgeMergedScriptPathReference', 'PowerForgeMergedScriptPathReferences', 'PowerForgeMergedScriptPathReplacement', 'PowerForgeMergedScriptPayload', 'PowerForgeMergedScriptPayloadBase64', 'PowerForgeMergedScriptPreamble', 'PowerForgeMergedScriptRelativeUsingPath', 'PowerForgeMergedScriptSegment', 'PowerForgeMergedScriptSegments', 'PowerForgeMergedScriptSourceEnd', 'PowerForgeMergedScriptSourceEndMarker', 'PowerForgeMergedScriptSourceStart', 'PowerForgeMergedScriptSourceStartMarker', 'PowerForgeMergedScriptTreatBareUsingNameAsPath', 'PowerForgeMergedScriptUsingPathReference', 'PowerForgeMergedScriptUsingPathReferences', 'PowerForgeMergedScriptUsingPathReplacement', 'PowerForgeMergedScriptUsingStatement', 'PowerForgeMergedScriptUsingStatements')");
+        builder.AppendLine("    $PowerForgeMergedScriptVariablesToRemove = @('PowerForgeMergedScriptAbsoluteUsingPath', 'PowerForgeMergedScriptAst', 'PowerForgeMergedScriptBuilder', 'PowerForgeMergedScriptContentStart', 'PowerForgeMergedScriptCursor', 'PowerForgeMergedScriptFirstSource', 'PowerForgeMergedScriptIsRelativeUsingPath', 'PowerForgeMergedScriptModuleSpecificationEntry', 'PowerForgeMergedScriptModuleSpecificationValue', 'PowerForgeMergedScriptMyCommandReference', 'PowerForgeMergedScriptPathReference', 'PowerForgeMergedScriptPathReferences', 'PowerForgeMergedScriptPathReplacement', 'PowerForgeMergedScriptPayload', 'PowerForgeMergedScriptPayloadBase64', 'PowerForgeMergedScriptRelativeUsingPath', 'PowerForgeMergedScriptSegment', 'PowerForgeMergedScriptSegmentAbsoluteUsingPath', 'PowerForgeMergedScriptSegmentAst', 'PowerForgeMergedScriptSegmentBuilder', 'PowerForgeMergedScriptSegmentModuleSpecificationEntry', 'PowerForgeMergedScriptSegmentModuleSpecificationValue', 'PowerForgeMergedScriptSegmentRelativeUsingPath', 'PowerForgeMergedScriptSegments', 'PowerForgeMergedScriptSegmentTreatBareUsingNameAsPath', 'PowerForgeMergedScriptSegmentUsingPathReference', 'PowerForgeMergedScriptSegmentUsingPathReferences', 'PowerForgeMergedScriptSegmentUsingPathReplacement', 'PowerForgeMergedScriptSegmentUsingStatement', 'PowerForgeMergedScriptSegmentUsingStatements', 'PowerForgeMergedScriptSourceEnd', 'PowerForgeMergedScriptSourceEndMarker', 'PowerForgeMergedScriptSourcePreamble', 'PowerForgeMergedScriptSourcePreambleBase64', 'PowerForgeMergedScriptSourcePreambleEnd', 'PowerForgeMergedScriptSourcePreambleMarker', 'PowerForgeMergedScriptSourceStart', 'PowerForgeMergedScriptSourceStartMarker', 'PowerForgeMergedScriptTreatBareUsingNameAsPath', 'PowerForgeMergedScriptUsingPathReference', 'PowerForgeMergedScriptUsingPathReferences', 'PowerForgeMergedScriptUsingPathReplacement', 'PowerForgeMergedScriptUsingStatement', 'PowerForgeMergedScriptUsingStatements')");
         builder.AppendLine("    foreach ($PowerForgeMergedScriptVariableToRemove in $PowerForgeMergedScriptVariablesToRemove) {");
         builder.AppendLine("        if ($null -ne $ExecutionContext.SessionState.PSVariable.Get($PowerForgeMergedScriptVariableToRemove)) {");
         builder.AppendLine("            Remove-Variable -Name $PowerForgeMergedScriptVariableToRemove -Force");
@@ -211,7 +257,7 @@ internal static partial class ModuleBootstrapperGenerator
 
         var encoded = moduleContent.Substring(payloadStart, payloadEnd - payloadStart);
         var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
-        var rewritten = rewritePayload(decoded) ?? string.Empty;
+        var rewritten = RewriteDeferredPayloadContent(decoded, rewritePayload);
         var prefix = moduleContent.Substring(0, payloadStart);
         var suffix = moduleContent.Substring(payloadEnd);
         var rewrittenPrefix = rewriteOuterContent?.Invoke(prefix) ?? prefix;
@@ -231,6 +277,61 @@ internal static partial class ModuleBootstrapperGenerator
                wrapped.ToString().TrimEnd('\r', '\n') +
                Environment.NewLine +
                rewrittenSuffix;
+    }
+
+    private static string RewriteDeferredPayloadContent(string content, Func<string, string> rewrite)
+    {
+        var marker = ModuleMergeComposer.MergedSourcePreambleMarker;
+        var builder = new StringBuilder(content.Length);
+        var contentCursor = 0;
+        var searchCursor = 0;
+        while (searchCursor < content.Length)
+        {
+            var markerStart = content.IndexOf(marker, searchCursor, StringComparison.Ordinal);
+            if (markerStart < 0)
+                break;
+            if (markerStart > 0 && content[markerStart - 1] != '\n')
+            {
+                searchCursor = markerStart + marker.Length;
+                continue;
+            }
+
+            var lineEnd = content.IndexOf('\n', markerStart);
+            if (lineEnd < 0)
+                lineEnd = content.Length;
+            var lineContentEnd = lineEnd;
+            if (lineContentEnd > markerStart && content[lineContentEnd - 1] == '\r')
+                lineContentEnd--;
+
+            var remainder = content.Substring(markerStart + marker.Length, lineContentEnd - markerStart - marker.Length).Trim();
+            var separator = remainder.LastIndexOf(' ');
+            var encodedPreamble = separator >= 0 ? remainder.Substring(separator + 1) : remainder;
+            if (encodedPreamble.Length == 0)
+            {
+                searchCursor = lineEnd + 1;
+                continue;
+            }
+
+            string decodedPreamble;
+            try
+            {
+                decodedPreamble = Encoding.UTF8.GetString(Convert.FromBase64String(encodedPreamble));
+            }
+            catch (FormatException)
+            {
+                searchCursor = lineEnd + 1;
+                continue;
+            }
+
+            var encodedStart = lineContentEnd - encodedPreamble.Length;
+            builder.Append(rewrite(content.Substring(contentCursor, encodedStart - contentCursor)) ?? string.Empty);
+            builder.Append(Convert.ToBase64String(Encoding.UTF8.GetBytes(rewrite(decodedPreamble) ?? string.Empty)));
+            contentCursor = lineContentEnd;
+            searchCursor = lineEnd + 1;
+        }
+
+        builder.Append(rewrite(content.Substring(contentCursor)) ?? string.Empty);
+        return builder.ToString();
     }
 
     private static void AppendWrappedBase64(StringBuilder builder, string encoded)

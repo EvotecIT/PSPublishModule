@@ -133,6 +133,65 @@ public sealed class ModulePsm1PlaceholderApplierTests
     }
 
     [Fact]
+    public void Apply_RewritesTokensInsidePerSourceDirectivePreamble()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var logger = new CollectingLogger();
+            var publicRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            var libCore = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
+            File.WriteAllText(Path.Combine(libCore.FullName, moduleName + ".dll"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(publicRoot.FullName, "Get-Test.ps1"),
+                "using assembly '../Lib/{ModuleVersion}.dll'" + Environment.NewLine +
+                "function Get-Test { 'ok' }");
+            var exports = new ExportSet(new[] { "Get-Test" }, Array.Empty<string>(), Array.Empty<string>());
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                moduleName,
+                information: null,
+                exports,
+                fixRelativePaths: false,
+                exportAssemblies: new[] { moduleName + ".dll" });
+            ModuleBootstrapperGenerator.Generate(
+                root.FullName,
+                moduleName,
+                exports,
+                new[] { moduleName + ".dll" },
+                handleRuntimes: false);
+            var psm1Path = Path.Combine(root.FullName, moduleName + ".psm1");
+            ModuleBootstrapperGenerator.InlineMergedScriptPayload(psm1Path, sources.MergedScriptContent);
+
+            ModulePsm1PlaceholderApplier.Apply(
+                logger,
+                psm1Path,
+                moduleName,
+                moduleVersion: "1.2.3",
+                preRelease: null,
+                replacements: null,
+                options: null);
+
+            var deferredPayload = DecodeDeferredPayload(File.ReadAllText(psm1Path));
+            var markerStart = deferredPayload.IndexOf(ModuleMergeComposer.MergedSourcePreambleMarker, StringComparison.Ordinal);
+            Assert.True(markerStart >= 0);
+            var markerEnd = deferredPayload.IndexOf('\n', markerStart);
+            Assert.True(markerEnd > markerStart);
+            var markerLine = deferredPayload.Substring(markerStart, markerEnd - markerStart).Trim();
+            var encodedPreamble = markerLine.Substring(markerLine.LastIndexOf(' ') + 1);
+            var sourcePreamble = Encoding.UTF8.GetString(Convert.FromBase64String(encodedPreamble));
+            Assert.Contains("1.2.3.dll", sourcePreamble, StringComparison.Ordinal);
+            Assert.DoesNotContain("{ModuleVersion}", sourcePreamble, StringComparison.Ordinal);
+            Assert.Empty(logger.Warnings);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Apply_DoesNotReplaceShortTokensInsideReencodedDeferredBase64()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

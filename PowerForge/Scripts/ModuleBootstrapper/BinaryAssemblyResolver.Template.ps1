@@ -21,10 +21,7 @@ foreach ($AssemblyFolder in @($AssemblyFolders.Name)) {
 $Framework = if ($Standard) { 'Standard' } elseif ($Core) { 'Core' } else { '' }
 $FrameworkNet = if ($Default) { 'Default' } elseif ($Standard) { 'Standard' } else { '' }
 {{RuntimePayloadSelectorBlock}}
-if ($PSEdition -eq 'Core' -and $HasNamedCorePayload -and ($Framework -eq 'Default' -or [string]::IsNullOrWhiteSpace($Framework))) {
-    Write-Error -Message 'No compatible PowerShell Core assemblies found'
-    return
-}
+$PowerForgeHasNoCompatibleNamedCorePayload = $PSEdition -eq 'Core' -and $HasNamedCorePayload -and ($Framework -eq 'Default' -or [string]::IsNullOrWhiteSpace($Framework))
 
 $PowerForgePreferredBinaryFolders = if ($PSEdition -eq 'Core') {
     @($Framework, 'Standard', 'Core', '', 'Default')
@@ -92,7 +89,13 @@ $ResolvePowerForgeModuleAssembly = {
     }
 
     $RecursiveMatches = @(Get-ChildItem -LiteralPath $LibRoot -File -Recurse -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -ieq $LibraryFileName })
+        Where-Object {
+            if ($_.Name -ine $LibraryFileName) { return $false }
+            if (-not $PowerForgeHasNoCompatibleNamedCorePayload) { return $true }
+            $RelativeCandidate = $_.FullName.Substring($LibRoot.Length).TrimStart([char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar))
+            $TopLevelFolder = @($RelativeCandidate -split '[\\/]')[0]
+            $TopLevelFolder -notmatch '^Core-(?:net|netcoreapp)\d+\.\d+$'
+        })
     if ($RecursiveMatches.Count -eq 1) {
         $RecursiveMatch = $RecursiveMatches[0]
         $RelativeDirectory = $RecursiveMatch.DirectoryName.Substring($LibRoot.Length).TrimStart([char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar))
@@ -104,6 +107,9 @@ $ResolvePowerForgeModuleAssembly = {
     }
     if ($RecursiveMatches.Count -gt 1) {
         throw "Configured binary module '$LibraryFileName' matched multiple nested Lib payloads. Use a path-qualified ExportAssemblies entry."
+    }
+    if ($PowerForgeHasNoCompatibleNamedCorePayload) {
+        throw 'No compatible PowerShell Core assemblies found'
     }
 
     throw "Configured binary module '$LibraryFileName' was not found in a compatible Lib layout."

@@ -537,6 +537,12 @@ internal static partial class ModuleBootstrapperGenerator
                 {
                     return new[] { libRoot };
                 }
+
+                var recursiveMatches = ModuleBinaryFileLocator.Enumerate(libRoot, SearchOption.AllDirectories)
+                    .Where(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                if (recursiveMatches.Length == 1)
+                    return new[] { Path.GetDirectoryName(recursiveMatches[0])! };
             }
 
             return Array.Empty<string>();

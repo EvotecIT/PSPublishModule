@@ -1054,9 +1054,11 @@ public class ModuleBootstrapperGeneratorTests
         }
     }
 
-    [Fact]
+    [Theory]
+    [InlineData("./Lib/Plugins/DemoModule.dll")]
+    [InlineData(@".\Lib\Plugins\DemoModule.dll")]
     [Trait("Category", "Integration")]
-    public void Generate_WithPathQualifiedExportAssembly_PreservesRelativeLocation()
+    public void Generate_WithPathQualifiedExportAssembly_PreservesRelativeLocation(string configuredReference)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-qualified-export-" + Guid.NewGuid().ToString("N"));
         var pluginRoot = Directory.CreateDirectory(Path.Combine(root, "Lib", "Plugins")).FullName;
@@ -1064,7 +1066,6 @@ public class ModuleBootstrapperGeneratorTests
 
         try
         {
-            var configuredReference = "Lib\\Plugins\\DemoModule.dll";
             ModuleBootstrapperGenerator.Generate(
                 root,
                 "DemoModule",
@@ -1095,6 +1096,8 @@ public class ModuleBootstrapperGeneratorTests
         var fixtureRoot = Path.Combine(root, "Fixture");
         var moduleRoot = Path.Combine(root, "Module");
         var pluginRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "Plugins")).FullName;
+        Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "Core-net99.0"));
+        File.WriteAllText(Path.Combine(moduleRoot, "Lib", "Core-net99.0", "Auxiliary.dll"), string.Empty);
 
         try
         {
@@ -1110,12 +1113,16 @@ public class ModuleBootstrapperGeneratorTests
                 "DemoModule",
                 new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
                 new[] { "DemoModule.dll" },
-                handleRuntimes: false);
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0" });
 
             var bootstrapperPath = Path.Combine(moduleRoot, "DemoModule.psm1");
             var bootstrapper = File.ReadAllText(bootstrapperPath);
             Assert.Contains("$RecursiveMatches = @(Get-ChildItem -LiteralPath $LibRoot -File -Recurse", bootstrapper);
             Assert.Contains("matched multiple nested Lib payloads", bootstrapper);
+            Assert.Contains("$PowerForgeHasNoCompatibleNamedCorePayload", bootstrapper);
+            Assert.True(File.Exists(Path.Combine(pluginRoot, "DemoModule.ModuleLoadContext.dll")));
 
             var processStartInfo = new System.Diagnostics.ProcessStartInfo
             {

@@ -27,6 +27,7 @@ internal static partial class ModuleMergeComposer
 {
     internal const string MergedSourceStartMarker = "# PowerForge merged source begin";
     internal const string MergedSourceEndMarker = "# PowerForge merged source end";
+    internal const string MergedSourcePreambleMarker = "# PowerForge merged source preamble ";
 
     internal static ModuleMergeSources BuildSources(
         string rootPath,
@@ -140,8 +141,7 @@ internal static partial class ModuleMergeComposer
             while (directiveStart < line.Length && char.IsWhiteSpace(line[directiveStart]))
                 directiveStart++;
 
-            if (StartsWithDirective(line, directiveStart, "#requires") ||
-                StartsWithDirective(line, directiveStart, "#requires"))
+            if (StartsWithDirective(line, directiveStart, "#requires"))
             {
                 preamble.Add(line);
                 continue;
@@ -275,6 +275,7 @@ internal static partial class ModuleMergeComposer
         var requires = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var usingLines = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var sourceBlocks = new List<string>();
+        var sourceBlockHasPreamble = new List<bool>();
 
         foreach (var file in files)
         {
@@ -292,10 +293,12 @@ internal static partial class ModuleMergeComposer
             }
 
             var block = new List<string>();
+            var sourceUsingLines = new List<string>();
             var directiveLineReplacements = ExtractPreambleDirectives(
                 lines,
                 requires,
                 usingLines,
+                sourceUsingLines,
                 file,
                 rootPath);
             for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
@@ -315,15 +318,28 @@ internal static partial class ModuleMergeComposer
             if (block.Count == 0)
                 continue;
 
-            sourceBlocks.Add(string.Join(System.Environment.NewLine, block));
+            var sourceBlock = string.Join(System.Environment.NewLine, block);
+            if (sourceUsingLines.Count > 0)
+            {
+                var sourcePreamble = string.Join(System.Environment.NewLine, sourceUsingLines);
+                var encodedPreamble = System.Convert.ToBase64String(Encoding.UTF8.GetBytes(sourcePreamble));
+                sourceBlock = MergedSourcePreambleMarker + encodedPreamble +
+                              System.Environment.NewLine + sourceBlock;
+            }
+            sourceBlocks.Add(sourceBlock);
+            sourceBlockHasPreamble.Add(sourceUsingLines.Count > 0);
         }
 
         var body = new StringBuilder(8192);
         var boundaryToken = ComputeMergedSourceBoundaryToken(sourceBlocks);
         var sourceStartMarker = MergedSourceStartMarker + " " + boundaryToken;
         var sourceEndMarker = MergedSourceEndMarker + " " + boundaryToken;
-        foreach (var block in sourceBlocks)
+        var sourcePreambleMarker = MergedSourcePreambleMarker + boundaryToken + " ";
+        for (var sourceIndex = 0; sourceIndex < sourceBlocks.Count; sourceIndex++)
         {
+            var block = sourceBlocks[sourceIndex];
+            if (sourceBlockHasPreamble[sourceIndex])
+                block = sourcePreambleMarker + block.Substring(MergedSourcePreambleMarker.Length);
             body.AppendLine(sourceStartMarker);
             body.AppendLine(block);
             body.AppendLine(sourceEndMarker);
@@ -360,6 +376,7 @@ internal static partial class ModuleMergeComposer
         IReadOnlyList<string> lines,
         ISet<string> requires,
         ISet<string> usingLines,
+        ICollection<string> sourceUsingLines,
         string sourcePath,
         string moduleRoot)
     {
@@ -388,10 +405,12 @@ internal static partial class ModuleMergeComposer
                 for (var directiveLine = index + 1; directiveLine <= directiveEnd; directiveLine++)
                     directive.AppendLine().Append(lines[directiveLine]);
 
-                usingLines.Add(RebaseUsingDirective(
+                var rebasedDirective = RebaseUsingDirective(
                     directive.ToString(),
                     sourcePath,
-                    moduleRoot));
+                    moduleRoot);
+                usingLines.Add(rebasedDirective);
+                sourceUsingLines.Add(rebasedDirective);
                 for (var directiveLine = index; directiveLine <= directiveEnd; directiveLine++)
                 {
                     lineReplacements[directiveLine] = directiveLine == index
