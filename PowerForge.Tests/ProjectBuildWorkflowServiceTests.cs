@@ -125,9 +125,8 @@ public sealed class ProjectBuildWorkflowServiceTests
                 }
 
                 Assert.False(spec.WhatIf);
-                Assert.Null(spec.ExpectedVersion);
-                Assert.NotNull(spec.ExpectedVersionsByProject);
-                Assert.Equal("1.2.3", spec.ExpectedVersionsByProject!["ProjectA"]);
+                Assert.NotNull(spec.PlannedVersionsByProject);
+                Assert.Equal("1.2.3", spec.PlannedVersionsByProject!["ProjectA"]);
                 return new DotNetRepositoryReleaseResult
                 {
                     Success = true,
@@ -456,6 +455,62 @@ public sealed class ProjectBuildWorkflowServiceTests
             message.Contains("Project build release execution failed after", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(logger.ErrorMessages, message =>
             message.Contains("ProjectA: package provenance mismatch", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Execute_reuses_planned_central_version_without_inserting_project_version()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.props"), """
+                <Project>
+                  <PropertyGroup>
+                    <VersionPrefix>1.2.3</VersionPrefix>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.CentralVersion"));
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.CentralVersion.csproj");
+            const string projectSource = """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <PackageId>Sample.CentralVersion</PackageId>
+                    <IsPackable>true</IsPackable>
+                  </PropertyGroup>
+                </Project>
+                """;
+            File.WriteAllText(projectPath, projectSource);
+
+            var workflow = new ProjectBuildWorkflowService(new NullLogger()).Execute(
+                new ProjectBuildConfiguration(),
+                root.FullName,
+                new ProjectBuildPreparedContext
+                {
+                    RootPath = root.FullName,
+                    UpdateVersions = true,
+                    Spec = new DotNetRepositoryReleaseSpec
+                    {
+                        RootPath = root.FullName,
+                        Pack = false,
+                        Publish = false,
+                        UpdateVersions = true,
+                        SignAssemblies = false,
+                        SignPackages = false
+                    }
+                },
+                executeBuild: true);
+
+            Assert.True(workflow.Result.Success, workflow.Result.ErrorMessage);
+            Assert.Equal("1.2.3", workflow.Result.Release!.ResolvedVersionsByProject["Sample.CentralVersion"]);
+            Assert.Equal(projectSource, File.ReadAllText(projectPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
     }
 
     private static DotNetRepositoryReleaseResult CreateMixedVersionRelease()

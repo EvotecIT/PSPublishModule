@@ -220,7 +220,13 @@ public sealed partial class DotNetRepositoryReleaseService
                 string? resolutionWarning;
                 try
                 {
-                    if (alignedVersions.TryGetValue(project.ProjectName, out var alignedVersion))
+                    if (spec.PlannedVersionsByProject is not null &&
+                        spec.PlannedVersionsByProject.TryGetValue(project.ProjectName, out var plannedVersion))
+                    {
+                        resolvedVersion = plannedVersion;
+                        resolutionWarning = null;
+                    }
+                    else if (alignedVersions.TryGetValue(project.ProjectName, out var alignedVersion))
                     {
                         resolvedVersion = alignedVersion;
                         resolutionWarning = null;
