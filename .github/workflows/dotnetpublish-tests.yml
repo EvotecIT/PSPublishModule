@@ -46,4 +46,11 @@ jobs:
 
       - name: Run DotNetPublish focused tests
         shell: pwsh
-        run: dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~DotNetPublish'
+        run: >-
+          dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj
+          -c Release
+          --no-restore
+          --filter 'FullyQualifiedName~DotNetPublish'
+          --logger 'console;verbosity=normal'
+          --blame-hang
+          --blame-hang-timeout 5m

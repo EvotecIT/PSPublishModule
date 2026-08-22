@@ -397,7 +397,8 @@ internal static partial class ModuleBootstrapperGenerator
             ["ModuleName"] = moduleName,
             ["ScriptPreambleBlock"] = string.Empty,
             ["ModuleRootCaptureBlock"] = includeBinaryLoader
-                ? "$PowerForgeModuleRoot = $PSScriptRoot"
+                ? "$PowerForgeModuleRoot = $PSScriptRoot" + Environment.NewLine +
+                  "$PowerForgeModulePath = $PSCommandPath"
                 : string.Empty,
             ["BinaryLoaderBlock"] = binaryLoaderBlock,
             ["ScriptLoaderBlock"] = scriptLoaderBlock,

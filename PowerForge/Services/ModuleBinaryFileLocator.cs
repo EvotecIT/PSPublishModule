@@ -66,9 +66,18 @@ internal static class ModuleBinaryFileLocator
             if (!candidate.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 candidate += ".dll";
             candidate = NormalizePathSeparators(candidate);
-            var libPrefix = "Lib" + Path.DirectorySeparatorChar;
-            if (!Path.IsPathRooted(candidate) && candidate.StartsWith(libPrefix, StringComparison.OrdinalIgnoreCase))
-                candidate = candidate.Substring(libPrefix.Length);
+            if (IsPortableRootedPath(candidate))
+            {
+                // Absolute configuration paths identify a build-time input. The generated module must
+                // resolve the copied payload from its packaged Lib layout after installation.
+                candidate = Path.GetFileName(candidate);
+            }
+            else
+            {
+                var libPrefix = "Lib" + Path.DirectorySeparatorChar;
+                if (candidate.StartsWith(libPrefix, StringComparison.OrdinalIgnoreCase))
+                    candidate = candidate.Substring(libPrefix.Length);
+            }
             if (seen.Add(candidate))
                 normalized.Add(candidate);
         }
@@ -106,4 +115,15 @@ internal static class ModuleBinaryFileLocator
         => path
             .Replace('\\', Path.DirectorySeparatorChar)
             .Replace('/', Path.DirectorySeparatorChar);
+
+    private static bool IsPortableRootedPath(string path)
+    {
+        if (Path.IsPathRooted(path))
+            return true;
+
+        return path.Length >= 3 &&
+               char.IsLetter(path[0]) &&
+               path[1] == ':' &&
+               (path[2] == '\\' || path[2] == '/');
+    }
 }

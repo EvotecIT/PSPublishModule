@@ -1088,6 +1088,34 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void Generate_WithAbsoluteExportAssembly_UsesPackagedFileName()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-absolute-export-" + Guid.NewGuid().ToString("N"));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core")).FullName;
+        File.WriteAllText(Path.Combine(libRoot, "DemoModule.dll"), string.Empty);
+        var configuredReference = Path.Combine(root, "build-output", "DemoModule.dll");
+
+        try
+        {
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { configuredReference },
+                handleRuntimes: false);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$LibraryFileNames = @('DemoModule.dll')", bootstrapper, StringComparison.Ordinal);
+            Assert.DoesNotContain(configuredReference, bootstrapper, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     [Trait("Category", "Integration")]
     public void Generate_WithAssemblyLoadContextTypeAccelerators_WritesAllowListedRegistrationBlock()
     {

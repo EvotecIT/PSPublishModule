@@ -69,7 +69,9 @@ public sealed class ModuleMergeApplierTests
                                      "using namespace System.Text" + Environment.NewLine + Environment.NewLine +
                                      "class BinaryBackedType { [TestModule.Models.Widget] $Value }" + Environment.NewLine +
                                      "function Get-Test { [StringBuilder]::new().Append('ok').ToString() }" + Environment.NewLine +
-                                     "function Get-TestRoot { $PSScriptRoot }" +
+                                     "function Get-TestRoot { $PSScriptRoot }" + Environment.NewLine +
+                                     "function Get-TestCommandPath { $PSCommandPath }" + Environment.NewLine +
+                                     "function Get-TestInvocationPath { $MyInvocation.MyCommand.Path }" +
                                      Environment.NewLine + Environment.NewLine +
                                      ModuleConditionalExportBlockBuilder.BuildExportBlock(exports, conditionalDependencies, moduleName),
                 hasLib: true);
@@ -83,6 +85,8 @@ public sealed class ModuleMergeApplierTests
             Assert.Contains("class BinaryBackedType { [TestModule.Models.Widget] $Value }", deferredPayload, StringComparison.Ordinal);
             Assert.Contains("function Get-Test { [StringBuilder]::new().Append('ok').ToString() }", deferredPayload, StringComparison.Ordinal);
             Assert.Contains("function Get-TestRoot { $PSScriptRoot }", deferredPayload, StringComparison.Ordinal);
+            Assert.Contains("function Get-TestCommandPath { $PSCommandPath }", deferredPayload, StringComparison.Ordinal);
+            Assert.Contains("function Get-TestInvocationPath { $MyInvocation.MyCommand.Path }", deferredPayload, StringComparison.Ordinal);
             Assert.StartsWith("#requires -Version 5.1" + Environment.NewLine + "using namespace System.Text", deferredPayload, StringComparison.Ordinal);
             Assert.DoesNotContain("class BinaryBackedType", mergedBootstrapper, StringComparison.Ordinal);
             Assert.Contains(". ([scriptblock]::Create($PowerForgeMergedScriptSegment))", mergedBootstrapper, StringComparison.Ordinal);
@@ -112,16 +116,20 @@ public sealed class ModuleMergeApplierTests
                 "# PowerForge script payload begin",
                 "# PowerForge script payload end");
             var expectedRoot = root.FullName.Replace("'", "''", StringComparison.Ordinal);
+            var expectedModulePath = psm1Path.Replace("'", "''", StringComparison.Ordinal);
             powerShell.AddScript(
                 "$PowerForgeModuleRoot = '" + expectedRoot + "'" + Environment.NewLine +
+                "$PowerForgeModulePath = '" + expectedModulePath + "'" + Environment.NewLine +
                 embeddedPayloadBlock + Environment.NewLine +
-                "@((Get-Test), (Get-TestRoot))");
+                "@((Get-Test), (Get-TestRoot), (Get-TestCommandPath), (Get-TestInvocationPath))");
             var output = powerShell.Invoke();
             Assert.False(powerShell.HadErrors);
             Assert.Empty(powerShell.Streams.Error);
-            Assert.Equal(2, output.Count);
+            Assert.Equal(4, output.Count);
             Assert.Equal("ok", output[0].BaseObject);
             Assert.Equal(root.FullName, output[1].BaseObject);
+            Assert.Equal(psm1Path, output[2].BaseObject);
+            Assert.Equal(psm1Path, output[3].BaseObject);
             Assert.Contains(logger.Infos, static message => message.Contains("binary module bootstrapper", StringComparison.OrdinalIgnoreCase));
         }
         finally
