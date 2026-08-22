@@ -316,7 +316,7 @@ internal static partial class ModuleMergeComposer
                 block.Add(fixRelativePaths ? NormalizeMergedRelativePathReferences(line) : line);
             }
 
-            if (block.Count == 0)
+            if (block.Count == 0 && sourcePreambleLines.Count == 0)
                 continue;
 
             var sourceBlock = string.Join(System.Environment.NewLine, block);

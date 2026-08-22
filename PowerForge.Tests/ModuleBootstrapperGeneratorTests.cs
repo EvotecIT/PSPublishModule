@@ -495,7 +495,7 @@ public partial class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
-    public void ResolveAssemblyLoadContextTargetDirectories_UsesFirstConfiguredCoreSelection()
+    public void ResolveAssemblyLoadContextTargetDirectories_CoversEveryRuntimeFallbackForFirstConfiguredAssembly()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-configured-layout-" + Guid.NewGuid().ToString("N"));
         var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib")).FullName;
@@ -511,7 +511,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 libRoot,
                 new[] { "DemoModule.dll", "ExtraModule.dll" });
 
-            Assert.Equal(new[] { coreRoot }, directories);
+            Assert.Equal(new[] { coreRoot, defaultRoot }, directories);
         }
         finally
         {
@@ -548,9 +548,10 @@ public partial class ModuleBootstrapperGeneratorTests
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
             Assert.Contains("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
             Assert.Contains("DemoModule.ModuleLoadContext.dll", bootstrapper);
-            Assert.Contains("LoadModules(", bootstrapper);
-            Assert.Contains("[string[]]@($PowerForgeResolvedBinaryModules.Assembly.Path)", bootstrapper);
-            Assert.Contains("$ModuleAssembly = $PowerForgeCoreModuleAssemblies[$LibraryIndex]", bootstrapper);
+            Assert.Contains("::LoadModuleFromGroup(", bootstrapper);
+            Assert.Contains("$PowerForgeCoreModuleAssemblyPaths", bootstrapper);
+            Assert.Contains("$PowerForgeResolvedBinaryModulePaths = [Collections.Generic.HashSet[string]]", bootstrapper);
+            Assert.Contains("$ModuleAssemblyPath,", bootstrapper);
             Assert.Contains("-PassThru -ErrorAction Stop", bootstrapper);
             Assert.Contains("AddExportedCmdlet", bootstrapper);
             Assert.Contains("AddExportedAlias", bootstrapper);
@@ -574,13 +575,13 @@ public partial class ModuleBootstrapperGeneratorTests
 
             var coreLoaderPath = Path.Combine(root, "Lib", "Core", "DemoModule.ModuleLoadContext.dll");
             Assert.True(File.Exists(coreLoaderPath));
+            Assert.True(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
             var coreLoaderTargetFramework = System.Reflection.Assembly.Load(File.ReadAllBytes(coreLoaderPath))
                 .GetCustomAttributesData()
                 .Single(attribute => attribute.AttributeType == typeof(System.Runtime.Versioning.TargetFrameworkAttribute))
                 .ConstructorArguments[0]
                 .Value as string;
-            Assert.Equal(".NETCoreApp,Version=v8.0", coreLoaderTargetFramework);
-            Assert.False(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
+            Assert.Equal(".NETCoreApp,Version=v3.1", coreLoaderTargetFramework);
             Assert.True(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
 
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));

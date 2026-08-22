@@ -527,22 +527,35 @@ internal static partial class ModuleBootstrapperGenerator
                     Directory.Exists(directory) &&
                     ModuleBinaryFileLocator.Enumerate(directory, SearchOption.TopDirectoryOnly)
                         .Any(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
-                    .ToArray();
-                if (targetDirectories.Length > 0)
-                    return targetDirectories;
+                    .ToList();
 
                 if (Directory.Exists(libRoot) &&
                     ModuleBinaryFileLocator.Enumerate(libRoot, SearchOption.TopDirectoryOnly)
                         .Any(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
                 {
-                    return new[] { libRoot };
+                    targetDirectories.Add(libRoot);
                 }
 
-                var recursiveMatches = ModuleBinaryFileLocator.Enumerate(libRoot, SearchOption.AllDirectories)
-                    .Where(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase))
-                    .ToArray();
-                if (recursiveMatches.Length == 1)
-                    return new[] { Path.GetDirectoryName(recursiveMatches[0])! };
+                var defaultDirectory = Path.Combine(libRoot, "Default");
+                if (Directory.Exists(defaultDirectory) &&
+                    ModuleBinaryFileLocator.Enumerate(defaultDirectory, SearchOption.TopDirectoryOnly)
+                        .Any(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    targetDirectories.Add(defaultDirectory);
+                }
+
+                // An unqualified runtime reference can fall through preferred folders to a unique
+                // arbitrary nested match when the named Core payload is incompatible with the host.
+                // Emit the helper beside every physical candidate so all runtime-selectable fallbacks
+                // have the same loader available.
+                foreach (var candidate in ModuleBinaryFileLocator.Enumerate(libRoot, SearchOption.AllDirectories)
+                             .Where(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    targetDirectories.Add(Path.GetDirectoryName(candidate)!);
+                }
+
+                if (targetDirectories.Count > 0)
+                    return targetDirectories.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             }
 
             return Array.Empty<string>();
@@ -829,7 +842,35 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
     public static Assembly LoadModule(string moduleAssemblyPath, string? contextName)
         => LoadModules(new[] {{ moduleAssemblyPath }}, contextName)[0];
 
+    public static Assembly LoadModuleFromGroup(string[] moduleAssemblyPaths, string moduleAssemblyPath, string? contextName)
+    {{
+        var fullPaths = NormalizeModuleAssemblyPaths(moduleAssemblyPaths);
+        var requestedPath = Path.GetFullPath(moduleAssemblyPath ?? throw new ArgumentNullException(nameof(moduleAssemblyPath)));
+        if (!fullPaths.Contains(requestedPath, StringComparer.OrdinalIgnoreCase))
+            throw new ArgumentException(""The requested module assembly must belong to the configured module group."", nameof(moduleAssemblyPath));
+
+        var contextKey = string.Join(""|"", fullPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
+        lock (Sync)
+        {{
+            var context = GetOrCreateContext(fullPaths, contextKey, contextName);
+            return context.LoadModuleAssembly(requestedPath);
+        }}
+    }}
+
     public static Assembly[] LoadModules(string[] moduleAssemblyPaths, string? contextName)
+    {{
+        var fullPaths = NormalizeModuleAssemblyPaths(moduleAssemblyPaths);
+        var contextKey = string.Join(""|"", fullPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
+
+        // The global lock keeps context creation and all configured export assembly loads single-shot for each module group.
+        lock (Sync)
+        {{
+            var context = GetOrCreateContext(fullPaths, contextKey, contextName);
+            return fullPaths.Select(context.LoadModuleAssembly).ToArray();
+        }}
+    }}
+
+    private static string[] NormalizeModuleAssemblyPaths(string[] moduleAssemblyPaths)
     {{
         if (moduleAssemblyPaths is null || moduleAssemblyPaths.Length == 0)
             throw new ArgumentException(""At least one module assembly path is required."", nameof(moduleAssemblyPaths));
@@ -847,19 +888,17 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
                 throw new FileNotFoundException(""Module assembly was not found."", fullPath);
         }}
 
-        var contextKey = string.Join(""|"", fullPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
+        return fullPaths;
+    }}
 
-        // The global lock keeps context creation and all configured export assembly loads single-shot for each module group.
-        lock (Sync)
-        {{
-            if (!Contexts.TryGetValue(contextKey, out var context))
-            {{
-                context = new ModuleAssemblyLoadContext(fullPaths, string.IsNullOrWhiteSpace(contextName) ? Path.GetFileNameWithoutExtension(fullPaths[0]) : contextName);
-                Contexts[contextKey] = context;
-            }}
+    private static ModuleAssemblyLoadContext GetOrCreateContext(string[] fullPaths, string contextKey, string? contextName)
+    {{
+        if (Contexts.TryGetValue(contextKey, out var context))
+            return context;
 
-            return fullPaths.Select(context.LoadModuleAssembly).ToArray();
-        }}
+        context = new ModuleAssemblyLoadContext(fullPaths, string.IsNullOrWhiteSpace(contextName) ? Path.GetFileNameWithoutExtension(fullPaths[0]) : contextName);
+        Contexts[contextKey] = context;
+        return context;
     }}
 
     protected override Assembly? Load(AssemblyName assemblyName)
