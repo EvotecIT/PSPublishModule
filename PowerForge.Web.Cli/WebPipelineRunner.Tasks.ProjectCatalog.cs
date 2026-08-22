@@ -2352,6 +2352,18 @@ internal static partial class WebPipelineRunner
                 }
             }
 
+            var powerShellGalleryModules = new List<WebEcosystemPowerShellGalleryModule>();
+            if (module is not null)
+                powerShellGalleryModules.Add(module);
+            foreach (var candidate in BuildProjectAliasIdentifierCandidates(project, includeSeparatorVariants: false))
+            {
+                if (!psgalleryById.TryGetValue(candidate, out var aliasModule))
+                    continue;
+
+                if (!powerShellGalleryModules.Any(existing => string.Equals(existing.Id, aliasModule.Id, StringComparison.OrdinalIgnoreCase)))
+                    powerShellGalleryModules.Add(aliasModule);
+            }
+
             var hasAnyMetrics = github is not null || nuget is not null || module is not null;
             if (!hasAnyMetrics)
                 continue;
@@ -2392,7 +2404,9 @@ internal static partial class WebPipelineRunner
                 {
                     Id = module.Id,
                     Version = module.Version,
-                    TotalDownloads = module.DownloadCount,
+                    TotalDownloads = powerShellGalleryModules.Count > 1
+                        ? powerShellGalleryModules.Sum(static galleryModule => Math.Max(0, galleryModule.DownloadCount))
+                        : module.DownloadCount,
                     GalleryUrl = module.GalleryUrl,
                     ProjectUrl = module.ProjectUrl
                 };

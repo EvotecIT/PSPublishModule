@@ -406,7 +406,7 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
     }
 
     [Fact]
-    public void SyncProjectCatalogTelemetryFromStats_MergesPowerShellGalleryDownloads_WhenStatsIncludeGallery()
+    public void SyncProjectCatalogTelemetryFromStats_AggregatesExplicitPowerShellGalleryAliasModules()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-ecosystem-catalog-telemetry-direct-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -426,12 +426,12 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                   "summary": {
                     "repositoryCount": 1,
                     "nuGetPackageCount": 0,
-                    "powerShellGalleryModuleCount": 1,
+                    "powerShellGalleryModuleCount": 2,
                     "gitHubStars": 42,
                     "gitHubForks": 5,
                     "nuGetDownloads": 0,
-                    "powerShellGalleryDownloads": 123456,
-                    "totalDownloads": 123456
+                    "powerShellGalleryDownloads": 124456,
+                    "totalDownloads": 124456
                   },
                   "gitHub": {
                     "organization": "EvotecIT",
@@ -453,14 +453,21 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                   },
                   "powerShellGallery": {
                     "owner": "Przemyslaw.Klys",
-                    "moduleCount": 1,
-                    "totalDownloads": 123456,
+                    "moduleCount": 2,
+                    "totalDownloads": 124456,
                     "modules": [
                       {
                         "id": "SecurityPolicy",
                         "version": "0.0.13",
                         "downloadCount": 123456,
                         "galleryUrl": "https://www.powershellgallery.com/packages/SecurityPolicy",
+                        "projectUrl": "https://github.com/EvotecIT/SecurityPolicy"
+                      },
+                      {
+                        "id": "SecurityPolicyLegacy",
+                        "version": "2.0.0",
+                        "downloadCount": 1000,
+                        "galleryUrl": "https://www.powershellgallery.com/packages/SecurityPolicyLegacy",
                         "projectUrl": "https://github.com/EvotecIT/SecurityPolicy"
                       }
                     ]
@@ -498,7 +505,7 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                       "slug": "securitypolicyx",
                       "name": "SecurityPolicyX",
                       "githubRepo": "EvotecIT/SecurityPolicyX",
-                      "aliases": ["/projects/securitypolicy/index.html?ref=legacy"],
+                      "aliases": ["/projects/securitypolicy/index.html?ref=legacy", "SecurityPolicyLegacy"],
                       "links": {
                         "powerShellGallery": "https://www.powershellgallery.com/packages/SecurityPolicy"
                       },
@@ -533,10 +540,10 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
             using var catalog = JsonDocument.Parse(File.ReadAllText(catalogPath));
             var project = catalog.RootElement.GetProperty("projects")[0];
             Assert.Equal(42, project.GetProperty("metrics").GetProperty("github").GetProperty("stars").GetInt32());
-            Assert.Equal(123456L, project.GetProperty("metrics").GetProperty("powerShellGallery").GetProperty("totalDownloads").GetInt64());
+            Assert.Equal(124456L, project.GetProperty("metrics").GetProperty("powerShellGallery").GetProperty("totalDownloads").GetInt64());
             Assert.Equal(2, project.GetProperty("metrics").GetProperty("nuget").GetProperty("packageCount").GetInt32());
             Assert.Equal(300L, project.GetProperty("metrics").GetProperty("nuget").GetProperty("totalDownloads").GetInt64());
-            Assert.Equal(123756L, project.GetProperty("metrics").GetProperty("downloads").GetProperty("total").GetInt64());
+            Assert.Equal(124756L, project.GetProperty("metrics").GetProperty("downloads").GetProperty("total").GetInt64());
             Assert.True(File.Exists(publishedCatalogPath));
         }
         finally
