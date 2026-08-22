@@ -1,6 +1,6 @@
 using PowerForge;
 
-public class ModuleBootstrapperGeneratorTests
+public partial class ModuleBootstrapperGeneratorTests
 {
     [Theory]
     [InlineData("AMD64", "win-x64")]
