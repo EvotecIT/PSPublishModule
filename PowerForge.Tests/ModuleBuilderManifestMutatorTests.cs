@@ -462,13 +462,13 @@ public sealed class ModuleBuilderManifestMutatorTests
             const string moduleName = "PowerForge";
             File.WriteAllText(
                 Path.Combine(root, $"{moduleName}.psd1"),
-                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; NestedModules = @('Nested.psm1'); FunctionsToExport = @('Invoke-RootOnly', 'Invoke-SharedFunction', 'Invoke-NestedFunction'); CmdletsToExport = @(); AliasesToExport = @() }");
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; NestedModules = @('Nested.psm1'); FunctionsToExport = @('Invoke-RootOnly', 'Invoke-SharedFunction', 'Invoke-NestedFunction'); CmdletsToExport = @(); AliasesToExport = @('RootOnlyAlias', 'SharedAlias', 'NestedAlias') }");
             File.WriteAllText(
                 Path.Combine(root, $"{moduleName}.psm1"),
-                "function Invoke-RootOnly { }; function Invoke-SharedFunction { }");
+                "function Invoke-RootOnly { }; function Invoke-SharedFunction { }; Set-Alias RootOnlyAlias Get-Item; Set-Alias SharedAlias Get-Item");
             File.WriteAllText(
                 Path.Combine(root, "Nested.psm1"),
-                "function Invoke-SharedFunction { }; function Invoke-NestedFunction { }");
+                "function Invoke-SharedFunction { }; function Invoke-NestedFunction { }; Set-Alias SharedAlias Get-Item; Set-Alias NestedAlias Get-Item");
             var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
             File.Copy(
                 typeof(ModuleBuilder).Assembly.Location,
@@ -486,9 +486,13 @@ public sealed class ModuleBuilderManifestMutatorTests
             });
 
             var functionWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "FunctionsToExport");
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
             Assert.Contains("Invoke-NestedFunction", functionWrite.Values);
             Assert.Contains("Invoke-SharedFunction", functionWrite.Values);
             Assert.DoesNotContain("Invoke-RootOnly", functionWrite.Values);
+            Assert.Contains("NestedAlias", aliasWrite.Values);
+            Assert.Contains("SharedAlias", aliasWrite.Values);
+            Assert.DoesNotContain("RootOnlyAlias", aliasWrite.Values);
         }
         finally
         {
@@ -515,10 +519,10 @@ public sealed class ModuleBuilderManifestMutatorTests
             const string moduleName = "PowerForge";
             File.WriteAllText(
                 Path.Combine(root, $"{moduleName}.psd1"),
-                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; NestedModules = @('External.Module'); FunctionsToExport = @('Invoke-AmbiguousFunction'); CmdletsToExport = @(); AliasesToExport = @() }");
+                "@{ ModuleVersion = '1.0.0'; RootModule = 'PowerForge.psm1'; NestedModules = @('External.Module'); FunctionsToExport = @('Invoke-AmbiguousFunction'); CmdletsToExport = @(); AliasesToExport = @('AmbiguousAlias') }");
             File.WriteAllText(
                 Path.Combine(root, $"{moduleName}.psm1"),
-                "function Invoke-AmbiguousFunction { }");
+                "function Invoke-AmbiguousFunction { }; Set-Alias AmbiguousAlias Get-Item");
             var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
             File.Copy(
                 typeof(ModuleBuilder).Assembly.Location,
@@ -536,7 +540,9 @@ public sealed class ModuleBuilderManifestMutatorTests
             });
 
             var functionWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "FunctionsToExport");
+            var aliasWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "AliasesToExport");
             Assert.Contains("Invoke-AmbiguousFunction", functionWrite.Values);
+            Assert.Contains("AmbiguousAlias", aliasWrite.Values);
         }
         finally
         {
