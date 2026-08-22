@@ -89,7 +89,53 @@ public sealed class BinaryDependencyPreflightService
             throw new DirectoryNotFoundException($"Module root not found: {root}");
 
         var edition = NormalizeEdition(powerShellEdition);
-        var assemblyRoot = ResolveAssemblyRoot(root, edition, out var relativeAssemblyRoot);
+        var assemblyRoots = ResolveAssemblyRoots(root, edition);
+        if (assemblyRoots.Length == 0)
+        {
+            return new BinaryDependencyPreflightResult(
+                edition,
+                root,
+                string.Empty,
+                string.Empty,
+                Array.Empty<BinaryDependencyPreflightIssue>(),
+                summary: "no binary payload");
+        }
+
+        if (assemblyRoots.Length == 1)
+        {
+            var single = assemblyRoots[0];
+            return AnalyzeAssemblyRoot(root, edition, single.Path, single.RelativePath, manifestPath);
+        }
+
+        var payloadResults = assemblyRoots
+            .Select(payload => AnalyzeAssemblyRoot(root, edition, payload.Path, payload.RelativePath, manifestPath))
+            .ToArray();
+        var issues = payloadResults
+            .SelectMany(result => result.Issues.Select(issue => new BinaryDependencyPreflightIssue(
+                Path.GetFileName(result.AssemblyRootRelativePath) + "/" + issue.AssemblyFileName,
+                issue.MissingDependencyName,
+                issue.ReferencedVersion)))
+            .ToArray();
+        var summary = issues.Length == 0
+            ? $"ok ({payloadResults.Length} payloads)"
+            : $"{issues.Length} missing dependenc{(issues.Length == 1 ? "y" : "ies")} across {payloadResults.Length} payloads";
+
+        return new BinaryDependencyPreflightResult(
+            edition,
+            root,
+            Path.Combine(root, "Lib"),
+            "Lib",
+            issues,
+            summary);
+    }
+
+    private BinaryDependencyPreflightResult AnalyzeAssemblyRoot(
+        string root,
+        string edition,
+        string assemblyRoot,
+        string relativeAssemblyRoot,
+        string? manifestPath)
+    {
         if (string.IsNullOrWhiteSpace(assemblyRoot) || !Directory.Exists(assemblyRoot))
         {
             return new BinaryDependencyPreflightResult(
@@ -366,69 +412,20 @@ public sealed class BinaryDependencyPreflightService
         return false;
     }
 
-    private static string ResolveAssemblyRoot(string moduleRoot, string edition, out string relativeAssemblyRoot)
+    private static PayloadRoot[] ResolveAssemblyRoots(string moduleRoot, string edition)
     {
-        relativeAssemblyRoot = string.Empty;
-
         var libRoot = Path.Combine(moduleRoot, "Lib");
         if (!Directory.Exists(libRoot))
-            return moduleRoot;
+            return new[] { new PayloadRoot(moduleRoot, string.Empty) };
 
-        var folders = new HashSet<string>(
-            Directory.EnumerateDirectories(libRoot).Select(Path.GetFileName).Where(static n => !string.IsNullOrWhiteSpace(n))!,
-            StringComparer.OrdinalIgnoreCase);
-
-        var framework = string.Empty;
-        var frameworkNet = string.Empty;
-        var hasStandard = folders.Contains("Standard");
-        var hasCore = folders.Contains("Core");
-        var hasDefault = folders.Contains("Default");
-
-        if (hasStandard && hasCore && hasDefault)
-        {
-            framework = "Standard";
-            frameworkNet = "Default";
-        }
-        else if (hasStandard && hasCore)
-        {
-            framework = "Standard";
-            frameworkNet = "Standard";
-        }
-        else if (hasCore && hasDefault)
-        {
-            framework = "Core";
-            frameworkNet = "Default";
-        }
-        else if (hasStandard && hasDefault)
-        {
-            framework = "Standard";
-            frameworkNet = "Default";
-        }
-        else if (hasStandard)
-        {
-            framework = "Standard";
-            frameworkNet = "Standard";
-        }
-        else if (hasCore)
-        {
-            framework = "Core";
-            frameworkNet = string.Empty;
-        }
-        else if (hasDefault)
-        {
-            framework = string.Empty;
-            frameworkNet = "Default";
-        }
-
-        var selected = string.Equals(edition, "Core", StringComparison.OrdinalIgnoreCase)
-            ? framework
-            : frameworkNet;
-
-        if (string.IsNullOrWhiteSpace(selected))
-            return libRoot;
-
-        relativeAssemblyRoot = Path.Combine("Lib", selected);
-        return Path.Combine(libRoot, selected);
+        return ModuleBinaryPayloadLayout.ResolveValidationPayloadDirectories(libRoot, edition)
+            .Where(Directory.Exists)
+            .Select(path => new PayloadRoot(
+                path,
+                string.Equals(path, libRoot, StringComparison.OrdinalIgnoreCase)
+                    ? "Lib"
+                    : Path.Combine("Lib", Path.GetFileName(path))))
+            .ToArray();
     }
 
     private static ScopedRootAnalysis? TryCreateScopedRootAnalysis(string moduleRoot, string assemblyRoot, string? manifestPath)
@@ -804,6 +801,18 @@ public sealed class BinaryDependencyPreflightService
         {
             CandidateAssemblyPaths = candidateAssemblyPaths ?? Array.Empty<string>();
             EntryAssemblyPaths = entryAssemblyPaths ?? Array.Empty<string>();
+        }
+    }
+
+    private sealed class PayloadRoot
+    {
+        public string Path { get; }
+        public string RelativePath { get; }
+
+        public PayloadRoot(string path, string relativePath)
+        {
+            Path = path;
+            RelativePath = relativePath;
         }
     }
 }

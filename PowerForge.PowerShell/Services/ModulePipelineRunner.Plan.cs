@@ -763,6 +763,7 @@ public sealed partial class ModulePipelineRunner
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
             BinaryConflictReportRoot = projectRoot,
+            AnalyzeInstalledBinaryConflictsDuringBuild = spec.Build.AnalyzeInstalledBinaryConflictsDuringBuild,
             IgnoreLibraryOnLoad = NormalizeStringArray(ignoreLibraryOnLoadFromSegments ?? spec.Build.IgnoreLibraryOnLoad),
             KeepStaging = spec.Build.KeepStaging,
             RefreshManifestOnly = refreshPsd1Only

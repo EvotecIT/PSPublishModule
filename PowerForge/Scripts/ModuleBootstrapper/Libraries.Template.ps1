@@ -3,8 +3,9 @@
 
 {{LibrariesByFolderMap}}
 
-$AssemblyFolders = Get-ChildItem -Path $PSScriptRoot\Lib -Directory -ErrorAction SilentlyContinue
-$Root = @(Get-ChildItem -Path $PSScriptRoot\Lib -File -ErrorAction SilentlyContinue | Where-Object Extension -IEQ '.dll').Count -gt 0
+$LibRoot = [IO.Path]::Combine($PSScriptRoot, 'Lib')
+$AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction SilentlyContinue
+$Root = @(Get-ChildItem -LiteralPath $LibRoot -File -ErrorAction SilentlyContinue | Where-Object Extension -IEQ '.dll').Count -gt 0
 
 $Default = $false
 $Core = $false
@@ -46,6 +47,7 @@ if ($Standard -and $Core -and $Default) {
     #Write-Error -Message 'No assemblies found'
 }
 
+{{RuntimePayloadSelectorBlock}}
 if ($PSEdition -eq 'Core') {
     $LibFolder = $Framework
 } else {
