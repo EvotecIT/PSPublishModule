@@ -183,7 +183,9 @@ internal static class ModuleMergeComposer
 
             try
             {
-                files.AddRange(Directory.EnumerateFiles(full, "*.ps1", SearchOption.AllDirectories));
+                files.AddRange(
+                    Directory.EnumerateFiles(full, "*", SearchOption.AllDirectories)
+                        .Where(static file => string.Equals(Path.GetExtension(file), ".ps1", StringComparison.OrdinalIgnoreCase)));
             }
             catch
             {
@@ -204,19 +206,9 @@ internal static class ModuleMergeComposer
 
     internal static string[] ResolveMergeDirectories(InformationConfiguration? information)
     {
-        var ordered = new List<string> { "Classes", "Enums", "Private", "Public" };
-
-        if (information?.IncludePS1 is { Length: > 0 })
-        {
-            foreach (var entry in information.IncludePS1)
-            {
-                if (string.IsNullOrWhiteSpace(entry))
-                    continue;
-                if (ordered.Any(existing => string.Equals(existing, entry, System.StringComparison.OrdinalIgnoreCase)))
-                    continue;
-                ordered.Add(entry);
-            }
-        }
+        IEnumerable<string> configured = information?.IncludePS1 is { Length: > 0 }
+            ? information.IncludePS1
+            : new[] { "Classes", "Enums", "Private", "Public" };
 
         if (information?.IncludeToArray is { Length: > 0 })
         {
@@ -224,19 +216,16 @@ internal static class ModuleMergeComposer
             {
                 if (entry is null || !string.Equals(entry.Key, "IncludePS1", System.StringComparison.OrdinalIgnoreCase))
                     continue;
-
-                foreach (var value in entry.Values ?? System.Array.Empty<string>())
-                {
-                    if (string.IsNullOrWhiteSpace(value))
-                        continue;
-                    if (ordered.Any(existing => string.Equals(existing, value, System.StringComparison.OrdinalIgnoreCase)))
-                        continue;
-                    ordered.Add(value);
-                }
+                if (entry.Values is { Length: > 0 })
+                    configured = entry.Values;
             }
         }
 
-        return ordered.ToArray();
+        return configured
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static string BuildMergedScriptContent(

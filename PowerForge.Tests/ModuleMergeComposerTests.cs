@@ -233,7 +233,7 @@ public sealed class ModuleMergeComposerTests
             WriteMergeModule(root.FullName, moduleName);
             Directory.CreateDirectory(Path.Combine(root.FullName, "LegacyScripts"));
             File.WriteAllText(
-                Path.Combine(root.FullName, "LegacyScripts", "Get-Legacy.ps1"),
+                Path.Combine(root.FullName, "LegacyScripts", "Get-Legacy.PS1"),
                 "function Get-Legacy { 'legacy' }");
 
             var sources = ModuleMergeComposer.BuildSources(
@@ -256,6 +256,22 @@ public sealed class ModuleMergeComposerTests
         {
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    [Fact]
+    public void ResolveMergeDirectories_LegacyIncludePs1OverridesModernAndDefaultFolders()
+    {
+        var directories = ModuleMergeComposer.ResolveMergeDirectories(
+            new InformationConfiguration
+            {
+                IncludePS1 = new[] { "ModernScripts" },
+                IncludeToArray = new[]
+                {
+                    new IncludeToArrayEntry { Key = "IncludePS1", Values = new[] { "LegacyScripts", "legacyscripts" } }
+                }
+            });
+
+        Assert.Equal(new[] { "LegacyScripts" }, directories);
     }
 
     [Fact]

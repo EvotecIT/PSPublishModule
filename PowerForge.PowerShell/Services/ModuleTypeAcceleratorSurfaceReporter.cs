@@ -34,7 +34,9 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
 
         var requestedTypes = Normalize(plan.BuildSpec.AssemblyTypeAccelerators);
         var requestedAssemblies = Normalize(plan.BuildSpec.AssemblyTypeAcceleratorAssemblies);
-        var libraryDirectory = ResolveAssemblyLoadContextLibraryDirectory(buildResult.StagingPath);
+        var libraryDirectory = ResolveAssemblyLoadContextLibraryDirectory(
+            buildResult.StagingPath,
+            plan.BuildSpec.ExportAssemblies);
 
         ModuleTypeAcceleratorSurfaceReport report;
         if (string.IsNullOrWhiteSpace(libraryDirectory) || !Directory.Exists(libraryDirectory))
@@ -319,13 +321,31 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
         builder.AppendLine();
     }
 
-    private static string? ResolveAssemblyLoadContextLibraryDirectory(string stagingPath)
+    private static string? ResolveAssemblyLoadContextLibraryDirectory(
+        string stagingPath,
+        IReadOnlyList<string>? exportAssemblyFileNames)
     {
         var libRoot = Path.Combine(stagingPath, "Lib");
         if (!Directory.Exists(libRoot))
             return null;
 
-        return ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetDirectories(libRoot).FirstOrDefault();
+        var candidates = ModuleBootstrapperGenerator
+            .ResolveAssemblyLoadContextTargetDirectories(libRoot, exportAssemblyFileNames)
+            .ToArray();
+        if (candidates.Length == 0)
+            return null;
+
+        var runtimeFolder = ModuleBinaryPayloadLayout.ResolveRuntimePayloadFolder(libRoot, "Core");
+        if (!string.IsNullOrWhiteSpace(runtimeFolder))
+        {
+            var runtimeDirectory = Path.Combine(libRoot, runtimeFolder);
+            var selected = candidates.FirstOrDefault(
+                candidate => string.Equals(candidate, runtimeDirectory, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(selected))
+                return selected;
+        }
+
+        return candidates[0];
     }
 
     private static string? ResolveAssemblyPath(string libraryDirectory, string? assemblyName)

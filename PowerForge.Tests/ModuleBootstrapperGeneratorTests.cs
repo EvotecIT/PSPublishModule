@@ -1005,12 +1005,16 @@ public class ModuleBootstrapperGeneratorTests
                 exports,
                 new[] { "DemoModule.dll" },
                 handleRuntimes: false,
-                useAssemblyLoadContext: true);
+                useAssemblyLoadContext: true,
+                assemblyTypeAcceleratorMode: AssemblyTypeAcceleratorExportMode.AllowList,
+                assemblyTypeAccelerators: new[] { "Dependency.Widget" });
 
             Assert.True(File.Exists(Path.Combine(root, "Lib", "DemoModule.ModuleLoadContext.dll")));
             Assert.False(File.Exists(Path.Combine(root, "Lib", "Core", "DemoModule.ModuleLoadContext.dll")));
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
             Assert.Contains("$LoaderAssemblyPath = [IO.Path]::Combine($PowerForgeResolvedBinaryModules[0].Assembly.Directory", bootstrapper);
+            Assert.Contains("$LibFolder = $LibraryDirectory", bootstrapper);
+            Assert.Contains("$PowerForgeAlcLibraryDirectory = [IO.Path]::GetFullPath($LibFolder)", bootstrapper);
         }
         finally
         {

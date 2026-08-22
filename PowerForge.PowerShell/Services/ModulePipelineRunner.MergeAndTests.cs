@@ -739,7 +739,8 @@ public sealed partial class ModulePipelineRunner
 
             try
             {
-                if (Directory.EnumerateFiles(includePath, "*.ps1", SearchOption.AllDirectories).Any())
+                if (Directory.EnumerateFiles(includePath, "*", SearchOption.AllDirectories)
+                    .Any(static file => string.Equals(Path.GetExtension(file), ".ps1", StringComparison.OrdinalIgnoreCase)))
                     return true;
             }
             catch

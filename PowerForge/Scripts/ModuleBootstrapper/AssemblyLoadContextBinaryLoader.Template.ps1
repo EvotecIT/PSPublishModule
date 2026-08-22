@@ -40,8 +40,8 @@ try {
         $Library = $PowerForgeResolvedBinaryModules[$LibraryIndex].Library
         $ResolvedModuleAssembly = $PowerForgeResolvedBinaryModules[$LibraryIndex].Assembly
         $ModuleAssemblyPath = $ResolvedModuleAssembly.Path
-        $LibFolder = $ResolvedModuleAssembly.Folder
         $LibraryDirectory = $ResolvedModuleAssembly.Directory
+        $LibFolder = $LibraryDirectory
         $LibraryName = [IO.Path]::GetFileNameWithoutExtension($ModuleAssemblyPath)
         $Class = "$LibraryName.Initialize"
 
