@@ -54,7 +54,8 @@ internal static class ModuleMergeComposer
         string manifestPath,
         string stagingPath,
         string moduleName,
-        IEnumerable<string> scriptPaths)
+        IEnumerable<string> scriptPaths,
+        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null)
     {
         if (string.IsNullOrWhiteSpace(manifestPath) || string.IsNullOrWhiteSpace(stagingPath) || string.IsNullOrWhiteSpace(moduleName))
             return;
@@ -86,7 +87,10 @@ internal static class ModuleMergeComposer
             builder.Append(script.TrimEnd());
         }
 
-        var exportBlock = ModuleConditionalExportBlockBuilder.BuildExportBlock(ModuleManifestExportReader.ReadExports(manifestPath)).TrimEnd();
+        var exportBlock = ModuleConditionalExportBlockBuilder.BuildExportBlock(
+            ModuleManifestExportReader.ReadExports(manifestPath),
+            conditionalFunctionDependencies,
+            moduleName).TrimEnd();
         if (!string.IsNullOrWhiteSpace(exportBlock))
         {
             if (builder.Length > 0)

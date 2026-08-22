@@ -17,8 +17,28 @@ $PowerForgeDesktopBinaryLoaded = $false
 $PowerForgeDesktopBinaryDirectories = @()
 try {
     $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
-    foreach ($Library in $LibraryFileNames) {
-        $ResolvedModuleAssembly = & $ResolvePowerForgeModuleAssembly -LibraryFileName $Library
+    $PowerForgeResolvedBinaryModules = @(
+        foreach ($Library in $LibraryFileNames) {
+            [pscustomobject]@{
+                Library = $Library
+                Assembly = & $ResolvePowerForgeModuleAssembly -LibraryFileName $Library
+            }
+        }
+    )
+    $PowerForgeCoreModuleAssemblies = @()
+    if ($PSEdition -eq 'Core' -and $PowerForgeResolvedBinaryModules.Count -gt 0) {
+        $LoaderAssemblyPath = [IO.Path]::Combine($PowerForgeResolvedBinaryModules[0].Assembly.Directory, '{{LoaderAssemblyName}}.dll')
+        if (-not ('{{LoaderTypeName}}' -as [type])) {
+            Add-Type -Path $LoaderAssemblyPath -ErrorAction Stop
+        }
+        [array] $PowerForgeCoreModuleAssemblies = [{{LoaderTypeName}}]::LoadModules(
+            [string[]]@($PowerForgeResolvedBinaryModules.Assembly.Path),
+            '{{ModuleName}}')
+    }
+
+    for ($LibraryIndex = 0; $LibraryIndex -lt $PowerForgeResolvedBinaryModules.Count; $LibraryIndex++) {
+        $Library = $PowerForgeResolvedBinaryModules[$LibraryIndex].Library
+        $ResolvedModuleAssembly = $PowerForgeResolvedBinaryModules[$LibraryIndex].Assembly
         $ModuleAssemblyPath = $ResolvedModuleAssembly.Path
         $LibFolder = $ResolvedModuleAssembly.Folder
         $LibraryDirectory = $ResolvedModuleAssembly.Directory
@@ -26,12 +46,7 @@ try {
         $Class = "$LibraryName.Initialize"
 
         if ($PSEdition -eq 'Core') {
-            $LoaderAssemblyPath = [IO.Path]::Combine($LibraryDirectory, '{{LoaderAssemblyName}}.dll')
-            if (-not ('{{LoaderTypeName}}' -as [type])) {
-                Add-Type -Path $LoaderAssemblyPath -ErrorAction Stop
-            }
-
-            $ModuleAssembly = [{{LoaderTypeName}}]::LoadModule($ModuleAssemblyPath, '{{ModuleName}}.' + $LibraryName)
+            $ModuleAssembly = $PowerForgeCoreModuleAssemblies[$LibraryIndex]
             $InnerModule = & $ImportModule -Assembly $ModuleAssembly -Force -PassThru -ErrorAction Stop
 
 {{TypeAcceleratorBlock}}

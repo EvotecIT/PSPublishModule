@@ -820,8 +820,18 @@ public sealed partial class ModulePipelineRunner
         return ModulePipelinePlanningHelpers.TryReadTargetFrameworks(spec.CsprojPath);
     }
 
-    private void SyncMergedPsm1WithGeneratedScripts(string manifestPath, string stagingPath, string moduleName, IEnumerable<string> scriptPaths)
-        => ModuleMergeComposer.SyncMergedPsm1WithGeneratedScripts(manifestPath, stagingPath, moduleName, scriptPaths);
+    private void SyncMergedPsm1WithGeneratedScripts(
+        string manifestPath,
+        string stagingPath,
+        string moduleName,
+        IEnumerable<string> scriptPaths,
+        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null)
+        => ModuleMergeComposer.SyncMergedPsm1WithGeneratedScripts(
+            manifestPath,
+            stagingPath,
+            moduleName,
+            scriptPaths,
+            conditionalFunctionDependencies);
 
     private IReadOnlyDictionary<string, string[]> ResolveConditionalExportDependencies(
         ModulePipelinePlan plan,

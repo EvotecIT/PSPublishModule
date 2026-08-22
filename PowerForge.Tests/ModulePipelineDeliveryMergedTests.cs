@@ -117,7 +117,7 @@ public sealed class ModulePipelineDeliveryMergedTests
 
             File.WriteAllText(Path.Combine(projectRoot.FullName, $"{moduleName}.psd1"), "@{ ModuleVersion = '1.0.0'; RootModule = 'TestModule.psm1'; FunctionsToExport = @(); CmdletsToExport = @(); AliasesToExport = @() }");
             File.WriteAllText(Path.Combine(projectRoot.FullName, $"{moduleName}.psm1"), string.Empty);
-            File.WriteAllText(Path.Combine(publicDir.FullName, "Get-Test.ps1"), "function Get-Test { 'ok' }");
+            File.WriteAllText(Path.Combine(publicDir.FullName, "Get-Test.ps1"), "function Get-Test { Get-OptionalWidget }");
             File.WriteAllText(Path.Combine(privateDir.FullName, "Invoke-Hidden.ps1"), "function Invoke-Hidden { 'ok' }");
             File.WriteAllText(Path.Combine(internalsDir.FullName, "tool.txt"), "hello");
 
@@ -153,6 +153,22 @@ public sealed class ModulePipelineDeliveryMergedTests
                             }
                         }
                     },
+                    new ConfigurationCommandSegment
+                    {
+                        Configuration = new CommandConfiguration
+                        {
+                            ModuleName = "Contoso.Optional",
+                            CommandName = new[] { "Get-OptionalWidget" }
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ApprovedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Contoso.Optional"
+                        }
+                    },
                     new ConfigurationArtefactSegment
                     {
                         ArtefactType = ArtefactType.Unpacked,
@@ -175,6 +191,8 @@ public sealed class ModulePipelineDeliveryMergedTests
             Assert.Contains("$FunctionsToExport = @(", stagingPsm1, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Install-TestModule", stagingPsm1, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Update-TestModule", stagingPsm1, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(1, CountOccurrences(stagingPsm1, "$PowerForgeCommandModuleDependencies = @{"));
+            Assert.Contains("'Contoso.Optional' = @('Get-Test')", stagingPsm1, StringComparison.Ordinal);
 
             var artefactPsm1Path = Path.Combine(artefactsDir, moduleName, $"{moduleName}.psm1");
             Assert.True(File.Exists(artefactPsm1Path));
@@ -278,5 +296,17 @@ public sealed class ModulePipelineDeliveryMergedTests
         {
             try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    private static int CountOccurrences(string content, string value)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = content.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
     }
 }

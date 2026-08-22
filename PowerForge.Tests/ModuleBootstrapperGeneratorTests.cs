@@ -333,7 +333,7 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
-    public void ResolveAssemblyLoadContextTargetDirectories_UsesCoreRuntimeSelectionPerConfiguredAssembly()
+    public void ResolveAssemblyLoadContextTargetDirectories_UsesFirstConfiguredCoreSelection()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-configured-layout-" + Guid.NewGuid().ToString("N"));
         var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib")).FullName;
@@ -349,7 +349,7 @@ public class ModuleBootstrapperGeneratorTests
                 libRoot,
                 new[] { "DemoModule.dll", "ExtraModule.dll" });
 
-            Assert.Equal(new[] { coreRoot, libRoot }, directories);
+            Assert.Equal(new[] { coreRoot }, directories);
         }
         finally
         {
@@ -383,7 +383,9 @@ public class ModuleBootstrapperGeneratorTests
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
             Assert.Contains("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
             Assert.Contains("DemoModule.ModuleLoadContext.dll", bootstrapper);
-            Assert.Contains("LoadModule($ModuleAssemblyPath, 'DemoModule.' + $LibraryName)", bootstrapper);
+            Assert.Contains("LoadModules(", bootstrapper);
+            Assert.Contains("[string[]]@($PowerForgeResolvedBinaryModules.Assembly.Path)", bootstrapper);
+            Assert.Contains("$ModuleAssembly = $PowerForgeCoreModuleAssemblies[$LibraryIndex]", bootstrapper);
             Assert.Contains("-PassThru -ErrorAction Stop", bootstrapper);
             Assert.Contains("AddExportedCmdlet", bootstrapper);
             Assert.Contains("AddExportedAlias", bootstrapper);
@@ -420,6 +422,85 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithAssemblyLoadContext_LoadsInterdependentExportsIntoOneContext()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-export-group-" + Guid.NewGuid().ToString("N"));
+        var libCore = Path.Combine(root, "Lib", "Core");
+        Directory.CreateDirectory(libCore);
+
+        try
+        {
+            var sharedPath = BuildFixtureProject(
+                root,
+                "SharedExportProject",
+                "SharedExport",
+                """
+                namespace SharedExport;
+
+                public sealed class SharedValue
+                {
+                }
+                """);
+            var primaryPath = BuildFixtureProject(
+                root,
+                "PrimaryExportProject",
+                "PrimaryExport",
+                """
+                namespace PrimaryExport;
+
+                public static class Entry
+                {
+                    public static void Accept(SharedExport.SharedValue value) { }
+                }
+                """,
+                new[] { sharedPath });
+
+            var packagedPrimary = Path.Combine(libCore, "PrimaryExport.dll");
+            var packagedShared = Path.Combine(root, "Lib", "SharedExport.dll");
+            File.Copy(primaryPath, packagedPrimary, overwrite: true);
+            File.Copy(sharedPath, packagedShared, overwrite: true);
+
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "PrimaryExport.dll", "SharedExport.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0" });
+
+            Assert.False(File.Exists(Path.Combine(root, "Lib", "DemoModule.ModuleLoadContext.dll")));
+            var loaderAssembly = System.Reflection.Assembly.LoadFile(Path.Combine(libCore, "DemoModule.ModuleLoadContext.dll"));
+            var contextType = loaderAssembly.GetType("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", throwOnError: true)!;
+            var loadModules = contextType.GetMethod("LoadModules", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
+            var loaded = (System.Reflection.Assembly[])loadModules.Invoke(
+                null,
+                new object?[] { new[] { packagedPrimary, packagedShared }, "DemoModule" })!;
+
+            Assert.Equal(2, loaded.Length);
+            var parameterType = loaded[0]
+                .GetType("PrimaryExport.Entry", throwOnError: true)!
+                .GetMethod("Accept", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!
+                .GetParameters()[0]
+                .ParameterType;
+            var sharedType = loaded[1].GetType("SharedExport.SharedValue", throwOnError: true)!;
+
+            Assert.Same(sharedType, parameterType);
+            Assert.Same(
+                System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(loaded[0]),
+                System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(loaded[1]));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                try { Directory.Delete(root, true); } catch { /* generated loader assembly remains locked after reflection load */ }
+            }
+        }
+    }
+
+    [Fact]
     public void BuildAssemblyLoadContextSource_ProbesPackagedRuntimeNativeAssets()
     {
         var identity = new ModuleBootstrapperGenerator.AssemblyLoadContextLoaderIdentity(
@@ -430,7 +511,7 @@ public class ModuleBootstrapperGeneratorTests
 
         Assert.Contains("LoadPackagedNativeLibrary", source);
         Assert.Contains("TryLoadPackagedNativeLibrary", source);
-        Assert.Contains("Path.Combine(_assemblyDirectory, \"runtimes\", rid, \"native\", fileName)", source);
+        Assert.Contains("Path.Combine(assemblyDirectory, \"runtimes\", rid, \"native\", fileName)", source);
         Assert.Contains("RuntimeInformation.ProcessArchitecture", source);
         Assert.Contains("GetProperty(\"RuntimeIdentifier\", BindingFlags.Public | BindingFlags.Static)", source);
         Assert.Contains("LoadUnmanagedDllFromPath(path)", source);
@@ -454,20 +535,22 @@ public class ModuleBootstrapperGeneratorTests
             "DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext");
         var source = ModuleBootstrapperGenerator.BuildAssemblyLoadContextSource(identity);
 
-        Assert.Contains("private readonly AssemblyDependencyResolver? _resolver;", source);
-        Assert.Contains("private readonly DependencyManifestResolver? _manifestResolver;", source);
-        Assert.Contains("_resolver = TryCreateResolver(_moduleAssemblyPath);", source);
-        Assert.Contains("_manifestResolver = DependencyManifestResolver.TryCreate(_moduleAssemblyPath);", source);
+        Assert.Contains("private readonly AssemblyDependencyResolver[] _resolvers;", source);
+        Assert.Contains("private readonly DependencyManifestResolver[] _manifestResolvers;", source);
+        Assert.Contains("_resolvers = moduleAssemblyPaths", source);
+        Assert.Contains("_manifestResolvers = moduleAssemblyPaths", source);
         Assert.Contains("catch (InvalidOperationException)", source);
         Assert.Contains("return null;", source);
-        Assert.Contains("_resolver?.ResolveAssemblyToPath(assemblyName)", source);
-        Assert.Contains("_resolver?.ResolveUnmanagedDllToPath(unmanagedDllName)", source);
-        Assert.Contains("_manifestResolver?.ResolveAssemblyToPath(assemblyName)", source);
-        Assert.Contains("_manifestResolver?.ResolveUnmanagedDllToPath(unmanagedDllName)", source);
+        Assert.Contains("foreach (var resolver in _resolvers)", source);
+        Assert.Contains("resolver.ResolveAssemblyToPath(assemblyName)", source);
+        Assert.Contains("resolver.ResolveUnmanagedDllToPath(unmanagedDllName)", source);
+        Assert.Contains("foreach (var manifestResolver in _manifestResolvers)", source);
+        Assert.Contains("manifestResolver.ResolveAssemblyToPath(assemblyName)", source);
+        Assert.Contains("manifestResolver.ResolveUnmanagedDllToPath(unmanagedDllName)", source);
         Assert.Contains("ResolvePackagedRuntimeAssembly(assemblyName.Name)", source);
-        Assert.Contains("Path.Combine(_assemblyDirectory, \"runtimes\", rid, \"lib\")", source);
+        Assert.Contains("Path.Combine(assemblyDirectory, \"runtimes\", rid, \"lib\")", source);
         Assert.Contains("Path.ChangeExtension(assemblyPath, \".deps.json\")", source);
-        Assert.Contains("Path.Combine(_assemblyDirectory, assemblyName.Name + \".dll\")", source);
+        Assert.Contains("Path.Combine(assemblyDirectory, assemblyName.Name + \".dll\")", source);
         Assert.Contains("LoadPackagedNativeLibrary(unmanagedDllName)", source);
     }
 
@@ -710,7 +793,7 @@ public class ModuleBootstrapperGeneratorTests
             Assert.True(File.Exists(Path.Combine(root, "Lib", "DemoModule.ModuleLoadContext.dll")));
             Assert.False(File.Exists(Path.Combine(root, "Lib", "Core", "DemoModule.ModuleLoadContext.dll")));
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
-            Assert.Contains("$LoaderAssemblyPath = [IO.Path]::Combine($LibraryDirectory", bootstrapper);
+            Assert.Contains("$LoaderAssemblyPath = [IO.Path]::Combine($PowerForgeResolvedBinaryModules[0].Assembly.Directory", bootstrapper);
         }
         finally
         {

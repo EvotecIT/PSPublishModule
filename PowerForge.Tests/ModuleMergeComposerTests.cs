@@ -327,7 +327,15 @@ public sealed class ModuleMergeComposerTests
                 """);
             File.WriteAllText(generatedPath, "function Install-TestModule { 'install' }");
 
-            ModuleMergeComposer.SyncMergedPsm1WithGeneratedScripts(manifestPath, root.FullName, moduleName, new[] { generatedPath });
+            ModuleMergeComposer.SyncMergedPsm1WithGeneratedScripts(
+                manifestPath,
+                root.FullName,
+                moduleName,
+                new[] { generatedPath },
+                new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Contoso.Optional"] = new[] { "Get-TestExample" }
+                });
 
             var merged = File.ReadAllText(psm1Path);
 
@@ -337,6 +345,8 @@ public sealed class ModuleMergeComposerTests
                 1,
                 CountOccurrences(merged, "Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport"));
             Assert.Contains("$FunctionsToExport = @('Get-TestExample', 'Install-TestModule')", merged, StringComparison.Ordinal);
+            Assert.Equal(1, CountOccurrences(merged, "$PowerForgeCommandModuleDependencies = @{"));
+            Assert.Contains("'Contoso.Optional' = @('Get-TestExample')", merged, StringComparison.Ordinal);
         }
         finally
         {

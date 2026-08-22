@@ -455,18 +455,17 @@ internal static partial class ModuleBootstrapperGenerator
                 libRoot,
                 Path.Combine(libRoot, "Default")
             };
-            var targetDirectories = new List<string>();
             foreach (var assemblyFileName in exportAssemblyFileNames)
             {
                 var targetDirectory = candidates.FirstOrDefault(directory =>
                     Directory.Exists(directory) &&
                     ModuleBinaryFileLocator.Enumerate(directory, SearchOption.TopDirectoryOnly)
                         .Any(path => string.Equals(Path.GetFileName(path), assemblyFileName, StringComparison.OrdinalIgnoreCase)));
-                if (targetDirectory is not null && !targetDirectories.Contains(targetDirectory, StringComparer.OrdinalIgnoreCase))
-                    targetDirectories.Add(targetDirectory);
+                if (targetDirectory is not null)
+                    return new[] { targetDirectory };
             }
 
-            return targetDirectories.ToArray();
+            return Array.Empty<string>();
         }
 
         var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -646,40 +645,61 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
     // Module contexts are intentionally non-collectible. A process restart is required to load a replaced DLL at the same path.
     private static readonly Dictionary<string, ModuleAssemblyLoadContext> Contexts = new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly string _assemblyDirectory;
-    private readonly string _moduleAssemblyPath;
-    private readonly AssemblyDependencyResolver? _resolver;
-    private readonly DependencyManifestResolver? _manifestResolver;
-    private Assembly? _moduleAssembly;
+    private readonly string[] _assemblyDirectories;
+    private readonly AssemblyDependencyResolver[] _resolvers;
+    private readonly DependencyManifestResolver[] _manifestResolvers;
+    private readonly Dictionary<string, Assembly> _moduleAssemblies = new(StringComparer.OrdinalIgnoreCase);
 
-    private ModuleAssemblyLoadContext(string moduleAssemblyPath, string contextName)
+    private ModuleAssemblyLoadContext(string[] moduleAssemblyPaths, string contextName)
         : base(contextName, isCollectible: false)
     {{
-        _moduleAssemblyPath = Path.GetFullPath(moduleAssemblyPath);
-        _assemblyDirectory = Path.GetDirectoryName(_moduleAssemblyPath) ?? string.Empty;
-        _resolver = TryCreateResolver(_moduleAssemblyPath);
-        _manifestResolver = DependencyManifestResolver.TryCreate(_moduleAssemblyPath);
+        _assemblyDirectories = moduleAssemblyPaths
+            .Select(path => Path.GetDirectoryName(path) ?? string.Empty)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _resolvers = moduleAssemblyPaths
+            .Select(TryCreateResolver)
+            .OfType<AssemblyDependencyResolver>()
+            .ToArray();
+        _manifestResolvers = moduleAssemblyPaths
+            .Select(DependencyManifestResolver.TryCreate)
+            .OfType<DependencyManifestResolver>()
+            .ToArray();
     }}
 
     public static Assembly LoadModule(string moduleAssemblyPath, string? contextName)
+        => LoadModules(new[] {{ moduleAssemblyPath }}, contextName)[0];
+
+    public static Assembly[] LoadModules(string[] moduleAssemblyPaths, string? contextName)
     {{
-        if (string.IsNullOrWhiteSpace(moduleAssemblyPath))
-            throw new ArgumentException(""Module assembly path is required."", nameof(moduleAssemblyPath));
+        if (moduleAssemblyPaths is null || moduleAssemblyPaths.Length == 0)
+            throw new ArgumentException(""At least one module assembly path is required."", nameof(moduleAssemblyPaths));
 
-        var fullPath = Path.GetFullPath(moduleAssemblyPath);
-        if (!File.Exists(fullPath))
-            throw new FileNotFoundException(""Module assembly was not found."", fullPath);
+        var fullPaths = moduleAssemblyPaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (fullPaths.Length == 0)
+            throw new ArgumentException(""At least one module assembly path is required."", nameof(moduleAssemblyPaths));
+        foreach (var fullPath in fullPaths)
+        {{
+            if (!File.Exists(fullPath))
+                throw new FileNotFoundException(""Module assembly was not found."", fullPath);
+        }}
 
-        // The global lock keeps context creation and the first main assembly load single-shot for each module path.
+        var contextKey = string.Join(""|"", fullPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
+
+        // The global lock keeps context creation and all configured export assembly loads single-shot for each module group.
         lock (Sync)
         {{
-            if (!Contexts.TryGetValue(fullPath, out var context))
+            if (!Contexts.TryGetValue(contextKey, out var context))
             {{
-                context = new ModuleAssemblyLoadContext(fullPath, string.IsNullOrWhiteSpace(contextName) ? Path.GetFileNameWithoutExtension(fullPath) : contextName);
-                Contexts[fullPath] = context;
+                context = new ModuleAssemblyLoadContext(fullPaths, string.IsNullOrWhiteSpace(contextName) ? Path.GetFileNameWithoutExtension(fullPaths[0]) : contextName);
+                Contexts[contextKey] = context;
             }}
 
-            return context.LoadMainModule();
+            return fullPaths.Select(context.LoadModuleAssembly).ToArray();
         }}
     }}
 
@@ -692,42 +712,60 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         if (AssemblyName.ReferenceMatchesDefinition(loaderAssembly, assemblyName))
             return typeof(ModuleAssemblyLoadContext).Assembly;
 
-        var resolvedPath = _resolver?.ResolveAssemblyToPath(assemblyName);
-        if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+        foreach (var resolver in _resolvers)
         {{
-            // A package can place a compile-time facade beside the module and the real
-            // implementation under runtimes/<rid>/lib. Replace only that adjacent
-            // facade; preserve every non-adjacent path selected by the dependency resolver.
-            var runtimePath = IsAdjacentAssemblyPath(resolvedPath, assemblyName.Name)
-                ? ResolvePackagedRuntimeAssembly(assemblyName.Name)
-                : null;
-            if (!string.IsNullOrWhiteSpace(runtimePath) && File.Exists(runtimePath))
-                return LoadFromAssemblyPath(runtimePath);
+            var resolvedPath = resolver.ResolveAssemblyToPath(assemblyName);
+            if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+            {{
+                // A package can place a compile-time facade beside the module and the real
+                // implementation under runtimes/<rid>/lib. Replace only that adjacent
+                // facade; preserve every non-adjacent path selected by the dependency resolver.
+                var runtimePath = IsAdjacentAssemblyPath(resolvedPath, assemblyName.Name)
+                    ? ResolvePackagedRuntimeAssembly(assemblyName.Name)
+                    : null;
+                if (!string.IsNullOrWhiteSpace(runtimePath) && File.Exists(runtimePath))
+                    return LoadFromAssemblyPath(runtimePath);
 
-            return LoadFromAssemblyPath(resolvedPath);
+                return LoadFromAssemblyPath(resolvedPath);
+            }}
         }}
 
-        resolvedPath = _manifestResolver?.ResolveAssemblyToPath(assemblyName);
-        if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
-            return LoadFromAssemblyPath(resolvedPath);
+        foreach (var manifestResolver in _manifestResolvers)
+        {{
+            var resolvedPath = manifestResolver.ResolveAssemblyToPath(assemblyName);
+            if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+                return LoadFromAssemblyPath(resolvedPath);
+        }}
 
-        var assemblyPath = Path.Combine(_assemblyDirectory, assemblyName.Name + "".dll"");
         var packagedRuntimePath = ResolvePackagedRuntimeAssembly(assemblyName.Name);
         if (!string.IsNullOrWhiteSpace(packagedRuntimePath) && File.Exists(packagedRuntimePath))
             return LoadFromAssemblyPath(packagedRuntimePath);
 
-        return File.Exists(assemblyPath) ? LoadFromAssemblyPath(assemblyPath) : null;
+        foreach (var assemblyDirectory in _assemblyDirectories)
+        {{
+            var assemblyPath = Path.Combine(assemblyDirectory, assemblyName.Name + "".dll"");
+            if (File.Exists(assemblyPath))
+                return LoadFromAssemblyPath(assemblyPath);
+        }}
+
+        return null;
     }}
 
     protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
     {{
-        var resolvedPath = _resolver?.ResolveUnmanagedDllToPath(unmanagedDllName);
-        if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
-            return LoadUnmanagedDllFromPath(resolvedPath);
+        foreach (var resolver in _resolvers)
+        {{
+            var resolvedPath = resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+            if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+                return LoadUnmanagedDllFromPath(resolvedPath);
+        }}
 
-        resolvedPath = _manifestResolver?.ResolveUnmanagedDllToPath(unmanagedDllName);
-        if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
-            return LoadUnmanagedDllFromPath(resolvedPath);
+        foreach (var manifestResolver in _manifestResolvers)
+        {{
+            var resolvedPath = manifestResolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+            if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+                return LoadUnmanagedDllFromPath(resolvedPath);
+        }}
 
         var packagedLibrary = LoadPackagedNativeLibrary(unmanagedDllName);
         return packagedLibrary != IntPtr.Zero
@@ -735,11 +773,20 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
             : IntPtr.Zero;
     }}
 
-    private Assembly LoadMainModule()
+    private Assembly LoadModuleAssembly(string moduleAssemblyPath)
     {{
-        // Called only while LoadModule holds Sync; keep the one-time main assembly load under that lock.
-        _moduleAssembly ??= LoadFromAssemblyPath(_moduleAssemblyPath);
-        return _moduleAssembly;
+        // Called only while LoadModules holds Sync; keep every configured export in the same context.
+        var fullPath = Path.GetFullPath(moduleAssemblyPath);
+        if (_moduleAssemblies.TryGetValue(fullPath, out var loaded))
+            return loaded;
+
+        loaded = Assemblies.FirstOrDefault(assembly =>
+            !assembly.IsDynamic &&
+            !string.IsNullOrWhiteSpace(assembly.Location) &&
+            string.Equals(Path.GetFullPath(assembly.Location), fullPath, StringComparison.OrdinalIgnoreCase))
+            ?? LoadFromAssemblyPath(fullPath);
+        _moduleAssemblies[fullPath] = loaded;
+        return loaded;
     }}
 
     private static AssemblyDependencyResolver? TryCreateResolver(string assemblyPath)
@@ -984,21 +1031,24 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         var fileName = assemblyName + "".dll"";
         foreach (var rid in GetRuntimeIdentifiers())
         {{
-            var runtimeLibRoot = Path.Combine(_assemblyDirectory, ""runtimes"", rid, ""lib"");
-            if (!Directory.Exists(runtimeLibRoot))
-                continue;
+            foreach (var assemblyDirectory in _assemblyDirectories)
+            {{
+                var runtimeLibRoot = Path.Combine(assemblyDirectory, ""runtimes"", rid, ""lib"");
+                if (!Directory.Exists(runtimeLibRoot))
+                    continue;
 
-            try
-            {{
-                foreach (var path in Directory.EnumerateFiles(runtimeLibRoot, fileName, SearchOption.AllDirectories))
+                try
                 {{
-                    if (File.Exists(path))
-                        return path;
+                    foreach (var path in Directory.EnumerateFiles(runtimeLibRoot, fileName, SearchOption.AllDirectories))
+                    {{
+                        if (File.Exists(path))
+                            return path;
+                    }}
                 }}
-            }}
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
-            {{
-                continue;
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
+                {{
+                    continue;
+                }}
             }}
         }}
 
@@ -1010,11 +1060,12 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         if (string.IsNullOrWhiteSpace(resolvedPath) || string.IsNullOrWhiteSpace(assemblyName))
             return false;
 
-        var adjacentPath = Path.Combine(_assemblyDirectory, assemblyName + "".dll"");
-        return string.Equals(
-            Path.GetFullPath(resolvedPath),
-            Path.GetFullPath(adjacentPath),
-            StringComparison.OrdinalIgnoreCase);
+        var fullResolvedPath = Path.GetFullPath(resolvedPath);
+        return _assemblyDirectories.Any(assemblyDirectory =>
+            string.Equals(
+                fullResolvedPath,
+                Path.GetFullPath(Path.Combine(assemblyDirectory, assemblyName + "".dll"")),
+                StringComparison.OrdinalIgnoreCase));
     }}
 
     private IntPtr LoadPackagedNativeLibrary(string unmanagedDllName)
@@ -1024,26 +1075,32 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 
         foreach (var rid in GetRuntimeIdentifiers())
         {{
+            foreach (var assemblyDirectory in _assemblyDirectories)
+            {{
+                foreach (var fileName in GetNativeLibraryFileNames(unmanagedDllName))
+                {{
+                    var path = Path.Combine(assemblyDirectory, ""runtimes"", rid, ""native"", fileName);
+                    if (File.Exists(path))
+                    {{
+                        var loaded = TryLoadPackagedNativeLibrary(path);
+                        if (loaded != IntPtr.Zero)
+                            return loaded;
+                    }}
+                }}
+            }}
+        }}
+
+        foreach (var assemblyDirectory in _assemblyDirectories)
+        {{
             foreach (var fileName in GetNativeLibraryFileNames(unmanagedDllName))
             {{
-                var path = Path.Combine(_assemblyDirectory, ""runtimes"", rid, ""native"", fileName);
+                var path = Path.Combine(assemblyDirectory, fileName);
                 if (File.Exists(path))
                 {{
                     var loaded = TryLoadPackagedNativeLibrary(path);
                     if (loaded != IntPtr.Zero)
                         return loaded;
                 }}
-            }}
-        }}
-
-        foreach (var fileName in GetNativeLibraryFileNames(unmanagedDllName))
-        {{
-            var path = Path.Combine(_assemblyDirectory, fileName);
-            if (File.Exists(path))
-            {{
-                var loaded = TryLoadPackagedNativeLibrary(path);
-                if (loaded != IntPtr.Zero)
-                    return loaded;
             }}
         }}
 
