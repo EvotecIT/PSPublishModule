@@ -80,6 +80,13 @@ internal static class ModuleBinaryFileLocator
                 var libPrefix = "Lib" + Path.DirectorySeparatorChar;
                 if (candidate.StartsWith(libPrefix, StringComparison.OrdinalIgnoreCase))
                     candidate = candidate.Substring(libPrefix.Length);
+                else
+                {
+                    // Relative paths outside Lib identify build-time inputs. ModuleBuilder copies those
+                    // assemblies into the packaged payload by file name, so installed resolution must not
+                    // retain project-relative directories such as Artifacts/ or bin/.
+                    candidate = Path.GetFileName(candidate);
+                }
             }
             if (seen.Add(candidate))
                 normalized.Add(candidate);

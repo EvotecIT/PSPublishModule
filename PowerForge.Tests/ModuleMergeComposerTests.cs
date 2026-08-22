@@ -300,7 +300,7 @@ public sealed class ModuleMergeComposerTests
                     IncludePS1 = new[] { "Private", "Public", "Enums", "Classes" }
                 },
                 exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
-                fixRelativePaths: false);
+                fixRelativePaths: true);
 
             Assert.True(
                 sources.MergedScriptContent.IndexOf("enum DemoKind", StringComparison.Ordinal) <
@@ -337,7 +337,7 @@ public sealed class ModuleMergeComposerTests
                 "DemoModule",
                 information: null,
                 exports: new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>()),
-                fixRelativePaths: false);
+                fixRelativePaths: true);
 
             var expectedDirective =
                 "using module @{" + Environment.NewLine +
@@ -397,9 +397,43 @@ public sealed class ModuleMergeComposerTests
                 "DemoModule",
                 information: null,
                 exports: new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>()),
-                fixRelativePaths: false);
+                fixRelativePaths: true);
 
             Assert.StartsWith("using assembly './Public/Helper.dll'", sources.MergedScriptContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void BuildSources_PreservesRelativeUsingPathsWhenPathFixesAreDisabled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var publicRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            File.WriteAllText(
+                Path.Combine(publicRoot.FullName, "Get-Demo.ps1"),
+                "using assembly '../External/Types.dll'" + Environment.NewLine +
+                "using module '../External/Types.psm1'" + Environment.NewLine +
+                "function Get-Demo { 'ok' }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                "DemoModule",
+                information: null,
+                exports: new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: false);
+
+            Assert.StartsWith(
+                "using assembly '../External/Types.dll'" + Environment.NewLine +
+                "using module '../External/Types.psm1'",
+                sources.MergedScriptContent,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("using assembly './External/", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("using module './External/", sources.MergedScriptContent, StringComparison.Ordinal);
         }
         finally
         {

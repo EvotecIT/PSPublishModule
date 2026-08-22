@@ -71,6 +71,22 @@ internal static partial class ModuleBootstrapperGenerator
         if (string.IsNullOrWhiteSpace(scriptPayload))
             return string.Empty;
 
+        // MergeMissing prepends recovered function definitions after the script preamble and before
+        // the first framed source. Frame that prefix as another source so the deferred loader executes
+        // it instead of starting at the first original source marker and silently dropping it.
+        var firstSourceIndex = scriptPayload.IndexOf(sourceStartMarker, StringComparison.Ordinal);
+        if (firstSourceIndex > 0)
+        {
+            var sourcePrefix = scriptPayload.Substring(0, firstSourceIndex).Trim();
+            if (!string.IsNullOrWhiteSpace(sourcePrefix))
+            {
+                scriptPayload = sourceStartMarker + Environment.NewLine +
+                                sourcePrefix + Environment.NewLine +
+                                sourceEndMarker + Environment.NewLine + Environment.NewLine +
+                                scriptPayload.Substring(firstSourceIndex);
+            }
+        }
+
         var deferredContent = string.IsNullOrWhiteSpace(scriptPreamble)
             ? scriptPayload
             : scriptPreamble.TrimEnd() + Environment.NewLine + Environment.NewLine + scriptPayload.TrimStart();

@@ -1158,12 +1158,123 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
+    public void InlineMergedScriptPayload_ExecutesFunctionsPrependedBeforeFirstSourceMarker()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-prepended-source-" + Guid.NewGuid().ToString("N"));
+        var fixtureRoot = Path.Combine(root, "Fixture");
+        var moduleRoot = Path.Combine(root, "Module");
+        var libRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "Core")).FullName;
+        var publicRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Public")).FullName;
+
+        try
+        {
+            var fixtureAssembly = BuildFixtureProject(
+                fixtureRoot,
+                "PrependedSourceFixture",
+                "DemoModule",
+                "namespace PrependedSourceFixture; public static class Marker { public static string Value => \"binary\"; }");
+            File.Copy(fixtureAssembly, Path.Combine(libRoot, "DemoModule.dll"), overwrite: true);
+            File.WriteAllText(
+                Path.Combine(publicRoot, "Get-Original.ps1"),
+                "function Get-Original { 'original' }");
+
+            var exports = new ExportSet(
+                new[] { "Get-Recovered", "Get-Original" },
+                Array.Empty<string>(),
+                Array.Empty<string>());
+            var sources = ModuleMergeComposer.BuildSources(
+                moduleRoot,
+                "DemoModule",
+                information: null,
+                exports,
+                fixRelativePaths: false,
+                exportAssemblies: new[] { "DemoModule.dll" });
+            var merged = ModuleMergeComposer.PrependFunctions(
+                new[] { "function Get-Recovered { 'recovered' }" },
+                sources.MergedScriptContent);
+
+            ModuleBootstrapperGenerator.Generate(
+                moduleRoot,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: false);
+            var bootstrapperPath = Path.Combine(moduleRoot, "DemoModule.psm1");
+            ModuleBootstrapperGenerator.InlineMergedScriptPayload(bootstrapperPath, merged);
+
+            var processStartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "pwsh",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            processStartInfo.ArgumentList.Add("-NoLogo");
+            processStartInfo.ArgumentList.Add("-NoProfile");
+            processStartInfo.ArgumentList.Add("-NonInteractive");
+            processStartInfo.ArgumentList.Add("-ExecutionPolicy");
+            processStartInfo.ArgumentList.Add("Bypass");
+            processStartInfo.ArgumentList.Add("-Command");
+            processStartInfo.ArgumentList.Add(
+                "Import-Module -Name '" + bootstrapperPath.Replace("'", "''", StringComparison.Ordinal) +
+                "' -Force -ErrorAction Stop; '{0},{1}' -f (Get-Recovered), (Get-Original)");
+
+            using var process = System.Diagnostics.Process.Start(processStartInfo)!;
+            var standardOutput = process.StandardOutput.ReadToEnd();
+            var standardError = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.True(
+                process.ExitCode == 0,
+                $"Generated module import failed.{Environment.NewLine}{standardOutput}{Environment.NewLine}{standardError}");
+            Assert.Contains("recovered,original", standardOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_WithAbsoluteExportAssembly_UsesPackagedFileName()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-absolute-export-" + Guid.NewGuid().ToString("N"));
         var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core")).FullName;
         File.WriteAllText(Path.Combine(libRoot, "DemoModule.dll"), string.Empty);
         var configuredReference = Path.Combine(root, "build-output", "DemoModule.dll");
+
+        try
+        {
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { configuredReference },
+                handleRuntimes: false);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$LibraryFileNames = @('DemoModule.dll')", bootstrapper, StringComparison.Ordinal);
+            Assert.DoesNotContain(configuredReference, bootstrapper, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Theory]
+    [InlineData("Artifacts/DemoModule.dll")]
+    [InlineData(@"bin\Release\DemoModule.dll")]
+    public void Generate_WithProjectRelativeExportAssembly_UsesPackagedFileName(string configuredReference)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-relative-export-" + Guid.NewGuid().ToString("N"));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core")).FullName;
+        File.WriteAllText(Path.Combine(libRoot, "DemoModule.dll"), string.Empty);
 
         try
         {

@@ -300,7 +300,8 @@ internal static partial class ModuleMergeComposer
                 usingLines,
                 sourceUsingLines,
                 file,
-                rootPath);
+                rootPath,
+                fixRelativePaths);
             for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
             {
                 var line = lines[lineIndex];
@@ -378,7 +379,8 @@ internal static partial class ModuleMergeComposer
         ISet<string> usingLines,
         ICollection<string> sourceUsingLines,
         string sourcePath,
-        string moduleRoot)
+        string moduleRoot,
+        bool fixRelativePaths)
     {
         // PowerShell using statements are valid only in the script preamble. Restricting extraction to that region
         // prevents embedded languages in here-strings and block comments from being mistaken for module directives.
@@ -405,10 +407,12 @@ internal static partial class ModuleMergeComposer
                 for (var directiveLine = index + 1; directiveLine <= directiveEnd; directiveLine++)
                     directive.AppendLine().Append(lines[directiveLine]);
 
-                var rebasedDirective = RebaseUsingDirective(
-                    directive.ToString(),
-                    sourcePath,
-                    moduleRoot);
+                var rebasedDirective = fixRelativePaths
+                    ? RebaseUsingDirective(
+                        directive.ToString(),
+                        sourcePath,
+                        moduleRoot)
+                    : directive.ToString();
                 usingLines.Add(rebasedDirective);
                 sourceUsingLines.Add(rebasedDirective);
                 for (var directiveLine = index; directiveLine <= directiveEnd; directiveLine++)
