@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Language;
+using System.Management.Automation.Runspaces;
 using System.Text;
 
 namespace PowerForge.Tests;
@@ -52,6 +54,10 @@ public sealed class ModuleMergeApplierTests
             Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
             Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
             File.WriteAllText(Path.Combine(root.FullName, "Lib", "Core", moduleName + ".dll"), string.Empty);
+            File.Copy(
+                typeof(ExportSet).Assembly.Location,
+                Path.Combine(root.FullName, "PowerForge.dll"),
+                overwrite: true);
             File.WriteAllText(Path.Combine(root.FullName, "Public", "Get-Test.ps1"), "function Get-Test { 'ok' }");
             ModuleBootstrapperGenerator.Generate(
                 root.FullName,
@@ -67,6 +73,7 @@ public sealed class ModuleMergeApplierTests
                 scriptFiles: new[] { Path.Combine(root.FullName, "Public", "Get-Test.ps1") },
                 mergedScriptContent: "#requires -Version 5.1" + Environment.NewLine +
                                      "using namespace System.Text" + Environment.NewLine + Environment.NewLine +
+                                     "using assembly 'PowerForge.dll'" + Environment.NewLine + Environment.NewLine +
                                      "class BinaryBackedType { [TestModule.Models.Widget] $Value }" + Environment.NewLine +
                                      "function Get-Test { [StringBuilder]::new().Append('ok').ToString() }" + Environment.NewLine +
                                      "function Get-TestRoot { $PSScriptRoot }" + Environment.NewLine +
@@ -107,7 +114,9 @@ public sealed class ModuleMergeApplierTests
             using var powerShell = PowerShell.Create();
             powerShell.AddScript("Add-Type -TypeDefinition 'namespace TestModule.Models { public sealed class Widget {} }'");
             _ = powerShell.Invoke();
-            Assert.False(powerShell.HadErrors);
+            Assert.False(
+                powerShell.HadErrors,
+                string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
             Assert.Empty(powerShell.Streams.Error);
             powerShell.Commands.Clear();
             powerShell.Streams.Error.Clear();
@@ -117,13 +126,17 @@ public sealed class ModuleMergeApplierTests
                 "# PowerForge script payload end");
             var expectedRoot = root.FullName.Replace("'", "''", StringComparison.Ordinal);
             var expectedModulePath = psm1Path.Replace("'", "''", StringComparison.Ordinal);
+            var unrelatedLocation = Path.GetTempPath().Replace("'", "''", StringComparison.Ordinal);
             powerShell.AddScript(
                 "$PowerForgeModuleRoot = '" + expectedRoot + "'" + Environment.NewLine +
                 "$PowerForgeModulePath = '" + expectedModulePath + "'" + Environment.NewLine +
+                "Set-Location -LiteralPath '" + unrelatedLocation + "'" + Environment.NewLine +
                 embeddedPayloadBlock + Environment.NewLine +
                 "@((Get-Test), (Get-TestRoot), (Get-TestCommandPath), (Get-TestInvocationPath))");
             var output = powerShell.Invoke();
-            Assert.False(powerShell.HadErrors);
+            Assert.False(
+                powerShell.HadErrors,
+                string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
             Assert.Empty(powerShell.Streams.Error);
             Assert.Equal(4, output.Count);
             Assert.Equal("ok", output[0].BaseObject);
@@ -131,6 +144,84 @@ public sealed class ModuleMergeApplierTests
             Assert.Equal(psm1Path, output[2].BaseObject);
             Assert.Equal(psm1Path, output[3].BaseObject);
             Assert.Contains(logger.Infos, static message => message.Contains("binary module bootstrapper", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Apply_RewritesRelativeMultilineUsingModuleSpecificationForDeferredParsing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
+            File.WriteAllText(Path.Combine(root.FullName, "Lib", "Core", moduleName + ".dll"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(root.FullName, "Types.psm1"),
+                "class PathBackedType { [string] $Value = 'typed' }");
+            File.WriteAllText(
+                Path.Combine(root.FullName, "Types.psd1"),
+                "@{" + Environment.NewLine +
+                "    RootModule = 'Types.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "    GUID = '4e7d8656-c82d-4ad7-8ad0-79fc8b827b87'" + Environment.NewLine +
+                "}");
+
+            var exports = new ExportSet(new[] { "Get-TypedValue" }, Array.Empty<string>(), Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root.FullName,
+                moduleName,
+                exports,
+                new[] { moduleName + ".dll" },
+                handleRuntimes: false);
+            var psm1Path = Path.Combine(root.FullName, moduleName + ".psm1");
+            var mergedContent =
+                "using module @{" + Environment.NewLine +
+                "    ModuleName = './Types.psd1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "}" + Environment.NewLine + Environment.NewLine +
+                "function Get-TypedValue { [PathBackedType]::new().Value }";
+
+            var outcome = ModuleMergeApplier.Apply(
+                new CollectingLogger(),
+                CreatePlan(root.FullName, mergeModule: true, mergeMissing: false),
+                new ModuleMergeSources(psm1Path, new[] { Path.Combine(root.FullName, "Public", "Get-TypedValue.ps1") }, mergedContent, hasLib: true),
+                missingReport: null);
+            var bootstrapper = File.ReadAllText(psm1Path);
+            var embeddedPayloadBlock = ExtractMarkedSection(
+                bootstrapper,
+                "# PowerForge script payload begin",
+                "# PowerForge script payload end");
+
+            Assert.True(outcome.MergedModule);
+            Assert.Contains("ModuleSpecification.KeyValuePairs", bootstrapper, StringComparison.Ordinal);
+            var initialSessionState = InitialSessionState.CreateDefault();
+            if (OperatingSystem.IsWindows())
+                initialSessionState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
+            using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+            runspace.Open();
+            using var powerShell = PowerShell.Create();
+            powerShell.Runspace = runspace;
+            var expectedRoot = root.FullName.Replace("'", "''", StringComparison.Ordinal);
+            var expectedModulePath = psm1Path.Replace("'", "''", StringComparison.Ordinal);
+            var unrelatedLocation = Path.GetTempPath().Replace("'", "''", StringComparison.Ordinal);
+            powerShell.AddScript(
+                "$PowerForgeModuleRoot = '" + expectedRoot + "'" + Environment.NewLine +
+                "$PowerForgeModulePath = '" + expectedModulePath + "'" + Environment.NewLine +
+                "Set-Location -LiteralPath '" + unrelatedLocation + "'" + Environment.NewLine +
+                embeddedPayloadBlock + Environment.NewLine +
+                "Get-TypedValue");
+            var output = powerShell.Invoke();
+
+            Assert.False(
+                powerShell.HadErrors,
+                string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
+            Assert.Empty(powerShell.Streams.Error);
+            Assert.Equal("typed", output[0].BaseObject);
         }
         finally
         {

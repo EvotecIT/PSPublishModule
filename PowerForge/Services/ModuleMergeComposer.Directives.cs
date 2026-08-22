@@ -36,7 +36,11 @@ internal static partial class ModuleMergeComposer
             return directive;
 
         var usingPath = directive.Substring(pathStart, pathEnd - pathStart);
-        var rebased = RebaseUsingPath(usingPath, sourcePath, moduleRoot);
+        var rebased = RebaseUsingPath(
+            usingPath,
+            sourcePath,
+            moduleRoot,
+            treatBareNameAsPath: string.Equals(kind, "assembly", System.StringComparison.OrdinalIgnoreCase));
         if (string.Equals(usingPath, rebased, System.StringComparison.Ordinal))
             return directive;
 
@@ -187,7 +191,7 @@ internal static partial class ModuleMergeComposer
             match =>
             {
                 var path = match.Groups["path"].Value;
-                var rebased = RebaseUsingPath(path, sourcePath, moduleRoot);
+                var rebased = RebaseUsingPath(path, sourcePath, moduleRoot, treatBareNameAsPath: false);
                 if (string.Equals(path, rebased, System.StringComparison.Ordinal))
                     return match.Value;
 
@@ -195,9 +199,13 @@ internal static partial class ModuleMergeComposer
                 return match.Groups[1].Value + quote + rebased + quote;
             });
 
-    private static string RebaseUsingPath(string usingPath, string sourcePath, string moduleRoot)
+    private static string RebaseUsingPath(
+        string usingPath,
+        string sourcePath,
+        string moduleRoot,
+        bool treatBareNameAsPath)
     {
-        if (!IsRelativeUsingPath(usingPath))
+        if (!IsRelativeUsingPath(usingPath, treatBareNameAsPath))
             return usingPath;
 
         var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath));
@@ -218,7 +226,7 @@ internal static partial class ModuleMergeComposer
         return index;
     }
 
-    private static bool IsRelativeUsingPath(string path)
+    private static bool IsRelativeUsingPath(string path, bool treatBareNameAsPath)
     {
         if (string.IsNullOrWhiteSpace(path) ||
             Path.IsPathRooted(path) ||
@@ -229,7 +237,8 @@ internal static partial class ModuleMergeComposer
             return false;
         }
 
-        return path.StartsWith(".", System.StringComparison.Ordinal) ||
+        return treatBareNameAsPath ||
+               path.StartsWith(".", System.StringComparison.Ordinal) ||
                path.IndexOf('\\') >= 0 ||
                path.IndexOf('/') >= 0;
     }

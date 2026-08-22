@@ -141,9 +141,18 @@ internal static partial class ModuleMergeComposer
                 directiveStart++;
 
             if (StartsWithDirective(line, directiveStart, "#requires") ||
-                StartsWithDirective(line, directiveStart, "using"))
+                StartsWithDirective(line, directiveStart, "#requires"))
             {
                 preamble.Add(line);
+                continue;
+            }
+
+            if (StartsWithDirective(line, directiveStart, "using"))
+            {
+                var directiveEnd = FindUsingDirectiveEnd(lines, index, directiveStart);
+                for (; index <= directiveEnd; index++)
+                    preamble.Add(lines[index]);
+                index--;
                 continue;
             }
 
