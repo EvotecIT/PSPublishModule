@@ -25,24 +25,40 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
 
-            foreach (EvaluatedProjectReference rawReference in matchingRaw)
+            string resolvedKey = BuildEvaluatedProjectReferenceKey(resolved);
+            if (matchingRaw.Any(rawReference => string.Equals(
+                    BuildEvaluatedProjectReferenceKey(rawReference),
+                    resolvedKey,
+                    StringComparison.Ordinal)))
             {
-                var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (KeyValuePair<string, string> property in resolved.GlobalProperties)
-                    properties[property.Key] = property.Value;
-                foreach (KeyValuePair<string, string> property in rawReference.GlobalProperties)
-                    properties[property.Key] = property.Value;
-
-                var merged = new EvaluatedProjectReference(
-                    resolved.ProjectPath,
-                    rawReference.TargetFramework ?? resolved.TargetFramework,
-                    properties,
-                    resolved.UndefineProperties
-                        .Concat(rawReference.UndefineProperties)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToArray());
-                results[BuildEvaluatedProjectReferenceKey(merged)] = merged;
+                results[resolvedKey] = resolved;
+                continue;
             }
+
+            if (matchingRaw.Length != 1)
+            {
+                // ResolveReferences is authoritative. Multiple raw contexts for the same
+                // child cannot be overlaid without inventing a Cartesian-product context.
+                results[resolvedKey] = resolved;
+                continue;
+            }
+
+            EvaluatedProjectReference rawReference = matchingRaw[0];
+            var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> property in resolved.GlobalProperties)
+                properties[property.Key] = property.Value;
+            foreach (KeyValuePair<string, string> property in rawReference.GlobalProperties)
+                properties[property.Key] = property.Value;
+
+            var merged = new EvaluatedProjectReference(
+                resolved.ProjectPath,
+                rawReference.TargetFramework ?? resolved.TargetFramework,
+                properties,
+                resolved.UndefineProperties
+                    .Concat(rawReference.UndefineProperties)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray());
+            results[BuildEvaluatedProjectReferenceKey(merged)] = merged;
         }
 
         return results.Values.ToArray();

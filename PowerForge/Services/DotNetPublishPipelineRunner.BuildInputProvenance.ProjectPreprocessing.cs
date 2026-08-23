@@ -117,6 +117,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 XElement Element,
                 string DefiningProjectPath,
                 XElement? ContainingTarget,
+                IReadOnlyList<PreprocessedProjectPropertyDefinition> StaticPropertyDefinitions,
                 IReadOnlyList<PreprocessedProjectPropertyDefinition> TargetPropertyDefinitions,
                 bool IsTargetTime,
                 bool RunsBeforeResolveReferences)>();
@@ -146,7 +147,6 @@ public sealed partial class DotNetPublishPipelineRunner
                     ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase));
                 bool isTargetTime = containingTarget is not null;
                 bool runsBeforeResolveReferences =
-                    !string.IsNullOrEmpty(request.TargetFramework) &&
                     containingTarget is not null &&
                     scheduledTargets.Contains(containingTarget);
 
@@ -185,6 +185,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         element,
                         declarationSources.Peek(),
                         containingTarget,
+                        propertyDefinitions.ToArray(),
                         containingTarget is not null &&
                         targetPropertyDefinitions.TryGetValue(
                             containingTarget,
@@ -221,7 +222,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     return new PreprocessedProjectReferenceDeclaration(
                         declaration.Element,
                         declaration.DefiningProjectPath,
-                        propertyDefinitions.Concat(runtimePropertyDefinitions).ToArray(),
+                        declaration.StaticPropertyDefinitions.Concat(runtimePropertyDefinitions).ToArray(),
                         runtimePropertyDefinitions,
                         initialProperties,
                         evaluatedItemLists,

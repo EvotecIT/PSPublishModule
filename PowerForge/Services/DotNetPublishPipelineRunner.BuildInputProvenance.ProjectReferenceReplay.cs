@@ -100,7 +100,8 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyList<PreprocessedProjectReferenceDeclaration> declarations,
             IReadOnlyDictionary<string, string> evaluatedConditionProperties,
             string metadataName,
-            bool includeTargetTime)
+            bool includeTargetTime,
+            string? evaluatedMetadataValue = null)
     {
         var defaults = new List<LiteralProjectReferenceMetadataAssignment>();
         foreach (PreprocessedProjectReferenceDeclaration declaration in declarations.Where(declaration =>
@@ -155,7 +156,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     declaringProjectPath,
                     referencedPath,
                     declaration,
-                    declarationConditionProperties))
+                    declarationConditionProperties,
+                    metadataName,
+                    evaluatedMetadataValue))
             {
                 continue;
             }
@@ -227,7 +230,9 @@ public sealed partial class DotNetPublishPipelineRunner
         string declaringProjectPath,
         string referencedPath,
         PreprocessedProjectReferenceDeclaration declaration,
-        IReadOnlyDictionary<string, string> evaluatedConditionProperties)
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
+        string? metadataName = null,
+        string? evaluatedMetadataValue = null)
     {
         StringComparison comparison = IsWindows()
             ? StringComparison.OrdinalIgnoreCase
@@ -248,8 +253,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluatedConditionProperties,
                     identityBaseDirectories,
                     comparison,
-                    identity.Value,
-                    allowEvaluatedReferenceIdentity: true))
+                    identity.Value))
             {
                 continue;
             }
@@ -264,8 +268,54 @@ public sealed partial class DotNetPublishPipelineRunner
                        evaluatedConditionProperties,
                        identityBaseDirectories,
                        comparison,
-                       exclude.Value,
-                       allowEvaluatedReferenceIdentity: false);
+                       exclude.Value);
+        }
+
+        return DoesEvaluatedMetadataCorrelateComputedDeclaration(
+            declaration,
+            evaluatedConditionProperties,
+            metadataName,
+            evaluatedMetadataValue);
+    }
+
+    private static bool DoesEvaluatedMetadataCorrelateComputedDeclaration(
+        PreprocessedProjectReferenceDeclaration declaration,
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
+        string? metadataName,
+        string? evaluatedMetadataValue)
+    {
+        if (string.IsNullOrEmpty(metadataName) || evaluatedMetadataValue is null ||
+            !declaration.Element.Attributes().Any(attribute =>
+                (attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
+                 attribute.Name.LocalName.Equals("Update", StringComparison.OrdinalIgnoreCase)) &&
+                (IsMsBuildPropertyFunctionExpression(attribute.Value) ||
+                 attribute.Value.IndexOf("@(", StringComparison.Ordinal) >= 0)))
+        {
+            return false;
+        }
+
+        foreach (LiteralProjectReferenceMetadataAssignment assignment in
+                 ReadActiveLiteralProjectReferenceMetadataAssignments(
+                     declaration,
+                     evaluatedConditionProperties,
+                     metadataName!))
+        {
+            foreach (string candidate in ReadLiteralProjectReferencePropertyAssignmentCandidates(
+                         assignment.PropertyDefinitions,
+                         assignment.InitialProperties,
+                         assignment.ConditionProperties,
+                         assignment.DefiningProjectPath,
+                         assignment.Value))
+            {
+                if (TryUnescapeMsBuildLiteral(candidate, out string? decoded) &&
+                    string.Equals(
+                        decoded!.Trim(),
+                        evaluatedMetadataValue.Trim(),
+                        StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
         }
 
         return false;
@@ -277,18 +327,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         IEnumerable<string> identityBaseDirectories,
         StringComparison comparison,
-        string itemSpec,
-        bool allowEvaluatedReferenceIdentity)
+        string itemSpec)
     {
-        if (allowEvaluatedReferenceIdentity && DoesEvaluatedProjectReferenceIdentityMatch(
-                itemSpec,
-                referencedPath,
-                declaration.EvaluatedItemLists,
-                comparison))
-        {
-            return true;
-        }
-
         string[] candidates = IsComputedProjectReferenceItemSpec(itemSpec)
              ? ReadLiteralProjectReferencePropertyAssignmentCandidates(
                  declaration.PropertyDefinitions,

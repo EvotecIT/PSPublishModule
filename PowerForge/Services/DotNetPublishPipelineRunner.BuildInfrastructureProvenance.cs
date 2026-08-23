@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Xml.Linq;
 
@@ -43,7 +44,6 @@ public sealed partial class DotNetPublishPipelineRunner
         string path,
         IEnumerable<string>? outputRoots,
         IEnumerable<string>? expectedOutputPaths,
-        IEnumerable<string>? recordedGeneratedOutputPaths,
         string referencedProjectDirectory,
         IEnumerable<string> evaluatedProjectDirectories)
     {
@@ -54,9 +54,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
             if (!(expectedOutputPaths ?? Array.Empty<string>()).Any(expectedPath =>
-                    string.Equals(Path.GetFullPath(expectedPath), fullPath, comparison)) ||
-                !(recordedGeneratedOutputPaths ?? Array.Empty<string>()).Any(recordedPath =>
-                    string.Equals(Path.GetFullPath(recordedPath), fullPath, comparison)))
+                    string.Equals(Path.GetFullPath(expectedPath), fullPath, comparison)))
             {
                 return false;
             }
@@ -108,44 +106,131 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static string[] ReadRecordedGeneratedOutputPaths(
-        JsonElement properties,
-        string projectPath)
+    private static bool TryProveControlledGeneratedOutput(
+        ProjectEvaluationRequest request,
+        string candidatePath,
+        IDictionary<string, bool> cache)
     {
+        string fullCandidatePath = Path.GetFullPath(candidatePath);
+        string cacheKey = request.BuildVisitKey() + "\0" +
+            (IsWindows() ? fullCandidatePath.ToUpperInvariant() : fullCandidatePath);
+        if (cache.TryGetValue(cacheKey, out bool cachedResult))
+            return cachedResult;
+
+        string controlledOutputRoot = Path.Combine(
+            Path.GetTempPath(),
+            "powerforge-provenance-build-" + Guid.NewGuid().ToString("N"));
         try
         {
-            string projectDirectory = Path.GetDirectoryName(projectPath)!;
-            string? intermediateOutputPath = ReadEvaluatedPath(
-                properties,
-                "IntermediateOutputPath",
-                projectDirectory);
-            if (string.IsNullOrWhiteSpace(intermediateOutputPath))
-                return Array.Empty<string>();
+            if (!File.Exists(fullCandidatePath))
+                return Cache(false);
+            Directory.CreateDirectory(controlledOutputRoot);
+            var arguments = new List<string>
+            {
+                "msbuild",
+                request.ProjectPath,
+                "-nologo",
+                "-verbosity:quiet",
+                "-target:Rebuild",
+                "-getProperty:TargetPath",
+                "-getItem:FileWrites"
+            };
+            if (request.Configuration is not null)
+                arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
+            if (request.TargetFramework is not null)
+                arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
+            foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
+                         entry => entry.Key,
+                         StringComparer.OrdinalIgnoreCase))
+            {
+                if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
+                    property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
+                    property.Key.Equals("BuildProjectReferences", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
+            }
+            arguments.Add("-p:BuildProjectReferences=false");
+            arguments.Add("-p:OutDir=" + EscapeMsBuildPropertyValue(
+                controlledOutputRoot + Path.DirectorySeparatorChar));
 
-            string cleanFile = ReadItemText(properties, "CleanFile") ??
-                Path.GetFileName(projectPath) + ".FileListAbsolute.txt";
-            if (string.IsNullOrWhiteSpace(cleanFile))
-                return Array.Empty<string>();
+            var process = RunBuildInputEvaluationProcess(
+                "dotnet",
+                Path.GetDirectoryName(request.ProjectPath)!,
+                arguments,
+                request.EnvironmentVariables,
+                TimeSpan.FromMinutes(5));
+            if (process.ExitCode != 0 || process.TimedOut)
+                return Cache(false);
 
-            string recordPath = Path.GetFullPath(Path.IsPathRooted(cleanFile)
-                ? cleanFile
-                : Path.Combine(intermediateOutputPath!, cleanFile));
-            if (!File.Exists(recordPath))
-                return Array.Empty<string>();
+            int jsonStart = process.StdOut.IndexOf('{');
+            int jsonEnd = process.StdOut.LastIndexOf('}');
+            if (jsonStart < 0 || jsonEnd < jsonStart)
+                return Cache(false);
+            using JsonDocument document = JsonDocument.Parse(
+                process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
+            if (!document.RootElement.TryGetProperty("Properties", out JsonElement properties) ||
+                !properties.TryGetProperty("TargetPath", out JsonElement targetPathElement) ||
+                targetPathElement.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(targetPathElement.GetString()) ||
+                !document.RootElement.TryGetProperty("Items", out JsonElement items) ||
+                !items.TryGetProperty("FileWrites", out JsonElement fileWrites) ||
+                fileWrites.ValueKind != JsonValueKind.Array)
+            {
+                return Cache(false);
+            }
 
-            return File.ReadLines(recordPath)
-                .Where(line => !string.IsNullOrWhiteSpace(line))
-                .Select(line => Path.GetFullPath(Path.IsPathRooted(line)
-                    ? line
-                    : Path.Combine(projectDirectory, line)))
+            string targetPath = Path.GetFullPath(targetPathElement.GetString()!);
+            StringComparer comparer = IsWindows()
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+            string[] writtenPaths = fileWrites.EnumerateArray()
+                .Select(item => ReadItemText(item, "FullPath") ?? ReadItemText(item, "Identity"))
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => Path.GetFullPath(Path.IsPathRooted(value!)
+                    ? value!
+                    : Path.Combine(Path.GetDirectoryName(request.ProjectPath)!, value!)))
                 .Where(File.Exists)
-                .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                .Distinct(comparer)
                 .ToArray();
+            if (!writtenPaths.Contains(targetPath, comparer) ||
+                !File.Exists(targetPath) ||
+                !IsSameOrBelowBuildInputPath(targetPath, controlledOutputRoot))
+            {
+                return Cache(false);
+            }
+
+            using SHA256 candidateHash = SHA256.Create();
+            using FileStream candidateStream = File.OpenRead(fullCandidatePath);
+            byte[] candidateDigest = candidateHash.ComputeHash(candidateStream);
+            using SHA256 controlledHash = SHA256.Create();
+            using FileStream controlledStream = File.OpenRead(targetPath);
+            byte[] controlledDigest = controlledHash.ComputeHash(controlledStream);
+            return Cache(candidateDigest.SequenceEqual(controlledDigest));
         }
         catch
         {
-            // Missing or unreadable build-write evidence fails closed.
-            return Array.Empty<string>();
+            // A generated output is trusted only when the controlled rebuild proves it.
+            return Cache(false);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(controlledOutputRoot))
+                    Directory.Delete(controlledOutputRoot, recursive: true);
+            }
+            catch
+            {
+                // Temporary proof output is best-effort cleanup only.
+            }
+        }
+
+        bool Cache(bool result)
+        {
+            cache[cacheKey] = result;
+            return result;
         }
     }
 
@@ -417,7 +502,6 @@ public sealed partial class DotNetPublishPipelineRunner
             string[] targetFrameworks,
             string[] outputRoots,
             string[] expectedOutputPaths,
-            string[] recordedGeneratedOutputPaths,
             GeneratedProjectReferenceOutput[] generatedProjectReferenceOutputs)
         {
             BuildInputs = buildInputs;
@@ -426,7 +510,6 @@ public sealed partial class DotNetPublishPipelineRunner
             TargetFrameworks = targetFrameworks;
             OutputRoots = outputRoots;
             ExpectedOutputPaths = expectedOutputPaths;
-            RecordedGeneratedOutputPaths = recordedGeneratedOutputPaths;
             GeneratedProjectReferenceOutputs = generatedProjectReferenceOutputs;
         }
 
@@ -436,7 +519,6 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string[] TargetFrameworks { get; }
         internal string[] OutputRoots { get; }
         internal string[] ExpectedOutputPaths { get; }
-        internal string[] RecordedGeneratedOutputPaths { get; }
         internal GeneratedProjectReferenceOutput[] GeneratedProjectReferenceOutputs { get; }
     }
 

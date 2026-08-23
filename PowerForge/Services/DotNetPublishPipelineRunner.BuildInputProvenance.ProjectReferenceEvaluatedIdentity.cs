@@ -5,22 +5,6 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private static bool DoesEvaluatedProjectReferenceIdentityMatch(
-        string itemSpec,
-        string referencedPath,
-        IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItemLists,
-        StringComparison comparison)
-    {
-        return IsMsBuildPropertyFunctionExpression(itemSpec) &&
-               evaluatedItemLists.TryGetValue(
-                   "ProjectReference",
-                   out EvaluatedProjectItem[]? evaluatedReferences) &&
-               evaluatedReferences.Any(reference => string.Equals(
-                   reference.FullPath,
-                   referencedPath,
-                   comparison));
-    }
-
     private static bool IsMsBuildPropertyFunctionExpression(string value)
         => value.IndexOf("$([", StringComparison.Ordinal) >= 0;
 

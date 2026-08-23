@@ -46,7 +46,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         evaluatedConditionProperties,
                         metadataName,
                         includeTargetTime: declarations.Any(declaration =>
-                            declaration.IsTargetTime && declaration.RunsBeforeResolveReferences));
+                            declaration.IsTargetTime && declaration.RunsBeforeResolveReferences),
+                        ReadItemText(item, metadataName));
                 foreach (LiteralProjectReferenceMetadataAssignment assignment in assignments)
                 {
                     foreach (string candidate in ReadLiteralProjectReferencePropertyAssignmentCandidates(

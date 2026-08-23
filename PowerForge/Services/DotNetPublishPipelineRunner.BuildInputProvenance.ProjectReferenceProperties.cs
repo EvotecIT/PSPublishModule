@@ -109,7 +109,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     projectReferenceDeclarations,
                     evaluatedConditionProperties,
                     metadataName,
-                    includeTargetTime: false);
+                    includeTargetTime: false,
+                    evaluatedAssignments);
             AddLiteralPropertyTables(effectiveAssignments);
             if (projectReferenceDeclarations.Any(declaration =>
                     declaration.IsTargetTime && declaration.RunsBeforeResolveReferences))
@@ -120,7 +121,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     projectReferenceDeclarations,
                     evaluatedConditionProperties,
                     metadataName,
-                    includeTargetTime: true);
+                    includeTargetTime: true,
+                    evaluatedAssignments);
                 results.Clear();
                 keys.Clear();
                 AddLiteralPropertyTables(effectiveAssignments);
