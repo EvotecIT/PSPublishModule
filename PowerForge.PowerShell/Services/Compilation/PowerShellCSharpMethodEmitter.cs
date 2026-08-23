@@ -59,6 +59,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             CanAssign,
             GetTypeName,
             type => PowerShellGeneratedTypePolicy.IsSupported(type, _targetFramework),
+            member => string.IsNullOrWhiteSpace(_targetFramework) || PowerShellGeneratedMemberPolicy.IsSupported(member, _targetFramework!),
             CanNormalizeNullStringReceiver,
             Error);
     }

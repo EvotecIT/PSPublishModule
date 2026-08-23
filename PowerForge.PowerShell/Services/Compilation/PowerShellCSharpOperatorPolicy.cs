@@ -31,6 +31,8 @@ internal static class PowerShellCSharpOperatorPolicy
                HasEqualityOperator(methods, type, "op_Inequality");
     }
 
+    internal static bool SupportsIncrement(Type type) => IsNumeric(type);
+
     private static bool HasEqualityOperator(IEnumerable<MethodInfo> methods, Type type, string name)
         => methods.Any(method =>
         {

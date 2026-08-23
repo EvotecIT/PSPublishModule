@@ -68,7 +68,7 @@ internal static class PowerShellCompiledModuleManifest
             targetManifest,
             selectedFallback,
             selectedCmdlets,
-            manifestAliases ?? Array.Empty<string>());
+            manifestAliases);
         if (manifestVariables is not null)
             mutator.TrySetTopLevelStringArray(targetManifest, "VariablesToExport", manifestVariables);
 

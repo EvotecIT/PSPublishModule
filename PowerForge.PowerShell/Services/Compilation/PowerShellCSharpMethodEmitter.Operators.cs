@@ -90,6 +90,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         {
             var variable = UnwrapExpression(unary.Child) as VariableExpressionAst
                 ?? throw Error(unary, "Increment and decrement require a statically typed local variable.");
+            if (!PowerShellCSharpOperatorPolicy.SupportsIncrement(childType))
+                throw Error(unary, $"Increment and decrement are not defined for CLR type '{childType.FullName}' on the conservative compilation path.");
             if (!_explicitlyTypedVariables.Contains(variable.VariablePath.UserPath))
                 throw Error(unary, $"Increment or decrement of untyped local '${variable.VariablePath.UserPath}' can promote dynamically in PowerShell.");
         }

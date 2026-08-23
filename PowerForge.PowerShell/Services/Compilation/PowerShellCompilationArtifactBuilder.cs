@@ -400,12 +400,15 @@ public sealed class PowerShellCompilationArtifactBuilder
             artifactName,
             Path.GetFileName(modulePath),
             typed);
-        if (manifestFiles is null)
-            return new CopiedArtifact(modulePath, files.ToArray());
-        foreach (var manifestFile in manifestFiles)
-            files.Add(CreateArtifactFile(manifestFile, manifestFile.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
-        var manifestPath = manifestFiles.First(path => path.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase));
-        return new CopiedArtifact(manifestPath, files.ToArray());
+        if (manifestFiles is not null)
+        {
+            foreach (var manifestFile in manifestFiles)
+                files.Add(CreateArtifactFile(manifestFile, manifestFile.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
+        }
+        foreach (var dependency in PowerShellHybridDependencyResolver.CopyDependencies(spec.SourcePath, moduleDirectory))
+            files.Add(CreateArtifactFile(dependency, "ModuleDependency"));
+        var primaryPath = manifestFiles?.First(path => path.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase)) ?? modulePath;
+        return new CopiedArtifact(primaryPath, files.ToArray());
     }
 
     private static CopiedArtifact CopyStrictModuleWithManifest(

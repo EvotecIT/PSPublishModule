@@ -63,7 +63,7 @@ internal static class Program
 
             if (requestedExitCode.HasValue)
                 return requestedExitCode.Value;
-            return powerShell.HadErrors ? 1 : 0;
+            return 0;
         }
         catch (Exception exception)
         {

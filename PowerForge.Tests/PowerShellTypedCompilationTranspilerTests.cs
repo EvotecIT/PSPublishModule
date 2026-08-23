@@ -135,6 +135,21 @@ public sealed class PowerShellTypedCompilationTranspilerTests
     }
 
     [Theory]
+    [InlineData("string")]
+    [InlineData("bool")]
+    [InlineData("int[]")]
+    public void Transpile_RoutesIncrementForNonNumericClrTypeToFallback(string type)
+    {
+        using var fixture = TranspilerFixture.Create(
+            $"function Update-Value {{ param([{type}] $Value); for (; $false; $Value++) {{ }}; return $Value }}");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("Increment and decrement", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
     [InlineData("return [System.Collections.Generic.List[int]]::new()", "reference set")]
     [InlineData("return [System.Management.Automation.PSVersionInfo]::PSEdition", "reference set")]
     public void Transpile_RejectsTypesUnavailableToGeneratedRuntimeIndependentProjects(string body, string expectedMessage)

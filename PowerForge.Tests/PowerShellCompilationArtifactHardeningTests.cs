@@ -6,7 +6,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class PowerShellCompilationArtifactHardeningTests
+public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
     [Fact]
     public void Build_PackagedExecutablePreservesOrderedOutputPathSemanticsAndValueValidation()

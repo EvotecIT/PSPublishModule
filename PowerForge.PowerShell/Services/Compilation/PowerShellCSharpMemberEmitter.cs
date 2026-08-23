@@ -14,6 +14,7 @@ internal sealed class PowerShellCSharpMemberEmitter
     private readonly Func<Type, Type, bool> _canAssign;
     private readonly Func<Type, string> _getTypeName;
     private readonly Func<Type, bool> _isSupportedType;
+    private readonly Func<MemberInfo, bool> _isSupportedMember;
     private readonly Func<ExpressionAst, bool> _canNormalizeNullStringReceiver;
     private readonly Func<Ast, string, PowerShellCSharpEmissionException> _error;
 
@@ -23,6 +24,7 @@ internal sealed class PowerShellCSharpMemberEmitter
         Func<Type, Type, bool> canAssign,
         Func<Type, string> getTypeName,
         Func<Type, bool> isSupportedType,
+        Func<MemberInfo, bool> isSupportedMember,
         Func<ExpressionAst, bool> canNormalizeNullStringReceiver,
         Func<Ast, string, PowerShellCSharpEmissionException> error)
     {
@@ -31,6 +33,7 @@ internal sealed class PowerShellCSharpMemberEmitter
         _canAssign = canAssign;
         _getTypeName = getTypeName;
         _isSupportedType = isSupportedType;
+        _isSupportedMember = isSupportedMember;
         _canNormalizeNullStringReceiver = canNormalizeNullStringReceiver;
         _error = error;
     }
@@ -127,7 +130,7 @@ internal sealed class PowerShellCSharpMemberEmitter
         {
             var constructor = SelectBest(
                 invocation,
-                target.Type.GetConstructors(BindingFlags.Public | BindingFlags.Instance),
+                target.Type.GetConstructors(BindingFlags.Public | BindingFlags.Instance).Where(constructor => _isSupportedMember(constructor)),
                 arguments,
                 argumentTypes,
                 static candidate => candidate.GetParameters(),
@@ -141,7 +144,8 @@ internal sealed class PowerShellCSharpMemberEmitter
             target.Type.GetMethods(flags)
                 .Where(candidate => candidate.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
                                     !candidate.IsGenericMethodDefinition &&
-                                    !candidate.ContainsGenericParameters),
+                                    !candidate.ContainsGenericParameters &&
+                                    _isSupportedMember(candidate)),
             arguments,
             argumentTypes,
             static candidate => candidate.GetParameters(),
@@ -223,6 +227,7 @@ internal sealed class PowerShellCSharpMemberEmitter
         var flags = BindingFlags.Public | BindingFlags.IgnoreCase |
                     (isStatic ? BindingFlags.Static | BindingFlags.FlattenHierarchy : BindingFlags.Instance);
         var members = type.GetMember(name, MemberTypes.Field | MemberTypes.Property, flags)
+            .Where(_isSupportedMember)
             .Where(member => member switch
             {
                 PropertyInfo property => property.GetMethod is not null && property.GetIndexParameters().Length == 0,

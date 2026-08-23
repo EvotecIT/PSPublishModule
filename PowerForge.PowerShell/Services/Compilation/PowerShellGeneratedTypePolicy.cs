@@ -56,13 +56,8 @@ internal static class PowerShellGeneratedTypePolicy
 
     private static HashSet<string> ReadTargetTypes(string targetFramework)
     {
-        var referenceDirectory = ResolveReferenceDirectory(targetFramework)
-            ?? throw new InvalidOperationException($"Reference assemblies for target framework '{targetFramework}' could not be located.");
         var types = new HashSet<string>(StringComparer.Ordinal);
-        var referencePaths = targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)
-            ? Net472ImplicitReferenceAssemblies.Select(name => Path.Combine(referenceDirectory, name)).Where(File.Exists)
-            : Directory.EnumerateFiles(referenceDirectory, "*.dll", SearchOption.TopDirectoryOnly);
-        foreach (var path in referencePaths)
+        foreach (var path in GetReferenceAssemblyPaths(targetFramework))
         {
             try
             {
@@ -90,6 +85,17 @@ internal static class PowerShellGeneratedTypePolicy
             }
         }
         return types;
+    }
+
+    internal static string[] GetReferenceAssemblyPaths(string targetFramework)
+    {
+        var referenceDirectory = ResolveReferenceDirectory(targetFramework)
+            ?? throw new InvalidOperationException($"Reference assemblies for target framework '{targetFramework}' could not be located.");
+        return (targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)
+                ? Net472ImplicitReferenceAssemblies.Select(name => Path.Combine(referenceDirectory, name)).Where(File.Exists)
+                : Directory.EnumerateFiles(referenceDirectory, "*.dll", SearchOption.TopDirectoryOnly))
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static string? ResolveReferenceDirectory(string targetFramework)
@@ -195,7 +201,7 @@ internal static class PowerShellGeneratedTypePolicy
     private static Version? ParseVersion(string value)
         => Version.TryParse(value.Split('-')[0], out var version) ? version : null;
 
-    private static string GetTypeDefinitionName(MetadataReader reader, TypeDefinitionHandle handle)
+    internal static string GetTypeDefinitionName(MetadataReader reader, TypeDefinitionHandle handle)
     {
         var definition = reader.GetTypeDefinition(handle);
         var name = reader.GetString(definition.Name);
@@ -206,13 +212,23 @@ internal static class PowerShellGeneratedTypePolicy
         return string.IsNullOrEmpty(@namespace) ? name : @namespace + "." + name;
     }
 
-    private static string GetExportedTypeName(MetadataReader reader, ExportedTypeHandle handle)
+    internal static string GetExportedTypeName(MetadataReader reader, ExportedTypeHandle handle)
     {
         var exported = reader.GetExportedType(handle);
         var name = reader.GetString(exported.Name);
         if (exported.Implementation.Kind == HandleKind.ExportedType)
             return GetExportedTypeName(reader, (ExportedTypeHandle)exported.Implementation) + "+" + name;
         var @namespace = reader.GetString(exported.Namespace);
+        return string.IsNullOrEmpty(@namespace) ? name : @namespace + "." + name;
+    }
+
+    internal static string GetTypeReferenceName(MetadataReader reader, TypeReferenceHandle handle)
+    {
+        var reference = reader.GetTypeReference(handle);
+        var name = reader.GetString(reference.Name);
+        if (reference.ResolutionScope.Kind == HandleKind.TypeReference)
+            return GetTypeReferenceName(reader, (TypeReferenceHandle)reference.ResolutionScope) + "+" + name;
+        var @namespace = reader.GetString(reference.Namespace);
         return string.IsNullOrEmpty(@namespace) ? name : @namespace + "." + name;
     }
 }

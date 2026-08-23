@@ -60,6 +60,13 @@ internal static class PowerShellBinaryCmdletSourceGenerator
 
     private static void AppendCmdlet(StringBuilder builder, PowerShellTypedCompilationResult typed, CmdletDescriptor cmdlet)
     {
+        var renamedParameter = cmdlet.Method.Parameters.FirstOrDefault(parameter =>
+        {
+            var memberName = PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name);
+            return !memberName.TrimStart('@').Equals(parameter.Name, StringComparison.OrdinalIgnoreCase);
+        });
+        if (renamedParameter is not null)
+            throw new InvalidOperationException($"Function '{cmdlet.Method.SourceName}' parameter '${renamedParameter.Name}' cannot preserve its PowerShell name as binary-cmdlet metadata after CLR identifier normalization.");
         var commonParameter = cmdlet.Method.Parameters.FirstOrDefault(parameter => CommonParameterNames.Contains(parameter.Name));
         if (commonParameter is not null)
             throw new InvalidOperationException($"Function '{cmdlet.Method.SourceName}' parameter '${commonParameter.Name}' collides with a PowerShell common parameter and cannot be exported as a binary cmdlet.");
@@ -89,10 +96,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         var invocation = $"{typed.TypeName}.{cmdlet.Method.GeneratedName}({arguments})";
         if (cmdlet.Method.ReturnType.Equals(typeof(void).FullName, StringComparison.Ordinal))
             builder.AppendLine($"        {invocation};");
-        else if (cmdlet.Method.ReturnType.EndsWith("[]", StringComparison.Ordinal))
-            builder.AppendLine($"        WriteObject({invocation}, enumerateCollection: true);");
         else
-            builder.AppendLine($"        WriteObject({invocation});");
+            builder.AppendLine($"        WriteObject({invocation}, enumerateCollection: true);");
         builder.AppendLine("    }");
         builder.AppendLine("}");
         builder.AppendLine();
