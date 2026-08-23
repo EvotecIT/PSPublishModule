@@ -22,6 +22,22 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Theory]
+    [InlineData("C:\\outside\\Helper.dll")]
+    [InlineData("\\\\server\\share\\Helper.dll")]
+    public void Build_RejectsWindowsRootedManifestFileReferenceOnEveryPlatform(string manifestPath)
+    {
+        using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
+        File.WriteAllText(Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            $"@{{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); RequiredAssemblies = @('{manifestPath}') }}");
+
+        var result = BuildManifestFixture(fixture, "PowerForge.RootedManifestReference");
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("must remain relative", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Theory]
     [InlineData("FormatsToProcess", "missing.format.ps1xml")]
     [InlineData("TypesToProcess", "missing.types.ps1xml")]
     [InlineData("RequiredAssemblies", "lib/missing.dll")]
@@ -62,6 +78,24 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(run.ExitCode == 0, run.StandardError + Environment.NewLine + run.StandardOutput);
         Assert.Equal("1", run.StandardOutput.Trim());
         Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Theory]
+    [InlineData("FormatsToProcess", ".\\Formats\\Demo.ps1xml", "Formats", "Demo.ps1xml")]
+    [InlineData("RequiredAssemblies", "lib\\Helper.dll", "lib", "Helper.dll")]
+    public void Build_NormalizesWindowsStyleManifestFileReferences(string key, string manifestPath, string directory, string fileName)
+    {
+        using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
+        var dependencyDirectory = Path.Combine(fixture.RootPath, directory);
+        Directory.CreateDirectory(dependencyDirectory);
+        File.WriteAllText(Path.Combine(dependencyDirectory, fileName), "dependency");
+        File.WriteAllText(Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            $"@{{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); {key} = @('{manifestPath}') }}");
+
+        var result = BuildManifestFixture(fixture, "PowerForge.PortableManifestPath");
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(result.ArtifactPath!)!, directory, fileName)));
     }
 
     [Fact]

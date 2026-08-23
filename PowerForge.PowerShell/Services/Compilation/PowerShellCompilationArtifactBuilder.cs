@@ -450,48 +450,7 @@ public sealed class PowerShellCompilationArtifactBuilder
     }
 
     private static string GeneratePackagedScript(string sourcePath)
-    {
-        Token[] tokens;
-        ParseError[] errors;
-        var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
-        if (errors.Length > 0)
-            throw new InvalidOperationException("Packaged script could not be parsed while preserving exit-code semantics.");
-
-        var source = new StringBuilder(File.ReadAllText(sourcePath));
-        var exits = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
-            .Cast<ExitStatementAst>()
-            .ToArray();
-        if (exits.Length > 0 && ast.FindAll(static node => node is TrapStatementAst, searchNestedScriptBlocks: true).Any())
-            throw new InvalidOperationException("Packaged scripts that combine exit with trap are not supported because exception instrumentation would change trap semantics.");
-        foreach (var exit in exits)
-        {
-            for (var parent = exit.Parent; parent is not null && !ReferenceEquals(parent, ast); parent = parent.Parent)
-            {
-                if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst ||
-                    parent is ScriptBlockAst scriptBlock && !ReferenceEquals(scriptBlock, ast) ||
-                    parent is TryStatementAst tryStatement && tryStatement.CatchClauses.Count > 0)
-                    throw new InvalidOperationException($"exit at line {exit.Extent.StartLineNumber} cannot be packaged safely because exception instrumentation would change nested or catch behavior.");
-            }
-        }
-
-        foreach (var exit in exits.OrderByDescending(static exit => exit.Extent.StartOffset))
-        {
-            var expression = exit.Pipeline?.Extent.Text;
-            var exitCode = string.IsNullOrWhiteSpace(expression) ? "0" : "[int](" + expression + ")";
-            var replacement = "throw [PowerForge.Compiled.PowerForgeScriptExitException]::new(" + exitCode + ")";
-            source.Remove(exit.Extent.StartOffset, exit.Extent.EndOffset - exit.Extent.StartOffset);
-            source.Insert(exit.Extent.StartOffset, replacement);
-        }
-        var prologueEndOffset = ast.ParamBlock?.Extent.EndOffset ?? 0;
-        foreach (var usingStatement in ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false).Cast<UsingStatementAst>())
-            prologueEndOffset = Math.Max(prologueEndOffset, usingStatement.Extent.EndOffset);
-        var pathSemantics = new StringBuilder();
-        if (prologueEndOffset > 0 && source[prologueEndOffset - 1] is not '\r' and not '\n') pathSemantics.AppendLine();
-        pathSemantics.AppendLine("$script:PSCommandPath = [System.Environment]::ProcessPath");
-        pathSemantics.AppendLine("$script:PSScriptRoot = [System.IO.Path]::GetDirectoryName($script:PSCommandPath)");
-        source.Insert(prologueEndOffset, pathSemantics.ToString());
-        return source.ToString();
-    }
+        => PowerShellPackagedScriptRewriter.Rewrite(sourcePath);
 
     private static string GenerateSwitchParameterInitializer(string sourcePath)
     {

@@ -96,7 +96,7 @@ internal static class PowerShellCompiledModuleManifest
 
         var copied = new List<string> { targetManifest };
         foreach (var reference in ReadReferencedFiles(sourceManifest)
-                     .GroupBy(static reference => reference.Path, GetPathComparer())
+                     .GroupBy(static reference => NormalizeManifestRelativePath(reference.Path), GetPathComparer())
                      .Select(static group => new ManifestFileReference(group.Key, group.Any(static reference => reference.Required))))
         {
             var sourceFile = ResolveContainedPath(Path.GetDirectoryName(sourceManifest)!, reference.Path);
@@ -165,6 +165,7 @@ internal static class PowerShellCompiledModuleManifest
         var extension = Path.GetExtension(value);
         return value.IndexOf(Path.DirectorySeparatorChar) >= 0 ||
                value.IndexOf(Path.AltDirectorySeparatorChar) >= 0 ||
+               value.IndexOf('\\') >= 0 ||
                value.StartsWith(".", StringComparison.Ordinal) ||
                extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
                extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase) ||
@@ -173,14 +174,23 @@ internal static class PowerShellCompiledModuleManifest
 
     private static string ResolveContainedPath(string root, string relativePath)
     {
-        if (Path.IsPathRooted(relativePath))
+        var normalizedPath = NormalizeManifestRelativePath(relativePath);
+        if (Path.IsPathRooted(normalizedPath) || LooksLikeWindowsRootedPath(relativePath))
             throw new InvalidOperationException($"Module manifest file reference '{relativePath}' must remain relative to the module root.");
         var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var fullPath = Path.GetFullPath(Path.Combine(root, relativePath));
+        var fullPath = Path.GetFullPath(Path.Combine(root, normalizedPath));
         if (!fullPath.StartsWith(fullRoot, GetPathComparison()))
             throw new InvalidOperationException($"Module manifest file reference '{relativePath}' escapes the module root.");
         return fullPath;
     }
+
+    internal static string NormalizeManifestRelativePath(string path)
+        => path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+
+    private static bool LooksLikeWindowsRootedPath(string path)
+        => path.StartsWith("\\\\", StringComparison.Ordinal) ||
+           path.StartsWith("//", StringComparison.Ordinal) ||
+           path.Length >= 2 && char.IsLetter(path[0]) && path[1] == ':';
 
     private static StringComparison GetPathComparison()
         => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)

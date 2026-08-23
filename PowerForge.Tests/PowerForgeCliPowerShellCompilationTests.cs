@@ -5,6 +5,21 @@ namespace PowerForge.Tests;
 
 public sealed class PowerForgeCliPowerShellCompilationTests
 {
+    [Theory]
+    [InlineData("powershell build missing.ps1 --kind exe --sing --output json", "powershell.build", "--sing")]
+    [InlineData("powershell analyze missing.ps1 --recurs --output json", "powershell.analyze", "--recurs")]
+    public async Task Commands_RejectUnknownOptions(string arguments, string command, string unknownOption)
+    {
+        var result = await RunCliAsync(FindRepositoryRoot(), arguments);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
+        using var document = JsonDocument.Parse(result.StdOut);
+        Assert.False(document.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal(command, document.RootElement.GetProperty("command").GetString());
+        Assert.Contains(unknownOption, document.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task BuildStrictTypedExecutable_ExposesRuntimeIndependentCliContract()
     {

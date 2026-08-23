@@ -68,6 +68,9 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             Write-Information 'information-after' -InformationAction Continue
             "root:$PSScriptRoot"
             "path:$PSCommandPath"
+            "invocation:$($MyInvocation.MyCommand.Path)"
+            function Get-NestedInvocationPath { "nested:$($MyInvocation.MyCommand.Path)" }
+            Get-NestedInvocationPath
             """);
         var spec = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -90,6 +93,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.Equal("information-after", lines[4]);
         AssertPathsEqual(Path.GetDirectoryName(result.ArtifactPath!)!, lines[5].Substring("root:".Length));
         AssertPathsEqual(result.ArtifactPath!, lines[6].Substring("path:".Length));
+        AssertPathsEqual(result.ArtifactPath!, lines[7].Substring("invocation:".Length));
+        Assert.Equal("nested:", lines[8]);
 
         var missingValue = Run(result.ArtifactPath!, "--Name", "--Verbose");
         Assert.Equal(1, missingValue.ExitCode);

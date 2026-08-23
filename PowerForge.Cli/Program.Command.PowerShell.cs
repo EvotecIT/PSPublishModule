@@ -37,6 +37,13 @@ internal static partial class Program
             return 0;
         }
 
+        if (!TryValidatePowerShellArguments(
+                args,
+                new[] { "--path", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--framework", "--rid", "--optimization", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
+                new[] { "--self-contained", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
+                out var argumentError))
+            return WritePowerShellError(outputJson, 2, argumentError, logger, "powershell.build");
+
         var path = TryGetOptionValue(args, "--path");
         if (string.IsNullOrWhiteSpace(path) && args.Length > 0 && !args[0].StartsWith("-", StringComparison.Ordinal))
             path = args[0];
@@ -140,6 +147,13 @@ internal static partial class Program
             WritePowerShellHelp(outputJson);
             return 0;
         }
+
+        if (!TryValidatePowerShellArguments(
+                args,
+                new[] { "--path", "--mode", "--output" },
+                new[] { "--no-recurse", "--json", "--output-json" },
+                out var argumentError))
+            return WritePowerShellError(outputJson, 2, argumentError, logger);
 
         var path = TryGetOptionValue(args, "--path");
         if (string.IsNullOrWhiteSpace(path) && args.Length > 0 && !args[0].StartsWith("-", StringComparison.Ordinal))
@@ -275,6 +289,44 @@ internal static partial class Program
         }
         kind = default;
         return false;
+    }
+
+    private static bool TryValidatePowerShellArguments(
+        string[] args,
+        IEnumerable<string> valueOptions,
+        IEnumerable<string> switchOptions,
+        out string error)
+    {
+        var values = valueOptions.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var switches = switchOptions.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var positionalCount = 0;
+        for (var index = 0; index < args.Length; index++)
+        {
+            var argument = args[index];
+            if (switches.Contains(argument)) continue;
+            if (values.Contains(argument))
+            {
+                if (++index >= args.Length || args[index].StartsWith("--", StringComparison.Ordinal))
+                {
+                    error = $"PowerShell option '{argument}' requires a value.";
+                    return false;
+                }
+                continue;
+            }
+            if (argument.StartsWith("-", StringComparison.Ordinal))
+            {
+                error = $"Unknown PowerShell option '{argument}'.";
+                return false;
+            }
+            if (++positionalCount > 1)
+            {
+                error = $"Unexpected PowerShell argument '{argument}'.";
+                return false;
+            }
+        }
+
+        error = string.Empty;
+        return true;
     }
 
     private static bool IsHelpArgument(string argument)
