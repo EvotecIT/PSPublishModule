@@ -156,6 +156,8 @@ public sealed class DocumentationEngine
                 if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             }
 
+            var authoredHelpPayload = CloneHelpPayload(extracted);
+
             try
             {
                 if (buildDocumentation.GenerateFallbackExamples)
@@ -238,7 +240,8 @@ public sealed class DocumentationEngine
                 markdownFiles: CountMarkdownFiles(docsPath),
                 externalHelpFilePath: externalHelpFile,
                 errorMessage: null,
-                externalHelpFilePaths: externalHelpFiles);
+                externalHelpFilePaths: externalHelpFiles,
+                authoredHelpPayload: authoredHelpPayload);
         }
         catch (Exception ex)
         {
@@ -320,6 +323,21 @@ public sealed class DocumentationEngine
             try { File.Delete(scriptPath); } catch { /* ignore */ }
             try { File.Delete(jsonPath); } catch { /* ignore */ }
         }
+    }
+
+    private static DocumentationExtractionPayload CloneHelpPayload(DocumentationExtractionPayload payload)
+    {
+        using var stream = new MemoryStream();
+        var serializer = new DataContractJsonSerializer(
+            typeof(DocumentationExtractionPayload),
+            new DataContractJsonSerializerSettings
+            {
+                UseSimpleDictionaryFormat = true
+            });
+        serializer.WriteObject(stream, payload);
+        stream.Position = 0;
+        return serializer.ReadObject(stream) as DocumentationExtractionPayload ??
+            new DocumentationExtractionPayload();
     }
 
     private static string AppendRequiredModulesHint(string moduleManifestPath, string? message)
