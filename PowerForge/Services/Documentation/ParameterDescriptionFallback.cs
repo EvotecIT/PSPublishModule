@@ -13,6 +13,7 @@ internal static class ParameterDescriptionFallback
     private static readonly HashSet<string> CollectionTypeNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "Array",
+        "ArrayList",
         "Collection",
         "Dictionary",
         "Hashtable",
