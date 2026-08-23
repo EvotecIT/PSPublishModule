@@ -7,6 +7,7 @@ public sealed partial class DotNetPublishPipelineRunner
 {
     private static readonly string[] EvaluatedBuildItemNames =
     [
+        "ProjectReference",
         "Compile",
         "Content",
         "EmbeddedResource",
@@ -23,8 +24,7 @@ public sealed partial class DotNetPublishPipelineRunner
         "SplashScreen",
         "RazorComponent",
         "TypeScriptCompile",
-        "None",
-        "ProjectReference"
+        "None"
     ];
 
     private static readonly HashSet<string> EvaluatedSourceItemNames = new(
@@ -731,10 +731,6 @@ public sealed partial class DotNetPublishPipelineRunner
                                 foreach (EvaluatedProjectReference rawReference in itemReferences)
                                     rawReferences[BuildEvaluatedProjectReferenceKey(rawReference)] = rawReference;
                             }
-                            else if (IsGeneratedProjectReferenceAssemblyReference(itemName, item))
-                            {
-                                continue;
-                            }
                             else if (TryReadGeneratedProjectReferenceOutputs(
                                          itemName,
                                          fullPath,
@@ -748,6 +744,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                          embeddedResourceProjectReferences,
                                          analyzerProjectReferences,
                                          taskWideProjectReferencePropertyRemovals,
+                                         rawReferences.Values,
                                          out GeneratedProjectReferenceOutput[] generatedOutputs))
                             {
                                 generatedProjectReferenceOutputs.AddRange(generatedOutputs);

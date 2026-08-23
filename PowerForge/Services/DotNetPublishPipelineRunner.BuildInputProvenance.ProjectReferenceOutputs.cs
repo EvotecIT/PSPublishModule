@@ -298,16 +298,6 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static bool IsGeneratedProjectReferenceAssemblyReference(
-        string itemName,
-        JsonElement item)
-        => (itemName.Equals("ReferencePath", StringComparison.Ordinal) ||
-            itemName.Equals("ReferenceCopyLocalPaths", StringComparison.Ordinal)) &&
-           string.Equals(
-               ReadItemText(item, "ReferenceSourceTarget"),
-               "ProjectReference",
-               StringComparison.OrdinalIgnoreCase);
-
     private static bool TryReadGeneratedProjectReferenceOutputs(
         string itemName,
         string fullPath,
@@ -321,6 +311,7 @@ public sealed partial class DotNetPublishPipelineRunner
         HashSet<string> embeddedResourceProjectReferences,
         HashSet<string> analyzerProjectReferences,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
+        IEnumerable<EvaluatedProjectReference> knownProjectReferences,
         out GeneratedProjectReferenceOutput[] outputs)
     {
         outputs = Array.Empty<GeneratedProjectReferenceOutput>();
@@ -328,6 +319,60 @@ public sealed partial class DotNetPublishPipelineRunner
             ReadItemText(item, "ReferenceSourceTarget"),
             "ProjectReference",
             StringComparison.OrdinalIgnoreCase);
+        bool isAssemblyReference =
+            itemName.Equals("ReferencePath", StringComparison.Ordinal) ||
+            itemName.Equals("ReferenceCopyLocalPaths", StringComparison.Ordinal);
+        if (isAssemblyReference && resolvedFromProjectReference)
+        {
+            if (!IsTrustedMsBuildProjectReferenceOutput(
+                    item,
+                    itemName,
+                    msBuildToolsPath,
+                    msBuildSdksPath))
+            {
+                return false;
+            }
+
+            string? sourceProjectPath = ReadItemText(item, "MSBuildSourceProjectFile");
+            if (string.IsNullOrWhiteSpace(sourceProjectPath))
+            {
+                return false;
+            }
+
+            string normalizedSourceProjectPath;
+            try
+            {
+                normalizedSourceProjectPath = Path.GetFullPath(sourceProjectPath!);
+            }
+            catch
+            {
+                return false;
+            }
+
+            StringComparison comparison = IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            EvaluatedProjectReference[] assemblyProjectReferences = knownProjectReferences
+                .Where(reference => string.Equals(
+                    reference.ProjectPath,
+                    normalizedSourceProjectPath,
+                    comparison))
+                .ToArray();
+            if (assemblyProjectReferences.Length == 0)
+                return false;
+
+            // ResolveReferences reports an expected TargetPath even when project builds are
+            // disabled and the child has not been built. An absent future output is not a
+            // current provenance input, but a present output must pass controlled proof below.
+            if (!File.Exists(fullPath))
+                return true;
+
+            outputs = assemblyProjectReferences
+                .Select(projectReference => new GeneratedProjectReferenceOutput(fullPath, projectReference))
+                .ToArray();
+            return true;
+        }
+
         string? outputItemType = null;
         HashSet<string>? declaredOutputs = null;
         if (itemName.Equals("EmbeddedResource", StringComparison.Ordinal) && resolvedFromProjectReference)
