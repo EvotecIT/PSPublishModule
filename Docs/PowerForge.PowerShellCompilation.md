@@ -177,21 +177,32 @@ The checked-in benchmark suite validates every result outside the timed operatio
 - the generated typed CLR method called inside a C# loop;
 - equivalent hand-written C#.
 
-The standard reference run used PowerShell 7.6.4 on .NET 10.0.10, Windows x64, and an AMD64 32-logical-core machine. Duration rows are medians after three warmups, 12 measured samples, and minimum/maximum exclusion. The startup benchmark used two warmups and 10 measured samples.
+The final Windows reference run used PowerShell 7.6.4 on .NET 10.0.10, Windows x64, and an AMD64 32-logical-core machine. Duration rows are medians after three warmups, 12 measured samples, and minimum/maximum exclusion. The startup benchmark used two warmups and 10 measured samples. All rows have zero validation failures and pin clean candidate `7f6a4160` plus generated artifact hashes.
 
-The table below is the pre-expansion reference baseline from clean runtime commit `3573bbb4`, with run IDs `20260823-101107-2428b314` (real function), `20260823-101222-03ed850e` (synthetic loop), and `20260823-101224-b2678047` (packaged startup). It is retained only as a comparison point; the expanded candidate requires fresh typed-EXE, coarse-command, optimization/size, and Linux evidence before release claims are made.
+Windows run IDs are `20260823-120435-c4bbe019` (real function), `20260823-120602-67365633` (synthetic loop), `20260823-120604-1a6f8e15` (binary dispatch), and `20260823-120606-158339e7` (startup and footprint).
 
 | Workload | Calls | PowerShell | Typed CLR | Hand-written C# | Typed vs PowerShell | Typed vs C# |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Real `Get-AllowedAverageMs`, absolute-cap branch | 50,000 | 229.96 ms | 5.90 ms | 2.21 ms | **39.0x faster** | 2.67x slower |
-| Real `Get-AllowedAverageMs`, relative-cap branch | 50,000 | 212.69 ms | 4.91 ms | 1.82 ms | **43.4x faster** | 2.69x slower |
-| Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 46.11 ms | 4.47 ms | 2.11 ms | **10.3x faster** | 2.12x slower |
+| Real `Get-AllowedAverageMs`, absolute-cap branch | 50,000 | 277.79 ms | 6.28 ms | 3.29 ms | **44.2x faster** | 1.91x slower |
+| Real `Get-AllowedAverageMs`, relative-cap branch | 50,000 | 277.48 ms | 6.07 ms | 4.07 ms | **45.7x faster** | 1.49x slower |
+| Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 53.91 ms | 4.83 ms | 2.46 ms | **11.2x faster** | 1.96x slower |
 
 These results prove a benefit only for eligible computation executed as CLR code. They do not promise that an arbitrary script or a generated cmdlet call is faster.
 
-The binary-cmdlet lane includes PowerShell command lookup, parameter binding, pipeline setup, and `WriteObject` for every call. It took 1,879.62 ms and 1,764.51 ms in the two 50,000-call real scenarios, versus 229.96 ms and 212.69 ms for the original function. The useful product shape is a coarse cmdlet that performs substantial compiled work per invocation, not a tiny arithmetic cmdlet called in a PowerShell loop.
+The binary-cmdlet lane includes PowerShell command lookup, parameter binding, pipeline setup, and `WriteObject` for every call. It took 2,297.33 ms and 2,217.00 ms in the two 50,000-call real scenarios, versus 277.79 ms and 277.48 ms for the original function. The dispatch-amortization workload then performed equivalent work through 1,000 fine cmdlet calls or one coarse command: 42.66 ms versus 3.87 ms, an **11.0x** improvement. The useful product shape is a coarse cmdlet that performs substantial compiled work per invocation, not a tiny arithmetic cmdlet called in a PowerShell loop.
 
-Packaging also has a measurable cost. A one-shot `pwsh -File` invocation took 194.50 ms, while the framework-dependent single-file packaged executable took 445.95 ms: 2.29x slower startup. The EXE is valuable for delivery and launch ergonomics, not startup speed.
+Executable startup proves that typed compilation changes the product result rather than merely its extension. The PowerShell-free typed EXE took 32.42 ms, `pwsh -File` took 199.94 ms, and the runtime-packaged EXE took 456.26 ms. The typed executable is **6.2x faster than `pwsh -File`** and **14.1x faster than packaging** in this one-shot workload. Packaging remains valuable for broad script compatibility and delivery ergonomics, not startup speed.
+
+| Windows x64 artifact | Bytes | Runtime model |
+| --- | ---: | --- |
+| Typed framework-dependent EXE | 177,358 | installed .NET |
+| Typed self-contained trimmed EXE | 12,912,947 | bundled trimmed .NET runtime |
+| Typed NativeAOT EXE | 1,313,792 | native, no .NET or PowerShell runtime required |
+| Packaged PowerShell EXE | 54,862,022 | embedded PowerShell runtime assets |
+
+The bounded Linux x64 run used PowerShell 7.5.4 on a .NET 9 host, two warmups, six measured samples for computation, 1,000 real-function calls, and 100 loop/dispatch calls. The supported net8 benchmark artifact produced disclosed CS1701 reference-unification warnings under that intermediate host; all measured operations still validated with zero failures. Run IDs are `20260823-120204-58213403`, `20260823-120307-747e5a55`, `20260823-120317-8a323de6`, and `20260823-120327-7f23ef4c`, pinned to clean candidate `7f6a4160`.
+
+On Linux, coarse binary dispatch took 5.47 ms versus 337.55 ms for repeated fine calls (**61.7x**), typed EXE startup took 68.77 ms versus 204.92 ms for `pwsh -File` and 532.68 ms for packaging, and the artifacts were 86,058 bytes framework-dependent, 13,432,873 bytes trimmed self-contained, 1,710,440 bytes NativeAOT, and 45,368,774 bytes packaged. The Linux typed, trimmed, NativeAOT, and packaged executables were all executed successfully on Linux; this is runtime proof, not Windows cross-publish evidence.
 
 Run the same matrix locally:
 
@@ -215,6 +226,8 @@ Low initial coverage is not hidden by Hybrid mode. It is written to the manifest
 Packaging and typed compilation are not obfuscation or source protection. A packaged executable contains an embedded script and runtime assets that a determined user can inspect. A typed EXE or DLL is normal managed/native code and remains analyzable.
 
 `Build-PowerShellArtifact -SignArtifact` and CLI `--sign` sign staged Windows `.exe`, `.dll`, `.ps1`, `.psm1`, and `.psd1` files before their SHA-256 and byte-size evidence is recorded. Signing runs in an isolated Windows PowerShell process with a bounded timeout. A missing certificate, provider timeout, or non-valid signature aborts the atomic publication; no unsigned replacement or stale manifest is committed. The broader PowerForge release pipeline remains the owner for packaging, release attestations, NuGet/GitHub publication, and policy-level signing configuration.
+
+The fail-closed signing and atomic-publication contract is covered by automated tests. Successful signing with the maintainer's real Authenticode provider and timestamp service remains a release acceptance gate; it is not inferred from the negative-path proof.
 
 The generated EXE carries the PowerShell SDK, so it is much larger than the input script and may start more slowly than an installed `pwsh`. Self-contained publication adds the .NET runtime as well. With `SingleFile = $false`, PowerForge preserves the complete nested publish tree instead of copying only top-level files. Runtime-packaged artifacts must be rebuilt when their embedded PowerShell or .NET dependencies need security updates.
 
