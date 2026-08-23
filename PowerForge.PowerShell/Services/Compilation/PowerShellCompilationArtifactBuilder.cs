@@ -55,7 +55,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                     $"Strict binary-module compilation rejected manifest runtime script hook(s): {string.Join(", ", runtimeManifestHooks)}.");
             if (spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Strict)
             {
-                var executable = PowerShellTypedExecutableEmitter.Emit(spec.SourcePath, plan);
+                var executable = PowerShellTypedExecutableEmitter.Emit(spec.SourcePath, plan, spec.TargetFramework);
                 File.WriteAllText(Path.Combine(workspace, "CompiledPowerShellScript.cs"), executable.CompiledSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 File.WriteAllText(Path.Combine(workspace, "Program.cs"), executable.ProgramSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 projectPath = Path.Combine(workspace, artifactName + ".csproj");
@@ -82,9 +82,15 @@ public sealed class PowerShellCompilationArtifactBuilder
                 typed = new PowerShellTypedCompilationTranspiler().Transpile(
                     spec.SourcePath,
                     "PowerForge.Compiled",
-                    PowerShellCSharpMethodEmitter.SanitizeIdentifier(artifactName) + "Methods");
+                    PowerShellCSharpMethodEmitter.SanitizeIdentifier(artifactName) + "Methods",
+                    spec.TargetFramework);
                 if (typed.Methods.Length == 0)
-                    throw new InvalidOperationException("No PowerShell functions were eligible for typed CLR compilation.");
+                {
+                    var firstBlocker = typed.Diagnostics.FirstOrDefault();
+                    throw new InvalidOperationException(firstBlocker is null
+                        ? "No PowerShell functions were eligible for typed CLR compilation."
+                        : $"No PowerShell functions were eligible for typed CLR compilation. First blocker: {firstBlocker.Message}");
+                }
                 if (spec.Mode == PowerShellCompilationMode.Strict && typed.Diagnostics.Length > 0)
                     throw new InvalidOperationException($"Strict mode rejected {typed.Diagnostics.Length} compilation blocker(s).");
                 if (spec.Mode == PowerShellCompilationMode.Strict &&

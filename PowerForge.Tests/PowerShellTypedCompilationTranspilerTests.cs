@@ -109,6 +109,19 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains(expectedMessage, StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Transpile_RoutesGenericMemberReturnTypeToDiagnosticInsteadOfThrowing()
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Get-Converters { return ([System.Text.Json.JsonSerializerOptions]::new()).Converters }");
+
+        var exception = Record.Exception(() => new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath));
+        Assert.Null(exception);
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("returns type", StringComparison.OrdinalIgnoreCase));
+    }
+
     private sealed class TranspilerFixture : IDisposable
     {
         private TranspilerFixture(string rootPath, string scriptPath)

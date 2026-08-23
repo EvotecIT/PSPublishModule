@@ -19,10 +19,11 @@ internal sealed class PowerShellCSharpMethodEmitter
     private readonly HashSet<string> _declaredLocals = new(StringComparer.OrdinalIgnoreCase);
     private readonly StringBuilder _builder = new();
     private readonly PowerShellCSharpMemberEmitter _memberEmitter;
+    private readonly string? _targetFramework;
     private int _indent = 1;
 
-    internal PowerShellCSharpMethodEmitter(string filePath, FunctionDefinitionAst function)
-        : this(filePath, function.Body, function.Name, SanitizeIdentifier(function.Name), null, initialize: true)
+    internal PowerShellCSharpMethodEmitter(string filePath, FunctionDefinitionAst function, string? targetFramework = null)
+        : this(filePath, function.Body, function.Name, SanitizeIdentifier(function.Name), null, targetFramework, initialize: true)
     {
     }
 
@@ -31,8 +32,9 @@ internal sealed class PowerShellCSharpMethodEmitter
         ScriptBlockAst body,
         string sourceName,
         string generatedName,
-        StatementAst[] statements)
-        : this(filePath, body, sourceName, SanitizeIdentifier(generatedName), statements, initialize: true)
+        StatementAst[] statements,
+        string? targetFramework = null)
+        : this(filePath, body, sourceName, SanitizeIdentifier(generatedName), statements, targetFramework, initialize: true)
     {
     }
 
@@ -42,6 +44,7 @@ internal sealed class PowerShellCSharpMethodEmitter
         string sourceName,
         string generatedName,
         StatementAst[]? statements,
+        string? targetFramework,
         bool initialize)
     {
         _filePath = filePath;
@@ -49,11 +52,13 @@ internal sealed class PowerShellCSharpMethodEmitter
         _sourceName = sourceName;
         _generatedName = generatedName;
         _statements = statements;
+        _targetFramework = targetFramework;
         _memberEmitter = new PowerShellCSharpMemberEmitter(
             InferExpressionType,
             EmitExpression,
             CanAssign,
             GetTypeName,
+            type => PowerShellGeneratedTypePolicy.IsSupported(type, _targetFramework),
             CanNormalizeNullStringReceiver,
             Error);
     }
@@ -65,7 +70,7 @@ internal sealed class PowerShellCSharpMethodEmitter
         foreach (var parameter in parameters)
         {
             var name = parameter.Name.VariablePath.UserPath;
-            if (!PowerShellGeneratedTypePolicy.IsSupported(parameter.StaticType))
+            if (!PowerShellGeneratedTypePolicy.IsSupported(parameter.StaticType, _targetFramework))
                 throw Error(parameter, $"Parameter '${name}' uses CLR type '{parameter.StaticType.FullName}' outside the generated project reference set.");
             if (_variables.ContainsKey(name))
                 throw Error(parameter, $"Parameter '${name}' duplicates another parameter under PowerShell's case-insensitive naming rules.");

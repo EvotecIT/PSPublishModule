@@ -14,7 +14,8 @@ public sealed class PowerShellTypedCompilationTranspiler
     public PowerShellTypedCompilationResult Transpile(
         string sourcePath,
         string namespaceName = "PowerForge.Compiled",
-        string typeName = "CompiledPowerShell")
+        string typeName = "CompiledPowerShell",
+        string? targetFramework = null)
     {
         if (string.IsNullOrWhiteSpace(sourcePath))
             throw new ArgumentException("A PowerShell source path is required.", nameof(sourcePath));
@@ -49,7 +50,7 @@ public sealed class PowerShellTypedCompilationTranspiler
 
             try
             {
-                var emitted = new PowerShellCSharpMethodEmitter(fullPath, function).Emit();
+                var emitted = new PowerShellCSharpMethodEmitter(fullPath, function, targetFramework).Emit();
                 methodSources.Add(emitted.Source);
                 methods.Add(new PowerShellCompiledMethod(
                     function.Name,

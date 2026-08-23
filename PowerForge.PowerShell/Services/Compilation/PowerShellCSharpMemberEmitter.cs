@@ -13,6 +13,7 @@ internal sealed class PowerShellCSharpMemberEmitter
     private readonly Func<Ast, string> _emitExpression;
     private readonly Func<Type, Type, bool> _canAssign;
     private readonly Func<Type, string> _getTypeName;
+    private readonly Func<Type, bool> _isSupportedType;
     private readonly Func<ExpressionAst, bool> _canNormalizeNullStringReceiver;
     private readonly Func<Ast, string, PowerShellCSharpEmissionException> _error;
 
@@ -21,6 +22,7 @@ internal sealed class PowerShellCSharpMemberEmitter
         Func<Ast, string> emitExpression,
         Func<Type, Type, bool> canAssign,
         Func<Type, string> getTypeName,
+        Func<Type, bool> isSupportedType,
         Func<ExpressionAst, bool> canNormalizeNullStringReceiver,
         Func<Ast, string, PowerShellCSharpEmissionException> error)
     {
@@ -28,6 +30,7 @@ internal sealed class PowerShellCSharpMemberEmitter
         _emitExpression = emitExpression;
         _canAssign = canAssign;
         _getTypeName = getTypeName;
+        _isSupportedType = isSupportedType;
         _canNormalizeNullStringReceiver = canNormalizeNullStringReceiver;
         _error = error;
     }
@@ -37,12 +40,15 @@ internal sealed class PowerShellCSharpMemberEmitter
         var target = ResolveTarget(member.Expression);
         var name = GetMemberName(member);
         var resolved = ResolveFieldOrProperty(member, target.Type, target.IsStatic, name);
-        return resolved switch
+        var type = resolved switch
         {
             PropertyInfo property => property.PropertyType,
             FieldInfo field => field.FieldType,
             _ => throw _error(member, $"CLR member '{target.Type.FullName}.{name}' is not a readable field or property.")
         };
+        if (!_isSupportedType(type))
+            throw _error(member, $"CLR member '{target.Type.FullName}.{name}' returns type '{type.FullName}' outside the generated project reference set.");
+        return type;
     }
 
     internal string EmitMember(MemberExpressionAst member)
@@ -60,7 +66,12 @@ internal sealed class PowerShellCSharpMemberEmitter
     }
 
     internal Type InferInvocationType(InvokeMemberExpressionAst invocation)
-        => ResolveInvocation(invocation).ReturnType;
+    {
+        var type = ResolveInvocation(invocation).ReturnType;
+        if (!_isSupportedType(type))
+            throw _error(invocation, $"CLR invocation returns type '{type.FullName}' outside the generated project reference set.");
+        return type;
+    }
 
     internal Type InferIndexType(IndexExpressionAst index)
     {
@@ -213,7 +224,7 @@ internal sealed class PowerShellCSharpMemberEmitter
         {
             var type = typeExpression.TypeName.GetReflectionType()
                 ?? throw _error(typeExpression, $"CLR type '{typeExpression.TypeName.FullName}' could not be resolved.");
-            if (!PowerShellGeneratedTypePolicy.IsSupported(type))
+            if (!_isSupportedType(type))
                 throw _error(typeExpression, $"CLR type '{typeExpression.TypeName.FullName}' is not available in the generated runtime-independent project reference set.");
             return new Target(type, true, _getTypeName(type));
         }

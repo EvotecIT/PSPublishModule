@@ -16,7 +16,7 @@ internal static class PowerShellCompiledModuleManifest
             return Array.Empty<string>();
 
         var hooks = new List<string>();
-        hooks.AddRange(ModuleManifestValueReader.ReadTopLevelStringOrArray(sourceManifest, "ScriptsToProcess"));
+        hooks.AddRange(ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "ScriptsToProcess") ?? Array.Empty<string>());
         hooks.AddRange(ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules")
             .Where(static reference => !Path.GetExtension(reference).Equals(".dll", StringComparison.OrdinalIgnoreCase)));
         return hooks

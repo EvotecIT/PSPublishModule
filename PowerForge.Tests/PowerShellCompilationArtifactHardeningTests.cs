@@ -96,6 +96,25 @@ public sealed class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_StrictBinaryModuleRejectsNonLiteralManifestRuntimeScriptHooks()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); ScriptsToProcess = @($PSScriptRoot + '\\initialize.ps1') }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.StrictDynamicManifestHook",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("literal string", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
     public void Build_HybridBinaryModuleReportsManifestRuntimeScriptHooksAsFallback()
     {
         using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
@@ -273,6 +292,55 @@ public sealed class PowerShellCompilationArtifactHardeningTests
         Assert.Equal(0, run.ExitCode);
         Assert.Equal(new[] { "False", "True", "2" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
         Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Build_HybridModulePreservesConditionalOnlyExportSurface()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-HiddenValue { return 1 }; function Get-PublicValue { return 2 }; if ($true) { Export-ModuleMember -Function Get-PublicValue }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ConditionalOnlyExport",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(result.Manifest!.UsesPowerShellRuntimeFallback);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; [bool](Get-Command Get-HiddenValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-PublicValue -ErrorAction SilentlyContinue); Get-PublicValue");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal(new[] { "False", "True", "2" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Build_Net472RejectsRuntimeTypeUnavailableToRequestedTargetBeforeDotNetCompilation()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-DateValue { return [System.DateOnly]::MinValue }");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TargetFrameworkType",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict)
+        {
+            TargetFramework = "net472"
+        };
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("reference set", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.True(string.IsNullOrWhiteSpace(result.BuildOutput), result.BuildOutput);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
     [Fact]

@@ -30,6 +30,15 @@ internal sealed class PowerShellModuleExportContract
 
     internal static PowerShellModuleExportContract? TryRead(ScriptBlockAst ast)
     {
+        var allCommands = ast.FindAll(
+                static node => node is CommandAst command &&
+                               command.GetCommandName()?.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) == true,
+                searchNestedScriptBlocks: false)
+            .Cast<CommandAst>()
+            .ToArray();
+        if (allCommands.Length == 0)
+            return null;
+
         var commands = (ast.EndBlock?.Statements.AsEnumerable() ?? Enumerable.Empty<StatementAst>())
             .OfType<PipelineAst>()
             .Where(static pipeline => pipeline.PipelineElements.Count == 1)
@@ -38,9 +47,6 @@ internal sealed class PowerShellModuleExportContract
             .Where(static command => command.GetCommandName()?.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) == true)
             .OrderBy(static command => command.Extent.StartOffset)
             .ToArray();
-        if (commands.Length == 0)
-            return null;
-
         var values = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
         {
             ["Function"] = new List<string>(),
