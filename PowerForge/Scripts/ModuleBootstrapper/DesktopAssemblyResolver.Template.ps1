@@ -3,7 +3,12 @@ $PowerForgeDesktopAssemblyRoots = @()
 if ($PSEdition -ne 'Core') {
     if ($null -ne $ResolvePowerForgeModuleAssembly -and $LibraryFileNames.Count -gt 0) {
         foreach ($PowerForgeDesktopLibraryFileName in $LibraryFileNames) {
-            $PowerForgeDesktopResolvedModule = & $ResolvePowerForgeModuleAssembly -LibraryFileName $PowerForgeDesktopLibraryFileName
+            try {
+                $PowerForgeDesktopResolvedModule = & $ResolvePowerForgeModuleAssembly -LibraryFileName $PowerForgeDesktopLibraryFileName
+            } catch {
+                Write-Verbose "Skipping Desktop resolver root for '$PowerForgeDesktopLibraryFileName'. $($_.Exception.Message)"
+                continue
+            }
             if ($PowerForgeDesktopResolvedModule.Directory -notin $PowerForgeDesktopAssemblyRoots) {
                 $PowerForgeDesktopAssemblyRoots += $PowerForgeDesktopResolvedModule.Directory
             }

@@ -102,6 +102,10 @@ public sealed partial class ModulePipelineRunner
                     UpdateManifestForGeneratedDeliveryCommands(plan, buildResult, state.PackageWithoutScriptFolders);
             }
 
+            if (state.MergeExecution.MergedModule) {
+                SynchronizeMergedPsm1ExportsFromManifest(buildResult, plan);
+            }
+
             if (!state.PackageWithoutScriptFolders && !plan.BuildSpec.RefreshManifestOnly)
                 TryRegenerateBootstrapperFromManifest(
                     buildResult,
@@ -277,6 +281,9 @@ public sealed partial class ModulePipelineRunner
         try
         {
             RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
+            if (state.MergeExecution.MergedModule) {
+                SynchronizeMergedPsm1ExportsFromManifest(buildResult, plan);
+            }
         }
         catch (Exception ex)
         {

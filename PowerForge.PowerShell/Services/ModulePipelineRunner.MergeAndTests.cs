@@ -385,6 +385,34 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
+    private void SynchronizeMergedPsm1ExportsFromManifest(
+        ModuleBuildResult buildResult,
+        ModulePipelinePlan plan)
+    {
+        var psm1Path = Path.Combine(buildResult.StagingPath, plan.ModuleName + ".psm1");
+        if (!File.Exists(psm1Path)) {
+            throw new FileNotFoundException("Merged module entry script was not found.", psm1Path);
+        }
+
+        var current = File.ReadAllText(psm1Path);
+        var previousExportBlock = ModuleMergeComposer.ExtractTrailingExportBlock(current, out var body);
+        if (string.IsNullOrWhiteSpace(previousExportBlock)) {
+            throw new InvalidDataException($"Merged module entry script '{Path.GetFileName(psm1Path)}' does not contain an authoritative export block.");
+        }
+
+        var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
+        var conditionalExportDependencies = ResolveConditionalExportDependencies(
+            plan,
+            ModuleMergeComposer.ResolveScriptFiles(buildResult.StagingPath, plan.Information),
+            exports);
+        var exportBlock = ModuleConditionalExportBlockBuilder.BuildExportBlock(
+            exports,
+            conditionalExportDependencies,
+            plan.ModuleName);
+        var synchronized = body.TrimEnd() + Environment.NewLine + Environment.NewLine + exportBlock.TrimEnd() + Environment.NewLine;
+        ModuleMergeComposer.WriteMergedPsm1(psm1Path, synchronized);
+    }
+
     private void TryRegenerateSourceDevelopmentBootstrapperFromManifest(
         ModuleBuildResult buildResult,
         ModulePipelinePlan plan)

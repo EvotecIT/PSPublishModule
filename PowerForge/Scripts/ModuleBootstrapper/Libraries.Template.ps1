@@ -62,7 +62,12 @@ if ($null -ne $ResolvePowerForgeModuleAssembly) {
         $PowerForgeLibrariesRootPrefix += [IO.Path]::DirectorySeparatorChar
     }
     foreach ($PowerForgeLibraryFileName in $LibraryFileNames) {
-        $PowerForgeResolvedLibrary = & $ResolvePowerForgeModuleAssembly -LibraryFileName $PowerForgeLibraryFileName
+        try {
+            $PowerForgeResolvedLibrary = & $ResolvePowerForgeModuleAssembly -LibraryFileName $PowerForgeLibraryFileName
+        } catch {
+            Write-Verbose "Skipping preload-folder discovery for '$PowerForgeLibraryFileName'. $($_.Exception.Message)"
+            continue
+        }
         $PowerForgeResolvedLibraryDirectory = [IO.Path]::GetFullPath($PowerForgeResolvedLibrary.Directory)
         $PowerForgeResolvedLibraryFolder = if ($PowerForgeResolvedLibraryDirectory -ieq $PowerForgeLibrariesRoot) {
             ''

@@ -384,19 +384,26 @@ internal static partial class ModuleMergeComposer
         string moduleRoot)
         => Regex.Replace(
             directive,
-            @"(?im)(\bModuleName\s*=\s*)(?:(?<single>')(?<singlePath>(?:''|[^'\r\n])*)'|(?<double>"")(?<doublePath>(?:`[^\r\n]|[^`""\r\n])*)"")",
+            @"(?im)(\bModuleName\s*=\s*)(?:(?<single>')(?<singlePath>(?:''|[^'\r\n])*)'|(?<double>"")(?<doublePath>(?:`[^\r\n]|[^`""\r\n])*)""|(?<bare>[^\s;}\r\n]+))",
             match =>
             {
-                var quote = match.Groups["single"].Success ? '\'' : '"';
+                var quote = match.Groups["single"].Success
+                    ? '\''
+                    : match.Groups["double"].Success ? '"' : '\0';
                 var encodedPath = match.Groups["single"].Success
                     ? match.Groups["singlePath"].Value
-                    : match.Groups["doublePath"].Value;
-                var path = DecodeUsingPathLiteral(encodedPath, quote);
+                    : match.Groups["double"].Success
+                        ? match.Groups["doublePath"].Value
+                        : match.Groups["bare"].Value;
+                var path = quote == '\0' ? encodedPath : DecodeUsingPathLiteral(encodedPath, quote);
                 var rebased = RebaseUsingPath(path, sourcePath, moduleRoot, treatBareNameAsPath: false);
                 if (string.Equals(path, rebased, System.StringComparison.Ordinal))
                     return match.Value;
 
-                return match.Groups[1].Value + quote + EncodeUsingPathLiteral(rebased, quote) + quote;
+                var encodedRebased = quote == '\0'
+                    ? FormatUnquotedUsingPath(rebased)
+                    : quote + EncodeUsingPathLiteral(rebased, quote) + quote;
+                return match.Groups[1].Value + encodedRebased;
             });
 
     private static int FindQuotedPathEnd(string directive, int start, char quote)

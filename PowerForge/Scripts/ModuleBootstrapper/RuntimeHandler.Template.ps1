@@ -3,7 +3,12 @@ $IsWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPl
 if ($IsWindowsPlatform) {
     [array] $ResolvedLibraryDirectories = @(
         foreach ($LibraryFileName in $LibraryFileNames) {
-            $ResolvedLibrary = & $ResolvePowerForgeModuleAssembly -LibraryFileName $LibraryFileName
+            try {
+                $ResolvedLibrary = & $ResolvePowerForgeModuleAssembly -LibraryFileName $LibraryFileName
+            } catch {
+                Write-Verbose "Skipping native runtime discovery for '$LibraryFileName'. $($_.Exception.Message)"
+                continue
+            }
             if ($null -ne $ResolvedLibrary -and -not [string]::IsNullOrWhiteSpace($ResolvedLibrary.Directory)) {
                 $ResolvedLibrary.Directory
             }

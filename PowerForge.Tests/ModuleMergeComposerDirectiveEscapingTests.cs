@@ -94,4 +94,43 @@ public sealed class ModuleMergeComposerDirectiveEscapingTests
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
+
+    [Fact]
+    public void BuildSources_RebasesUnquotedModuleSpecificationPath()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string sourceFolder = "Scripts";
+            var sourceRoot = Directory.CreateDirectory(Path.Combine(root.FullName, sourceFolder));
+            File.WriteAllText(Path.Combine(sourceRoot.FullName, "Types.psm1"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(sourceRoot.FullName, "Types.psd1"),
+                "@{ RootModule = 'Types.psm1'; ModuleVersion = '1.0.0'; GUID = '8f41bdd6-c00a-431f-b390-c431664b9e88' }");
+            File.WriteAllText(
+                Path.Combine(sourceRoot.FullName, "Get-Demo.ps1"),
+                "using module @{" + Environment.NewLine +
+                "    ModuleName = ./Types.psd1" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "}" + Environment.NewLine +
+                "function Get-Demo { 'ok' }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                "DemoModule",
+                information: new InformationConfiguration { IncludePS1 = new[] { sourceFolder } },
+                exports: new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: true);
+
+            Assert.StartsWith(
+                "using module @{" + Environment.NewLine +
+                "    ModuleName = ./Scripts/Types.psd1",
+                sources.MergedScriptContent,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
 }

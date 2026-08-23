@@ -191,6 +191,15 @@ public partial class ModuleBootstrapperGeneratorTests
             Assert.Contains("ProcessArchitecture", bootstrapper);
             Assert.Contains("IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)", bootstrapper);
             Assert.Contains("$ResolvedLibrary = & $ResolvePowerForgeModuleAssembly -LibraryFileName $LibraryFileName", bootstrapper);
+            var librariesScript = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
+            Assert.Contains("Skipping preload-folder discovery", librariesScript, StringComparison.Ordinal);
+            Assert.Contains("Skipping Desktop resolver root", bootstrapper, StringComparison.Ordinal);
+            Assert.Contains("Skipping native runtime discovery", bootstrapper, StringComparison.Ordinal);
+            var preloadResolveIndex = librariesScript.IndexOf("$PowerForgeResolvedLibrary = & $ResolvePowerForgeModuleAssembly", StringComparison.Ordinal);
+            Assert.True(
+                librariesScript.LastIndexOf("try {", preloadResolveIndex, StringComparison.Ordinal) >= 0 &&
+                librariesScript.IndexOf("} catch {", preloadResolveIndex, StringComparison.Ordinal) > preloadResolveIndex,
+                "Preload-folder resolution must isolate failures per configured assembly.");
             Assert.Contains("$NativeLibraryDirectories = @(", bootstrapper);
             Assert.Contains("Get-ChildItem -LiteralPath $LibraryRoot -Directory", bootstrapper);
             Assert.Contains("foreach ($NativeLibraryDirectory in $NativeLibraryDirectories)", bootstrapper);
