@@ -192,11 +192,11 @@ public sealed partial class DotNetPublishPipelineRunner
                     declaration.Element,
                     conditionProperties,
                     declaration.DefiningProjectPath) ||
-                !DoesProjectReferenceDeclarationMatch(
+                DoesProjectReferenceDeclarationMatch(
                     declaringProjectPath,
                     referencedPath,
                     declaration,
-                    conditionProperties))
+                    conditionProperties) is ProjectReferenceDeclarationMatch.NoMatch)
             {
                 continue;
             }

@@ -1,3 +1,4 @@
+using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using System.Text;
@@ -51,8 +52,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
         byte[] image = reader.GetEntireImage().GetContent().ToArray();
         byte[] metadata = reader.GetMetadata().GetContent().ToArray();
-        NormalizeGuidHeap(metadata);
-        ZeroDirectory(image, reader.PEHeaders, corHeader.StrongNameSignatureDirectory);
+        MetadataReader metadataReader = reader.GetMetadataReader();
+        Guid moduleVersionId = metadataReader.GetGuid(metadataReader.GetModuleDefinition().Mvid);
+        NormalizeNonIdentityGuidHeapEntries(metadata, moduleVersionId);
         ZeroDirectory(image, reader.PEHeaders, peHeader.ImportAddressTableDirectory);
 
         int sectionStart = reader.PEHeaders.SectionHeaders.Min(section => section.PointerToRawData);
@@ -75,7 +77,7 @@ public sealed partial class DotNetPublishPipelineRunner
         return content.ToArray();
     }
 
-    private static void NormalizeGuidHeap(byte[] metadata)
+    private static void NormalizeNonIdentityGuidHeapEntries(byte[] metadata, Guid moduleVersionId)
     {
         if (metadata.Length < 20 || BitConverter.ToUInt32(metadata, 0) != 0x424A5342)
             throw new InvalidDataException("The managed metadata root is invalid.");
@@ -87,6 +89,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         ushort streamCount = BitConverter.ToUInt16(metadata, position + 2);
         position += 4;
+        byte[] moduleVersionIdBytes = moduleVersionId.ToByteArray();
         for (int index = 0; index < streamCount; index++)
         {
             if (position + 8 > metadata.Length)
@@ -102,7 +105,15 @@ public sealed partial class DotNetPublishPipelineRunner
             position = AlignToFour(nameEnd + 1);
             if (!name.Equals("#GUID", StringComparison.Ordinal))
                 continue;
-            ZeroRange(metadata, streamOffset, streamSize);
+            if (streamOffset < 0 || streamSize < 0 || streamOffset > metadata.Length - streamSize)
+                throw new InvalidDataException("The managed GUID heap is outside the metadata image.");
+
+            int streamEnd = streamOffset + streamSize;
+            for (int guidOffset = streamOffset; guidOffset + 16 <= streamEnd; guidOffset += 16)
+            {
+                if (!metadata.AsSpan(guidOffset, 16).SequenceEqual(moduleVersionIdBytes))
+                    ZeroRange(metadata, guidOffset, 16);
+            }
             return;
         }
     }

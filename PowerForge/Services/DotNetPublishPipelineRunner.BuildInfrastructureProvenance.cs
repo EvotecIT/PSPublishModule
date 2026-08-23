@@ -108,6 +108,9 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryProveControlledGeneratedOutput(
         ProjectEvaluationRequest request,
         string candidatePath,
+        string? evaluatedIntermediateRoot,
+        string? evaluatedIntermediateOutputPath,
+        string? evaluatedPathMap,
         IDictionary<string, bool> cache)
     {
         string fullCandidatePath = Path.GetFullPath(candidatePath);
@@ -147,22 +150,57 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
                     property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
-                    property.Key.Equals("BuildProjectReferences", StringComparison.OrdinalIgnoreCase))
+                    property.Key.Equals("BuildProjectReferences", StringComparison.OrdinalIgnoreCase) ||
+                    property.Key.Equals("NuGetLockFilePath", StringComparison.OrdinalIgnoreCase) ||
+                    property.Key.Equals("PathMap", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
                 arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
             }
             arguments.Add("-p:BuildProjectReferences=false");
+            arguments.Add("-p:NuGetLockFilePath=" + EscapeMsBuildPropertyValue(
+                Path.Combine(controlledIntermediateRoot, "packages.lock.json")));
             arguments.Add("-p:OutDir=" + EscapeMsBuildPropertyValue(
                 controlledBinaryRoot + Path.DirectorySeparatorChar));
             arguments.Add("-p:MSBuildProjectExtensionsPath=" + EscapeMsBuildPropertyValue(
                 controlledIntermediateRoot + Path.DirectorySeparatorChar));
-            arguments.Add("-p:IntermediateOutputPath=" + EscapeMsBuildPropertyValue(
-                Path.Combine(
+            string controlledIntermediateOutputPath = Path.Combine(
+                controlledIntermediateRoot,
+                request.Configuration ?? "Release",
+                request.TargetFramework ?? string.Empty);
+            if (!string.IsNullOrWhiteSpace(evaluatedIntermediateRoot) &&
+                !string.IsNullOrWhiteSpace(evaluatedIntermediateOutputPath))
+            {
+                string normalizedIntermediateRoot = NormalizeBuildInputPathRoot(evaluatedIntermediateRoot!);
+                string normalizedIntermediateOutputPath = Path.GetFullPath(evaluatedIntermediateOutputPath!);
+                if (!IsSameOrBelowBuildInputPath(
+                        normalizedIntermediateOutputPath,
+                        normalizedIntermediateRoot))
+                {
+                    return Cache(false);
+                }
+                string relativeIntermediatePath = FrameworkCompatibility.GetRelativePath(
+                    normalizedIntermediateRoot,
+                    normalizedIntermediateOutputPath);
+                controlledIntermediateOutputPath = Path.Combine(
                     controlledIntermediateRoot,
-                    request.Configuration ?? "Release",
-                    request.TargetFramework ?? string.Empty) + Path.DirectorySeparatorChar));
+                    relativeIntermediatePath);
+            }
+            arguments.Add("-p:IntermediateOutputPath=" + EscapeMsBuildPropertyValue(
+                controlledIntermediateOutputPath + Path.DirectorySeparatorChar));
+            if (!string.IsNullOrWhiteSpace(evaluatedIntermediateRoot))
+            {
+                if (!TryBuildControlledPathMap(
+                        controlledIntermediateRoot,
+                        evaluatedIntermediateRoot!,
+                        evaluatedPathMap,
+                        out string? controlledPathMap))
+                {
+                    return Cache(false);
+                }
+                arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));
+            }
 
             var process = RunBuildInputEvaluationProcess(
                 "dotnet",
@@ -237,6 +275,53 @@ public sealed partial class DotNetPublishPipelineRunner
             cache[cacheKey] = result;
             return result;
         }
+    }
+
+    private static bool TryBuildControlledPathMap(
+        string controlledIntermediateRoot,
+        string evaluatedIntermediateRoot,
+        string? evaluatedPathMap,
+        out string pathMap)
+    {
+        string originalRoot = NormalizeBuildInputPathRoot(evaluatedIntermediateRoot);
+        string mappedOriginalRoot = originalRoot;
+        if (!string.IsNullOrWhiteSpace(evaluatedPathMap))
+        {
+            foreach (string entry in evaluatedPathMap!.Split(','))
+            {
+                int separator = entry.IndexOf('=');
+                if (separator <= 0)
+                {
+                    pathMap = string.Empty;
+                    return false;
+                }
+
+                string source = entry.Substring(0, separator).Trim();
+                string target = entry.Substring(separator + 1).Trim();
+                if (source.Length == 0 || target.Length == 0)
+                {
+                    pathMap = string.Empty;
+                    return false;
+                }
+
+                if (!IsSameOrBelowBuildInputPath(originalRoot, source))
+                    continue;
+                string suffix = originalRoot.Substring(NormalizeBuildInputPathRoot(source).Length)
+                    .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                mappedOriginalRoot = suffix.Length == 0
+                    ? target
+                    : target.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                      Path.DirectorySeparatorChar + suffix;
+                break;
+            }
+        }
+
+        string controlledMapping = NormalizeBuildInputPathRoot(controlledIntermediateRoot) + "=" +
+                                   mappedOriginalRoot;
+        pathMap = string.IsNullOrWhiteSpace(evaluatedPathMap)
+            ? controlledMapping
+            : controlledMapping + "," + evaluatedPathMap;
+        return true;
     }
 
     private static bool IsTrackedProjectOutputPath(string path, string projectDirectory)
@@ -507,6 +592,9 @@ public sealed partial class DotNetPublishPipelineRunner
             string[] targetFrameworks,
             string[] outputRoots,
             string[] expectedOutputPaths,
+            string? intermediateRoot,
+            string? intermediateOutputPath,
+            string? pathMap,
             GeneratedProjectReferenceOutput[] generatedProjectReferenceOutputs)
         {
             BuildInputs = buildInputs;
@@ -515,6 +603,9 @@ public sealed partial class DotNetPublishPipelineRunner
             TargetFrameworks = targetFrameworks;
             OutputRoots = outputRoots;
             ExpectedOutputPaths = expectedOutputPaths;
+            IntermediateRoot = intermediateRoot;
+            IntermediateOutputPath = intermediateOutputPath;
+            PathMap = pathMap;
             GeneratedProjectReferenceOutputs = generatedProjectReferenceOutputs;
         }
 
@@ -524,6 +615,9 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string[] TargetFrameworks { get; }
         internal string[] OutputRoots { get; }
         internal string[] ExpectedOutputPaths { get; }
+        internal string? IntermediateRoot { get; }
+        internal string? IntermediateOutputPath { get; }
+        internal string? PathMap { get; }
         internal GeneratedProjectReferenceOutput[] GeneratedProjectReferenceOutputs { get; }
     }
 

@@ -155,17 +155,22 @@ public sealed partial class DotNetPublishPipelineRunner
                 IsDefinitelyInactiveMsBuildElement(
                     projectReference,
                     declarationConditionProperties,
-                    declaration.DefiningProjectPath) ||
-                !DoesProjectReferenceDeclarationMatch(
-                    declaringProjectPath,
-                    referencedPath,
-                    declaration,
-                    declarationConditionProperties,
-                    metadataName,
-                    evaluatedMetadataValue))
+                    declaration.DefiningProjectPath))
             {
                 continue;
             }
+
+            ProjectReferenceDeclarationMatch declarationMatch = DoesProjectReferenceDeclarationMatch(
+                declaringProjectPath,
+                referencedPath,
+                declaration,
+                declarationConditionProperties,
+                metadataName,
+                evaluatedMetadataValue);
+            if (declarationMatch is ProjectReferenceDeclarationMatch.NoMatch)
+                continue;
+            bool declarationMayBeSkipped = declaration.ExecutionMayBeSkipped ||
+                                           declarationMatch is ProjectReferenceDeclarationMatch.Ambiguous;
 
             bool isInclude = HasMsBuildAttribute(projectReference, "Include");
             bool isUpdate = HasMsBuildAttribute(projectReference, "Update");
@@ -185,7 +190,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     metadataName);
             if (isRemove)
             {
-                if (definitelyActive && !declaration.ExecutionMayBeSkipped)
+                if (definitelyActive && !declarationMayBeSkipped)
                     states.Clear();
                 continue;
             }
@@ -204,14 +209,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
 
-            bool removeMetadataIsCertain = TryReadRemovedProjectReferenceMetadataNames(
+            bool removeMetadataIsCertain = TryReadProjectReferenceMetadataRemoval(
                 declaration,
                 declarationConditionProperties,
-                out string[] removedMetadataNames);
-            bool removesCurrentMetadata = removedMetadataNames.Contains(
                 metadataName,
-                StringComparer.OrdinalIgnoreCase);
-            bool removalIsAmbiguous = HasMsBuildAttribute(projectReference, "RemoveMetadata") &&
+                out bool removesCurrentMetadata);
+            bool removalIsAmbiguous = (HasMsBuildAttribute(projectReference, "RemoveMetadata") ||
+                                       HasMsBuildAttribute(projectReference, "KeepMetadata")) &&
                                       !removeMetadataIsCertain;
             if (isUpdate &&
                 (declaredAssignments.Count > 0 || removesCurrentMetadata || removalIsAmbiguous))
@@ -224,7 +228,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         bool deletionIsDefinite = removesCurrentMetadata &&
                                                   removeMetadataIsCertain &&
                                                   definitelyActive &&
-                                                  !declaration.ExecutionMayBeSkipped;
+                                                  !declarationMayBeSkipped;
                         if (deletionIsDefinite)
                         {
                             state.Assignments.Clear();
@@ -248,7 +252,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             state.Assignments,
                             metadataName);
                     state.Assignments = definitelyActive &&
-                                        !declaration.ExecutionMayBeSkipped &&
+                                        !declarationMayBeSkipped &&
                                         !identityIsComputed
                         ? effectiveAssignments
                         : MergeLiteralProjectReferenceMetadataAssignments(
@@ -271,7 +275,14 @@ public sealed partial class DotNetPublishPipelineRunner
             attributeName,
             StringComparison.OrdinalIgnoreCase));
 
-    private static bool DoesProjectReferenceDeclarationMatch(
+    private enum ProjectReferenceDeclarationMatch
+    {
+        NoMatch,
+        Match,
+        Ambiguous
+    }
+
+    private static ProjectReferenceDeclarationMatch DoesProjectReferenceDeclarationMatch(
         string declaringProjectPath,
         string referencedPath,
         PreprocessedProjectReferenceDeclaration declaration,
@@ -305,22 +316,34 @@ public sealed partial class DotNetPublishPipelineRunner
 
             XAttribute? exclude = declaration.Element.Attributes().FirstOrDefault(attribute =>
                 attribute.Name.LocalName.Equals("Exclude", StringComparison.OrdinalIgnoreCase));
-            return !identity.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
-                   exclude is null ||
-                   !DoesProjectReferenceItemSpecMatch(
-                       referencedPath,
-                       declaration,
-                       evaluatedConditionProperties,
-                       identityBaseDirectories,
-                       comparison,
-                       exclude.Value);
+            if (!identity.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
+                exclude is null)
+            {
+                return ProjectReferenceDeclarationMatch.Match;
+            }
+
+            bool excludeMatches = DoesProjectReferenceItemSpecMatch(
+                referencedPath,
+                declaration,
+                evaluatedConditionProperties,
+                identityBaseDirectories,
+                comparison,
+                exclude.Value,
+                out bool excludeMatchIsCertain);
+            if (!excludeMatchIsCertain)
+                return ProjectReferenceDeclarationMatch.Ambiguous;
+            return excludeMatches
+                ? ProjectReferenceDeclarationMatch.NoMatch
+                : ProjectReferenceDeclarationMatch.Match;
         }
 
         return DoesEvaluatedMetadataCorrelateComputedDeclaration(
             declaration,
             evaluatedConditionProperties,
             metadataName,
-            evaluatedMetadataValue);
+            evaluatedMetadataValue)
+            ? ProjectReferenceDeclarationMatch.Match
+            : ProjectReferenceDeclarationMatch.NoMatch;
     }
 
     private static bool DoesEvaluatedMetadataCorrelateComputedDeclaration(
@@ -366,24 +389,33 @@ public sealed partial class DotNetPublishPipelineRunner
         return false;
     }
 
-    private static bool TryReadRemovedProjectReferenceMetadataNames(
+    private static bool TryReadProjectReferenceMetadataRemoval(
         PreprocessedProjectReferenceDeclaration declaration,
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
-        out string[] metadataNames)
+        string metadataName,
+        out bool removesMetadata)
     {
-        metadataNames = Array.Empty<string>();
+        removesMetadata = false;
         XAttribute? removeMetadata = declaration.Element.Attributes().FirstOrDefault(attribute =>
             attribute.Name.LocalName.Equals("RemoveMetadata", StringComparison.OrdinalIgnoreCase));
-        if (removeMetadata is null)
+        XAttribute? keepMetadata = declaration.Element.Attributes().FirstOrDefault(attribute =>
+            attribute.Name.LocalName.Equals("KeepMetadata", StringComparison.OrdinalIgnoreCase));
+        if (removeMetadata is null && keepMetadata is null)
             return true;
+        if (removeMetadata is not null && keepMetadata is not null)
+            return false;
 
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string candidate in ReadLiteralProjectReferencePropertyAssignmentCandidates(
-                     declaration.PropertyDefinitions,
-                     declaration.InitialProperties,
-                     evaluatedConditionProperties,
-                     declaration.DefiningProjectPath,
-                     removeMetadata.Value))
+        string[] candidates = ReadLiteralProjectReferencePropertyAssignmentCandidates(
+            declaration.PropertyDefinitions,
+            declaration.InitialProperties,
+            evaluatedConditionProperties,
+            declaration.DefiningProjectPath,
+            (removeMetadata ?? keepMetadata)!.Value);
+        if (candidates.Length == 0)
+            return false;
+
+        var removalOutcomes = new HashSet<bool>();
+        foreach (string candidate in candidates)
         {
             if (candidate.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
                 candidate.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
@@ -393,6 +425,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 return false;
             }
 
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string name in decoded!.Split(
                          new[] { ';' },
                          StringSplitOptions.RemoveEmptyEntries))
@@ -400,9 +433,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (name.Trim().Length > 0)
                     names.Add(name.Trim());
             }
+            removalOutcomes.Add(removeMetadata is not null
+                ? names.Contains(metadataName)
+                : !names.Contains(metadataName));
         }
 
-        metadataNames = names.ToArray();
+        if (removalOutcomes.Count != 1)
+            return false;
+        removesMetadata = removalOutcomes.Single();
         return true;
     }
 
@@ -413,6 +451,23 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string> identityBaseDirectories,
         StringComparison comparison,
         string itemSpec)
+        => DoesProjectReferenceItemSpecMatch(
+            referencedPath,
+            declaration,
+            evaluatedConditionProperties,
+            identityBaseDirectories,
+            comparison,
+            itemSpec,
+            out _);
+
+    private static bool DoesProjectReferenceItemSpecMatch(
+        string referencedPath,
+        PreprocessedProjectReferenceDeclaration declaration,
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
+        IEnumerable<string> identityBaseDirectories,
+        StringComparison comparison,
+        string itemSpec,
+        out bool matchIsCertain)
     {
         string[] candidates = IsComputedProjectReferenceItemSpec(itemSpec)
              ? ReadLiteralProjectReferencePropertyAssignmentCandidates(
@@ -422,8 +477,19 @@ public sealed partial class DotNetPublishPipelineRunner
                 declaration.DefiningProjectPath,
                 itemSpec)
             : [itemSpec];
+        if (candidates.Length == 0)
+        {
+            matchIsCertain = false;
+            return false;
+        }
+
+        bool anyMatchingCandidate = false;
+        bool anyNonMatchingCandidate = false;
+        bool anyUnknownCandidate = false;
         foreach (string candidate in candidates)
         {
+            bool candidateMatches = false;
+            bool candidateIsCertain = true;
             foreach (string individualItemSpec in candidate.Split(
                          new[] { ';' },
                          StringSplitOptions.RemoveEmptyEntries))
@@ -432,6 +498,14 @@ public sealed partial class DotNetPublishPipelineRunner
                              individualItemSpec,
                              declaration.EvaluatedItemLists))
                 {
+                    if (expandedItemSpec.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+                        expandedItemSpec.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+                        expandedItemSpec.IndexOf("%(", StringComparison.Ordinal) >= 0)
+                    {
+                        candidateIsCertain = false;
+                        continue;
+                    }
+
                     foreach (string baseDirectory in identityBaseDirectories.Distinct(
                                  IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
                     {
@@ -441,7 +515,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                 out string? declaredPath) &&
                             string.Equals(declaredPath, referencedPath, comparison))
                         {
-                            return true;
+                            candidateMatches = true;
+                            break;
                         }
 
                         if (TryMatchProjectReferenceGlob(
@@ -450,14 +525,28 @@ public sealed partial class DotNetPublishPipelineRunner
                                 referencedPath,
                                 comparison))
                         {
-                            return true;
+                            candidateMatches = true;
+                            break;
                         }
                     }
+                    if (candidateMatches)
+                        break;
                 }
+                if (candidateMatches)
+                    break;
             }
+
+            if (candidateMatches)
+                anyMatchingCandidate = true;
+            else if (candidateIsCertain)
+                anyNonMatchingCandidate = true;
+            else
+                anyUnknownCandidate = true;
         }
 
-        return false;
+        matchIsCertain = !anyUnknownCandidate &&
+                         !(anyMatchingCandidate && anyNonMatchingCandidate);
+        return anyMatchingCandidate;
     }
 
     private static IEnumerable<string> ExpandEvaluatedProjectItemList(
