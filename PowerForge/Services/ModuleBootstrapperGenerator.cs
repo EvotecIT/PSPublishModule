@@ -516,14 +516,18 @@ internal static partial class ModuleBootstrapperGenerator
         var runtimeCandidates = ModuleBinaryPayloadLayout.ResolveAssemblyLoadContextTargetDirectories(libRoot);
         if (exportAssemblyFileNames is { Count: > 0 })
         {
+            var allTargetDirectories = new List<string>();
             foreach (var assemblyFileName in exportAssemblyFileNames)
             {
                 var qualifiedAssemblyPath = ResolveQualifiedAssemblyPath(libRoot, assemblyFileName);
                 if (!string.IsNullOrWhiteSpace(qualifiedAssemblyPath))
-                    return new[] { Path.GetDirectoryName(qualifiedAssemblyPath!)! };
+                {
+                    allTargetDirectories.Add(Path.GetDirectoryName(qualifiedAssemblyPath!)!);
+                    continue;
+                }
 
                 var configuredFileName = Path.GetFileName(assemblyFileName);
-                var targetDirectories = runtimeCandidates.Where(directory =>
+                var configuredTargetDirectories = runtimeCandidates.Where(directory =>
                     Directory.Exists(directory) &&
                     ModuleBinaryFileLocator.Enumerate(directory, SearchOption.TopDirectoryOnly)
                         .Any(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
@@ -533,7 +537,7 @@ internal static partial class ModuleBootstrapperGenerator
                     ModuleBinaryFileLocator.Enumerate(libRoot, SearchOption.TopDirectoryOnly)
                         .Any(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
                 {
-                    targetDirectories.Add(libRoot);
+                    configuredTargetDirectories.Add(libRoot);
                 }
 
                 var defaultDirectory = Path.Combine(libRoot, "Default");
@@ -541,7 +545,7 @@ internal static partial class ModuleBootstrapperGenerator
                     ModuleBinaryFileLocator.Enumerate(defaultDirectory, SearchOption.TopDirectoryOnly)
                         .Any(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
                 {
-                    targetDirectories.Add(defaultDirectory);
+                    configuredTargetDirectories.Add(defaultDirectory);
                 }
 
                 // An unqualified runtime reference can fall through preferred folders to a unique
@@ -551,14 +555,13 @@ internal static partial class ModuleBootstrapperGenerator
                 foreach (var candidate in ModuleBinaryFileLocator.Enumerate(libRoot, SearchOption.AllDirectories)
                              .Where(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
                 {
-                    targetDirectories.Add(Path.GetDirectoryName(candidate)!);
+                    configuredTargetDirectories.Add(Path.GetDirectoryName(candidate)!);
                 }
 
-                if (targetDirectories.Count > 0)
-                    return targetDirectories.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                allTargetDirectories.AddRange(configuredTargetDirectories);
             }
 
-            return Array.Empty<string>();
+            return allTargetDirectories.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         }
 
         if (runtimeCandidates.Length > 0)

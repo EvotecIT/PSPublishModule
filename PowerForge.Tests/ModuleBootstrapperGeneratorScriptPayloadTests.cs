@@ -247,6 +247,94 @@ public partial class ModuleBootstrapperGeneratorTests
 
     [Fact]
     [Trait("Category", "Integration")]
+    public void InlineMergedScriptPayload_UsesPlatformElevationForRunAsAdministratorRequirement()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-source-elevation-" + Guid.NewGuid().ToString("N"));
+        var moduleRoot = Path.Combine(root, "Module");
+        var libRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "Core")).FullName;
+        var publicRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Public")).FullName;
+
+        try
+        {
+            var fixtureAssembly = BuildFixtureProject(
+                Path.Combine(root, "Fixture"),
+                "SourceElevationFixture",
+                "DemoModule",
+                "namespace SourceElevationFixture; public static class Marker { public static string Value => \"binary\"; }");
+            File.Copy(fixtureAssembly, Path.Combine(libRoot, "DemoModule.dll"), overwrite: true);
+            File.WriteAllText(
+                Path.Combine(publicRoot, "A-Elevated.ps1"),
+                "#requires -RunAsAdministrator" + Environment.NewLine +
+                "function Get-ElevatedSource { 'elevated' }");
+            File.WriteAllText(
+                Path.Combine(publicRoot, "B-Compatible.ps1"),
+                "function Get-CompatibleSource { 'compatible' }");
+
+            var exports = new ExportSet(
+                new[] { "Get-ElevatedSource", "Get-CompatibleSource" },
+                Array.Empty<string>(),
+                Array.Empty<string>());
+            var sources = ModuleMergeComposer.BuildSources(
+                moduleRoot,
+                "DemoModule",
+                information: null,
+                exports,
+                fixRelativePaths: false,
+                exportAssemblies: new[] { "DemoModule.dll" });
+
+            ModuleBootstrapperGenerator.Generate(
+                moduleRoot,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: false);
+            var bootstrapperPath = Path.Combine(moduleRoot, "DemoModule.psm1");
+            ModuleBootstrapperGenerator.InlineMergedScriptPayload(bootstrapperPath, sources.MergedScriptContent);
+            var bootstrapper = File.ReadAllText(bootstrapperPath);
+            Assert.Contains("IsPrivilegedProcess", bootstrapper, StringComparison.Ordinal);
+            Assert.DoesNotContain("requires an elevated Windows PowerShell session", bootstrapper, StringComparison.Ordinal);
+
+            var processStartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "pwsh",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            processStartInfo.ArgumentList.Add("-NoLogo");
+            processStartInfo.ArgumentList.Add("-NoProfile");
+            processStartInfo.ArgumentList.Add("-NonInteractive");
+            processStartInfo.ArgumentList.Add("-Command");
+            processStartInfo.ArgumentList.Add(
+                "$ErrorActionPreference = 'Continue'; " +
+                "Import-Module -Name '" + bootstrapperPath.Replace("'", "''", StringComparison.Ordinal) + "' -Force; " +
+                "if ((Get-CompatibleSource) -ne 'compatible') { throw 'The later source was not loaded.' }; " +
+                "$elevatedCommand = Get-Command Get-ElevatedSource -ErrorAction SilentlyContinue; " +
+                "if ([Environment]::IsPrivilegedProcess -and $null -eq $elevatedCommand) { throw 'The elevated source was not loaded.' }; " +
+                "if (-not [Environment]::IsPrivilegedProcess -and $null -ne $elevatedCommand) { throw 'The elevated source loaded in an unprivileged process.' }; " +
+                "'platform-elevation-scoped'");
+
+            using var process = System.Diagnostics.Process.Start(processStartInfo)!;
+            var standardOutput = process.StandardOutput.ReadToEnd();
+            var standardError = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.True(
+                process.ExitCode == 0,
+                $"Generated module elevation proof failed.{Environment.NewLine}{standardOutput}{Environment.NewLine}{standardError}");
+            Assert.Contains("platform-elevation-scoped", standardOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public void InlineMergedScriptPayload_DoesNotHoistUsingDirectiveFromEditionGatedSource()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-source-using-gate-" + Guid.NewGuid().ToString("N"));

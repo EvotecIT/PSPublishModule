@@ -504,7 +504,7 @@ public partial class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
-    public void ResolveAssemblyLoadContextTargetDirectories_CoversEveryRuntimeFallbackForFirstConfiguredAssembly()
+    public void ResolveAssemblyLoadContextTargetDirectories_CoversEveryRuntimeFallbackForConfiguredAssemblies()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-configured-layout-" + Guid.NewGuid().ToString("N"));
         var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib")).FullName;
@@ -520,7 +520,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 libRoot,
                 new[] { "DemoModule.dll", "ExtraModule.dll" });
 
-            Assert.Equal(new[] { coreRoot, defaultRoot }, directories);
+            Assert.Equal(new[] { coreRoot, defaultRoot, libRoot }, directories);
         }
         finally
         {
@@ -652,7 +652,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 useAssemblyLoadContext: true,
                 targetFrameworks: new[] { "net8.0" });
 
-            Assert.False(File.Exists(Path.Combine(root, "Lib", "DemoModule.ModuleLoadContext.dll")));
+            Assert.True(File.Exists(Path.Combine(root, "Lib", "DemoModule.ModuleLoadContext.dll")));
             var loaderAssembly = System.Reflection.Assembly.LoadFile(Path.Combine(libCore, "DemoModule.ModuleLoadContext.dll"));
             var contextType = loaderAssembly.GetType("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", throwOnError: true)!;
             var loadModules = contextType.GetMethod("LoadModules", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;

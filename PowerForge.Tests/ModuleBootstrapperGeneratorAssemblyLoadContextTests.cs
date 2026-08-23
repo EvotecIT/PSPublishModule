@@ -47,6 +47,51 @@ public partial class ModuleBootstrapperGeneratorTests
 
     [Fact]
     [Trait("Category", "Integration")]
+    public void AssemblyLoadContextLoader_IsCopiedBesideLaterFallbackExport()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-later-fallback-" + Guid.NewGuid().ToString("N"));
+        var futureCoreRoot = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core-net99.0")).FullName;
+        var pluginRoot = Directory.CreateDirectory(Path.Combine(root, "Lib", "Plugins")).FullName;
+
+        try
+        {
+            File.WriteAllText(Path.Combine(futureCoreRoot, "Broken.dll"), "not a compatible managed assembly");
+            var validAssembly = BuildFixtureProject(
+                Path.Combine(root, "Fixture"),
+                "AlcLaterFallbackFixture",
+                "Auxiliary",
+                "namespace Auxiliary; public static class Initialize { public static string Read() => \"later-fallback\"; }");
+            File.Copy(validAssembly, Path.Combine(pluginRoot, "Auxiliary.dll"), overwrite: true);
+
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "Broken",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "Broken.dll", "Auxiliary.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0" });
+
+            Assert.True(File.Exists(Path.Combine(futureCoreRoot, "Broken.ModuleLoadContext.dll")));
+            Assert.True(File.Exists(Path.Combine(pluginRoot, "Broken.ModuleLoadContext.dll")));
+            var result = RunGeneratedModulePowerShell(
+                root,
+                "$ErrorActionPreference = 'Continue'; Import-Module -Name '" +
+                Path.Combine(root, "Broken.psm1").Replace("'", "''", StringComparison.Ordinal) +
+                "' -Force; [Auxiliary.Initialize]::Read()");
+
+            Assert.True(result.ExitCode == 0, result.StdOut + Environment.NewLine + result.StdErr);
+            Assert.Contains("later-fallback", result.StdOut, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public void AssemblyLoadContextLoader_DeduplicatesReferencesToSameResolvedAssembly()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-deduplicate-" + Guid.NewGuid().ToString("N"));
