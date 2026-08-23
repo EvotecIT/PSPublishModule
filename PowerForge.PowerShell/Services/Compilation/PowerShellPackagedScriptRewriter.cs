@@ -14,6 +14,15 @@ internal static class PowerShellPackagedScriptRewriter
         if (errors.Length > 0)
             throw new InvalidOperationException("Packaged script could not be parsed while preserving script semantics.");
 
+        var fileResolvedUsing = ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false)
+            .Cast<UsingStatementAst>()
+            .FirstOrDefault(static statement => statement.UsingStatementKind != UsingStatementKind.Namespace);
+        if (fileResolvedUsing is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged executable generation does not support '{fileResolvedUsing.Extent.Text}' because using module/assembly directives are resolved before the embedded script receives file-backed path metadata.");
+        }
+
         var exits = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
             .Cast<ExitStatementAst>()
             .ToArray();

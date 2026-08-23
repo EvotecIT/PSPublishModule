@@ -247,6 +247,47 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_StrictModuleAcceptsNestedBinaryManifestWithoutScriptFallback()
+    {
+        using var nestedFixture = ArtifactFixture.Create("function Get-NestedValue { return 9 }", ".psm1");
+        File.WriteAllText(
+            Path.ChangeExtension(nestedFixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-NestedValue'); CmdletsToExport = @() }");
+        var nestedResult = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            nestedFixture.ScriptPath,
+            nestedFixture.OutputPath,
+            "NestedBinary",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+        Assert.True(nestedResult.Succeeded, nestedResult.Error + Environment.NewLine + nestedResult.BuildOutput);
+
+        using var fixture = ArtifactFixture.Create("function Get-TypedValue { return 1 }", ".psm1");
+        var nestedDirectory = Path.Combine(fixture.RootPath, "Nested");
+        Directory.CreateDirectory(nestedDirectory);
+        var nestedArtifactDirectory = Path.GetDirectoryName(nestedResult.ArtifactPath!)!;
+        File.Copy(nestedResult.ArtifactPath!, Path.Combine(nestedDirectory, "NestedBinary.psd1"));
+        File.Copy(Path.Combine(nestedArtifactDirectory, "NestedBinary.dll"), Path.Combine(nestedDirectory, "NestedBinary.dll"));
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; NestedModules = @('Nested/NestedBinary.psd1'); FunctionsToExport = @('Get-TypedValue'); CmdletsToExport = '*' }");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.StrictNestedBinary",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.False(result.Manifest!.UsesPowerShellRuntimeFallback);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-TypedValue; Get-NestedValue");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal(new[] { "1", "9" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
     public void Build_HybridModulePreservesWildcardExportsFromNestedBinaryModule()
     {
         using var nestedFixture = ArtifactFixture.Create("function Get-NestedValue { return 9 }", ".psm1");

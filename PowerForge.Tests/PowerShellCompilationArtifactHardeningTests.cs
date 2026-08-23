@@ -148,6 +148,73 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_PackagedExecutableRejectsFileResolvedUsingDirective()
+    {
+        using var fixture = ArtifactFixture.Create("using module ./Helper.psm1; Get-HelperValue");
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Helper.psm1"), "function Get-HelperValue { return 9 }; Export-ModuleMember -Function Get-HelperValue");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.PackagedUsingModule",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("using module/assembly directives", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_PackagedExecutableFormatsStructuredPipelineOutputLikePowerShell()
+    {
+        using var fixture = ArtifactFixture.Create("[pscustomobject]@{ Name = 'Ada'; Count = 2 }");
+        var original = Run("pwsh", "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath);
+        Assert.Equal(0, original.ExitCode);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.StructuredOutput",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var packaged = Run(result.ArtifactPath!);
+        Assert.Equal(0, packaged.ExitCode);
+        static string[] Lines(string value) => value
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static line => line.TrimEnd())
+            .ToArray();
+        Assert.Equal(Lines(original.StandardOutput), Lines(packaged.StandardOutput));
+        Assert.DoesNotContain("@{Name=Ada", packaged.StandardOutput, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_HybridModuleAcceptsAlreadyCorrectGeneratedRootModule()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-TypedValue { return 1 }; function Get-FallbackValue { Write-Output 2 }; Export-ModuleMember -Function @('Get-TypedValue', 'Get-FallbackValue')",
+            ".psm1");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-TypedValue', 'Get-FallbackValue'); CmdletsToExport = @() }");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "input",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-TypedValue; Get-FallbackValue");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal(new[] { "1", "2" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
     public void Build_BinaryModuleRejectsPowerShellCommonParameterCollision()
     {
         using var fixture = ArtifactFixture.Create(

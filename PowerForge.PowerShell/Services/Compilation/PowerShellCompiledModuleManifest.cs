@@ -35,15 +35,7 @@ internal static class PowerShellCompiledModuleManifest
         var sourceManifest = Path.ChangeExtension(sourcePath, ".psd1");
         if (!File.Exists(sourceManifest))
             return Array.Empty<string>();
-
-        var hooks = new List<string>();
-        hooks.AddRange(ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "ScriptsToProcess") ?? Array.Empty<string>());
-        hooks.AddRange(ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules")
-            .Where(static reference => !Path.GetExtension(reference).Equals(".dll", StringComparison.OrdinalIgnoreCase)));
-        return hooks
-            .Where(static reference => !string.IsNullOrWhiteSpace(reference))
-            .Distinct(GetPathComparer())
-            .ToArray();
+        return CollectRuntimeScriptFiles(sourceManifest);
     }
 
     internal static string[] GetContainedRuntimeScriptFiles(string sourcePath)
@@ -52,20 +44,7 @@ internal static class PowerShellCompiledModuleManifest
         if (!File.Exists(sourceManifest))
             return Array.Empty<string>();
 
-        var scripts = new List<string>();
-        scripts.AddRange(ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "ScriptsToProcess") ?? Array.Empty<string>());
-        scripts.AddRange(ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules")
-            .Where(static reference =>
-            {
-                var extension = Path.GetExtension(reference);
-                return extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
-                       extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase) ||
-                       extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase);
-            }));
-        return scripts
-            .Where(static reference => !string.IsNullOrWhiteSpace(reference))
-            .Distinct(GetPathComparer())
-            .ToArray();
+        return CollectRuntimeScriptFiles(sourceManifest);
     }
 
     internal static string[]? Create(
@@ -113,7 +92,11 @@ internal static class PowerShellCompiledModuleManifest
                 .ToArray();
 
         var mutator = new AstModuleManifestMutator();
-        if (!mutator.TrySetTopLevelString(targetManifest, "RootModule", rootModuleFileName))
+        if (!mutator.TrySetTopLevelString(targetManifest, "RootModule", rootModuleFileName) &&
+            !string.Equals(
+                ModuleManifestValueReader.ReadTopLevelString(targetManifest, "RootModule"),
+                rootModuleFileName,
+                GetPathComparison()))
             throw new InvalidOperationException($"Module manifest '{sourceManifest}' does not contain a literal RootModule entry that can be updated.");
         ApplyTargetCompatibility(sourceManifest, targetManifest, targetFramework, mutator);
         mutator.TrySetManifestExports(
@@ -263,6 +246,75 @@ internal static class PowerShellCompiledModuleManifest
         return references.Values
             .OrderBy(static reference => reference.RelativePath, GetPathComparer())
             .ToArray();
+    }
+
+    private static string[] CollectRuntimeScriptFiles(string manifestPath)
+    {
+        var rootManifest = Path.GetFullPath(manifestPath);
+        var rootDirectory = Path.GetDirectoryName(rootManifest) ?? Directory.GetCurrentDirectory();
+        var scripts = new HashSet<string>(GetPathComparer());
+        var visited = new HashSet<string>(GetPathComparer());
+        CollectRuntimeScriptFiles(rootManifest, rootDirectory, includeRootModule: false, scripts, visited);
+        return scripts.OrderBy(static path => path, GetPathComparer()).ToArray();
+    }
+
+    private static void CollectRuntimeScriptFiles(
+        string manifestPath,
+        string rootDirectory,
+        bool includeRootModule,
+        ISet<string> scripts,
+        ISet<string> visited)
+    {
+        manifestPath = Path.GetFullPath(manifestPath);
+        if (!visited.Add(manifestPath))
+            return;
+
+        var manifestDirectory = Path.GetDirectoryName(manifestPath) ?? rootDirectory;
+        if (includeRootModule)
+        {
+            var rootModule = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "RootModule");
+            if (string.IsNullOrWhiteSpace(rootModule))
+            {
+                scripts.Add(NormalizeManifestRelativePath(FrameworkCompatibility.GetRelativePath(rootDirectory, manifestPath)));
+            }
+            else
+            {
+                AddRuntimeModuleReference(rootModule!, manifestDirectory, rootDirectory, scripts, visited);
+            }
+        }
+
+        foreach (var script in ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifestPath, "ScriptsToProcess") ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(script))
+                continue;
+            var sourceFile = ResolveContainedPath(rootDirectory, manifestDirectory, script);
+            scripts.Add(NormalizeManifestRelativePath(FrameworkCompatibility.GetRelativePath(rootDirectory, sourceFile)));
+        }
+        foreach (var nestedModule in ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifestPath, "NestedModules"))
+            AddRuntimeModuleReference(nestedModule, manifestDirectory, rootDirectory, scripts, visited);
+    }
+
+    private static void AddRuntimeModuleReference(
+        string reference,
+        string manifestDirectory,
+        string rootDirectory,
+        ISet<string> scripts,
+        ISet<string> visited)
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+            return;
+        var extension = Path.GetExtension(reference);
+        if (extension.Equals(".dll", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var sourceFile = ResolveContainedPath(rootDirectory, manifestDirectory, reference);
+        var relativePath = NormalizeManifestRelativePath(FrameworkCompatibility.GetRelativePath(rootDirectory, sourceFile));
+        if (extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase) && File.Exists(sourceFile))
+        {
+            CollectRuntimeScriptFiles(sourceFile, rootDirectory, includeRootModule: true, scripts, visited);
+            return;
+        }
+        scripts.Add(relativePath);
     }
 
     private static IEnumerable<ManifestFileReference> ReadReferencedFiles(string manifestPath, bool includeRootModule = false)
