@@ -16,8 +16,8 @@ internal static class PowerShellCompiledModuleManifest
         if (File.Exists(sourceManifest))
         {
             protectedFiles.Add(Path.GetFullPath(sourceManifest));
-            protectedFiles.AddRange(ReadReferencedFiles(sourceManifest)
-                .Select(reference => ResolveContainedPath(Path.GetDirectoryName(sourceManifest)!, reference.Path))
+            protectedFiles.AddRange(ReadReferencedFileClosure(sourceManifest)
+                .Select(static reference => reference.SourcePath)
                 .Where(File.Exists));
         }
         if (includeHybridDependencies)
@@ -125,27 +125,25 @@ internal static class PowerShellCompiledModuleManifest
             mutator.TrySetTopLevelStringArray(targetManifest, "VariablesToExport", manifestVariables);
 
         var copied = new List<string> { targetManifest };
-        foreach (var reference in ReadReferencedFiles(sourceManifest)
-                     .GroupBy(static reference => NormalizeManifestRelativePath(reference.Path), GetPathComparer())
-                     .Select(static group => new ManifestFileReference(group.Key, group.Any(static reference => reference.Required))))
+        foreach (var reference in ReadReferencedFileClosure(sourceManifest))
         {
-            var sourceFile = ResolveContainedPath(Path.GetDirectoryName(sourceManifest)!, reference.Path);
+            var sourceFile = reference.SourcePath;
             if (!File.Exists(sourceFile))
             {
                 if (reference.Required)
-                    throw new FileNotFoundException($"Required module manifest file reference '{reference.Path}' was not found.", sourceFile);
+                    throw new FileNotFoundException($"Required module manifest file reference '{reference.RelativePath}' was not found.", sourceFile);
                 continue;
             }
             PowerShellCompilationPathSafety.EnsureNoLinks(
                 Path.GetDirectoryName(sourceManifest)!,
                 sourceFile,
-                $"Module manifest file reference '{reference.Path}' traverses a symbolic link or junction, which is not allowed for artifact staging.");
+                $"Module manifest file reference '{reference.RelativePath}' traverses a symbolic link or junction, which is not allowed for artifact staging.");
             if (sourceFile.Equals(sourcePath, GetPathComparison()) ||
                 sourceFile.Equals(sourceManifest, GetPathComparison()))
                 continue;
-            var targetFile = ResolveContainedPath(moduleDirectory, reference.Path);
+            var targetFile = ResolveContainedPath(moduleDirectory, reference.RelativePath);
             if (File.Exists(targetFile))
-                throw new InvalidOperationException($"Module manifest file reference '{reference.Path}' collides with a generated compilation artifact.");
+                throw new InvalidOperationException($"Module manifest file reference '{reference.RelativePath}' collides with a generated compilation artifact.");
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile) ?? moduleDirectory);
             File.Copy(sourceFile, targetFile, overwrite: false);
             copied.Add(targetFile);
@@ -227,8 +225,54 @@ internal static class PowerShellCompiledModuleManifest
             .ToArray();
     }
 
-    private static IEnumerable<ManifestFileReference> ReadReferencedFiles(string manifestPath)
+    private static IReadOnlyList<ResolvedManifestFileReference> ReadReferencedFileClosure(string manifestPath)
     {
+        var rootManifest = Path.GetFullPath(manifestPath);
+        var rootDirectory = Path.GetDirectoryName(rootManifest) ?? Directory.GetCurrentDirectory();
+        var pending = new Stack<(string ManifestPath, bool IsRoot)>();
+        var visitedManifests = new HashSet<string>(GetPathComparer());
+        var references = new Dictionary<string, ResolvedManifestFileReference>(GetPathComparer());
+        pending.Push((rootManifest, true));
+
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            if (!visitedManifests.Add(current.ManifestPath))
+                continue;
+
+            var currentDirectory = Path.GetDirectoryName(current.ManifestPath) ?? rootDirectory;
+            foreach (var reference in ReadReferencedFiles(current.ManifestPath, includeRootModule: !current.IsRoot))
+            {
+                var sourceFile = ResolveContainedPath(rootDirectory, currentDirectory, reference.Path);
+                var relativePath = NormalizeManifestRelativePath(FrameworkCompatibility.GetRelativePath(rootDirectory, sourceFile));
+                if (references.TryGetValue(sourceFile, out var existing))
+                {
+                    if (reference.Required && !existing.Required)
+                        references[sourceFile] = new ResolvedManifestFileReference(sourceFile, relativePath, required: true);
+                }
+                else
+                {
+                    references.Add(sourceFile, new ResolvedManifestFileReference(sourceFile, relativePath, reference.Required));
+                }
+
+                if (File.Exists(sourceFile) && Path.GetExtension(sourceFile).Equals(".psd1", StringComparison.OrdinalIgnoreCase))
+                    pending.Push((sourceFile, false));
+            }
+        }
+
+        return references.Values
+            .OrderBy(static reference => reference.RelativePath, GetPathComparer())
+            .ToArray();
+    }
+
+    private static IEnumerable<ManifestFileReference> ReadReferencedFiles(string manifestPath, bool includeRootModule = false)
+    {
+        if (includeRootModule)
+        {
+            var rootModule = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "RootModule");
+            if (!string.IsNullOrWhiteSpace(rootModule))
+                yield return new ManifestFileReference(rootModule!, required: true);
+        }
         foreach (var key in new[] { "FormatsToProcess", "TypesToProcess", "ScriptsToProcess" })
         foreach (var value in ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, key))
             yield return new ManifestFileReference(value, required: true);
@@ -264,6 +308,18 @@ internal static class PowerShellCompiledModuleManifest
         return fullPath;
     }
 
+    private static string ResolveContainedPath(string root, string baseDirectory, string relativePath)
+    {
+        var normalizedPath = NormalizeManifestRelativePath(relativePath);
+        if (Path.IsPathRooted(normalizedPath) || LooksLikeWindowsRootedPath(relativePath))
+            throw new InvalidOperationException($"Module manifest file reference '{relativePath}' must remain relative to the module root.");
+        var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var fullPath = Path.GetFullPath(Path.Combine(baseDirectory, normalizedPath));
+        if (!fullPath.StartsWith(fullRoot, GetPathComparison()))
+            throw new InvalidOperationException($"Module manifest file reference '{relativePath}' escapes the module root.");
+        return fullPath;
+    }
+
     internal static string NormalizeManifestRelativePath(string path)
         => path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
 
@@ -291,6 +347,20 @@ internal static class PowerShellCompiledModuleManifest
         }
 
         internal string Path { get; }
+        internal bool Required { get; }
+    }
+
+    private sealed class ResolvedManifestFileReference
+    {
+        internal ResolvedManifestFileReference(string sourcePath, string relativePath, bool required)
+        {
+            SourcePath = sourcePath;
+            RelativePath = relativePath;
+            Required = required;
+        }
+
+        internal string SourcePath { get; }
+        internal string RelativePath { get; }
         internal bool Required { get; }
     }
 }

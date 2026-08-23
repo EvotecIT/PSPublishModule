@@ -10,6 +10,11 @@ internal static class PowerShellCompilationArtifactSigner
         ".exe", ".dll", ".ps1", ".psm1", ".psd1"
     };
 
+    private static readonly HashSet<string> BuildOwnedRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Primary", "PrimaryModule", "TypedAssembly", "PrimaryModuleManifest"
+    };
+
     internal static PowerShellCompilationSigningResult? Sign(
         PowerShellCompilationBuildSpec spec,
         IEnumerable<PowerShellCompilationArtifactFile> files)
@@ -29,11 +34,7 @@ internal static class PowerShellCompilationArtifactSigner
             throw new InvalidOperationException($"Could not select {requested} from {spec.CertificateStoreLocation}\\My.");
         }
 
-        var signableFiles = files
-            .Select(static file => file.Path)
-            .Where(path => SignableExtensions.Contains(Path.GetExtension(path)))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var signableFiles = GetBuildOwnedSignableFiles(files);
         if (signableFiles.Length == 0)
             throw new InvalidOperationException("Signing was requested, but the generated artifact contains no Authenticode-signable files.");
 
@@ -74,6 +75,14 @@ internal static class PowerShellCompilationArtifactSigner
             NormalizeThumbprint(lookup.Certificate.Thumbprint),
             signableFiles.Length);
     }
+
+    internal static string[] GetBuildOwnedSignableFiles(IEnumerable<PowerShellCompilationArtifactFile> files)
+        => files
+            .Where(static file => BuildOwnedRoles.Contains(file.Role))
+            .Select(static file => file.Path)
+            .Where(path => SignableExtensions.Contains(Path.GetExtension(path)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     private static string NormalizeThumbprint(string? thumbprint)
         => (thumbprint ?? string.Empty).Replace(" ", string.Empty).ToUpperInvariant();

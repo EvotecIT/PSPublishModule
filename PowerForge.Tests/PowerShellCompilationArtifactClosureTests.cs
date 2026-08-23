@@ -208,6 +208,45 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_HybridModuleStagesNestedManifestDependencyClosure()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-TypedValue { return 1 }; Export-ModuleMember -Function Get-TypedValue",
+            ".psm1");
+        var nestedDirectory = Path.Combine(fixture.RootPath, "Nested");
+        Directory.CreateDirectory(nestedDirectory);
+        File.WriteAllText(
+            Path.Combine(nestedDirectory, "Nested.psd1"),
+            "@{ RootModule = 'Nested.psm1'; ModuleVersion = '1.0.0'; FormatsToProcess = @('Nested.format.ps1xml'); FunctionsToExport = @('Get-NestedValue') }");
+        File.WriteAllText(
+            Path.Combine(nestedDirectory, "Nested.psm1"),
+            "function Get-NestedValue { return 9 }; Export-ModuleMember -Function Get-NestedValue");
+        File.WriteAllText(
+            Path.Combine(nestedDirectory, "Nested.format.ps1xml"),
+            "<Configuration><ViewDefinitions /></Configuration>");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; NestedModules = @('Nested/Nested.psd1'); FunctionsToExport = '*'; CmdletsToExport = @() }");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.NestedManifestClosure",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Contains(result.Manifest!.Files, file => file.Role == "ModuleDependency" && file.Path.EndsWith(Path.Combine("Nested", "Nested.psd1"), StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Manifest.Files, file => file.Role == "ModuleDependency" && file.Path.EndsWith(Path.Combine("Nested", "Nested.psm1"), StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Manifest.Files, file => file.Role == "ModuleDependency" && file.Path.EndsWith(Path.Combine("Nested", "Nested.format.ps1xml"), StringComparison.OrdinalIgnoreCase));
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-TypedValue; Get-NestedValue");
+        Assert.True(run.ExitCode == 0, $"Exit code: {run.ExitCode}{Environment.NewLine}{run.StandardError}{Environment.NewLine}{run.StandardOutput}");
+        Assert.Equal(new[] { "1", "9" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
     public void Build_HybridModulePreservesWildcardExportsFromNestedBinaryModule()
     {
         using var nestedFixture = ArtifactFixture.Create("function Get-NestedValue { return 9 }", ".psm1");

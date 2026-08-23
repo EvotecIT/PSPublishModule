@@ -89,6 +89,8 @@ public sealed class PowerShellCompilationArtifactBuilder
                 {
                     var exportContract = PowerShellModuleExportContract.TryRead(spec.SourcePath);
                     exportedFunctions = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName));
+                    if (spec.Mode == PowerShellCompilationMode.Hybrid)
+                        typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework);
                     typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, spec.TargetFramework);
                 }
                 if (typed.Methods.Length == 0)
@@ -426,8 +428,9 @@ public sealed class PowerShellCompilationArtifactBuilder
             spec.TargetFramework);
         if (manifestFiles is not null)
         {
+            var primaryManifest = manifestFiles.First(path => path.EndsWith(artifactName + ".psd1", StringComparison.OrdinalIgnoreCase));
             foreach (var manifestFile in manifestFiles)
-                files.Add(CreateArtifactFile(manifestFile, manifestFile.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
+                files.Add(CreateArtifactFile(manifestFile, manifestFile.Equals(primaryManifest, StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
         }
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
         var runtimeHooks = PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(spec.SourcePath)
@@ -459,9 +462,10 @@ public sealed class PowerShellCompilationArtifactBuilder
             Path.GetFileName(assemblyPath),
             typed,
             spec.TargetFramework) ?? throw new InvalidOperationException("The sibling module manifest was not available during artifact publication.");
+        var primaryManifest = manifestFiles.First(path => path.EndsWith(artifactName + ".psd1", StringComparison.OrdinalIgnoreCase));
         foreach (var manifestFile in manifestFiles)
-            files.Add(CreateArtifactFile(manifestFile, manifestFile.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
-        var manifestPath = manifestFiles.First(path => path.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase));
+            files.Add(CreateArtifactFile(manifestFile, manifestFile.Equals(primaryManifest, StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
+        var manifestPath = primaryManifest;
         return new CopiedArtifact(manifestPath, files.ToArray());
     }
 

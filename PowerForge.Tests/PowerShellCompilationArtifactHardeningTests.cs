@@ -326,6 +326,55 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_HybridModuleRoutesDuplicateConditionalFunctionNameToFallback()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "if ($true) { function Get-Value { return 1 } }; function Get-Value { return 2 }; function Get-TypedValue { return 3 }; Export-ModuleMember -Function @('Get-Value', 'Get-TypedValue')",
+            ".psm1");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.DuplicateFunctionFallback",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Contains(result.Manifest.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("multiple retained definitions", StringComparison.OrdinalIgnoreCase));
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; (Get-Command Get-Value).CommandType; Get-Value; (Get-Command Get-TypedValue).CommandType; Get-TypedValue");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal(new[] { "Function", "2", "Cmdlet", "3" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Signing_SelectsOnlyBuildOwnedArtifacts()
+    {
+        var files = new[]
+        {
+            new PowerShellCompilationArtifactFile { Path = "tool.exe", Role = "Primary" },
+            new PowerShellCompilationArtifactFile { Path = "module.psm1", Role = "PrimaryModule" },
+            new PowerShellCompilationArtifactFile { Path = "typed.dll", Role = "TypedAssembly" },
+            new PowerShellCompilationArtifactFile { Path = "module.psd1", Role = "PrimaryModuleManifest" },
+            new PowerShellCompilationArtifactFile { Path = "Microsoft.PowerShell.SDK.dll", Role = "RuntimeDependency" },
+            new PowerShellCompilationArtifactFile { Path = "Vendor.Cmdlets.dll", Role = "ModuleDependency" },
+            new PowerShellCompilationArtifactFile { Path = "Nested.psm1", Role = "ModuleDependency" }
+        };
+
+        var selected = PowerShellCompilationArtifactSigner.GetBuildOwnedSignableFiles(files);
+
+        Assert.Equal(new[] { "tool.exe", "module.psm1", "typed.dll", "module.psd1" }, selected);
+    }
+
+    [Fact]
     public void Build_RejectsExecutableOnlyPublicationOptionsForLibrary()
     {
         using var fixture = ArtifactFixture.Create("function Get-Value { return 1 }");
