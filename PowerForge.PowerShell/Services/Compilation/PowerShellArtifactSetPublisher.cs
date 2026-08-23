@@ -119,7 +119,7 @@ internal static class PowerShellArtifactSetPublisher
 
     private static bool EntryExists(string path) => File.Exists(path) || Directory.Exists(path);
 
-    private static FileStream AcquirePublicationLock(string outputDirectory, string artifactName)
+    private static IDisposable AcquirePublicationLock(string outputDirectory, string artifactName)
     {
         var lockPath = Path.Combine(outputDirectory, "." + artifactName + ".artifact-publish.lock");
         var stopwatch = Stopwatch.StartNew();
@@ -127,7 +127,9 @@ internal static class PowerShellArtifactSetPublisher
         {
             try
             {
-                return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                return new PublicationLock(
+                    lockPath,
+                    new FileStream(lockPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None));
             }
             catch (IOException) when (stopwatch.Elapsed < TimeSpan.FromSeconds(30))
             {
@@ -137,6 +139,27 @@ internal static class PowerShellArtifactSetPublisher
             {
                 throw new TimeoutException($"Timed out waiting to publish artifact '{artifactName}' to '{outputDirectory}'.", exception);
             }
+        }
+    }
+
+    private sealed class PublicationLock : IDisposable
+    {
+        private readonly string _path;
+        private FileStream? _stream;
+
+        internal PublicationLock(string path, FileStream stream)
+        {
+            _path = path;
+            _stream = stream;
+        }
+
+        public void Dispose()
+        {
+            var stream = Interlocked.Exchange(ref _stream, null);
+            if (stream is null)
+                return;
+            stream.Dispose();
+            try { File.Delete(_path); } catch { }
         }
     }
 
