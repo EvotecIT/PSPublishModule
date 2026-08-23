@@ -22,4 +22,9 @@ public sealed class ModuleValidationSpec
 
     /// <summary>Validation settings.</summary>
     public ModuleValidationSettings Settings { get; set; } = new();
+
+    /// <summary>
+    /// Help metadata captured before generated presentation fallbacks were written.
+    /// </summary>
+    internal DocumentationExtractionPayload? AuthoredHelpPayload { get; set; }
 }

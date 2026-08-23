@@ -27,6 +27,9 @@ public class MarkdownHelpWriterTests
                 new() { Name = "OpenModes", Type = "BinaryDocMode[*]" },
                 new() { Name = "TargetElementIds", Type = "List`1" },
                 new() { Name = "Properties", Type = "Dictionary`2" },
+                new() { Name = "Metadata", Type = "Hashtable" },
+                new() { Name = "QualifiedMetadata", Type = "System.Collections.Hashtable" },
+                new() { Name = "Enabled", Type = "System.Boolean" },
                 new() { Name = "OptionalCount", Type = "Nullable`1" },
                 new() { Name = "TemplateExpression", Type = "String", Description = "{{ FulfillmentMode }}" },
                 new() { Name = "FillColorExpression", Type = "String", Description = "{{ FillColor }}" }
@@ -42,6 +45,9 @@ public class MarkdownHelpWriterTests
         Assert.Contains("Specifies one or more values for open modes.", markdown, StringComparison.Ordinal);
         Assert.Contains("Specifies one or more values for target element ids.", markdown, StringComparison.Ordinal);
         Assert.Contains("Specifies one or more values for properties.", markdown, StringComparison.Ordinal);
+        Assert.Contains("Specifies one or more values for metadata.", markdown, StringComparison.Ordinal);
+        Assert.Contains("Specifies one or more values for qualified metadata.", markdown, StringComparison.Ordinal);
+        Assert.Contains("Specifies a Boolean value for enabled.", markdown, StringComparison.Ordinal);
         Assert.Contains("Specifies a value for optional count.", markdown, StringComparison.Ordinal);
         Assert.Contains("{{ FulfillmentMode }}", markdown, StringComparison.Ordinal);
         Assert.Contains("{{ FillColor }}", markdown, StringComparison.Ordinal);

@@ -171,6 +171,83 @@ public sealed class ModuleValidationServiceTests
     }
 
     [Fact]
+    public void Run_DocumentationValidation_UsesAuthoredSnapshotInsteadOfRenderedFallbacks()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var manifestPath = Path.Combine(root.FullName, "TestModule.psd1");
+            File.WriteAllText(manifestPath, "@{}");
+
+            var authoredPayload = new DocumentationExtractionPayload
+            {
+                Commands =
+                {
+                    new DocumentationCommandHelp
+                    {
+                        Name = "Get-Thing",
+                        Synopsis = "Gets a thing.",
+                        Description = "Gets a thing.",
+                        Parameters =
+                        {
+                            new DocumentationParameterHelp
+                            {
+                                Name = "Name",
+                                Type = "String",
+                                Description = string.Empty
+                            }
+                        }
+                    }
+                }
+            };
+
+            var settings = new ModuleValidationSettings
+            {
+                Enable = true,
+                Structure = new ModuleStructureValidationSettings { Severity = ValidationSeverity.Off },
+                Documentation = new DocumentationValidationSettings
+                {
+                    Severity = ValidationSeverity.Warning,
+                    MinSynopsisPercent = 100,
+                    MinDescriptionPercent = 100,
+                    MinExampleCountPerCommand = 0,
+                    MinParameterDescriptionPercent = 100
+                },
+                ScriptAnalyzer = new ScriptAnalyzerValidationSettings { Severity = ValidationSeverity.Off },
+                FileIntegrity = new FileIntegrityValidationSettings { Severity = ValidationSeverity.Off },
+                Tests = new TestSuiteValidationSettings { Severity = ValidationSeverity.Off },
+                Binary = new BinaryModuleValidationSettings { Severity = ValidationSeverity.Off },
+                Csproj = new CsprojValidationSettings { Severity = ValidationSeverity.Off }
+            };
+
+            var service = new ModuleValidationService(
+                new NullLogger(),
+                new StubPowerShellRunner(new PowerShellRunResult(1, string.Empty, "must not extract rendered help", TestPowerShellExecutable)));
+
+            var report = service.Run(new ModuleValidationSpec
+            {
+                ProjectRoot = root.FullName,
+                StagingPath = root.FullName,
+                ModuleName = "TestModule",
+                ManifestPath = manifestPath,
+                Settings = settings,
+                AuthoredHelpPayload = authoredPayload
+            });
+
+            var check = Assert.Single(report.Checks);
+            Assert.Equal(CheckStatus.Warning, check.Status);
+            Assert.Contains("parameter docs 0/1", check.Summary, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                check.Issues,
+                issue => issue.Contains("parameter 'Name' is missing description", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Run_DocumentationValidation_TruncatesLongMissingItemLists()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

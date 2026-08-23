@@ -220,6 +220,89 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
     }
 
     [Fact]
+    public void Run_DocumentationValidationReceivesAuthoredHelpSnapshot()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var authoredPayload = new DocumentationExtractionPayload
+            {
+                ModuleName = moduleName,
+                Commands =
+                {
+                    new DocumentationCommandHelp
+                    {
+                        Name = "Get-Test",
+                        Parameters =
+                        {
+                            new DocumentationParameterHelp { Name = "Name", Description = string.Empty }
+                        }
+                    }
+                }
+            };
+            var hostedOperations = new FakeHostedOperations
+            {
+                NextAuthoredHelpPayload = authoredPayload
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = "Docs",
+                            PathReadme = "Docs\\Readme.md"
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true,
+                            GenerateExternalHelp = false
+                        }
+                    },
+                    new ConfigurationValidationSegment
+                    {
+                        Settings = new ModuleValidationSettings
+                        {
+                            Enable = true
+                        }
+                    }
+                }
+            };
+
+            var plan = runner.Plan(spec);
+            runner.Run(spec, plan);
+
+            Assert.NotNull(hostedOperations.LastValidationSpec);
+            Assert.Same(authoredPayload, hostedOperations.LastValidationSpec!.AuthoredHelpPayload);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Run_DocumentationGateSyncsRefreshedManifestToProjectRoot()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -584,6 +667,8 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         public List<string> OperationOrder { get; } = new();
         public string[] LastDocumentationCommands { get; private set; } = Array.Empty<string>();
         public ArtefactBuildResult[] LastPublishedArtefacts { get; private set; } = Array.Empty<ArtefactBuildResult>();
+        public DocumentationExtractionPayload? NextAuthoredHelpPayload { get; set; }
+        public ModuleValidationSpec? LastValidationSpec { get; private set; }
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
             ModuleDependency[] dependencies,
@@ -637,11 +722,16 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
                 exitCode: 0,
                 markdownFiles: LastDocumentationCommands.Length,
                 externalHelpFilePath: string.Empty,
-                errorMessage: null);
+                errorMessage: null,
+                externalHelpFilePaths: Array.Empty<string>(),
+                authoredHelpPayload: NextAuthoredHelpPayload);
         }
 
         public ModuleValidationReport ValidateModule(ModuleValidationSpec spec)
-            => throw new InvalidOperationException("Not used in this test.");
+        {
+            LastValidationSpec = spec;
+            return new ModuleValidationReport(Array.Empty<ModuleValidationCheckResult>());
+        }
 
         public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
             => throw new InvalidOperationException("Not used in this test.");

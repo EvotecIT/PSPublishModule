@@ -167,6 +167,75 @@ public sealed class DocumentationEngineSafetyTests
     }
 
     [Fact]
+    public void Build_RetainsAuthoredHelpSnapshotBeforeRenderingParameterFallbacks()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var stagingRoot = Path.Combine(root.FullName, "Staging");
+            Directory.CreateDirectory(stagingRoot);
+            var manifestPath = Path.Combine(stagingRoot, "TestModule.psd1");
+            File.WriteAllText(manifestPath, "@{ ModuleVersion = '1.0.0'; RootModule = 'TestModule.psm1' }");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = "TestModule",
+                Commands =
+                [
+                    new DocumentationCommandHelp
+                    {
+                        Name = "Get-Test",
+                        Synopsis = "Gets a test item.",
+                        Description = "Gets a test item.",
+                        Parameters =
+                        {
+                            new DocumentationParameterHelp
+                            {
+                                Name = "Name",
+                                Type = "String",
+                                Description = string.Empty
+                            }
+                        }
+                    }
+                ]
+            };
+
+            var result = new DocumentationEngine(new PayloadPowerShellRunner(payload), new NullLogger()).Build(
+                moduleName: "TestModule",
+                stagingPath: stagingRoot,
+                moduleManifestPath: manifestPath,
+                documentation: new DocumentationConfiguration
+                {
+                    Path = "Docs",
+                    PathReadme = Path.Combine("Docs", "Readme.md")
+                },
+                buildDocumentation: new BuildDocumentationConfiguration
+                {
+                    Enable = true,
+                    GenerateExternalHelp = true
+                });
+
+            Assert.True(result.Succeeded, result.ErrorMessage);
+            Assert.NotNull(result.AuthoredHelpPayload);
+            var authoredCommand = Assert.Single(result.AuthoredHelpPayload!.Commands);
+            Assert.Empty(Assert.Single(authoredCommand.Parameters).Description);
+            Assert.Empty(authoredCommand.Examples);
+            Assert.Contains(
+                "Specifies a value for name.",
+                File.ReadAllText(result.ExternalHelpFilePath),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Get-Test",
+                File.ReadAllText(Path.Combine(result.DocsPath, "Get-Test.md")),
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Build_DoesNotCleanDocsWhenExtractionFails()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

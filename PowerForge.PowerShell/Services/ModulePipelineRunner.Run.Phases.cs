@@ -602,7 +602,8 @@ public sealed partial class ModulePipelineRunner
                     ModuleName = plan.ModuleName,
                     ManifestPath = buildResult.ManifestPath,
                     BuildSpec = plan.BuildSpec,
-                    Settings = plan.ValidationSettings ?? new ModuleValidationSettings()
+                    Settings = plan.ValidationSettings ?? new ModuleValidationSettings(),
+                    AuthoredHelpPayload = state.DocumentationResult?.AuthoredHelpPayload
                 });
 
                 if (state.ValidationReport.Status == CheckStatus.Fail)

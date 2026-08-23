@@ -37,8 +37,11 @@ public sealed partial class ModuleValidationService
         DocumentationExtractionPayload payload;
         try
         {
-            var engine = new DocumentationEngine(_runner, _logger);
-            payload = engine.ExtractHelpPayload(spec.StagingPath, manifestPath, TimeSpan.FromSeconds(Math.Max(1, settings.TimeoutSeconds)));
+            payload = spec.AuthoredHelpPayload ??
+                new DocumentationEngine(_runner, _logger).ExtractHelpPayload(
+                    spec.StagingPath,
+                    manifestPath,
+                    TimeSpan.FromSeconds(Math.Max(1, settings.TimeoutSeconds)));
         }
         catch (Exception ex)
         {

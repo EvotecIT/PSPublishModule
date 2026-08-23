@@ -15,6 +15,7 @@ internal static class ParameterDescriptionFallback
         "Array",
         "Collection",
         "Dictionary",
+        "Hashtable",
         "HashSet",
         "ICollection",
         "IDictionary",
@@ -67,7 +68,8 @@ internal static class ParameterDescriptionFallback
             return $"Specifies the {words} switch.";
 
         if (type.Equals("Boolean", StringComparison.OrdinalIgnoreCase) ||
-            type.Equals("Bool", StringComparison.OrdinalIgnoreCase))
+            type.Equals("Bool", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("System.Boolean", StringComparison.OrdinalIgnoreCase))
             return $"Specifies a Boolean value for {words}.";
 
         return $"Specifies a value for {words}.";
