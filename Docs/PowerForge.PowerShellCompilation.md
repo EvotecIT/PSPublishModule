@@ -178,21 +178,24 @@ The checked-in benchmark suite validates every result outside the timed operatio
 - the generated typed CLR method called inside a C# loop;
 - equivalent hand-written C#.
 
-The final Windows reference run used PowerShell 7.6.4 on .NET 10.0.10, Windows x64, and an AMD64 32-logical-core machine. Duration rows are medians after three warmups, 12 measured samples, and minimum/maximum exclusion. The startup benchmark used two warmups and 10 measured samples. All rows have zero validation failures and pin clean candidate `7f6a4160` plus generated artifact hashes.
+The current Windows computation and startup reference run used PowerShell 7.6.4 on .NET 10.0.11, Windows x64, and an AMD64 32-logical-core machine. Duration rows are medians after three warmups, 12 measured samples, and minimum/maximum exclusion. The startup benchmark used two warmups and 10 measured samples. All rows have zero validation failures and pin clean candidate `dbf5c14a` plus generated artifact hashes.
 
-Windows run IDs are `20260823-120435-c4bbe019` (real function), `20260823-120602-67365633` (synthetic loop), `20260823-120604-1a6f8e15` (binary dispatch), and `20260823-120606-158339e7` (startup and footprint).
+Windows run IDs are `20260823-140734-1b40d8c8` (real function), `20260823-140840-4e52f51a` (synthetic loop), `20260823-140843-45f4dbe5` (indexed array), `20260823-140845-f6ded219` (binary dispatch), and `20260823-140847-48d3c89f` (startup).
 
 | Workload | Calls | PowerShell | Typed CLR | Hand-written C# | Typed vs PowerShell | Typed vs C# |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Real `Get-AllowedAverageMs`, absolute-cap branch | 50,000 | 277.79 ms | 6.28 ms | 3.29 ms | **44.2x faster** | 1.91x slower |
-| Real `Get-AllowedAverageMs`, relative-cap branch | 50,000 | 277.48 ms | 6.07 ms | 4.07 ms | **45.7x faster** | 1.49x slower |
-| Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 53.91 ms | 4.83 ms | 2.46 ms | **11.2x faster** | 1.96x slower |
+| Real `Get-AllowedAverageMs`, absolute-cap branch | 50,000 | 206.63 ms | 5.29 ms | 2.24 ms | **39.1x faster** | 2.37x slower |
+| Real `Get-AllowedAverageMs`, relative-cap branch | 50,000 | 226.45 ms | 5.53 ms | 2.40 ms | **40.9x faster** | 2.31x slower |
+| Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 55.68 ms | 5.27 ms | 3.07 ms | **10.6x faster** | 1.72x slower |
+| Indexed sum over 1,000-element typed array | 1,000 | 50.55 ms | 4.43 ms | 2.37 ms | **11.4x faster** | 1.87x slower |
 
 These results prove a benefit only for eligible computation executed as CLR code. They do not promise that an arbitrary script or a generated cmdlet call is faster.
 
-The binary-cmdlet lane includes PowerShell command lookup, parameter binding, pipeline setup, and `WriteObject` for every call. It took 2,297.33 ms and 2,217.00 ms in the two 50,000-call real scenarios, versus 277.79 ms and 277.48 ms for the original function. The dispatch-amortization workload then performed equivalent work through 1,000 fine cmdlet calls or one coarse command: 42.66 ms versus 3.87 ms, an **11.0x** improvement. The useful product shape is a coarse cmdlet that performs substantial compiled work per invocation, not a tiny arithmetic cmdlet called in a PowerShell loop.
+The binary-cmdlet lane includes PowerShell command lookup, parameter binding, pipeline setup, and `WriteObject` for every call. It took 1,803.54 ms and 1,742.44 ms in the two 50,000-call real scenarios, versus 206.63 ms and 226.45 ms for the original function. The dispatch-amortization workload then performed equivalent work through 1,000 fine cmdlet calls or one coarse command: 40.94 ms versus 4.18 ms, a **9.8x** improvement. The useful product shape is a coarse cmdlet that performs substantial compiled work per invocation, not a tiny arithmetic cmdlet called in a PowerShell loop.
 
-Executable startup proves that typed compilation changes the product result rather than merely its extension. The PowerShell-free typed EXE took 32.42 ms, `pwsh -File` took 199.94 ms, and the runtime-packaged EXE took 456.26 ms. The typed executable is **6.2x faster than `pwsh -File`** and **14.1x faster than packaging** in this one-shot workload. Packaging remains valuable for broad script compatibility and delivery ergonomics, not startup speed.
+Executable startup proves that typed compilation changes the product result rather than merely its extension. The PowerShell-free typed EXE took 34.36 ms, `pwsh -File` took 210.70 ms, and the runtime-packaged EXE took 454.44 ms. The typed executable is **6.1x faster than `pwsh -File`** and **13.2x faster than packaging** in this one-shot workload. Packaging remains valuable for broad script compatibility and delivery ergonomics, not startup speed.
+
+The optimization and footprint matrix below was measured separately on clean candidate `7f6a4160`; the current standard refresh intentionally reused the already-proven artifact modes rather than rebuilding large trimmed and NativeAOT outputs.
 
 | Windows x64 artifact | Bytes | Runtime model |
 | --- | ---: | --- |
@@ -232,6 +235,6 @@ The fail-closed signing and atomic-publication contract is covered by automated 
 
 The generated EXE carries the PowerShell SDK, so it is much larger than the input script and may start more slowly than an installed `pwsh`. Self-contained publication adds the .NET runtime as well. With `SingleFile = $false`, PowerForge preserves the complete nested publish tree instead of copying only top-level files. Runtime-packaged artifacts must be rebuilt when their embedded PowerShell or .NET dependencies need security updates.
 
-Typed executable compilation currently accepts one top-level script body and rejects local function declarations. Hybrid module composition preserves `using` and module `param` prologues for mixed `.ps1` or `.psm1` source. Manifest and export preservation requires literal unconditional exports and contained relative file references. Strict modules reject `ScriptsToProcess` and script-based `NestedModules`; Hybrid records those hooks as runtime fallback. Binary-module generation also rejects function parameters that collide with PowerShell common or optional common parameters. A plain CLR library contains only eligible methods and no automatic PowerShell fallback host.
+Typed executable compilation currently accepts one top-level script body and rejects local function declarations. Hybrid module composition preserves `using` and module `param` prologues for mixed `.ps1` or `.psm1` source. Generated typed export shaping requires literal unconditional exports and contained relative file references; conditional-only export logic remains in the script fallback and executes unchanged. Strict modules reject `ScriptsToProcess` and script-based `NestedModules`; Hybrid records those hooks as runtime fallback. Binary-module generation also rejects function parameters that collide with PowerShell common or optional common parameters. A plain CLR library contains only eligible methods and no automatic PowerShell fallback host.
 
 Strict typed executables may request `Trimmed` or `NativeAot` optimization. Both require a RID-specific, self-contained, single-artifact build; NativeAOT already emits the native executable directly and does not enable MSBuild's separate single-file bundler. Packaged PowerShell executables are rejected because trimming a dynamic PowerShell runtime is not a safe default. Native AOT is therefore a deployment option only for the proven typed subset, not a promise that arbitrary PowerShell can be converted to native code.
