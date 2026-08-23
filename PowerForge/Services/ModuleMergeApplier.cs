@@ -7,7 +7,6 @@ internal sealed class ModuleMergeApplicationOutcome
     internal ModuleMergeApplicationOutcome(
         bool mergedModule,
         bool usedExistingPsm1,
-        bool retainedBootstrapperBecauseBinaryOutputsDetected,
         int topLevelInlinedFunctions,
         int totalInlinedFunctions,
         int scriptFilesDetected,
@@ -16,7 +15,6 @@ internal sealed class ModuleMergeApplicationOutcome
     {
         MergedModule = mergedModule;
         UsedExistingPsm1 = usedExistingPsm1;
-        RetainedBootstrapperBecauseBinaryOutputsDetected = retainedBootstrapperBecauseBinaryOutputsDetected;
         TopLevelInlinedFunctions = topLevelInlinedFunctions;
         TotalInlinedFunctions = totalInlinedFunctions;
         ScriptFilesDetected = scriptFilesDetected;
@@ -26,7 +24,6 @@ internal sealed class ModuleMergeApplicationOutcome
 
     internal bool MergedModule { get; }
     internal bool UsedExistingPsm1 { get; }
-    internal bool RetainedBootstrapperBecauseBinaryOutputsDetected { get; }
     internal int TopLevelInlinedFunctions { get; }
     internal int TotalInlinedFunctions { get; }
     internal int ScriptFilesDetected { get; }
@@ -55,7 +52,6 @@ internal static class ModuleMergeApplier
             return new ModuleMergeApplicationOutcome(
                 mergedModule: false,
                 usedExistingPsm1: false,
-                retainedBootstrapperBecauseBinaryOutputsDetected: false,
                 topLevelInlinedFunctions: 0,
                 totalInlinedFunctions: 0,
                 scriptFilesDetected: 0,
@@ -64,17 +60,11 @@ internal static class ModuleMergeApplier
         }
 
         var mergedModule = false;
-        var retainedBootstrapperBecauseBinaryOutputsDetected = false;
         var usedExistingPsm1 = false;
 
         if (plan.MergeModule)
         {
-            if (mergeSources.HasLib)
-            {
-                logger.Warn("MergeModuleOnBuild requested but binary outputs were detected. Keeping bootstrapper PSM1.");
-                retainedBootstrapperBecauseBinaryOutputsDetected = true;
-            }
-            else if (!mergeSources.HasScripts)
+            if (!mergeSources.HasScripts)
             {
                 logger.Warn("MergeModuleOnBuild requested but no script sources were found. Skipping merge.");
                 usedExistingPsm1 = File.Exists(mergeSources.Psm1Path);
@@ -99,7 +89,15 @@ internal static class ModuleMergeApplier
                 if (plan.MergeMissing && missingReport?.Functions is { Length: > 0 })
                     merged = ModuleMergeComposer.PrependFunctions(missingReport.Functions, merged);
 
-                ModuleMergeComposer.WriteMergedPsm1(mergeSources.Psm1Path, merged);
+                if (mergeSources.HasLib)
+                {
+                    ModuleBootstrapperGenerator.InlineMergedScriptPayload(mergeSources.Psm1Path, merged);
+                    logger.Info("Merged script sources into the binary module bootstrapper PSM1.");
+                }
+                else
+                {
+                    ModuleMergeComposer.WriteMergedPsm1(mergeSources.Psm1Path, merged);
+                }
                 mergedModule = true;
             }
         }
@@ -116,7 +114,6 @@ internal static class ModuleMergeApplier
         return new ModuleMergeApplicationOutcome(
             mergedModule: mergedModule,
             usedExistingPsm1: usedExistingPsm1,
-            retainedBootstrapperBecauseBinaryOutputsDetected: retainedBootstrapperBecauseBinaryOutputsDetected,
             topLevelInlinedFunctions: missingReport?.FunctionsTopLevelOnly?.Length ?? 0,
             totalInlinedFunctions: missingReport?.Functions?.Length ?? 0,
             scriptFilesDetected: mergeSources.ScriptFiles.Length,

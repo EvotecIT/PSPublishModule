@@ -41,14 +41,10 @@ internal static class ModulePsm1PlaceholderApplier
             return;
         }
 
-        var updated = content;
-        foreach (var replacement in resolvedReplacements)
-        {
-            if (string.IsNullOrEmpty(replacement.Find))
-                continue;
-
-            updated = updated.Replace(replacement.Find, replacement.Replace ?? string.Empty);
-        }
+        var updated = ModuleBootstrapperGenerator.RewriteDeferredScriptPayload(
+            content,
+            payload => ApplyReplacements(payload, resolvedReplacements),
+            outerContent => ApplyReplacements(outerContent, resolvedReplacements));
 
         if (string.Equals(content, updated, StringComparison.Ordinal))
             return;
@@ -61,6 +57,22 @@ internal static class ModulePsm1PlaceholderApplier
         {
             logger.Warn($"Failed to write PSM1 after placeholder replacement: {ex.Message}");
         }
+    }
+
+    private static string ApplyReplacements(
+        string content,
+        IReadOnlyList<(string Find, string Replace)> replacements)
+    {
+        var updated = content ?? string.Empty;
+        foreach (var replacement in replacements)
+        {
+            if (string.IsNullOrEmpty(replacement.Find))
+                continue;
+
+            updated = updated.Replace(replacement.Find, replacement.Replace ?? string.Empty);
+        }
+
+        return updated;
     }
 
     internal static IReadOnlyList<(string Find, string Replace)> BuildReplacements(

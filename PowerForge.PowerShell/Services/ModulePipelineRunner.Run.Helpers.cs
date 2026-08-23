@@ -235,15 +235,12 @@ public sealed partial class ModulePipelineRunner
              mergeExecution.TopLevelInlinedFunctions > 0 ||
              mergeExecution.TotalInlinedFunctions > 0 ||
              mergeExecution.UsedExistingPsm1 ||
-             mergeExecution.RetainedBootstrapperBecauseBinaryOutputsDetected ||
              mergeExecution.MergedModule))
         {
             notes.Add(new ModuleOwnerNote(
                 "Module Entry Script",
                 ModuleOwnerNoteSeverity.Info,
-                summary: mergeExecution.RetainedBootstrapperBecauseBinaryOutputsDetected
-                    ? "Build kept the existing .psm1 entry script because the module contains binaries."
-                    : mergeExecution.UsedExistingPsm1 && !mergeExecution.HasScriptSources
+                summary: mergeExecution.UsedExistingPsm1 && !mergeExecution.HasScriptSources
                         ? "Build reused the existing .psm1 entry script because there were no script sources to merge."
                         : mergeExecution.MergedModule
                             ? $"Build wrote a merged .psm1 entry script from {mergeExecution.ScriptFilesDetected} script source file(s)."

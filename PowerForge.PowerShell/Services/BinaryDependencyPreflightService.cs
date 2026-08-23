@@ -151,7 +151,9 @@ public sealed class BinaryDependencyPreflightService
         if (scopedRootAnalysis is not null)
             return AnalyzeScopedRootGraph(edition, root, assemblyRoot, relativeAssemblyRoot, scopedRootAnalysis);
 
-        var assemblyPaths = EnumerateCandidateAssemblies(assemblyRoot).ToArray();
+        var assemblyPaths = EnumerateCandidateAssemblies(assemblyRoot)
+            .Where(path => !ShouldExcludeGeneratedCoreLoader(path, edition, manifestPath))
+            .ToArray();
         if (assemblyPaths.Length == 0)
         {
             return new BinaryDependencyPreflightResult(
@@ -426,6 +428,23 @@ public sealed class BinaryDependencyPreflightService
                     ? "Lib"
                     : Path.Combine("Lib", Path.GetFileName(path))))
             .ToArray();
+    }
+
+    private static bool ShouldExcludeGeneratedCoreLoader(string assemblyPath, string edition, string? manifestPath)
+    {
+        if (!string.Equals(edition, "Desktop", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(manifestPath))
+        {
+            return false;
+        }
+
+        var moduleName = Path.GetFileNameWithoutExtension(manifestPath);
+        if (string.IsNullOrWhiteSpace(moduleName))
+            return false;
+
+        var fileName = Path.GetFileName(assemblyPath);
+        return ModuleBootstrapperGenerator.GetAssemblyLoadContextLoaderFileNames(moduleName)
+            .Contains(fileName, StringComparer.OrdinalIgnoreCase);
     }
 
     private static ScopedRootAnalysis? TryCreateScopedRootAnalysis(string moduleRoot, string assemblyRoot, string? manifestPath)

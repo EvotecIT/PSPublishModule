@@ -29,6 +29,9 @@ internal static class ModuleBinaryExportSurfaceValidator
         var assembliesByPayload = ResolveAssembliesByPayload(projectRoot, moduleName, exportAssemblies);
         var hasSelectablePayloads = !assembliesByPayload.ContainsKey("module");
         var hasAssemblies = assembliesByPayload.Values.Any(static assemblies => assemblies.Length > 0);
+        var hasExplicitExportAssemblies = exportAssemblies?.Any(static entry => !string.IsNullOrWhiteSpace(entry)) == true;
+        if (hasSelectablePayloads && !hasAssemblies && !hasExplicitExportAssemblies && HasAnySelectablePayloadAssembly(projectRoot))
+            return new ModuleBinaryExportSurface(false, Array.Empty<string>(), Array.Empty<string>());
         if (hasSelectablePayloads)
             ValidateConfiguredAssemblies(assembliesByPayload, moduleName, exportAssemblies);
         else if (!hasAssemblies)
@@ -92,6 +95,9 @@ internal static class ModuleBinaryExportSurfaceValidator
         var assembliesByPayload = ResolveAssembliesByPayload(projectRoot, moduleName, exportAssemblies);
         var hasSelectablePayloads = !assembliesByPayload.ContainsKey("module");
         var hasAssemblies = assembliesByPayload.Values.Any(static assemblies => assemblies.Length > 0);
+        var hasExplicitExportAssemblies = exportAssemblies?.Any(static entry => !string.IsNullOrWhiteSpace(entry)) == true;
+        if (hasSelectablePayloads && !hasAssemblies && !hasExplicitExportAssemblies && HasAnySelectablePayloadAssembly(projectRoot))
+            return;
         if (!hasSelectablePayloads && !hasAssemblies)
             return;
 
@@ -99,6 +105,24 @@ internal static class ModuleBinaryExportSurfaceValidator
             assembliesByPayload,
             moduleName,
             exportAssemblies);
+    }
+
+    private static bool HasAnySelectablePayloadAssembly(string projectRoot)
+    {
+        var libRoot = Path.Combine(projectRoot, "Lib");
+        if (!Directory.Exists(libRoot))
+            return false;
+
+        try
+        {
+            return Directory.EnumerateDirectories(libRoot)
+                .Where(directory => ModuleBinaryPayloadLayout.IsSelectablePayloadFolderName(Path.GetFileName(directory)))
+                .Any(directory => ModuleBinaryFileLocator.HasAny(directory, SearchOption.TopDirectoryOnly));
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void ValidateConfiguredAssemblies(

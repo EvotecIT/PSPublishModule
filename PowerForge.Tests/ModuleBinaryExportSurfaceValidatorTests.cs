@@ -92,6 +92,27 @@ public sealed class ModuleBinaryExportSurfaceValidatorTests
     }
 
     [Fact]
+    public void Detect_TreatsAuxiliaryOnlySelectablePayloadAsScriptModule()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var core = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
+        File.Copy(typeof(BinaryExportDetector).Assembly.Location, Path.Combine(core.FullName, "Auxiliary.dll"));
+
+        try
+        {
+            var surface = ModuleBinaryExportSurfaceValidator.Detect(root.FullName, "DemoModule", Array.Empty<string>());
+
+            Assert.False(surface.HasAssemblies);
+            Assert.Empty(surface.Cmdlets);
+            ModuleBinaryExportSurfaceValidator.ValidateConfiguredAssemblies(root.FullName, "DemoModule", Array.Empty<string>());
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Detect_RejectsEmptySelectablePayload()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

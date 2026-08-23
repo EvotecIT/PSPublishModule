@@ -232,8 +232,7 @@ public sealed class ModuleBuilder
             }
 
             var existingLibRoot = Path.Combine(opts.ProjectRoot, "Lib");
-            var hasExistingBinaryPayload = Directory.Exists(existingLibRoot) &&
-                                           Directory.EnumerateFiles(existingLibRoot, "*.dll", SearchOption.AllDirectories).Any();
+            var hasExistingBinaryPayload = ModuleBinaryFileLocator.HasAny(existingLibRoot, SearchOption.AllDirectories);
 
             if (hasExistingBinaryPayload)
             {
@@ -698,7 +697,7 @@ public sealed class ModuleBuilder
     private static int CopyReferencedTopLevelAssemblies(string publishDir, string targetDir, PublishCopyOptions options)
     {
         var copied = 0;
-        var initialAssemblies = Directory.EnumerateFiles(targetDir, "*.dll", SearchOption.TopDirectoryOnly).ToArray();
+        var initialAssemblies = ModuleBinaryFileLocator.Enumerate(targetDir, SearchOption.TopDirectoryOnly).ToArray();
 
         foreach (var assemblyPath in initialAssemblies)
         {

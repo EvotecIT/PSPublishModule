@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Xunit;
@@ -137,6 +138,77 @@ public sealed class ModulePipelineManifestRefreshTests
             Assert.DoesNotContain("IconUri =", content, StringComparison.Ordinal);
             Assert.DoesNotContain("LicenseUri =", content, StringComparison.Ordinal);
             Assert.Contains("RequireLicenseAcceptance = $false", content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_MergedModuleSynchronizesManifestOverrideExportsIntoPsm1()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var commands = Directory.CreateDirectory(Path.Combine(root.FullName, "Commands"));
+            File.WriteAllText(
+                Path.Combine(commands.FullName, "Get-Custom.ps1"),
+                "function Get-Custom { 'ok' }" + Environment.NewLine +
+                "Set-Alias -Name gcus -Value Get-Custom");
+            File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psm1"), "# bootstrap");
+            File.WriteAllText(
+                Path.Combine(root.FullName, moduleName + ".psd1"),
+                "@{" + Environment.NewLine +
+                "    RootModule = 'TestModule.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "    GUID = '11111111-1111-1111-1111-111111111111'" + Environment.NewLine +
+                "    FunctionsToExport = @()" + Environment.NewLine +
+                "    CmdletsToExport = @()" + Environment.NewLine +
+                "    AliasesToExport = @()" + Environment.NewLine +
+                "}");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { Merge = true }
+                    },
+                    new ConfigurationInformationSegment
+                    {
+                        Configuration = new InformationConfiguration { IncludePS1 = new[] { "Commands" } }
+                    },
+                    new ConfigurationManifestSegment
+                    {
+                        Configuration = new ManifestConfiguration
+                        {
+                            FunctionsToExport = new[] { "Get-Custom" },
+                            CmdletsToExport = Array.Empty<string>(),
+                            AliasesToExport = new[] { "gcus" }
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+            var psm1 = File.ReadAllText(Path.Combine(result.BuildResult.StagingPath, moduleName + ".psm1"));
+
+            Assert.Contains("$FunctionsToExport = @('Get-Custom')", psm1, StringComparison.Ordinal);
+            Assert.Contains("$AliasesToExport = @('gcus')", psm1, StringComparison.Ordinal);
+            Assert.Single(Regex.Matches(psm1, "Export-ModuleMember -Function \\$FunctionsToExport").Cast<Match>());
         }
         finally
         {

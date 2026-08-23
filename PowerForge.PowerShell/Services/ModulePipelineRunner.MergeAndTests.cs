@@ -27,14 +27,14 @@ public sealed partial class ModulePipelineRunner
             buildResult.Exports,
             fixRelativePaths: !plan.DoNotAttemptToFixRelativePaths,
             conditionalFunctionDependencies: conditionalExportDependencies,
-            scriptFiles: scriptFiles);
+            scriptFiles: scriptFiles,
+            exportAssemblies: plan.BuildSpec.ExportAssemblies);
 
         if (!mergeInfo.HasScripts && !File.Exists(mergeInfo.Psm1Path))
         {
             return new MergeExecutionResult(
                 mergedModule: false,
                 usedExistingPsm1: false,
-                retainedBootstrapperBecauseBinaryOutputsDetected: false,
                 requiredModules: plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
                 approvedModules: plan.ApprovedModules ?? Array.Empty<string>(),
                 dependentModules: Array.Empty<string>(),
@@ -69,7 +69,6 @@ public sealed partial class ModulePipelineRunner
         return new MergeExecutionResult(
             mergedModule: mergeOutcome.MergedModule,
             usedExistingPsm1: mergeOutcome.UsedExistingPsm1,
-            retainedBootstrapperBecauseBinaryOutputsDetected: mergeOutcome.RetainedBootstrapperBecauseBinaryOutputsDetected,
             requiredModules: plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
             approvedModules: plan.ApprovedModules ?? Array.Empty<string>(),
             dependentModules: dependentRequiredModules,
@@ -228,8 +227,7 @@ public sealed partial class ModulePipelineRunner
             return false;
 
         var payloadPath = Path.Combine(stagingPath, "Lib", folderName);
-        return Directory.Exists(payloadPath) &&
-               Directory.EnumerateFiles(payloadPath, "*.dll", SearchOption.AllDirectories).Any();
+        return ModuleBinaryFileLocator.HasAny(payloadPath, SearchOption.AllDirectories);
     }
 
     private void RunTestsAfterMerge(
@@ -385,6 +383,34 @@ public sealed partial class ModulePipelineRunner
             _logger.Warn($"Failed to regenerate module bootstrapper exports for '{moduleName}'. Error: {ex.Message}");
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
         }
+    }
+
+    private void SynchronizeMergedPsm1ExportsFromManifest(
+        ModuleBuildResult buildResult,
+        ModulePipelinePlan plan)
+    {
+        var psm1Path = Path.Combine(buildResult.StagingPath, plan.ModuleName + ".psm1");
+        if (!File.Exists(psm1Path)) {
+            throw new FileNotFoundException("Merged module entry script was not found.", psm1Path);
+        }
+
+        var current = File.ReadAllText(psm1Path);
+        var previousExportBlock = ModuleMergeComposer.ExtractTrailingExportBlock(current, out var body);
+        if (string.IsNullOrWhiteSpace(previousExportBlock)) {
+            throw new InvalidDataException($"Merged module entry script '{Path.GetFileName(psm1Path)}' does not contain an authoritative export block.");
+        }
+
+        var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
+        var conditionalExportDependencies = ResolveConditionalExportDependencies(
+            plan,
+            ModuleMergeComposer.ResolveScriptFiles(buildResult.StagingPath, plan.Information),
+            exports);
+        var exportBlock = ModuleConditionalExportBlockBuilder.BuildExportBlock(
+            exports,
+            conditionalExportDependencies,
+            plan.ModuleName);
+        var synchronized = body.TrimEnd() + Environment.NewLine + Environment.NewLine + exportBlock.TrimEnd() + Environment.NewLine;
+        ModuleMergeComposer.WriteMergedPsm1(psm1Path, synchronized);
     }
 
     private void TryRegenerateSourceDevelopmentBootstrapperFromManifest(
@@ -741,7 +767,8 @@ public sealed partial class ModulePipelineRunner
 
             try
             {
-                if (Directory.EnumerateFiles(includePath, "*.ps1", SearchOption.AllDirectories).Any())
+                if (Directory.EnumerateFiles(includePath, "*", SearchOption.AllDirectories)
+                    .Any(static file => string.Equals(Path.GetExtension(file), ".ps1", StringComparison.OrdinalIgnoreCase)))
                     return true;
             }
             catch
@@ -754,29 +781,7 @@ public sealed partial class ModulePipelineRunner
     }
 
     private static string[] ResolveScriptIncludeFolders(InformationConfiguration? information)
-    {
-        var includes = new List<string>();
-        if (information?.IncludePS1 is { Length: > 0 })
-            includes.AddRange(information.IncludePS1);
-
-        if (information?.IncludeToArray is { Length: > 0 })
-        {
-            foreach (var entry in information.IncludeToArray)
-            {
-                if (entry is null || !string.Equals(entry.Key, "IncludePS1", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                if (entry.Values is { Length: > 0 })
-                    includes.AddRange(entry.Values);
-            }
-        }
-
-        return includes
-            .Where(static include => !string.IsNullOrWhiteSpace(include))
-            .Select(static include => include.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
+        => ModuleMergeComposer.ResolveMergeDirectories(information);
 
     private static string? ResolveDevelopmentBinaryRoot(ModuleBuildSpec spec)
     {
@@ -844,8 +849,18 @@ public sealed partial class ModulePipelineRunner
         return ModulePipelinePlanningHelpers.TryReadTargetFrameworks(spec.CsprojPath);
     }
 
-    private void SyncMergedPsm1WithGeneratedScripts(string manifestPath, string stagingPath, string moduleName, IEnumerable<string> scriptPaths)
-        => ModuleMergeComposer.SyncMergedPsm1WithGeneratedScripts(manifestPath, stagingPath, moduleName, scriptPaths);
+    private void SyncMergedPsm1WithGeneratedScripts(
+        string manifestPath,
+        string stagingPath,
+        string moduleName,
+        IEnumerable<string> scriptPaths,
+        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null)
+        => ModuleMergeComposer.SyncMergedPsm1WithGeneratedScripts(
+            manifestPath,
+            stagingPath,
+            moduleName,
+            scriptPaths,
+            conditionalFunctionDependencies);
 
     private IReadOnlyDictionary<string, string[]> ResolveConditionalExportDependencies(
         ModulePipelinePlan plan,
