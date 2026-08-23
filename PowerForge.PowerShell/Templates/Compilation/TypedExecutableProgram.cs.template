@@ -72,7 +72,14 @@ internal static class Program
         {
             var values = raw[parameter.Name];
             if (values.Count == 0)
-                throw new ArgumentException($"Required parameter '--{parameter.Name}' was not provided.");
+            {
+                if (parameter.IsRequired)
+                    throw new ArgumentException($"Required parameter '--{parameter.Name}' was not provided.");
+                converted[parameter.Name] = parameter.Type.IsValueType
+                    ? Activator.CreateInstance(parameter.Type)!
+                    : null!;
+                continue;
+            }
             if (parameter.IsArray)
             {
                 var elementType = parameter.Type.GetElementType()!;
@@ -183,14 +190,16 @@ internal static class Program
 
     private sealed class ParameterSpec
     {
-        internal ParameterSpec(string name, Type type)
+        internal ParameterSpec(string name, Type type, bool isRequired)
         {
             Name = name;
             Type = type;
+            IsRequired = isRequired;
         }
 
         internal string Name { get; }
         internal Type Type { get; }
+        internal bool IsRequired { get; }
         internal bool IsArray => Type.IsArray;
     }
 }

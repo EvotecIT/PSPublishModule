@@ -422,7 +422,8 @@ public sealed class PowerShellCompilationArtifactBuilder
             moduleDirectory,
             artifactName,
             Path.GetFileName(modulePath),
-            typed);
+            typed,
+            spec.TargetFramework);
         if (manifestFiles is not null)
         {
             foreach (var manifestFile in manifestFiles)
@@ -456,7 +457,8 @@ public sealed class PowerShellCompilationArtifactBuilder
             moduleDirectory,
             artifactName,
             Path.GetFileName(assemblyPath),
-            typed) ?? throw new InvalidOperationException("The sibling module manifest was not available during artifact publication.");
+            typed,
+            spec.TargetFramework) ?? throw new InvalidOperationException("The sibling module manifest was not available during artifact publication.");
         foreach (var manifestFile in manifestFiles)
             files.Add(CreateArtifactFile(manifestFile, manifestFile.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
         var manifestPath = manifestFiles.First(path => path.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase));

@@ -9,6 +9,25 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Fact]
+    public void Build_StrictTypedExecutableUsesClrDefaultForOmittedOptionalParameter()
+    {
+        using var fixture = ArtifactFixture.Create("param([int] $Count); return $Count");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedExecutableOptionalParameter",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var processResult = RunProcess(result.ArtifactPath!);
+
+        Assert.Equal(0, processResult.ExitCode);
+        Assert.Equal("0", processResult.StandardOutput.Trim());
+        Assert.True(string.IsNullOrWhiteSpace(processResult.StandardError), processResult.StandardError);
+    }
+
+    [Fact]
     public void Build_StrictTypedExecutableRunsWithoutPowerShellRuntime()
     {
         using var fixture = ArtifactFixture.Create(
@@ -185,5 +204,22 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(result.Succeeded);
         Assert.Contains("code-signing certificate", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    private static (int ExitCode, string StandardOutput, string StandardError) RunProcess(string fileName)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        using var process = Process.Start(startInfo)!;
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(60_000), "Typed executable did not exit within 60 seconds.");
+        return (process.ExitCode, standardOutput, standardError);
     }
 }

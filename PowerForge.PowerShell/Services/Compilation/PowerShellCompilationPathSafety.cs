@@ -15,6 +15,8 @@ internal static class PowerShellCompilationPathSafety
     {
         var relativePath = FrameworkCompatibility.GetRelativePath(root, path);
         var current = Path.GetFullPath(root);
+        if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException(error);
         foreach (var segment in relativePath.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries))
         {
             current = Path.Combine(current, segment);

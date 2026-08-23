@@ -365,6 +365,52 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_HybridModuleRejectsLinkedSourceRootBeforePublication()
+    {
+        var container = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var actualRoot = Path.Combine(container, "actual");
+        var linkedRoot = Path.Combine(container, "linked");
+        var outputPath = Path.Combine(container, "output");
+        Directory.CreateDirectory(actualRoot);
+        Directory.CreateDirectory(outputPath);
+        File.WriteAllText(Path.Combine(actualRoot, "input.psm1"), ". \"$PSScriptRoot/Helper.ps1\"; function Get-TypedValue { return 1 }");
+        File.WriteAllText(Path.Combine(actualRoot, "Helper.ps1"), "$script:LoadedThroughLink = $true");
+        try
+        {
+            Directory.CreateSymbolicLink(linkedRoot, actualRoot);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Directory.Delete(container, recursive: true);
+            return;
+        }
+        catch (PlatformNotSupportedException)
+        {
+            Directory.Delete(container, recursive: true);
+            return;
+        }
+
+        try
+        {
+            var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                Path.Combine(linkedRoot, "input.psm1"),
+                outputPath,
+                "PowerForge.LinkedSourceRoot",
+                PowerShellCompilationArtifactKind.BinaryModule,
+                PowerShellCompilationMode.Hybrid));
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("symbolic link or junction", result.Error, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(outputPath));
+        }
+        finally
+        {
+            try { Directory.Delete(linkedRoot); } catch { }
+            try { Directory.Delete(container, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Build_HybridModuleRejectsDynamicDotSourceBeforePublication()
     {
         using var fixture = ArtifactFixture.Create(

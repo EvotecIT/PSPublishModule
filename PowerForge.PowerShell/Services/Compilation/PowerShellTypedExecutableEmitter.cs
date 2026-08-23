@@ -52,7 +52,8 @@ internal static class PowerShellTypedExecutableEmitter
         var parameters = ast.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
         var parameterSpecs = string.Join(Environment.NewLine, parameters.Select(parameter =>
             "        new ParameterSpec(\"" + EscapeCSharpString(parameter.Name.VariablePath.UserPath) + "\", typeof(" +
-            PowerShellCSharpMethodEmitter.GetTypeName(parameter.StaticType) + ")),"));
+            PowerShellCSharpMethodEmitter.GetTypeName(parameter.StaticType) + "), " +
+            (IsMandatory(parameter) ? "true" : "false") + "),"));
         var arguments = string.Join(", ", parameters.Select(parameter =>
             "(" + PowerShellCSharpMethodEmitter.GetTypeName(parameter.StaticType) + ")values[\"" +
             EscapeCSharpString(parameter.Name.VariablePath.UserPath) + "\"]"));
@@ -65,6 +66,31 @@ internal static class PowerShellTypedExecutableEmitter
             .Replace("{{PARAMETER_SPECS}}", parameterSpecs)
             .Replace("{{INVOCATION}}", invocationSource);
         return new PowerShellTypedExecutableEmission(compiledSource, programSource);
+    }
+
+    private static bool IsMandatory(ParameterAst parameter)
+    {
+        foreach (var attribute in parameter.Attributes.OfType<AttributeAst>())
+        {
+            if (!attribute.TypeName.Name.Equals("Parameter", StringComparison.OrdinalIgnoreCase) &&
+                !attribute.TypeName.Name.Equals("ParameterAttribute", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var argument in attribute.NamedArguments)
+            {
+                if (!argument.ArgumentName.Equals("Mandatory", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (argument.ExpressionOmitted)
+                    return true;
+                if (argument.Argument is ConstantExpressionAst { Value: bool constant })
+                    return constant;
+                if (argument.Argument is VariableExpressionAst variable)
+                    return variable.VariablePath.UserPath.Equals("true", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        return false;
     }
 
     private static string ReadTemplate(string resourceName)

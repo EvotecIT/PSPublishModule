@@ -73,7 +73,8 @@ internal static class PowerShellCompiledModuleManifest
         string moduleDirectory,
         string artifactName,
         string rootModuleFileName,
-        PowerShellTypedCompilationResult typed)
+        PowerShellTypedCompilationResult typed,
+        string targetFramework)
     {
         var sourceManifest = Path.ChangeExtension(sourcePath, ".psd1");
         if (!File.Exists(sourceManifest))
@@ -111,6 +112,7 @@ internal static class PowerShellCompiledModuleManifest
         var mutator = new AstModuleManifestMutator();
         if (!mutator.TrySetTopLevelString(targetManifest, "RootModule", rootModuleFileName))
             throw new InvalidOperationException($"Module manifest '{sourceManifest}' does not contain a literal RootModule entry that can be updated.");
+        ApplyTargetCompatibility(sourceManifest, targetManifest, targetFramework, mutator);
         mutator.TrySetManifestExports(
             targetManifest,
             selectedFallback,
@@ -146,6 +148,47 @@ internal static class PowerShellCompiledModuleManifest
             copied.Add(targetFile);
         }
         return copied.ToArray();
+    }
+
+    private static void ApplyTargetCompatibility(
+        string sourceManifest,
+        string targetManifest,
+        string targetFramework,
+        AstModuleManifestMutator mutator)
+    {
+        var (powerShellVersion, edition) = targetFramework.ToLowerInvariant() switch
+        {
+            "net472" => ("5.1", "Desktop"),
+            "net8.0" => ("7.4", "Core"),
+            "net10.0" => ("7.6", "Core"),
+            _ => throw new ArgumentException($"Unsupported compiled module target framework '{targetFramework}'.", nameof(targetFramework))
+        };
+
+        var targetVersion = Version.Parse(powerShellVersion);
+        var effectiveVersion = targetVersion;
+        var sourceVersionText = ModuleManifestValueReader.ReadTopLevelString(sourceManifest, "PowerShellVersion");
+        if (!string.IsNullOrWhiteSpace(sourceVersionText))
+        {
+            if (!Version.TryParse(sourceVersionText, out var sourceVersion))
+                throw new InvalidDataException($"Module manifest PowerShellVersion '{sourceVersionText}' is not a valid version.");
+            if (edition.Equals("Desktop", StringComparison.OrdinalIgnoreCase) && sourceVersion > targetVersion)
+            {
+                throw new InvalidOperationException(
+                    $"Module manifest requires PowerShell {sourceVersion}, which is newer than the {powerShellVersion} runtime supported by target framework '{targetFramework}'.");
+            }
+            if (sourceVersion > effectiveVersion)
+                effectiveVersion = sourceVersion;
+        }
+
+        var sourceEditions = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "CompatiblePSEditions");
+        if (sourceEditions is { Length: > 0 } && !sourceEditions.Contains(edition, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Module manifest CompatiblePSEditions does not include '{edition}', which is required by target framework '{targetFramework}'.");
+        }
+
+        mutator.TrySetTopLevelString(targetManifest, "PowerShellVersion", effectiveVersion.ToString());
+        mutator.TrySetTopLevelStringArray(targetManifest, "CompatiblePSEditions", new[] { edition });
     }
 
     private static string[] ReadFunctionNames(string sourcePath)
