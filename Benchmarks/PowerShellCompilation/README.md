@@ -16,6 +16,7 @@ Build or import the current PSPublishModule binary, then run:
 ```powershell
 Invoke-BenchmarkSuite `
     -Path .\Benchmarks\PowerShellCompilation\powershell-compilation.benchmark.ps1 `
+    -Variable @{ IncludeOptimizedExecutables = $true } `
     -RunMode local
 ```
 
@@ -33,3 +34,5 @@ Artifacts are written under `Ignore\Benchmarks\PowerShellCompilation`. The metad
 Do not interpret the binary-cmdlet lane as pure arithmetic throughput: it intentionally includes PowerShell command discovery, parameter binding, pipeline, and `PSCmdlet.WriteObject` overhead. The typed-CLR and hand-written-C# lanes perform their repeated calls inside C# and are the appropriate comparison for code-generation quality.
 
 The same quick matrix can run under Linux PowerShell. A host whose PowerShell runtime sits on an intermediate .NET major may emit reference-unification warnings while loading the supported `net8.0` benchmark artifact; those warnings must be disclosed with the run rather than treated as a clean standard baseline.
+
+For a bounded cross-platform baseline, override `Calls`, `LoopCalls`, `Warmup`, and `Iterations`. Positional workload semantics remain identical; only the sample volume changes. `IncludeOptimizedExecutables` publishes and executes the checked-in `typed-executable-optimization.ps1` workload as both trimmed and NativeAOT single-file artifacts, then records their hashes and byte sizes in startup metadata.

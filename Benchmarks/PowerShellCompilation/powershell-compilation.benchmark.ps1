@@ -3,13 +3,18 @@ $outputRoot = Join-Path $repositoryRoot 'Ignore\Benchmarks\PowerShellCompilation
 $buildRoot = Join-Path $outputRoot 'artifacts'
 $workloadPath = Join-Path $PSScriptRoot 'compiler-workloads.ps1'
 $startupScriptPath = Join-Path $PSScriptRoot 'packaged-startup.ps1'
+$optimizedExecutableScriptPath = Join-Path $PSScriptRoot 'typed-executable-optimization.ps1'
 $harnessPath = Join-Path $PSScriptRoot 'PowerShellCompilationBenchmarkHarness.cs'
 $quick = Get-BenchmarkInput Quick $false -Bool
-$calls = if ($quick) { 2000 } else { 50000 }
-$loopCalls = if ($quick) { 100 } else { 1000 }
-$warmup = if ($quick) { 1 } else { 3 }
-$iterations = if ($quick) { 3 } else { 12 }
+$calls = [int](Get-BenchmarkInput Calls $(if ($quick) { 2000 } else { 50000 }))
+$loopCalls = [int](Get-BenchmarkInput LoopCalls $(if ($quick) { 100 } else { 1000 }))
+$warmup = [int](Get-BenchmarkInput Warmup $(if ($quick) { 1 } else { 3 }))
+$iterations = [int](Get-BenchmarkInput Iterations $(if ($quick) { 3 } else { 12 }))
+$includeOptimizedExecutables = Get-BenchmarkInput IncludeOptimizedExecutables $false -Bool
 $targetFramework = if ([System.Environment]::Version.Major -ge 10) { 'net10.0' } else { 'net8.0' }
+$architecture = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
+$defaultRid = if ($IsWindows) { "win-$architecture" } elseif ($IsMacOS) { "osx-$architecture" } else { "linux-$architecture" }
+$runtimeIdentifier = Get-BenchmarkInput RuntimeIdentifier $defaultRid
 
 New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 $builder = [PowerForge.PowerShellCompilationArtifactBuilder]::new()
@@ -60,6 +65,38 @@ $typedExecutableSpec.TargetFramework = $targetFramework
 $typedExecutableResult = $builder.Build($typedExecutableSpec)
 if (-not $typedExecutableResult.Succeeded) {
     throw "Typed benchmark executable failed: $($typedExecutableResult.Error)`n$($typedExecutableResult.BuildOutput)"
+}
+
+$optimizedExecutableEvidence = [ordered]@{}
+if ($includeOptimizedExecutables) {
+    foreach ($optimization in @(
+        [PowerForge.PowerShellCompilationExecutableOptimization]::Trimmed,
+        [PowerForge.PowerShellCompilationExecutableOptimization]::NativeAot)) {
+        $optimizationName = $optimization.ToString()
+        $optimizationSpec = [PowerForge.PowerShellCompilationBuildSpec]::new(
+            $optimizedExecutableScriptPath,
+            $buildRoot,
+            "PowerForge.CompilationBenchmark.Typed$optimizationName",
+            [PowerForge.PowerShellCompilationArtifactKind]::Executable,
+            [PowerForge.PowerShellCompilationMode]::Strict)
+        $optimizationSpec.TargetFramework = $targetFramework
+        $optimizationSpec.RuntimeIdentifier = $runtimeIdentifier
+        $optimizationSpec.SelfContained = $true
+        $optimizationSpec.SingleFile = $true
+        $optimizationSpec.Optimization = $optimization
+        $optimizationResult = $builder.Build($optimizationSpec)
+        if (-not $optimizationResult.Succeeded) {
+            throw "$optimizationName typed executable failed: $($optimizationResult.Error)`n$($optimizationResult.BuildOutput)"
+        }
+        $verificationOutput = @(& $optimizationResult.ArtifactPath --Count=5 --Values=10 --Values=-3)
+        if ($LASTEXITCODE -ne 0 -or $verificationOutput.Count -ne 1 -or [long]$verificationOutput[0] -ne 22L) {
+            throw "$optimizationName typed executable returned an invalid verification result."
+        }
+        $optimizedExecutableEvidence[$optimizationName] = [pscustomobject]@{
+            Sha256 = (Get-FileHash -LiteralPath $optimizationResult.ArtifactPath -Algorithm SHA256).Hash
+            Bytes = (Get-Item -LiteralPath $optimizationResult.ArtifactPath).Length
+        }
+    }
 }
 
 Add-Type -Path $typedResult.ArtifactPath
@@ -256,6 +293,11 @@ New-BenchmarkSuite 'powershell-compilation-packaged-startup' -OutputRoot $output
     Add-BenchmarkMetadata PowerShellScriptBytes (Get-Item -LiteralPath $startupScriptPath).Length
     Add-BenchmarkMetadata PackagedExecutableBytes (Get-Item -LiteralPath $executableResult.ArtifactPath).Length
     Add-BenchmarkMetadata TypedExecutableBytes (Get-Item -LiteralPath $typedExecutableResult.ArtifactPath).Length
+    Add-BenchmarkMetadata OptimizedExecutableRuntimeIdentifier $runtimeIdentifier
+    foreach ($entry in $optimizedExecutableEvidence.GetEnumerator()) {
+        Add-BenchmarkMetadata "$($entry.Key)ExecutableSha256" $entry.Value.Sha256
+        Add-BenchmarkMetadata "$($entry.Key)ExecutableBytes" $entry.Value.Bytes
+    }
     Set-BenchmarkPolicy -Warmup 2 -Iterations $(if ($quick) { 3 } else { 10 }) -Order Rotated -OutlierMode ExcludeMinMax
     Add-BenchmarkCase Startup @{ Expected = 150.0 }
 

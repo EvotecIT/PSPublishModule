@@ -198,6 +198,7 @@ Run the same matrix locally:
 ```powershell
 Invoke-BenchmarkSuite `
     -Path .\Benchmarks\PowerShellCompilation\powershell-compilation.benchmark.ps1 `
+    -Variable @{ IncludeOptimizedExecutables = $true } `
     -RunMode standard
 ```
 
