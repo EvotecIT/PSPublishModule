@@ -578,6 +578,8 @@ public sealed class PowerShellCompilationArtifactBuilder
         source.Insert(prologueEndOffset, import.ToString());
         var builder = new StringBuilder(source.ToString());
         if (source.Length > 0 && source[source.Length - 1] != '\n') builder.AppendLine();
+        if (exportContract is not null && exportContract.Commands.Length == 0)
+            return builder.ToString();
         builder.AppendLine();
         builder.Append("Export-ModuleMember -Function @(").Append(JoinPowerShellNames(exportedFallbackFunctions))
             .Append(") -Cmdlet @(").Append(JoinPowerShellNames(exportedCompiledCmdlets.Concat(additionalCmdlets).Distinct(StringComparer.OrdinalIgnoreCase)))

@@ -10,6 +10,19 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellGeneratedTypePolicy
 {
+    private static readonly string[] Net472ImplicitReferenceAssemblies =
+    {
+        "mscorlib.dll",
+        "System.Core.dll",
+        "System.Data.dll",
+        "System.dll",
+        "System.Drawing.dll",
+        "System.IO.Compression.FileSystem.dll",
+        "System.Numerics.dll",
+        "System.Runtime.Serialization.dll",
+        "System.Xml.dll",
+        "System.Xml.Linq.dll"
+    };
     private static readonly ConcurrentDictionary<string, Lazy<HashSet<string>>> TargetTypes = new(StringComparer.OrdinalIgnoreCase);
 
     internal static bool IsSupported(Type type, string? targetFramework = null)
@@ -46,7 +59,10 @@ internal static class PowerShellGeneratedTypePolicy
         var referenceDirectory = ResolveReferenceDirectory(targetFramework)
             ?? throw new InvalidOperationException($"Reference assemblies for target framework '{targetFramework}' could not be located.");
         var types = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var path in Directory.EnumerateFiles(referenceDirectory, "*.dll", SearchOption.TopDirectoryOnly))
+        var referencePaths = targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)
+            ? Net472ImplicitReferenceAssemblies.Select(name => Path.Combine(referenceDirectory, name)).Where(File.Exists)
+            : Directory.EnumerateFiles(referenceDirectory, "*.dll", SearchOption.TopDirectoryOnly);
+        foreach (var path in referencePaths)
         {
             try
             {
@@ -131,18 +147,34 @@ internal static class PowerShellGeneratedTypePolicy
     private static string? ResolveDotNetRoot()
     {
         var configured = Environment.GetEnvironmentVariable("DOTNET_ROOT");
-        if (!string.IsNullOrWhiteSpace(configured) && Directory.Exists(configured))
-            return Path.GetFullPath(configured);
+        var pathDirectories = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+            .Split(Path.PathSeparator)
+            .Where(static directory => !string.IsNullOrWhiteSpace(directory));
+        return ResolveDotNetRoot(configured, pathDirectories);
+    }
+
+    internal static string? ResolveDotNetRoot(string? configured, IEnumerable<string> pathDirectories)
+    {
+        var configuredRoot = NormalizeDotNetRoot(configured);
+        if (configuredRoot is not null)
+            return configuredRoot;
         var executable = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "dotnet.exe" : "dotnet";
-        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-                     .Split(Path.PathSeparator)
-                     .Where(static directory => !string.IsNullOrWhiteSpace(directory)))
+        foreach (var directory in pathDirectories)
         {
             try
             {
                 var candidate = Path.Combine(directory.Trim().Trim('"'), executable);
-                if (File.Exists(candidate))
-                    return Path.GetDirectoryName(Path.GetFullPath(candidate));
+                if (!File.Exists(candidate))
+                    continue;
+                var directRoot = NormalizeDotNetRoot(Path.GetDirectoryName(Path.GetFullPath(candidate)));
+                if (directRoot is not null)
+                    return directRoot;
+#if NET8_0_OR_GREATER
+                var target = new FileInfo(candidate).ResolveLinkTarget(returnFinalTarget: true);
+                var linkedRoot = NormalizeDotNetRoot(target is null ? null : Path.GetDirectoryName(target.FullName));
+                if (linkedRoot is not null)
+                    return linkedRoot;
+#endif
             }
             catch
             {
@@ -150,6 +182,14 @@ internal static class PowerShellGeneratedTypePolicy
             }
         }
         return null;
+    }
+
+    private static string? NormalizeDotNetRoot(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return null;
+        var root = Path.GetFullPath(candidate);
+        return Directory.Exists(Path.Combine(root, "packs", "Microsoft.NETCore.App.Ref")) ? root : null;
     }
 
     private static Version? ParseVersion(string value)

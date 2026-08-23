@@ -122,6 +122,62 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("returns type", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Transpile_RoutesExplicitGenericLocalTypeToDiagnosticInsteadOfThrowing()
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Get-Items { param([int[]] $Values); [System.Collections.Generic.IEnumerable[int]] $items = $Values; return $Values }");
+
+        var exception = Record.Exception(() => new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath));
+        Assert.Null(exception);
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("typed local declaration", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ResolveDotNetRoot_IgnoresInvalidConfiguredRootAndFindsSdkOnPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var sdkRoot = Path.Combine(root, "sdk");
+        var packs = Path.Combine(sdkRoot, "packs", "Microsoft.NETCore.App.Ref");
+        Directory.CreateDirectory(packs);
+        File.WriteAllText(Path.Combine(sdkRoot, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"), string.Empty);
+        try
+        {
+            var resolved = PowerShellGeneratedTypePolicy.ResolveDotNetRoot(Path.Combine(root, "invalid"), new[] { sdkRoot });
+            Assert.Equal(Path.GetFullPath(sdkRoot), resolved);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ResolveDotNetRoot_FollowsPosixExecutableSymlink()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var sdkRoot = Path.Combine(root, "sdk");
+        var bin = Path.Combine(root, "bin");
+        Directory.CreateDirectory(Path.Combine(sdkRoot, "packs", "Microsoft.NETCore.App.Ref"));
+        Directory.CreateDirectory(bin);
+        var target = Path.Combine(sdkRoot, "dotnet");
+        File.WriteAllText(target, string.Empty);
+        File.CreateSymbolicLink(Path.Combine(bin, "dotnet"), target);
+        try
+        {
+            var resolved = PowerShellGeneratedTypePolicy.ResolveDotNetRoot(null, new[] { bin });
+            Assert.Equal(Path.GetFullPath(sdkRoot), resolved);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     private sealed class TranspilerFixture : IDisposable
     {
         private TranspilerFixture(string rootPath, string scriptPath)

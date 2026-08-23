@@ -154,6 +154,8 @@ internal sealed class PowerShellCSharpMethodEmitter
         var declaredType = assignment.Left is ConvertExpressionAst conversion
             ? conversion.StaticType
             : rightType;
+        if (!PowerShellGeneratedTypePolicy.IsSupported(declaredType, _targetFramework))
+            throw Error(assignment.Left, $"Local '${name}' uses CLR type '{declaredType.FullName}' outside the generated project reference set.");
         if (!CanAssign(declaredType, rightType))
             throw Error(assignment, $"Assignment requires PowerShell conversion from '{rightType.FullName}' to '{declaredType.FullName}', which is not an implicit CLR conversion.");
         if (_variables.TryGetValue(name, out var existingType))

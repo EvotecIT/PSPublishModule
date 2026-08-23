@@ -322,6 +322,33 @@ public sealed class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_HybridModulePreservesDefaultExportsWhenConditionalOnlyExportDoesNotRun()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-FirstValue { return 1 }; function Get-SecondValue { return 2 }; if ($false) { Export-ModuleMember -Function Get-SecondValue }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ConditionalFalseExport",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(result.Manifest!.UsesPowerShellRuntimeFallback);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; [bool](Get-Command Get-FirstValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-SecondValue -ErrorAction SilentlyContinue); Get-FirstValue; Get-SecondValue");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal(new[] { "True", "True", "1", "2" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
     public void Build_Net472RejectsRuntimeTypeUnavailableToRequestedTargetBeforeDotNetCompilation()
     {
         using var fixture = ArtifactFixture.Create("function Get-DateValue { return [System.DateOnly]::MinValue }");
@@ -329,6 +356,28 @@ public sealed class PowerShellCompilationArtifactHardeningTests
             fixture.ScriptPath,
             fixture.OutputPath,
             "PowerForge.TargetFrameworkType",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict)
+        {
+            TargetFramework = "net472"
+        };
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("reference set", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.True(string.IsNullOrWhiteSpace(result.BuildOutput), result.BuildOutput);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_Net472RejectsFrameworkTypeOutsideGeneratedProjectReferencesBeforeDotNetCompilation()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-EncodedValue { return [System.Web.HttpUtility]::HtmlEncode('value') }");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.UnreferencedFrameworkType",
             PowerShellCompilationArtifactKind.Library,
             PowerShellCompilationMode.Strict)
         {
