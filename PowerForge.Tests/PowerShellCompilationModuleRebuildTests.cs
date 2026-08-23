@@ -74,6 +74,40 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_ConventionalModuleLoaderCompilesAndStagesDiscoveredFunctionFiles()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            $Public = @(Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -Recurse)
+            $Private = @(Get-ChildItem -Path $PSScriptRoot\Private\*.ps1 -Recurse)
+            foreach ($Import in @($Private + $Public)) { . $Import.FullName }
+            Export-ModuleMember -Function Get-TypedValue, Get-FallbackValue
+            """,
+            ".psm1");
+        Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Public"));
+        Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Private"));
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Public", "Get-TypedValue.ps1"), "function Get-TypedValue { return 42 }");
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Private", "Get-FallbackValue.ps1"), "function Get-FallbackValue { return (Get-Date).Year }");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-TypedValue', 'Get-FallbackValue'); CmdletsToExport = @() }");
+
+        var result = BuildResolvedModule(fixture.RootPath, fixture.OutputPath, "PowerForge.ConventionalModule");
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        var outputRoot = Path.GetDirectoryName(result.ArtifactPath!)!;
+        var typedSource = Path.Combine(outputRoot, "Public", "Get-TypedValue.ps1");
+        var fallbackSource = Path.Combine(outputRoot, "Private", "Get-FallbackValue.ps1");
+        Assert.True(File.Exists(typedSource));
+        Assert.True(File.Exists(fallbackSource));
+        Assert.DoesNotContain("function Get-TypedValue", File.ReadAllText(typedSource), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("function Get-FallbackValue", File.ReadAllText(fallbackSource), StringComparison.OrdinalIgnoreCase);
+        var proof = RunModuleProof(result.ArtifactPath!, "Get-TypedValue; [int](Get-FallbackValue) -gt 2000");
+        Assert.Equal(new[] { "42", "True" }, proof.Split(Environment.NewLine));
+    }
+
+    [Fact]
     public void Build_PreservesFunctionsExportedByNestedScriptModule()
     {
         using var fixture = ArtifactFixture.Create(

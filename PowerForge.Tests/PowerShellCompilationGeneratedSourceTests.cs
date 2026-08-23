@@ -95,6 +95,49 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.DoesNotContain("ancestor target imported", output + error, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("net8.0", "8.0.4")]
+    [InlineData("net10.0", "10.0.11")]
+    public void Build_EmittedBinaryModulePinsServicedSecurityXmlDependency(string targetFramework, string expectedVersion)
+    {
+        using var fixture = ArtifactFixture.Create("function Get-SecurityDependencyProof { return 42 }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "GeneratedSecurityDependency",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict)
+        {
+            EmitSource = true,
+            TargetFramework = targetFramework
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var project = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "GeneratedSecurityDependency.csproj"));
+        Assert.Contains($"<PackageReference Include=\"System.Security.Cryptography.Xml\" Version=\"{expectedVersion}\"", project, StringComparison.Ordinal);
+        Assert.Contains("ExcludeAssets=\"runtime\"", project, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_EmittedPackagedExecutablePinsServicedSecurityXmlDependency()
+    {
+        using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "GeneratedPackagedSecurityDependency",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package)
+        {
+            EmitSource = true,
+            TargetFramework = "net10.0"
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var project = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "GeneratedPackagedSecurityDependency.csproj"));
+        Assert.Contains("<PackageReference Include=\"System.Security.Cryptography.Xml\" Version=\"10.0.11\"", project, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Build_RebuildWithoutEmitSourceRemovesPriorGeneratedProject()
     {

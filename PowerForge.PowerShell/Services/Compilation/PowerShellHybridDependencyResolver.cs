@@ -17,15 +17,19 @@ internal static class PowerShellHybridDependencyResolver
         string sourcePath,
         string moduleDirectory,
         IEnumerable<string>? additionalEntryPaths = null,
-        Func<string, string?>? contentTransformer = null)
+        Func<string, string?>? contentTransformer = null,
+        IEnumerable<string>? explicitDependencyPaths = null,
+        bool allowConventionalLoader = false)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
         var comparer = PowerShellCompilationPathSafety.PathComparer;
         var entryPaths = new HashSet<string>(
             new[] { sourcePath }.Concat(additionalEntryPaths ?? Array.Empty<string>()).Select(Path.GetFullPath),
             comparer);
+        var discoveryEntries = (additionalEntryPaths ?? Array.Empty<string>())
+            .Concat(explicitDependencyPaths ?? Array.Empty<string>());
         var copied = new List<string>();
-        foreach (var dependency in DiscoverDependencies(sourcePath, additionalEntryPaths))
+        foreach (var dependency in DiscoverDependencies(sourcePath, discoveryEntries, allowConventionalLoader))
         {
             if (entryPaths.Contains(dependency))
                 continue;
@@ -57,16 +61,18 @@ internal static class PowerShellHybridDependencyResolver
 
     internal static string[] DiscoverDependencies(
         string sourcePath,
-        IEnumerable<string>? additionalEntryPaths = null)
-        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: false);
+        IEnumerable<string>? additionalEntryPaths = null,
+        bool allowConventionalLoader = false)
+        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: false, allowConventionalLoader);
 
     internal static string[] DiscoverModuleScopeDependencies(string sourcePath)
-        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths: null, moduleScopeOnly: true);
+        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths: null, moduleScopeOnly: true, allowConventionalLoader: false);
 
     private static string[] DiscoverDependenciesCore(
         string sourcePath,
         IEnumerable<string>? additionalEntryPaths,
-        bool moduleScopeOnly)
+        bool moduleScopeOnly,
+        bool allowConventionalLoader)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
         var discovered = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
@@ -105,6 +111,8 @@ internal static class PowerShellHybridDependencyResolver
             {
                 var expression = command.CommandElements.FirstOrDefault()
                     ?? throw new InvalidOperationException($"Dot-source expression at {current}:{command.Extent.StartLineNumber} has no path.");
+                if (allowConventionalLoader && IsConventionalImportExpression(expression, command))
+                    continue;
                 var relativePath = NormalizeRelativePath(ReadLiteralPath(expression, current, command.Extent.StartLineNumber));
                 if (Path.IsPathRooted(relativePath) || WildcardPattern.ContainsWildcardCharacters(relativePath))
                     throw new InvalidOperationException($"Dot-source path '{relativePath}' at {current}:{command.Extent.StartLineNumber} must be a contained literal path without wildcards.");
@@ -119,6 +127,24 @@ internal static class PowerShellHybridDependencyResolver
             }
         }
         return discovered.ToArray();
+    }
+
+    private static bool IsConventionalImportExpression(CommandElementAst expression, CommandAst command)
+    {
+        if (expression is not MemberExpressionAst
+        {
+            Expression: VariableExpressionAst variable,
+            Member: StringConstantExpressionAst member
+        } || !member.Value.Equals("FullName", StringComparison.OrdinalIgnoreCase))
+            return false;
+        for (var ancestor = command.Parent; ancestor is not null; ancestor = ancestor.Parent)
+        {
+            if (ancestor is ForEachStatementAst loop)
+                return loop.Variable.VariablePath.UserPath.Equals(variable.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase);
+            if (ancestor is FunctionDefinitionAst or ScriptBlockAst)
+                return false;
+        }
+        return false;
     }
 
     private static string ReadLiteralPath(CommandElementAst expression, string sourcePath, int line)

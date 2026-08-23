@@ -169,7 +169,8 @@ public sealed class PowerShellCompilationArtifactBuilder
                         .Replace("{{ARTIFACT_NAME}}", EscapeXml(artifactName))
                         .Replace("{{SINGLE_FILE}}", spec.SingleFile ? "true" : "false")
                         .Replace("{{SELF_CONTAINED}}", spec.SelfContained ? "true" : "false")
-                        .Replace("{{POWERSHELL_SDK_VERSION}}", GetPowerShellSdkVersion(spec.TargetFramework)),
+                        .Replace("{{POWERSHELL_SDK_VERSION}}", GetPowerShellSdkVersion(spec.TargetFramework))
+                        .Replace("{{SECURITY_XML_VERSION}}", GetSecurityXmlVersion(spec.TargetFramework)),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 requiresPowerShellRuntime = true;
                 usesPowerShellRuntimeFallback = true;
@@ -266,14 +267,16 @@ public sealed class PowerShellCompilationArtifactBuilder
                 };
                 var manifestPath = Path.Combine(spec.OutputDirectory, artifactName + ".powerforge-compilation.json");
                 WriteManifest(Path.Combine(artifactStagingDirectory, Path.GetFileName(manifestPath)), manifest);
-                PowerShellArtifactSetPublisher.Commit(
+            PowerShellArtifactSetPublisher.Commit(
                     artifactStagingDirectory,
                     spec.OutputDirectory,
                     artifactName,
                     PowerShellCompiledModuleManifest.GetProtectedSourceFiles(
-                        spec.SourcePath,
-                        spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid,
-                        spec.ModuleManifestPath));
+                            spec.SourcePath,
+                            spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid,
+                            spec.ModuleManifestPath)
+                        .Concat(compilationSourcePaths)
+                        .Distinct(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
 
                 result.Succeeded = true;
                 result.ArtifactPath = artifactPath;
@@ -562,6 +565,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                 files.Add(CreateArtifactFile(manifestFile, manifestFile.Equals(primaryManifest, StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
         }
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var conventionalSources = PowerShellConventionalModuleSourceDiscovery.Discover(spec.SourcePath);
         var runtimeHooks = PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(spec.SourcePath, spec.ModuleManifestPath)
             .Select(reference => Path.GetFullPath(Path.Combine(
                 sourceRoot,
@@ -572,7 +576,11 @@ public sealed class PowerShellCompilationArtifactBuilder
                      spec.SourcePath,
                      moduleDirectory,
                      runtimeHooks,
-                     path => PowerShellHybridModuleComposer.ComposeDependency(path, typed, wrappedCompiledMethods)))
+                     path => PowerShellHybridModuleComposer.ComposeDependency(path, typed, wrappedCompiledMethods),
+                     typed.SourcePaths.Where(path => !path.Equals(
+                         spec.SourcePath,
+                         RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)),
+                     allowConventionalLoader: conventionalSources.Length > 0))
             files.Add(CreateArtifactFile(dependency, "ModuleDependency"));
         var primaryPath = manifestFiles?.First(path => path.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase)) ?? modulePath;
         return new CopiedArtifact(primaryPath, files.ToArray());
@@ -797,10 +805,14 @@ public sealed class PowerShellCompilationArtifactBuilder
     private static string GetPowerShellSdkVersion(string targetFramework)
         => targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ? "7.6.4" : "7.4.18";
 
+    private static string GetSecurityXmlVersion(string targetFramework)
+        => targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ? "10.0.11" : "8.0.4";
+
     private static string GetPowerShellReference(string targetFramework)
         => targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)
             ? "<PackageReference Include=\"Microsoft.PowerShell.5.ReferenceAssemblies\" Version=\"1.1.0\" PrivateAssets=\"all\" />"
-            : $"<PackageReference Include=\"Microsoft.PowerShell.SDK\" Version=\"{GetPowerShellSdkVersion(targetFramework)}\" PrivateAssets=\"all\" ExcludeAssets=\"runtime\" />";
+            : $"<PackageReference Include=\"Microsoft.PowerShell.SDK\" Version=\"{GetPowerShellSdkVersion(targetFramework)}\" PrivateAssets=\"all\" ExcludeAssets=\"runtime\" />{Environment.NewLine}    " +
+              $"<PackageReference Include=\"System.Security.Cryptography.Xml\" Version=\"{GetSecurityXmlVersion(targetFramework)}\" PrivateAssets=\"all\" ExcludeAssets=\"runtime\" />";
 
     private static string ReadTemplate(string resourceName)
     {

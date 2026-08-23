@@ -36,6 +36,51 @@ public sealed class PowerShellCompilationInputResolverTests
     }
 
     [Fact]
+    public void Resolve_LooseScriptSetInfersStrictTypedLibrary()
+    {
+        using var fixture = ResolverFixture.Create();
+        var first = fixture.Write("Get-One.ps1", "function Get-One { return 1 }");
+        var second = fixture.Write("Public/Get-Two.ps1", "function Get-Two { return 2 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(new[] { first, second });
+
+        Assert.Equal(first, resolved.SourcePath);
+        Assert.Null(resolved.ModuleManifestPath);
+        Assert.Equal(PowerShellCompilationArtifactKind.Library, resolved.Kind);
+        Assert.Equal(PowerShellCompilationMode.Strict, resolved.Mode);
+        Assert.Equal(new[] { first, second }, resolved.CompilationSourceFiles);
+    }
+
+    [Fact]
+    public void Resolve_LooseScriptSetRequiresOneExplicitExecutableEntrypoint()
+    {
+        using var fixture = ResolverFixture.Create();
+        var first = fixture.Write("Main.ps1", "return 1");
+        var second = fixture.Write("Helper.ps1", "function Get-Helper { return 2 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver().Resolve(
+            new[] { first, second },
+            PowerShellCompilationArtifactKind.Executable));
+
+        Assert.Contains("one explicit .ps1 entrypoint", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_LooseBinaryModuleSetRequiresStrictMode()
+    {
+        using var fixture = ResolverFixture.Create();
+        var first = fixture.Write("Get-One.ps1", "function Get-One { return 1 }");
+        var second = fixture.Write("Get-Two.ps1", "function Get-Two { return 2 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver().Resolve(
+            new[] { first, second },
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.Contains("requires Strict mode", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Resolve_ModuleDirectoryUsesMatchingManifestAndDiscoversLiteralSources()
     {
         using var fixture = ResolverFixture.Create("SampleModule");
@@ -104,6 +149,51 @@ public sealed class PowerShellCompilationInputResolverTests
 
         Assert.Equal(new[] { direct, root }.OrderBy(static path => path), resolved.CompilationSourceFiles.OrderBy(static path => path));
         Assert.Equal(new[] { conditional, direct, local, root }.OrderBy(static path => path), resolved.SourceFiles.OrderBy(static path => path));
+    }
+
+    [Fact]
+    public void Resolve_ConventionalModuleLoaderDiscoversAuthoredPowerShellGlobsWithoutExecutingModuleCode()
+    {
+        using var fixture = ResolverFixture.Create("ConventionalModule");
+        fixture.Write("ConventionalModule.psd1", "@{ RootModule = 'ConventionalModule.psm1' }");
+        var root = fixture.Write(
+            "ConventionalModule.psm1",
+            """
+            $Public = @(Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -Recurse)
+            $Private = @(Get-ChildItem -Path $PSScriptRoot/Private/*.ps1 -Recurse)
+            $Libraries = @(Get-ChildItem -Path $PSScriptRoot\Lib\*.dll -Recurse)
+            function Find-Locally { Get-ChildItem -Path $PSScriptRoot\Ignored\*.ps1 -Recurse }
+            foreach ($Import in @($Private + $Public)) { . $Import.FullName }
+            """);
+        var publicFunction = fixture.Write("Public/Get-PublicProof.ps1", "function Get-PublicProof { return 1 }");
+        var privateFunction = fixture.Write("Private/Get-PrivateProof.ps1", "function Get-PrivateProof { return 2 }");
+        fixture.Write("Ignored/Get-IgnoredProof.ps1", "function Get-IgnoredProof { return 3 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.Root);
+
+        Assert.Equal(
+            new[] { privateFunction, publicFunction, root }.OrderBy(static path => path),
+            resolved.CompilationSourceFiles.OrderBy(static path => path));
+        Assert.DoesNotContain(resolved.SourceFiles, path => path.Contains("Ignored", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Resolve_ConventionalModuleLoaderDoesNotHideUnrelatedDynamicDotSource()
+    {
+        using var fixture = ResolverFixture.Create("ConventionalModule");
+        fixture.Write("ConventionalModule.psd1", "@{ RootModule = 'ConventionalModule.psm1' }");
+        fixture.Write(
+            "ConventionalModule.psm1",
+            """
+            $Public = @(Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -Recurse)
+            foreach ($Import in $Public) { . $Import.FullName }
+            . $Outside.FullName
+            """);
+        fixture.Write("Public/Get-PublicProof.ps1", "function Get-PublicProof { return 1 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

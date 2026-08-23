@@ -7,7 +7,7 @@ internal static partial class Program
     private const string PowerShellAnalyzeUsage =
         "Usage: powerforge powershell analyze <path> [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--no-recurse] [--output json]";
     private const string PowerShellBuildUsage =
-        "Usage: powerforge powershell build <path> [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
+        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
 
     private static int CommandPowerShell(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -44,10 +44,10 @@ internal static partial class Program
                 out var argumentError))
             return WritePowerShellError(outputJson, 2, argumentError, logger, "powershell.build");
 
-        var path = TryGetOptionValue(args, "--path");
-        if (string.IsNullOrWhiteSpace(path) && args.Length > 0 && !args[0].StartsWith("-", StringComparison.Ordinal))
-            path = args[0];
-        if (string.IsNullOrWhiteSpace(path))
+        var paths = GetOptionValues(args, "--path").ToList();
+        if (args.Length > 0 && !args[0].StartsWith("-", StringComparison.Ordinal))
+            paths.Insert(0, args[0]);
+        if (paths.Count == 0)
             return WritePowerShellError(outputJson, 2, "A PowerShell source file is required.", logger, "powershell.build");
 
         var kindValue = TryGetOptionValue(args, "--kind") ?? TryGetOptionValue(args, "--target");
@@ -68,8 +68,8 @@ internal static partial class Program
 
         try
         {
-            var fullPath = Path.GetFullPath(path.Trim().Trim('"'));
-            var resolved = new PowerShellCompilationInputResolver().Resolve(fullPath, kindOverride, modeOverride);
+            var fullPaths = paths.Select(path => Path.GetFullPath(path.Trim().Trim('"'))).ToArray();
+            var resolved = new PowerShellCompilationInputResolver().Resolve(fullPaths, kindOverride, modeOverride);
             var outputDirectory = TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? Path.Combine(resolved.ModuleRoot, "artifacts");
             var artifactName = TryGetOptionValue(args, "--name") ?? resolved.ArtifactName;
             var optimizationValue = TryGetOptionValue(args, "--optimization") ?? nameof(PowerShellCompilationExecutableOptimization.None);
@@ -343,6 +343,15 @@ internal static partial class Program
 
         error = string.Empty;
         return true;
+    }
+
+    private static IEnumerable<string> GetOptionValues(string[] args, string optionName)
+    {
+        for (var index = 0; index < args.Length - 1; index++)
+        {
+            if (!args[index].Equals(optionName, StringComparison.OrdinalIgnoreCase)) continue;
+            yield return args[++index];
+        }
     }
 
     private static bool IsHelpArgument(string argument)

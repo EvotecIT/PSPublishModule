@@ -62,6 +62,70 @@ public sealed class PowerShellCompilationResolvedInput
 /// </summary>
 public sealed class PowerShellCompilationInputResolver
 {
+    /// <summary>Resolves a loose set of PowerShell script files into one typed library or strict binary module.</summary>
+    public PowerShellCompilationResolvedInput Resolve(
+        IEnumerable<string> paths,
+        PowerShellCompilationArtifactKind? kind = null,
+        PowerShellCompilationMode? mode = null)
+    {
+        if (paths is null) throw new ArgumentNullException(nameof(paths));
+        var requestedPaths = paths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(path.Trim().Trim('"')))
+            .Distinct(GetPathComparer())
+            .ToArray();
+        if (requestedPaths.Length == 0)
+            throw new ArgumentException("At least one PowerShell script path is required.", nameof(paths));
+        if (requestedPaths.Length == 1)
+            return Resolve(requestedPaths[0], kind, mode);
+        if (kind.HasValue && !Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), kind.Value))
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        if (mode.HasValue && (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode.Value) || mode.Value is PowerShellCompilationMode.Analyze or PowerShellCompilationMode.Package))
+            throw new ArgumentOutOfRangeException(nameof(mode), "Loose file-set builds accept Hybrid or Strict mode.");
+
+        foreach (var requestedPath in requestedPaths)
+        {
+            if (!File.Exists(requestedPath))
+                throw new FileNotFoundException("PowerShell compilation input was not found.", requestedPath);
+            if (!Path.GetExtension(requestedPath).Equals(".ps1", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("A loose compilation file set may contain only .ps1 files. Point to a .psd1, .psm1, or module directory for module discovery.", nameof(paths));
+        }
+
+        var resolvedKind = kind ?? PowerShellCompilationArtifactKind.Library;
+        if (resolvedKind == PowerShellCompilationArtifactKind.Executable)
+            throw new InvalidOperationException(
+                "Executable compilation currently accepts one explicit .ps1 entrypoint. Multi-file executables require entrypoint-aware dependency bundling; use one root script that literal-dot-sources its dependencies, or build a Library/BinaryModule file set.");
+        var resolvedMode = mode ?? PowerShellCompilationMode.Strict;
+        if (resolvedKind == PowerShellCompilationArtifactKind.BinaryModule && resolvedMode != PowerShellCompilationMode.Strict)
+            throw new InvalidOperationException(
+                "A loose BinaryModule file set requires Strict mode because it has no script-module entrypoint in which unsupported functions could be preserved. Point to a module root for Hybrid fallback.");
+
+        var sourcePath = requestedPaths[0];
+        var moduleRoot = Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory();
+        foreach (var requestedPath in requestedPaths)
+        {
+            PowerShellCompilationPathSafety.EnsureContained(
+                moduleRoot,
+                requestedPath,
+                $"Loose compilation source '{requestedPath}' must be contained by the first source directory '{moduleRoot}'.");
+            PowerShellCompilationPathSafety.EnsureNoLinks(
+                moduleRoot,
+                requestedPath,
+                $"Loose compilation source '{requestedPath}' traverses a symbolic link or junction.");
+        }
+
+        return new PowerShellCompilationResolvedInput(
+            sourcePath,
+            sourcePath,
+            null,
+            moduleRoot,
+            Path.GetFileNameWithoutExtension(sourcePath),
+            resolvedKind,
+            resolvedMode,
+            requestedPaths,
+            requestedPaths);
+    }
+
     /// <summary>Resolves a script, module manifest, script module, or module directory into one build input.</summary>
     public PowerShellCompilationResolvedInput Resolve(
         string path,
@@ -124,6 +188,7 @@ public sealed class PowerShellCompilationInputResolver
         }
         else
         {
+            var conventionalSources = PowerShellConventionalModuleSourceDiscovery.Discover(sourcePath);
             var runtimeHooks = manifestPath is null
                 ? Array.Empty<string>()
                 : PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(sourcePath, manifestPath)
@@ -131,11 +196,15 @@ public sealed class PowerShellCompilationInputResolver
                     .ToArray();
             var runtimeHookSet = runtimeHooks.ToHashSet(GetPathComparer());
             compilationSourceFiles = PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(sourcePath)
+                .Concat(conventionalSources)
                 .Where(file => IsPowerShellSource(file))
                 .Where(file => !runtimeHookSet.Contains(file))
                 .OrderBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            sourceFiles = PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath, runtimeHooks)
+            sourceFiles = PowerShellHybridDependencyResolver.DiscoverDependencies(
+                    sourcePath,
+                    runtimeHooks.Concat(conventionalSources),
+                    allowConventionalLoader: conventionalSources.Length > 0)
                 .Where(file => IsPowerShellSource(file))
                 .OrderBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();

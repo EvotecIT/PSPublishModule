@@ -418,6 +418,13 @@ public sealed class PowerShellCompilationAnalyzer
                         file,
                         variable.Extent));
                     break;
+                case ExpandableStringExpressionAst expandable when expandable.Extent.Text.Contains("`$", StringComparison.Ordinal):
+                    diagnostics.Add(CreateDiagnostic(
+                        PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                        "Expandable strings that mix escaped dollar signs with interpolation require PowerShell token-preserving semantics.",
+                        file,
+                        expandable.Extent));
+                    break;
                 case BinaryExpressionAst binary when !SupportedBinaryOperators.Contains(binary.Operator.ToString()):
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.UnsupportedOperator,
@@ -499,7 +506,7 @@ public sealed class PowerShellCompilationAnalyzer
             PipelineAst or CommandExpressionAst or AssignmentStatementAst or IfStatementAst or
             ForStatementAst or WhileStatementAst or ForEachStatementAst or ReturnStatementAst or
             BreakStatementAst or ContinueStatementAst or BinaryExpressionAst or UnaryExpressionAst or
-            ParenExpressionAst or ConvertExpressionAst or ConstantExpressionAst or StringConstantExpressionAst or
+            ParenExpressionAst or ConvertExpressionAst or ConstantExpressionAst or StringConstantExpressionAst or ExpandableStringExpressionAst or
             VariableExpressionAst or ArrayLiteralAst or HashtableAst or TypeExpressionAst or MemberExpressionAst or
             InvokeMemberExpressionAst or IndexExpressionAst;
 

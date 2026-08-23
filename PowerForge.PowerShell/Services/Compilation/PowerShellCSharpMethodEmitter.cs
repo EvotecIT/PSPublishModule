@@ -474,6 +474,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         return ast switch
         {
             StringConstantExpressionAst text => EmitString(text.Value),
+            ExpandableStringExpressionAst expandable => EmitExpandableString(expandable),
             ConstantExpressionAst constant => EmitConstant(constant),
             VariableExpressionAst variable => EmitVariable(variable),
             ParenExpressionAst parenthesized => $"({EmitExpression(parenthesized.Pipeline)})",
@@ -488,6 +489,35 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             IndexExpressionAst index => _memberEmitter.EmitIndex(index),
             _ => throw Error(ast, $"Expression '{ast.GetType().Name}' is not implemented by the C# emitter.")
         };
+    }
+
+    private string EmitExpandableString(ExpandableStringExpressionAst expandable)
+    {
+        if (expandable.Extent.Text.Contains("`$", StringComparison.Ordinal))
+            throw Error(expandable, "Expandable strings that mix escaped dollar signs with interpolation require PowerShell token-preserving semantics.");
+
+        var parts = new List<string>();
+        var cursor = 0;
+        foreach (var nested in expandable.NestedExpressions)
+        {
+            if (nested is not VariableExpressionAst variable || InferVariableType(variable) != typeof(string))
+                throw Error(nested, "Typed expandable strings currently accept only statically typed string variables; subexpressions and runtime string conversion remain on the PowerShell path.");
+            var token = nested.Extent.Text;
+            var tokenIndex = expandable.Value.IndexOf(token, cursor, StringComparison.Ordinal);
+            if (tokenIndex < 0)
+                throw Error(nested, "Expandable string source could not be mapped losslessly to its parsed interpolation token.");
+            if (tokenIndex > cursor)
+                parts.Add(EmitString(expandable.Value.Substring(cursor, tokenIndex - cursor)));
+            parts.Add($"({EmitVariable(variable)} ?? string.Empty)");
+            cursor = tokenIndex + token.Length;
+        }
+        if (cursor < expandable.Value.Length)
+            parts.Add(EmitString(expandable.Value.Substring(cursor)));
+        if (parts.Count == 0)
+            return EmitString(expandable.Value);
+        if (parts.Count == 1)
+            return parts[0];
+        return $"global::System.String.Concat(new string[] {{ {string.Join(", ", parts)} }})";
     }
 
     private string EmitBooleanExpression(Ast ast)
@@ -569,6 +599,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         return ast switch
         {
             StringConstantExpressionAst => typeof(string),
+            ExpandableStringExpressionAst => typeof(string),
             ConstantExpressionAst constant => constant.Value?.GetType() ?? typeof(object),
             VariableExpressionAst variable => InferVariableType(variable),
             ParenExpressionAst parenthesized => InferExpressionType(parenthesized.Pipeline),

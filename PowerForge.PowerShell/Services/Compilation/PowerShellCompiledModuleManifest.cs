@@ -22,9 +22,14 @@ internal static class PowerShellCompiledModuleManifest
         if (includeHybridDependencies)
         {
             var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? Directory.GetCurrentDirectory();
+            var conventionalSources = PowerShellConventionalModuleSourceDiscovery.Discover(sourcePath);
             var runtimeHooks = GetContainedRuntimeScriptFiles(sourcePath, sourceManifest)
-                .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, NormalizeManifestRelativePath(reference))));
-            protectedFiles.AddRange(PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath, runtimeHooks));
+                .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, NormalizeManifestRelativePath(reference))))
+                .Concat(conventionalSources);
+            protectedFiles.AddRange(PowerShellHybridDependencyResolver.DiscoverDependencies(
+                sourcePath,
+                runtimeHooks,
+                allowConventionalLoader: conventionalSources.Length > 0));
         }
         return protectedFiles.Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
     }

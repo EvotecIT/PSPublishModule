@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -15,14 +16,18 @@ namespace PSPublishModule;
 /// <summary>Package a standalone script as a single-file executable</summary>
 /// <code>Build-PowerShellArtifact -Path .\tool.ps1</code>
 /// </example>
+/// <example>
+/// <summary>Compile several loose scripts into one typed cmdlet module</summary>
+/// <code>Build-PowerShellArtifact -Path .\Public\Get-One.ps1, .\Public\Get-Two.ps1 -Kind BinaryModule</code>
+/// </example>
 [Cmdlet("Build", "PowerShellArtifact", SupportsShouldProcess = true)]
 [OutputType(typeof(PowerShellCompilationBuildResult))]
 public sealed class BuildPowerShellArtifactCommand : PSCmdlet
 {
-    /// <summary>PowerShell script, module manifest, script module, or module directory.</summary>
+    /// <summary>One PowerShell script/module path, or several loose .ps1 files for a typed library or strict binary module.</summary>
     [Parameter(Mandatory = true, Position = 0)]
     [ValidateNotNullOrEmpty]
-    public string Path { get; set; } = string.Empty;
+    public string[] Path { get; set; } = Array.Empty<string>();
 
     /// <summary>Optional artifact shape. Defaults to Executable for .ps1 and BinaryModule for module inputs.</summary>
     [Parameter]
@@ -116,11 +121,11 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
         PowerShellCompilationResolvedInput resolved;
         try
         {
-            resolved = new PowerShellCompilationInputResolver().Resolve(requestedPath, Kind, Mode);
+            resolved = new PowerShellCompilationInputResolver().Resolve(requestedPaths, Kind, Mode);
         }
         catch (Exception ex)
         {
-            ThrowTerminatingError(new ErrorRecord(ex, "PowerShellArtifactInputResolutionFailed", ErrorCategory.InvalidArgument, requestedPath));
+            ThrowTerminatingError(new ErrorRecord(ex, "PowerShellArtifactInputResolutionFailed", ErrorCategory.InvalidArgument, requestedPaths));
             return;
         }
         var outputPath = string.IsNullOrWhiteSpace(OutputDirectory)

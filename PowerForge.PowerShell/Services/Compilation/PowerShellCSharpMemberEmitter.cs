@@ -250,6 +250,11 @@ internal sealed class PowerShellCSharpMemberEmitter
                 score += 3;
                 continue;
             }
+            if (target.IsEnum && arguments[index] is StringConstantExpressionAst enumText && TryResolveEnumLiteral(target, enumText.Value, out _))
+            {
+                score += 3;
+                continue;
+            }
             return -1;
         }
         return score;
@@ -259,7 +264,35 @@ internal sealed class PowerShellCSharpMemberEmitter
     {
         if (targetType == typeof(char) && argument is StringConstantExpressionAst text && text.Value.Length == 1)
             return EmitChar(text.Value[0]);
+        if (targetType.IsEnum && argument is StringConstantExpressionAst enumText && TryResolveEnumLiteral(targetType, enumText.Value, out var enumValue))
+            return EmitEnumValue(targetType, enumValue);
         return _emitExpression(argument);
+    }
+
+    private static bool TryResolveEnumLiteral(Type enumType, string value, out object resolved)
+    {
+        try
+        {
+            var candidate = Enum.Parse(enumType, value, ignoreCase: true);
+            if (Enum.IsDefined(enumType, candidate))
+            {
+                resolved = candidate;
+                return true;
+            }
+        }
+        catch (ArgumentException) { }
+        catch (OverflowException) { }
+        resolved = default!;
+        return false;
+    }
+
+    private string EmitEnumValue(Type enumType, object value)
+    {
+        var underlying = Enum.GetUnderlyingType(enumType);
+        var literal = Type.GetTypeCode(underlying) is TypeCode.Byte or TypeCode.UInt16 or TypeCode.UInt32 or TypeCode.UInt64
+            ? Convert.ToUInt64(value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture) + "UL"
+            : Convert.ToInt64(value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture) + "L";
+        return $"({_getTypeName(enumType)}){literal}";
     }
 
     private MemberInfo ResolveFieldOrProperty(Ast node, Type type, bool isStatic, string name)
