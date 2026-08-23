@@ -8,7 +8,7 @@ This benchmark matrix separates three different claims:
 
 The real-function workload is `Get-AllowedAverageMs`, taken from TestimoX's dashboard benchmark gate. The triangular-number loop is intentionally synthetic and exposes hot-loop behavior without command, provider, or I/O noise. Every measured lane validates its result outside the timed operation. Artifact generation, assembly loading, module import, and workload setup are also outside the timed block.
 
-The 2026-08-23 Windows reference run measured the typed CLR lane 42.3-45.3x faster than the original real function and 8.8x faster on the synthetic loop. It also measured packaged startup 2.33x slower than `pwsh -File`. See [PowerShell Compilation](../../Docs/PowerForge.PowerShellCompilation.md#measured-performance) for the full table, environment, run IDs, interpretation, and eligibility limits.
+The final 2026-08-23 clean-head Windows run measured the typed CLR lane 39.0-43.4x faster than the original real function and 10.3x faster on the synthetic loop. It also measured packaged startup 2.29x slower than `pwsh -File`. See [PowerShell Compilation](../../Docs/PowerForge.PowerShellCompilation.md#measured-performance) for the full table, environment, run IDs, interpretation, and eligibility limits.
 
 Build or import the current PSPublishModule binary, then run:
 

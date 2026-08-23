@@ -159,19 +159,19 @@ The checked-in benchmark suite validates every result outside the timed operatio
 
 The standard reference run used PowerShell 7.6.4 on .NET 10.0.10, Windows x64, and an AMD64 32-logical-core machine. Duration rows are medians after three warmups, 12 measured samples, and minimum/maximum exclusion. The startup benchmark used two warmups and 10 measured samples.
 
-The final-candidate run IDs are `20260823-082527-44a8f15d` (real function), `20260823-082626-88be2d77` (synthetic loop), and `20260823-082628-f6f3a6fd` (packaged startup).
+The final-candidate run IDs are `20260823-101107-2428b314` (real function), `20260823-101222-03ed850e` (synthetic loop), and `20260823-101224-b2678047` (packaged startup). They were recorded from clean runtime commit `3573bbb4` and pin the generated artifact hashes in benchmark metadata.
 
 | Workload | Calls | PowerShell | Typed CLR | Hand-written C# | Typed vs PowerShell | Typed vs C# |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Real `Get-AllowedAverageMs`, absolute-cap branch | 50,000 | 205.78 ms | 4.54 ms | 2.91 ms | **45.3x faster** | 1.56x slower |
-| Real `Get-AllowedAverageMs`, relative-cap branch | 50,000 | 194.75 ms | 4.60 ms | 2.16 ms | **42.3x faster** | 2.13x slower |
-| Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 34.60 ms | 3.91 ms | 2.00 ms | **8.8x faster** | 1.95x slower |
+| Real `Get-AllowedAverageMs`, absolute-cap branch | 50,000 | 229.96 ms | 5.90 ms | 2.21 ms | **39.0x faster** | 2.67x slower |
+| Real `Get-AllowedAverageMs`, relative-cap branch | 50,000 | 212.69 ms | 4.91 ms | 1.82 ms | **43.4x faster** | 2.69x slower |
+| Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 46.11 ms | 4.47 ms | 2.11 ms | **10.3x faster** | 2.12x slower |
 
 These results prove a benefit only for eligible computation executed as CLR code. They do not promise that an arbitrary script or a generated cmdlet call is faster.
 
-The binary-cmdlet lane includes PowerShell command lookup, parameter binding, pipeline setup, and `WriteObject` for every call. It took 1,531.36 ms and 1,595.28 ms in the two 50,000-call real scenarios, versus 205.78 ms and 194.75 ms for the original function. The useful product shape is a coarse cmdlet that performs substantial compiled work per invocation, not a tiny arithmetic cmdlet called in a PowerShell loop.
+The binary-cmdlet lane includes PowerShell command lookup, parameter binding, pipeline setup, and `WriteObject` for every call. It took 1,879.62 ms and 1,764.51 ms in the two 50,000-call real scenarios, versus 229.96 ms and 212.69 ms for the original function. The useful product shape is a coarse cmdlet that performs substantial compiled work per invocation, not a tiny arithmetic cmdlet called in a PowerShell loop.
 
-Packaging also has a measurable cost. A one-shot `pwsh -File` invocation took 196.21 ms, while the framework-dependent single-file packaged executable took 456.18 ms: 2.33x slower startup. The EXE is valuable for delivery and launch ergonomics, not startup speed.
+Packaging also has a measurable cost. A one-shot `pwsh -File` invocation took 194.50 ms, while the framework-dependent single-file packaged executable took 445.95 ms: 2.29x slower startup. The EXE is valuable for delivery and launch ergonomics, not startup speed.
 
 Run the same matrix locally:
 
