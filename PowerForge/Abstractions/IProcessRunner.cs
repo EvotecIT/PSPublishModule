@@ -519,7 +519,7 @@ public sealed class ProcessRunner : IProcessRunner
                     {
                         using var treeKill = Process.Start(new ProcessStartInfo
                         {
-                            FileName = "taskkill.exe",
+                            FileName = GetWindowsTaskKillPath(),
                             Arguments = $"/PID {process.Id} /T /F",
                             UseShellExecute = false,
                             CreateNoWindow = true
@@ -543,6 +543,11 @@ public sealed class ProcessRunner : IProcessRunner
             // Best-effort cleanup only.
         }
     }
+
+#if NET472
+    internal static string GetWindowsTaskKillPath()
+        => Path.Combine(Environment.SystemDirectory, "taskkill.exe");
+#endif
 
 #if NET472
     private static string QuoteArgument(string argument)

@@ -15,6 +15,40 @@ namespace PowerForge.Tests;
 public sealed class PowerShellTypedCompilationDifferentialTests
 {
     [Fact]
+    public void TypedFloatDivisionPromotesOperandsBeforeEvaluation()
+    {
+        const string source = "function Divide-Single { param([float] $Left, [float] $Right); return $Left / $Right }";
+        using var fixture = DifferentialFixture.Create(source);
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.SingleDivisionDifferential",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+
+        using var assemblyStream = File.OpenRead(build.ArtifactPath!);
+        var loadContext = new AssemblyLoadContext("PowerForgeSingleDivisionDifferential", isCollectible: true);
+        using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        runspace.Open();
+        InitializePowerShellSource(runspace, source);
+        try
+        {
+            var generatedType = loadContext.LoadFromStream(assemblyStream)
+                .GetType("PowerForge.Compiled.PowerForge_SingleDivisionDifferentialMethods", throwOnError: true)!;
+            AssertDifferential(generatedType, runspace, "Divide-Single", "Divide_Single", new[]
+            {
+                new object[] { 1f, 3f },
+                new object[] { 16_777_215f, 3f }
+            });
+        }
+        finally
+        {
+            loadContext.Unload();
+        }
+    }
+
+    [Fact]
     public void TypedCommonModuleHelpersMatchPowerShell()
     {
         const string source =

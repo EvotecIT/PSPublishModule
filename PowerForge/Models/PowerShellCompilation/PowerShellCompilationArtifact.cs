@@ -46,6 +46,8 @@ public sealed class PowerShellCompilationBuildSpec
         if (string.IsNullOrWhiteSpace(sourcePath)) throw new ArgumentException("A source path is required.", nameof(sourcePath));
         if (string.IsNullOrWhiteSpace(outputDirectory)) throw new ArgumentException("An output directory is required.", nameof(outputDirectory));
         if (string.IsNullOrWhiteSpace(artifactName)) throw new ArgumentException("An artifact name is required.", nameof(artifactName));
+        if (!Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), kind)) throw new ArgumentOutOfRangeException(nameof(kind));
+        if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode)) throw new ArgumentOutOfRangeException(nameof(mode));
         SourcePath = System.IO.Path.GetFullPath(sourcePath.Trim().Trim('"'));
         OutputDirectory = System.IO.Path.GetFullPath(outputDirectory.Trim().Trim('"'));
         ArtifactName = artifactName;

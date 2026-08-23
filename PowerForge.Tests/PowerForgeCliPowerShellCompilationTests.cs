@@ -8,7 +8,8 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     [Theory]
     [InlineData("powershell build missing.ps1 --kind exe --sing --output json", "powershell.build", "--sing")]
     [InlineData("powershell analyze missing.ps1 --recurs --output json", "powershell.analyze", "--recurs")]
-    public async Task Commands_RejectUnknownOptions(string arguments, string command, string unknownOption)
+    [InlineData("powershell build missing.ps1 --kind exe --mode 999 --output json", "powershell.build", "999")]
+    public async Task Commands_RejectInvalidOptions(string arguments, string command, string errorFragment)
     {
         var result = await RunCliAsync(FindRepositoryRoot(), arguments);
 
@@ -17,7 +18,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
         using var document = JsonDocument.Parse(result.StdOut);
         Assert.False(document.RootElement.GetProperty("success").GetBoolean());
         Assert.Equal(command, document.RootElement.GetProperty("command").GetString());
-        Assert.Contains(unknownOption, document.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.Contains(errorFragment, document.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

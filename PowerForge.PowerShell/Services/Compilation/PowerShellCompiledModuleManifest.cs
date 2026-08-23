@@ -9,6 +9,27 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellCompiledModuleManifest
 {
+    internal static string[] GetProtectedSourceFiles(string sourcePath, bool includeHybridDependencies)
+    {
+        var protectedFiles = new List<string> { Path.GetFullPath(sourcePath) };
+        var sourceManifest = Path.ChangeExtension(sourcePath, ".psd1");
+        if (File.Exists(sourceManifest))
+        {
+            protectedFiles.Add(Path.GetFullPath(sourceManifest));
+            protectedFiles.AddRange(ReadReferencedFiles(sourceManifest)
+                .Select(reference => ResolveContainedPath(Path.GetDirectoryName(sourceManifest)!, reference.Path))
+                .Where(File.Exists));
+        }
+        if (includeHybridDependencies)
+        {
+            var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? Directory.GetCurrentDirectory();
+            var runtimeHooks = GetContainedRuntimeScriptFiles(sourcePath)
+                .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, reference)));
+            protectedFiles.AddRange(PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath, runtimeHooks));
+        }
+        return protectedFiles.Distinct(GetPathComparer()).ToArray();
+    }
+
     internal static string[] GetRuntimeScriptHooks(string sourcePath)
     {
         var sourceManifest = Path.ChangeExtension(sourcePath, ".psd1");
@@ -75,13 +96,17 @@ internal static class PowerShellCompiledModuleManifest
         var selectedCompiled = Select(explicitCompiled, manifestFunctions);
         var selectedFallback = Select(explicitFallback, manifestFunctions);
         var explicitCmdlets = explicitExports?.Cmdlets ?? Array.Empty<string>();
+        var hasNestedModules = ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules").Any();
+        var preserveWildcardCmdlets = hasNestedModules && manifestCmdlets?.Contains("*", StringComparer.OrdinalIgnoreCase) == true;
         var selectedSourceCmdlets = manifestCmdlets?.Contains("*", StringComparer.OrdinalIgnoreCase) == true
             ? explicitCmdlets
             : Select(explicitCmdlets, manifestCmdlets);
-        var selectedCmdlets = selectedSourceCmdlets
-            .Concat(selectedCompiled)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var selectedCmdlets = preserveWildcardCmdlets
+            ? new[] { "*" }
+            : selectedSourceCmdlets
+                .Concat(selectedCompiled)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
         var mutator = new AstModuleManifestMutator();
         if (!mutator.TrySetTopLevelString(targetManifest, "RootModule", rootModuleFileName))

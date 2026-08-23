@@ -89,6 +89,11 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             "And" => "&&", "Or" => "||",
             _ => throw Error(binary, $"Binary operator '{binary.Operator}' is not implemented.")
         };
+        if (operation == "Divide" && InferBinaryType(binary) == typeof(double))
+        {
+            left = $"((double)({left}))";
+            right = $"((double)({right}))";
+        }
         return $"({left} {symbol} {right})";
     }
 

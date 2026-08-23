@@ -127,6 +127,8 @@ public sealed class PowerShellCompilationPlan
     /// <summary>Creates an aggregate compilation plan.</summary>
     public PowerShellCompilationPlan(PowerShellCompilationMode mode, PowerShellCompilationFilePlan[] files)
     {
+        if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
+            throw new ArgumentOutOfRangeException(nameof(mode));
         Mode = mode;
         Files = files ?? Array.Empty<PowerShellCompilationFilePlan>();
         TotalUnits = Files.Sum(static file => file.Units.Length);
@@ -170,6 +172,8 @@ public sealed class PowerShellCompilationSpec
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("An input path is required.", nameof(path));
+        if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
+            throw new ArgumentOutOfRangeException(nameof(mode));
 
         Path = System.IO.Path.GetFullPath(path.Trim().Trim('"'));
         Mode = mode;

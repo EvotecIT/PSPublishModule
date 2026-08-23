@@ -11,6 +11,10 @@ internal static class PowerShellArtifactSetPublisher
         System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
+    private static readonly StringComparer PathComparer =
+        System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
     internal static string CreateStagingDirectory(string outputDirectory, string artifactName)
     {
@@ -41,7 +45,7 @@ internal static class PowerShellArtifactSetPublisher
             SizeBytes = file.SizeBytes
         }).ToArray();
 
-    internal static void Commit(string stagingDirectory, string outputDirectory, string artifactName)
+    internal static void Commit(string stagingDirectory, string outputDirectory, string artifactName, IEnumerable<string> protectedSourcePaths)
     {
         var stagingPath = NormalizeDirectoryPath(stagingDirectory);
         var outputPath = NormalizeDirectoryPath(outputDirectory);
@@ -61,6 +65,7 @@ internal static class PowerShellArtifactSetPublisher
             artifactName + ".pdb",
             artifactName + ".powerforge-compilation.json"
         }.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        EnsureOwnedEntriesDoNotContainSource(outputPath, ownedNames, protectedSourcePaths);
         var backupDirectory = Path.Combine(outputPath, "." + artifactName + ".artifact-backup-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(backupDirectory);
         var backups = new List<(string Backup, string Target)>();
@@ -118,6 +123,29 @@ internal static class PowerShellArtifactSetPublisher
     }
 
     private static bool EntryExists(string path) => File.Exists(path) || Directory.Exists(path);
+
+    private static void EnsureOwnedEntriesDoNotContainSource(string outputDirectory, IEnumerable<string> ownedNames, IEnumerable<string> sourcePaths)
+    {
+        var protectedPaths = sourcePaths.Select(Path.GetFullPath).Distinct(PathComparer).ToArray();
+        foreach (var name in ownedNames)
+        {
+            var target = Path.GetFullPath(Path.Combine(outputDirectory, name));
+            if (!EntryExists(target)) continue;
+            var protectedPath = protectedPaths.FirstOrDefault(path =>
+                string.Equals(target, path, PathComparison) ||
+                Directory.Exists(target) && IsSameOrDescendant(path, target));
+            if (protectedPath is not null)
+                throw new InvalidOperationException($"Artifact publication target '{target}' contains the input source '{protectedPath}' and cannot be replaced.");
+        }
+    }
+
+    private static bool IsSameOrDescendant(string path, string directory)
+    {
+        var normalizedDirectory = NormalizeDirectoryPath(directory);
+        return string.Equals(path, normalizedDirectory, PathComparison) ||
+               path.StartsWith(normalizedDirectory + Path.DirectorySeparatorChar, PathComparison) ||
+               path.StartsWith(normalizedDirectory + Path.AltDirectorySeparatorChar, PathComparison);
+    }
 
     private static IDisposable AcquirePublicationLock(string outputDirectory, string artifactName)
     {

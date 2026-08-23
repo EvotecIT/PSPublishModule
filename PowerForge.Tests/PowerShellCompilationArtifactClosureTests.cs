@@ -32,7 +32,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 }
                 File.WriteAllText(Path.Combine(staging, artifactName + ".powerforge-compilation.json"), marker);
                 gate.Wait();
-                PowerShellArtifactSetPublisher.Commit(staging, outputDirectory, artifactName);
+                PowerShellArtifactSetPublisher.Commit(staging, outputDirectory, artifactName, new[] { Path.Combine(outputDirectory, "protected-source.ps1") });
             })).ToArray();
 
             gate.Set();
@@ -208,14 +208,25 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
-    public void Build_HybridModulePreservesNamedExternalNestedModule()
+    public void Build_HybridModulePreservesWildcardExportsFromNestedBinaryModule()
     {
+        using var nestedFixture = ArtifactFixture.Create("function Get-NestedValue { return 9 }", ".psm1");
+        var nestedResult = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            nestedFixture.ScriptPath,
+            nestedFixture.OutputPath,
+            "PowerForge.NestedCmdlets",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+        Assert.True(nestedResult.Succeeded, nestedResult.Error + Environment.NewLine + nestedResult.BuildOutput);
+        var nestedAssembly = nestedResult.ArtifactPath!;
+
         using var fixture = ArtifactFixture.Create(
             "function Get-TypedValue { return 1 }; Export-ModuleMember -Function Get-TypedValue",
             ".psm1");
+        File.Copy(nestedAssembly, Path.Combine(fixture.RootPath, "NestedCmdlets.dll"));
         File.WriteAllText(
             Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
-            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; GUID = 'b02be75a-f6a9-421e-94fb-02d51178eeba'; NestedModules = @('Microsoft.PowerShell.Utility'); FunctionsToExport = @('Get-TypedValue') }");
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; GUID = 'b02be75a-f6a9-421e-94fb-02d51178eeba'; NestedModules = @('NestedCmdlets.dll'); FunctionsToExport = @('Get-TypedValue'); CmdletsToExport = '*' }");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
@@ -225,10 +236,86 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
-        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-TypedValue");
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-TypedValue; Get-NestedValue");
         Assert.Equal(0, run.ExitCode);
-        Assert.Equal("1", run.StandardOutput.Trim());
+        Assert.Equal(new[] { "1", "9" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
         Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Build_RefusesToReplaceDirectoryContainingManifestDependency()
+    {
+        using var nestedFixture = ArtifactFixture.Create("function Get-NestedValue { return 9 }", ".psm1");
+        var nestedResult = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            nestedFixture.ScriptPath,
+            nestedFixture.OutputPath,
+            "NestedCmdlets",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+        Assert.True(nestedResult.Succeeded, nestedResult.Error + Environment.NewLine + nestedResult.BuildOutput);
+
+        using var fixture = ArtifactFixture.Create("function Get-TypedValue { return 1 }", ".psm1");
+        var protectedDirectory = Path.Combine(fixture.RootPath, "Foo");
+        Directory.CreateDirectory(protectedDirectory);
+        var protectedDependency = Path.Combine(protectedDirectory, "NestedCmdlets.dll");
+        File.Copy(nestedResult.ArtifactPath!, protectedDependency);
+        var expectedBytes = File.ReadAllBytes(protectedDependency);
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; GUID = 'ef34904f-8dbf-47a1-b4b4-c5f48330645f'; NestedModules = @('Foo/NestedCmdlets.dll'); FunctionsToExport = @('Get-TypedValue'); CmdletsToExport = '*' }");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.RootPath,
+            "Foo",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("contains the input source", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(protectedDependency));
+        Assert.Equal(expectedBytes, File.ReadAllBytes(protectedDependency));
+    }
+
+    [Fact]
+    public void Build_RefusesToReplaceDirectoryContainingHybridDotSourceDependency()
+    {
+        using var fixture = ArtifactFixture.Create(
+            ". \"$PSScriptRoot/Foo/helper.ps1\"; function Get-TypedValue { return 1 }",
+            ".psm1");
+        var protectedDirectory = Path.Combine(fixture.RootPath, "Foo");
+        Directory.CreateDirectory(protectedDirectory);
+        var protectedDependency = Path.Combine(protectedDirectory, "helper.ps1");
+        const string helperSource = "function Get-HelperValue { return 9 }";
+        File.WriteAllText(protectedDependency, helperSource);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.RootPath,
+            "Foo",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("contains the input source", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(protectedDependency));
+        Assert.Equal(helperSource, File.ReadAllText(protectedDependency));
+    }
+
+    [Fact]
+    public void Build_PackagedExecutableRejectsNestedExitStatements()
+    {
+        using var fixture = ArtifactFixture.Create("exit $(exit 1)");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.NestedExit",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("nested exit statements", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

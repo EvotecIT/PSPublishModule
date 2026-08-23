@@ -219,7 +219,13 @@ public sealed class PowerShellCompilationArtifactBuilder
                 };
                 var manifestPath = Path.Combine(spec.OutputDirectory, artifactName + ".powerforge-compilation.json");
                 WriteManifest(Path.Combine(artifactStagingDirectory, Path.GetFileName(manifestPath)), manifest);
-                PowerShellArtifactSetPublisher.Commit(artifactStagingDirectory, spec.OutputDirectory, artifactName);
+                PowerShellArtifactSetPublisher.Commit(
+                    artifactStagingDirectory,
+                    spec.OutputDirectory,
+                    artifactName,
+                    PowerShellCompiledModuleManifest.GetProtectedSourceFiles(
+                        spec.SourcePath,
+                        spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid));
 
                 result.Succeeded = true;
                 result.ArtifactPath = artifactPath;
@@ -249,6 +255,14 @@ public sealed class PowerShellCompilationArtifactBuilder
 
     private static void ValidateSpec(PowerShellCompilationBuildSpec spec)
     {
+        if (!Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), spec.Kind))
+            throw new ArgumentOutOfRangeException(nameof(spec), "Artifact kind is not defined.");
+        if (!Enum.IsDefined(typeof(PowerShellCompilationMode), spec.Mode))
+            throw new ArgumentOutOfRangeException(nameof(spec), "Compilation mode is not defined.");
+        if (!Enum.IsDefined(typeof(PowerShellCompilationExecutableOptimization), spec.Optimization))
+            throw new ArgumentOutOfRangeException(nameof(spec), "Executable optimization is not defined.");
+        if (!Enum.IsDefined(typeof(CertificateStoreLocation), spec.CertificateStoreLocation))
+            throw new ArgumentOutOfRangeException(nameof(spec), "Certificate store location is not defined.");
         if (spec.Mode == PowerShellCompilationMode.Analyze)
             throw new ArgumentException("Analyze mode reports eligibility and does not produce artifacts. Use the analyzer API or CLI analyze command.", nameof(spec));
         if (!File.Exists(spec.SourcePath))

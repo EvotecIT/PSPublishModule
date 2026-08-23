@@ -60,7 +60,9 @@ internal static partial class Program
                 ? PowerShellCompilationMode.Strict
                 : PowerShellCompilationMode.Hybrid;
         var modeValue = TryGetOptionValue(args, "--mode") ?? defaultMode.ToString();
-        if (!Enum.TryParse<PowerShellCompilationMode>(modeValue, ignoreCase: true, out var mode) || mode == PowerShellCompilationMode.Analyze)
+        if (!Enum.TryParse<PowerShellCompilationMode>(modeValue, ignoreCase: true, out var mode) ||
+            !Enum.IsDefined(typeof(PowerShellCompilationMode), mode) ||
+            mode == PowerShellCompilationMode.Analyze)
             return WritePowerShellError(outputJson, 2, $"Unknown artifact compilation mode '{modeValue}'.", logger, "powershell.build");
 
         try
@@ -69,10 +71,12 @@ internal static partial class Program
             var outputDirectory = TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? Path.Combine(Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory(), "artifacts");
             var artifactName = TryGetOptionValue(args, "--name") ?? Path.GetFileNameWithoutExtension(fullPath);
             var optimizationValue = TryGetOptionValue(args, "--optimization") ?? nameof(PowerShellCompilationExecutableOptimization.None);
-            if (!Enum.TryParse<PowerShellCompilationExecutableOptimization>(optimizationValue, ignoreCase: true, out var optimization))
+            if (!Enum.TryParse<PowerShellCompilationExecutableOptimization>(optimizationValue, ignoreCase: true, out var optimization) ||
+                !Enum.IsDefined(typeof(PowerShellCompilationExecutableOptimization), optimization))
                 return WritePowerShellError(outputJson, 2, $"Unknown executable optimization '{optimizationValue}'. Use None, Trimmed, or NativeAot.", logger, "powershell.build");
             var certificateStoreValue = TryGetOptionValue(args, "--certificate-store") ?? nameof(CertificateStoreLocation.CurrentUser);
-            if (!Enum.TryParse<CertificateStoreLocation>(certificateStoreValue, ignoreCase: true, out var certificateStore))
+            if (!Enum.TryParse<CertificateStoreLocation>(certificateStoreValue, ignoreCase: true, out var certificateStore) ||
+                !Enum.IsDefined(typeof(CertificateStoreLocation), certificateStore))
                 return WritePowerShellError(outputJson, 2, $"Unknown certificate store '{certificateStoreValue}'. Use CurrentUser or LocalMachine.", logger, "powershell.build");
             var spec = new PowerShellCompilationBuildSpec(fullPath, outputDirectory, artifactName, kind, mode)
             {
@@ -162,7 +166,8 @@ internal static partial class Program
             return WritePowerShellError(outputJson, 2, "A PowerShell file or directory path is required.", logger);
 
         var modeValue = TryGetOptionValue(args, "--mode") ?? nameof(PowerShellCompilationMode.Analyze);
-        if (!Enum.TryParse<PowerShellCompilationMode>(modeValue, ignoreCase: true, out var mode))
+        if (!Enum.TryParse<PowerShellCompilationMode>(modeValue, ignoreCase: true, out var mode) ||
+            !Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             return WritePowerShellError(outputJson, 2, $"Unknown compilation mode '{modeValue}'.", logger);
 
         try

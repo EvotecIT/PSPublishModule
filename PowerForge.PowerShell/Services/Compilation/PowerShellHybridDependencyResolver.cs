@@ -21,9 +21,38 @@ internal static class PowerShellHybridDependencyResolver
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
         var comparer = GetPathComparer();
-        var discovered = new HashSet<string>(comparer);
-        var pending = new Queue<string>();
+        var entryPaths = new HashSet<string>(
+            new[] { sourcePath }.Concat(additionalEntryPaths ?? Array.Empty<string>()).Select(Path.GetFullPath),
+            comparer);
         var copied = new List<string>();
+        foreach (var dependency in DiscoverDependencies(sourcePath, additionalEntryPaths))
+        {
+            if (entryPaths.Contains(dependency))
+                continue;
+            var target = Path.GetFullPath(Path.Combine(moduleDirectory, FrameworkCompatibility.GetRelativePath(sourceRoot, dependency)));
+            PowerShellCompilationPathSafety.EnsureContained(Path.GetFullPath(moduleDirectory), target, $"Dot-source target for '{dependency}' escapes the hybrid module staging root.");
+            Directory.CreateDirectory(Path.GetDirectoryName(target) ?? moduleDirectory);
+            if (File.Exists(target))
+            {
+                if (!File.ReadAllBytes(target).SequenceEqual(File.ReadAllBytes(dependency)))
+                    throw new InvalidOperationException($"Dot-sourced hybrid module dependency '{dependency}' collides with a generated or manifest-staged artifact.");
+            }
+            else
+            {
+                File.Copy(dependency, target, overwrite: false);
+                copied.Add(target);
+            }
+        }
+        return copied.ToArray();
+    }
+
+    internal static string[] DiscoverDependencies(
+        string sourcePath,
+        IEnumerable<string>? additionalEntryPaths = null)
+    {
+        var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
+        var discovered = new HashSet<string>(GetPathComparer());
+        var pending = new Queue<string>();
         foreach (var entryPath in new[] { sourcePath }.Concat(additionalEntryPaths ?? Array.Empty<string>()))
         {
             var entry = Path.GetFullPath(entryPath);
@@ -59,24 +88,10 @@ internal static class PowerShellHybridDependencyResolver
                 PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, dependency, $"Dot-source path at {current}:{command.Extent.StartLineNumber} traverses a symbolic link or junction, which is not allowed for hybrid staging.");
                 if (!discovered.Add(dependency))
                     continue;
-
-                var target = Path.GetFullPath(Path.Combine(moduleDirectory, FrameworkCompatibility.GetRelativePath(sourceRoot, dependency)));
-                PowerShellCompilationPathSafety.EnsureContained(Path.GetFullPath(moduleDirectory), target, $"Dot-source target for {current}:{command.Extent.StartLineNumber} escapes the hybrid module staging root.");
-                Directory.CreateDirectory(Path.GetDirectoryName(target) ?? moduleDirectory);
-                if (File.Exists(target))
-                {
-                    if (!File.ReadAllBytes(target).SequenceEqual(File.ReadAllBytes(dependency)))
-                        throw new InvalidOperationException($"Dot-sourced hybrid module dependency '{relativePath}' collides with a generated or manifest-staged artifact.");
-                }
-                else
-                {
-                    File.Copy(dependency, target, overwrite: false);
-                    copied.Add(target);
-                }
                 pending.Enqueue(dependency);
             }
         }
-        return copied.ToArray();
+        return discovered.ToArray();
     }
 
     private static string ReadLiteralPath(CommandElementAst expression, string sourcePath, int line)

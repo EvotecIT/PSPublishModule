@@ -9,6 +9,28 @@ namespace PowerForge.Tests;
 public sealed class PowerShellCompilationAnalyzerTests
 {
     [Fact]
+    public void PublicCompilationSpecsRejectUndefinedModesAndKinds()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PowerShellCompilationSpec(
+            Path.GetTempPath(),
+            (PowerShellCompilationMode)999));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PowerShellCompilationPlan(
+            (PowerShellCompilationMode)999,
+            Array.Empty<PowerShellCompilationFilePlan>()));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PowerShellCompilationBuildSpec(
+            "input.ps1",
+            Path.GetTempPath(),
+            "InvalidMode",
+            PowerShellCompilationArtifactKind.Executable,
+            (PowerShellCompilationMode)999));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PowerShellCompilationBuildSpec(
+            "input.ps1",
+            Path.GetTempPath(),
+            "InvalidKind",
+            (PowerShellCompilationArtifactKind)999));
+    }
+
+    [Fact]
     public void Analyze_AcceptsTypedArithmeticLoopAsWholeFunction()
     {
         using var fixture = CompilationFixture.Create(

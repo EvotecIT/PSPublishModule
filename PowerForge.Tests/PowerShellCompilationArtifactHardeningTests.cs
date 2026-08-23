@@ -8,6 +8,35 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
+    [Fact]
+    public void Build_RefusesToReplaceDirectoryContainingInputSource()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var sourceDirectory = Path.Combine(root, "Foo");
+        Directory.CreateDirectory(sourceDirectory);
+        var sourcePath = Path.Combine(sourceDirectory, "Foo.psm1");
+        const string source = "function Get-Value { return 1 }";
+        File.WriteAllText(sourcePath, source);
+        try
+        {
+            var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                sourcePath,
+                root,
+                "Foo",
+                PowerShellCompilationArtifactKind.Library,
+                PowerShellCompilationMode.Strict));
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("contains the input source", result.Error, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(source, File.ReadAllText(sourcePath));
+            Assert.Empty(Directory.EnumerateDirectories(root, ".*.artifact-backup-*", SearchOption.TopDirectoryOnly));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     [Theory]
     [InlineData("net8.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
@@ -99,6 +128,23 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var missingValue = Run(result.ArtifactPath!, "--Name", "--Verbose");
         Assert.Equal(1, missingValue.ExitCode);
         Assert.Contains("requires a value", missingValue.StandardError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_PackagedExecutableRewritesInvocationPathInsideExitExpressionWithoutOverlap()
+    {
+        using var fixture = ArtifactFixture.Create("exit [int]($MyInvocation.MyCommand.Path -eq $PSCommandPath)");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.PackagedExitPath",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(result.ArtifactPath!);
+        Assert.Equal(1, run.ExitCode);
+        Assert.DoesNotContain("ParserError", run.StandardError, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
