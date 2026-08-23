@@ -91,9 +91,47 @@ public sealed class PowerShellTypedCompilationTranspilerTests
 
         var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
 
-        Assert.Single(result.Methods);
+        var method = Assert.Single(result.Methods);
+        Assert.Equal(typeof(object).FullName, method.ReturnType);
         Assert.Empty(result.Diagnostics);
-        Assert.Contains("(Values)[(Index) < 0 ? (Values).Length + (Index) : (Index)]", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("? null : (object)", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains(".Length + (Index)", result.SourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Transpile_RoutesArrayConcatenationCompoundAssignmentToFallback()
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Add-Values { param([int[]] $Values, [int[]] $Other); $Values += $Other; return $Values }");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("compound assignment", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Transpile_RoutesInvalidSignedUnsignedCompoundAssignmentToFallback()
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Add-Value { param([ulong] $Total, [long] $Value); $Total += $Value; return $Total }");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("compound assignment", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Transpile_RoutesStructEqualityWithoutClrOperatorToFallback()
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Test-Entry { $left = [System.Collections.DictionaryEntry]::new('key', 'value'); $right = [System.Collections.DictionaryEntry]::new('key', 'value'); return $left -eq $right }");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("equality operator", StringComparison.OrdinalIgnoreCase));
     }
 
     [Theory]

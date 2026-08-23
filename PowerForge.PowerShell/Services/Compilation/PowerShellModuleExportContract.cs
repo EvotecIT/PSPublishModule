@@ -62,6 +62,12 @@ internal sealed class PowerShellModuleExportContract
                 if (element is CommandParameterAst parameter)
                 {
                     currentParameter = ResolveParameter(parameter);
+                    if (parameter.Argument is not null)
+                    {
+                        foreach (var value in ReadLiteralValues(parameter.Argument))
+                            values[currentParameter].Add(value);
+                        currentParameter = null;
+                    }
                     continue;
                 }
                 if (currentParameter is null)

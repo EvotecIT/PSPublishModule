@@ -76,6 +76,8 @@ internal sealed class PowerShellCSharpMemberEmitter
     internal Type InferIndexType(IndexExpressionAst index)
     {
         var target = ResolveIndexTarget(index);
+        if (IsDirectReturnValue(index))
+            return typeof(object);
         return target.Type == typeof(string) ? typeof(char) : target.Type.GetElementType()!;
     }
 
@@ -84,7 +86,24 @@ internal sealed class PowerShellCSharpMemberEmitter
         var target = ResolveIndexTarget(index);
         var targetCode = EmitTarget(target);
         var indexCode = _emitExpression(index.Index);
-        return $"{targetCode}[({indexCode}) < 0 ? {targetCode}.Length + ({indexCode}) : ({indexCode})]";
+        var normalizedIndex = $"(({indexCode}) < 0 ? {targetCode}.Length + ({indexCode}) : ({indexCode}))";
+        var missing = $"{normalizedIndex} < 0 || {normalizedIndex} >= {targetCode}.Length";
+        var value = $"{targetCode}[{normalizedIndex}]";
+        string emitted;
+        if (IsDirectReturnValue(index))
+            emitted = $"({missing} ? null : (object){value})";
+        else if (IsCompoundAssignmentValue(index))
+        {
+            var elementType = target.Type == typeof(string) ? typeof(char) : target.Type.GetElementType()!;
+            emitted = $"({missing} ? default({_getTypeName(elementType)}) : {value})";
+        }
+        else
+        {
+            throw _error(index, "Typed indexing is currently supported only as a direct return value or compound-assignment operand so missing-index semantics remain exact.");
+        }
+        return target.Type.IsArray
+            ? $"({targetCode} is null ? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\") : {emitted})"
+            : emitted;
     }
 
     internal string EmitInvocation(InvokeMemberExpressionAst invocation)
@@ -252,6 +271,22 @@ internal sealed class PowerShellCSharpMemberEmitter
         => index is VariableExpressionAst or ConstantExpressionAst ||
            index is UnaryExpressionAst { Child: ConstantExpressionAst } unary &&
            unary.TokenKind.ToString() is "Plus" or "Minus";
+
+    private static bool IsDirectReturnValue(IndexExpressionAst index)
+    {
+        Ast current = index;
+        while (current.Parent is CommandExpressionAst or ParenExpressionAst or PipelineAst)
+            current = current.Parent;
+        return current.Parent is ReturnStatementAst;
+    }
+
+    private static bool IsCompoundAssignmentValue(IndexExpressionAst index)
+    {
+        Ast current = index;
+        while (current.Parent is CommandExpressionAst or ParenExpressionAst)
+            current = current.Parent;
+        return current.Parent is AssignmentStatementAst assignment && assignment.Operator.ToString() != "Equals";
+    }
 
     private static string GetMemberName(MemberExpressionAst member)
         => member.Member is StringConstantExpressionAst name && !string.IsNullOrWhiteSpace(name.Value)

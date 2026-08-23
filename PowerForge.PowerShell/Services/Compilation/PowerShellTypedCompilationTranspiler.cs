@@ -35,6 +35,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         var ast = Parser.ParseFile(fullPath, out tokens, out parseErrors);
         if (parseErrors.Length > 0)
             return CreateResult(fullPath, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics);
+        typeName = ResolveCollisionFreeTypeName(typeName, ast);
 
         var eligible = filePlan.Units
             .Where(static unit => unit.Kind == PowerShellCompilationUnitKind.Function && unit.IsCompilable)
@@ -110,6 +111,18 @@ public sealed class PowerShellTypedCompilationTranspiler
 
     private static string SanitizeQualifiedName(string value)
         => string.Join(".", value.Split('.').Select(PowerShellCSharpMethodEmitter.SanitizeIdentifier));
+
+    private static string ResolveCollisionFreeTypeName(string requestedTypeName, ScriptBlockAst ast)
+    {
+        var generatedMethods = ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+            .Cast<FunctionDefinitionAst>()
+            .Select(static function => PowerShellCSharpMethodEmitter.SanitizeIdentifier(function.Name))
+            .ToHashSet(StringComparer.Ordinal);
+        var candidate = PowerShellCSharpMethodEmitter.SanitizeIdentifier(requestedTypeName);
+        while (generatedMethods.Contains(candidate))
+            candidate = PowerShellCSharpMethodEmitter.SanitizeIdentifier("_" + candidate.TrimStart('@'));
+        return candidate;
+    }
 }
 
 internal sealed class PowerShellCSharpEmissionException : Exception

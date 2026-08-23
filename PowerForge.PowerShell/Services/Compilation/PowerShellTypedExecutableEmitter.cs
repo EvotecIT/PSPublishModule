@@ -19,7 +19,14 @@ internal static class PowerShellTypedExecutableEmitter
         if (functionUnits.Length > 0)
             throw new InvalidOperationException("The first typed executable subset accepts top-level script code only; local PowerShell function declarations are not compiled into the entry point yet.");
         if (scriptUnits.Length != 1 || !scriptUnits[0].IsCompilable || !plan.CanProceed)
-            throw new InvalidOperationException("Strict typed executable generation requires one fully eligible top-level script unit with no fallback diagnostics.");
+        {
+            var firstBlocker = plan.Files
+                .SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics)))
+                .FirstOrDefault();
+            throw new InvalidOperationException(firstBlocker is null
+                ? "Strict typed executable generation requires one fully eligible top-level script unit with no fallback diagnostics."
+                : $"Strict typed executable generation requires one fully eligible top-level script unit. First blocker: {firstBlocker.Message}");
+        }
 
         Token[] tokens;
         ParseError[] errors;

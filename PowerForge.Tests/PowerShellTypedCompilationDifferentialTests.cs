@@ -186,12 +186,15 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             });
             AssertDifferential(type, runspace, "Get-IndexedValue", "Get_IndexedValue", new[]
             {
-                new object[] { new[] { 10, 20, 30 }, 0 }, new object[] { new[] { 10, 20, 30 }, 2 }, new object[] { new[] { 10, 20, 30 }, -1 }
+                new object[] { new[] { 10, 20, 30 }, 0 }, new object[] { new[] { 10, 20, 30 }, 2 }, new object[] { new[] { 10, 20, 30 }, -1 },
+                new object[] { new[] { 10, 20, 30 }, 5 }, new object[] { new[] { 10, 20, 30 }, -5 }, new object[] { Array.Empty<int>(), 0 }
             });
             AssertDifferential(type, runspace, "Get-IndexedCharacter", "Get_IndexedCharacter", new[]
             {
-                new object[] { "PowerForge", 0 }, new object[] { "PowerForge", 5 }, new object[] { "PowerForge", -1 }
+                new object[] { "PowerForge", 0 }, new object[] { "PowerForge", 5 }, new object[] { "PowerForge", -1 },
+                new object[] { "PowerForge", 99 }, new object[] { "PowerForge", -99 }, new object[] { string.Empty, 0 }, new object[] { null!, 0 }
             });
+            AssertIndexingNullArrayFails(type, runspace);
         }
         finally
         {
@@ -389,7 +392,7 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             foreach (var argument in arguments) powerShell.AddArgument(argument);
             var output = powerShell.Invoke();
             Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error));
-            var powerShellValue = Assert.Single(output).BaseObject;
+            var powerShellValue = output.Count == 0 ? null : Assert.Single(output)?.BaseObject;
             var compiledValue = method.Invoke(null, arguments);
             AssertEquivalent(powerShellValue, compiledValue, $"{powerShellName}({string.Join(", ", arguments)})");
         }
@@ -421,6 +424,19 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             return;
         }
         Assert.True(Equals(expected, actual), $"{caseName}: PowerShell returned '{expected}' ({expected?.GetType().FullName}); compiled CLR returned '{actual}' ({actual?.GetType().FullName}).");
+    }
+
+    private static void AssertIndexingNullArrayFails(Type generatedType, Runspace runspace)
+    {
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Get-IndexedValue").AddArgument(null).AddArgument(0);
+        powerShell.Invoke();
+        Assert.True(powerShell.HadErrors);
+
+        var method = generatedType.GetMethod("Get_IndexedValue", BindingFlags.Public | BindingFlags.Static)!;
+        var exception = Assert.Throws<TargetInvocationException>(() => method.Invoke(null, new object?[] { null, 0 }));
+        Assert.IsType<InvalidOperationException>(exception.InnerException);
     }
 
     private sealed class DifferentialFixture : IDisposable

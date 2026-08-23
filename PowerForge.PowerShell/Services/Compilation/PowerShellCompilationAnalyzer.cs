@@ -205,6 +205,22 @@ public sealed class PowerShellCompilationAnalyzer
             }
         }
 
+        if (ast.ScriptRequirements is not null)
+        {
+            var requirement = CreateDiagnostic(
+                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                "Source #requires directives cannot be omitted from a typed artifact; this file must remain on the PowerShell runtime path.",
+                file,
+                ast.Extent);
+            for (var index = 0; index < units.Count; index++)
+                units[index] = ReplaceUnit(units[index], typeof(object), new[] { requirement });
+            return new PowerShellCompilationFilePlan(
+                file,
+                relativePath,
+                units.ToArray(),
+                units.Count == 0 ? new[] { requirement } : Array.Empty<PowerShellCompilationDiagnostic>());
+        }
+
         return new PowerShellCompilationFilePlan(file, relativePath, units.ToArray(), Array.Empty<PowerShellCompilationDiagnostic>());
     }
 

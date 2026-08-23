@@ -349,6 +349,66 @@ public sealed class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_HybridModulePreservesColonAttachedLiteralExport()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-PublicValue { return 1 }; function Get-PrivateValue { return 2 }; Export-ModuleMember -Function:Get-PublicValue",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.AttachedExport",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; [bool](Get-Command Get-PublicValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-PrivateValue -ErrorAction SilentlyContinue); Get-PublicValue");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal(new[] { "True", "False", "1" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Build_StrictTypedArtifactRejectsSourceRequiresBeforeDotNetCompilation()
+    {
+        using var fixture = ArtifactFixture.Create("#Requires -RunAsAdministrator" + Environment.NewLine + "param([int] $Value)" + Environment.NewLine + "return $Value");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.SourceRequires",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("#requires", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.True(string.IsNullOrWhiteSpace(result.BuildOutput), result.BuildOutput);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_LibraryAvoidsMethodContainerNameCollision()
+    {
+        using var fixture = ArtifactFixture.Create("function FooMethods { return 42 }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "Foo",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
+        var type = assembly.GetType("PowerForge.Compiled._FooMethods", throwOnError: true)!;
+        Assert.Equal(42, type.GetMethod("FooMethods")!.Invoke(null, null));
+    }
+
+    [Fact]
     public void Build_Net472RejectsRuntimeTypeUnavailableToRequestedTargetBeforeDotNetCompilation()
     {
         using var fixture = ArtifactFixture.Create("function Get-DateValue { return [System.DateOnly]::MinValue }");
