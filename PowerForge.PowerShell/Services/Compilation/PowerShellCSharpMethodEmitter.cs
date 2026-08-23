@@ -433,6 +433,9 @@ internal sealed class PowerShellCSharpMethodEmitter
             var comparison = $"global::System.String.Equals({left}, {right}, global::System.StringComparison.InvariantCulture)";
             return operation == "Cne" ? $"!({comparison})" : comparison;
         }
+        if ((operation is "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge") &&
+            leftType == typeof(string) && rightType == typeof(string))
+            throw Error(binary, "PowerShell string relational comparison uses culture-aware runtime semantics and is not supported by the typed compiler.");
 
         var symbol = operation switch
         {

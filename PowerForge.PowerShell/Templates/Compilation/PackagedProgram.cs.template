@@ -30,31 +30,26 @@ internal static class Program
             }
 
             int? requestedExitCode = null;
-            IEnumerable<PSObject> output;
+            using var output = new PSDataCollection<PSObject>();
+            output.DataAdded += (_, eventArgs) => Console.Out.WriteLine(output[eventArgs.Index]?.ToString());
+            powerShell.Streams.Information.DataAdded += (_, eventArgs) => Console.Out.WriteLine(powerShell.Streams.Information[eventArgs.Index].MessageData?.ToString());
+            powerShell.Streams.Warning.DataAdded += (_, eventArgs) => Console.Error.WriteLine($"WARNING: {powerShell.Streams.Warning[eventArgs.Index].Message}");
+            powerShell.Streams.Error.DataAdded += (_, eventArgs) =>
+            {
+                var error = powerShell.Streams.Error[eventArgs.Index];
+                if (TryGetScriptExitCode(error.Exception, out var exitCode))
+                    requestedExitCode ??= exitCode;
+                else
+                    Console.Error.WriteLine(error.ToString());
+            };
             try
             {
-                output = powerShell.Invoke();
+                powerShell.Invoke<PSObject>(input: null, output);
             }
             catch (RuntimeException exception) when (TryGetScriptExitCode(exception, out _))
             {
                 TryGetScriptExitCode(exception, out var exitCode);
                 requestedExitCode = exitCode;
-                output = Array.Empty<PSObject>();
-            }
-            foreach (var value in output)
-                Console.Out.WriteLine(value?.ToString());
-            foreach (var information in powerShell.Streams.Information)
-                Console.Out.WriteLine(information.MessageData?.ToString());
-            foreach (var warning in powerShell.Streams.Warning)
-                Console.Error.WriteLine($"WARNING: {warning.Message}");
-            foreach (var error in powerShell.Streams.Error)
-            {
-                if (TryGetScriptExitCode(error.Exception, out var exitCode))
-                {
-                    requestedExitCode ??= exitCode;
-                    continue;
-                }
-                Console.Error.WriteLine(error.ToString());
             }
 
             if (requestedExitCode.HasValue)
@@ -90,8 +85,12 @@ internal static class Program
 
             if (!positionalOnly && TryParseParameter(value, out var name, out var inlineValue))
             {
-                if (inlineValue is null && !SwitchParameters.Contains(name) && index + 1 < arguments.Count && !LooksLikeParameter(arguments[index + 1]))
+                if (inlineValue is null && !SwitchParameters.Contains(name))
+                {
+                    if (index + 1 >= arguments.Count || LooksLikeParameter(arguments[index + 1]))
+                        throw new ArgumentException($"Parameter '-{name}' requires a value. Use '-{name}=value' when the value begins with '-'.");
                     inlineValue = arguments[++index];
+                }
                 yield return new ScriptArgument(name, inlineValue);
                 continue;
             }

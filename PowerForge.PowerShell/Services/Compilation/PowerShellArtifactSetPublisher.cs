@@ -1,0 +1,144 @@
+namespace PowerForge;
+
+/// <summary>
+/// Publishes a complete compilation artifact set with rollback when a durable replacement fails.
+/// </summary>
+internal static class PowerShellArtifactSetPublisher
+{
+    private static readonly StringComparison PathComparison =
+        System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+    internal static string CreateStagingDirectory(string outputDirectory, string artifactName)
+    {
+        var path = Path.Combine(outputDirectory, "." + artifactName + ".artifact-staging-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    internal static string RebasePath(string path, string stagingDirectory, string outputDirectory)
+    {
+        var relativePath = FrameworkCompatibility.GetRelativePath(stagingDirectory, path);
+        if (relativePath.Equals("..", StringComparison.Ordinal) ||
+            relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+            relativePath.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+            throw new InvalidOperationException("A staged artifact path escaped its publication directory.");
+        return Path.Combine(outputDirectory, relativePath);
+    }
+
+    internal static PowerShellCompilationArtifactFile[] RebaseFiles(
+        IEnumerable<PowerShellCompilationArtifactFile> files,
+        string stagingDirectory,
+        string outputDirectory)
+        => files.Select(file => new PowerShellCompilationArtifactFile
+        {
+            Path = RebasePath(file.Path, stagingDirectory, outputDirectory),
+            Role = file.Role,
+            Sha256 = file.Sha256
+        }).ToArray();
+
+    internal static void Commit(string stagingDirectory, string outputDirectory, string artifactName)
+    {
+        var stagingPath = NormalizeDirectoryPath(stagingDirectory);
+        var outputPath = NormalizeDirectoryPath(outputDirectory);
+        if (!string.Equals(Path.GetDirectoryName(stagingPath), outputPath, PathComparison))
+            throw new InvalidOperationException("Artifact staging must be a direct child of the durable output directory.");
+
+        var stagedEntries = Directory.EnumerateFileSystemEntries(stagingPath).ToArray();
+        if (stagedEntries.Length == 0)
+            throw new InvalidOperationException("The staged artifact set is empty.");
+
+        var ownedNames = new[]
+        {
+            artifactName,
+            artifactName + ".exe",
+            artifactName + ".dll",
+            artifactName + ".pdb",
+            artifactName + ".powerforge-compilation.json"
+        }.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var backupDirectory = Path.Combine(outputPath, "." + artifactName + ".artifact-backup-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(backupDirectory);
+        var backups = new List<(string Backup, string Target)>();
+        var installed = new List<string>();
+        var preserveBackup = false;
+
+        try
+        {
+            foreach (var name in ownedNames)
+            {
+                var target = Path.Combine(outputPath, name);
+                if (!EntryExists(target)) continue;
+                var backup = Path.Combine(backupDirectory, name);
+                MoveEntry(target, backup);
+                backups.Add((backup, target));
+            }
+
+            foreach (var stagedEntry in stagedEntries)
+            {
+                var target = Path.Combine(outputPath, Path.GetFileName(stagedEntry));
+                MoveEntry(stagedEntry, target);
+                installed.Add(target);
+            }
+        }
+        catch (Exception publicationError)
+        {
+            Exception? rollbackError = null;
+            foreach (var target in installed.AsEnumerable().Reverse())
+            {
+                try { DeleteEntry(target); } catch (Exception ex) { rollbackError ??= ex; }
+            }
+            foreach (var backup in backups.AsEnumerable().Reverse())
+            {
+                try { MoveEntry(backup.Backup, backup.Target); } catch (Exception ex) { rollbackError ??= ex; }
+            }
+            if (rollbackError is not null)
+            {
+                preserveBackup = true;
+                throw new InvalidOperationException("Artifact publication and rollback both failed; inspect the output and backup directories before reuse.", new AggregateException(publicationError, rollbackError));
+            }
+            throw new InvalidOperationException("Artifact publication failed; the previous durable artifact set was restored.", publicationError);
+        }
+        finally
+        {
+            TryDeleteDirectory(stagingPath);
+            if (!preserveBackup)
+                TryDeleteDirectory(backupDirectory);
+        }
+    }
+
+    internal static void TryDeleteDirectory(string path)
+    {
+        if (!Directory.Exists(path)) return;
+        try { Directory.Delete(path, recursive: true); } catch { }
+    }
+
+    private static bool EntryExists(string path) => File.Exists(path) || Directory.Exists(path);
+
+    private static string NormalizeDirectoryPath(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var root = Path.GetPathRoot(fullPath) ?? string.Empty;
+        return fullPath.Length > root.Length
+            ? fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            : fullPath;
+    }
+
+    private static void MoveEntry(string source, string destination)
+    {
+        if (File.Exists(source))
+            File.Move(source, destination);
+        else if (Directory.Exists(source))
+            Directory.Move(source, destination);
+        else
+            throw new FileNotFoundException("Artifact publication entry was not found.", source);
+    }
+
+    private static void DeleteEntry(string path)
+    {
+        if (File.Exists(path))
+            File.Delete(path);
+        else if (Directory.Exists(path))
+            Directory.Delete(path, recursive: true);
+    }
+}

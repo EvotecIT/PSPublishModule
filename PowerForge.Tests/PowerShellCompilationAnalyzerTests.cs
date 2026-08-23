@@ -182,11 +182,15 @@ public sealed class PowerShellCompilationAnalyzerTests
                 param([long] $Wide)
                 return 1, $Wide
             }
+            function Test-StringOrder {
+                param([string] $Left, [string] $Right)
+                return $Left -lt $Right
+            }
             """);
 
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
 
-        Assert.Equal(15, plan.RuntimeFallbackUnits);
+        Assert.Equal(16, plan.RuntimeFallbackUnits);
         Assert.All(Assert.Single(plan.Files).Units, static unit => Assert.False(unit.IsCompilable));
         var messages = string.Join(Environment.NewLine, plan.Files.SelectMany(static file => file.Units).SelectMany(static unit => unit.Diagnostics).Select(static diagnostic => diagnostic.Message));
         Assert.Contains("truthiness", messages, StringComparison.OrdinalIgnoreCase);
@@ -202,6 +206,7 @@ public sealed class PowerShellCompilationAnalyzerTests
         Assert.Contains("break must be inside", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("integral division changes runtime result type", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("one inferred CLR array element type", messages, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("string relational comparison", messages, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class CompilationFixture : IDisposable

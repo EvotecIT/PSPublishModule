@@ -18,6 +18,12 @@ public sealed class PowerShellCompilationArtifactBuilder
     private const string PackagedProgramTemplate = "PowerForge.PowerShell.Compilation.PackagedProgram.cs.template";
     private const string BinaryModuleProjectTemplate = "PowerForge.PowerShell.Compilation.BinaryModule.csproj.template";
     private const int MaximumBuildOutputLength = 64 * 1024;
+    private static readonly HashSet<string> CommonCmdletParameterNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Verbose", "Debug", "ErrorAction", "WarningAction", "InformationAction", "ProgressAction",
+        "ErrorVariable", "WarningVariable", "InformationVariable", "OutVariable", "OutBuffer", "PipelineVariable",
+        "WhatIf", "Confirm", "UseTransaction"
+    };
 
     /// <summary>Builds the requested PowerShell artifact.</summary>
     public PowerShellCompilationBuildResult Build(PowerShellCompilationBuildSpec spec)
@@ -115,44 +121,53 @@ public sealed class PowerShellCompilationArtifactBuilder
             if (process.ExitCode != 0)
                 throw new InvalidOperationException($"Generated .NET build failed with exit code {process.ExitCode}.");
 
-            var copiedArtifact = CopyArtifact(spec, artifactName, publishDirectory, typed, usesPowerShellRuntimeFallback);
-            var artifactPath = copiedArtifact.PrimaryPath;
-            var compiledMethods = typed?.Methods.Length ?? 0;
-            var nonCompiledUnits = Math.Max(0, plan.TotalUnits - compiledMethods);
-            var fallbackUnits = usesPowerShellRuntimeFallback ? nonCompiledUnits : 0;
-            var omittedUnits = spec.Kind == PowerShellCompilationArtifactKind.Library ? nonCompiledUnits : 0;
-            var diagnostics = typed?.Diagnostics ?? plan.Files
-                .SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics)))
-                .ToArray();
-            var manifest = new PowerShellCompilationArtifactManifest
+            var artifactStagingDirectory = PowerShellArtifactSetPublisher.CreateStagingDirectory(spec.OutputDirectory, artifactName);
+            try
             {
-                ArtifactName = artifactName,
-                Kind = spec.Kind,
-                Mode = spec.Mode,
-                SourcePath = spec.SourcePath,
-                TargetFramework = spec.TargetFramework,
-                RuntimeIdentifier = runtimeIdentifier,
-                RequiresPowerShellRuntime = requiresPowerShellRuntime,
-                UsesPowerShellRuntimeFallback = usesPowerShellRuntimeFallback,
-                SelfContained = spec.SelfContained,
-                SingleFile = spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.SingleFile,
-                CompiledMethods = compiledMethods,
-                RuntimeFallbackUnits = fallbackUnits,
-                OmittedUnits = omittedUnits,
-                CompilationCoveragePercentage = plan.TotalUnits == 0 ? 0 : compiledMethods * 100d / plan.TotalUnits,
-                ArtifactPath = artifactPath,
-                ArtifactSha256 = ComputeSha256(artifactPath),
-                Files = copiedArtifact.Files,
-                Diagnostics = diagnostics
-            };
-            var manifestPath = Path.Combine(spec.OutputDirectory, artifactName + ".powerforge-compilation.json");
-            WriteManifest(manifestPath, manifest);
+                var stagedArtifact = CopyArtifact(spec, artifactName, publishDirectory, typed, usesPowerShellRuntimeFallback, artifactStagingDirectory);
+                var artifactPath = PowerShellArtifactSetPublisher.RebasePath(stagedArtifact.PrimaryPath, artifactStagingDirectory, spec.OutputDirectory);
+                var compiledMethods = typed?.Methods.Length ?? 0;
+                var nonCompiledUnits = Math.Max(0, plan.TotalUnits - compiledMethods);
+                var fallbackUnits = usesPowerShellRuntimeFallback ? nonCompiledUnits : 0;
+                var omittedUnits = spec.Kind == PowerShellCompilationArtifactKind.Library ? nonCompiledUnits : 0;
+                var diagnostics = typed?.Diagnostics ?? plan.Files
+                    .SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics)))
+                    .ToArray();
+                var manifest = new PowerShellCompilationArtifactManifest
+                {
+                    ArtifactName = artifactName,
+                    Kind = spec.Kind,
+                    Mode = spec.Mode,
+                    SourcePath = spec.SourcePath,
+                    TargetFramework = spec.TargetFramework,
+                    RuntimeIdentifier = runtimeIdentifier,
+                    RequiresPowerShellRuntime = requiresPowerShellRuntime,
+                    UsesPowerShellRuntimeFallback = usesPowerShellRuntimeFallback,
+                    SelfContained = spec.SelfContained,
+                    SingleFile = spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.SingleFile,
+                    CompiledMethods = compiledMethods,
+                    RuntimeFallbackUnits = fallbackUnits,
+                    OmittedUnits = omittedUnits,
+                    CompilationCoveragePercentage = plan.TotalUnits == 0 ? 0 : compiledMethods * 100d / plan.TotalUnits,
+                    ArtifactPath = artifactPath,
+                    ArtifactSha256 = ComputeSha256(stagedArtifact.PrimaryPath),
+                    Files = PowerShellArtifactSetPublisher.RebaseFiles(stagedArtifact.Files, artifactStagingDirectory, spec.OutputDirectory),
+                    Diagnostics = diagnostics
+                };
+                var manifestPath = Path.Combine(spec.OutputDirectory, artifactName + ".powerforge-compilation.json");
+                WriteManifest(Path.Combine(artifactStagingDirectory, Path.GetFileName(manifestPath)), manifest);
+                PowerShellArtifactSetPublisher.Commit(artifactStagingDirectory, spec.OutputDirectory, artifactName);
 
-            result.Succeeded = true;
-            result.ArtifactPath = artifactPath;
-            result.ManifestPath = manifestPath;
-            result.Manifest = manifest;
-            return result;
+                result.Succeeded = true;
+                result.ArtifactPath = artifactPath;
+                result.ManifestPath = manifestPath;
+                result.Manifest = manifest;
+                return result;
+            }
+            finally
+            {
+                PowerShellArtifactSetPublisher.TryDeleteDirectory(artifactStagingDirectory);
+            }
         }
         catch (Exception ex)
         {
@@ -228,7 +243,8 @@ public sealed class PowerShellCompilationArtifactBuilder
         string artifactName,
         string publishDirectory,
         PowerShellTypedCompilationResult? typed,
-        bool usesPowerShellRuntimeFallback)
+        bool usesPowerShellRuntimeFallback,
+        string outputDirectory)
     {
         if (spec.Kind is PowerShellCompilationArtifactKind.Library or PowerShellCompilationArtifactKind.BinaryModule)
         {
@@ -236,9 +252,9 @@ public sealed class PowerShellCompilationArtifactBuilder
             if (!File.Exists(source)) throw new FileNotFoundException("Generated library was not found.", source);
 
             if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && usesPowerShellRuntimeFallback)
-                return CopyHybridModule(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."));
+                return CopyHybridModule(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory);
 
-            var target = Path.Combine(spec.OutputDirectory, artifactName + ".dll");
+            var target = Path.Combine(outputDirectory, artifactName + ".dll");
             File.Copy(source, target, overwrite: true);
             return CreateCopiedArtifactWithSymbols(source, target, "Primary");
         }
@@ -248,33 +264,21 @@ public sealed class PowerShellCompilationArtifactBuilder
         if (!File.Exists(executable)) throw new FileNotFoundException("Generated executable was not found.", executable);
         if (spec.SingleFile)
         {
-            var target = Path.Combine(spec.OutputDirectory, executableFileName);
+            var target = Path.Combine(outputDirectory, executableFileName);
             File.Copy(executable, target, overwrite: true);
             return CreateCopiedArtifactWithSymbols(executable, target, "Primary");
         }
 
-        var targetDirectory = Path.Combine(spec.OutputDirectory, artifactName);
-        var stagingDirectory = Path.Combine(spec.OutputDirectory, "." + artifactName + ".staging-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(stagingDirectory);
-        try
+        var targetDirectory = Path.Combine(outputDirectory, artifactName);
+        Directory.CreateDirectory(targetDirectory);
+        foreach (var directory in Directory.EnumerateDirectories(publishDirectory, "*", SearchOption.AllDirectories))
+            Directory.CreateDirectory(Path.Combine(targetDirectory, FrameworkCompatibility.GetRelativePath(publishDirectory, directory)));
+        foreach (var file in Directory.EnumerateFiles(publishDirectory, "*", SearchOption.AllDirectories))
         {
-            foreach (var directory in Directory.EnumerateDirectories(publishDirectory, "*", SearchOption.AllDirectories))
-                Directory.CreateDirectory(Path.Combine(stagingDirectory, FrameworkCompatibility.GetRelativePath(publishDirectory, directory)));
-            foreach (var file in Directory.EnumerateFiles(publishDirectory, "*", SearchOption.AllDirectories))
-            {
-                var relativePath = FrameworkCompatibility.GetRelativePath(publishDirectory, file);
-                var target = Path.Combine(stagingDirectory, relativePath);
-                Directory.CreateDirectory(Path.GetDirectoryName(target) ?? stagingDirectory);
-                File.Copy(file, target, overwrite: true);
-            }
-            ReplaceDirectory(stagingDirectory, targetDirectory);
-        }
-        finally
-        {
-            if (Directory.Exists(stagingDirectory))
-            {
-                try { Directory.Delete(stagingDirectory, recursive: true); } catch { }
-            }
+            var relativePath = FrameworkCompatibility.GetRelativePath(publishDirectory, file);
+            var target = Path.Combine(targetDirectory, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(target) ?? targetDirectory);
+            File.Copy(file, target, overwrite: true);
         }
         var primaryPath = Path.Combine(targetDirectory, executableFileName);
         var files = Directory.EnumerateFiles(targetDirectory, "*", SearchOption.AllDirectories)
@@ -284,31 +288,6 @@ public sealed class PowerShellCompilationArtifactBuilder
                 path.Equals(primaryPath, StringComparison.OrdinalIgnoreCase) ? "Primary" : "RuntimeDependency"))
             .ToArray();
         return new CopiedArtifact(primaryPath, files);
-    }
-
-    private static void ReplaceDirectory(string stagingDirectory, string targetDirectory)
-    {
-        var backupDirectory = targetDirectory + ".backup-" + Guid.NewGuid().ToString("N");
-        var movedExisting = false;
-        try
-        {
-            if (Directory.Exists(targetDirectory))
-            {
-                Directory.Move(targetDirectory, backupDirectory);
-                movedExisting = true;
-            }
-            Directory.Move(stagingDirectory, targetDirectory);
-        }
-        catch
-        {
-            if (!Directory.Exists(targetDirectory) && movedExisting && Directory.Exists(backupDirectory))
-                Directory.Move(backupDirectory, targetDirectory);
-            throw;
-        }
-        if (movedExisting && Directory.Exists(backupDirectory))
-        {
-            try { Directory.Delete(backupDirectory, recursive: true); } catch { }
-        }
     }
 
     internal static string GetExecutableFileName(string artifactName, string? runtimeIdentifier)
@@ -323,9 +302,10 @@ public sealed class PowerShellCompilationArtifactBuilder
         PowerShellCompilationBuildSpec spec,
         string artifactName,
         string compiledAssembly,
-        PowerShellTypedCompilationResult typed)
+        PowerShellTypedCompilationResult typed,
+        string outputDirectory)
     {
-        var moduleDirectory = Path.Combine(spec.OutputDirectory, artifactName);
+        var moduleDirectory = Path.Combine(outputDirectory, artifactName);
         Directory.CreateDirectory(moduleDirectory);
         var assemblyPath = Path.Combine(moduleDirectory, artifactName + ".dll");
         var modulePath = Path.Combine(moduleDirectory, artifactName + ".psm1");
@@ -374,6 +354,14 @@ public sealed class PowerShellCompilationArtifactBuilder
             source.Remove(exit.Extent.StartOffset, exit.Extent.EndOffset - exit.Extent.StartOffset);
             source.Insert(exit.Extent.StartOffset, replacement);
         }
+        var prologueEndOffset = ast.ParamBlock?.Extent.EndOffset ?? 0;
+        foreach (var usingStatement in ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false).Cast<UsingStatementAst>())
+            prologueEndOffset = Math.Max(prologueEndOffset, usingStatement.Extent.EndOffset);
+        var pathSemantics = new StringBuilder();
+        if (prologueEndOffset > 0 && source[prologueEndOffset - 1] is not '\r' and not '\n') pathSemantics.AppendLine();
+        pathSemantics.AppendLine("$script:PSCommandPath = [System.Environment]::ProcessPath");
+        pathSemantics.AppendLine("$script:PSScriptRoot = [System.IO.Path]::GetDirectoryName($script:PSCommandPath)");
+        source.Insert(prologueEndOffset, pathSemantics.ToString());
         return source.ToString();
     }
 
@@ -551,6 +539,9 @@ public sealed class PowerShellCompilationArtifactBuilder
             var verb = method.SourceName.Substring(0, separator);
             var noun = method.SourceName.Substring(separator + 1);
             var className = PowerShellCSharpMethodEmitter.SanitizeIdentifier(verb + noun + "Command");
+            var commonParameter = method.Parameters.FirstOrDefault(parameter => CommonCmdletParameterNames.Contains(parameter.Name));
+            if (commonParameter is not null)
+                throw new InvalidOperationException($"Function '{method.SourceName}' parameter '${commonParameter.Name}' collides with a PowerShell common parameter and cannot be exported as a binary cmdlet.");
             builder.AppendLine($"[Cmdlet(\"{EscapeCSharpString(verb)}\", \"{EscapeCSharpString(noun)}\")]");
             if (!method.ReturnType.Equals(typeof(void).FullName, StringComparison.Ordinal))
                 builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(method.ReturnType)}))]");

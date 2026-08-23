@@ -43,7 +43,7 @@ powerforge powershell build .\Invoke-Report.ps1 `
 .\artifacts\Invoke-Report.exe --Path C:\Reports --Format Html
 ```
 
-The generated host accepts positional arguments, `--Name value`, `--Name=value`, switches such as `--Force`, and `--` to stop named-argument parsing. Output and information records go to stdout, warnings and errors go to stderr, and a top-level explicit `exit <code>` becomes the process exit code. Packaging rejects `exit` inside a function, nested script block, trap, or caught region because exception instrumentation would change PowerShell behavior.
+The generated host accepts positional arguments, `--Name value`, `--Name=value`, switches and aliases such as `--Force`, common switches on advanced scripts, and `--` to stop named-argument parsing. A non-switch named parameter must have a value; use `--Name=-value` when that value begins with `-`. Output and information records go to stdout in arrival order, warnings and errors go to stderr, and a top-level explicit `exit <code>` becomes the process exit code. `$PSScriptRoot` resolves to the packaged artifact directory and `$PSCommandPath` to the running artifact path. Packaging rejects `exit` inside a function, nested script block, trap, or caught region because exception instrumentation would change PowerShell behavior.
 
 Compile a strict binary module:
 
@@ -127,6 +127,7 @@ The analyzer rejects dynamic behavior rather than guessing. Current blockers inc
 - parameter attributes, default expressions, and `dynamicparam`, `begin`, `process`, or `clean` blocks;
 - implicit pipeline output and typed top-level script generation;
 - PowerShell truthiness conversions, element-wise array comparison, and coercion between incompatible CLR types;
+- string relational operators whose culture-aware ordering has not yet been translated;
 - explicit conversion expressions, heterogeneous branch return types, and integral division whose PowerShell result type depends on the quotient;
 - untyped integral arithmetic that can change CLR type after overflow;
 - control flow for which the conservative emitter cannot prove declaration or return behavior.
@@ -144,6 +145,8 @@ Each successful build writes `<name>.powerforge-compilation.json`. The manifest 
 - exact source diagnostics and locations for unsupported units.
 
 A packaged EXE therefore reports `requiresPowerShellRuntime: true` and `usesPowerShellRuntimeFallback: true`. A strict CLR library reports both values as `false`. A strict binary module requires PowerShell as its cmdlet host but reports no script fallback.
+
+PowerForge stages the complete owned artifact shape and manifest before publication. Rebuilding under the same artifact name replaces prior EXE, DLL, PDB, module-directory, and manifest state together; a failed durable commit rolls back to the previous set instead of leaving a new binary beside stale integrity evidence.
 
 ## Measured performance
 
@@ -192,4 +195,4 @@ Packaging is not obfuscation, code signing, or source protection. The executable
 
 The generated EXE carries the PowerShell SDK, so it is much larger than the input script and may start more slowly than an installed `pwsh`. Self-contained publication adds the .NET runtime as well. With `SingleFile = $false`, PowerForge preserves the complete nested publish tree instead of copying only top-level files. Runtime-packaged artifacts must be rebuilt when their embedded PowerShell or .NET dependencies need security updates.
 
-Typed compilation is currently function-oriented. A strictly typed top-level EXE entry point is not implemented; executable output uses the packaging lane. Hybrid module composition preserves `using` and module `param` prologues for mixed `.ps1` or `.psm1` source. A source with explicit `Export-ModuleMember` declarations or a sibling `.psd1` manifest is rejected for now rather than risk exposing private helpers or changing selective exports. A plain CLR library contains only the eligible methods and no automatic PowerShell fallback host.
+Typed compilation is currently function-oriented. A strictly typed top-level EXE entry point is not implemented; executable output uses the packaging lane. Hybrid module composition preserves `using` and module `param` prologues for mixed `.ps1` or `.psm1` source. A source with explicit `Export-ModuleMember` declarations or a sibling `.psd1` manifest is rejected for now rather than risk exposing private helpers or changing selective exports. Binary-module generation also rejects function parameters that collide with PowerShell common or optional common parameters. A plain CLR library contains only the eligible methods and no automatic PowerShell fallback host.

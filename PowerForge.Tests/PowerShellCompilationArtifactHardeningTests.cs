@@ -1,0 +1,196 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using PowerForge;
+using Xunit;
+
+namespace PowerForge.Tests;
+
+public sealed class PowerShellCompilationArtifactHardeningTests
+{
+    [Fact]
+    public void Build_PackagedExecutablePreservesOrderedOutputPathSemanticsAndValueValidation()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            [CmdletBinding()]
+            param([string] $Name)
+            Write-Information 'information-before' -InformationAction Continue
+            "output:$Name"
+            Write-Information 'information-after' -InformationAction Continue
+            "root:$PSScriptRoot"
+            "path:$PSCommandPath"
+            """);
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.PackagedSemantics",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var success = Run(result.ArtifactPath!, "--Name", "Ada");
+        Assert.True(success.ExitCode == 0, success.StandardError + Environment.NewLine + success.StandardOutput);
+        Assert.True(string.IsNullOrWhiteSpace(success.StandardError), success.StandardError);
+        var lines = success.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal("information-before", lines[0]);
+        Assert.Equal("output:Ada", lines[1]);
+        Assert.Equal("information-after", lines[2]);
+        AssertPathsEqual(Path.GetDirectoryName(result.ArtifactPath!)!, lines[3].Substring("root:".Length));
+        AssertPathsEqual(result.ArtifactPath!, lines[4].Substring("path:".Length));
+
+        var missingValue = Run(result.ArtifactPath!, "--Name", "--Verbose");
+        Assert.Equal(1, missingValue.ExitCode);
+        Assert.Contains("requires a value", missingValue.StandardError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_BinaryModuleRejectsPowerShellCommonParameterCollision()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Get-Collision {
+                param([string] $Verbose)
+                return $Verbose
+            }
+            """);
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.CommonParameterCollision",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("common parameter", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_ReplacesTheCompleteArtifactShapeWithoutLeavingPriorFiles()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Get-TypedValue {
+                param([int] $Value)
+                return $Value
+            }
+            function Get-DynamicValue {
+                param([string] $Path)
+                return Get-Item -LiteralPath $Path
+            }
+            """);
+        var librarySpec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ShapeReplacement",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Hybrid);
+        var library = new PowerShellCompilationArtifactBuilder().Build(librarySpec);
+        Assert.True(library.Succeeded, library.Error + Environment.NewLine + library.BuildOutput);
+        var previousLibraryPath = library.ArtifactPath!;
+        Assert.True(File.Exists(previousLibraryPath));
+
+        var moduleSpec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ShapeReplacement",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid);
+        var module = new PowerShellCompilationArtifactBuilder().Build(moduleSpec);
+
+        Assert.True(module.Succeeded, module.Error + Environment.NewLine + module.BuildOutput);
+        Assert.False(File.Exists(previousLibraryPath));
+        Assert.True(Directory.Exists(Path.Combine(fixture.OutputPath, "PowerForge.ShapeReplacement")));
+        Assert.All(module.Manifest!.Files, file => Assert.True(File.Exists(file.Path), file.Path));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath, ".PowerForge.ShapeReplacement.artifact-*"));
+    }
+
+    [Fact]
+    public void Build_RestoresPreviousArtifactSetWhenDurableCommitFails()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+
+        using var fixture = ArtifactFixture.Create("function Get-Value { return 1 }");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.AtomicRollback",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict);
+        var first = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(first.Succeeded, first.Error + Environment.NewLine + first.BuildOutput);
+        var originalArtifactHash = Hash(first.ArtifactPath!);
+        var originalManifestHash = Hash(first.ManifestPath!);
+        File.WriteAllText(fixture.ScriptPath, "function Get-Value { return 2 }");
+
+        PowerShellCompilationBuildResult failed;
+        using (new FileStream(first.ManifestPath!, FileMode.Open, FileAccess.Read, FileShare.None))
+            failed = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(failed.Succeeded);
+        Assert.Contains("previous durable artifact set was restored", failed.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(originalArtifactHash, Hash(first.ArtifactPath!));
+        Assert.Equal(originalManifestHash, Hash(first.ManifestPath!));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath, ".PowerForge.AtomicRollback.artifact-*"));
+    }
+
+    private static (int ExitCode, string StandardOutput, string StandardError) Run(string fileName, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
+        using var process = Process.Start(startInfo)!;
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(60_000), "Packaged executable did not exit within 60 seconds.");
+        return (process.ExitCode, standardOutput, standardError);
+    }
+
+    private static void AssertPathsEqual(string expected, string actual)
+    {
+        var comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        Assert.True(Path.GetFullPath(expected).Equals(Path.GetFullPath(actual), comparison), $"Expected '{expected}', got '{actual}'.");
+    }
+
+    private static string Hash(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+
+    private sealed class ArtifactFixture : IDisposable
+    {
+        private ArtifactFixture(string rootPath, string scriptPath, string outputPath)
+        {
+            RootPath = rootPath;
+            ScriptPath = scriptPath;
+            OutputPath = outputPath;
+        }
+
+        public string RootPath { get; }
+        public string ScriptPath { get; }
+        public string OutputPath { get; }
+
+        public static ArtifactFixture Create(string source)
+        {
+            var rootPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+            var outputPath = Path.Combine(rootPath, "output");
+            Directory.CreateDirectory(outputPath);
+            var scriptPath = Path.Combine(rootPath, "input.ps1");
+            File.WriteAllText(scriptPath, source);
+            return new ArtifactFixture(rootPath, scriptPath, outputPath);
+        }
+
+        public void Dispose()
+        {
+            try { Directory.Delete(RootPath, recursive: true); } catch { }
+        }
+    }
+}
