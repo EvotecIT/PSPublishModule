@@ -622,6 +622,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             PreprocessedProjectReferenceDeclaration[] projectReferenceDeclarations =
                 Array.Empty<PreprocessedProjectReferenceDeclaration>();
+            PreprocessedProjectPropertyDefinition[] preResolvePropertyDefinitions =
+                Array.Empty<PreprocessedProjectPropertyDefinition>();
+            bool hasDynamicProjectReferenceTaskOutputs = false;
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
                 AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
@@ -680,12 +683,28 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!TryReadPreprocessedProjectImports(
                         request,
                         out string[] preprocessedImports,
-                        out projectReferenceDeclarations))
+                        out projectReferenceDeclarations,
+                        out preResolvePropertyDefinitions,
+                        out hasDynamicProjectReferenceTaskOutputs))
                     return false;
                 importPaths.UnionWith(preprocessedImports);
                 importPaths.UnionWith(ReadDeclaredBuildInputCandidates(
                     request.ProjectPath,
                     importPaths));
+                if (projectReferenceDeclarations.Length > 0 ||
+                    hasDynamicProjectReferenceTaskOutputs ||
+                    preResolvePropertyDefinitions.Any(definition =>
+                        definition.Element.Name.LocalName.Equals(
+                            "_GlobalPropertiesToRemoveFromProjectReferences",
+                            StringComparison.OrdinalIgnoreCase)))
+                {
+                    evaluatedProjectReferenceConditionProperties =
+                        ReadEvaluatedProjectReferenceConditionProperties(request, importPaths);
+                    taskWideProjectReferencePropertyRemovals =
+                        ReadPreResolveTaskWideProjectReferencePropertyRemovals(
+                            preResolvePropertyDefinitions,
+                            evaluatedProjectReferenceConditionProperties);
+                }
                 foreach (string importPath in importPaths)
                 {
                     AddClassifiedEvaluatedInput(
@@ -700,14 +719,6 @@ public sealed partial class DotNetPublishPipelineRunner
 
                 if (root.TryGetProperty("Items", out JsonElement items))
                 {
-                    if (items.TryGetProperty("ProjectReference", out JsonElement projectReferenceItems) &&
-                        projectReferenceItems.ValueKind == JsonValueKind.Array &&
-                        projectReferenceItems.GetArrayLength() > 0)
-                    {
-                        evaluatedProjectReferenceConditionProperties =
-                            ReadEvaluatedProjectReferenceConditionProperties(request, importPaths);
-                    }
-
                     HashSet<string> embeddedResourceProjectReferences =
                         ReadProjectReferenceOutputKeys(items, "EmbeddedResource");
                     HashSet<string> analyzerProjectReferences =
@@ -760,7 +771,10 @@ public sealed partial class DotNetPublishPipelineRunner
                                         evaluatedProjectReferenceConditionProperties,
                                         taskWideProjectReferencePropertyRemovals,
                                         preferEffectiveLiteralAssignments: projectReferenceDeclarations.Any(
-                                            declaration => declaration.IsTargetTime),
+                                            declaration => declaration.IsTargetTime) ||
+                                            hasDynamicProjectReferenceTaskOutputs,
+                                        allowAmbiguousEvaluatedAssignments:
+                                            hasDynamicProjectReferenceTaskOutputs,
                                         out EvaluatedProjectReference[] itemReferences) ||
                                     itemReferences.Length == 0)
                                 {
@@ -821,6 +835,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         projectReferenceDeclarations,
                         evaluatedProjectReferenceConditionProperties,
                         taskWideProjectReferencePropertyRemovals,
+                        hasDynamicProjectReferenceTaskOutputs,
                         out EvaluatedProjectReference[] resolvedReferences))
                     return false;
                 foreach (EvaluatedProjectReference reference in MergeResolvedProjectReferenceContexts(

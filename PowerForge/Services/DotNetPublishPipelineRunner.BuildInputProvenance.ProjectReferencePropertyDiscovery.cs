@@ -7,6 +7,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static string[] ReadProjectReferenceConditionPropertyNames(IEnumerable<string> projectPaths)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        names.Add("_GlobalPropertiesToRemoveFromProjectReferences");
         var propertyDefinitions = new Dictionary<string, List<XElement>>(StringComparer.OrdinalIgnoreCase);
         foreach (string projectPath in projectPaths
                      .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))

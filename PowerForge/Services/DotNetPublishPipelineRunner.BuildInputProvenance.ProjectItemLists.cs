@@ -50,6 +50,16 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             names.Add("ProjectReference");
         }
+        if (document.Descendants().Any(element =>
+                element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase) &&
+                element.Attributes().Any(attribute =>
+                    attribute.Name.LocalName.Equals("ItemName", StringComparison.OrdinalIgnoreCase) &&
+                    attribute.Value.Trim().Equals("ProjectReference", StringComparison.OrdinalIgnoreCase)) &&
+                element.Ancestors().Any(ancestor =>
+                    ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase))))
+        {
+            names.Add("ProjectReference");
+        }
         return names.ToArray();
     }
 

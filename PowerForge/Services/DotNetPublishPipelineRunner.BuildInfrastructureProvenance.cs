@@ -1,26 +1,9 @@
 using System.Text.Json;
-using System.Xml.Linq;
 
 namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private static bool ProjectDeclaresTargetFramework(string projectPath)
-    {
-        try
-        {
-            XDocument project = XDocument.Load(projectPath, LoadOptions.None);
-            return project.Descendants().Any(element =>
-                (element.Name.LocalName.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
-                 element.Name.LocalName.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase)) &&
-                !string.IsNullOrWhiteSpace(element.Value));
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     private static bool IsGeneratedBuildInfrastructurePath(
         string path,
         IEnumerable<string>? generatedBuildRoots)

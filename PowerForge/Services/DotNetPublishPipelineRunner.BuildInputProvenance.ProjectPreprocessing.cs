@@ -8,10 +8,14 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryReadPreprocessedProjectImports(
         ProjectEvaluationRequest request,
         out string[] imports,
-        out PreprocessedProjectReferenceDeclaration[] projectReferenceDeclarations)
+        out PreprocessedProjectReferenceDeclaration[] projectReferenceDeclarations,
+        out PreprocessedProjectPropertyDefinition[] preResolvePropertyDefinitions,
+        out bool hasDynamicProjectReferenceTaskOutputs)
     {
         imports = Array.Empty<string>();
         projectReferenceDeclarations = Array.Empty<PreprocessedProjectReferenceDeclaration>();
+        preResolvePropertyDefinitions = Array.Empty<PreprocessedProjectPropertyDefinition>();
+        hasDynamicProjectReferenceTaskOutputs = false;
         string outputPath = Path.Combine(
             Path.GetTempPath(),
             "powerforge-msbuild-imports-" + Guid.NewGuid().ToString("N") + ".xml");
@@ -90,14 +94,32 @@ public sealed partial class DotNetPublishPipelineRunner
             if (document.Root is null)
                 return false;
 
-            bool hasTargetTimeProjectReferences = document.Descendants().Any(element =>
+            bool hasDeclaredProjectReferences = document.Descendants().Any(element =>
+                element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase));
+            bool hasDeclaredTargetTimeProjectReferences = document.Descendants().Any(element =>
                 element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase) &&
                 element.Ancestors().Any(ancestor =>
                     ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)));
-            string[] initialTargetExpressions = hasTargetTimeProjectReferences
+            hasDynamicProjectReferenceTaskOutputs = document.Descendants().Any(element =>
+                element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase) &&
+                element.Attributes().Any(attribute =>
+                    attribute.Name.LocalName.Equals("ItemName", StringComparison.OrdinalIgnoreCase) &&
+                    attribute.Value.Trim().Equals("ProjectReference", StringComparison.OrdinalIgnoreCase)) &&
+                element.Ancestors().Any(ancestor =>
+                    ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)));
+            bool hasTargetTimeRemovalProperty = document.Descendants().Any(element =>
+                element.Name.LocalName.Equals(
+                    "_GlobalPropertiesToRemoveFromProjectReferences",
+                    StringComparison.OrdinalIgnoreCase) &&
+                element.Ancestors().Any(ancestor =>
+                    ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)));
+            bool requiresTargetGraph = hasDeclaredTargetTimeProjectReferences ||
+                                       hasDynamicProjectReferenceTaskOutputs ||
+                                       (hasDeclaredProjectReferences && hasTargetTimeRemovalProperty);
+            string[] initialTargetExpressions = requiresTargetGraph
                 ? ReadProjectInitialTargetExpressions(request.ProjectPath, imports)
                 : Array.Empty<string>();
-            ScheduledProjectReferenceTargetGraph scheduledTargets = hasTargetTimeProjectReferences
+            ScheduledProjectReferenceTargetGraph scheduledTargets = requiresTargetGraph
                 ? ReadScheduledProjectReferenceTargets(request, document, initialTargetExpressions)
                 : ScheduledProjectReferenceTargetGraph.Empty;
             IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItemLists =
@@ -105,6 +127,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     request,
                     ReadProjectReferenceItemListNames(document),
                     executeResolveReferences:
+                        hasDynamicProjectReferenceTaskOutputs ||
                         RequiresTargetExecutionForProjectReferenceIdentities(document));
             HashSet<string> immutableGlobalProperties = ReadImmutableGlobalPropertyNames(
                 request,
@@ -203,6 +226,16 @@ public sealed partial class DotNetPublishPipelineRunner
 
             IReadOnlyDictionary<string, string> initialProperties =
                 BuildInitialProjectReferenceProperties(request);
+
+            preResolvePropertyDefinitions = propertyDefinitions
+                .Concat(scheduledTargets.ReadExecutionOrder().SelectMany(target =>
+                    targetPropertyDefinitions.TryGetValue(
+                        target,
+                        out List<PreprocessedProjectPropertyDefinition>? definitions)
+                        ? (IEnumerable<PreprocessedProjectPropertyDefinition>)definitions
+                        : Array.Empty<PreprocessedProjectPropertyDefinition>()))
+                .Distinct()
+                .ToArray();
 
             projectReferenceDeclarations = declarationElements
                 .OrderBy(declaration => declaration.IsTargetTime ? 1 : 0)
@@ -497,6 +530,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 ? _executionOrder.Take(index)
                 : Array.Empty<XElement>();
         }
+
+        internal IEnumerable<XElement> ReadExecutionOrder() => _executionOrder;
     }
 
 }

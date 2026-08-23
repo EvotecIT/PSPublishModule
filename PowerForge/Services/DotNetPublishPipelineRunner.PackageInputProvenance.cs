@@ -28,8 +28,8 @@ public sealed partial class DotNetPublishPipelineRunner
         };
         if (request.Configuration is not null)
             arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
-        if (request.TargetFramework is not null &&
-            !ProjectDeclaresTargetFramework(request.ProjectPath))
+        if (!string.IsNullOrEmpty(request.TargetFramework) &&
+            !ProjectDeclaresUnconditionalTargetFramework(request.ProjectPath))
         {
             arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
         }
@@ -72,6 +72,25 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 // A leftover temporary lock cannot make an input trusted.
             }
+        }
+    }
+
+    private static bool ProjectDeclaresUnconditionalTargetFramework(string projectPath)
+    {
+        try
+        {
+            XDocument project = XDocument.Load(projectPath, LoadOptions.None);
+            return project.Descendants().Any(element =>
+                (element.Name.LocalName.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
+                 element.Name.LocalName.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase)) &&
+                !string.IsNullOrWhiteSpace(element.Value) &&
+                !element.AncestorsAndSelf().Any(candidate => candidate.Attributes().Any(attribute =>
+                    attribute.Name.LocalName.Equals("Condition", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(attribute.Value))));
+        }
+        catch
+        {
+            return false;
         }
     }
 

@@ -49,6 +49,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
         bool preferEffectiveLiteralAssignments,
+        bool allowAmbiguousEvaluatedAssignments,
         out EvaluatedProjectReference[] references)
         => TryReadEvaluatedProjectReferences(
             item,
@@ -59,6 +60,7 @@ public sealed partial class DotNetPublishPipelineRunner
             evaluatedConditionProperties,
             taskWidePropertyRemovals,
             preferEffectiveLiteralAssignments,
+            allowAmbiguousEvaluatedAssignments,
             out references);
 
     private static bool TryReadEvaluatedProjectReferences(
@@ -70,6 +72,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
         bool preferEffectiveLiteralAssignments,
+        bool allowAmbiguousEvaluatedAssignments,
         out EvaluatedProjectReference[] references)
     {
         references = Array.Empty<EvaluatedProjectReference>();
@@ -98,6 +101,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     "Properties",
                     projectProperties,
                     preferEffectiveLiteralAssignments,
+                    allowAmbiguousEvaluatedAssignments,
                     out propertyContexts))
             {
                 return false;
@@ -117,6 +121,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         metadataName,
                         ReadItemText(item, metadataName),
                         preferEffectiveLiteralAssignments,
+                        allowAmbiguousEvaluatedAssignments,
                         out propertyContexts))
                 {
                     return false;
@@ -134,6 +139,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 "AdditionalProperties",
                 ReadItemText(item, "AdditionalProperties"),
                 preferEffectiveLiteralAssignments,
+                allowAmbiguousEvaluatedAssignments,
                 out propertyContexts))
         {
             return false;
@@ -178,6 +184,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyList<PreprocessedProjectReferenceDeclaration> projectReferenceDeclarations,
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
+        bool allowAmbiguousEvaluatedAssignments,
         out EvaluatedProjectReference[] references)
     {
         references = Array.Empty<EvaluatedProjectReference>();
@@ -200,6 +207,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluatedConditionProperties,
                     taskWidePropertyRemovals,
                     preferEffectiveLiteralAssignments: false,
+                    allowAmbiguousEvaluatedAssignments,
                     out EvaluatedProjectReference[] itemReferences))
             {
                 return false;
@@ -402,6 +410,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 evaluatedConditionProperties,
                 taskWidePropertyRemovals,
                 preferEffectiveLiteralAssignments: false,
+                allowAmbiguousEvaluatedAssignments: false,
                 out EvaluatedProjectReference[] projectReferences) ||
             projectReferences.Length == 0)
         {

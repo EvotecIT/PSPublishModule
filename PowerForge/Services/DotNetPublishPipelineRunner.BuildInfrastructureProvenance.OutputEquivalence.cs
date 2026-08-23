@@ -18,6 +18,12 @@ public sealed partial class DotNetPublishPipelineRunner
 
         try
         {
+            if (HasAuthenticodeCertificateTable(candidatePath) ||
+                HasAuthenticodeCertificateTable(controlledPath))
+            {
+                return false;
+            }
+
             byte[] candidateContent = ReadManagedProvenanceContent(candidatePath);
             byte[] controlledContent = ReadManagedProvenanceContent(controlledPath);
             return candidateContent.SequenceEqual(controlledContent);
@@ -34,6 +40,13 @@ public sealed partial class DotNetPublishPipelineRunner
         using SHA256 hash = SHA256.Create();
         using FileStream stream = File.OpenRead(path);
         return hash.ComputeHash(stream);
+    }
+
+    private static bool HasAuthenticodeCertificateTable(string path)
+    {
+        using FileStream stream = File.OpenRead(path);
+        using var reader = new PEReader(stream);
+        return reader.PEHeaders.PEHeader?.CertificateTableDirectory.Size > 0;
     }
 
     private static byte[] ReadManagedProvenanceContent(string path)

@@ -17,6 +17,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string metadataName,
         string? assignments,
         bool preferEffectiveLiteralAssignments,
+        bool allowAmbiguousEvaluatedAssignments,
         out List<Dictionary<string, string>> results)
     {
         results = new List<Dictionary<string, string>>();
@@ -38,6 +39,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 preferEffectiveLiteralAssignments,
                 out Dictionary<string, string>[] overlays,
                 out bool hadEffectiveAssignments);
+        if (!readLiteralTables &&
+            allowAmbiguousEvaluatedAssignments &&
+            !hadEffectiveAssignments)
+        {
+            readLiteralTables = TryReadAmbiguousProjectReferencePropertyTables(
+                assignments!,
+                out overlays);
+        }
         if (!readLiteralTables &&
             preferEffectiveLiteralAssignments &&
             !hadEffectiveAssignments)
@@ -482,6 +491,135 @@ public sealed partial class DotNetPublishPipelineRunner
 
         tables = table.Count == 0 ? Array.Empty<Dictionary<string, string>>() : [table];
         return tables.Length > 0;
+    }
+
+    private static bool TryReadAmbiguousProjectReferencePropertyTables(
+        string assignments,
+        out Dictionary<string, string>[] tables)
+    {
+        var results = new List<Dictionary<string, string>>();
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        string[] segments = assignments.Split(new[] { ';' });
+        if (!TryExpandAmbiguousProjectReferencePropertyTables(
+                segments,
+                index: 0,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                currentName: null,
+                currentValue: string.Empty,
+                results,
+                keys))
+        {
+            tables = Array.Empty<Dictionary<string, string>>();
+            return false;
+        }
+
+        tables = results.ToArray();
+        return tables.Length > 0;
+    }
+
+    private static bool TryExpandAmbiguousProjectReferencePropertyTables(
+        IReadOnlyList<string> segments,
+        int index,
+        Dictionary<string, string> completed,
+        string? currentName,
+        string currentValue,
+        List<Dictionary<string, string>> results,
+        HashSet<string> keys)
+    {
+        if (results.Count > MaximumProjectReferencePropertyContexts)
+            return false;
+
+        if (index >= segments.Count)
+        {
+            var result = new Dictionary<string, string>(completed, StringComparer.OrdinalIgnoreCase);
+            if (currentName is not null)
+                result[currentName] = currentValue;
+            if (keys.Add(BuildProjectReferencePropertyTableKey(result)))
+                results.Add(result);
+            return results.Count <= MaximumProjectReferencePropertyContexts;
+        }
+
+        string segment = segments[index];
+        int separator = segment.IndexOf('=');
+        if (currentName is null)
+        {
+            if (separator <= 0)
+            {
+                return TryExpandAmbiguousProjectReferencePropertyTables(
+                    segments,
+                    index + 1,
+                    completed,
+                    currentName: null,
+                    currentValue: string.Empty,
+                    results,
+                    keys);
+            }
+
+            string name = segment.Substring(0, separator).Trim();
+            if (name.Length == 0)
+            {
+                return TryExpandAmbiguousProjectReferencePropertyTables(
+                    segments,
+                    index + 1,
+                    completed,
+                    currentName: null,
+                    currentValue: string.Empty,
+                    results,
+                    keys);
+            }
+
+            return TryExpandAmbiguousProjectReferencePropertyTables(
+                segments,
+                index + 1,
+                completed,
+                name,
+                segment.Substring(separator + 1).Trim(),
+                results,
+                keys);
+        }
+
+        if (!TryExpandAmbiguousProjectReferencePropertyTables(
+                segments,
+                index + 1,
+                completed,
+                currentName,
+                currentValue + ";" + segment,
+                results,
+                keys))
+        {
+            return false;
+        }
+
+        if (segment.Length == 0)
+        {
+            return TryExpandAmbiguousProjectReferencePropertyTables(
+                segments,
+                index + 1,
+                completed,
+                currentName,
+                currentValue,
+                results,
+                keys);
+        }
+        if (separator <= 0)
+            return true;
+
+        string nextName = segment.Substring(0, separator).Trim();
+        if (nextName.Length == 0)
+            return true;
+
+        var nextCompleted = new Dictionary<string, string>(completed, StringComparer.OrdinalIgnoreCase)
+        {
+            [currentName] = currentValue
+        };
+        return TryExpandAmbiguousProjectReferencePropertyTables(
+            segments,
+            index + 1,
+            nextCompleted,
+            nextName,
+            segment.Substring(separator + 1).Trim(),
+            results,
+            keys);
     }
 
     private static string BuildProjectReferencePropertyTableKey(
