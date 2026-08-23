@@ -60,12 +60,13 @@ public sealed class PowerShellCompilationArtifactBuilder
                 File.WriteAllText(Path.Combine(workspace, "CompiledPowerShellScript.cs"), executable.CompiledSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 File.WriteAllText(Path.Combine(workspace, "Program.cs"), executable.ProgramSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 projectPath = Path.Combine(workspace, artifactName + ".csproj");
+                var publishSingleFile = ShouldEnablePublishSingleFile(spec);
                 File.WriteAllText(
                     projectPath,
                     ReadTemplate(TypedExecutableProjectTemplate)
                         .Replace("{{TARGET_FRAMEWORK}}", EscapeXml(spec.TargetFramework))
                         .Replace("{{ARTIFACT_NAME}}", EscapeXml(artifactName))
-                        .Replace("{{SINGLE_FILE}}", spec.SingleFile ? "true" : "false")
+                        .Replace("{{SINGLE_FILE}}", publishSingleFile ? "true" : "false")
                         .Replace("{{SELF_CONTAINED}}", spec.SelfContained ? "true" : "false")
                         .Replace("{{PUBLISH_TRIMMED}}", spec.Optimization != PowerShellCompilationExecutableOptimization.None ? "true" : "false")
                         .Replace("{{PUBLISH_AOT}}", spec.Optimization == PowerShellCompilationExecutableOptimization.NativeAot ? "true" : "false"),
@@ -250,6 +251,9 @@ public sealed class PowerShellCompilationArtifactBuilder
             !spec.TargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Typed libraries and binary modules currently target net472, net8.0, or net10.0.", nameof(spec));
     }
+
+    internal static bool ShouldEnablePublishSingleFile(PowerShellCompilationBuildSpec spec)
+        => spec.SingleFile && spec.Optimization != PowerShellCompilationExecutableOptimization.NativeAot;
 
     private static GeneratedBuildProcessResult RunDotNetBuild(
         PowerShellCompilationBuildSpec spec,

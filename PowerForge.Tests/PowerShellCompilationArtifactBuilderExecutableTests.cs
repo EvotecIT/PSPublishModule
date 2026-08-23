@@ -131,6 +131,24 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void NativeAotUsesItsNativeSingleArtifactInsteadOfSingleFileBundling()
+    {
+        using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.NativeAotSingleArtifact",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict)
+        {
+            SingleFile = true,
+            Optimization = PowerShellCompilationExecutableOptimization.NativeAot
+        };
+
+        Assert.False(PowerShellCompilationArtifactBuilder.ShouldEnablePublishSingleFile(spec));
+    }
+
+    [Fact]
     public void Build_SigningFailureDoesNotPublishUnsignedArtifactsOrStaleHashes()
     {
         using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");
