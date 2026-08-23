@@ -7,7 +7,7 @@ internal static partial class Program
     private const string PowerShellAnalyzeUsage =
         "Usage: powerforge powershell analyze <path> [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--no-recurse] [--output json]";
     private const string PowerShellBuildUsage =
-        "Usage: powerforge powershell build <path> --kind <exe|dll|library> [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--output json]";
+        "Usage: powerforge powershell build <path> [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
 
     private static int CommandPowerShell(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -40,7 +40,7 @@ internal static partial class Program
         if (!TryValidatePowerShellArguments(
                 args,
                 new[] { "--path", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--framework", "--rid", "--optimization", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
-                new[] { "--self-contained", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
+                new[] { "--self-contained", "--emit-source", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
                 out var argumentError))
             return WritePowerShellError(outputJson, 2, argumentError, logger, "powershell.build");
 
@@ -51,8 +51,13 @@ internal static partial class Program
             return WritePowerShellError(outputJson, 2, "A PowerShell source file is required.", logger, "powershell.build");
 
         var kindValue = TryGetOptionValue(args, "--kind") ?? TryGetOptionValue(args, "--target");
-        if (!TryParseArtifactKind(kindValue, out var kind))
-            return WritePowerShellError(outputJson, 2, "Artifact kind must be 'exe', 'dll', or 'library'.", logger, "powershell.build");
+        PowerShellCompilationArtifactKind? kindOverride = null;
+        if (!string.IsNullOrWhiteSpace(kindValue))
+        {
+            if (!TryParseArtifactKind(kindValue, out var parsedKind))
+                return WritePowerShellError(outputJson, 2, "Artifact kind must be 'exe', 'dll', or 'library'.", logger, "powershell.build");
+            kindOverride = parsedKind;
+        }
 
         var defaultMode = PowerShellCompilationBuildSpec.GetDefaultMode(kind);
         var modeValue = TryGetOptionValue(args, "--mode") ?? defaultMode.ToString();
@@ -64,8 +69,9 @@ internal static partial class Program
         try
         {
             var fullPath = Path.GetFullPath(path.Trim().Trim('"'));
-            var outputDirectory = TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? Path.Combine(Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory(), "artifacts");
-            var artifactName = TryGetOptionValue(args, "--name") ?? Path.GetFileNameWithoutExtension(fullPath);
+            var resolved = new PowerShellCompilationInputResolver().Resolve(fullPath, kindOverride, modeOverride);
+            var outputDirectory = TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? Path.Combine(resolved.ModuleRoot, "artifacts");
+            var artifactName = TryGetOptionValue(args, "--name") ?? resolved.ArtifactName;
             var optimizationValue = TryGetOptionValue(args, "--optimization") ?? nameof(PowerShellCompilationExecutableOptimization.None);
             if (!Enum.TryParse<PowerShellCompilationExecutableOptimization>(optimizationValue, ignoreCase: true, out var optimization) ||
                 !Enum.IsDefined(typeof(PowerShellCompilationExecutableOptimization), optimization))
@@ -74,8 +80,10 @@ internal static partial class Program
             if (!Enum.TryParse<CertificateStoreLocation>(certificateStoreValue, ignoreCase: true, out var certificateStore) ||
                 !Enum.IsDefined(typeof(CertificateStoreLocation), certificateStore))
                 return WritePowerShellError(outputJson, 2, $"Unknown certificate store '{certificateStoreValue}'. Use CurrentUser or LocalMachine.", logger, "powershell.build");
-            var spec = new PowerShellCompilationBuildSpec(fullPath, outputDirectory, artifactName, kind, mode)
+            var spec = new PowerShellCompilationBuildSpec(resolved.SourcePath, outputDirectory, artifactName, resolved.Kind, resolved.Mode)
             {
+                ModuleManifestPath = resolved.ModuleManifestPath,
+                CompilationSourcePaths = resolved.CompilationSourceFiles,
                 TargetFramework = TryGetOptionValue(args, "--framework") ?? "net8.0",
                 RuntimeIdentifier = TryGetOptionValue(args, "--rid"),
                 SelfContained = args.Any(static argument => argument.Equals("--self-contained", StringComparison.OrdinalIgnoreCase)),
@@ -85,7 +93,8 @@ internal static partial class Program
                 CertificateThumbprint = TryGetOptionValue(args, "--certificate-thumbprint"),
                 CertificateStoreLocation = certificateStore,
                 TimeStampServer = TryGetOptionValue(args, "--timestamp-server") ?? "http://timestamp.digicert.com",
-                KeepBuildWorkspace = args.Any(static argument => argument.Equals("--keep-workspace", StringComparison.OrdinalIgnoreCase))
+                KeepBuildWorkspace = args.Any(static argument => argument.Equals("--keep-workspace", StringComparison.OrdinalIgnoreCase)),
+                EmitSource = args.Any(static argument => argument.Equals("--emit-source", StringComparison.OrdinalIgnoreCase))
             };
             var signingTimeoutValue = TryGetOptionValue(args, "--signing-timeout");
             if (!string.IsNullOrWhiteSpace(signingTimeoutValue))
@@ -125,8 +134,10 @@ internal static partial class Program
                 return exitCode;
             }
 
-            logger.Success($"Built {kind}: {result.ArtifactPath}");
+            logger.Success($"Built {resolved.Kind}: {result.ArtifactPath}");
             logger.Info($"Manifest: {result.ManifestPath}");
+            if (!string.IsNullOrWhiteSpace(result.GeneratedSourcePath))
+                logger.Info($"Generated source: {result.GeneratedSourcePath}");
             logger.Info(result.Manifest!.UsesPowerShellRuntimeFallback
                 ? $"Runtime-packaged artifact: {result.Manifest.RuntimeFallbackUnits} unit(s) execute through PowerShell."
                 : result.Manifest.RequiresPowerShellRuntime

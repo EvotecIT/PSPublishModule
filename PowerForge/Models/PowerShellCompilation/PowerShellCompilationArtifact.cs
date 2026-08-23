@@ -78,6 +78,12 @@ public sealed class PowerShellCompilationBuildSpec
     /// <summary>PowerShell source file.</summary>
     public string SourcePath { get; }
 
+    /// <summary>Optional source module manifest selected independently from the root script module.</summary>
+    public string? ModuleManifestPath { get; set; }
+
+    /// <summary>Optional contained literal dot-sourced files that participate in the same module compilation scope.</summary>
+    public string[] CompilationSourcePaths { get; set; } = Array.Empty<string>();
+
     /// <summary>Destination directory for durable artifacts and the manifest.</summary>
     public string OutputDirectory { get; }
 
@@ -123,6 +129,9 @@ public sealed class PowerShellCompilationBuildSpec
     /// <summary>Whether the generated build workspace should be retained for inspection.</summary>
     public bool KeepBuildWorkspace { get; set; }
 
+    /// <summary>Whether a durable, independently buildable copy of the generated source project should be published.</summary>
+    public bool EmitSource { get; set; }
+
     /// <summary>Maximum time allowed for restore and compilation.</summary>
     public int TimeoutSeconds { get; set; } = 300;
 }
@@ -146,6 +155,9 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Full source path.</summary>
     public string SourcePath { get; set; } = string.Empty;
+
+    /// <summary>All authored files resolved into the shared module compilation scope.</summary>
+    public string[] SourceFiles { get; set; } = Array.Empty<string>();
 
     /// <summary>Target framework.</summary>
     public string TargetFramework { get; set; } = string.Empty;
@@ -195,6 +207,9 @@ public sealed class PowerShellCompilationArtifactManifest
     /// <summary>Exact artifact file path.</summary>
     public string ArtifactPath { get; set; } = string.Empty;
 
+    /// <summary>Durable generated source project path when source emission was requested.</summary>
+    public string? GeneratedSourcePath { get; set; }
+
     /// <summary>SHA-256 of the primary artifact.</summary>
     public string ArtifactSha256 { get; set; } = string.Empty;
 
@@ -239,6 +254,9 @@ public sealed class PowerShellCompilationBuildResult
 
     /// <summary>Retained generated workspace path when requested.</summary>
     public string? BuildWorkspace { get; set; }
+
+    /// <summary>Durable generated source project path when requested.</summary>
+    public string? GeneratedSourcePath { get; set; }
 
     /// <summary>Failure message.</summary>
     public string? Error { get; set; }

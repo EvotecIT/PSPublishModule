@@ -21,13 +21,13 @@ Builds a packaged executable, typed CLR library, or importable binary/hybrid mod
 
 ### EXAMPLE 1
 ```powershell
-Build-PowerShellArtifact -Path .\tool.ps1 -Kind Executable -OutputDirectory .\artifacts
+Build-PowerShellArtifact -Path .\MyModule -EmitSource
 ```
 
 
 ### EXAMPLE 2
 ```powershell
-Build-PowerShellArtifact -Path .\module.psm1 -Kind BinaryModule -Mode Hybrid -OutputDirectory .\artifacts
+Build-PowerShellArtifact -Path .\tool.ps1
 ```
 
 
@@ -82,7 +82,7 @@ Accept wildcard characters: False
 ```
 
 ### -Kind
-Artifact shape to produce.
+Optional artifact shape. Defaults to Executable for .ps1 and BinaryModule for module inputs.
 
 ```yaml
 Type: PowerShellCompilationArtifactKind
@@ -90,7 +90,7 @@ Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: Executable, Library, BinaryModule
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -98,7 +98,7 @@ Accept wildcard characters: False
 ```
 
 ### -Mode
-Fallback policy. Defaults to Package for EXE, Strict for binary modules, and Hybrid for CLR libraries. Analyze is not a build mode.
+Fallback policy. Defaults to Package for executables and Hybrid for module/library inputs. Analyze is not a build mode.
 
 ```yaml
 Type: PowerShellCompilationMode
@@ -162,7 +162,7 @@ Accept wildcard characters: False
 ```
 
 ### -Path
-PowerShell script or module source path.
+PowerShell script, module manifest, script module, or module directory.
 
 ```yaml
 Type: String

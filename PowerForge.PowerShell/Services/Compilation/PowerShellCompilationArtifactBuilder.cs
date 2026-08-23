@@ -57,7 +57,7 @@ public sealed class PowerShellCompilationArtifactBuilder
             int compiledUnits;
             int runtimeRoutedUnits;
             var runtimeManifestHooks = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
-                ? PowerShellCompiledModuleManifest.GetRuntimeScriptHooks(spec.SourcePath)
+                ? PowerShellCompiledModuleManifest.GetRuntimeScriptHooks(spec.SourcePath, spec.ModuleManifestPath)
                 : Array.Empty<string>();
             if (spec.Mode == PowerShellCompilationMode.Strict && runtimeManifestHooks.Length > 0)
                 throw new InvalidOperationException(
@@ -89,7 +89,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                 if (spec.Mode == PowerShellCompilationMode.Package)
                     throw new InvalidOperationException("DLL artifacts require Hybrid or Strict mode because they contain genuinely typed methods.");
                 typed = new PowerShellTypedCompilationTranspiler().Transpile(
-                    spec.SourcePath,
+                    compilationSourcePaths,
                     "PowerForge.Compiled",
                     PowerShellCSharpMethodEmitter.SanitizeIdentifier(artifactName) + "Methods",
                     spec.TargetFramework);
@@ -102,7 +102,8 @@ public sealed class PowerShellCompilationArtifactBuilder
                         typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework);
                     typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, spec.TargetFramework);
                 }
-                if (typed.Methods.Length == 0)
+                if (typed.Methods.Length == 0 &&
+                    !(spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid))
                 {
                     var firstBlocker = typed.Diagnostics.FirstOrDefault();
                     throw new InvalidOperationException(firstBlocker is null
@@ -188,6 +189,32 @@ public sealed class PowerShellCompilationArtifactBuilder
             try
             {
                 var stagedArtifact = CopyArtifact(spec, artifactName, publishDirectory, typed, usesPowerShellRuntimeFallback, artifactStagingDirectory);
+                string? stagedGeneratedSourcePath = null;
+                if (spec.EmitSource)
+                {
+                    stagedGeneratedSourcePath = PowerShellGeneratedSourcePublisher.CopyProject(
+                        workspace,
+                        projectPath,
+                        artifactName,
+                        artifactStagingDirectory,
+                        spec,
+                        typed);
+                    stagedArtifact = stagedArtifact.WithAdditionalFiles(
+                        Directory.EnumerateFiles(stagedGeneratedSourcePath, "*", SearchOption.AllDirectories)
+                            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+                            .Select(path => CreateArtifactFile(
+                                path,
+                                Path.GetExtension(path).Equals(".csproj", StringComparison.OrdinalIgnoreCase)
+                                    ? "GeneratedProject"
+                                    : Path.GetFileName(path).Equals("source-map.json", StringComparison.OrdinalIgnoreCase)
+                                        ? "GeneratedSourceMap"
+                                    : Path.GetFileName(path).Equals("global.json", StringComparison.OrdinalIgnoreCase) ||
+                                      Path.GetFileName(path).StartsWith("Directory.", StringComparison.OrdinalIgnoreCase)
+                                        ? "GeneratedBuildIsolation"
+                                    : Path.GetExtension(path).Equals(".ps1", StringComparison.OrdinalIgnoreCase)
+                                        ? "GeneratedPackagedSource"
+                                        : "GeneratedSource")));
+                }
                 var signing = PowerShellCompilationArtifactSigner.Sign(spec, stagedArtifact.Files);
                 if (signing is not null)
                 {
@@ -198,6 +225,9 @@ public sealed class PowerShellCompilationArtifactBuilder
                     }
                 }
                 var artifactPath = PowerShellArtifactSetPublisher.RebasePath(stagedArtifact.PrimaryPath, artifactStagingDirectory, spec.OutputDirectory);
+                var generatedSourcePath = stagedGeneratedSourcePath is null
+                    ? null
+                    : PowerShellArtifactSetPublisher.RebasePath(stagedGeneratedSourcePath, artifactStagingDirectory, spec.OutputDirectory);
                 var nonCompiledUnits = Math.Max(0, plan.TotalUnits - compiledUnits);
                 var fallbackUnits = usesPowerShellRuntimeFallback
                     ? Math.Max(0, plan.TotalUnits - runtimeRoutedUnits) + runtimeManifestHooks.Length
@@ -212,6 +242,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                     Kind = spec.Kind,
                     Mode = spec.Mode,
                     SourcePath = spec.SourcePath,
+                    SourceFiles = compilationSourcePaths,
                     TargetFramework = spec.TargetFramework,
                     RuntimeIdentifier = runtimeIdentifier,
                     RequiresPowerShellRuntime = requiresPowerShellRuntime,
@@ -224,6 +255,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                     OmittedUnits = omittedUnits,
                     CompilationCoveragePercentage = plan.TotalUnits == 0 ? 0 : compiledUnits * 100d / plan.TotalUnits,
                     ArtifactPath = artifactPath,
+                    GeneratedSourcePath = generatedSourcePath,
                     ArtifactSha256 = ComputeSha256(stagedArtifact.PrimaryPath),
                     ArtifactSizeBytes = new FileInfo(stagedArtifact.PrimaryPath).Length,
                     AuthenticodeSigned = signing is not null,
@@ -240,11 +272,13 @@ public sealed class PowerShellCompilationArtifactBuilder
                     artifactName,
                     PowerShellCompiledModuleManifest.GetProtectedSourceFiles(
                         spec.SourcePath,
-                        spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid));
+                        spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid,
+                        spec.ModuleManifestPath));
 
                 result.Succeeded = true;
                 result.ArtifactPath = artifactPath;
                 result.ManifestPath = manifestPath;
+                result.GeneratedSourcePath = generatedSourcePath;
                 result.Manifest = manifest;
                 return result;
             }
@@ -285,6 +319,21 @@ public sealed class PowerShellCompilationArtifactBuilder
         var extension = Path.GetExtension(spec.SourcePath);
         if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("PowerShell artifacts accept .ps1 and .psm1 source files.", nameof(spec));
+        if (!string.IsNullOrWhiteSpace(spec.ModuleManifestPath))
+        {
+            if (!File.Exists(spec.ModuleManifestPath))
+                throw new FileNotFoundException("PowerShell module manifest was not found.", spec.ModuleManifestPath);
+            if (!Path.GetExtension(spec.ModuleManifestPath).Equals(".psd1", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("ModuleManifestPath must reference a .psd1 file.", nameof(spec));
+            var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath));
+            var manifestDirectory = Path.GetDirectoryName(Path.GetFullPath(spec.ModuleManifestPath));
+            if (!string.Equals(sourceDirectory, manifestDirectory, RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                throw new ArgumentException("The source .psm1 and module manifest must reside in the same module directory.", nameof(spec));
+            PowerShellCompilationPathSafety.EnsureNoLinks(
+                sourceDirectory!,
+                Path.GetFullPath(spec.ModuleManifestPath),
+                $"PowerShell module manifest '{spec.ModuleManifestPath}' traverses a symbolic link or junction.");
+        }
         if (spec.TimeoutSeconds < 1)
             throw new ArgumentOutOfRangeException(nameof(spec), "Build timeout must be positive.");
         if (spec.SignArtifact && string.IsNullOrWhiteSpace(spec.TimeStampServer))
@@ -310,6 +359,62 @@ public sealed class PowerShellCompilationArtifactBuilder
             !spec.TargetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) &&
             !spec.TargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Typed libraries and binary modules currently target net472, net8.0, or net10.0.", nameof(spec));
+    }
+
+    private static string[] ResolveCompilationSourcePaths(PowerShellCompilationBuildSpec spec)
+    {
+        var sourcePath = Path.GetFullPath(spec.SourcePath);
+        var sourceRoot = Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory();
+        var paths = new[] { sourcePath }
+            .Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(path.Trim().Trim('"')))
+            .Distinct(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
+        foreach (var path in paths)
+        {
+            if (!File.Exists(path))
+                throw new FileNotFoundException("PowerShell compilation source file was not found.", path);
+            var extension = Path.GetExtension(path);
+            if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException($"PowerShell compilation source '{path}' must be a .ps1 or .psm1 file.", nameof(spec));
+            if (!path.Equals(sourcePath, RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                PowerShellCompilationPathSafety.EnsureContained(sourceRoot, path, $"Additional compilation source '{path}' escapes the root module directory.");
+            PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, path, $"Compilation source '{path}' traverses a symbolic link or junction.");
+        }
+        if (spec.Kind == PowerShellCompilationArtifactKind.Executable && paths.Length != 1)
+            throw new ArgumentException("Executable compilation accepts one script entrypoint; module-scope source sets are supported by library and binary-module artifacts.", nameof(spec));
+        return paths;
+    }
+
+    private static PowerShellCompilationPlan AnalyzeCompilationSources(IEnumerable<string> sourcePaths, PowerShellCompilationMode mode)
+    {
+        var analyzer = new PowerShellCompilationAnalyzer();
+        var files = sourcePaths
+            .SelectMany(path => analyzer.Analyze(new PowerShellCompilationSpec(path, mode)).Files)
+            .ToArray();
+        return new PowerShellCompilationPlan(mode, files);
+    }
+
+    private static void ValidateRuntimeHookSourceOwnership(
+        PowerShellCompilationBuildSpec spec,
+        IEnumerable<string> compilationSourcePaths)
+    {
+        if (spec.Kind != PowerShellCompilationArtifactKind.BinaryModule || string.IsNullOrWhiteSpace(spec.ModuleManifestPath))
+            return;
+        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var comparer = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var compilationSources = compilationSourcePaths.Select(Path.GetFullPath).ToHashSet(comparer);
+        var overlap = PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(spec.SourcePath, spec.ModuleManifestPath)
+            .Select(reference => Path.GetFullPath(Path.Combine(
+                sourceRoot,
+                PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(reference))))
+            .FirstOrDefault(compilationSources.Contains);
+        if (overlap is not null)
+        {
+            throw new InvalidOperationException(
+                $"PowerShell source '{overlap}' cannot be both an explicit compilation source and a manifest runtime hook. Remove it from CompilationSourcePaths so its runtime scope and loading semantics are preserved.");
+        }
     }
 
     internal static bool ShouldEnablePublishSingleFile(PowerShellCompilationBuildSpec spec)
@@ -365,7 +470,8 @@ public sealed class PowerShellCompilationArtifactBuilder
             if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && usesPowerShellRuntimeFallback)
                 return CopyHybridModule(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory);
 
-            if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && HasSiblingModuleManifest(spec.SourcePath))
+            if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
+                (!string.IsNullOrWhiteSpace(spec.ModuleManifestPath) || HasSiblingModuleManifest(spec.SourcePath)))
                 return CopyStrictModuleWithManifest(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory);
 
             var target = Path.Combine(outputDirectory, artifactName + ".dll");
@@ -432,13 +538,18 @@ public sealed class PowerShellCompilationArtifactBuilder
         var files = new List<PowerShellCompilationArtifactFile>();
         File.WriteAllText(
             modulePath,
-            GenerateHybridModuleScript(spec.SourcePath, Path.GetFileName(assemblyPath), typed),
+            PowerShellHybridModuleComposer.ComposeRoot(
+                spec.SourcePath,
+                Path.GetFileName(assemblyPath),
+                typed,
+                manifestControlsExports: !string.IsNullOrWhiteSpace(spec.ModuleManifestPath) || HasSiblingModuleManifest(spec.SourcePath)),
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         files.Add(CreateArtifactFile(modulePath, "PrimaryModule"));
         files.Add(CreateArtifactFile(assemblyPath, "TypedAssembly"));
         CopyDebugSymbolsIfPresent(compiledAssembly, assemblyPath, files);
         var manifestFiles = PowerShellCompiledModuleManifest.Create(
             spec.SourcePath,
+            spec.ModuleManifestPath,
             moduleDirectory,
             artifactName,
             Path.GetFileName(modulePath),
@@ -451,10 +562,17 @@ public sealed class PowerShellCompilationArtifactBuilder
                 files.Add(CreateArtifactFile(manifestFile, manifestFile.Equals(primaryManifest, StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
         }
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
-        var runtimeHooks = PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(spec.SourcePath)
-            .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, reference)))
+        var runtimeHooks = PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(spec.SourcePath, spec.ModuleManifestPath)
+            .Select(reference => Path.GetFullPath(Path.Combine(
+                sourceRoot,
+                PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(reference))))
             .ToArray();
-        foreach (var dependency in PowerShellHybridDependencyResolver.CopyDependencies(spec.SourcePath, moduleDirectory, runtimeHooks))
+        var wrappedCompiledMethods = PowerShellHybridModuleComposer.GetWrappedCompiledMethodKeys(spec.SourcePath, typed);
+        foreach (var dependency in PowerShellHybridDependencyResolver.CopyDependencies(
+                     spec.SourcePath,
+                     moduleDirectory,
+                     runtimeHooks,
+                     path => PowerShellHybridModuleComposer.ComposeDependency(path, typed, wrappedCompiledMethods)))
             files.Add(CreateArtifactFile(dependency, "ModuleDependency"));
         var primaryPath = manifestFiles?.First(path => path.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase)) ?? modulePath;
         return new CopiedArtifact(primaryPath, files.ToArray());
@@ -475,6 +593,7 @@ public sealed class PowerShellCompilationArtifactBuilder
         CopyDebugSymbolsIfPresent(compiledAssembly, assemblyPath, files);
         var manifestFiles = PowerShellCompiledModuleManifest.Create(
             spec.SourcePath,
+            spec.ModuleManifestPath,
             moduleDirectory,
             artifactName,
             Path.GetFileName(assemblyPath),
@@ -632,12 +751,6 @@ public sealed class PowerShellCompilationArtifactBuilder
         => Path.GetExtension(sourcePath).Equals(".psm1", StringComparison.OrdinalIgnoreCase) &&
            File.Exists(Path.ChangeExtension(sourcePath, ".psd1"));
 
-    private static string JoinPowerShellNames(IEnumerable<string> names)
-        => string.Join(", ", names.Select(name => "'" + EscapePowerShellSingleQuotedString(name) + "'"));
-
-    private static string EscapePowerShellSingleQuotedString(string value)
-        => value.Replace("'", "''");
-
     private static CopiedArtifact CreateCopiedArtifactWithSymbols(string sourcePath, string targetPath, string role)
     {
         var files = new List<PowerShellCompilationArtifactFile> { CreateArtifactFile(targetPath, role) };
@@ -716,7 +829,7 @@ public sealed class PowerShellCompilationArtifactBuilder
         var sanitized = new string(value.Trim().Select(character => char.IsLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '_').ToArray());
         if (string.IsNullOrWhiteSpace(sanitized) || sanitized is "." or "..")
             throw new ArgumentException("Artifact name does not contain a usable file name.", nameof(value));
-        if (new[] { ".exe", ".dll", ".pdb", ".powerforge-compilation.json" }
+        if (new[] { ".exe", ".dll", ".pdb", ".generated", ".powerforge-compilation.json" }
             .Any(suffix => sanitized.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
             throw new ArgumentException("Artifact name must not end with a generated artifact suffix because it can overlap another artifact set.", nameof(value));
         PowerShellArtifactSetPublisher.EnsureArtifactNameIsNotReserved(sanitized, nameof(value));
@@ -739,6 +852,9 @@ public sealed class PowerShellCompilationArtifactBuilder
 
         internal string PrimaryPath { get; }
         internal PowerShellCompilationArtifactFile[] Files { get; }
+
+        internal CopiedArtifact WithAdditionalFiles(IEnumerable<PowerShellCompilationArtifactFile> files)
+            => new(PrimaryPath, Files.Concat(files).ToArray());
     }
 
     private sealed class GeneratedBuildProcessResult
@@ -754,4 +870,5 @@ public sealed class PowerShellCompilationArtifactBuilder
         internal string Output { get; }
         internal bool TimedOut { get; }
     }
+
 }

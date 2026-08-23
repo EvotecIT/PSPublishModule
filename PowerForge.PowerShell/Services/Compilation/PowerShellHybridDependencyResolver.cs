@@ -16,7 +16,8 @@ internal static class PowerShellHybridDependencyResolver
     internal static string[] CopyDependencies(
         string sourcePath,
         string moduleDirectory,
-        IEnumerable<string>? additionalEntryPaths = null)
+        IEnumerable<string>? additionalEntryPaths = null,
+        Func<string, string?>? contentTransformer = null)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
         var comparer = PowerShellCompilationPathSafety.PathComparer;
@@ -31,10 +32,19 @@ internal static class PowerShellHybridDependencyResolver
             var target = Path.GetFullPath(Path.Combine(moduleDirectory, FrameworkCompatibility.GetRelativePath(sourceRoot, dependency)));
             PowerShellCompilationPathSafety.EnsureContained(Path.GetFullPath(moduleDirectory), target, $"Dot-source target for '{dependency}' escapes the hybrid module staging root.");
             Directory.CreateDirectory(Path.GetDirectoryName(target) ?? moduleDirectory);
+            var transformedContent = contentTransformer?.Invoke(dependency);
             if (File.Exists(target))
             {
-                if (!File.ReadAllBytes(target).SequenceEqual(File.ReadAllBytes(dependency)))
+                var matches = transformedContent is null
+                    ? File.ReadAllBytes(target).SequenceEqual(File.ReadAllBytes(dependency))
+                    : File.ReadAllText(target).Equals(transformedContent, StringComparison.Ordinal);
+                if (!matches)
                     throw new InvalidOperationException($"Dot-sourced hybrid module dependency '{dependency}' collides with a generated or manifest-staged artifact.");
+            }
+            else if (transformedContent is not null)
+            {
+                File.WriteAllText(target, transformedContent, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                copied.Add(target);
             }
             else
             {
@@ -48,6 +58,15 @@ internal static class PowerShellHybridDependencyResolver
     internal static string[] DiscoverDependencies(
         string sourcePath,
         IEnumerable<string>? additionalEntryPaths = null)
+        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: false);
+
+    internal static string[] DiscoverModuleScopeDependencies(string sourcePath)
+        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths: null, moduleScopeOnly: true);
+
+    private static string[] DiscoverDependenciesCore(
+        string sourcePath,
+        IEnumerable<string>? additionalEntryPaths,
+        bool moduleScopeOnly)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
         var discovered = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
@@ -71,9 +90,18 @@ internal static class PowerShellHybridDependencyResolver
             var ast = Parser.ParseFile(current, out tokens, out errors);
             if (errors.Length > 0)
                 throw new InvalidOperationException($"Dot-sourced hybrid module dependency '{current}' could not be parsed.");
-            foreach (var command in ast.FindAll(
-                         static node => node is CommandAst { InvocationOperator: TokenKind.Dot },
-                         searchNestedScriptBlocks: true).Cast<CommandAst>())
+            var dotSourceCommands = moduleScopeOnly
+                ? (ast.EndBlock is null ? Enumerable.Empty<StatementAst>() : ast.EndBlock.Statements)
+                    .OfType<PipelineAst>()
+                    .Where(static pipeline => pipeline.PipelineElements.Count == 1)
+                    .Select(static pipeline => pipeline.PipelineElements[0])
+                    .OfType<CommandAst>()
+                    .Where(static command => command.InvocationOperator == TokenKind.Dot)
+                : ast.FindAll(
+                        static node => node is CommandAst { InvocationOperator: TokenKind.Dot },
+                        searchNestedScriptBlocks: true)
+                    .Cast<CommandAst>();
+            foreach (var command in dotSourceCommands)
             {
                 var expression = command.CommandElements.FirstOrDefault()
                     ?? throw new InvalidOperationException($"Dot-source expression at {current}:{command.Extent.StartLineNumber} has no path.");
@@ -102,7 +130,8 @@ internal static class PowerShellHybridDependencyResolver
         {
             var match = ScriptRootPath.Match(expandable.Value);
             if (match.Success)
-                return match.Groups["suffix"].Value.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                return NormalizeRelativePath(match.Groups["suffix"].Value)
+                    .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar, '\\', '/');
         }
         throw new InvalidOperationException($"Dot-source expression at {sourcePath}:{line} must be a literal $PSScriptRoot path for portable hybrid staging.");
     }

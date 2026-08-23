@@ -70,7 +70,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         if (invalid.Count == 0)
             return typed;
         var filtered = new PowerShellTypedCompilationTranspiler().TranspileExcluding(
-            typed.SourcePath,
+            typed.SourcePaths,
             typed.NamespaceName,
             typed.TypeName,
             targetFramework,
@@ -84,7 +84,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             filtered.Diagnostics.Concat(diagnostics)
                 .OrderBy(static diagnostic => diagnostic.Line)
                 .ThenBy(static diagnostic => diagnostic.Column)
-                .ToArray());
+                .ToArray(),
+            filtered.SourcePaths);
     }
 
     internal static string Generate(PowerShellTypedCompilationResult typed, string[]? exportedFunctions = null)
@@ -225,12 +226,12 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         => new(
             PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
             message,
-            typed.SourcePath,
+            string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
             method.SourceLine,
             1);
 
     private static string GetMethodKey(PowerShellCompiledMethod method)
-        => method.SourceName + "\0" + method.SourceLine;
+        => method.SourcePath + "\0" + method.SourceName + "\0" + method.SourceLine;
 
     private sealed class CmdletDescriptor
     {

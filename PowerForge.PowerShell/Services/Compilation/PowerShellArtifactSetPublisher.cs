@@ -71,6 +71,7 @@ internal static class PowerShellArtifactSetPublisher
             artifactName + ".exe",
             artifactName + ".dll",
             artifactName + ".pdb",
+            artifactName + ".generated",
             artifactName + ".powerforge-compilation.json"
         }.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         EnsureOwnedEntriesDoNotContainSource(outputPath, ownedNames, protectedPaths);

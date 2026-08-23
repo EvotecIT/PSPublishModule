@@ -1,6 +1,6 @@
 # PowerShell Compilation
 
-PowerForge can turn a `.ps1` or `.psm1` file into three different artifact shapes:
+PowerForge can turn a `.ps1`, `.psm1`, `.psd1`, or conventional module directory into three different artifact shapes:
 
 - a packaged executable that preserves dynamic PowerShell semantics, or a genuinely typed executable for an eligible top-level script;
 - an importable binary or hybrid module whose eligible functions are compiled to typed CLR methods;
@@ -14,8 +14,8 @@ These are deliberately separate claims. Packaging makes a script easier to distr
 | --- | --- | --- | --- | --- |
 | `Executable` / `exe` | `Package` | Single-file host with embedded script and PowerShell SDK | Embedded in the application | No |
 | `Executable` / `exe` | `Strict` | Runtime-independent typed .NET executable | No | Yes, for eligible CPU-bound work and process startup |
-| `BinaryModule` / `dll` | `Strict` | Importable DLL when every function compiles | Yes, as the cmdlet host | Only inside sufficiently coarse compiled work |
-| `BinaryModule` / `dll` | `Hybrid` | Module folder with a typed DLL and `.psm1` fallback | Yes | For eligible functions; unsupported functions remain scripts |
+| `BinaryModule` / `dll` | `Strict` (explicit) | Importable DLL when every function compiles | Yes, as the cmdlet host | Only inside sufficiently coarse compiled work |
+| `BinaryModule` / `dll` | `Hybrid` (default) | Module folder with a typed DLL and `.psm1` fallback | Yes | For eligible functions; unsupported functions remain scripts |
 | `Library` / `library` | `Hybrid` | CLR DLL with eligible public static methods | No | Yes, when called as CLR code |
 
 Supported target frameworks are:
@@ -27,6 +27,25 @@ The `net472` binary-module lane is tested by importing and invoking the generate
 
 ## Use the CLI
 
+For the common case, point PowerForge at the module directory. It selects the matching top-level manifest and root module, infers a hybrid binary-module build, and writes to the module's `artifacts` directory:
+
+```powershell
+powerforge powershell build .\MyModule --emit-source
+```
+
+The accepted input shapes are:
+
+- `.ps1`: defaults to a packaged executable;
+- `.psm1`: defaults to a hybrid binary module and uses a same-name sibling `.psd1` when present;
+- `.psd1`: resolves a literal `.psm1` `RootModule`;
+- directory: prefers a manifest matching the directory name, otherwise accepts one unambiguous top-level manifest or script module.
+
+Directory discovery does not recurse into samples, tests, or nested modules looking for an entrypoint. Multiple plausible top-level entries fail with their candidate names. A manifest root currently needs to be a `.psm1` beside the `.psd1`; an existing binary `RootModule` is rejected because it is already compiled input. A same-name sibling manifest is accepted only when its `RootModule` points back to the selected `.psm1`. Use `--kind` and `--mode` only when overriding the inferred artifact shape or fallback policy.
+
+Unconditional top-level literal `$PSScriptRoot` dot-sourced files share the root module's compilation scope. Eligible functions in `Public` or `Private` files can therefore become binary cmdlets, while unsupported functions remain in their staged script files. Conditional and function-local dot-sources, `ScriptsToProcess`, and script-based nested modules stay runtime content because PowerShell gives them different scope and loading semantics.
+
+Module inputs cannot be overridden to `Executable`. Use a standalone `.ps1` as the executable entrypoint or build the module as `BinaryModule`; PowerForge does not invent module-to-application startup semantics.
+
 Analyze a file or a complete source tree before building:
 
 ```powershell
@@ -37,7 +56,6 @@ Package a script as an executable:
 
 ```powershell
 powerforge powershell build .\Invoke-Report.ps1 `
-    --kind exe `
     --out .\artifacts `
     --name Invoke-Report
 
@@ -72,12 +90,10 @@ Import-Module .\artifacts\MathTools.dll
 
 When `MathTools.psd1` exists beside `MathTools.psm1`, the primary artifact is a rewritten manifest in a module directory. `RootModule`, `FunctionsToExport`, and `CmdletsToExport` are remapped so a function that became a binary cmdlet keeps the same public name. Literal top-level `Export-ModuleMember` declarations are preserved across typed and fallback commands; dynamic export expressions are rejected. An omitted `AliasesToExport` entry stays omitted so aliases created by retained module source continue to follow PowerShell's default manifest policy.
 
-Build a hybrid module when only part of the source is eligible:
+Build a hybrid module when only part of the source is eligible. The kind and mode are inferred from the module input:
 
 ```powershell
-powerforge powershell build .\Operations.psm1 `
-    --kind dll `
-    --mode Hybrid `
+powerforge powershell build .\Operations `
     --out .\artifacts
 
 Import-Module .\artifacts\Operations\Operations.psm1
@@ -100,13 +116,11 @@ The cmdlet is a thin PowerShell surface over the same artifact builder:
 
 ```powershell
 Build-PowerShellArtifact `
-    -Path .\Operations.psm1 `
-    -Kind BinaryModule `
-    -Mode Hybrid `
-    -OutputDirectory .\artifacts
+    -Path .\Operations `
+    -EmitSource
 ```
 
-It supports `-WhatIf`, returns `PowerShellCompilationBuildResult`, and uses the same defaults and manifests as the CLI.
+It supports `-WhatIf`, returns `PowerShellCompilationBuildResult`, and uses the same discovery, defaults, overrides, and manifests as the CLI. `-Kind`, `-Mode`, `-Name`, and `-OutputDirectory` remain available when the inferred values are not the desired artifact.
 
 ## Modes
 
@@ -115,6 +129,8 @@ It supports `-WhatIf`, returns `PowerShellCompilationBuildResult`, and uses the 
 `Package` preserves dynamic PowerShell behavior. The current executable lane embeds the source script and PowerShell SDK in a generated .NET host. It is a distribution feature, not typed compilation.
 
 `Hybrid` compiles complete eligible functions and retains diagnostics for everything else. A hybrid binary module removes compiled function definitions from its generated `.psm1`, imports the typed DLL, and keeps unsupported functions on the script path. Literal `$PSScriptRoot` dot-source dependencies are staged recursively with their relative layout, including dependencies reached from manifest runtime hooks. Dynamic, missing, wildcard, working-directory-relative, source-root-escaping, or symbolic-link/junction paths fail before publication. A hybrid CLR library extracts eligible methods without carrying script fallback because it is intended for direct .NET consumption.
+
+Only unconditional top-level literal dot-sourced files participate in the root module's typed source set. Conditional and function-local dot-sources plus manifest runtime hooks are still discovered and staged, but are counted as runtime fallback rather than being flattened into a different scope. Nested script modules and nested manifests keep their relative layout, manifest closure, and export policy.
 
 `Strict` fails the build when any executable unit needs fallback. For an executable it compiles one eligible top-level script body into a native .NET entrypoint with no PowerShell SDK dependency. For a DLL it guarantees that the artifact contains only behavior covered by the typed compiler contract.
 
@@ -163,16 +179,25 @@ This boundary is expected to expand through semantic proof, not syntax count. Ne
 Each successful build writes `<name>.powerforge-compilation.json`. The manifest records:
 
 - artifact kind, mode, target framework, and runtime identifier;
+- the resolved root and all authored files in the shared compilation scope;
 - whether PowerShell is required and whether script fallback is used;
 - compiled method count, runtime-fallback count, omitted-unit count, and coverage percentage;
 - SHA-256 for the primary artifact, portable PDBs, and every distributed runtime or hybrid-module file;
-- exact source diagnostics and locations for unsupported units.
+- exact source diagnostics and locations for unsupported units;
 - byte sizes for the primary artifact and every durable file;
 - executable optimization mode and Authenticode signing evidence when requested.
 
 A packaged EXE therefore reports `requiresPowerShellRuntime: true` and `usesPowerShellRuntimeFallback: true`. A strict CLR library reports both values as `false`. A strict binary module requires PowerShell as its cmdlet host but reports no script fallback.
 
-PowerForge stages the complete owned artifact shape and manifest before publication. Rebuilding under the same artifact name replaces prior EXE, DLL, PDB, module-directory, and manifest state together; same-name publication is serialized across threads and processes, and a failed durable commit rolls back to the previous set instead of leaving a new binary beside stale integrity evidence.
+PowerForge stages the complete owned artifact shape and manifest before publication. Rebuilding under the same artifact name replaces prior EXE, DLL, PDB, module-directory, generated-source directory, and manifest state together; same-name publication is serialized across threads and processes, and a failed durable commit rolls back to the previous set instead of leaving a new binary beside stale integrity evidence.
+
+Add `--emit-source` or `-EmitSource` to publish `<name>.generated` as part of the same atomic artifact set. It contains the exact generated `.cs` files, `.csproj`, and a `source-map.json` that maps each generated method to its authored file and line; packaged executables also include the rewritten embedded `Source.ps1`. The project can be inspected or rebuilt directly:
+
+```powershell
+dotnet build .\artifacts\MyModule.generated\MyModule.csproj -c Release
+```
+
+Every emitted source file is listed with its role, SHA-256, and size in the compilation manifest. The emitted project includes local `Directory.Build.*`, `Directory.Packages.props`, and `global.json` isolation files so an ancestor repository's MSBuild, central-package, or SDK policy cannot silently change the inspection rebuild. Rebuilding the artifact without source emission removes a prior generated-source directory so stale C# cannot be mistaken for the current binary.
 
 ## Measured performance
 

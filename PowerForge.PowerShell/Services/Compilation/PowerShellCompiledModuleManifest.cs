@@ -8,10 +8,10 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellCompiledModuleManifest
 {
-    internal static string[] GetProtectedSourceFiles(string sourcePath, bool includeHybridDependencies)
+    internal static string[] GetProtectedSourceFiles(string sourcePath, bool includeHybridDependencies, string? moduleManifestPath = null)
     {
         var protectedFiles = new List<string> { Path.GetFullPath(sourcePath) };
-        var sourceManifest = Path.ChangeExtension(sourcePath, ".psd1");
+        var sourceManifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
         if (File.Exists(sourceManifest))
         {
             protectedFiles.Add(Path.GetFullPath(sourceManifest));
@@ -22,24 +22,24 @@ internal static class PowerShellCompiledModuleManifest
         if (includeHybridDependencies)
         {
             var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? Directory.GetCurrentDirectory();
-            var runtimeHooks = GetContainedRuntimeScriptFiles(sourcePath)
-                .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, reference)));
+            var runtimeHooks = GetContainedRuntimeScriptFiles(sourcePath, sourceManifest)
+                .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, NormalizeManifestRelativePath(reference))));
             protectedFiles.AddRange(PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath, runtimeHooks));
         }
         return protectedFiles.Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
     }
 
-    internal static string[] GetRuntimeScriptHooks(string sourcePath)
+    internal static string[] GetRuntimeScriptHooks(string sourcePath, string? moduleManifestPath = null)
     {
-        var sourceManifest = Path.ChangeExtension(sourcePath, ".psd1");
+        var sourceManifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
         if (!File.Exists(sourceManifest))
             return Array.Empty<string>();
         return CollectRuntimeScriptFiles(sourceManifest);
     }
 
-    internal static string[] GetContainedRuntimeScriptFiles(string sourcePath)
+    internal static string[] GetContainedRuntimeScriptFiles(string sourcePath, string? moduleManifestPath = null)
     {
-        var sourceManifest = Path.ChangeExtension(sourcePath, ".psd1");
+        var sourceManifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
         if (!File.Exists(sourceManifest))
             return Array.Empty<string>();
 
@@ -48,19 +48,20 @@ internal static class PowerShellCompiledModuleManifest
 
     internal static string[]? Create(
         string sourcePath,
+        string? moduleManifestPath,
         string moduleDirectory,
         string artifactName,
         string rootModuleFileName,
         PowerShellTypedCompilationResult typed,
         string targetFramework)
     {
-        var sourceManifest = Path.ChangeExtension(sourcePath, ".psd1");
+        var sourceManifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
         if (!File.Exists(sourceManifest))
             return null;
 
         var targetManifest = Path.Combine(moduleDirectory, artifactName + ".psd1");
         File.Copy(sourceManifest, targetManifest, overwrite: true);
-        var allFunctions = ReadFunctionNames(sourcePath);
+        var allFunctions = ReadFunctionNames(typed.SourcePaths);
         var compiled = typed.Methods.Select(static method => method.SourceName).ToArray();
         var compiledSet = compiled.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fallback = allFunctions.Where(name => !compiledSet.Contains(name)).ToArray();
@@ -233,16 +234,19 @@ internal static class PowerShellCompiledModuleManifest
         mutator.TrySetTopLevelStringArray(targetManifest, "CompatiblePSEditions", new[] { edition });
     }
 
-    private static string[] ReadFunctionNames(string sourcePath)
+    private static string[] ReadFunctionNames(IEnumerable<string> sourcePaths)
     {
-        Token[] tokens;
-        ParseError[] errors;
-        var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
-        if (errors.Length > 0)
-            throw new InvalidOperationException("Module functions could not be parsed while preserving manifest exports.");
-        return ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-            .Cast<FunctionDefinitionAst>()
-            .Select(static function => function.Name)
+        return sourcePaths.SelectMany(sourcePath =>
+            {
+                Token[] tokens;
+                ParseError[] errors;
+                var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
+                if (errors.Length > 0)
+                    throw new InvalidOperationException($"Module functions in '{sourcePath}' could not be parsed while preserving manifest exports.");
+                return ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+                    .Cast<FunctionDefinitionAst>()
+                    .Select(static function => function.Name);
+            })
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -400,6 +404,68 @@ internal static class PowerShellCompiledModuleManifest
             yield return new ManifestFileReference(value, required: false);
         foreach (var value in ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifestPath, "NestedModules"))
             yield return new ManifestFileReference(value, IsContainedModulePath(value));
+    }
+
+    private static IEnumerable<ManifestFileReference> ReadReferencedFilesRecursive(string manifestPath)
+    {
+        var moduleRoot = Path.GetDirectoryName(Path.GetFullPath(manifestPath)) ?? Directory.GetCurrentDirectory();
+        var visited = new HashSet<string>(GetPathComparer());
+        return ReadReferencedFilesRecursiveCore(Path.GetFullPath(manifestPath), moduleRoot, visited).ToArray();
+    }
+
+    private static IEnumerable<ManifestFileReference> ReadReferencedFilesRecursiveCore(
+        string manifestPath,
+        string moduleRoot,
+        HashSet<string> visited)
+    {
+        if (!visited.Add(manifestPath))
+            yield break;
+        var manifestDirectory = Path.GetDirectoryName(manifestPath) ?? moduleRoot;
+        foreach (var reference in ReadReferencedFiles(manifestPath))
+        {
+            var sourceFile = ResolveContainedPath(manifestDirectory, reference.Path);
+            var rootRelative = FrameworkCompatibility.GetRelativePath(moduleRoot, sourceFile);
+            yield return new ManifestFileReference(rootRelative, reference.Required);
+            if (Path.GetExtension(sourceFile).Equals(".psd1", StringComparison.OrdinalIgnoreCase) && File.Exists(sourceFile))
+            {
+                foreach (var nested in ReadReferencedFilesRecursiveCore(sourceFile, moduleRoot, visited))
+                    yield return nested;
+            }
+        }
+    }
+
+    private static void CollectRuntimeScriptFiles(
+        string manifestPath,
+        string moduleRoot,
+        HashSet<string> scripts,
+        HashSet<string> visited)
+    {
+        manifestPath = Path.GetFullPath(manifestPath);
+        if (!visited.Add(manifestPath))
+            return;
+        var manifestDirectory = Path.GetDirectoryName(manifestPath) ?? moduleRoot;
+        var references = (ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifestPath, "ScriptsToProcess") ?? Array.Empty<string>())
+            .Concat(ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifestPath, "NestedModules"));
+        foreach (var reference in references.Where(static value => !string.IsNullOrWhiteSpace(value)))
+        {
+            var extension = Path.GetExtension(reference);
+            if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) &&
+                !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase) &&
+                !extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var referencedPath = ResolveContainedPath(manifestDirectory, reference);
+            scripts.Add(FrameworkCompatibility.GetRelativePath(moduleRoot, referencedPath));
+            if (!extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase) || !File.Exists(referencedPath))
+                continue;
+            var nestedRoot = ModuleManifestValueReader.ReadTopLevelString(referencedPath, "RootModule");
+            if (!string.IsNullOrWhiteSpace(nestedRoot))
+            {
+                var nestedRootPath = ResolveContainedPath(Path.GetDirectoryName(referencedPath)!, nestedRoot!);
+                if (Path.GetExtension(nestedRootPath).Equals(".psm1", StringComparison.OrdinalIgnoreCase))
+                    scripts.Add(FrameworkCompatibility.GetRelativePath(moduleRoot, nestedRootPath));
+            }
+            CollectRuntimeScriptFiles(referencedPath, moduleRoot, scripts, visited);
+        }
     }
 
     private static bool IsContainedModulePath(string value)

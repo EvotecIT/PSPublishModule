@@ -8,25 +8,25 @@ namespace PSPublishModule;
 /// Builds a packaged executable, typed CLR library, or importable binary/hybrid module from PowerShell source.
 /// </summary>
 /// <example>
-/// <summary>Package a script as a single-file executable</summary>
-/// <code>Build-PowerShellArtifact -Path .\tool.ps1 -Kind Executable -OutputDirectory .\artifacts</code>
+/// <summary>Build a module directly from its conventional folder layout</summary>
+/// <code>Build-PowerShellArtifact -Path .\MyModule -EmitSource</code>
 /// </example>
 /// <example>
-/// <summary>Compile eligible functions and retain unsupported functions as script fallback</summary>
-/// <code>Build-PowerShellArtifact -Path .\module.psm1 -Kind BinaryModule -Mode Hybrid -OutputDirectory .\artifacts</code>
+/// <summary>Package a standalone script as a single-file executable</summary>
+/// <code>Build-PowerShellArtifact -Path .\tool.ps1</code>
 /// </example>
 [Cmdlet("Build", "PowerShellArtifact", SupportsShouldProcess = true)]
 [OutputType(typeof(PowerShellCompilationBuildResult))]
 public sealed class BuildPowerShellArtifactCommand : PSCmdlet
 {
-    /// <summary>PowerShell script or module source path.</summary>
+    /// <summary>PowerShell script, module manifest, script module, or module directory.</summary>
     [Parameter(Mandatory = true, Position = 0)]
     [ValidateNotNullOrEmpty]
     public string Path { get; set; } = string.Empty;
 
-    /// <summary>Artifact shape to produce.</summary>
-    [Parameter(Mandatory = true)]
-    public PowerShellCompilationArtifactKind Kind { get; set; }
+    /// <summary>Optional artifact shape. Defaults to Executable for .ps1 and BinaryModule for module inputs.</summary>
+    [Parameter]
+    public PowerShellCompilationArtifactKind? Kind { get; set; }
 
     /// <summary>Destination for durable artifacts and the compilation manifest.</summary>
     [Parameter]
@@ -36,7 +36,7 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     [Parameter]
     public string? Name { get; set; }
 
-    /// <summary>Fallback policy. Defaults to Package for EXE, Strict for binary modules, and Hybrid for CLR libraries. Analyze is not a build mode.</summary>
+    /// <summary>Fallback policy. Defaults to Package for executables and Hybrid for module/library inputs. Analyze is not a build mode.</summary>
     [Parameter]
     public PowerShellCompilationMode? Mode { get; set; }
 
@@ -86,6 +86,10 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     [Parameter]
     public SwitchParameter KeepBuildWorkspace { get; set; }
 
+    /// <summary>Publish an independently buildable generated C# source project beside the artifact.</summary>
+    [Parameter]
+    public SwitchParameter EmitSource { get; set; }
+
     /// <summary>Maximum restore and compile time in seconds.</summary>
     [Parameter]
     [ValidateRange(1, int.MaxValue)]
@@ -109,11 +113,27 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
                 Mode));
             return;
         }
-        if (!ShouldProcess(outputPath, $"Build {Kind} artifact '{artifactName}' from '{sourcePath}'"))
+        PowerShellCompilationResolvedInput resolved;
+        try
+        {
+            resolved = new PowerShellCompilationInputResolver().Resolve(requestedPath, Kind, Mode);
+        }
+        catch (Exception ex)
+        {
+            ThrowTerminatingError(new ErrorRecord(ex, "PowerShellArtifactInputResolutionFailed", ErrorCategory.InvalidArgument, requestedPath));
+            return;
+        }
+        var outputPath = string.IsNullOrWhiteSpace(OutputDirectory)
+            ? System.IO.Path.Combine(resolved.ModuleRoot, "artifacts")
+            : SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputDirectory);
+        var artifactName = string.IsNullOrWhiteSpace(Name) ? resolved.ArtifactName : Name!;
+        if (!ShouldProcess(outputPath, $"Build {resolved.Kind} artifact '{artifactName}' from '{resolved.RequestedPath}'"))
             return;
 
-        var spec = new PowerShellCompilationBuildSpec(sourcePath, outputPath, artifactName, Kind, mode)
+        var spec = new PowerShellCompilationBuildSpec(resolved.SourcePath, outputPath, artifactName, resolved.Kind, resolved.Mode)
         {
+            ModuleManifestPath = resolved.ModuleManifestPath,
+            CompilationSourcePaths = resolved.CompilationSourceFiles,
             TargetFramework = TargetFramework,
             RuntimeIdentifier = RuntimeIdentifier,
             SelfContained = SelfContained.IsPresent,
@@ -125,6 +145,7 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
             TimeStampServer = TimeStampServer,
             SigningTimeoutSeconds = SigningTimeoutSeconds,
             KeepBuildWorkspace = KeepBuildWorkspace.IsPresent,
+            EmitSource = EmitSource.IsPresent,
             TimeoutSeconds = TimeoutSeconds
         };
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);

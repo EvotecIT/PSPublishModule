@@ -1956,12 +1956,12 @@
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Kind</maml:name>
           <maml:description>
-            <maml:para>Artifact shape to produce.</maml:para>
+            <maml:para>Optional artifact shape. Defaults to Executable for .ps1 and BinaryModule for module inputs.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">PowerShellCompilationArtifactKind</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellCompilationArtifactKind</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Executable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Library</command:parameterValue>
@@ -1976,7 +1976,7 @@
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Mode</maml:name>
           <maml:description>
-            <maml:para>Fallback policy. Defaults to Package for EXE, Strict for binary modules, and Hybrid for CLR libraries. Analyze is not a build mode.</maml:para>
+            <maml:para>Fallback policy. Defaults to Package for executables and Hybrid for module/library inputs. Analyze is not a build mode.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">PowerShellCompilationMode</command:parameterValue>
           <command:parameterValueGroup>
@@ -2035,7 +2035,7 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
-            <maml:para>PowerShell script or module source path.</maml:para>
+            <maml:para>PowerShell script, module manifest, script module, or module directory.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -2183,12 +2183,12 @@
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Kind</maml:name>
         <maml:description>
-          <maml:para>Artifact shape to produce.</maml:para>
+          <maml:para>Optional artifact shape. Defaults to Executable for .ps1 and BinaryModule for module inputs.</maml:para>
         </maml:description>
-        <command:parameterValue required="true" variableLength="false">PowerShellCompilationArtifactKind</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">PowerShellCompilationArtifactKind</command:parameterValue>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">Executable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Library</command:parameterValue>
@@ -2203,7 +2203,7 @@
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Mode</maml:name>
         <maml:description>
-          <maml:para>Fallback policy. Defaults to Package for EXE, Strict for binary modules, and Hybrid for CLR libraries. Analyze is not a build mode.</maml:para>
+          <maml:para>Fallback policy. Defaults to Package for executables and Hybrid for module/library inputs. Analyze is not a build mode.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">PowerShellCompilationMode</command:parameterValue>
         <command:parameterValueGroup>
@@ -2262,7 +2262,7 @@
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
         <maml:name>Path</maml:name>
         <maml:description>
-          <maml:para>PowerShell script or module source path.</maml:para>
+          <maml:para>PowerShell script, module manifest, script module, or module directory.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -2389,15 +2389,15 @@
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>Package a script as a single-file executable</maml:title>
-        <dev:code>Build-PowerShellArtifact -Path .\tool.ps1 -Kind Executable -OutputDirectory .\artifacts</dev:code>
+        <maml:title>Build a module directly from its conventional folder layout</maml:title>
+        <dev:code>Build-PowerShellArtifact -Path .\MyModule -EmitSource</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
-        <maml:title>Compile eligible functions and retain unsupported functions as script fallback</maml:title>
-        <dev:code>Build-PowerShellArtifact -Path .\module.psm1 -Kind BinaryModule -Mode Hybrid -OutputDirectory .\artifacts</dev:code>
+        <maml:title>Package a standalone script as a single-file executable</maml:title>
+        <dev:code>Build-PowerShellArtifact -Path .\tool.ps1</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
