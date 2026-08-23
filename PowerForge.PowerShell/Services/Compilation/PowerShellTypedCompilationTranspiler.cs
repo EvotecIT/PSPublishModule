@@ -16,6 +16,22 @@ public sealed class PowerShellTypedCompilationTranspiler
         string namespaceName = "PowerForge.Compiled",
         string typeName = "CompiledPowerShell",
         string? targetFramework = null)
+        => TranspileCore(sourcePath, namespaceName, typeName, targetFramework, excludedMethods: null);
+
+    internal PowerShellTypedCompilationResult TranspileExcluding(
+        string sourcePath,
+        string namespaceName,
+        string typeName,
+        string? targetFramework,
+        ISet<string> excludedMethods)
+        => TranspileCore(sourcePath, namespaceName, typeName, targetFramework, excludedMethods);
+
+    private static PowerShellTypedCompilationResult TranspileCore(
+        string sourcePath,
+        string namespaceName,
+        string typeName,
+        string? targetFramework,
+        ISet<string>? excludedMethods)
     {
         if (string.IsNullOrWhiteSpace(sourcePath))
             throw new ArgumentException("A PowerShell source path is required.", nameof(sourcePath));
@@ -38,7 +54,9 @@ public sealed class PowerShellTypedCompilationTranspiler
         typeName = ResolveCollisionFreeTypeName(typeName, ast);
 
         var eligible = filePlan.Units
-            .Where(static unit => unit.Kind == PowerShellCompilationUnitKind.Function && unit.IsCompilable)
+            .Where(unit => unit.Kind == PowerShellCompilationUnitKind.Function &&
+                           unit.IsCompilable &&
+                           (excludedMethods is null || !excludedMethods.Contains(GetMethodKey(unit.Name, unit.StartLine))))
             .ToDictionary(static unit => (unit.Name, unit.StartLine));
         var methods = new List<PowerShellCompiledMethod>();
         var methodSources = new List<string>();
@@ -111,6 +129,9 @@ public sealed class PowerShellTypedCompilationTranspiler
 
     private static string SanitizeQualifiedName(string value)
         => string.Join(".", value.Split('.').Select(PowerShellCSharpMethodEmitter.SanitizeIdentifier));
+
+    private static string GetMethodKey(string name, int sourceLine)
+        => name + "\0" + sourceLine;
 
     private static string ResolveCollisionFreeTypeName(string requestedTypeName, ScriptBlockAst ast)
     {

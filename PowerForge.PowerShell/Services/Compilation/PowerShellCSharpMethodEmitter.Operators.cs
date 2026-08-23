@@ -11,6 +11,21 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var left = EmitExpression(binary.Left);
         var right = EmitExpression(binary.Right);
         var operation = binary.Operator.ToString();
+        if (operation is "Isplit" or "Csplit")
+        {
+            if (leftType != typeof(string) || rightType != typeof(string))
+                throw Error(binary, $"Operator '-{operation.ToLowerInvariant()}' currently requires scalar String operands.");
+            var options = operation == "Isplit"
+                ? "global::System.Text.RegularExpressions.RegexOptions.IgnoreCase"
+                : "global::System.Text.RegularExpressions.RegexOptions.None";
+            return $"global::System.Text.RegularExpressions.Regex.Split(({left} ?? string.Empty), ({right} ?? string.Empty), {options})";
+        }
+        if (operation == "Join")
+        {
+            if (leftType != typeof(string[]) || rightType != typeof(string))
+                throw Error(binary, "Operator '-join' currently requires a String array and scalar String separator.");
+            return $"global::System.String.Join(({right} ?? string.Empty), ({left} ?? global::System.Array.Empty<string>()))";
+        }
         if (operation is "And" or "Or" && (leftType != typeof(bool) || rightType != typeof(bool)))
             throw Error(binary, $"Operator '-{operation.ToLowerInvariant()}' requires Boolean operands on the typed compilation path.");
         if (operation is "Plus" or "Minus" or "Multiply" or "Divide" or "Rem")
@@ -111,6 +126,10 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private Type InferBinaryType(BinaryExpressionAst binary)
     {
         var operation = binary.Operator.ToString();
+        if (operation is "Isplit" or "Csplit")
+            return typeof(string[]);
+        if (operation == "Join")
+            return typeof(string);
         if (operation is "Ieq" or "Ceq" or "Ine" or "Cne" or "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge" or "And" or "Or")
             return typeof(bool);
         if (operation == "Divide")

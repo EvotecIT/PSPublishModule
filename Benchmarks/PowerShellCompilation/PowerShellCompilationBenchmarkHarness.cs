@@ -81,4 +81,24 @@ public static class PowerShellCompilationBenchmarkHarness
         }
         return result;
     }
+
+    public static string RunTypedPtrConversion(int calls, string address)
+    {
+        var result = string.Empty;
+        for (var index = 0; index < calls; index++)
+            result = PowerForge_CompilationBenchmarkMethods.Convert_IpAddressToPtrString(address);
+        return result;
+    }
+
+    public static string RunHandWrittenPtrConversion(int calls, string address)
+    {
+        var result = string.Empty;
+        for (var index = 0; index < calls; index++)
+        {
+            var octets = (address ?? string.Empty).Split(new[] { '.' });
+            System.Array.Reverse(octets);
+            result = string.Join(".", octets) + ".in-addr.arpa";
+        }
+        return result;
+    }
 }

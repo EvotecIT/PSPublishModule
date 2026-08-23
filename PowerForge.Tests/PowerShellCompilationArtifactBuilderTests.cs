@@ -544,50 +544,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_RejectsManifestFileReferenceOutsideModuleRoot()
-    {
-        using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
-        File.WriteAllText(
-            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
-            "@{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); FormatsToProcess = @('../outside.format.ps1xml') }");
-        var spec = new PowerShellCompilationBuildSpec(
-            fixture.ScriptPath,
-            fixture.OutputPath,
-            "PowerForge.EscapingManifest",
-            PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict);
-
-        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
-
-        Assert.False(result.Succeeded);
-        Assert.Contains("escapes the module root", result.Error, StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
-    }
-
-    [Fact]
-    public void Build_RejectsManifestFileReferenceThatCollidesWithGeneratedAssembly()
-    {
-        using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
-        const string artifactName = "PowerForge.CollidingManifest";
-        File.WriteAllText(Path.Combine(Path.GetDirectoryName(fixture.ScriptPath)!, artifactName + ".dll"), "source dependency");
-        File.WriteAllText(
-            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
-            $"@{{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); FileList = @('{artifactName}.dll') }}");
-        var spec = new PowerShellCompilationBuildSpec(
-            fixture.ScriptPath,
-            fixture.OutputPath,
-            artifactName,
-            PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict);
-
-        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
-
-        Assert.False(result.Succeeded);
-        Assert.Contains("collides with a generated compilation artifact", result.Error, StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
-    }
-
-    [Fact]
     public void Build_PackagedExecutableRejectsCaughtExitInstrumentation()
     {
         using var fixture = ArtifactFixture.Create(

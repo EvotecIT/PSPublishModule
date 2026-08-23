@@ -109,7 +109,7 @@ $currentPowerShell = (Get-Process -Id $PID).Path
 $moduleQualifier = [System.IO.Path]::GetFileNameWithoutExtension($moduleResult.ArtifactPath)
 
 New-BenchmarkSuite 'powershell-compilation-real-function' -OutputRoot $outputRoot {
-    Add-BenchmarkMetadata Workload 'Get-AllowedAverageMs from TestimoX benchmark gate'
+    Add-BenchmarkMetadata Workload 'Production threshold calculation'
     Add-BenchmarkMetadata TypedArtifactSha256 $typedHash
     Add-BenchmarkMetadata BinaryModuleSha256 $moduleHash
     Set-BenchmarkPolicy -Warmup $warmup -Iterations $iterations -Order GroupedRotated -OutlierMode ExcludeMinMax
@@ -172,6 +172,67 @@ New-BenchmarkSuite 'powershell-compilation-real-function' -OutputRoot $outputRoo
     Add-BenchmarkValidation {
         param($case, $run)
         Assert-BenchmarkValue -Actual ([double] $run.Result) -Expected ([double] $case.Expected)
+    }
+    Add-BenchmarkComparison -Dimension Engine -Baseline HandWrittenCSharp -Metric MedianMs -TieTolerance 0.05
+}
+
+New-BenchmarkSuite 'powershell-compilation-powerinfoblox-ptr' -OutputRoot $outputRoot {
+    Add-BenchmarkMetadata Workload 'PowerInfoBlox IPv4-to-PTR helper'
+    Add-BenchmarkMetadata TypedArtifactSha256 $typedHash
+    Add-BenchmarkMetadata BinaryModuleSha256 $moduleHash
+    Set-BenchmarkPolicy -Warmup $warmup -Iterations $iterations -Order GroupedRotated -OutlierMode ExcludeMinMax
+    Add-BenchmarkCase Convert @{ Calls = $calls; Address = '192.168.100.20'; Expected = '20.100.168.192.in-addr.arpa' }
+
+    Set-BenchmarkSetup {
+        param($case, $run)
+        . $workloadPath
+        Set-Item -Path Function:\global:Convert-IpAddressToPtrString -Value ${function:Convert-IpAddressToPtrString}
+        Import-Module -Name $moduleResult.ArtifactPath -Global -Force -ErrorAction Stop
+    }
+
+    Add-BenchmarkEngine PowerShellFunction {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $result = ''
+            for ([int] $index = 0; $index -lt $case.Calls; $index++) {
+                $result = Convert-IpAddressToPtrString $case.Address
+            }
+            $run.Result = $result
+        }
+    }
+
+    Add-BenchmarkEngine BinaryCmdlet {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $result = ''
+            for ([int] $index = 0; $index -lt $case.Calls; $index++) {
+                $result = & "$moduleQualifier\Convert-IpAddressToPtrString" $case.Address
+            }
+            $run.Result = $result
+        }
+    }
+
+    Add-BenchmarkEngine TypedClr {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = [PowerForge.CompilationBenchmarks.PowerShellCompilationBenchmarkHarness]::RunTypedPtrConversion(
+                $case.Calls,
+                $case.Address)
+        }
+    }
+
+    Add-BenchmarkEngine HandWrittenCSharp {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = [PowerForge.CompilationBenchmarks.PowerShellCompilationBenchmarkHarness]::RunHandWrittenPtrConversion(
+                $case.Calls,
+                $case.Address)
+        }
+    }
+
+    Add-BenchmarkValidation {
+        param($case, $run)
+        Assert-BenchmarkValue -Actual ([string] $run.Result) -Expected ([string] $case.Expected)
     }
     Add-BenchmarkComparison -Dimension Engine -Baseline HandWrittenCSharp -Metric MedianMs -TieTolerance 0.05
 }

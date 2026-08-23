@@ -95,17 +95,27 @@ internal static class PowerShellCompiledModuleManifest
             mutator.TrySetTopLevelStringArray(targetManifest, "VariablesToExport", manifestVariables);
 
         var copied = new List<string> { targetManifest };
-        foreach (var reference in ReadReferencedFiles(sourceManifest).Distinct(GetPathComparer()))
+        foreach (var reference in ReadReferencedFiles(sourceManifest)
+                     .GroupBy(static reference => reference.Path, GetPathComparer())
+                     .Select(static group => new ManifestFileReference(group.Key, group.Any(static reference => reference.Required))))
         {
-            var sourceFile = ResolveContainedPath(Path.GetDirectoryName(sourceManifest)!, reference);
+            var sourceFile = ResolveContainedPath(Path.GetDirectoryName(sourceManifest)!, reference.Path);
             if (!File.Exists(sourceFile))
+            {
+                if (reference.Required)
+                    throw new FileNotFoundException($"Required module manifest file reference '{reference.Path}' was not found.", sourceFile);
                 continue;
+            }
+            PowerShellCompilationPathSafety.EnsureNoLinks(
+                Path.GetDirectoryName(sourceManifest)!,
+                sourceFile,
+                $"Module manifest file reference '{reference.Path}' traverses a symbolic link or junction, which is not allowed for artifact staging.");
             if (sourceFile.Equals(sourcePath, GetPathComparison()) ||
                 sourceFile.Equals(sourceManifest, GetPathComparison()))
                 continue;
-            var targetFile = ResolveContainedPath(moduleDirectory, reference);
+            var targetFile = ResolveContainedPath(moduleDirectory, reference.Path);
             if (File.Exists(targetFile))
-                throw new InvalidOperationException($"Module manifest file reference '{reference}' collides with a generated compilation artifact.");
+                throw new InvalidOperationException($"Module manifest file reference '{reference.Path}' collides with a generated compilation artifact.");
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile) ?? moduleDirectory);
             File.Copy(sourceFile, targetFile, overwrite: false);
             copied.Add(targetFile);
@@ -137,13 +147,28 @@ internal static class PowerShellCompiledModuleManifest
             .ToArray();
     }
 
-    private static IEnumerable<string> ReadReferencedFiles(string manifestPath)
+    private static IEnumerable<ManifestFileReference> ReadReferencedFiles(string manifestPath)
     {
-        foreach (var key in new[] { "FormatsToProcess", "TypesToProcess", "ScriptsToProcess", "RequiredAssemblies", "FileList" })
+        foreach (var key in new[] { "FormatsToProcess", "TypesToProcess", "ScriptsToProcess" })
         foreach (var value in ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, key))
-            yield return value;
+            yield return new ManifestFileReference(value, required: true);
+        foreach (var value in ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, "RequiredAssemblies"))
+            yield return new ManifestFileReference(value, IsContainedModulePath(value));
+        foreach (var value in ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, "FileList"))
+            yield return new ManifestFileReference(value, required: false);
         foreach (var value in ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifestPath, "NestedModules"))
-            yield return value;
+            yield return new ManifestFileReference(value, IsContainedModulePath(value));
+    }
+
+    private static bool IsContainedModulePath(string value)
+    {
+        var extension = Path.GetExtension(value);
+        return value.IndexOf(Path.DirectorySeparatorChar) >= 0 ||
+               value.IndexOf(Path.AltDirectorySeparatorChar) >= 0 ||
+               value.StartsWith(".", StringComparison.Ordinal) ||
+               extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ResolveContainedPath(string root, string relativePath)
@@ -166,4 +191,16 @@ internal static class PowerShellCompiledModuleManifest
         => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
+
+    private sealed class ManifestFileReference
+    {
+        internal ManifestFileReference(string path, bool required)
+        {
+            Path = path;
+            Required = required;
+        }
+
+        internal string Path { get; }
+        internal bool Required { get; }
+    }
 }

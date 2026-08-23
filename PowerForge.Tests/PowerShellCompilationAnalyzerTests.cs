@@ -95,7 +95,7 @@ public sealed class PowerShellCompilationAnalyzerTests
         using var fixture = CompilationFixture.Create(
             """
             function Invoke-StreamingThing {
-                param([Parameter(Mandatory)] [int] $Value = (Get-Random))
+                param([Parameter(Mandatory)] [ValidateRange(1, 10)] [int] $Value = (Get-Random))
                 process {
                     $Value + 1
                 }
@@ -109,6 +109,54 @@ public sealed class PowerShellCompilationAnalyzerTests
         Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedSyntax && diagnostic.Message.Contains("process", StringComparison.Ordinal));
         Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedSyntax && diagnostic.Message.Contains("AttributeAst", StringComparison.Ordinal));
         Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.Code == PowerShellCompilationDiagnosticCode.CommandInvocation && diagnostic.Message.Contains("Get-Random", StringComparison.Ordinal));
+        Assert.True(Assert.Single(unit.Parameters).IsMandatory);
+    }
+
+    [Fact]
+    public void Analyze_AcceptsConservativePowerInfoBloxHelperMetadataAndOperators()
+    {
+        using var fixture = CompilationFixture.Create(
+            """
+            function Convert-IpAddressToPtrString {
+                [CmdletBinding()]
+                param([Parameter(Mandatory = $true)] [string] $IPAddress)
+                $octets = $IPAddress -split "\."
+                [array]::Reverse($octets)
+                $ptrString = ($octets -join ".") + ".in-addr.arpa"
+                $ptrString
+            }
+            """);
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.True(unit.IsCompilable, string.Join(Environment.NewLine, unit.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        Assert.True(Assert.Single(unit.Parameters).IsMandatory);
+        Assert.Equal(typeof(string).FullName, unit.ReturnType);
+    }
+
+    [Fact]
+    public void Analyze_RejectsEscapingDictionaryAndDynamicParameterMetadata()
+    {
+        using var fixture = CompilationFixture.Create(
+            """
+            function Get-EscapingMap {
+                return @{ Name = 'Value' }
+            }
+            function Get-DynamicMetadata {
+                param([Parameter(ValueFromPipeline = $true)] [string] $Value)
+                return $Value
+            }
+            """);
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
+
+        Assert.Equal(2, plan.RuntimeFallbackUnits);
+        var units = Assert.Single(plan.Files).Units;
+        Assert.Contains(units.Single(unit => unit.Name == "Get-EscapingMap").Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("lookup-only local", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(units.Single(unit => unit.Name == "Get-DynamicMetadata").Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("AttributeAst", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -234,6 +282,49 @@ public sealed class PowerShellCompilationAnalyzerTests
         var units = Assert.Single(plan.Files).Units;
         Assert.DoesNotContain(units, static unit => unit.Name == "Get-ConditionalValue");
         Assert.Contains(units, static unit => unit.Name == "Get-TopValue" && unit.IsCompilable);
+    }
+
+    [Fact]
+    public void Analyze_RoutesRuntimeBearingUsingModuleToWholeFileFallback()
+    {
+        using var fixture = CompilationFixture.Create("using module Microsoft.PowerShell.Utility\nfunction Get-TypedValue { return 1 }");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, diagnostic =>
+            diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedSyntax &&
+            diagnostic.Message.Contains("runtime-bearing using", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_RoutesRuntimeBearingUsingAssemblyToWholeFileFallback()
+    {
+        using var fixture = CompilationFixture.Create("using assembly './runtime.dll'\nfunction Get-TypedValue { return 1 }");
+        File.Copy(typeof(object).Assembly.Location, Path.Combine(fixture.RootPath, "runtime.dll"));
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, diagnostic =>
+            diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedSyntax &&
+            diagnostic.Message.Contains("runtime-bearing using", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_RoutesVoidInvocationAssignmentToFallbackBeforeGeneratedBuild()
+    {
+        using var fixture = CompilationFixture.Create(
+            "function Get-Value { $ignored = [Console]::WriteLine('text'); return 1 }");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("void CLR invocation", StringComparison.OrdinalIgnoreCase));
     }
 
     private sealed class CompilationFixture : IDisposable

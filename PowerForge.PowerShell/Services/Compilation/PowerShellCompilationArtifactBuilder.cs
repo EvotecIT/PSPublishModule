@@ -84,6 +84,13 @@ public sealed class PowerShellCompilationArtifactBuilder
                     "PowerForge.Compiled",
                     PowerShellCSharpMethodEmitter.SanitizeIdentifier(artifactName) + "Methods",
                     spec.TargetFramework);
+                string[]? exportedFunctions = null;
+                if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
+                {
+                    var exportContract = PowerShellModuleExportContract.TryRead(spec.SourcePath);
+                    exportedFunctions = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName));
+                    typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, spec.TargetFramework);
+                }
                 if (typed.Methods.Length == 0)
                 {
                     var firstBlocker = typed.Diagnostics.FirstOrDefault();
@@ -99,9 +106,9 @@ public sealed class PowerShellCompilationArtifactBuilder
                 File.WriteAllText(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
-                    var exportContract = PowerShellModuleExportContract.TryRead(spec.SourcePath);
-                    var exportedFunctions = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName));
-                    runtimeRoutedUnits = exportedFunctions?.Length ?? typed.Methods.Length;
+                    runtimeRoutedUnits = exportedFunctions is null
+                        ? typed.Methods.Length
+                        : exportedFunctions.Count(name => typed.Methods.Any(method => method.SourceName.Equals(name, StringComparison.OrdinalIgnoreCase)));
                     File.WriteAllText(
                         Path.Combine(workspace, "CompiledCmdlets.cs"),
                         PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions),
@@ -257,6 +264,8 @@ public sealed class PowerShellCompilationArtifactBuilder
             throw new ArgumentOutOfRangeException(nameof(spec), "Signing timeout must be positive.");
         if (spec.Kind == PowerShellCompilationArtifactKind.Executable && !spec.TargetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) && !spec.TargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Executables currently target net8.0 or net10.0.", nameof(spec));
+        if (spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Hybrid)
+            throw new ArgumentException("Hybrid executable compilation is not supported. Use Package for broad PowerShell compatibility or Strict for a genuinely typed executable.", nameof(spec));
         if (spec.Kind != PowerShellCompilationArtifactKind.Executable &&
             (spec.SelfContained || !string.IsNullOrWhiteSpace(spec.RuntimeIdentifier)))
             throw new ArgumentException("SelfContained and RuntimeIdentifier are executable-only publication options.", nameof(spec));

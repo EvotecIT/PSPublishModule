@@ -17,6 +17,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private readonly Dictionary<string, (int Start, int End)> _loopScopedVariables = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _explicitlyTypedVariables = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _declaredLocals = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _predeclaredLocals = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<int> _scalarForeachLoops = new();
     private readonly StringBuilder _builder = new();
     private readonly PowerShellCSharpMemberEmitter _memberEmitter;
     private readonly string? _targetFramework;
@@ -87,7 +89,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         InferLocalTypes(statements);
         ValidateVariableReferences(statements);
         var returnType = InferReturnType(statements);
-        if (returnType != typeof(void) && statements.LastOrDefault() is not ReturnStatementAst)
+        if (returnType != typeof(void) && !HasTerminalValue(statements))
             throw Error(_body, $"Typed non-void unit '{_sourceName}' must end with an explicit return statement on the conservative compilation path.");
         var parameterSource = string.Join(", ", parameters.Select(parameter =>
             $"{GetTypeName(parameter.StaticType)} {SanitizeIdentifier(parameter.Name.VariablePath.UserPath)}"));
@@ -103,8 +105,13 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             var identifier = GetVariableIdentifier(parameter.Name.VariablePath.UserPath);
             AppendLine($"{identifier} = {identifier} ?? string.Empty;");
         }
-        foreach (var statement in statements)
-            EmitStatement(statement, returnType);
+        foreach (var name in _predeclaredLocals.OrderBy(name => _firstAssignmentOffsets[name]))
+        {
+            AppendLine($"{GetTypeName(_variables[name])} {GetVariableIdentifier(name)} = default!;");
+            _declaredLocals.Add(name);
+        }
+        for (var index = 0; index < statements.Length; index++)
+            EmitStatement(statements[index], returnType, allowImplicitReturn: index == statements.Length - 1);
         _indent--;
         AppendLine("}");
         _indent--;
@@ -129,12 +136,15 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         foreach (var loop in loops)
         {
             var collectionType = InferExpressionType(loop.Condition);
-            if (!collectionType.IsArray || collectionType.GetElementType() is null)
-                throw Error(loop.Condition, "foreach currently requires a statically typed one-dimensional array.");
+            var elementType = collectionType.IsArray ? collectionType.GetElementType() : CanUseScalarStringForeach(loop.Condition) ? typeof(string) : null;
+            if (elementType is null)
+                throw Error(loop.Condition, "foreach currently requires a statically typed one-dimensional array or scalar string.");
             var name = loop.Variable.VariablePath.UserPath;
             if (_variables.ContainsKey(name))
                 throw Error(loop.Variable, $"foreach variable '${name}' cannot reuse another function-scope variable on the conservative compilation path.");
-            _variables[name] = collectionType.GetElementType()!;
+            _variables[name] = elementType;
+            if (!collectionType.IsArray)
+                _scalarForeachLoops.Add(loop.Extent.StartOffset);
             AddVariableIdentifier(name, loop.Variable);
             _firstAssignmentOffsets[name] = loop.Extent.StartOffset;
             _loopScopedVariables[name] = (loop.Extent.StartOffset, loop.Extent.EndOffset);
@@ -152,6 +162,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
         var name = variable.VariablePath.UserPath;
         var rightType = InferExpressionType(assignment.Right);
+        if (rightType == typeof(void))
+            throw Error(assignment.Right, $"Assignment to '${name}' uses a void CLR invocation whose PowerShell null result cannot be represented by an inferred CLR local.");
         var declaredType = assignment.Left is ConvertExpressionAst conversion
             ? conversion.StaticType
             : rightType;
@@ -181,7 +193,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         if (assignment.Operator.ToString() != "Equals")
             throw Error(assignment, $"Compound assignment to undeclared local '${name}' is not eligible for typed compilation.");
 
-        if (assignment.Parent is not NamedBlockAst && assignment.Parent is not ForStatementAst)
+        if (assignment.Parent is not NamedBlockAst && assignment.Parent is not ForStatementAst && assignment.Parent is not IfStatementAst)
             throw Error(assignment, $"Local '${name}' must be declared at function scope or in a for initializer before it can be compiled safely.");
 
         _variables.Add(name, declaredType);
@@ -189,6 +201,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         _firstAssignmentOffsets.Add(name, assignment.Extent.StartOffset);
         if (assignment.Parent is ForStatementAst forStatement)
             _loopScopedVariables[name] = (forStatement.Extent.StartOffset, forStatement.Extent.EndOffset);
+        if (assignment.Parent is IfStatementAst)
+            _predeclaredLocals.Add(name);
         if (assignment.Left is ConvertExpressionAst)
             _explicitlyTypedVariables.Add(name);
     }
@@ -261,9 +275,6 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             .SelectMany(static statement => statement.FindAll(static node => node is ReturnStatementAst, searchNestedScriptBlocks: false))
             .Cast<ReturnStatementAst>()
             .ToArray();
-        if (returns.Length == 0)
-            return typeof(void);
-
         Type? result = null;
         foreach (var statement in returns)
         {
@@ -273,10 +284,19 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             result ??= current;
         }
 
+        var terminal = statements.LastOrDefault();
+        if (terminal is PipelineAst { PipelineElements.Count: 1, PipelineElements: var elements } &&
+            elements[0] is CommandExpressionAst)
+        {
+            var current = InferExpressionType(terminal);
+            if (current != typeof(void))
+                result = result is null ? current : UnifyTypes(result, current, terminal);
+        }
+
         return result ?? typeof(void);
     }
 
-    private void EmitStatement(StatementAst statement, Type returnType)
+    private void EmitStatement(StatementAst statement, Type returnType, bool allowImplicitReturn = false)
     {
         switch (statement)
         {
@@ -321,7 +341,18 @@ internal sealed partial class PowerShellCSharpMethodEmitter
                 AppendLine("continue;");
                 return;
             case PipelineAst pipeline when pipeline.PipelineElements.Count == 1 && pipeline.PipelineElements[0] is CommandExpressionAst:
-                throw Error(pipeline, "Implicit PowerShell pipeline output cannot be emitted as a typed return value.");
+                var expressionType = InferExpressionType(pipeline);
+                if (expressionType == typeof(void))
+                {
+                    AppendLine($"{EmitExpression(pipeline)};");
+                    return;
+                }
+                if (allowImplicitReturn && returnType == expressionType)
+                {
+                    AppendLine($"return {EmitExpression(pipeline)};");
+                    return;
+                }
+                throw Error(pipeline, "Implicit PowerShell pipeline output is supported only for the terminal typed value.");
             default:
                 throw Error(statement, $"Statement '{statement.GetType().Name}' is not implemented by the C# emitter.");
         }
@@ -394,11 +425,15 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     {
         var name = statement.Variable.VariablePath.UserPath;
         var collectionType = InferExpressionType(statement.Condition);
-        var elementType = collectionType.GetElementType()
-            ?? throw Error(statement.Condition, "foreach requires a statically typed one-dimensional array.");
+        var elementType = collectionType.IsArray ? collectionType.GetElementType() : CanUseScalarStringForeach(statement.Condition) ? typeof(string) : null;
+        if (elementType is null)
+            throw Error(statement.Condition, "foreach requires a statically typed one-dimensional array or scalar string.");
         var collection = EmitExpression(statement.Condition);
         _declaredLocals.Add(name);
-        AppendLine($"foreach ({GetTypeName(_variables[name])} {GetVariableIdentifier(name)} in ({collection} ?? global::System.Array.Empty<{GetTypeName(elementType)}>()))");
+        var enumerable = _scalarForeachLoops.Contains(statement.Extent.StartOffset)
+            ? $"new[] {{ {collection} }}"
+            : $"({collection} ?? global::System.Array.Empty<{GetTypeName(elementType)}>())";
+        AppendLine($"foreach ({GetTypeName(_variables[name])} {GetVariableIdentifier(name)} in {enumerable})");
         EmitBlock(statement.Body, returnType);
     }
 
@@ -442,6 +477,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             BinaryExpressionAst binary => EmitBinary(binary),
             UnaryExpressionAst unary => EmitUnary(unary),
             ArrayLiteralAst array => EmitArray(array),
+            HashtableAst hashtable => EmitStringDictionary(hashtable),
+            AssignmentStatementAst assignment => EmitAssignmentExpression(assignment),
             InvokeMemberExpressionAst invocation => _memberEmitter.EmitInvocation(invocation),
             MemberExpressionAst member => _memberEmitter.EmitMember(member),
             IndexExpressionAst index => _memberEmitter.EmitIndex(index),
@@ -451,7 +488,10 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
     private string EmitBooleanExpression(Ast ast)
     {
-        if (InferExpressionType(ast) != typeof(bool))
+        var type = InferExpressionType(ast);
+        if (type == typeof(string) && UnwrapExpression(ast) is AssignmentStatementAst)
+            return $"!global::System.String.IsNullOrEmpty({EmitExpression(ast)})";
+        if (type != typeof(bool))
             throw Error(ast, "PowerShell truthiness conversion is dynamic; typed conditions must already be Boolean.");
         return EmitExpression(ast);
     }
@@ -495,6 +535,15 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         return ast;
     }
 
+    private bool CanUseScalarStringForeach(Ast condition)
+    {
+        var expression = UnwrapTransparentExpression(condition);
+        return expression is StringConstantExpressionAst ||
+               expression is VariableExpressionAst variable &&
+               _explicitlyTypedVariables.Contains(variable.VariablePath.UserPath) &&
+               InferVariableType(variable) == typeof(string);
+    }
+
     private string GetVariableIdentifier(string name)
         => _variableIdentifiers.TryGetValue(name, out var identifier)
             ? identifier
@@ -524,6 +573,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             UnaryExpressionAst unary => InferExpressionType(unary.Child),
             ArrayLiteralAst array when array.Elements.Count > 0 && array.Elements.Select(InferExpressionType).Distinct().Count() == 1 => InferExpressionType(array.Elements[0]).MakeArrayType(),
             ArrayLiteralAst array => throw Error(array, "Heterogeneous or empty PowerShell array literals cannot be represented by one inferred CLR array element type."),
+            HashtableAst hashtable => InferStringDictionaryType(hashtable),
+            AssignmentStatementAst assignment => InferExpressionType(assignment.Right),
             InvokeMemberExpressionAst invocation => _memberEmitter.InferInvocationType(invocation),
             MemberExpressionAst member => _memberEmitter.InferMemberType(member),
             IndexExpressionAst index => _memberEmitter.InferIndexType(index),
@@ -618,7 +669,10 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     {
         if (type.IsArray) return GetTypeName(type.GetElementType()!) + "[]";
         if (type.IsGenericType)
-            throw new InvalidOperationException($"Constructed generic CLR type '{type.FullName}' is not supported by the conservative generated project.");
+        {
+            var definitionName = (type.GetGenericTypeDefinition().FullName ?? type.Name).Split('`')[0].Replace('+', '.');
+            return $"global::{definitionName}<{string.Join(", ", type.GetGenericArguments().Select(GetTypeName))}>";
+        }
         if (type == typeof(void)) return "void";
         if (type == typeof(bool)) return "bool";
         if (type == typeof(byte)) return "byte";

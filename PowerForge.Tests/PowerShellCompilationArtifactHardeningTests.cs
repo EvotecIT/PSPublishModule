@@ -8,6 +8,51 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
+    [Theory]
+    [InlineData("net8.0", "pwsh")]
+    [InlineData("net472", "powershell.exe")]
+    public void Build_StrictBinaryModulePreservesMandatoryMetadataForTypedHelper(string targetFramework, string host)
+    {
+        if (targetFramework == "net472" && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Convert-IpAddressToPtrString {
+                [CmdletBinding()]
+                param([Parameter(Mandatory = $true)] [string] $IPAddress)
+                $octets = $IPAddress -split "\."
+                [array]::Reverse($octets)
+                $ptrString = ($octets -join ".") + ".in-addr.arpa"
+                $ptrString
+            }
+            Export-ModuleMember -Function Convert-IpAddressToPtrString
+            """,
+            ".psm1");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.PowerInfoBloxHelper",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict)
+        {
+            TargetFramework = targetFramework
+        };
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            host,
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; $p=(Get-Command Convert-IpAddressToPtrString).Parameters['IPAddress']; $p.Attributes.Mandatory; Convert-IpAddressToPtrString -IPAddress '192.168.1.20'");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal(new[] { "True", "20.1.168.192.in-addr.arpa" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
     [Fact]
     public void Build_PackagedExecutablePreservesOrderedOutputPathSemanticsAndValueValidation()
     {
@@ -191,6 +236,42 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.False(result.Succeeded);
         Assert.Contains("duplicate binary-cmdlet class", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_HybridModuleRoutesNonCmdletFunctionNameToScriptFallback()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-TypedValue { return 7 }; function Helper { return 11 }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.NonCmdletFallback",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
+        Assert.Contains(result.Manifest.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("Verb-Noun", StringComparison.OrdinalIgnoreCase));
+        var assemblyPath = Path.Combine(Path.GetDirectoryName(result.ArtifactPath!)!, "PowerForge.NonCmdletFallback.dll");
+        var assembly = System.Reflection.Assembly.LoadFile(assemblyPath);
+        var methodContainer = assembly.GetTypes().Single(type =>
+            type.GetMethod("Get_TypedValue", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static) is not null);
+        Assert.Null(methodContainer.GetMethod("Helper", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static));
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-TypedValue; Helper");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal(new[] { "7", "11" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
     }
 
     [Fact]
@@ -536,7 +617,26 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.False(File.Exists(previousLibraryPath));
         Assert.True(Directory.Exists(Path.Combine(fixture.OutputPath, "PowerForge.ShapeReplacement")));
         Assert.All(module.Manifest!.Files, file => Assert.True(File.Exists(file.Path), file.Path));
-        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath, ".PowerForge.ShapeReplacement.artifact-*"));
+        Assert.Empty(Directory.EnumerateDirectories(fixture.OutputPath, ".PowerForge.ShapeReplacement.artifact-*"));
+    }
+
+    [Fact]
+    public void Build_ReusesAbandonedPublicationLockFile()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-Value { return 1 }");
+        const string artifactName = "PowerForge.AbandonedLock";
+        var lockPath = Path.Combine(fixture.OutputPath, "." + artifactName + ".artifact-publish.lock");
+        File.WriteAllText(lockPath, "abandoned");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            artifactName,
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(File.Exists(lockPath));
     }
 
     [Fact]
@@ -565,7 +665,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.Contains("previous durable artifact set was restored", failed.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(originalArtifactHash, Hash(first.ArtifactPath!));
         Assert.Equal(originalManifestHash, Hash(first.ManifestPath!));
-        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath, ".PowerForge.AtomicRollback.artifact-*"));
+        Assert.Empty(Directory.EnumerateDirectories(fixture.OutputPath, ".PowerForge.AtomicRollback.artifact-*"));
     }
 
     private static (int ExitCode, string StandardOutput, string StandardError) Run(string fileName, params string[] arguments)

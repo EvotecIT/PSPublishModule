@@ -66,10 +66,17 @@ public sealed class PowerShellCompilationParameter
 {
     /// <summary>Creates a parameter description.</summary>
     public PowerShellCompilationParameter(string name, string typeName, bool hasDefaultValue)
+        : this(name, typeName, hasDefaultValue, false)
+    {
+    }
+
+    /// <summary>Creates a parameter description including preserved binding metadata.</summary>
+    public PowerShellCompilationParameter(string name, string typeName, bool hasDefaultValue, bool isMandatory)
     {
         Name = name ?? string.Empty;
         TypeName = typeName ?? string.Empty;
         HasDefaultValue = hasDefaultValue;
+        IsMandatory = isMandatory;
     }
 
     /// <summary>PowerShell parameter name without the dollar prefix.</summary>
@@ -80,6 +87,9 @@ public sealed class PowerShellCompilationParameter
 
     /// <summary>Whether PowerShell source declares a default value.</summary>
     public bool HasDefaultValue { get; }
+
+    /// <summary>Whether source parameter metadata requires a bound value.</summary>
+    public bool IsMandatory { get; }
 }
 
 /// <summary>

@@ -17,6 +17,7 @@ internal sealed class PowerShellCSharpMemberEmitter
     private readonly Func<MemberInfo, bool> _isSupportedMember;
     private readonly Func<ExpressionAst, bool> _canNormalizeNullStringReceiver;
     private readonly Func<Ast, string, PowerShellCSharpEmissionException> _error;
+    private int _temporaryIndex;
 
     internal PowerShellCSharpMemberEmitter(
         Func<Ast, Type> inferExpressionType,
@@ -65,6 +66,8 @@ internal sealed class PowerShellCSharpMemberEmitter
             var elementType = target.Type.GetElementType()!;
             return $"({target.Code} ?? global::System.Array.Empty<{_getTypeName(elementType)}>()).Length";
         }
+        if (!target.IsStatic && target.Type == typeof(string))
+            return $"({target.Code} ?? string.Empty).{actualName}";
         return $"{EmitTarget(target)}.{actualName}";
     }
 
@@ -79,6 +82,8 @@ internal sealed class PowerShellCSharpMemberEmitter
     internal Type InferIndexType(IndexExpressionAst index)
     {
         var target = ResolveIndexTarget(index);
+        if (IsStringDictionary(target.Type))
+            return typeof(string);
         if (IsDirectReturnValue(index))
             return typeof(object);
         return target.Type == typeof(string) ? typeof(char) : target.Type.GetElementType()!;
@@ -89,6 +94,11 @@ internal sealed class PowerShellCSharpMemberEmitter
         var target = ResolveIndexTarget(index);
         var targetCode = EmitTarget(target);
         var indexCode = _emitExpression(index.Index);
+        if (IsStringDictionary(target.Type))
+        {
+            var temporary = "__powerForgeDictionaryValue" + _temporaryIndex++.ToString(CultureInfo.InvariantCulture);
+            return $"({targetCode} is null ? throw new global::System.InvalidOperationException(\"Cannot index into a null dictionary.\") : {targetCode}.TryGetValue({indexCode}, out var {temporary}) ? {temporary} : null)";
+        }
         var normalizedIndex = $"(({indexCode}) < 0 ? {targetCode}.Length + ({indexCode}) : ({indexCode}))";
         var missing = $"{normalizedIndex} < 0 || {normalizedIndex} >= {targetCode}.Length";
         var value = $"{targetCode}[{normalizedIndex}]";
@@ -262,16 +272,22 @@ internal sealed class PowerShellCSharpMemberEmitter
         if (index.Target is not VariableExpressionAst and not StringConstantExpressionAst and not ArrayLiteralAst)
             throw _error(index.Target, "Typed indexing requires a side-effect-free local, parameter, string literal, or array literal target.");
         var target = ResolveTarget(index.Target);
-        if (target.IsStatic || target.Type != typeof(string) && !target.Type.IsArray)
-            throw _error(index.Target, "Typed indexing currently supports strings and one-dimensional CLR arrays only.");
+        if (target.IsStatic || target.Type != typeof(string) && !target.Type.IsArray && !IsStringDictionary(target.Type))
+            throw _error(index.Target, "Typed indexing currently supports strings, one-dimensional CLR arrays, and homogeneous string dictionaries only.");
         if (target.Type.IsArray && target.Type.GetArrayRank() != 1)
             throw _error(index.Target, "Typed indexing currently supports one-dimensional CLR arrays only.");
-        if (_inferExpressionType(index.Index) != typeof(int))
-            throw _error(index.Index, "Typed indexing requires one scalar Int32 index.");
+        var expectedIndexType = IsStringDictionary(target.Type) ? typeof(string) : typeof(int);
+        if (_inferExpressionType(index.Index) != expectedIndexType)
+            throw _error(index.Index, $"Typed indexing requires one scalar {expectedIndexType.Name} index for this target.");
         if (!IsSideEffectFreeIndex(index.Index))
             throw _error(index.Index, "Typed indexing requires a side-effect-free Int32 variable or constant index.");
         return target;
     }
+
+    private static bool IsStringDictionary(Type type)
+        => type.IsGenericType &&
+           type.GetGenericTypeDefinition() == typeof(Dictionary<,>) &&
+           type.GetGenericArguments().SequenceEqual(new[] { typeof(string), typeof(string) });
 
     private static bool IsSideEffectFreeIndex(ExpressionAst index)
         => index is VariableExpressionAst or ConstantExpressionAst ||

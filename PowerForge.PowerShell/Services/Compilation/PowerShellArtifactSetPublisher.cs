@@ -128,8 +128,7 @@ internal static class PowerShellArtifactSetPublisher
             try
             {
                 return new PublicationLock(
-                    lockPath,
-                    new FileStream(lockPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None));
+                    new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None));
             }
             catch (IOException) when (stopwatch.Elapsed < TimeSpan.FromSeconds(30))
             {
@@ -144,12 +143,10 @@ internal static class PowerShellArtifactSetPublisher
 
     private sealed class PublicationLock : IDisposable
     {
-        private readonly string _path;
         private FileStream? _stream;
 
-        internal PublicationLock(string path, FileStream stream)
+        internal PublicationLock(FileStream stream)
         {
-            _path = path;
             _stream = stream;
         }
 
@@ -159,7 +156,6 @@ internal static class PowerShellArtifactSetPublisher
             if (stream is null)
                 return;
             stream.Dispose();
-            try { File.Delete(_path); } catch { }
         }
     }
 

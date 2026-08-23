@@ -51,3 +51,13 @@ function Get-IndexedSum {
 
     return $total
 }
+
+function Convert-IpAddressToPtrString {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)] [string] $IPAddress)
+
+    $octets = $IPAddress -split "\."
+    [array]::Reverse($octets)
+    $ptrString = ($octets -join ".") + ".in-addr.arpa"
+    $ptrString
+}

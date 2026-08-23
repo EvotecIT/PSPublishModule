@@ -29,8 +29,20 @@ internal static class PowerShellGeneratedTypePolicy
     {
         if (type.IsArray)
             return type.GetArrayRank() == 1 && IsSupported(type.GetElementType()!, targetFramework);
-        if (type.IsGenericType || type.IsByRef || type.IsPointer)
+        if (type.IsGenericType)
+        {
+            if (type.GetGenericTypeDefinition() != typeof(Dictionary<,>))
+                return false;
+            return type.GetGenericArguments().All(argument => IsSupported(argument, targetFramework)) &&
+                   IsSupportedNonGeneric(type.GetGenericTypeDefinition(), targetFramework);
+        }
+        if (type.IsByRef || type.IsPointer)
             return false;
+        return IsSupportedNonGeneric(type, targetFramework);
+    }
+
+    private static bool IsSupportedNonGeneric(Type type, string? targetFramework)
+    {
         var location = type.Assembly.Location;
         if (string.IsNullOrWhiteSpace(location))
             return type.Assembly == typeof(object).Assembly;

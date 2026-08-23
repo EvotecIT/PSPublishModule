@@ -43,6 +43,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 : File.ReadAllText(Path.Combine(outputDirectory, artifactName + ".dll"));
             Assert.Equal(artifactMarker, File.ReadAllText(Path.Combine(outputDirectory, artifactName + ".powerforge-compilation.json")));
             Assert.Empty(Directory.EnumerateDirectories(outputDirectory, ".*.artifact-*", SearchOption.TopDirectoryOnly));
+            Assert.True(File.Exists(Path.Combine(outputDirectory, "." + artifactName + ".artifact-publish.lock")));
         }
         finally
         {

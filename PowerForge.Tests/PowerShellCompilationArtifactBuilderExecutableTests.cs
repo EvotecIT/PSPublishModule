@@ -131,6 +131,23 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_RejectsHybridExecutableInsteadOfPublishingPackageWithHybridManifest()
+    {
+        using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.InvalidHybridExecutable",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Hybrid);
+
+        var exception = Assert.Throws<ArgumentException>(() => new PowerShellCompilationArtifactBuilder().Build(spec));
+
+        Assert.Contains("Hybrid executable", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
     public void NativeAotUsesItsNativeSingleArtifactInsteadOfSingleFileBundling()
     {
         using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");

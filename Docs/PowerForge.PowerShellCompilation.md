@@ -124,33 +124,36 @@ Eligibility is whole-function and intentionally conservative. One unsupported co
 
 The first subset supports:
 
-- explicitly typed scalar parameters and one-dimensional typed arrays;
+- explicitly typed scalar parameters and one-dimensional typed arrays, including preserved `Parameter(Mandatory)` metadata;
 - typed or safely inferred local variables;
-- explicit `return` values;
-- `if`/`elseif`/`else`, `for`, `while`, and `foreach` over typed arrays;
+- explicit `return` values and one terminal implicit-output expression;
+- `if`/`elseif`/`else`, `for`, `while`, and `foreach` over typed arrays or an explicitly typed scalar string;
 - Boolean logic and scalar comparisons with known compatible types;
 - string equality with PowerShell case-sensitive or case-insensitive behavior;
+- scalar string `-split` and string-array `-join`;
+- lookup-only, case-insensitive string dictionaries created from homogeneous string hashtable literals;
+- empty `CmdletBinding()` metadata and `Parameter(Mandatory)` metadata, with mandatory binding preserved by generated binary cmdlets;
 - floating-point and decimal arithmetic with compatible operands;
 - explicitly typed integral accumulators and loop counters with checked assignment semantics;
 - unlabeled `break` and `continue` inside supported loops;
 - one-dimensional typed-array and string indexing with PowerShell-compatible negative and missing-index behavior for direct returns and compound-assignment operands;
 - statically resolved CLR constructors, static fields/properties, instance fields/properties, and exact method overloads for supported typed arguments.
 
-Member compilation is intentionally exact. The emitter resolves a single CLR member or overload at build time, applies only supported assignable/numeric/one-character conversions, and falls back when resolution is missing or ambiguous. Both the type and selected constructor, method, property, or field must exist in the requested target framework's reference assemblies; analyzer-host-only APIs and constructed generic types are rejected before `dotnet` compilation. Null typed arrays preserve PowerShell's zero-length `.Length` behavior, while nullable CLR API results retain failure behavior.
+Member compilation is intentionally exact. The emitter resolves a single CLR member or overload at build time, applies only supported assignable/numeric/one-character conversions, and falls back when resolution is missing or ambiguous. Both the type and selected constructor, method, property, or field must exist in the requested target framework's reference assemblies; analyzer-host-only APIs and general constructed generic types are rejected before `dotnet` compilation. The compiler-owned homogeneous string dictionary is the current narrow generic exception. Null typed arrays preserve PowerShell's zero-length `.Length` behavior, and a nullable inferred string's property access uses PowerShell's empty-string property semantics while method invocation retains CLR null failure behavior.
 
 The analyzer rejects dynamic behavior rather than guessing. Current blockers include:
 
 - command, provider, pipeline, and dynamic command invocation;
 - dynamic member names, PowerShell-adapted properties, ambiguous overloads, and general object-property semantics;
 - script blocks, closures, runtime scopes such as `$env:`, and untyped parameters;
-- parameter attributes, default expressions, and `dynamicparam`, `begin`, `process`, or `clean` blocks;
-- implicit pipeline output outside the currently supported explicit-return subset;
+- parameter attributes beyond empty `CmdletBinding()` and `Parameter(Mandatory)`, default expressions, and `dynamicparam`, `begin`, `process`, or `clean` blocks;
+- nonterminal or nested implicit pipeline output;
 - PowerShell truthiness conversions, element-wise array comparison, and coercion between incompatible CLR types;
 - string relational operators whose culture-aware ordering has not yet been translated;
 - explicit conversion expressions, heterogeneous branch return types, and integral division whose PowerShell result type depends on the quotient;
 - untyped integral arithmetic that can change CLR type after overflow;
 - array concatenation and compound-assignment operand pairs that have no exact static CLR operator;
-- source `#requires` directives, which keep the complete source file on the PowerShell runtime path rather than being silently omitted;
+- source `#requires` directives and runtime-bearing `using module` / `using assembly` statements, which keep the complete source file on the PowerShell runtime path rather than being silently omitted;
 - control flow for which the conservative emitter cannot prove declaration or return behavior.
 
 This boundary is expected to expand through semantic proof, not syntax count. New constructs need differential tests against PowerShell before they become eligible.
@@ -223,20 +226,22 @@ See [the benchmark README](../Benchmarks/PowerShellCompilation/README.md) for th
 
 ## Real-source eligibility
 
-A scan of TestimoX commit `02b1755109e1661347593a115c1b5ba67132b404` covered 1,665 PowerShell files and 2,086 executable units. The current conservative subset accepts seven units (0.336%): one representative logon script, the two `Get-AllowedAverageMs` benchmark-gate functions, and four real path/administrator helpers. The post-hardening census still reports seven eligible and 2,079 runtime-fallback units with no parse-error files. Typed indexing removed `IndexExpressionAst` as a blocker, but it did not increase whole-function eligibility at this commit because every indexed unit still has another unsupported construct. The corpus result is therefore reported as unchanged rather than counting partial syntax support as a performance win.
+The canonical census uses exact committed source from six PowerShell-first products. It scans only authored module trees (`Public`, `Private`, and PSSharedGoods `Enums`), not dirty working-tree changes, generated modules, examples, tests, build scripts, or website assets. The pinned inputs are Testimo `f7550cf661ebaf97ae38f96b664aee09efd9cbde`, PSWriteHTML `fa88b1bbecc539b59c9a82cd4b95efc6cc951244`, O365Essentials `fad82882ff116c262ffd3c2c3fdb2781a8ddf0f3`, PSSharedGoods `12e9c2520d347df2988286ea1ba3e81e011ef0de`, ADEssentials `b2b1f760853becb773841f744bea196d02aa6c2b`, and PowerInfoBlox `9de3730afbfd61ed6bec59bc78e9e7a8d91b6233`.
 
-Low initial coverage is not hidden by Hybrid mode. It is written to the manifest, and every fallback has a diagnostic explaining what needs compiler support. The next useful compiler work is driven by recurring blocker classes in real repositories rather than making isolated syntax examples turn green.
+That lane contains 1,249 files and 1,340 whole script/function units with no parse-error files. Before the common-module language slice, one unit compiled. The current candidate compiles eight units (0.597%): one PSWriteHTML unit, six PSSharedGoods units, and PowerInfoBlox `Convert-IpAddressToPtrString`. The PowerInfoBlox helper is also built and invoked as a strict generated binary cmdlet with mandatory parameter metadata, while PSSharedGoods `ConvertFrom-OperationType` is differentially checked for known, case-insensitive, and missing dictionary keys. Testimo, O365Essentials, and ADEssentials remain at zero typed units; their current blockers are reported rather than hidden.
+
+Low initial coverage is not hidden by Hybrid mode. It is written to the manifest, and every fallback has a diagnostic explaining what needs compiler support. Diagnostics are deliberately blocker-masked to avoid cascades, so accepting one outer construct can reveal deeper runtime semantics without increasing coverage. Roadmap priority therefore comes from repeated full-corpus passes and executable differential proof, not raw syntax-occurrence counts.
 
 ## Security and distribution limits
 
 Packaging and typed compilation are not obfuscation or source protection. A packaged executable contains an embedded script and runtime assets that a determined user can inspect. A typed EXE or DLL is normal managed/native code and remains analyzable.
 
-`Build-PowerShellArtifact -SignArtifact` and CLI `--sign` sign staged Windows `.exe`, `.dll`, `.ps1`, `.psm1`, and `.psd1` files before their SHA-256 and byte-size evidence is recorded. Signing runs in an isolated Windows PowerShell process with a bounded timeout. A missing certificate, provider timeout, or non-valid signature aborts the atomic publication; no unsigned replacement or stale manifest is committed. The broader PowerForge release pipeline remains the owner for packaging, release attestations, NuGet/GitHub publication, and policy-level signing configuration.
+`Build-PowerShellArtifact -SignArtifact` and CLI `--sign` sign staged Windows `.exe`, `.dll`, `.ps1`, `.psm1`, and `.psd1` files before their SHA-256 and byte-size evidence is recorded. Signing runs in an isolated Windows PowerShell process with a bounded timeout. A missing certificate, provider timeout, or non-valid signature aborts the atomic publication; no unsigned replacement or stale manifest is committed. Concurrent replacements serialize through a durable per-artifact lock file whose exclusive handle defines ownership across Windows and Unix. The broader PowerForge release pipeline remains the owner for packaging, release attestations, NuGet/GitHub publication, and policy-level signing configuration.
 
 The fail-closed signing and atomic-publication contract is covered by automated tests. On 2026-08-23 the internal acceptance run also produced a valid Authenticode-signed typed EXE, a net8 binary module, and a net472 binary module with the maintainer's code-signing certificate and DigiCert timestamp service. Each staged hash matched the final manifest and each artifact executed successfully in its target host. These were local internal proof artifacts only; nothing was published to PSGallery, NuGet, GitHub Releases, or another feed.
 
 The generated EXE carries the PowerShell SDK, so it is much larger than the input script and may start more slowly than an installed `pwsh`. Self-contained publication adds the .NET runtime as well. With `SingleFile = $false`, PowerForge preserves the complete nested publish tree instead of copying only top-level files. Runtime-packaged artifacts must be rebuilt when their embedded PowerShell or .NET dependencies need security updates.
 
-Typed executable compilation currently accepts one top-level script body and rejects local function declarations. Source `#requires` directives are never erased: Strict typed builds reject them with the source diagnostic, while Hybrid keeps that file on the PowerShell runtime path. Hybrid module composition preserves `using` and module `param` prologues for mixed `.ps1` or `.psm1` source. Generated typed export shaping requires literal unconditional exports, including colon-attached literal forms such as `-Function:Get-Value`, and contained relative file references; conditional-only export logic remains in the script fallback and executes unchanged. Strict modules reject `ScriptsToProcess` and script-based `NestedModules`; Hybrid records those hooks as runtime fallback. Binary-module generation rejects function parameters that collide with PowerShell common or optional common parameters, or whose PowerShell spelling cannot be preserved in CLR parameter metadata. Generated cmdlet output uses PowerShell's normal collection-enumeration contract rather than treating only arrays as pipelines; `OutputType` advertises an array's element type and uses `object` when an enumerable's element type cannot be proven. A plain CLR library contains only eligible methods and no automatic PowerShell fallback host.
+Typed executable compilation currently accepts one top-level script body and rejects local function declarations. `Hybrid` is not a valid executable mode: choose runtime-preserving `Package` or PowerShell-free `Strict`. Source `#requires` directives and runtime-bearing `using` statements are never erased: Strict typed builds reject them, Hybrid modules retain affected functions on the runtime path, and Hybrid libraries omit them with diagnostics. Hybrid module composition preserves namespace `using` and module `param` prologues for mixed `.ps1` or `.psm1` source. Generated typed export shaping requires literal unconditional exports, including colon-attached literal forms such as `-Function:Get-Value`, and contained relative file references; conditional-only export logic remains in the script fallback and executes unchanged. Strict modules reject `ScriptsToProcess` and script-based `NestedModules`; Hybrid records those hooks as runtime fallback. Required contained assemblies, format files, type files, and scripts must exist; named external assemblies remain manifest references rather than local files. Every staged manifest or dot-source path must remain inside the source root without symbolic-link or junction traversal. Binary-module generation routes non-Verb-Noun or otherwise unrepresentable wrappers to Hybrid script fallback and excludes their methods from the generated CLR assembly; Strict mode rejects them. Generated cmdlet output uses PowerShell's normal collection-enumeration contract rather than treating only arrays as pipelines; `OutputType` advertises an array's element type and uses `object` when an enumerable's element type cannot be proven. A plain CLR library contains only eligible methods and no automatic PowerShell fallback host.
 
 Strict typed executables may request `Trimmed` or `NativeAot` optimization. Both require a RID-specific, self-contained, single-artifact build; NativeAOT already emits the native executable directly and does not enable MSBuild's separate single-file bundler. Packaged PowerShell executables are rejected because trimming a dynamic PowerShell runtime is not a safe default. Native AOT is therefore a deployment option only for the proven typed subset, not a promise that arbitrary PowerShell can be converted to native code.

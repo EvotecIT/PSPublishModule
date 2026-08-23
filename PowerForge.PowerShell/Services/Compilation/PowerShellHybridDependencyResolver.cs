@@ -27,10 +27,10 @@ internal static class PowerShellHybridDependencyResolver
         foreach (var entryPath in new[] { sourcePath }.Concat(additionalEntryPaths ?? Array.Empty<string>()))
         {
             var entry = Path.GetFullPath(entryPath);
-            EnsureContained(sourceRoot, entry, entry, line: 1);
+            PowerShellCompilationPathSafety.EnsureContained(sourceRoot, entry, $"Hybrid module runtime source '{entry}' escapes the hybrid module source root.");
             if (!File.Exists(entry))
                 throw new FileNotFoundException($"Hybrid module runtime source '{entry}' was not found.", entry);
-            EnsureNoLinks(sourceRoot, entry, entry, line: 1);
+            PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, entry, $"Hybrid module runtime source '{entry}' traverses a symbolic link or junction, which is not allowed for hybrid staging.");
             if (discovered.Add(entry))
                 pending.Enqueue(entry);
         }
@@ -53,15 +53,15 @@ internal static class PowerShellHybridDependencyResolver
                 if (Path.IsPathRooted(relativePath) || WildcardPattern.ContainsWildcardCharacters(relativePath))
                     throw new InvalidOperationException($"Dot-source path '{relativePath}' at {current}:{command.Extent.StartLineNumber} must be a contained literal path without wildcards.");
                 var dependency = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(current)!, relativePath));
-                EnsureContained(sourceRoot, dependency, current, command.Extent.StartLineNumber);
+                PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency, $"Dot-source path at {current}:{command.Extent.StartLineNumber} escapes the hybrid module source root.");
                 if (!File.Exists(dependency))
                     throw new FileNotFoundException($"Dot-sourced hybrid module dependency '{relativePath}' was not found for {current}:{command.Extent.StartLineNumber}.", dependency);
-                EnsureNoLinks(sourceRoot, dependency, current, command.Extent.StartLineNumber);
+                PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, dependency, $"Dot-source path at {current}:{command.Extent.StartLineNumber} traverses a symbolic link or junction, which is not allowed for hybrid staging.");
                 if (!discovered.Add(dependency))
                     continue;
 
                 var target = Path.GetFullPath(Path.Combine(moduleDirectory, FrameworkCompatibility.GetRelativePath(sourceRoot, dependency)));
-                EnsureContained(Path.GetFullPath(moduleDirectory), target, current, command.Extent.StartLineNumber);
+                PowerShellCompilationPathSafety.EnsureContained(Path.GetFullPath(moduleDirectory), target, $"Dot-source target for {current}:{command.Extent.StartLineNumber} escapes the hybrid module staging root.");
                 Directory.CreateDirectory(Path.GetDirectoryName(target) ?? moduleDirectory);
                 if (File.Exists(target))
                 {
@@ -95,28 +95,6 @@ internal static class PowerShellHybridDependencyResolver
 
     private static string NormalizeRelativePath(string path)
         => path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
-
-    private static void EnsureContained(string root, string path, string sourcePath, int line)
-    {
-        var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!path.StartsWith(normalizedRoot, GetPathComparison()))
-            throw new InvalidOperationException($"Dot-source path at {sourcePath}:{line} escapes the hybrid module source root.");
-    }
-
-    private static void EnsureNoLinks(string root, string path, string sourcePath, int line)
-    {
-        var relativePath = FrameworkCompatibility.GetRelativePath(root, path);
-        var current = root;
-        foreach (var segment in relativePath.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries))
-        {
-            current = Path.Combine(current, segment);
-            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-                throw new InvalidOperationException($"Dot-source path at {sourcePath}:{line} traverses a symbolic link or junction, which is not allowed for hybrid staging.");
-        }
-    }
-
-    private static StringComparison GetPathComparison()
-        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     private static StringComparer GetPathComparer()
         => RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;

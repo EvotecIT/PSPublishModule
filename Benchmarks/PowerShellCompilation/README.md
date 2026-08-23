@@ -7,7 +7,7 @@ This benchmark matrix separates three different claims:
 - many fine binary-cmdlet calls versus one coarse generated command doing equivalent work;
 - a typed executable and a packaged single-file executable versus `pwsh -File` process startup.
 
-The real-function workload is `Get-AllowedAverageMs`, taken from TestimoX's dashboard benchmark gate. The triangular-number and indexed-array loops are intentionally synthetic and expose hot-loop and typed-indexing behavior without command, provider, or I/O noise. Every measured lane validates its result outside the timed operation. Artifact generation, assembly loading, module import, and workload setup are also outside the timed block.
+The real-source workloads are a production threshold calculation and PowerInfoBlox's `Convert-IpAddressToPtrString`. The triangular-number and indexed-array loops are intentionally synthetic and expose hot-loop and typed-indexing behavior without command, provider, or I/O noise. Every measured lane validates its result outside the timed operation. Artifact generation, assembly loading, module import, and workload setup are also outside the timed block.
 
 See [PowerShell Compilation](../../Docs/PowerForge.PowerShellCompilation.md#measured-performance) for the clean-candidate tables, environment, run IDs, interpretation, and eligibility limits. Quick runs are smoke evidence only and record `gitWorktreeClean: false` when the candidate is still changing.
 

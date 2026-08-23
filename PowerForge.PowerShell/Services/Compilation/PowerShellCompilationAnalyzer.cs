@@ -11,7 +11,7 @@ public sealed class PowerShellCompilationAnalyzer
     {
         "Plus", "Minus", "Multiply", "Divide", "Rem",
         "Ieq", "Ceq", "Ine", "Cne", "Ilt", "Clt", "Ile", "Cle", "Igt", "Cgt", "Ige", "Cge",
-        "And", "Or"
+        "And", "Or", "Isplit", "Csplit", "Join"
     };
 
     private static readonly HashSet<string> SupportedUnaryOperators = new(StringComparer.Ordinal)
@@ -205,20 +205,33 @@ public sealed class PowerShellCompilationAnalyzer
             }
         }
 
+        var fileWideDiagnostics = ast.UsingStatements
+            .OfType<UsingStatementAst>()
+            .Where(static statement => statement.UsingStatementKind != UsingStatementKind.Namespace)
+            .Select(statement => CreateDiagnostic(
+                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                $"Source '{statement.Extent.Text}' has runtime-bearing using semantics that cannot be omitted from a typed artifact; this file must remain on the PowerShell runtime path.",
+                file,
+                statement.Extent))
+            .ToList();
         if (ast.ScriptRequirements is not null)
         {
-            var requirement = CreateDiagnostic(
+            fileWideDiagnostics.Add(CreateDiagnostic(
                 PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                 "Source #requires directives cannot be omitted from a typed artifact; this file must remain on the PowerShell runtime path.",
                 file,
-                ast.Extent);
+                ast.Extent));
+        }
+        if (fileWideDiagnostics.Count > 0)
+        {
+            var diagnostics = fileWideDiagnostics.ToArray();
             for (var index = 0; index < units.Count; index++)
-                units[index] = ReplaceUnit(units[index], typeof(object), new[] { requirement });
+                units[index] = ReplaceUnit(units[index], typeof(object), diagnostics);
             return new PowerShellCompilationFilePlan(
                 file,
                 relativePath,
                 units.ToArray(),
-                units.Count == 0 ? new[] { requirement } : Array.Empty<PowerShellCompilationDiagnostic>());
+                units.Count == 0 ? diagnostics : Array.Empty<PowerShellCompilationDiagnostic>());
         }
 
         return new PowerShellCompilationFilePlan(file, relativePath, units.ToArray(), Array.Empty<PowerShellCompilationDiagnostic>());
@@ -254,14 +267,6 @@ public sealed class PowerShellCompilationAnalyzer
 
         foreach (var statement in executableStatements)
         {
-            if (statement is PipelineAst pipeline && pipeline.PipelineElements.Count == 1 && pipeline.PipelineElements[0] is CommandExpressionAst)
-            {
-                diagnostics.Add(CreateDiagnostic(
-                    PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                    "Implicit pipeline output is not supported; use an explicit return statement for typed compilation.",
-                    file,
-                    statement.Extent));
-            }
             AnalyzeNode(statement, root, file, diagnostics, localVariables);
         }
 
@@ -303,7 +308,8 @@ public sealed class PowerShellCompilationAnalyzer
             result.Add(new PowerShellCompilationParameter(
                 parameter.Name.VariablePath.UserPath,
                 type.FullName ?? type.Name,
-                parameter.DefaultValue is not null));
+                parameter.DefaultValue is not null,
+                IsMandatoryParameter(parameter)));
 
             foreach (var attribute in parameter.Attributes.Where(static attribute => attribute is not TypeConstraintAst))
                 AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables);
@@ -349,6 +355,8 @@ public sealed class PowerShellCompilationAnalyzer
                         "Nested script blocks and script-block literals require PowerShell runtime semantics.",
                         file,
                         candidate.Extent));
+                    break;
+                case AttributeAst attribute when IsSupportedMetadataAttribute(attribute):
                     break;
                 case ConvertExpressionAst conversion when conversion.Parent is AssignmentStatementAst assignment && ReferenceEquals(assignment.Left, conversion) && !IsSupportedParameterType(conversion.StaticType):
                     diagnostics.Add(CreateDiagnostic(
@@ -442,8 +450,50 @@ public sealed class PowerShellCompilationAnalyzer
             ForStatementAst or WhileStatementAst or ForEachStatementAst or ReturnStatementAst or
             BreakStatementAst or ContinueStatementAst or BinaryExpressionAst or UnaryExpressionAst or
             ParenExpressionAst or ConvertExpressionAst or ConstantExpressionAst or StringConstantExpressionAst or
-            VariableExpressionAst or ArrayLiteralAst or TypeExpressionAst or MemberExpressionAst or
+            VariableExpressionAst or ArrayLiteralAst or HashtableAst or TypeExpressionAst or MemberExpressionAst or
             InvokeMemberExpressionAst or IndexExpressionAst;
+
+    private static bool IsMandatoryParameter(ParameterAst parameter)
+        => parameter.Attributes
+            .OfType<AttributeAst>()
+            .Where(static attribute => IsAttributeNamed(attribute, "Parameter"))
+            .SelectMany(static attribute => attribute.NamedArguments)
+            .Any(static argument =>
+                argument.ArgumentName.Equals("Mandatory", StringComparison.OrdinalIgnoreCase) &&
+                TryGetBooleanAttributeValue(argument, out var value) && value);
+
+    private static bool IsSupportedMetadataAttribute(AttributeAst attribute)
+    {
+        if (IsAttributeNamed(attribute, "CmdletBinding"))
+            return attribute.PositionalArguments.Count == 0 && attribute.NamedArguments.Count == 0;
+        if (!IsAttributeNamed(attribute, "Parameter") || attribute.PositionalArguments.Count != 0)
+            return false;
+        return attribute.NamedArguments.All(static argument =>
+            argument.ArgumentName.Equals("Mandatory", StringComparison.OrdinalIgnoreCase) &&
+            TryGetBooleanAttributeValue(argument, out _));
+    }
+
+    private static bool TryGetBooleanAttributeValue(NamedAttributeArgumentAst argument, out bool value)
+    {
+        try
+        {
+            if (argument.Argument.SafeGetValue() is bool resolved)
+            {
+                value = resolved;
+                return true;
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Dynamic attribute arguments remain on the PowerShell runtime path.
+        }
+        value = false;
+        return false;
+    }
+
+    private static bool IsAttributeNamed(AttributeAst attribute, string name)
+        => attribute.TypeName.Name.Equals(name, StringComparison.OrdinalIgnoreCase) ||
+           attribute.TypeName.Name.Equals(name + "Attribute", StringComparison.OrdinalIgnoreCase);
 
     private static StatementAst[] GetEndStatements(ScriptBlockAst scriptBlock, bool excludeFunctionDefinitions, bool excludeModuleExports)
         => scriptBlock.EndBlock?.Statements

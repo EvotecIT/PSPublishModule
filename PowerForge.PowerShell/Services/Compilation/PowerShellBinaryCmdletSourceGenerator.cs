@@ -19,6 +19,74 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         .Append("ProcessRecord")
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+    internal static PowerShellTypedCompilationResult PrepareForBinaryModule(
+        PowerShellTypedCompilationResult typed,
+        string[]? exportedFunctions,
+        string? targetFramework)
+    {
+        var selected = exportedFunctions?.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var invalid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var diagnostics = new List<PowerShellCompilationDiagnostic>();
+        var descriptors = new List<CmdletDescriptor>();
+        foreach (var method in typed.Methods.Where(method => selected is null || selected.Contains(method.SourceName)))
+        {
+            try
+            {
+                var descriptor = CreateDescriptor(method);
+                ValidateDescriptor(descriptor);
+                descriptors.Add(descriptor);
+            }
+            catch (InvalidOperationException ex)
+            {
+                invalid.Add(GetMethodKey(method));
+                diagnostics.Add(CreateDiagnostic(typed, method, ex.Message));
+            }
+        }
+
+        foreach (var duplicateClass in descriptors
+                     .Where(descriptor => !invalid.Contains(GetMethodKey(descriptor.Method)))
+                     .GroupBy(static descriptor => descriptor.ClassName, StringComparer.OrdinalIgnoreCase)
+                     .Where(static group => group.Count() > 1))
+        {
+            var message = $"Functions {string.Join(", ", duplicateClass.Select(static cmdlet => $"'{cmdlet.Method.SourceName}'"))} generate duplicate binary-cmdlet class '{duplicateClass.Key}'.";
+            foreach (var descriptor in duplicateClass)
+            {
+                invalid.Add(GetMethodKey(descriptor.Method));
+                diagnostics.Add(CreateDiagnostic(typed, descriptor.Method, message));
+            }
+        }
+
+        foreach (var descriptor in descriptors.Where(descriptor =>
+                     !invalid.Contains(GetMethodKey(descriptor.Method)) &&
+                     descriptor.ClassName.Equals(typed.TypeName, StringComparison.OrdinalIgnoreCase)))
+        {
+            invalid.Add(GetMethodKey(descriptor.Method));
+            diagnostics.Add(CreateDiagnostic(
+                typed,
+                descriptor.Method,
+                $"Function '{descriptor.Method.SourceName}' generates binary-cmdlet class '{descriptor.ClassName}', which collides with compiled method container '{typed.TypeName}'."));
+        }
+
+        if (invalid.Count == 0)
+            return typed;
+        var filtered = new PowerShellTypedCompilationTranspiler().TranspileExcluding(
+            typed.SourcePath,
+            typed.NamespaceName,
+            typed.TypeName,
+            targetFramework,
+            invalid);
+        return new PowerShellTypedCompilationResult(
+            filtered.SourcePath,
+            filtered.NamespaceName,
+            filtered.TypeName,
+            filtered.SourceCode,
+            filtered.Methods,
+            filtered.Diagnostics.Concat(diagnostics)
+                .OrderBy(static diagnostic => diagnostic.Line)
+                .ThenBy(static diagnostic => diagnostic.Column)
+                .ToArray());
+    }
+
     internal static string Generate(PowerShellTypedCompilationResult typed, string[]? exportedFunctions = null)
     {
         var selected = exportedFunctions?.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -58,7 +126,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         return new CmdletDescriptor(method, verb, noun, PowerShellCSharpMethodEmitter.SanitizeIdentifier(verb + noun + "Command"));
     }
 
-    private static void AppendCmdlet(StringBuilder builder, PowerShellTypedCompilationResult typed, CmdletDescriptor cmdlet)
+    private static void ValidateDescriptor(CmdletDescriptor cmdlet)
     {
         var renamedParameter = cmdlet.Method.Parameters.FirstOrDefault(parameter =>
         {
@@ -77,6 +145,11 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         });
         if (reservedParameter is not null)
             throw new InvalidOperationException($"Function '{cmdlet.Method.SourceName}' parameter '${reservedParameter.Name}' collides with generated or inherited binary-cmdlet member '{PowerShellCSharpMethodEmitter.SanitizeIdentifier(reservedParameter.Name)}'.");
+    }
+
+    private static void AppendCmdlet(StringBuilder builder, PowerShellTypedCompilationResult typed, CmdletDescriptor cmdlet)
+    {
+        ValidateDescriptor(cmdlet);
 
         builder.AppendLine($"[Cmdlet(\"{EscapeCSharpString(cmdlet.Verb)}\", \"{EscapeCSharpString(cmdlet.Noun)}\")]");
         var outputType = GetCmdletOutputTypeName(cmdlet.Method.ReturnType);
@@ -87,7 +160,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         for (var index = 0; index < cmdlet.Method.Parameters.Length; index++)
         {
             var parameter = cmdlet.Method.Parameters[index];
-            builder.AppendLine($"    [Parameter(Position = {index})]");
+            builder.AppendLine($"    [Parameter(Position = {index}{(parameter.IsMandatory ? ", Mandatory = true" : string.Empty)})]");
             builder.AppendLine($"    public {GetGeneratedTypeName(parameter.TypeName)} {PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name)} {{ get; set; }}{(parameter.TypeName == typeof(string).FullName ? " = string.Empty;" : string.Empty)}");
             builder.AppendLine();
         }
@@ -106,6 +179,9 @@ internal static class PowerShellBinaryCmdletSourceGenerator
 
     private static string GetGeneratedTypeName(string fullName)
     {
+        var resolved = Type.GetType(fullName, throwOnError: false);
+        if (resolved is not null)
+            return PowerShellCSharpMethodEmitter.GetTypeName(resolved);
         if (fullName.EndsWith("[]", StringComparison.Ordinal))
             return GetGeneratedTypeName(fullName.Substring(0, fullName.Length - 2)) + "[]";
         if (fullName == typeof(void).FullName) return "void";
@@ -144,6 +220,20 @@ internal static class PowerShellBinaryCmdletSourceGenerator
 
     private static string EscapeCSharpString(string value)
         => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+    private static PowerShellCompilationDiagnostic CreateDiagnostic(
+        PowerShellTypedCompilationResult typed,
+        PowerShellCompiledMethod method,
+        string message)
+        => new(
+            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+            message,
+            typed.SourcePath,
+            method.SourceLine,
+            1);
+
+    private static string GetMethodKey(PowerShellCompiledMethod method)
+        => method.SourceName + "\0" + method.SourceLine;
 
     private sealed class CmdletDescriptor
     {
