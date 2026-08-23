@@ -74,6 +74,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 Write-Error 'Requested failure'
                 exit 7
             }
+            Write-Verbose 'verbose-record'
+            Write-Debug 'debug-record'
             "Hello, $Name; Force=$($Force.IsPresent)"
             """);
         var spec = new PowerShellCompilationBuildSpec(
@@ -122,6 +124,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             CreateNoWindow = true
         };
         commonSwitchStartInfo.ArgumentList.Add("--Verbose");
+        commonSwitchStartInfo.ArgumentList.Add("--Debug");
         commonSwitchStartInfo.ArgumentList.Add("Grace");
         using var commonSwitchProcess = Process.Start(commonSwitchStartInfo)!;
         var commonSwitchOutput = commonSwitchProcess.StandardOutput.ReadToEnd();
@@ -129,6 +132,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(commonSwitchProcess.WaitForExit(60_000), "Packaged executable common-switch case did not exit within 60 seconds.");
         Assert.True(commonSwitchProcess.ExitCode == 0, $"Exit code: {commonSwitchProcess.ExitCode}{Environment.NewLine}{commonSwitchError}{Environment.NewLine}{commonSwitchOutput}");
         Assert.Contains("Hello, Grace; Force=False", commonSwitchOutput, StringComparison.Ordinal);
+        Assert.Contains("VERBOSE: verbose-record", commonSwitchOutput, StringComparison.Ordinal);
+        Assert.Contains("DEBUG: debug-record", commonSwitchOutput, StringComparison.Ordinal);
         Assert.True(string.IsNullOrWhiteSpace(commonSwitchError), commonSwitchError);
 
         var failureStartInfo = new ProcessStartInfo

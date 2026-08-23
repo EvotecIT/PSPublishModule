@@ -33,6 +33,8 @@ internal static class Program
             using var output = new PSDataCollection<PSObject>();
             output.DataAdded += (_, eventArgs) => Console.Out.WriteLine(output[eventArgs.Index]?.ToString());
             powerShell.Streams.Information.DataAdded += (_, eventArgs) => Console.Out.WriteLine(powerShell.Streams.Information[eventArgs.Index].MessageData?.ToString());
+            powerShell.Streams.Verbose.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"VERBOSE: {powerShell.Streams.Verbose[eventArgs.Index].Message}");
+            powerShell.Streams.Debug.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"DEBUG: {powerShell.Streams.Debug[eventArgs.Index].Message}");
             powerShell.Streams.Warning.DataAdded += (_, eventArgs) => Console.Error.WriteLine($"WARNING: {powerShell.Streams.Warning[eventArgs.Index].Message}");
             powerShell.Streams.Error.DataAdded += (_, eventArgs) =>
             {

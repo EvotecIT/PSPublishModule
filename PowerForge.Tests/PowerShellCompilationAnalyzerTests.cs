@@ -186,11 +186,22 @@ public sealed class PowerShellCompilationAnalyzerTests
                 param([string] $Left, [string] $Right)
                 return $Left -lt $Right
             }
+            function Test-NullScalar {
+                param([int] $Value)
+                return $Value -eq $null
+            }
+            function Test-BooleanOrder {
+                param([bool] $Left, [bool] $Right)
+                return $Left -lt $Right
+            }
+            filter Get-FilteredValue {
+                return 1
+            }
             """);
 
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
 
-        Assert.Equal(16, plan.RuntimeFallbackUnits);
+        Assert.Equal(19, plan.RuntimeFallbackUnits);
         Assert.All(Assert.Single(plan.Files).Units, static unit => Assert.False(unit.IsCompilable));
         var messages = string.Join(Environment.NewLine, plan.Files.SelectMany(static file => file.Units).SelectMany(static unit => unit.Diagnostics).Select(static diagnostic => diagnostic.Message));
         Assert.Contains("truthiness", messages, StringComparison.OrdinalIgnoreCase);
@@ -207,6 +218,22 @@ public sealed class PowerShellCompilationAnalyzerTests
         Assert.Contains("integral division changes runtime result type", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("one inferred CLR array element type", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("string relational comparison", messages, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("non-nullable CLR value", messages, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Relational comparison for CLR type 'System.Boolean'", messages, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("per-pipeline-input", messages, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Analyze_ExcludesConditionallyDeclaredFunctionsFromTypedUnits()
+    {
+        using var fixture = CompilationFixture.Create(
+            "if ($false) { function Get-ConditionalValue { return 1 } }; function Get-TopValue { return 2 }");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath, PowerShellCompilationMode.Hybrid));
+
+        var units = Assert.Single(plan.Files).Units;
+        Assert.DoesNotContain(units, static unit => unit.Name == "Get-ConditionalValue");
+        Assert.Contains(units, static unit => unit.Name == "Get-TopValue" && unit.IsCompilable);
     }
 
     private sealed class CompilationFixture : IDisposable

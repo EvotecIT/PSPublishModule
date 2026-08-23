@@ -89,6 +89,16 @@ public sealed class PowerShellTypedCompilationDifferentialTests
                 return $Value.Length
             }
 
+            function Test-NullText {
+                param([string] $Value)
+                return $Value -eq $null
+            }
+
+            function Get-BoundText {
+                param([string] $Value)
+                return $Value
+            }
+
             function Get-LeafName {
                 param([string] $Value)
                 return [System.IO.Path]::GetFileName($Value)
@@ -136,6 +146,14 @@ public sealed class PowerShellTypedCompilationDifferentialTests
                 new object[] { null!, string.Empty }
             });
             AssertDifferential(type, runspace, "Get-TextLength", "Get_TextLength", new[]
+            {
+                new object[] { "PowerForge" }, new object[] { string.Empty }, new object[] { null! }
+            });
+            AssertDifferential(type, runspace, "Test-NullText", "Test_NullText", new[]
+            {
+                new object[] { "PowerForge" }, new object[] { string.Empty }, new object[] { null! }
+            });
+            AssertDifferential(type, runspace, "Get-BoundText", "Get_BoundText", new[]
             {
                 new object[] { "PowerForge" }, new object[] { string.Empty }, new object[] { null! }
             });
@@ -232,6 +250,11 @@ public sealed class PowerShellTypedCompilationDifferentialTests
                 if (($Value -ge $Minimum) -and ($Value -le $Maximum)) { return $true }
                 return $false
             }
+
+            function Test-DoubleSelfEquality {
+                param([double] $Value)
+                return $Value -eq $Value
+            }
             """;
         using var fixture = DifferentialFixture.Create(source);
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath, PowerShellCompilationMode.Strict));
@@ -300,7 +323,12 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             });
             AssertDifferential(type, runspace, "Test-InRange", "Test_InRange", new[]
             {
-                new object[] { 5d, 0d, 10d }, new object[] { -1d, 0d, 10d }, new object[] { 10d, 0d, 10d }
+                new object[] { 5d, 0d, 10d }, new object[] { -1d, 0d, 10d }, new object[] { 10d, 0d, 10d },
+                new object[] { double.NaN, 0d, 10d }
+            });
+            AssertDifferential(type, runspace, "Test-DoubleSelfEquality", "Test_DoubleSelfEquality", new[]
+            {
+                new object[] { double.NaN }, new object[] { 0d }, new object[] { double.PositiveInfinity }
             });
         }
         finally

@@ -90,6 +90,11 @@ internal sealed class PowerShellCSharpMethodEmitter
         AppendLine("checked");
         AppendLine("{");
         _indent++;
+        foreach (var parameter in parameters.Where(static parameter => parameter.StaticType == typeof(string)))
+        {
+            var identifier = GetVariableIdentifier(parameter.Name.VariablePath.UserPath);
+            AppendLine($"{identifier} = {identifier} ?? string.Empty;");
+        }
         foreach (var statement in statements)
             EmitStatement(statement, returnType);
         _indent--;
@@ -326,7 +331,10 @@ internal sealed class PowerShellCSharpMethodEmitter
             throw Error(assignment, $"Integral compound assignment to untyped local '${name}' can promote dynamically in PowerShell and is not eligible for typed compilation.");
         _declaredLocals.Add(name);
         var suffix = terminate ? ";" : string.Empty;
-        AppendLine($"{left} {operation} {EmitExpression(assignment.Right)}{suffix}");
+        var right = EmitExpression(assignment.Right);
+        if (operation == "=" && _variables[name] == typeof(string) && _explicitlyTypedVariables.Contains(name))
+            right = $"({right} ?? string.Empty)";
+        AppendLine($"{left} {operation} {right}{suffix}");
     }
 
     private void EmitIf(IfStatementAst statement, Type returnType)
@@ -461,6 +469,9 @@ internal sealed class PowerShellCSharpMethodEmitter
         {
             if (leftType.IsArray || rightType.IsArray)
                 throw Error(binary, "PowerShell array comparison is element-wise and is not supported by the scalar typed compiler.");
+            if (IsNullExpression(binary.Left) && IsNonNullableValueType(rightType) ||
+                IsNullExpression(binary.Right) && IsNonNullableValueType(leftType))
+                throw Error(binary, "Comparing a non-nullable CLR value to $null requires PowerShell runtime semantics.");
             if (leftType != rightType && !IsNullExpression(binary.Left) && !IsNullExpression(binary.Right))
                 throw Error(binary, "Comparison operands must have the same static CLR type on the conservative compilation path.");
         }
@@ -477,6 +488,10 @@ internal sealed class PowerShellCSharpMethodEmitter
         if ((operation is "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge") &&
             leftType == typeof(string) && rightType == typeof(string))
             throw Error(binary, "PowerShell string relational comparison uses culture-aware runtime semantics and is not supported by the typed compiler.");
+        if (operation is "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge" &&
+            !(IsNumeric(leftType) && IsNumeric(rightType)) &&
+            !(leftType == typeof(char) && rightType == typeof(char)))
+            throw Error(binary, $"Relational comparison for CLR type '{leftType.FullName}' is not supported by the conservative compiler.");
 
         var symbol = operation switch
         {
@@ -568,6 +583,9 @@ internal sealed class PowerShellCSharpMethodEmitter
         return ast is VariableExpressionAst variable && variable.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase) ||
                ast is ConstantExpressionAst constant && constant.Value is null;
     }
+
+    private static bool IsNonNullableValueType(Type type)
+        => type.IsValueType && Nullable.GetUnderlyingType(type) is null;
 
     private Type InferExpressionType(Ast ast)
     {

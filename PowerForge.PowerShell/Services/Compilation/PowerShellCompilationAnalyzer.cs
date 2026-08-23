@@ -125,6 +125,7 @@ public sealed class PowerShellCompilationAnalyzer
 
         var functions = ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
             .Cast<FunctionDefinitionAst>()
+            .Where(function => function.Parent is NamedBlockAst && ReferenceEquals(function.Parent.Parent, ast))
             .OrderBy(static function => function.Extent.StartOffset)
             .ToArray();
         foreach (var function in functions)
@@ -135,6 +136,20 @@ public sealed class PowerShellCompilationAnalyzer
                 function.Body,
                 file,
                 GetEndStatements(function.Body, excludeFunctionDefinitions: false, excludeModuleExports: false));
+            if (function.IsFilter)
+            {
+                functionUnit = ReplaceUnit(
+                    functionUnit,
+                    typeof(object),
+                    new[]
+                    {
+                        CreateDiagnostic(
+                            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                            $"Filter '{function.Name}' requires per-pipeline-input PowerShell processing semantics and cannot be compiled as an ordinary CLR method.",
+                            file,
+                            function.Extent)
+                    });
+            }
             if (functionUnit.IsCompilable)
             {
                 try

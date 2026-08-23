@@ -70,6 +70,185 @@ public sealed class PowerShellCompilationArtifactHardeningTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
+    [Theory]
+    [InlineData("ProcessRecord")]
+    [InlineData("WriteObject")]
+    public void Build_BinaryModuleRejectsGeneratedOrInheritedMemberCollision(string parameterName)
+    {
+        using var fixture = ArtifactFixture.Create($"function Get-Collision {{ param([string] ${parameterName}); return ${parameterName} }}");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.MemberCollision",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("binary-cmdlet member", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_BinaryModuleRejectsParameterMatchingGeneratedClassName()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Collision { param([string] $GetCollisionCommand); return $GetCollisionCommand }");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ClassMemberCollision",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("binary-cmdlet member", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_BinaryModuleRejectsDuplicateSanitizedClassNames()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Ab { return 1 }; function GetA-b { return 2 }");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.DuplicateCmdletClass",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("duplicate binary-cmdlet class", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_RejectsExecutableOnlyPublicationOptionsForLibrary()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-Value { return 1 }");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.LibraryOptions",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict)
+        {
+            SelfContained = true
+        };
+
+        var exception = Assert.Throws<ArgumentException>(() => new PowerShellCompilationArtifactBuilder().Build(spec));
+
+        Assert.Contains("executable-only", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_RejectsSuffixBearingArtifactNameWithoutClaimingSiblingFiles()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-Value { return 1 }");
+        var builder = new PowerShellCompilationArtifactBuilder();
+        var sibling = builder.Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.Sibling",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+        Assert.True(sibling.Succeeded, sibling.Error + Environment.NewLine + sibling.BuildOutput);
+        var artifactHash = Hash(sibling.ArtifactPath!);
+        var manifestHash = Hash(sibling.ManifestPath!);
+
+        var exception = Assert.Throws<ArgumentException>(() => builder.Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.Sibling.dll",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict)));
+
+        Assert.Contains("generated artifact suffix", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(artifactHash, Hash(sibling.ArtifactPath!));
+        Assert.Equal(manifestHash, Hash(sibling.ManifestPath!));
+    }
+
+    [Fact]
+    public void Build_HybridModuleKeepsConditionalFunctionsOnPowerShellFallback()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "if ($false) { function Get-ConditionalValue { return 1 } }; function Get-TopValue { return 2 }; Export-ModuleMember -Function @('Get-TopValue')");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ConditionalFunction",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; [bool](Get-Command Get-ConditionalValue -ErrorAction SilentlyContinue); Get-TopValue");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal(new[] { "False", "2" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Build_HybridModuleRetainsPrivateTypedHelperNeededByFallbackFunction()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-PrivateValue { return 7 }; function Get-PublicValue { return Get-PrivateValue }; Export-ModuleMember -Function @('Get-PublicValue')",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.PrivateHelper",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Equal(2, result.Manifest.RuntimeFallbackUnits);
+        Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; [bool](Get-Command Get-PrivateValue -ErrorAction SilentlyContinue); Get-PublicValue");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal(new[] { "False", "7" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Theory]
+    [InlineData(PowerShellCompilationArtifactKind.Library)]
+    [InlineData(PowerShellCompilationArtifactKind.BinaryModule)]
+    public void Build_StrictDllRejectsEligibleTopLevelUnitThatCannotBeEmitted(PowerShellCompilationArtifactKind kind)
+    {
+        using var fixture = ArtifactFixture.Create("function Get-Value { return 1 }; return 2");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TopLevelOmission",
+            kind,
+            PowerShellCompilationMode.Strict));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("top-level script unit", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
     [Fact]
     public void Build_ReplacesTheCompleteArtifactShapeWithoutLeavingPriorFiles()
     {
@@ -178,12 +357,12 @@ public sealed class PowerShellCompilationArtifactHardeningTests
         public string ScriptPath { get; }
         public string OutputPath { get; }
 
-        public static ArtifactFixture Create(string source)
+        public static ArtifactFixture Create(string source, string extension = ".ps1")
         {
             var rootPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
             var outputPath = Path.Combine(rootPath, "output");
             Directory.CreateDirectory(outputPath);
-            var scriptPath = Path.Combine(rootPath, "input.ps1");
+            var scriptPath = Path.Combine(rootPath, "input" + extension);
             File.WriteAllText(scriptPath, source);
             return new ArtifactFixture(rootPath, scriptPath, outputPath);
         }
