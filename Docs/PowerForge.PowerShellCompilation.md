@@ -180,24 +180,24 @@ The checked-in benchmark suite validates every result outside the timed operatio
 - the generated typed CLR method called inside a C# loop;
 - equivalent hand-written C#.
 
-The current Windows computation and startup reference run used PowerShell 7.6.4 on .NET 10.0.11, Windows x64, and an AMD64 32-logical-core machine. Duration rows are medians after three warmups, 12 measured samples, and minimum/maximum exclusion. The startup benchmark used two warmups and 10 measured samples. All rows have zero validation failures and pin clean candidate `d27e559b` plus generated artifact hashes.
+The current Windows computation and startup reference run used PowerShell 7.6.4 on .NET 10.0.11, Windows x64, and an AMD64 32-logical-core machine. Duration rows are medians after three warmups, 12 measured samples, and minimum/maximum exclusion. The startup benchmark used two warmups and 10 measured samples. All rows have zero validation failures and pin clean candidate `dba44037` plus generated artifact hashes.
 
-Windows run IDs are `20260823-145245-e361b781` (real function), `20260823-145343-bf84bfd4` (synthetic loop), `20260823-145345-a00adc1f` (indexed array), `20260823-145347-8244a441` (binary dispatch), and `20260823-145348-ce8cd148` (startup).
+Windows run IDs are `20260823-155934-e6880101` (real function), `20260823-160044-e1a26fa0` (synthetic loop), `20260823-160046-152c8198` (indexed array), `20260823-160049-aab08ba9` (binary dispatch), and `20260823-160051-940517f3` (startup).
 
 | Workload | Calls | PowerShell | Typed CLR | Hand-written C# | Typed vs PowerShell | Typed vs C# |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Real `Get-AllowedAverageMs`, absolute-cap branch | 50,000 | 204.05 ms | 4.90 ms | 2.31 ms | **41.7x faster** | 2.12x slower |
-| Real `Get-AllowedAverageMs`, relative-cap branch | 50,000 | 198.03 ms | 4.84 ms | 1.75 ms | **40.9x faster** | 2.76x slower |
-| Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 31.88 ms | 3.98 ms | 1.87 ms | **8.0x faster** | 2.13x slower |
-| Indexed sum over 1,000-element typed array | 1,000 | 40.57 ms | 4.44 ms | 1.83 ms | **9.1x faster** | 2.42x slower |
+| Real `Get-AllowedAverageMs`, absolute-cap branch | 50,000 | 251.47 ms | 5.96 ms | 2.37 ms | **42.2x faster** | 2.51x slower |
+| Real `Get-AllowedAverageMs`, relative-cap branch | 50,000 | 234.80 ms | 5.89 ms | 2.56 ms | **39.9x faster** | 2.30x slower |
+| Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 41.47 ms | 5.22 ms | 3.24 ms | **7.9x faster** | 1.61x slower |
+| Indexed sum over 1,000-element typed array | 1,000 | 58.73 ms | 6.06 ms | 3.05 ms | **9.7x faster** | 1.99x slower |
 
 These results prove a benefit only for eligible computation executed as CLR code. They do not promise that an arbitrary script or a generated cmdlet call is faster.
 
-The binary-cmdlet lane includes PowerShell command lookup, parameter binding, pipeline setup, and `WriteObject` for every call. It took 1,538.50 ms and 1,566.52 ms in the two 50,000-call real scenarios, versus 204.05 ms and 198.03 ms for the original function. The dispatch-amortization workload then performed equivalent work through 1,000 fine cmdlet calls or one coarse command: 33.84 ms versus 2.61 ms, a **13.0x** improvement. The useful product shape is a coarse cmdlet that performs substantial compiled work per invocation, not a tiny arithmetic cmdlet called in a PowerShell loop.
+The binary-cmdlet lane includes PowerShell command lookup, parameter binding, pipeline setup, and `WriteObject` for every call. It took 1,965.61 ms and 1,934.12 ms in the two 50,000-call real scenarios, versus 251.47 ms and 234.80 ms for the original function. The dispatch-amortization workload then performed equivalent work through 1,000 fine cmdlet calls or one coarse command: 49.86 ms versus 4.94 ms, a **10.1x** improvement. The useful product shape is a coarse cmdlet that performs substantial compiled work per invocation, not a tiny arithmetic cmdlet called in a PowerShell loop.
 
-Executable startup proves that typed compilation changes the product result rather than merely its extension. The PowerShell-free typed EXE took 30.56 ms, `pwsh -File` took 190.48 ms, and the runtime-packaged EXE took 434.90 ms. The typed executable is **6.2x faster than `pwsh -File`** and **14.2x faster than packaging** in this one-shot workload. Packaging remains valuable for broad script compatibility and delivery ergonomics, not startup speed.
+Executable startup proves that typed compilation changes the product result rather than merely its extension. The PowerShell-free typed EXE took 35.63 ms, `pwsh -File` took 205.75 ms, and the runtime-packaged EXE took 465.31 ms. The typed executable is **5.8x faster than `pwsh -File`** and **13.1x faster than packaging** in this one-shot workload. Packaging remains valuable for broad script compatibility and delivery ergonomics, not startup speed.
 
-The optimization and footprint matrix below was rebuilt and executed with the same clean candidate `d27e559b` and the `win-x64` runtime identifier.
+The optimization and footprint matrix below was rebuilt and executed with the same clean candidate `dba44037` and the `win-x64` runtime identifier.
 
 | Windows x64 artifact | Bytes | Runtime model |
 | --- | ---: | --- |
