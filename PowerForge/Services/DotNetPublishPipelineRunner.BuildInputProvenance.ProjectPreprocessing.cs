@@ -120,7 +120,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 IReadOnlyList<PreprocessedProjectPropertyDefinition> StaticPropertyDefinitions,
                 IReadOnlyList<PreprocessedProjectPropertyDefinition> TargetPropertyDefinitions,
                 bool IsTargetTime,
-                bool RunsBeforeResolveReferences)>();
+                bool RunsBeforeResolveReferences,
+                bool ExecutionMayBeSkipped)>();
             foreach (XNode node in document.Root.DescendantNodes())
             {
                 if (node is XComment comment)
@@ -193,7 +194,10 @@ public sealed partial class DotNetPublishPipelineRunner
                             ? definitions.ToArray()
                             : Array.Empty<PreprocessedProjectPropertyDefinition>(),
                         isTargetTime,
-                        runsBeforeResolveReferences));
+                        runsBeforeResolveReferences,
+                        runsBeforeResolveReferences &&
+                        !string.IsNullOrWhiteSpace(containingTarget?.Attribute("Inputs")?.Value) &&
+                        !string.IsNullOrWhiteSpace(containingTarget?.Attribute("Outputs")?.Value)));
                 }
             }
 
@@ -227,7 +231,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         initialProperties,
                         evaluatedItemLists,
                         declaration.IsTargetTime,
-                        declaration.RunsBeforeResolveReferences);
+                        declaration.RunsBeforeResolveReferences,
+                        declaration.ExecutionMayBeSkipped);
                 })
                 .ToArray();
             return true;

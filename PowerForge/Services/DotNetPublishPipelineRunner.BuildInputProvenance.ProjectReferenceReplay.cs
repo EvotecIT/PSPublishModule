@@ -28,7 +28,8 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, string> initialProperties,
             IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItemLists,
             bool isTargetTime,
-            bool runsBeforeResolveReferences)
+            bool runsBeforeResolveReferences,
+            bool executionMayBeSkipped)
         {
             Element = element;
             DefiningProjectPath = definingProjectPath;
@@ -38,6 +39,7 @@ public sealed partial class DotNetPublishPipelineRunner
             EvaluatedItemLists = evaluatedItemLists;
             IsTargetTime = isTargetTime;
             RunsBeforeResolveReferences = runsBeforeResolveReferences;
+            ExecutionMayBeSkipped = executionMayBeSkipped;
         }
 
         internal XElement Element { get; }
@@ -55,6 +57,8 @@ public sealed partial class DotNetPublishPipelineRunner
         internal bool IsTargetTime { get; }
 
         internal bool RunsBeforeResolveReferences { get; }
+
+        internal bool ExecutionMayBeSkipped { get; }
     }
 
     private sealed class LiteralProjectReferenceMetadataAssignment
@@ -170,6 +174,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 projectReference,
                 declarationConditionProperties,
                 declaration.DefiningProjectPath);
+            bool identityIsComputed = projectReference.Attributes().Any(attribute =>
+                (attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
+                 attribute.Name.LocalName.Equals("Update", StringComparison.OrdinalIgnoreCase)) &&
+                IsComputedProjectReferenceItemSpec(attribute.Value));
             List<LiteralProjectReferenceMetadataAssignment> declaredAssignments =
                 ReadActiveLiteralProjectReferenceMetadataAssignments(
                     declaration,
@@ -177,7 +185,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     metadataName);
             if (isRemove)
             {
-                if (definitelyActive)
+                if (definitelyActive && !declaration.ExecutionMayBeSkipped)
                     states.Clear();
                 continue;
             }
@@ -196,8 +204,42 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
 
-            if (isUpdate && declaredAssignments.Count > 0)
+            bool removeMetadataIsCertain = TryReadRemovedProjectReferenceMetadataNames(
+                declaration,
+                declarationConditionProperties,
+                out string[] removedMetadataNames);
+            bool removesCurrentMetadata = removedMetadataNames.Contains(
+                metadataName,
+                StringComparer.OrdinalIgnoreCase);
+            bool removalIsAmbiguous = HasMsBuildAttribute(projectReference, "RemoveMetadata") &&
+                                      !removeMetadataIsCertain;
+            if (isUpdate &&
+                (declaredAssignments.Count > 0 || removesCurrentMetadata || removalIsAmbiguous))
             {
+                LiteralProjectReferenceItemState[] currentStates = states.ToArray();
+                if (removesCurrentMetadata || removalIsAmbiguous)
+                {
+                    foreach (LiteralProjectReferenceItemState state in currentStates)
+                    {
+                        bool deletionIsDefinite = removesCurrentMetadata &&
+                                                  removeMetadataIsCertain &&
+                                                  definitelyActive &&
+                                                  !declaration.ExecutionMayBeSkipped;
+                        if (deletionIsDefinite)
+                        {
+                            state.Assignments.Clear();
+                        }
+                        else
+                        {
+                            states.Add(new LiteralProjectReferenceItemState(
+                                Array.Empty<LiteralProjectReferenceMetadataAssignment>()));
+                        }
+                    }
+                }
+
+                if (declaredAssignments.Count == 0)
+                    continue;
+
                 foreach (LiteralProjectReferenceItemState state in states)
                 {
                     List<LiteralProjectReferenceMetadataAssignment> effectiveAssignments =
@@ -205,7 +247,9 @@ public sealed partial class DotNetPublishPipelineRunner
                             declaredAssignments,
                             state.Assignments,
                             metadataName);
-                    state.Assignments = definitelyActive
+                    state.Assignments = definitelyActive &&
+                                        !declaration.ExecutionMayBeSkipped &&
+                                        !identityIsComputed
                         ? effectiveAssignments
                         : MergeLiteralProjectReferenceMetadataAssignments(
                             state.Assignments,
@@ -214,11 +258,12 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
-        return states
+        LiteralProjectReferenceMetadataAssignment[] replayed = states
             .SelectMany(state => state.Assignments)
             .GroupBy(BuildLiteralProjectReferenceMetadataAssignmentKey, StringComparer.Ordinal)
             .Select(group => group.First())
             .ToArray();
+        return replayed;
     }
 
     private static bool HasMsBuildAttribute(XElement element, string attributeName)
@@ -319,6 +364,46 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return false;
+    }
+
+    private static bool TryReadRemovedProjectReferenceMetadataNames(
+        PreprocessedProjectReferenceDeclaration declaration,
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
+        out string[] metadataNames)
+    {
+        metadataNames = Array.Empty<string>();
+        XAttribute? removeMetadata = declaration.Element.Attributes().FirstOrDefault(attribute =>
+            attribute.Name.LocalName.Equals("RemoveMetadata", StringComparison.OrdinalIgnoreCase));
+        if (removeMetadata is null)
+            return true;
+
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string candidate in ReadLiteralProjectReferencePropertyAssignmentCandidates(
+                     declaration.PropertyDefinitions,
+                     declaration.InitialProperties,
+                     evaluatedConditionProperties,
+                     declaration.DefiningProjectPath,
+                     removeMetadata.Value))
+        {
+            if (candidate.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+                candidate.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+                candidate.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
+                !TryUnescapeMsBuildLiteral(candidate, out string? decoded))
+            {
+                return false;
+            }
+
+            foreach (string name in decoded!.Split(
+                         new[] { ';' },
+                         StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (name.Trim().Length > 0)
+                    names.Add(name.Trim());
+            }
+        }
+
+        metadataNames = names.ToArray();
+        return true;
     }
 
     private static bool DoesProjectReferenceItemSpecMatch(

@@ -37,9 +37,21 @@ public sealed partial class DotNetPublishPipelineRunner
 
             if (matchingRaw.Length != 1)
             {
-                // ResolveReferences is authoritative. Multiple raw contexts for the same
-                // child cannot be overlaid without inventing a Cartesian-product context.
+                // ResolveReferences remains authoritative, while each raw branch is retained
+                // independently. Never merge distinct raw property tables with each other.
                 results[resolvedKey] = resolved;
+                foreach (EvaluatedProjectReference rawCandidate in matchingRaw)
+                {
+                    var rawBranch = new EvaluatedProjectReference(
+                        resolved.ProjectPath,
+                        rawCandidate.TargetFramework ?? resolved.TargetFramework,
+                        rawCandidate.GlobalProperties,
+                        resolved.UndefineProperties
+                            .Concat(rawCandidate.UndefineProperties)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToArray());
+                    results[BuildEvaluatedProjectReferenceKey(rawBranch)] = rawBranch;
+                }
                 continue;
             }
 

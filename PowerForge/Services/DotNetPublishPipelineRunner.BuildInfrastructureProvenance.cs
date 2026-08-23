@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Xml.Linq;
 
@@ -120,6 +119,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string controlledOutputRoot = Path.Combine(
             Path.GetTempPath(),
             "powerforge-provenance-build-" + Guid.NewGuid().ToString("N"));
+        string controlledIntermediateRoot = Path.Combine(controlledOutputRoot, "obj");
+        string controlledBinaryRoot = Path.Combine(controlledOutputRoot, "bin");
         try
         {
             if (!File.Exists(fullCandidatePath))
@@ -131,6 +132,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 request.ProjectPath,
                 "-nologo",
                 "-verbosity:quiet",
+                "-restore",
                 "-target:Rebuild",
                 "-getProperty:TargetPath",
                 "-getItem:FileWrites"
@@ -153,7 +155,14 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             arguments.Add("-p:BuildProjectReferences=false");
             arguments.Add("-p:OutDir=" + EscapeMsBuildPropertyValue(
-                controlledOutputRoot + Path.DirectorySeparatorChar));
+                controlledBinaryRoot + Path.DirectorySeparatorChar));
+            arguments.Add("-p:MSBuildProjectExtensionsPath=" + EscapeMsBuildPropertyValue(
+                controlledIntermediateRoot + Path.DirectorySeparatorChar));
+            arguments.Add("-p:IntermediateOutputPath=" + EscapeMsBuildPropertyValue(
+                Path.Combine(
+                    controlledIntermediateRoot,
+                    request.Configuration ?? "Release",
+                    request.TargetFramework ?? string.Empty) + Path.DirectorySeparatorChar));
 
             var process = RunBuildInputEvaluationProcess(
                 "dotnet",
@@ -201,13 +210,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 return Cache(false);
             }
 
-            using SHA256 candidateHash = SHA256.Create();
-            using FileStream candidateStream = File.OpenRead(fullCandidatePath);
-            byte[] candidateDigest = candidateHash.ComputeHash(candidateStream);
-            using SHA256 controlledHash = SHA256.Create();
-            using FileStream controlledStream = File.OpenRead(targetPath);
-            byte[] controlledDigest = controlledHash.ComputeHash(controlledStream);
-            return Cache(candidateDigest.SequenceEqual(controlledDigest));
+            return Cache(AreControlledGeneratedOutputsEquivalent(
+                fullCandidatePath,
+                targetPath));
         }
         catch
         {

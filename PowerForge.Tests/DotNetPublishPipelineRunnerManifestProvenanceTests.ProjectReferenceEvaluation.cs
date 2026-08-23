@@ -56,6 +56,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
             Assert.Empty(provenance.DirtyPaths);
+            Assert.True(File.Exists(Path.Combine(root, "artifacts", "shared", "Library.dll")));
         }
         finally
         {
