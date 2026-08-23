@@ -46,35 +46,47 @@ internal static class PowerShellGeneratedMemberPolicy
                     foreach (var methodHandle in type.GetMethods())
                     {
                         var method = reader.GetMethodDefinition(methodHandle);
+                        if ((method.Attributes & MethodAttributes.MemberAccessMask) != MethodAttributes.Public)
+                            continue;
                         var signature = method.DecodeSignature(provider, genericContext: null);
                         members.Add(CreateMethodKey(
                             typeName,
                             reader.GetString(method.Name),
                             (method.Attributes & MethodAttributes.Static) != 0,
-                            signature.ParameterTypes));
+                            method.GetGenericParameters().Count,
+                            signature.ParameterTypes,
+                            signature.ReturnType));
                     }
                     foreach (var fieldHandle in type.GetFields())
                     {
                         var field = reader.GetFieldDefinition(fieldHandle);
+                        if ((field.Attributes & FieldAttributes.FieldAccessMask) != FieldAttributes.Public)
+                            continue;
                         members.Add(CreateSimpleKey(
                             typeName,
                             "F",
                             reader.GetString(field.Name),
-                            (field.Attributes & FieldAttributes.Static) != 0));
+                            (field.Attributes & FieldAttributes.Static) != 0,
+                            field.DecodeSignature(provider, genericContext: null)));
                     }
                     foreach (var propertyHandle in type.GetProperties())
                     {
                         var property = reader.GetPropertyDefinition(propertyHandle);
                         var accessors = property.GetAccessors();
-                        var accessorHandle = !accessors.Getter.IsNil ? accessors.Getter : accessors.Setter;
-                        if (accessorHandle.IsNil)
+                        if (accessors.Getter.IsNil)
                             continue;
-                        var accessor = reader.GetMethodDefinition(accessorHandle);
+                        var accessor = reader.GetMethodDefinition(accessors.Getter);
+                        if ((accessor.Attributes & MethodAttributes.MemberAccessMask) != MethodAttributes.Public)
+                            continue;
+                        var signature = accessor.DecodeSignature(provider, genericContext: null);
+                        if (signature.ParameterTypes.Length != 0)
+                            continue;
                         members.Add(CreateSimpleKey(
                             typeName,
                             "P",
                             reader.GetString(property.Name),
-                            (accessor.Attributes & MethodAttributes.Static) != 0));
+                            (accessor.Attributes & MethodAttributes.Static) != 0,
+                            signature.ReturnType));
                     }
                 }
             }
@@ -97,22 +109,25 @@ internal static class PowerShellGeneratedMemberPolicy
                 declaringType!,
                 method is ConstructorInfo ? ".ctor" : method.Name,
                 method.IsStatic,
-                method.GetParameters().Select(static parameter => GetReflectionTypeName(parameter.ParameterType))),
+                method is MethodInfo genericMethod ? genericMethod.GetGenericArguments().Length : 0,
+                method.GetParameters().Select(static parameter => GetReflectionTypeName(parameter.ParameterType)),
+                method is MethodInfo methodInfo ? GetReflectionTypeName(methodInfo.ReturnType) : typeof(void).FullName!),
             PropertyInfo property => CreateSimpleKey(
                 declaringType!,
                 "P",
                 property.Name,
-                (property.GetMethod ?? property.SetMethod)?.IsStatic == true),
-            FieldInfo field => CreateSimpleKey(declaringType!, "F", field.Name, field.IsStatic),
+                (property.GetMethod ?? property.SetMethod)?.IsStatic == true,
+                GetReflectionTypeName(property.PropertyType)),
+            FieldInfo field => CreateSimpleKey(declaringType!, "F", field.Name, field.IsStatic, GetReflectionTypeName(field.FieldType)),
             _ => null
         };
     }
 
-    private static string CreateMethodKey(string type, string name, bool isStatic, IEnumerable<string> parameters)
-        => type + "|M|" + name + "|" + (isStatic ? "S" : "I") + "|" + string.Join(",", parameters);
+    private static string CreateMethodKey(string type, string name, bool isStatic, int genericArity, IEnumerable<string> parameters, string returnType)
+        => type + "|M|" + name + "|" + (isStatic ? "S" : "I") + "|" + genericArity + "|" + string.Join(",", parameters) + "|" + returnType;
 
-    private static string CreateSimpleKey(string type, string kind, string name, bool isStatic)
-        => type + "|" + kind + "|" + name + "|" + (isStatic ? "S" : "I");
+    private static string CreateSimpleKey(string type, string kind, string name, bool isStatic, string valueType)
+        => type + "|" + kind + "|" + name + "|" + (isStatic ? "S" : "I") + "|" + valueType;
 
     private static string GetReflectionTypeName(Type type)
     {

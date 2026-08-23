@@ -143,6 +143,7 @@ internal sealed class PowerShellCSharpMemberEmitter
             invocation,
             target.Type.GetMethods(flags)
                 .Where(candidate => candidate.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
+                                    !candidate.IsSpecialName &&
                                     !candidate.IsGenericMethodDefinition &&
                                     !candidate.ContainsGenericParameters &&
                                     _isSupportedMember(candidate)),

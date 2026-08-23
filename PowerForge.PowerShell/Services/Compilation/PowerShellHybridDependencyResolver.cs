@@ -14,14 +14,26 @@ internal static class PowerShellHybridDependencyResolver
         @"^\$(?:\{)?PSScriptRoot(?:\})?(?<suffix>[\\/].+)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    internal static string[] CopyDependencies(string sourcePath, string moduleDirectory)
+    internal static string[] CopyDependencies(
+        string sourcePath,
+        string moduleDirectory,
+        IEnumerable<string>? additionalEntryPaths = null)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
         var comparer = GetPathComparer();
-        var discovered = new HashSet<string>(comparer) { Path.GetFullPath(sourcePath) };
+        var discovered = new HashSet<string>(comparer);
         var pending = new Queue<string>();
         var copied = new List<string>();
-        pending.Enqueue(Path.GetFullPath(sourcePath));
+        foreach (var entryPath in new[] { sourcePath }.Concat(additionalEntryPaths ?? Array.Empty<string>()))
+        {
+            var entry = Path.GetFullPath(entryPath);
+            EnsureContained(sourceRoot, entry, entry, line: 1);
+            if (!File.Exists(entry))
+                throw new FileNotFoundException($"Hybrid module runtime source '{entry}' was not found.", entry);
+            EnsureNoLinks(sourceRoot, entry, entry, line: 1);
+            if (discovered.Add(entry))
+                pending.Enqueue(entry);
+        }
 
         while (pending.Count > 0)
         {
@@ -44,6 +56,7 @@ internal static class PowerShellHybridDependencyResolver
                 EnsureContained(sourceRoot, dependency, current, command.Extent.StartLineNumber);
                 if (!File.Exists(dependency))
                     throw new FileNotFoundException($"Dot-sourced hybrid module dependency '{relativePath}' was not found for {current}:{command.Extent.StartLineNumber}.", dependency);
+                EnsureNoLinks(sourceRoot, dependency, current, command.Extent.StartLineNumber);
                 if (!discovered.Add(dependency))
                     continue;
 
@@ -88,6 +101,18 @@ internal static class PowerShellHybridDependencyResolver
         var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!path.StartsWith(normalizedRoot, GetPathComparison()))
             throw new InvalidOperationException($"Dot-source path at {sourcePath}:{line} escapes the hybrid module source root.");
+    }
+
+    private static void EnsureNoLinks(string root, string path, string sourcePath, int line)
+    {
+        var relativePath = FrameworkCompatibility.GetRelativePath(root, path);
+        var current = root;
+        foreach (var segment in relativePath.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, segment);
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException($"Dot-source path at {sourcePath}:{line} traverses a symbolic link or junction, which is not allowed for hybrid staging.");
+        }
     }
 
     private static StringComparison GetPathComparison()

@@ -405,7 +405,11 @@ public sealed class PowerShellCompilationArtifactBuilder
             foreach (var manifestFile in manifestFiles)
                 files.Add(CreateArtifactFile(manifestFile, manifestFile.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
         }
-        foreach (var dependency in PowerShellHybridDependencyResolver.CopyDependencies(spec.SourcePath, moduleDirectory))
+        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var runtimeHooks = PowerShellCompiledModuleManifest.GetRuntimeScriptHooks(spec.SourcePath)
+            .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, reference)))
+            .ToArray();
+        foreach (var dependency in PowerShellHybridDependencyResolver.CopyDependencies(spec.SourcePath, moduleDirectory, runtimeHooks))
             files.Add(CreateArtifactFile(dependency, "ModuleDependency"));
         var primaryPath = manifestFiles?.First(path => path.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase)) ?? modulePath;
         return new CopiedArtifact(primaryPath, files.ToArray());

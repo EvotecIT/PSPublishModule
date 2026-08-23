@@ -1,3 +1,7 @@
+using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
+
 namespace PowerForge;
 
 /// <summary>
@@ -45,6 +49,7 @@ internal static class PowerShellArtifactSetPublisher
         var outputPath = NormalizeDirectoryPath(outputDirectory);
         if (!string.Equals(Path.GetDirectoryName(stagingPath), outputPath, PathComparison))
             throw new InvalidOperationException("Artifact staging must be a direct child of the durable output directory.");
+        using var publicationLock = AcquirePublicationLock(outputPath, artifactName);
 
         var stagedEntries = Directory.EnumerateFileSystemEntries(stagingPath).ToArray();
         if (stagedEntries.Length == 0)
@@ -115,6 +120,33 @@ internal static class PowerShellArtifactSetPublisher
     }
 
     private static bool EntryExists(string path) => File.Exists(path) || Directory.Exists(path);
+
+    private static FileStream AcquirePublicationLock(string outputDirectory, string artifactName)
+    {
+        var identity = (PathComparison == StringComparison.OrdinalIgnoreCase ? outputDirectory.ToUpperInvariant() : outputDirectory) + "\n" + artifactName.ToUpperInvariant();
+        string hash;
+        using (var sha256 = SHA256.Create())
+            hash = BitConverter.ToString(sha256.ComputeHash(Encoding.UTF8.GetBytes(identity))).Replace("-", string.Empty);
+        var lockDirectory = Path.Combine(Path.GetTempPath(), "PowerForge", "ArtifactPublicationLocks");
+        Directory.CreateDirectory(lockDirectory);
+        var lockPath = Path.Combine(lockDirectory, hash + ".lock");
+        var stopwatch = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) when (stopwatch.Elapsed < TimeSpan.FromSeconds(30))
+            {
+                Thread.Sleep(50);
+            }
+            catch (IOException exception)
+            {
+                throw new TimeoutException($"Timed out waiting to publish artifact '{artifactName}' to '{outputDirectory}'.", exception);
+            }
+        }
+    }
 
     private static string NormalizeDirectoryPath(string path)
     {

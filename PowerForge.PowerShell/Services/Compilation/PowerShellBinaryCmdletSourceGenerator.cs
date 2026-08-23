@@ -79,8 +79,9 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             throw new InvalidOperationException($"Function '{cmdlet.Method.SourceName}' parameter '${reservedParameter.Name}' collides with generated or inherited binary-cmdlet member '{PowerShellCSharpMethodEmitter.SanitizeIdentifier(reservedParameter.Name)}'.");
 
         builder.AppendLine($"[Cmdlet(\"{EscapeCSharpString(cmdlet.Verb)}\", \"{EscapeCSharpString(cmdlet.Noun)}\")]");
-        if (!cmdlet.Method.ReturnType.Equals(typeof(void).FullName, StringComparison.Ordinal))
-            builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(cmdlet.Method.ReturnType)}))]");
+        var outputType = GetCmdletOutputTypeName(cmdlet.Method.ReturnType);
+        if (outputType is not null)
+            builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(outputType)}))]");
         builder.AppendLine($"public sealed class {cmdlet.ClassName} : PSCmdlet");
         builder.AppendLine("{");
         for (var index = 0; index < cmdlet.Method.Parameters.Length; index++)
@@ -123,6 +124,18 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         if (fullName == typeof(char).FullName) return "char";
         if (fullName == typeof(string).FullName) return "string";
         return "global::" + fullName.Replace('+', '.');
+    }
+
+    private static string? GetCmdletOutputTypeName(string returnType)
+    {
+        if (returnType.Equals(typeof(void).FullName, StringComparison.Ordinal))
+            return null;
+        if (returnType.EndsWith("[]", StringComparison.Ordinal))
+            return returnType.Substring(0, returnType.Length - 2);
+        var type = Type.GetType(returnType, throwOnError: false);
+        return type is not null && type != typeof(string) && typeof(System.Collections.IEnumerable).IsAssignableFrom(type)
+            ? typeof(object).FullName
+            : returnType;
     }
 
     private static string EscapeCSharpString(string value)

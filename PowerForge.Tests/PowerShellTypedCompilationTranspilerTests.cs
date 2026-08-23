@@ -135,18 +135,39 @@ public sealed class PowerShellTypedCompilationTranspilerTests
     }
 
     [Theory]
-    [InlineData("string")]
-    [InlineData("bool")]
-    [InlineData("int[]")]
-    public void Transpile_RoutesIncrementForNonNumericClrTypeToFallback(string type)
+    [InlineData("string", "$Value++")]
+    [InlineData("string", "++$Value")]
+    [InlineData("string", "$Value--")]
+    [InlineData("string", "--$Value")]
+    [InlineData("bool", "$Value++")]
+    [InlineData("bool", "++$Value")]
+    [InlineData("bool", "$Value--")]
+    [InlineData("bool", "--$Value")]
+    [InlineData("int[]", "$Value++")]
+    [InlineData("int[]", "++$Value")]
+    [InlineData("int[]", "$Value--")]
+    [InlineData("int[]", "--$Value")]
+    public void Transpile_RoutesIncrementForNonNumericClrTypeToFallback(string type, string operation)
     {
         using var fixture = TranspilerFixture.Create(
-            $"function Update-Value {{ param([{type}] $Value); for (; $false; $Value++) {{ }}; return $Value }}");
+            $"function Update-Value {{ param([{type}] $Value); for (; $false; {operation}) {{ }}; return $Value }}");
 
         var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
 
         Assert.Empty(result.Methods);
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("Increment and decrement", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Transpile_RoutesSpecialNameClrMethodInvocationToFallback()
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Add-Decimal { return [decimal]::op_Addition([decimal]::One, [decimal]::One) }");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("No exact CLR overload", StringComparison.OrdinalIgnoreCase));
     }
 
     [Theory]
