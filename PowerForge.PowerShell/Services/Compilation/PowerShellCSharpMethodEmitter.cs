@@ -159,6 +159,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var variable = FindAssignedVariable(assignment.Left);
         if (variable is null)
             throw Error(assignment.Left, "Only local-variable assignment can be translated to typed CLR code.");
+        if (PowerShellAssignmentTargetPolicy.IsReadOnlyAutomaticVariable(variable.VariablePath.UserPath))
+            throw Error(assignment.Left, $"Assignment to read-only automatic variable '${variable.VariablePath.UserPath}' cannot be translated to typed CLR code.");
 
         var name = variable.VariablePath.UserPath;
         var rightType = InferExpressionType(assignment.Right);
@@ -610,9 +612,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     }
 
     private static VariableExpressionAst? FindAssignedVariable(ExpressionAst left)
-        => left.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: false)
-            .Cast<VariableExpressionAst>()
-            .FirstOrDefault();
+        => PowerShellAssignmentTargetPolicy.FindDirectVariable(left);
 
     private static Type UnifyTypes(Type left, Type right, Ast node)
     {

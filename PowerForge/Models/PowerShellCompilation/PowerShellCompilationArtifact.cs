@@ -35,13 +35,23 @@ public enum PowerShellCompilationExecutableOptimization
 /// </summary>
 public sealed class PowerShellCompilationBuildSpec
 {
+    /// <summary>Creates an artifact-build specification with the default mode for the artifact kind.</summary>
+    public PowerShellCompilationBuildSpec(
+        string sourcePath,
+        string outputDirectory,
+        string artifactName,
+        PowerShellCompilationArtifactKind kind)
+        : this(sourcePath, outputDirectory, artifactName, kind, GetDefaultMode(kind))
+    {
+    }
+
     /// <summary>Creates an artifact-build specification.</summary>
     public PowerShellCompilationBuildSpec(
         string sourcePath,
         string outputDirectory,
         string artifactName,
         PowerShellCompilationArtifactKind kind,
-        PowerShellCompilationMode mode = PowerShellCompilationMode.Package)
+        PowerShellCompilationMode mode)
     {
         if (string.IsNullOrWhiteSpace(sourcePath)) throw new ArgumentException("A source path is required.", nameof(sourcePath));
         if (string.IsNullOrWhiteSpace(outputDirectory)) throw new ArgumentException("An output directory is required.", nameof(outputDirectory));
@@ -54,6 +64,16 @@ public sealed class PowerShellCompilationBuildSpec
         Kind = kind;
         Mode = mode;
     }
+
+    /// <summary>Returns the build mode used when a caller omits an explicit mode.</summary>
+    public static PowerShellCompilationMode GetDefaultMode(PowerShellCompilationArtifactKind kind)
+        => kind switch
+        {
+            PowerShellCompilationArtifactKind.Executable => PowerShellCompilationMode.Package,
+            PowerShellCompilationArtifactKind.BinaryModule => PowerShellCompilationMode.Strict,
+            PowerShellCompilationArtifactKind.Library => PowerShellCompilationMode.Hybrid,
+            _ => throw new ArgumentOutOfRangeException(nameof(kind))
+        };
 
     /// <summary>PowerShell source file.</summary>
     public string SourcePath { get; }

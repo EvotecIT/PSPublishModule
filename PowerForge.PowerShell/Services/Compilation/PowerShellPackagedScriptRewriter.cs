@@ -23,6 +23,17 @@ internal static class PowerShellPackagedScriptRewriter
                 $"Packaged executable generation does not support '{fileResolvedUsing.Extent.Text}' because using module/assembly directives are resolved before the embedded script receives file-backed path metadata.");
         }
 
+        var dotSource = ast.FindAll(
+                static node => node is CommandAst { InvocationOperator: TokenKind.Dot },
+                searchNestedScriptBlocks: true)
+            .Cast<CommandAst>()
+            .FirstOrDefault();
+        if (dotSource is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged executable generation does not support dot-sourced command '{dotSource.Extent.Text}' because the dependency is not embedded with file-backed path semantics.");
+        }
+
         var exits = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
             .Cast<ExitStatementAst>()
             .ToArray();

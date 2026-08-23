@@ -54,11 +54,7 @@ internal static partial class Program
         if (!TryParseArtifactKind(kindValue, out var kind))
             return WritePowerShellError(outputJson, 2, "Artifact kind must be 'exe', 'dll', or 'library'.", logger, "powershell.build");
 
-        var defaultMode = kind == PowerShellCompilationArtifactKind.Executable
-            ? PowerShellCompilationMode.Package
-            : kind == PowerShellCompilationArtifactKind.BinaryModule
-                ? PowerShellCompilationMode.Strict
-                : PowerShellCompilationMode.Hybrid;
+        var defaultMode = PowerShellCompilationBuildSpec.GetDefaultMode(kind);
         var modeValue = TryGetOptionValue(args, "--mode") ?? defaultMode.ToString();
         if (!Enum.TryParse<PowerShellCompilationMode>(modeValue, ignoreCase: true, out var mode) ||
             !Enum.IsDefined(typeof(PowerShellCompilationMode), mode) ||

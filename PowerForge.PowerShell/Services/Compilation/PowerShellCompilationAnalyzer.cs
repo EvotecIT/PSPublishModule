@@ -405,12 +405,32 @@ public sealed class PowerShellCompilationAnalyzer
                         file,
                         unary.Extent));
                     break;
-                case AssignmentStatementAst assignment when !SupportedAssignmentOperators.Contains(assignment.Operator.ToString()):
-                    diagnostics.Add(CreateDiagnostic(
-                        PowerShellCompilationDiagnosticCode.UnsupportedOperator,
-                        $"Assignment operator '{assignment.Operator}' is not supported by the typed compiler.",
-                        file,
-                        assignment.Extent));
+                case AssignmentStatementAst assignment:
+                    var assignedVariable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);
+                    if (assignedVariable is null)
+                    {
+                        diagnostics.Add(CreateDiagnostic(
+                            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                            "Only direct local-variable assignment is supported; indexed and member assignment require PowerShell runtime semantics.",
+                            file,
+                            assignment.Left.Extent));
+                    }
+                    else if (PowerShellAssignmentTargetPolicy.IsReadOnlyAutomaticVariable(assignedVariable.VariablePath.UserPath))
+                    {
+                        diagnostics.Add(CreateDiagnostic(
+                            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                            $"Assignment to read-only automatic variable '${assignedVariable.VariablePath.UserPath}' requires PowerShell runtime semantics.",
+                            file,
+                            assignment.Left.Extent));
+                    }
+                    else if (!SupportedAssignmentOperators.Contains(assignment.Operator.ToString()))
+                    {
+                        diagnostics.Add(CreateDiagnostic(
+                            PowerShellCompilationDiagnosticCode.UnsupportedOperator,
+                            $"Assignment operator '{assignment.Operator}' is not supported by the typed compiler.",
+                            file,
+                            assignment.Extent));
+                    }
                     break;
                 default:
                     if (!IsSupportedNode(candidate, unitRoot))
@@ -429,6 +449,9 @@ public sealed class PowerShellCompilationAnalyzer
     private static bool IsRuntimeVariable(VariableExpressionAst variable, HashSet<string> localVariables)
     {
         var name = variable.VariablePath.UserPath;
+        if (PowerShellAssignmentTargetPolicy.IsReadOnlyAutomaticVariable(name) &&
+            PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable))
+            return false;
         if (name.Equals("true", StringComparison.OrdinalIgnoreCase) ||
             name.Equals("false", StringComparison.OrdinalIgnoreCase) ||
             name.Equals("null", StringComparison.OrdinalIgnoreCase))
@@ -525,10 +548,10 @@ public sealed class PowerShellCompilationAnalyzer
             .Cast<AssignmentStatementAst>();
         foreach (var assignment in assignments)
         {
-            var variable = assignment.Left.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: false)
-                .Cast<VariableExpressionAst>()
-                .FirstOrDefault();
-            if (variable is not null && !variable.VariablePath.UserPath.Contains(':'))
+            var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);
+            if (variable is not null &&
+                !variable.VariablePath.UserPath.Contains(':') &&
+                !PowerShellAssignmentTargetPolicy.IsReadOnlyAutomaticVariable(variable.VariablePath.UserPath))
                 variables.Add(variable.VariablePath.UserPath);
         }
 

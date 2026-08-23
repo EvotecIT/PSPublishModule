@@ -99,7 +99,7 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
             ? System.IO.Path.Combine(System.IO.Path.GetDirectoryName(sourcePath) ?? SessionState.Path.CurrentFileSystemLocation.Path, "artifacts")
             : SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputDirectory);
         var artifactName = string.IsNullOrWhiteSpace(Name) ? System.IO.Path.GetFileNameWithoutExtension(sourcePath) : Name!;
-        var mode = Mode ?? GetDefaultMode(Kind);
+        var mode = Mode ?? PowerShellCompilationBuildSpec.GetDefaultMode(Kind);
         if (mode == PowerShellCompilationMode.Analyze)
         {
             ThrowTerminatingError(new ErrorRecord(
@@ -142,11 +142,4 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
         WriteObject(result);
     }
 
-    private static PowerShellCompilationMode GetDefaultMode(PowerShellCompilationArtifactKind kind)
-        => kind switch
-        {
-            PowerShellCompilationArtifactKind.Executable => PowerShellCompilationMode.Package,
-            PowerShellCompilationArtifactKind.BinaryModule => PowerShellCompilationMode.Strict,
-            _ => PowerShellCompilationMode.Hybrid
-        };
 }
