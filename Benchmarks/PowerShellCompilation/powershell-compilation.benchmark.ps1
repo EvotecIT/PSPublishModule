@@ -1,0 +1,211 @@
+$repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
+$outputRoot = Join-Path $repositoryRoot 'Ignore\Benchmarks\PowerShellCompilation'
+$buildRoot = Join-Path $outputRoot 'artifacts'
+$workloadPath = Join-Path $PSScriptRoot 'compiler-workloads.ps1'
+$startupScriptPath = Join-Path $PSScriptRoot 'packaged-startup.ps1'
+$harnessPath = Join-Path $PSScriptRoot 'PowerShellCompilationBenchmarkHarness.cs'
+$quick = Get-BenchmarkInput Quick $false -Bool
+$calls = if ($quick) { 2000 } else { 50000 }
+$loopCalls = if ($quick) { 100 } else { 1000 }
+$warmup = if ($quick) { 1 } else { 3 }
+$iterations = if ($quick) { 3 } else { 12 }
+$targetFramework = if ([System.Environment]::Version.Major -ge 10) { 'net10.0' } else { 'net8.0' }
+
+New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
+$builder = [PowerForge.PowerShellCompilationArtifactBuilder]::new()
+
+$typedSpec = [PowerForge.PowerShellCompilationBuildSpec]::new(
+    $workloadPath,
+    $buildRoot,
+    'PowerForge.CompilationBenchmark',
+    [PowerForge.PowerShellCompilationArtifactKind]::Library,
+    [PowerForge.PowerShellCompilationMode]::Strict)
+$typedSpec.TargetFramework = $targetFramework
+$typedResult = $builder.Build($typedSpec)
+if (-not $typedResult.Succeeded) {
+    throw "Typed benchmark library failed: $($typedResult.Error)`n$($typedResult.BuildOutput)"
+}
+
+$moduleSpec = [PowerForge.PowerShellCompilationBuildSpec]::new(
+    $workloadPath,
+    $buildRoot,
+    'PowerForge.CompilationBenchmark.Module',
+    [PowerForge.PowerShellCompilationArtifactKind]::BinaryModule,
+    [PowerForge.PowerShellCompilationMode]::Strict)
+$moduleSpec.TargetFramework = $targetFramework
+$moduleResult = $builder.Build($moduleSpec)
+if (-not $moduleResult.Succeeded) {
+    throw "Binary benchmark module failed: $($moduleResult.Error)`n$($moduleResult.BuildOutput)"
+}
+
+$executableSpec = [PowerForge.PowerShellCompilationBuildSpec]::new(
+    $startupScriptPath,
+    $buildRoot,
+    'PowerForge.CompilationBenchmark.Startup',
+    [PowerForge.PowerShellCompilationArtifactKind]::Executable,
+    [PowerForge.PowerShellCompilationMode]::Package)
+$executableSpec.TargetFramework = $targetFramework
+$executableResult = $builder.Build($executableSpec)
+if (-not $executableResult.Succeeded) {
+    throw "Packaged benchmark executable failed: $($executableResult.Error)`n$($executableResult.BuildOutput)"
+}
+
+Add-Type -Path $typedResult.ArtifactPath
+Add-Type -TypeDefinition (Get-Content -LiteralPath $harnessPath -Raw) -ReferencedAssemblies $typedResult.ArtifactPath -CompilerOptions '/optimize'
+$typedHash = (Get-FileHash -LiteralPath $typedResult.ArtifactPath -Algorithm SHA256).Hash
+$moduleHash = (Get-FileHash -LiteralPath $moduleResult.ArtifactPath -Algorithm SHA256).Hash
+$executableHash = (Get-FileHash -LiteralPath $executableResult.ArtifactPath -Algorithm SHA256).Hash
+$currentPowerShell = (Get-Process -Id $PID).Path
+$moduleQualifier = [System.IO.Path]::GetFileNameWithoutExtension($moduleResult.ArtifactPath)
+
+New-BenchmarkSuite 'powershell-compilation-real-function' -OutputRoot $outputRoot {
+    Add-BenchmarkMetadata Workload 'Get-AllowedAverageMs from TestimoX benchmark gate'
+    Add-BenchmarkMetadata TypedArtifactSha256 $typedHash
+    Add-BenchmarkMetadata BinaryModuleSha256 $moduleHash
+    Set-BenchmarkPolicy -Warmup $warmup -Iterations $iterations -Order GroupedRotated -OutlierMode ExcludeMinMax
+    Add-BenchmarkCaseSource @(
+        [pscustomobject]@{ Name = 'AbsoluteCap'; Calls = $calls; BaselineMs = 100.0; RelativeTolerance = 0.2; AbsoluteToleranceMs = 30.0; Expected = 130.0 }
+        [pscustomobject]@{ Name = 'RelativeCap'; Calls = $calls; BaselineMs = 100.0; RelativeTolerance = 0.5; AbsoluteToleranceMs = 30.0; Expected = 150.0 }
+    )
+
+    Set-BenchmarkSetup {
+        param($case, $run)
+        . $workloadPath
+        Set-Item -Path Function:\global:Get-AllowedAverageMs -Value ${function:Get-AllowedAverageMs}
+        Import-Module -Name $moduleResult.ArtifactPath -Global -Force -ErrorAction Stop
+    }
+
+    Add-BenchmarkEngine PowerShellFunction {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            [double] $result = 0
+            for ([int] $index = 0; $index -lt $case.Calls; $index++) {
+                $result = Get-AllowedAverageMs $case.BaselineMs $case.RelativeTolerance $case.AbsoluteToleranceMs
+            }
+            $run.Result = $result
+        }
+    }
+
+    Add-BenchmarkEngine BinaryCmdlet {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            [double] $result = 0
+            for ([int] $index = 0; $index -lt $case.Calls; $index++) {
+                $result = & "$moduleQualifier\Get-AllowedAverageMs" $case.BaselineMs $case.RelativeTolerance $case.AbsoluteToleranceMs
+            }
+            $run.Result = $result
+        }
+    }
+
+    Add-BenchmarkEngine TypedClr {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = [PowerForge.CompilationBenchmarks.PowerShellCompilationBenchmarkHarness]::RunTypedBranch(
+                $case.Calls,
+                $case.BaselineMs,
+                $case.RelativeTolerance,
+                $case.AbsoluteToleranceMs)
+        }
+    }
+
+    Add-BenchmarkEngine HandWrittenCSharp {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = [PowerForge.CompilationBenchmarks.PowerShellCompilationBenchmarkHarness]::RunHandWrittenBranch(
+                $case.Calls,
+                $case.BaselineMs,
+                $case.RelativeTolerance,
+                $case.AbsoluteToleranceMs)
+        }
+    }
+
+    Add-BenchmarkValidation {
+        param($case, $run)
+        Assert-BenchmarkValue -Actual ([double] $run.Result) -Expected ([double] $case.Expected)
+    }
+    Add-BenchmarkComparison -Dimension Engine -Baseline HandWrittenCSharp -Metric MedianMs -TieTolerance 0.05
+}
+
+New-BenchmarkSuite 'powershell-compilation-synthetic-loop' -OutputRoot $outputRoot {
+    Add-BenchmarkMetadata Workload 'Typed triangular-number loop'
+    Add-BenchmarkMetadata TypedArtifactSha256 $typedHash
+    Add-BenchmarkMetadata BinaryModuleSha256 $moduleHash
+    Set-BenchmarkPolicy -Warmup $warmup -Iterations $iterations -Order GroupedRotated -OutlierMode ExcludeMinMax
+    Add-BenchmarkCase Loop @{ Calls = $loopCalls; Count = 1000; Expected = 500500L }
+
+    Set-BenchmarkSetup {
+        param($case, $run)
+        . $workloadPath
+        Set-Item -Path Function:\global:Get-TriangularNumber -Value ${function:Get-TriangularNumber}
+        Import-Module -Name $moduleResult.ArtifactPath -Global -Force -ErrorAction Stop
+    }
+
+    Add-BenchmarkEngine PowerShellFunction {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            [long] $result = 0
+            for ([int] $index = 0; $index -lt $case.Calls; $index++) {
+                $result = Get-TriangularNumber $case.Count
+            }
+            $run.Result = $result
+        }
+    }
+
+    Add-BenchmarkEngine BinaryCmdlet {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            [long] $result = 0
+            for ([int] $index = 0; $index -lt $case.Calls; $index++) {
+                $result = & "$moduleQualifier\Get-TriangularNumber" $case.Count
+            }
+            $run.Result = $result
+        }
+    }
+
+    Add-BenchmarkEngine TypedClr {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = [PowerForge.CompilationBenchmarks.PowerShellCompilationBenchmarkHarness]::RunTypedLoop($case.Calls, $case.Count)
+        }
+    }
+
+    Add-BenchmarkEngine HandWrittenCSharp {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = [PowerForge.CompilationBenchmarks.PowerShellCompilationBenchmarkHarness]::RunHandWrittenLoop($case.Calls, $case.Count)
+        }
+    }
+
+    Add-BenchmarkValidation {
+        param($case, $run)
+        Assert-BenchmarkValue -Actual ([long] $run.Result) -Expected ([long] $case.Expected)
+    }
+    Add-BenchmarkComparison -Dimension Engine -Baseline HandWrittenCSharp -Metric MedianMs -TieTolerance 0.05
+}
+
+New-BenchmarkSuite 'powershell-compilation-packaged-startup' -OutputRoot $outputRoot {
+    Add-BenchmarkMetadata Workload 'Cold process startup and one script invocation'
+    Add-BenchmarkMetadata PackagedExecutableSha256 $executableHash
+    Set-BenchmarkPolicy -Warmup 2 -Iterations $(if ($quick) { 3 } else { 10 }) -Order Rotated -OutlierMode ExcludeMinMax
+    Add-BenchmarkCase Startup @{ Expected = 150.0 }
+
+    Add-BenchmarkEngine PowerShellFile {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = & $currentPowerShell -NoProfile -NonInteractive -File $startupScriptPath 100 0.5 30
+        }
+    }
+
+    Add-BenchmarkEngine PackagedExecutable {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = & $executableResult.ArtifactPath 100 0.5 30
+        }
+    }
+
+    Add-BenchmarkValidation {
+        param($case, $run)
+        Assert-BenchmarkValue -Actual ([double] $run.Result) -Expected ([double] $case.Expected)
+    }
+    Add-BenchmarkComparison -Dimension Engine -Baseline PowerShellFile -Metric MedianMs -TieTolerance 0.05
+}

@@ -1,0 +1,169 @@
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
+using System.Reflection;
+
+namespace PowerForge.Compiled;
+
+internal static class Program
+{
+    private const string ScriptResourceName = "PowerForge.Compiled.Source.ps1";
+
+    private static int Main(string[] args)
+    {
+        try
+        {
+            var source = ReadEmbeddedScript();
+            using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+            runspace.Open();
+            using var powerShell = PowerShell.Create();
+            powerShell.Runspace = runspace;
+            powerShell.AddScript(source, useLocalScope: false);
+            foreach (var argument in ParseArguments(args))
+            {
+                if (argument.Name is null)
+                    powerShell.AddArgument(argument.Value);
+                else if (argument.Value is null)
+                    powerShell.AddParameter(argument.Name);
+                else
+                    powerShell.AddParameter(argument.Name, argument.Value);
+            }
+
+            int? requestedExitCode = null;
+            IEnumerable<PSObject> output;
+            try
+            {
+                output = powerShell.Invoke();
+            }
+            catch (RuntimeException exception) when (TryGetScriptExitCode(exception, out _))
+            {
+                TryGetScriptExitCode(exception, out var exitCode);
+                requestedExitCode = exitCode;
+                output = Array.Empty<PSObject>();
+            }
+            foreach (var value in output)
+                Console.Out.WriteLine(value?.ToString());
+            foreach (var information in powerShell.Streams.Information)
+                Console.Out.WriteLine(information.MessageData?.ToString());
+            foreach (var warning in powerShell.Streams.Warning)
+                Console.Error.WriteLine($"WARNING: {warning.Message}");
+            foreach (var error in powerShell.Streams.Error)
+            {
+                if (TryGetScriptExitCode(error.Exception, out var exitCode))
+                {
+                    requestedExitCode ??= exitCode;
+                    continue;
+                }
+                Console.Error.WriteLine(error.ToString());
+            }
+
+            if (requestedExitCode.HasValue)
+                return requestedExitCode.Value;
+            return powerShell.HadErrors ? 1 : 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception.ToString());
+            return 1;
+        }
+    }
+
+    private static string ReadEmbeddedScript()
+    {
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(ScriptResourceName)
+            ?? throw new InvalidOperationException($"Embedded PowerShell script '{ScriptResourceName}' was not found.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
+    private static IEnumerable<ScriptArgument> ParseArguments(IReadOnlyList<string> arguments)
+    {
+        var positionalOnly = false;
+        for (var index = 0; index < arguments.Count; index++)
+        {
+            var value = arguments[index];
+            if (!positionalOnly && value == "--")
+            {
+                positionalOnly = true;
+                continue;
+            }
+
+            if (!positionalOnly && TryParseParameter(value, out var name, out var inlineValue))
+            {
+                if (inlineValue is null && index + 1 < arguments.Count && !LooksLikeParameter(arguments[index + 1]))
+                    inlineValue = arguments[++index];
+                yield return new ScriptArgument(name, inlineValue);
+                continue;
+            }
+
+            yield return new ScriptArgument(null, value);
+        }
+    }
+
+    private static bool TryParseParameter(string value, out string name, out string? inlineValue)
+    {
+        name = string.Empty;
+        inlineValue = null;
+        if (!LooksLikeParameter(value)) return false;
+        var prefixLength = value.StartsWith("--", StringComparison.Ordinal) ? 2 : 1;
+        var token = value[prefixLength..];
+        var separator = token.IndexOfAny(new[] { '=', ':' });
+        if (separator >= 0)
+        {
+            name = token[..separator];
+            inlineValue = token[(separator + 1)..];
+        }
+        else
+        {
+            name = token;
+        }
+        return name.Length > 0;
+    }
+
+    private static bool LooksLikeParameter(string value)
+    {
+        if (value.Length < 2 || value[0] != '-') return false;
+        var index = value.Length > 2 && value[1] == '-' ? 2 : 1;
+        return index < value.Length && (char.IsLetter(value[index]) || value[index] == '_');
+    }
+
+    private static bool TryGetScriptExitCode(Exception exception, out int exitCode)
+    {
+        if (exception is PowerForgeScriptExitException scriptExit)
+        {
+            exitCode = scriptExit.ExitCode;
+            return true;
+        }
+        if (exception is RuntimeException runtimeException &&
+            runtimeException.ErrorRecord?.Exception is Exception recordException &&
+            !ReferenceEquals(recordException, exception) &&
+            TryGetScriptExitCode(recordException, out exitCode))
+            return true;
+        if (exception.InnerException is not null && TryGetScriptExitCode(exception.InnerException, out exitCode))
+            return true;
+        exitCode = 0;
+        return false;
+    }
+
+    private sealed class ScriptArgument
+    {
+        internal ScriptArgument(string? name, string? value)
+        {
+            Name = name;
+            Value = value;
+        }
+
+        internal string? Name { get; }
+        internal string? Value { get; }
+    }
+}
+
+public sealed class PowerForgeScriptExitException : Exception
+{
+    public PowerForgeScriptExitException(int exitCode)
+        : base($"PowerShell script requested process exit code {exitCode}.")
+    {
+        ExitCode = exitCode;
+    }
+
+    public int ExitCode { get; }
+}

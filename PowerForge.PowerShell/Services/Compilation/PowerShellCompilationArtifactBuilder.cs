@@ -1,0 +1,537 @@
+using System.Diagnostics;
+using System.Management.Automation.Language;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace PowerForge;
+
+/// <summary>
+/// Produces runtime-packaged executables and genuinely typed CLR libraries from PowerShell source.
+/// </summary>
+public sealed class PowerShellCompilationArtifactBuilder
+{
+    private const string TypedProjectTemplate = "PowerForge.PowerShell.Compilation.TypedLibrary.csproj.template";
+    private const string PackagedProjectTemplate = "PowerForge.PowerShell.Compilation.PackagedExecutable.csproj.template";
+    private const string PackagedProgramTemplate = "PowerForge.PowerShell.Compilation.PackagedProgram.cs.template";
+    private const string BinaryModuleProjectTemplate = "PowerForge.PowerShell.Compilation.BinaryModule.csproj.template";
+    private const int MaximumBuildOutputLength = 64 * 1024;
+
+    /// <summary>Builds the requested PowerShell artifact.</summary>
+    public PowerShellCompilationBuildResult Build(PowerShellCompilationBuildSpec spec)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        ValidateSpec(spec);
+
+        Directory.CreateDirectory(spec.OutputDirectory);
+        var artifactName = SanitizeArtifactName(spec.ArtifactName);
+        // Microsoft.PowerShell.SDK carries deeply nested content files. Keeping the disposable
+        // generated project below the durable output directory can exceed MAX_PATH on Windows
+        // even when the user's final artifact path is otherwise reasonable.
+        var workspace = Path.Combine(Path.GetTempPath(), "PowerForge", "ps-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspace);
+        var result = new PowerShellCompilationBuildResult { BuildWorkspace = spec.KeepBuildWorkspace ? workspace : null };
+
+        try
+        {
+            var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(spec.SourcePath, spec.Mode));
+            if (plan.ParseErrorFiles > 0)
+                throw new InvalidOperationException("PowerShell source contains parser errors; no artifact was produced.");
+
+            var publishDirectory = Path.Combine(workspace, "publish");
+            Directory.CreateDirectory(publishDirectory);
+            PowerShellTypedCompilationResult? typed = null;
+            string projectPath;
+            bool requiresPowerShellRuntime;
+            bool usesPowerShellRuntimeFallback;
+            if (spec.Kind is PowerShellCompilationArtifactKind.Library or PowerShellCompilationArtifactKind.BinaryModule)
+            {
+                if (spec.Mode == PowerShellCompilationMode.Package)
+                    throw new InvalidOperationException("DLL artifacts require Hybrid or Strict mode because they contain genuinely typed methods.");
+
+                typed = new PowerShellTypedCompilationTranspiler().Transpile(
+                    spec.SourcePath,
+                    "PowerForge.Compiled",
+                    PowerShellCSharpMethodEmitter.SanitizeIdentifier(artifactName) + "Methods");
+                if (typed.Methods.Length == 0)
+                    throw new InvalidOperationException("No PowerShell functions were eligible for typed CLR compilation.");
+                if (spec.Mode == PowerShellCompilationMode.Strict && typed.Diagnostics.Length > 0)
+                    throw new InvalidOperationException($"Strict mode rejected {typed.Diagnostics.Length} compilation blocker(s).");
+                File.WriteAllText(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
+                    File.WriteAllText(Path.Combine(workspace, "CompiledCmdlets.cs"), GenerateBinaryCmdletSource(typed), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                projectPath = Path.Combine(workspace, artifactName + ".csproj");
+                var projectTemplate = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
+                    ? ReadTemplate(BinaryModuleProjectTemplate).Replace("{{POWERSHELL_REFERENCE}}", GetPowerShellReference(spec.TargetFramework))
+                    : ReadTemplate(TypedProjectTemplate);
+                File.WriteAllText(
+                    projectPath,
+                    projectTemplate
+                        .Replace("{{TARGET_FRAMEWORK}}", EscapeXml(spec.TargetFramework))
+                        .Replace("{{ARTIFACT_NAME}}", EscapeXml(artifactName)),
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                requiresPowerShellRuntime = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule;
+                usesPowerShellRuntimeFallback = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && typed.Methods.Length != plan.TotalUnits;
+            }
+            else
+            {
+                if (spec.Mode == PowerShellCompilationMode.Strict)
+                    throw new InvalidOperationException("Strict typed executable generation is not implemented; use Package or Hybrid mode for an explicit runtime-packaged executable.");
+
+                File.WriteAllText(
+                    Path.Combine(workspace, "Source.ps1"),
+                    GeneratePackagedScript(spec.SourcePath),
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                File.WriteAllText(Path.Combine(workspace, "Program.cs"), ReadTemplate(PackagedProgramTemplate), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                projectPath = Path.Combine(workspace, artifactName + ".csproj");
+                File.WriteAllText(
+                    projectPath,
+                    ReadTemplate(PackagedProjectTemplate)
+                        .Replace("{{TARGET_FRAMEWORK}}", EscapeXml(spec.TargetFramework))
+                        .Replace("{{ARTIFACT_NAME}}", EscapeXml(artifactName))
+                        .Replace("{{SINGLE_FILE}}", spec.SingleFile ? "true" : "false")
+                        .Replace("{{SELF_CONTAINED}}", spec.SelfContained ? "true" : "false")
+                        .Replace("{{POWERSHELL_SDK_VERSION}}", GetPowerShellSdkVersion(spec.TargetFramework)),
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                requiresPowerShellRuntime = true;
+                usesPowerShellRuntimeFallback = true;
+            }
+
+            var runtimeIdentifier = ResolveRuntimeIdentifier(spec);
+            var process = RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier);
+            result.BuildOutput = BoundOutput(process.Output);
+            if (process.TimedOut)
+                throw new TimeoutException($"Generated .NET build exceeded {spec.TimeoutSeconds} seconds.");
+            if (process.ExitCode != 0)
+                throw new InvalidOperationException($"Generated .NET build failed with exit code {process.ExitCode}.");
+
+            var copiedArtifact = CopyArtifact(spec, artifactName, publishDirectory, typed, usesPowerShellRuntimeFallback);
+            var artifactPath = copiedArtifact.PrimaryPath;
+            var compiledMethods = typed?.Methods.Length ?? 0;
+            var nonCompiledUnits = Math.Max(0, plan.TotalUnits - compiledMethods);
+            var fallbackUnits = usesPowerShellRuntimeFallback ? nonCompiledUnits : 0;
+            var omittedUnits = spec.Kind == PowerShellCompilationArtifactKind.Library ? nonCompiledUnits : 0;
+            var diagnostics = typed?.Diagnostics ?? plan.Files
+                .SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics)))
+                .ToArray();
+            var manifest = new PowerShellCompilationArtifactManifest
+            {
+                ArtifactName = artifactName,
+                Kind = spec.Kind,
+                Mode = spec.Mode,
+                SourcePath = spec.SourcePath,
+                TargetFramework = spec.TargetFramework,
+                RuntimeIdentifier = runtimeIdentifier,
+                RequiresPowerShellRuntime = requiresPowerShellRuntime,
+                UsesPowerShellRuntimeFallback = usesPowerShellRuntimeFallback,
+                SelfContained = spec.SelfContained,
+                SingleFile = spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.SingleFile,
+                CompiledMethods = compiledMethods,
+                RuntimeFallbackUnits = fallbackUnits,
+                OmittedUnits = omittedUnits,
+                CompilationCoveragePercentage = plan.TotalUnits == 0 ? 0 : compiledMethods * 100d / plan.TotalUnits,
+                ArtifactPath = artifactPath,
+                ArtifactSha256 = ComputeSha256(artifactPath),
+                Files = copiedArtifact.Files,
+                Diagnostics = diagnostics
+            };
+            var manifestPath = Path.Combine(spec.OutputDirectory, artifactName + ".powerforge-compilation.json");
+            WriteManifest(manifestPath, manifest);
+
+            result.Succeeded = true;
+            result.ArtifactPath = artifactPath;
+            result.ManifestPath = manifestPath;
+            result.Manifest = manifest;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            result.Succeeded = false;
+            result.Error = ex.Message;
+            return result;
+        }
+        finally
+        {
+            if (!spec.KeepBuildWorkspace)
+            {
+                try { Directory.Delete(workspace, recursive: true); } catch { }
+            }
+        }
+    }
+
+    private static void ValidateSpec(PowerShellCompilationBuildSpec spec)
+    {
+        if (!File.Exists(spec.SourcePath))
+            throw new FileNotFoundException("PowerShell source file was not found.", spec.SourcePath);
+        var extension = Path.GetExtension(spec.SourcePath);
+        if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("PowerShell artifacts accept .ps1 and .psm1 source files.", nameof(spec));
+        if (spec.TimeoutSeconds < 1)
+            throw new ArgumentOutOfRangeException(nameof(spec), "Build timeout must be positive.");
+        if (spec.Kind == PowerShellCompilationArtifactKind.Executable && !spec.TargetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) && !spec.TargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Packaged executables currently target net8.0 or net10.0.", nameof(spec));
+        if (spec.Kind != PowerShellCompilationArtifactKind.Executable &&
+            !spec.TargetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase) &&
+            !spec.TargetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) &&
+            !spec.TargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Typed libraries and binary modules currently target net472, net8.0, or net10.0.", nameof(spec));
+    }
+
+    private static GeneratedBuildProcessResult RunDotNetBuild(
+        PowerShellCompilationBuildSpec spec,
+        string projectPath,
+        string publishDirectory,
+        string? runtimeIdentifier)
+    {
+        var arguments = new List<string>
+        {
+            spec.Kind == PowerShellCompilationArtifactKind.Executable ? "publish" : "build",
+            projectPath,
+            "--configuration", "Release",
+            "--output", publishDirectory,
+            "--nologo",
+            "--verbosity", "minimal"
+        };
+        if (spec.Kind == PowerShellCompilationArtifactKind.Executable && !string.IsNullOrWhiteSpace(runtimeIdentifier))
+        {
+            arguments.Add("--runtime");
+            arguments.Add(runtimeIdentifier!);
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            WorkingDirectory = Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        WindowsProcessArguments.Add(startInfo, arguments.ToArray());
+        ProcessStartInfoEncoding.TryApplyUtf8(startInfo);
+        using var process = new Process { StartInfo = startInfo };
+        var output = new StringBuilder();
+        process.OutputDataReceived += (_, eventArgs) => { if (eventArgs.Data is not null) output.AppendLine(eventArgs.Data); };
+        process.ErrorDataReceived += (_, eventArgs) => { if (eventArgs.Data is not null) output.AppendLine(eventArgs.Data); };
+        if (!process.Start())
+            throw new InvalidOperationException("Failed to start dotnet artifact build.");
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+        var exited = process.WaitForExit(checked(spec.TimeoutSeconds * 1000));
+        if (!exited)
+        {
+            try { process.Kill(); } catch { }
+            return new GeneratedBuildProcessResult(-1, output.ToString(), timedOut: true);
+        }
+        process.WaitForExit();
+        return new GeneratedBuildProcessResult(process.ExitCode, output.ToString(), timedOut: false);
+    }
+
+    private static CopiedArtifact CopyArtifact(
+        PowerShellCompilationBuildSpec spec,
+        string artifactName,
+        string publishDirectory,
+        PowerShellTypedCompilationResult? typed,
+        bool usesPowerShellRuntimeFallback)
+    {
+        if (spec.Kind is PowerShellCompilationArtifactKind.Library or PowerShellCompilationArtifactKind.BinaryModule)
+        {
+            var source = Path.Combine(publishDirectory, artifactName + ".dll");
+            if (!File.Exists(source)) throw new FileNotFoundException("Generated library was not found.", source);
+
+            if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && usesPowerShellRuntimeFallback)
+                return CopyHybridModule(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."));
+
+            var target = Path.Combine(spec.OutputDirectory, artifactName + ".dll");
+            File.Copy(source, target, overwrite: true);
+            return CreateCopiedArtifact(target, "Primary");
+        }
+
+        var executableFileName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? artifactName + ".exe" : artifactName;
+        var executable = Path.Combine(publishDirectory, executableFileName);
+        if (!File.Exists(executable)) throw new FileNotFoundException("Generated executable was not found.", executable);
+        if (spec.SingleFile)
+        {
+            var target = Path.Combine(spec.OutputDirectory, executableFileName);
+            File.Copy(executable, target, overwrite: true);
+            return CreateCopiedArtifact(target, "Primary");
+        }
+
+        var targetDirectory = Path.Combine(spec.OutputDirectory, artifactName);
+        Directory.CreateDirectory(targetDirectory);
+        foreach (var file in Directory.EnumerateFiles(publishDirectory))
+            File.Copy(file, Path.Combine(targetDirectory, Path.GetFileName(file)), overwrite: true);
+        return CreateCopiedArtifact(Path.Combine(targetDirectory, executableFileName), "Primary");
+    }
+
+    private static CopiedArtifact CopyHybridModule(
+        PowerShellCompilationBuildSpec spec,
+        string artifactName,
+        string compiledAssembly,
+        PowerShellTypedCompilationResult typed)
+    {
+        var moduleDirectory = Path.Combine(spec.OutputDirectory, artifactName);
+        Directory.CreateDirectory(moduleDirectory);
+        var assemblyPath = Path.Combine(moduleDirectory, artifactName + ".dll");
+        var modulePath = Path.Combine(moduleDirectory, artifactName + ".psm1");
+        File.Copy(compiledAssembly, assemblyPath, overwrite: true);
+        File.WriteAllText(
+            modulePath,
+            GenerateHybridModuleScript(spec.SourcePath, Path.GetFileName(assemblyPath), typed),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        return new CopiedArtifact(
+            modulePath,
+            new[]
+            {
+                CreateArtifactFile(modulePath, "PrimaryModule"),
+                CreateArtifactFile(assemblyPath, "TypedAssembly")
+            });
+    }
+
+    private static string GeneratePackagedScript(string sourcePath)
+    {
+        Token[] tokens;
+        ParseError[] errors;
+        var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
+        if (errors.Length > 0)
+            throw new InvalidOperationException("Packaged script could not be parsed while preserving exit-code semantics.");
+
+        var source = new StringBuilder(File.ReadAllText(sourcePath));
+        var exits = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
+            .Cast<ExitStatementAst>()
+            .OrderByDescending(static exit => exit.Extent.StartOffset);
+        foreach (var exit in exits)
+        {
+            var expression = exit.Pipeline?.Extent.Text;
+            var exitCode = string.IsNullOrWhiteSpace(expression) ? "0" : "[int](" + expression + ")";
+            var replacement = "throw [PowerForge.Compiled.PowerForgeScriptExitException]::new(" + exitCode + ")";
+            source.Remove(exit.Extent.StartOffset, exit.Extent.EndOffset - exit.Extent.StartOffset);
+            source.Insert(exit.Extent.StartOffset, replacement);
+        }
+        return source.ToString();
+    }
+
+    private static string GenerateHybridModuleScript(
+        string sourcePath,
+        string assemblyFileName,
+        PowerShellTypedCompilationResult typed)
+    {
+        Token[] tokens;
+        ParseError[] errors;
+        var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
+        if (errors.Length > 0)
+            throw new InvalidOperationException("Hybrid module source could not be parsed while composing fallback code.");
+
+        var compiled = new HashSet<string>(
+            typed.Methods.Select(static method => method.SourceName + "\0" + method.SourceLine),
+            StringComparer.OrdinalIgnoreCase);
+        var functions = ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+            .Cast<FunctionDefinitionAst>()
+            .OrderByDescending(static function => function.Extent.StartOffset)
+            .ToArray();
+        var source = new StringBuilder(File.ReadAllText(sourcePath));
+        foreach (var function in functions)
+        {
+            if (!compiled.Contains(function.Name + "\0" + function.Extent.StartLineNumber))
+                continue;
+            source.Remove(function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset);
+        }
+
+        var fallbackFunctions = functions
+            .Where(function => !compiled.Contains(function.Name + "\0" + function.Extent.StartLineNumber))
+            .OrderBy(static function => function.Extent.StartOffset)
+            .Select(static function => function.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var compiledCmdlets = typed.Methods
+            .Select(static method => method.SourceName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var builder = new StringBuilder();
+        builder.AppendLine("# Generated by PowerForge hybrid PowerShell compilation.");
+        builder.AppendLine("Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath '" + EscapePowerShellSingleQuotedString(assemblyFileName) + "') -Force -ErrorAction Stop");
+        builder.AppendLine();
+        builder.Append(source);
+        if (source.Length > 0 && source[source.Length - 1] != '\n') builder.AppendLine();
+        builder.AppendLine();
+        builder.AppendLine("Export-ModuleMember -Function @(" + JoinPowerShellNames(fallbackFunctions) + ") -Cmdlet @(" + JoinPowerShellNames(compiledCmdlets) + ")");
+        return builder.ToString();
+    }
+
+    private static string JoinPowerShellNames(IEnumerable<string> names)
+        => string.Join(", ", names.Select(name => "'" + EscapePowerShellSingleQuotedString(name) + "'"));
+
+    private static string EscapePowerShellSingleQuotedString(string value)
+        => value.Replace("'", "''");
+
+    private static CopiedArtifact CreateCopiedArtifact(string primaryPath, string role)
+        => new(primaryPath, new[] { CreateArtifactFile(primaryPath, role) });
+
+    private static PowerShellCompilationArtifactFile CreateArtifactFile(string path, string role)
+        => new() { Path = path, Role = role, Sha256 = ComputeSha256(path) };
+
+    private static string? ResolveRuntimeIdentifier(PowerShellCompilationBuildSpec spec)
+    {
+        if (spec.Kind != PowerShellCompilationArtifactKind.Executable)
+            return null;
+        if (!string.IsNullOrWhiteSpace(spec.RuntimeIdentifier))
+            return spec.RuntimeIdentifier;
+        if (!spec.SingleFile && !spec.SelfContained)
+            return null;
+
+        var prefix = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "win" :
+            RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "osx" : "linux";
+        var architecture = RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.X86 => "x86",
+            Architecture.Arm64 => "arm64",
+            Architecture.Arm => "arm",
+            _ => "x64"
+        };
+        return prefix + "-" + architecture;
+    }
+
+    private static string GetPowerShellSdkVersion(string targetFramework)
+        => targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ? "7.6.4" : "7.4.18";
+
+    private static string GetPowerShellReference(string targetFramework)
+        => targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)
+            ? "<PackageReference Include=\"Microsoft.PowerShell.5.ReferenceAssemblies\" Version=\"1.1.0\" PrivateAssets=\"all\" />"
+            : $"<PackageReference Include=\"Microsoft.PowerShell.SDK\" Version=\"{GetPowerShellSdkVersion(targetFramework)}\" PrivateAssets=\"all\" ExcludeAssets=\"runtime\" />";
+
+    private static string GenerateBinaryCmdletSource(PowerShellTypedCompilationResult typed)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("// <auto-generated />");
+        builder.AppendLine("#nullable enable");
+        builder.AppendLine("using System.Management.Automation;");
+        builder.AppendLine();
+        builder.AppendLine($"namespace {typed.NamespaceName};");
+        builder.AppendLine();
+        foreach (var method in typed.Methods)
+        {
+            var separator = method.SourceName.IndexOf('-');
+            if (separator < 1 || separator == method.SourceName.Length - 1)
+                throw new InvalidOperationException($"Function '{method.SourceName}' cannot be exported as a binary cmdlet because it does not use Verb-Noun naming.");
+            var verb = method.SourceName.Substring(0, separator);
+            var noun = method.SourceName.Substring(separator + 1);
+            var className = PowerShellCSharpMethodEmitter.SanitizeIdentifier(verb + noun + "Command");
+            builder.AppendLine($"[Cmdlet(\"{EscapeCSharpString(verb)}\", \"{EscapeCSharpString(noun)}\")]");
+            if (!method.ReturnType.Equals(typeof(void).FullName, StringComparison.Ordinal))
+                builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(method.ReturnType)}))]");
+            builder.AppendLine($"public sealed class {className} : PSCmdlet");
+            builder.AppendLine("{");
+            for (var index = 0; index < method.Parameters.Length; index++)
+            {
+                var parameter = method.Parameters[index];
+                builder.AppendLine($"    [Parameter(Position = {index})]");
+                builder.AppendLine($"    public {GetGeneratedTypeName(parameter.TypeName)} {PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name)} {{ get; set; }}{(parameter.TypeName == typeof(string).FullName ? " = string.Empty;" : string.Empty)}");
+                builder.AppendLine();
+            }
+            builder.AppendLine("    protected override void ProcessRecord()");
+            builder.AppendLine("    {");
+            var arguments = string.Join(", ", method.Parameters.Select(parameter => PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name)));
+            var invocation = $"{typed.TypeName}.{method.GeneratedName}({arguments})";
+            if (method.ReturnType.Equals(typeof(void).FullName, StringComparison.Ordinal))
+                builder.AppendLine($"        {invocation};");
+            else if (method.ReturnType.EndsWith("[]", StringComparison.Ordinal))
+                builder.AppendLine($"        WriteObject({invocation}, enumerateCollection: true);");
+            else
+                builder.AppendLine($"        WriteObject({invocation});");
+            builder.AppendLine("    }");
+            builder.AppendLine("}");
+            builder.AppendLine();
+        }
+        return builder.ToString();
+    }
+
+    private static string GetGeneratedTypeName(string fullName)
+    {
+        if (fullName.EndsWith("[]", StringComparison.Ordinal))
+            return GetGeneratedTypeName(fullName.Substring(0, fullName.Length - 2)) + "[]";
+        if (fullName == typeof(void).FullName) return "void";
+        if (fullName == typeof(bool).FullName) return "bool";
+        if (fullName == typeof(byte).FullName) return "byte";
+        if (fullName == typeof(sbyte).FullName) return "sbyte";
+        if (fullName == typeof(short).FullName) return "short";
+        if (fullName == typeof(ushort).FullName) return "ushort";
+        if (fullName == typeof(int).FullName) return "int";
+        if (fullName == typeof(uint).FullName) return "uint";
+        if (fullName == typeof(long).FullName) return "long";
+        if (fullName == typeof(ulong).FullName) return "ulong";
+        if (fullName == typeof(float).FullName) return "float";
+        if (fullName == typeof(double).FullName) return "double";
+        if (fullName == typeof(decimal).FullName) return "decimal";
+        if (fullName == typeof(char).FullName) return "char";
+        if (fullName == typeof(string).FullName) return "string";
+        return "global::" + fullName.Replace('+', '.');
+    }
+
+    private static string EscapeCSharpString(string value)
+        => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+    private static string ReadTemplate(string resourceName)
+    {
+        using var stream = typeof(PowerShellCompilationArtifactBuilder).Assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Embedded compilation template '{resourceName}' was not found.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
+    private static void WriteManifest(string path, PowerShellCompilationArtifactManifest manifest)
+    {
+        var options = new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        options.Converters.Add(new JsonStringEnumConverter());
+        File.WriteAllText(path, JsonSerializer.Serialize(manifest, options), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
+
+    private static string ComputeSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var algorithm = SHA256.Create();
+        return string.Concat(algorithm.ComputeHash(stream).Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
+    }
+
+    private static string SanitizeArtifactName(string value)
+    {
+        var sanitized = new string(value.Trim().Select(character => char.IsLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '_').ToArray());
+        if (string.IsNullOrWhiteSpace(sanitized) || sanitized is "." or "..")
+            throw new ArgumentException("Artifact name does not contain a usable file name.", nameof(value));
+        return sanitized;
+    }
+
+    private static string EscapeXml(string value)
+        => System.Security.SecurityElement.Escape(value) ?? string.Empty;
+
+    private static string BoundOutput(string output)
+        => output.Length <= MaximumBuildOutputLength ? output : output.Substring(output.Length - MaximumBuildOutputLength);
+
+    private sealed class CopiedArtifact
+    {
+        internal CopiedArtifact(string primaryPath, PowerShellCompilationArtifactFile[] files)
+        {
+            PrimaryPath = primaryPath;
+            Files = files;
+        }
+
+        internal string PrimaryPath { get; }
+        internal PowerShellCompilationArtifactFile[] Files { get; }
+    }
+
+    private sealed class GeneratedBuildProcessResult
+    {
+        internal GeneratedBuildProcessResult(int exitCode, string output, bool timedOut)
+        {
+            ExitCode = exitCode;
+            Output = output;
+            TimedOut = timedOut;
+        }
+
+        internal int ExitCode { get; }
+        internal string Output { get; }
+        internal bool TimedOut { get; }
+    }
+}

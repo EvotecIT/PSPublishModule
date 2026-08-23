@@ -666,6 +666,7 @@ Start here:
 - [Benchmarks/ManagedModules/README.md](Benchmarks/ManagedModules/README.md)
 - [Docs/PSPublishModule.ModuleIsolation.md](Docs/PSPublishModule.ModuleIsolation.md)
 - [Docs/PSPublishModule.DevelopmentBootstrapper.md](Docs/PSPublishModule.DevelopmentBootstrapper.md)
+- [Docs/PowerForge.PowerShellCompilation.md](Docs/PowerForge.PowerShellCompilation.md)
 - [Docs/PowerForge.Web.WebsiteStarter.md](Docs/PowerForge.Web.WebsiteStarter.md)
 - [Docs/PowerForge.Web.QualityGates.md](Docs/PowerForge.Web.QualityGates.md)
 - [Docs/PowerForge.Web.Roadmap.md](Docs/PowerForge.Web.Roadmap.md)
