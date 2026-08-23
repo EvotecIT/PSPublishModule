@@ -147,7 +147,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 evaluatedConditionProperties,
                 taskWidePropertyRemovals,
                 preferEffectiveLiteralAssignments,
-                out string[] undefineProperties))
+                out string[][] removalContexts))
         {
             return false;
         }
@@ -157,13 +157,14 @@ public sealed partial class DotNetPublishPipelineRunner
             ? null
             : ReadItemText(item, "NearestTargetFramework");
         references = propertyContexts
-            .Select(globalProperties => new EvaluatedProjectReference(
+            .SelectMany(globalProperties => removalContexts.Select(undefineProperties =>
+                new EvaluatedProjectReference(
                 projectPath,
                 globalProperties.TryGetValue("TargetFramework", out string? propertyTargetFramework)
                     ? propertyTargetFramework
                     : nearestTargetFramework,
                 globalProperties,
-                undefineProperties))
+                undefineProperties)))
             .GroupBy(BuildEvaluatedProjectReferenceKey, StringComparer.Ordinal)
             .Select(group => group.First())
             .ToArray();

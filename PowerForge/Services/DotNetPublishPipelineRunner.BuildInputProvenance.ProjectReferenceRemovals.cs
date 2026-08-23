@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Xml.Linq;
 
 namespace PowerForge;
 
@@ -12,15 +13,18 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
         bool preferEffectiveLiteralAssignments,
-        out string[] removals)
+        out string[][] removalContexts)
     {
-        removals = Array.Empty<string>();
+        removalContexts = Array.Empty<string[]>();
         if (!preferEffectiveLiteralAssignments)
         {
-            removals = ReadProjectReferencePropertyNames(
-                ReadItemText(item, "UndefineProperties"),
-                ReadItemText(item, "GlobalPropertiesToRemove"),
-                string.Join(";", taskWidePropertyRemovals));
+            removalContexts =
+            [
+                ReadProjectReferencePropertyNames(
+                    ReadItemText(item, "UndefineProperties"),
+                    ReadItemText(item, "GlobalPropertiesToRemove"),
+                    string.Join(";", taskWidePropertyRemovals))
+            ];
             return true;
         }
 
@@ -66,12 +70,85 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
             }
 
-            removals = results.ToArray();
+            var contexts = new List<string[]> { results.ToArray() };
+            if (HasUncertainProjectReferencePropertyRemoval(
+                    declaringProjectPath,
+                    referencedPath,
+                    declarations,
+                    evaluatedConditionProperties))
+            {
+                contexts.Add(taskWidePropertyRemovals.ToArray());
+            }
+            removalContexts = contexts
+                .GroupBy(
+                    context => string.Join("\0", context.OrderBy(
+                        value => value,
+                        StringComparer.OrdinalIgnoreCase)),
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToArray();
             return true;
         }
         catch
         {
             return false;
         }
+    }
+
+    private static bool HasUncertainProjectReferencePropertyRemoval(
+        string declaringProjectPath,
+        string referencedPath,
+        IEnumerable<PreprocessedProjectReferenceDeclaration> declarations,
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties)
+    {
+        foreach (PreprocessedProjectReferenceDeclaration declaration in declarations)
+        {
+            if (declaration.IsTargetTime && !declaration.RunsBeforeResolveReferences)
+                continue;
+
+            IReadOnlyDictionary<string, string> conditionProperties =
+                BuildTargetTimeConditionProperties(
+                    evaluatedConditionProperties,
+                    declaration.RuntimePropertyDefinitions);
+            bool definitelyActive = IsDefinitelyActiveMsBuildElement(
+                declaration.Element,
+                conditionProperties,
+                declaration.DefiningProjectPath);
+            if (IsDefinitelyInactiveMsBuildElement(
+                    declaration.Element,
+                    conditionProperties,
+                    declaration.DefiningProjectPath) ||
+                !DoesProjectReferenceDeclarationMatch(
+                    declaringProjectPath,
+                    referencedPath,
+                    declaration,
+                    conditionProperties))
+            {
+                continue;
+            }
+
+            bool hasRemovalAttribute = declaration.Element.Attributes().Any(attribute =>
+                    attribute.Name.LocalName.Equals("UndefineProperties", StringComparison.OrdinalIgnoreCase) ||
+                    attribute.Name.LocalName.Equals("GlobalPropertiesToRemove", StringComparison.OrdinalIgnoreCase));
+            XElement[] removalElements = declaration.Element.Elements().Where(element =>
+                    element.Name.LocalName.Equals("UndefineProperties", StringComparison.OrdinalIgnoreCase) ||
+                    element.Name.LocalName.Equals("GlobalPropertiesToRemove", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if ((!definitelyActive && (hasRemovalAttribute || removalElements.Length > 0)) ||
+                removalElements.Any(element =>
+                    !IsDefinitelyActiveMsBuildElement(
+                        element,
+                        conditionProperties,
+                        declaration.DefiningProjectPath) &&
+                    !IsDefinitelyInactiveMsBuildElement(
+                        element,
+                        conditionProperties,
+                        declaration.DefiningProjectPath)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -40,12 +40,38 @@ public sealed partial class DotNetPublishPipelineRunner
                 names.Add(match.Groups[1].Value);
             }
         }
+        if (document.Descendants().Where(element =>
+                element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(element => element.Attributes().Where(attribute =>
+                attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
+                attribute.Name.LocalName.Equals("Update", StringComparison.OrdinalIgnoreCase) ||
+                attribute.Name.LocalName.Equals("Remove", StringComparison.OrdinalIgnoreCase)))
+            .Any(attribute => IsMsBuildPropertyFunctionExpression(attribute.Value)))
+        {
+            names.Add("ProjectReference");
+        }
         return names.ToArray();
+    }
+
+    private static bool RequiresTargetExecutionForProjectReferenceIdentities(XDocument document)
+    {
+        return document.Descendants().Where(element =>
+                element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase) &&
+                element.Ancestors().Any(ancestor =>
+                    ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)))
+            .SelectMany(element => element.Attributes().Where(attribute =>
+                attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
+                attribute.Name.LocalName.Equals("Update", StringComparison.OrdinalIgnoreCase) ||
+                attribute.Name.LocalName.Equals("Remove", StringComparison.OrdinalIgnoreCase)))
+            .Any(attribute =>
+                attribute.Value.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+                IsMsBuildPropertyFunctionExpression(attribute.Value));
     }
 
     private static IReadOnlyDictionary<string, EvaluatedProjectItem[]> ReadEvaluatedProjectItemPaths(
         ProjectEvaluationRequest request,
-        IReadOnlyCollection<string> itemNames)
+        IReadOnlyCollection<string> itemNames,
+        bool executeResolveReferences)
     {
         if (itemNames.Count == 0)
             return new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
@@ -59,6 +85,8 @@ public sealed partial class DotNetPublishPipelineRunner
         };
         foreach (string itemName in itemNames)
             arguments.Add("-getItem:" + itemName);
+        if (executeResolveReferences)
+            arguments.Add("-target:ResolveReferences");
         if (request.Configuration is not null)
             arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
         if (request.TargetFramework is not null)

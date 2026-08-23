@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -249,7 +248,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluatedConditionProperties,
                     identityBaseDirectories,
                     comparison,
-                    identity.Value))
+                    identity.Value,
+                    allowEvaluatedReferenceIdentity: true))
             {
                 continue;
             }
@@ -264,7 +264,8 @@ public sealed partial class DotNetPublishPipelineRunner
                        evaluatedConditionProperties,
                        identityBaseDirectories,
                        comparison,
-                       exclude.Value);
+                       exclude.Value,
+                       allowEvaluatedReferenceIdentity: false);
         }
 
         return false;
@@ -276,8 +277,18 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         IEnumerable<string> identityBaseDirectories,
         StringComparison comparison,
-        string itemSpec)
+        string itemSpec,
+        bool allowEvaluatedReferenceIdentity)
     {
+        if (allowEvaluatedReferenceIdentity && DoesEvaluatedProjectReferenceIdentityMatch(
+                itemSpec,
+                referencedPath,
+                declaration.EvaluatedItemLists,
+                comparison))
+        {
+            return true;
+        }
+
         string[] candidates = IsComputedProjectReferenceItemSpec(itemSpec)
              ? ReadLiteralProjectReferencePropertyAssignmentCandidates(
                  declaration.PropertyDefinitions,
@@ -374,69 +385,6 @@ public sealed partial class DotNetPublishPipelineRunner
             expanded.Add(value);
         }
         return expanded;
-    }
-
-    private static bool TryMatchProjectReferenceGlob(
-        string definingDirectory,
-        string? itemSpec,
-        string referencedPath,
-        StringComparison comparison)
-    {
-        if (string.IsNullOrWhiteSpace(itemSpec) ||
-            itemSpec!.IndexOfAny(new[] { '*', '?' }) < 0 ||
-            itemSpec.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
-            itemSpec.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
-            itemSpec.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
-            !TryUnescapeMsBuildLiteral(itemSpec, out string? unescapedItemSpec))
-        {
-            return false;
-        }
-
-        string fullPattern = Path.GetFullPath(Path.IsPathRooted(unescapedItemSpec!)
-            ? unescapedItemSpec!
-            : Path.Combine(definingDirectory, unescapedItemSpec!));
-        string normalizedPattern = fullPattern.Replace('\\', '/');
-        string normalizedPath = Path.GetFullPath(referencedPath).Replace('\\', '/');
-        string expression = BuildProjectReferenceGlobExpression(normalizedPattern);
-        RegexOptions options = RegexOptions.CultureInvariant;
-        if (comparison == StringComparison.OrdinalIgnoreCase)
-            options |= RegexOptions.IgnoreCase;
-        return Regex.IsMatch(normalizedPath, expression, options, TimeSpan.FromSeconds(1));
-    }
-
-    private static string BuildProjectReferenceGlobExpression(string pattern)
-    {
-        var expression = new StringBuilder("^");
-        for (int index = 0; index < pattern.Length; index++)
-        {
-            char character = pattern[index];
-            if (character == '*')
-            {
-                bool recursive = index + 1 < pattern.Length && pattern[index + 1] == '*';
-                bool followedBySeparator = recursive &&
-                    index + 2 < pattern.Length &&
-                    pattern[index + 2] == '/';
-                expression.Append(followedBySeparator
-                    ? "(?:.*/)?"
-                    : recursive
-                        ? ".*"
-                        : "[^/]*");
-                if (followedBySeparator)
-                    index += 2;
-                else if (recursive)
-                    index++;
-            }
-            else if (character == '?')
-            {
-                expression.Append("[^/]");
-            }
-            else
-            {
-                expression.Append(Regex.Escape(character.ToString()));
-            }
-        }
-        expression.Append('$');
-        return expression.ToString();
     }
 
     private static List<LiteralProjectReferenceMetadataAssignment>

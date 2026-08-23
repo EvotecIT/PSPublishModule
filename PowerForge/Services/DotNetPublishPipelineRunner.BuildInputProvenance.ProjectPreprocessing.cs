@@ -103,7 +103,9 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItemLists =
                 ReadEvaluatedProjectItemPaths(
                     request,
-                    ReadProjectReferenceItemListNames(document));
+                    ReadProjectReferenceItemListNames(document),
+                    executeResolveReferences:
+                        RequiresTargetExecutionForProjectReferenceIdentities(document));
             HashSet<string> immutableGlobalProperties = ReadImmutableGlobalPropertyNames(
                 request,
                 document.Root);
@@ -275,6 +277,17 @@ public sealed partial class DotNetPublishPipelineRunner
 
         IReadOnlyDictionary<string, string> evaluatedProperties =
             ReadEvaluatedProjectProperties(request, propertyNames);
+        var initialExecutionProperties = new Dictionary<string, string>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, string> property in evaluatedProperties)
+            initialExecutionProperties[property.Key] = property.Value;
+        var executionPropertyContexts = new List<Dictionary<string, string>>
+        {
+            initialExecutionProperties
+        };
+        HashSet<string> immutableGlobalProperties = ReadImmutableGlobalPropertyNames(
+            request,
+            document.Root!);
         XElement[] effectiveTargetOrder = document.Descendants().Where(element =>
                 element.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase) &&
                 !string.IsNullOrWhiteSpace(element.Attribute("Name")?.Value) &&
@@ -319,6 +332,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     beforeTargets,
                     afterTargets,
                     evaluatedProperties,
+                    executionPropertyContexts,
+                    immutableGlobalProperties,
+                    propertyNames,
                     visiting,
                     executed,
                     executionOrder);
@@ -330,6 +346,9 @@ public sealed partial class DotNetPublishPipelineRunner
             beforeTargets,
             afterTargets,
             evaluatedProperties,
+            executionPropertyContexts,
+            immutableGlobalProperties,
+            propertyNames,
             visiting,
             executed,
             executionOrder);
@@ -346,6 +365,9 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, List<XElement>> beforeTargets,
         IReadOnlyDictionary<string, List<XElement>> afterTargets,
         IReadOnlyDictionary<string, string> evaluatedProperties,
+        List<Dictionary<string, string>> executionPropertyContexts,
+        ISet<string> immutableGlobalProperties,
+        ISet<string> scheduledPropertyNames,
         HashSet<XElement> visiting,
         HashSet<XElement> executed,
         List<XElement> executionOrder)
@@ -353,9 +375,10 @@ public sealed partial class DotNetPublishPipelineRunner
         if (executed.Contains(target) || !visiting.Add(target))
             return;
 
-        foreach (string dependency in ReadExpandedMsBuildTargetList(
-                     target.Attribute("DependsOnTargets")?.Value,
-                     evaluatedProperties))
+        foreach (string dependency in executionPropertyContexts.SelectMany(context =>
+                     ReadExpandedMsBuildTargetList(
+                         target.Attribute("DependsOnTargets")?.Value,
+                         context)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
         {
             if (effectiveTargets.TryGetValue(dependency, out XElement? dependencyTarget))
             {
@@ -365,6 +388,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     beforeTargets,
                     afterTargets,
                     evaluatedProperties,
+                    executionPropertyContexts,
+                    immutableGlobalProperties,
+                    scheduledPropertyNames,
                     visiting,
                     executed,
                     executionOrder);
@@ -382,6 +408,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     beforeTargets,
                     afterTargets,
                     evaluatedProperties,
+                    executionPropertyContexts,
+                    immutableGlobalProperties,
+                    scheduledPropertyNames,
                     visiting,
                     executed,
                     executionOrder);
@@ -390,7 +419,14 @@ public sealed partial class DotNetPublishPipelineRunner
 
         visiting.Remove(target);
         if (executed.Add(target))
+        {
             executionOrder.Add(target);
+            ApplyScheduledTargetPropertyDefinitions(
+                target,
+                executionPropertyContexts,
+                immutableGlobalProperties,
+                scheduledPropertyNames);
+        }
 
         if (afterTargets.TryGetValue(targetName, out List<XElement>? afterHooks))
         {
@@ -402,6 +438,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     beforeTargets,
                     afterTargets,
                     evaluatedProperties,
+                    executionPropertyContexts,
+                    immutableGlobalProperties,
+                    scheduledPropertyNames,
                     visiting,
                     executed,
                     executionOrder);
@@ -454,36 +493,4 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static IEnumerable<string> ReadExpandedMsBuildTargetList(
-        string? value,
-        IReadOnlyDictionary<string, string> evaluatedProperties)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return Array.Empty<string>();
-
-        string expanded = Regex.Replace(
-            value!,
-            @"\$\(([A-Za-z_][A-Za-z0-9_.-]*)\)",
-            match => evaluatedProperties.TryGetValue(match.Groups[1].Value, out string? propertyValue)
-                ? propertyValue
-                : match.Value,
-            RegexOptions.CultureInvariant);
-        return expanded.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(entry => entry.Trim())
-            .Where(entry => entry.Length > 0 && entry.IndexOf("$(", StringComparison.Ordinal) < 0)
-            .ToArray();
-    }
-
-    private static bool TryReadPreprocessedImportPath(string comment, out string? importPath)
-    {
-        importPath = comment
-            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(line => line.Trim())
-            .FirstOrDefault(candidate => Path.IsPathRooted(candidate) && File.Exists(candidate));
-        if (importPath is null)
-            return false;
-
-        importPath = Path.GetFullPath(importPath);
-        return true;
-    }
 }
