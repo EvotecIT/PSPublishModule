@@ -194,6 +194,8 @@ Windows run IDs are `20260823-155934-e6880101` (real function), `20260823-160044
 | Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 41.47 ms | 5.22 ms | 3.24 ms | **7.9x faster** | 1.61x slower |
 | Indexed sum over 1,000-element typed array | 1,000 | 58.73 ms | 6.06 ms | 3.05 ms | **9.7x faster** | 1.99x slower |
 
+The real PowerInfoBlox IPv4-to-PTR helper was measured separately on clean candidate `cf61babd` with 10,000 calls, two warmups, six measured samples, and minimum/maximum exclusion. Run `20260823-173135-cde90279` completed with zero validation failures: PowerShell took 102.81 ms, generated typed CLR 6.34 ms, and hand-written C# 4.41 ms. The generated method was **16.2x faster than PowerShell** and 1.44x slower than the hand-written implementation. Calling the tiny generated binary cmdlet 10,000 times took 356.46 ms, reinforcing that cmdlets should perform coarser work per dispatch.
+
 These results prove a benefit only for eligible computation executed as CLR code. They do not promise that an arbitrary script or a generated cmdlet call is faster.
 
 The binary-cmdlet lane includes PowerShell command lookup, parameter binding, pipeline setup, and `WriteObject` for every call. It took 1,965.61 ms and 1,934.12 ms in the two 50,000-call real scenarios, versus 251.47 ms and 234.80 ms for the original function. The dispatch-amortization workload then performed equivalent work through 1,000 fine cmdlet calls or one coarse command: 49.86 ms versus 4.94 ms, a **10.1x** improvement. The useful product shape is a coarse cmdlet that performs substantial compiled work per invocation, not a tiny arithmetic cmdlet called in a PowerShell loop.
