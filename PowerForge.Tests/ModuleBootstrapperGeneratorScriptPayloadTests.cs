@@ -28,6 +28,7 @@ public partial class ModuleBootstrapperGeneratorTests
             File.WriteAllText(
                 Path.Combine(publicRoot, "Get-RequiredType.ps1"),
                 "$script:RequirementAppearsAfterCode = $true" + Environment.NewLine +
+                "#requires -Assembly System.Xml" + Environment.NewLine +
                 "#requires -Assembly ../Lib/RequiredTypes.dll" + Environment.NewLine +
                 "class PowerForgeRequiredDerived : RequiredTypes.Base { }" + Environment.NewLine +
                 "function Get-RequiredType { [PowerForgeRequiredDerived]::new().Read() }");
@@ -41,6 +42,8 @@ public partial class ModuleBootstrapperGeneratorTests
                 fixRelativePaths: true,
                 exportAssemblies: new[] { "DemoModule.dll" });
             Assert.Contains("#requires -Assembly ./Lib/RequiredTypes.dll", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("#requires -Assembly System.Xml", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("./Public/System.Xml", sources.MergedScriptContent, StringComparison.Ordinal);
 
             ModuleBootstrapperGenerator.Generate(
                 moduleRoot,

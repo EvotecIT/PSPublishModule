@@ -421,6 +421,7 @@ public sealed class ModuleMergeComposerTests
                 "#requires -Assembly ../DoNotTouch.dll" + Environment.NewLine +
                 "'@" + Environment.NewLine +
                 "$script:BeforeRequirement = $true" + Environment.NewLine +
+                "#requires -Assembly System.Xml" + Environment.NewLine +
                 "#requires -Assembly ../Lib/RequiredTypes.dll" + Environment.NewLine +
                 "function Get-Demo { $text }");
 
@@ -432,8 +433,40 @@ public sealed class ModuleMergeComposerTests
                 fixRelativePaths: true);
 
             Assert.Contains("#requires -Assembly ./Lib/RequiredTypes.dll", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("#requires -Assembly System.Xml", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("#requires -Assembly ./Public/System.Xml", sources.MergedScriptContent, StringComparison.Ordinal);
             Assert.Contains("#requires -Assembly ../DoNotTouch.dll", sources.MergedScriptContent, StringComparison.Ordinal);
             Assert.DoesNotContain("#requires -Assembly ./DoNotTouch.dll", sources.MergedScriptContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData("System.Xml")]
+    [InlineData("'System.Xml'")]
+    public void BuildSources_PreservesNameOnlyRequiresAssembly(string assemblyRequirement)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var publicRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            File.WriteAllText(
+                Path.Combine(publicRoot.FullName, "Get-Demo.ps1"),
+                "#requires -Assembly " + assemblyRequirement + Environment.NewLine +
+                "function Get-Demo { 'ok' }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                "DemoModule",
+                information: null,
+                exports: new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: true);
+
+            Assert.Contains("#requires -Assembly " + assemblyRequirement, sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("./Public/System.Xml", sources.MergedScriptContent, StringComparison.Ordinal);
         }
         finally
         {

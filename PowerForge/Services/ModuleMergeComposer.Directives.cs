@@ -161,7 +161,11 @@ internal static partial class ModuleMergeComposer
                         ? match.Groups["doublePath"].Value
                         : match.Groups["bare"].Value;
                 var path = quote == '\0' ? encodedPath : DecodeUsingPathLiteral(encodedPath, quote);
-                var rebased = RebaseUsingPath(path, sourcePath, moduleRoot, treatBareNameAsPath: true);
+                var rebased = RebaseUsingPath(
+                    path,
+                    sourcePath,
+                    moduleRoot,
+                    treatBareNameAsPath: IsBareAssemblyRequirementPath(path, sourcePath));
                 if (string.Equals(path, rebased, StringComparison.Ordinal))
                     return match.Value;
 
@@ -170,6 +174,29 @@ internal static partial class ModuleMergeComposer
                     : quote + EncodeUsingPathLiteral(rebased, quote) + quote;
                 return match.Groups["prefix"].Value + encodedRebased;
             });
+
+    private static bool IsBareAssemblyRequirementPath(string value, string sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            value.StartsWith(".", StringComparison.Ordinal) ||
+            value.IndexOf('/') >= 0 ||
+            value.IndexOf('\\') >= 0)
+        {
+            return false;
+        }
+
+        var extension = Path.GetExtension(value);
+        if (extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".winmd", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath));
+        return !string.IsNullOrWhiteSpace(sourceDirectory) &&
+               File.Exists(Path.Combine(sourceDirectory, value));
+    }
 
     private static string RebaseUsingDirective(string directive, string sourcePath, string moduleRoot)
     {
