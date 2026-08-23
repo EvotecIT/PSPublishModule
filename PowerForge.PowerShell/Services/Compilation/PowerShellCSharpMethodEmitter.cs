@@ -7,7 +7,10 @@ namespace PowerForge;
 internal sealed class PowerShellCSharpMethodEmitter
 {
     private readonly string _filePath;
-    private readonly FunctionDefinitionAst _function;
+    private readonly ScriptBlockAst _body;
+    private readonly string _sourceName;
+    private readonly string _generatedName;
+    private readonly StatementAst[]? _statements;
     private readonly Dictionary<string, Type> _variables = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _variableIdentifiers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _firstAssignmentOffsets = new(StringComparer.OrdinalIgnoreCase);
@@ -15,17 +18,49 @@ internal sealed class PowerShellCSharpMethodEmitter
     private readonly HashSet<string> _explicitlyTypedVariables = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _declaredLocals = new(StringComparer.OrdinalIgnoreCase);
     private readonly StringBuilder _builder = new();
+    private readonly PowerShellCSharpMemberEmitter _memberEmitter;
     private int _indent = 1;
 
     internal PowerShellCSharpMethodEmitter(string filePath, FunctionDefinitionAst function)
+        : this(filePath, function.Body, function.Name, SanitizeIdentifier(function.Name), null, initialize: true)
+    {
+    }
+
+    internal PowerShellCSharpMethodEmitter(
+        string filePath,
+        ScriptBlockAst body,
+        string sourceName,
+        string generatedName,
+        StatementAst[] statements)
+        : this(filePath, body, sourceName, SanitizeIdentifier(generatedName), statements, initialize: true)
+    {
+    }
+
+    private PowerShellCSharpMethodEmitter(
+        string filePath,
+        ScriptBlockAst body,
+        string sourceName,
+        string generatedName,
+        StatementAst[]? statements,
+        bool initialize)
     {
         _filePath = filePath;
-        _function = function;
+        _body = body;
+        _sourceName = sourceName;
+        _generatedName = generatedName;
+        _statements = statements;
+        _memberEmitter = new PowerShellCSharpMemberEmitter(
+            InferExpressionType,
+            EmitExpression,
+            CanAssign,
+            GetTypeName,
+            CanNormalizeNullStringReceiver,
+            Error);
     }
 
     internal PowerShellCSharpMethodEmission Emit()
     {
-        var paramBlock = _function.Body.ParamBlock;
+        var paramBlock = _body.ParamBlock;
         var parameters = paramBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
         foreach (var parameter in parameters)
         {
@@ -40,17 +75,16 @@ internal sealed class PowerShellCSharpMethodEmitter
             _explicitlyTypedVariables.Add(name);
         }
 
-        var statements = _function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
+        var statements = _statements ?? _body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         InferLocalTypes(statements);
         ValidateVariableReferences(statements);
         var returnType = InferReturnType(statements);
         if (returnType != typeof(void) && statements.LastOrDefault() is not ReturnStatementAst)
-            throw Error(_function.Body, "A typed non-void function must end with an explicit return statement on the conservative compilation path.");
-        var generatedName = SanitizeIdentifier(_function.Name);
+            throw Error(_body, $"Typed non-void unit '{_sourceName}' must end with an explicit return statement on the conservative compilation path.");
         var parameterSource = string.Join(", ", parameters.Select(parameter =>
             $"{GetTypeName(parameter.StaticType)} {SanitizeIdentifier(parameter.Name.VariablePath.UserPath)}"));
 
-        AppendLine($"public static {GetTypeName(returnType)} {generatedName}({parameterSource})");
+        AppendLine($"public static {GetTypeName(returnType)} {_generatedName}({parameterSource})");
         AppendLine("{");
         _indent++;
         AppendLine("checked");
@@ -63,7 +97,7 @@ internal sealed class PowerShellCSharpMethodEmitter
         _indent--;
         AppendLine("}");
 
-        return new PowerShellCSharpMethodEmission(generatedName, returnType, _builder.ToString().TrimEnd());
+        return new PowerShellCSharpMethodEmission(_generatedName, returnType, _builder.ToString().TrimEnd());
     }
 
     private void InferLocalTypes(IEnumerable<StatementAst> statements)
@@ -166,7 +200,7 @@ internal sealed class PowerShellCSharpMethodEmitter
             if (name.Equals("true", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("false", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("null", StringComparison.OrdinalIgnoreCase) ||
-                _function.Body.ParamBlock?.Parameters.Any(parameter => parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) == true)
+                _body.ParamBlock?.Parameters.Any(parameter => parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) == true)
                 continue;
             if (_firstAssignmentOffsets.TryGetValue(name, out var firstAssignment) && variable.Extent.StartOffset < firstAssignment)
                 throw Error(variable, $"Local '${name}' is read before its first assignment; that relies on dynamic PowerShell null semantics.");
@@ -228,6 +262,11 @@ internal sealed class PowerShellCSharpMethodEmitter
             case ReturnStatementAst returnStatement:
                 if (returnStatement.Pipeline is null)
                     AppendLine("return;");
+                else if (InferExpressionType(returnStatement.Pipeline) == typeof(void))
+                {
+                    AppendLine($"{EmitExpression(UnwrapTransparentExpression(returnStatement.Pipeline))};");
+                    AppendLine("return;");
+                }
                 else
                     AppendLine($"return {EmitExpression(returnStatement.Pipeline)};");
                 return;
@@ -270,7 +309,7 @@ internal sealed class PowerShellCSharpMethodEmitter
             ?? throw Error(assignment.Left, "Only local-variable assignment is supported.");
         var name = variable.VariablePath.UserPath;
         var identifier = GetVariableIdentifier(name);
-        var isParameter = _function.Body.ParamBlock?.Parameters.Any(parameter => parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) == true;
+        var isParameter = _body.ParamBlock?.Parameters.Any(parameter => parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) == true;
         var declaration = !_declaredLocals.Contains(name) && !isParameter;
         var left = declaration ? $"{GetTypeName(_variables[name])} {identifier}" : identifier;
         var operation = assignment.Operator.ToString() switch
@@ -373,6 +412,8 @@ internal sealed class PowerShellCSharpMethodEmitter
             BinaryExpressionAst binary => EmitBinary(binary),
             UnaryExpressionAst unary => EmitUnary(unary),
             ArrayLiteralAst array => EmitArray(array),
+            InvokeMemberExpressionAst invocation => _memberEmitter.EmitInvocation(invocation),
+            MemberExpressionAst member => _memberEmitter.EmitMember(member),
             _ => throw Error(ast, $"Expression '{ast.GetType().Name}' is not implemented by the C# emitter.")
         };
     }
@@ -499,10 +540,27 @@ internal sealed class PowerShellCSharpMethodEmitter
         return GetVariableIdentifier(name);
     }
 
+    private bool CanNormalizeNullStringReceiver(ExpressionAst expression)
+    {
+        var receiver = UnwrapTransparentExpression(expression);
+        if (receiver is StringConstantExpressionAst)
+            return true;
+        return receiver is VariableExpressionAst variable &&
+               _explicitlyTypedVariables.Contains(variable.VariablePath.UserPath);
+    }
+
+    private static Ast UnwrapTransparentExpression(Ast ast)
+    {
+        ast = UnwrapExpression(ast);
+        while (ast is ParenExpressionAst parenthesized)
+            ast = UnwrapExpression(parenthesized.Pipeline);
+        return ast;
+    }
+
     private string GetVariableIdentifier(string name)
         => _variableIdentifiers.TryGetValue(name, out var identifier)
             ? identifier
-            : throw Error(_function, $"Variable '${name}' does not have a canonical generated identifier.");
+            : throw Error(_body, $"Variable '${name}' does not have a canonical generated identifier.");
 
     private static bool IsNullExpression(Ast ast)
     {
@@ -525,6 +583,8 @@ internal sealed class PowerShellCSharpMethodEmitter
             UnaryExpressionAst unary => InferExpressionType(unary.Child),
             ArrayLiteralAst array when array.Elements.Count > 0 && array.Elements.Select(InferExpressionType).Distinct().Count() == 1 => InferExpressionType(array.Elements[0]).MakeArrayType(),
             ArrayLiteralAst array => throw Error(array, "Heterogeneous or empty PowerShell array literals cannot be represented by one inferred CLR array element type."),
+            InvokeMemberExpressionAst invocation => _memberEmitter.InferInvocationType(invocation),
+            MemberExpressionAst member => _memberEmitter.InferMemberType(member),
             _ => throw Error(ast, $"The CLR type of '{ast.GetType().Name}' cannot be inferred.")
         };
     }
@@ -636,7 +696,7 @@ internal sealed class PowerShellCSharpMethodEmitter
         "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort", "using", "virtual", "void", "volatile", "while"
     };
 
-    private static string GetTypeName(Type type)
+    internal static string GetTypeName(Type type)
     {
         if (type.IsArray) return GetTypeName(type.GetElementType()!) + "[]";
         if (type == typeof(void)) return "void";

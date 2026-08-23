@@ -9,7 +9,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class PowerShellCompilationArtifactBuilderTests
+public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Fact]
     public void Build_TypedLibraryProducesRunnableClrMethodAndHonestManifest()
@@ -42,6 +42,8 @@ public sealed class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(1, result.Manifest.CompiledMethods);
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         Assert.Equal(0, result.Manifest.OmittedUnits);
+        Assert.Equal(new FileInfo(result.ArtifactPath!).Length, result.Manifest.ArtifactSizeBytes);
+        Assert.All(result.Manifest.Files, file => Assert.Equal(new FileInfo(file.Path).Length, file.SizeBytes));
         Assert.Equal(64, result.Manifest.ArtifactSha256.Length);
         Assert.Contains(result.Manifest.Files, file => file.Role == "DebugSymbols" && file.Path.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase));
 
@@ -327,13 +329,13 @@ public sealed class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_HybridModuleRejectsSelectiveExportsInsteadOfBroadeningPublicSurface()
+    public void Build_HybridModulePreservesLiteralSelectiveExports()
     {
         using var fixture = ArtifactFixture.Create(
             """
             function Get-PublicValue { return 1 }
             function Get-PrivateValue { return 2 }
-            Export-ModuleMember -Function Get-PublicValue
+            Export-ModuleMember -Function @('Get-PublicValue')
             """);
         var spec = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -344,18 +346,53 @@ public sealed class PowerShellCompilationArtifactBuilderTests
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
-        Assert.False(result.Succeeded);
-        Assert.Contains("must not broaden", result.Error, StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.NotNull(result.ArtifactPath);
+        var escapedModulePath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var command = $"Import-Module -Name '{escapedModulePath}' -Force; [bool](Get-Command Get-PublicValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-PrivateValue -ErrorAction SilentlyContinue); Get-PublicValue";
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "pwsh",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-NonInteractive");
+        startInfo.ArgumentList.Add("-Command");
+        startInfo.ArgumentList.Add(command);
+        using var process = Process.Start(startInfo)!;
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(60_000), "Selective-export module proof did not exit within 60 seconds.");
+        Assert.True(process.ExitCode == 0, $"Exit code: {process.ExitCode}{Environment.NewLine}{standardError}{Environment.NewLine}{standardOutput}");
+        Assert.Equal(new[] { "True", "False", "1" }, standardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(standardError), standardError);
     }
 
     [Fact]
-    public void Build_StrictBinaryModuleRejectsSiblingManifestInsteadOfBroadeningPublicSurface()
+    public void Build_StrictBinaryModuleRewritesSiblingManifestWithoutBroadeningPublicSurface()
     {
-        using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Get-PublicValue { return 1 }
+            function Get-PrivateValue { return 2 }
+            """,
+            ".psm1");
         File.WriteAllText(
             Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
-            "@{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue') }");
+            """
+            @{
+                RootModule = 'input.psm1'
+                ModuleVersion = '1.0.0'
+                GUID = '936a8f5f-156a-470b-ad57-262cafb46748'
+                FunctionsToExport = @('Get-PublicValue')
+                CmdletsToExport = @()
+                VariablesToExport = @()
+                AliasesToExport = @()
+            }
+            """);
         var spec = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
@@ -365,8 +402,183 @@ public sealed class PowerShellCompilationArtifactBuilderTests
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.NotNull(result.ArtifactPath);
+        Assert.EndsWith(".psd1", result.ArtifactPath, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(result.Manifest);
+        Assert.Contains(result.Manifest!.Files, file => file.Role == "PrimaryModuleManifest" && file.Path == result.ArtifactPath);
+        Assert.Contains(result.Manifest.Files, file => file.Role == "TypedAssembly" && file.Path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
+        var manifestText = File.ReadAllText(result.ArtifactPath!);
+        Assert.Contains("PowerForge.ManifestExport.dll", manifestText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("input.psm1", manifestText, StringComparison.OrdinalIgnoreCase);
+
+        var escapedModulePath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var command = $"Import-Module -Name '{escapedModulePath}' -Force; [bool](Get-Command Get-PublicValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-PrivateValue -ErrorAction SilentlyContinue); Get-PublicValue";
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "pwsh",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-NonInteractive");
+        startInfo.ArgumentList.Add("-Command");
+        startInfo.ArgumentList.Add(command);
+        using var process = Process.Start(startInfo)!;
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(60_000), "Manifest-backed strict module proof did not exit within 60 seconds.");
+        Assert.True(process.ExitCode == 0, $"Exit code: {process.ExitCode}{Environment.NewLine}{standardError}{Environment.NewLine}{standardOutput}");
+        Assert.Equal(new[] { "True", "False", "1" }, standardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(standardError), standardError);
+    }
+
+    [Fact]
+    public void Build_HybridBinaryModulePreservesManifestExportsAcrossTypedAndFallbackCommands()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Get-CompiledValue { return 1 }
+            function Get-FallbackValue { return (Get-Date).Year }
+            function Get-PrivateValue { return 2 }
+            """,
+            ".psm1");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            """
+            @{
+                RootModule = 'input.psm1'
+                ModuleVersion = '1.0.0'
+                GUID = 'e3013745-2f57-470e-8317-09532eb16c29'
+                FunctionsToExport = @('Get-CompiledValue', 'Get-FallbackValue')
+                CmdletsToExport = @()
+                VariablesToExport = @()
+                AliasesToExport = @()
+            }
+            """);
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.HybridManifest",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        var escapedModulePath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var command = $"Import-Module -Name '{escapedModulePath}' -Force; [bool](Get-Command Get-CompiledValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-FallbackValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-PrivateValue -ErrorAction SilentlyContinue); Get-CompiledValue; [int](Get-FallbackValue) -gt 2000";
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "pwsh",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-NonInteractive");
+        startInfo.ArgumentList.Add("-Command");
+        startInfo.ArgumentList.Add(command);
+        using var process = Process.Start(startInfo)!;
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(60_000), "Manifest-backed hybrid module proof did not exit within 60 seconds.");
+        Assert.True(process.ExitCode == 0, $"Exit code: {process.ExitCode}{Environment.NewLine}{standardError}{Environment.NewLine}{standardOutput}");
+        Assert.Equal(new[] { "True", "True", "False", "1", "True" }, standardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(standardError), standardError);
+    }
+
+    [Fact]
+    public void Build_RejectsDynamicManifestExportsWithoutPublishingPartialArtifacts()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; FunctionsToExport = @(Get-DynamicExport); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @() }");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.DynamicManifest",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
         Assert.False(result.Succeeded);
-        Assert.Contains("sibling module manifest", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("literal string", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_RejectsDynamicExportModuleMemberWithoutPublishingPartialArtifacts()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Get-PublicValue { return 1 }
+            $exports = 'Get-PublicValue'
+            Export-ModuleMember -Function $exports
+            """,
+            ".psm1");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.DynamicExportCommand",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("non-literal export", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_RejectsManifestFileReferenceOutsideModuleRoot()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); FormatsToProcess = @('../outside.format.ps1xml') }");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.EscapingManifest",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("escapes the module root", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_RejectsManifestFileReferenceThatCollidesWithGeneratedAssembly()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
+        const string artifactName = "PowerForge.CollidingManifest";
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(fixture.ScriptPath)!, artifactName + ".dll"), "source dependency");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            $"@{{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); FileList = @('{artifactName}.dll') }}");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            artifactName,
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("collides with a generated compilation artifact", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 

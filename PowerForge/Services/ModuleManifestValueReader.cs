@@ -87,6 +87,25 @@ internal static class ModuleManifestValueReader
         return null;
     }
 
+    internal static string[]? ReadTopLevelLiteralStringOrArrayOrThrow(string manifestPath, string key)
+    {
+        if (!TryReadManifestText(manifestPath, out var manifestText) ||
+            !ModuleManifestTextParser.TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression))
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expression) &&
+            ModuleManifestTextParser.TryParseStrictStringArrayExpression(expression!, out var values) &&
+            values is not null)
+        {
+            return values;
+        }
+
+        throw new InvalidDataException(
+            $"PowerShell manifest property '{key}' must contain a literal string or string array for compiled module export preservation.");
+    }
+
     internal static string[] ReadPsDataStringOrArray(string manifestPath, string key)
     {
         if (!TryReadManifestText(manifestPath, out var manifestText))

@@ -24,3 +24,19 @@ function Get-TriangularNumber {
 
     return $total
 }
+
+function Get-RepeatedTriangularNumber {
+    param([int] $Calls, [int] $Count)
+
+    [long] $result = 0
+    [long] $total = 0
+    for ([int] $call = 0; $call -lt $Calls; $call++) {
+        $total = 0
+        for ([int] $value = 1; $value -le $Count; $value++) {
+            $total += $value
+        }
+        $result = $total
+    }
+
+    return $result
+}

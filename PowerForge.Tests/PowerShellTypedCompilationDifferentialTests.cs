@@ -15,6 +15,146 @@ namespace PowerForge.Tests;
 public sealed class PowerShellTypedCompilationDifferentialTests
 {
     [Fact]
+    public void TypedClrStringReceiverPreservesMissingValueFailure()
+    {
+        const string source =
+            "function Test-MissingEnvironmentPrefix { param([string] $Name); $value = [Environment]::GetEnvironmentVariable($Name); return $value.StartsWith('PowerForge') }";
+        using var fixture = DifferentialFixture.Create(source);
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.NullableMemberDifferential",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+
+        using var assemblyStream = File.OpenRead(build.ArtifactPath!);
+        var loadContext = new AssemblyLoadContext("PowerForgeNullableMemberDifferential", isCollectible: true);
+        using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        runspace.Open();
+        InitializePowerShellSource(runspace, source);
+        var environmentName = "POWERFORGE_MISSING_" + Guid.NewGuid().ToString("N");
+        try
+        {
+            using var powerShell = PowerShell.Create();
+            powerShell.Runspace = runspace;
+            powerShell.AddCommand("Test-MissingEnvironmentPrefix").AddArgument(environmentName);
+            powerShell.Invoke();
+            Assert.True(powerShell.HadErrors);
+
+            var method = loadContext.LoadFromStream(assemblyStream)
+                .GetType("PowerForge.Compiled.PowerForge_NullableMemberDifferentialMethods", throwOnError: true)!
+                .GetMethod("Test_MissingEnvironmentPrefix", BindingFlags.Public | BindingFlags.Static)!;
+            var exception = Assert.Throws<TargetInvocationException>(() => method.Invoke(null, new object[] { environmentName }));
+            Assert.IsType<NullReferenceException>(exception.InnerException);
+        }
+        finally
+        {
+            loadContext.Unload();
+        }
+    }
+
+    [Fact]
+    public void TypedVoidClrReturnLowersToInvocationThenReturn()
+    {
+        const string source = "function Write-TypedLine { param([string] $Value); return ([Console]::WriteLine($Value)) }";
+        using var fixture = DifferentialFixture.Create(source);
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.VoidMemberDifferential",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+    }
+
+    [Fact]
+    public void TypedMethodsMatchPowerShellForStaticallyResolvedClrMembers()
+    {
+        const string source =
+            """
+            function Test-TextPrefix {
+                param([string] $Value, [string] $Prefix)
+                return $Value.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)
+            }
+
+            function Test-ParenthesizedTextPrefix {
+                param([string] $Value, [string] $Prefix)
+                return ($Value).StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)
+            }
+
+            function Get-TextLength {
+                param([string] $Value)
+                return $Value.Length
+            }
+
+            function Get-LeafName {
+                param([string] $Value)
+                return [System.IO.Path]::GetFileName($Value)
+            }
+
+            function Get-TimeSpanSeconds {
+                param([int] $Seconds)
+                $value = [System.TimeSpan]::new(0, 0, $Seconds)
+                return $value.TotalSeconds
+            }
+            """;
+        using var fixture = DifferentialFixture.Create(source);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath, PowerShellCompilationMode.Strict));
+        Assert.True(
+            plan.CanProceed,
+            string.Join(Environment.NewLine, plan.Files.SelectMany(file => file.Diagnostics.Concat(file.Units.SelectMany(unit => unit.Diagnostics))).Select(diagnostic => diagnostic.Message)));
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.MemberDifferential",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+
+        using var assemblyStream = File.OpenRead(build.ArtifactPath!);
+        var loadContext = new AssemblyLoadContext("PowerForgeMemberDifferential", isCollectible: true);
+        using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        runspace.Open();
+        InitializePowerShellSource(runspace, source);
+        try
+        {
+            var type = loadContext.LoadFromStream(assemblyStream)
+                .GetType("PowerForge.Compiled.PowerForge_MemberDifferentialMethods", throwOnError: true)!;
+            AssertDifferential(type, runspace, "Test-TextPrefix", "Test_TextPrefix", new[]
+            {
+                new object[] { "PowerForge", "power" },
+                new object[] { "PowerForge", "forge" },
+                new object[] { string.Empty, string.Empty },
+                new object[] { null!, string.Empty }
+            });
+            AssertDifferential(type, runspace, "Test-ParenthesizedTextPrefix", "Test_ParenthesizedTextPrefix", new[]
+            {
+                new object[] { "PowerForge", "power" },
+                new object[] { string.Empty, string.Empty },
+                new object[] { null!, string.Empty }
+            });
+            AssertDifferential(type, runspace, "Get-TextLength", "Get_TextLength", new[]
+            {
+                new object[] { "PowerForge" }, new object[] { string.Empty }, new object[] { null! }
+            });
+            AssertDifferential(type, runspace, "Get-LeafName", "Get_LeafName", new[]
+            {
+                new object[] { "C:/Support/PowerForge.ps1" }, new object[] { "PowerForge.ps1" }
+            });
+            AssertDifferential(type, runspace, "Get-TimeSpanSeconds", "Get_TimeSpanSeconds", new[]
+            {
+                new object[] { 0 }, new object[] { 59 }, new object[] { 90 }, new object[] { -10 }
+            });
+        }
+        finally
+        {
+            loadContext.Unload();
+        }
+    }
+
+    [Fact]
     public void TypedMethodsMatchPowerShellAcrossArithmeticLoopDivisionAndStringBranches()
     {
         const string source =

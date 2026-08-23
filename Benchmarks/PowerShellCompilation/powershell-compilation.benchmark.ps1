@@ -50,11 +50,24 @@ if (-not $executableResult.Succeeded) {
     throw "Packaged benchmark executable failed: $($executableResult.Error)`n$($executableResult.BuildOutput)"
 }
 
+$typedExecutableSpec = [PowerForge.PowerShellCompilationBuildSpec]::new(
+    $startupScriptPath,
+    $buildRoot,
+    'PowerForge.CompilationBenchmark.TypedStartup',
+    [PowerForge.PowerShellCompilationArtifactKind]::Executable,
+    [PowerForge.PowerShellCompilationMode]::Strict)
+$typedExecutableSpec.TargetFramework = $targetFramework
+$typedExecutableResult = $builder.Build($typedExecutableSpec)
+if (-not $typedExecutableResult.Succeeded) {
+    throw "Typed benchmark executable failed: $($typedExecutableResult.Error)`n$($typedExecutableResult.BuildOutput)"
+}
+
 Add-Type -Path $typedResult.ArtifactPath
-Add-Type -TypeDefinition (Get-Content -LiteralPath $harnessPath -Raw) -ReferencedAssemblies $typedResult.ArtifactPath -CompilerOptions '/optimize'
+Add-Type -TypeDefinition (Get-Content -LiteralPath $harnessPath -Raw) -ReferencedAssemblies $typedResult.ArtifactPath -CompilerOptions '/optimize' -IgnoreWarnings
 $typedHash = (Get-FileHash -LiteralPath $typedResult.ArtifactPath -Algorithm SHA256).Hash
 $moduleHash = (Get-FileHash -LiteralPath $moduleResult.ArtifactPath -Algorithm SHA256).Hash
 $executableHash = (Get-FileHash -LiteralPath $executableResult.ArtifactPath -Algorithm SHA256).Hash
+$typedExecutableHash = (Get-FileHash -LiteralPath $typedExecutableResult.ArtifactPath -Algorithm SHA256).Hash
 $currentPowerShell = (Get-Process -Id $PID).Path
 $moduleQualifier = [System.IO.Path]::GetFileNameWithoutExtension($moduleResult.ArtifactPath)
 
@@ -183,9 +196,66 @@ New-BenchmarkSuite 'powershell-compilation-synthetic-loop' -OutputRoot $outputRo
     Add-BenchmarkComparison -Dimension Engine -Baseline HandWrittenCSharp -Metric MedianMs -TieTolerance 0.05
 }
 
+New-BenchmarkSuite 'powershell-compilation-binary-dispatch-amortization' -OutputRoot $outputRoot {
+    Add-BenchmarkMetadata Workload 'Equivalent triangular-number work through fine or coarse generated commands'
+    Add-BenchmarkMetadata BinaryModuleSha256 $moduleHash
+    Set-BenchmarkPolicy -Warmup $warmup -Iterations $iterations -Order GroupedRotated -OutlierMode ExcludeMinMax
+    Add-BenchmarkCase Loop @{ Calls = $loopCalls; Count = 1000; Expected = 500500L }
+
+    Set-BenchmarkSetup {
+        param($case, $run)
+        . $workloadPath
+        Set-Item -Path Function:\global:Get-TriangularNumber -Value ${function:Get-TriangularNumber}
+        Set-Item -Path Function:\global:Get-RepeatedTriangularNumber -Value ${function:Get-RepeatedTriangularNumber}
+        Import-Module -Name $moduleResult.ArtifactPath -Global -Force -ErrorAction Stop
+    }
+
+    Add-BenchmarkEngine FineBinaryCmdlet {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            [long] $result = 0
+            for ([int] $index = 0; $index -lt $case.Calls; $index++) {
+                $result = & "$moduleQualifier\Get-TriangularNumber" $case.Count
+            }
+            $run.Result = $result
+        }
+    }
+
+    Add-BenchmarkEngine CoarseBinaryCmdlet {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = & "$moduleQualifier\Get-RepeatedTriangularNumber" $case.Calls $case.Count
+        }
+    }
+
+    Add-BenchmarkEngine TypedClr {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = [PowerForge.CompilationBenchmarks.PowerShellCompilationBenchmarkHarness]::RunTypedRepeatedLoop($case.Calls, $case.Count)
+        }
+    }
+
+    Add-BenchmarkEngine HandWrittenCSharp {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = [PowerForge.CompilationBenchmarks.PowerShellCompilationBenchmarkHarness]::RunHandWrittenRepeatedLoop($case.Calls, $case.Count)
+        }
+    }
+
+    Add-BenchmarkValidation {
+        param($case, $run)
+        Assert-BenchmarkValue -Actual ([long] $run.Result) -Expected ([long] $case.Expected)
+    }
+    Add-BenchmarkComparison -Dimension Engine -Baseline HandWrittenCSharp -Metric MedianMs -TieTolerance 0.05
+}
+
 New-BenchmarkSuite 'powershell-compilation-packaged-startup' -OutputRoot $outputRoot {
     Add-BenchmarkMetadata Workload 'Cold process startup and one script invocation'
     Add-BenchmarkMetadata PackagedExecutableSha256 $executableHash
+    Add-BenchmarkMetadata TypedExecutableSha256 $typedExecutableHash
+    Add-BenchmarkMetadata PowerShellScriptBytes (Get-Item -LiteralPath $startupScriptPath).Length
+    Add-BenchmarkMetadata PackagedExecutableBytes (Get-Item -LiteralPath $executableResult.ArtifactPath).Length
+    Add-BenchmarkMetadata TypedExecutableBytes (Get-Item -LiteralPath $typedExecutableResult.ArtifactPath).Length
     Set-BenchmarkPolicy -Warmup 2 -Iterations $(if ($quick) { 3 } else { 10 }) -Order Rotated -OutlierMode ExcludeMinMax
     Add-BenchmarkCase Startup @{ Expected = 150.0 }
 
@@ -200,6 +270,14 @@ New-BenchmarkSuite 'powershell-compilation-packaged-startup' -OutputRoot $output
         Add-BenchmarkOperation Invoke {
             param($case, $run)
             $run.Result = & $executableResult.ArtifactPath 100 0.5 30
+        }
+    }
+
+
+    Add-BenchmarkEngine TypedExecutable {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = & $typedExecutableResult.ArtifactPath 100 0.5 30
         }
     }
 

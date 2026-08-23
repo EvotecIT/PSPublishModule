@@ -4,11 +4,12 @@ This benchmark matrix separates three different claims:
 
 - a normal PowerShell function versus an importable generated binary cmdlet;
 - genuinely typed generated CLR methods versus equivalent hand-written C#;
-- a packaged single-file executable versus `pwsh -File` process startup.
+- many fine binary-cmdlet calls versus one coarse generated command doing equivalent work;
+- a typed executable and a packaged single-file executable versus `pwsh -File` process startup.
 
 The real-function workload is `Get-AllowedAverageMs`, taken from TestimoX's dashboard benchmark gate. The triangular-number loop is intentionally synthetic and exposes hot-loop behavior without command, provider, or I/O noise. Every measured lane validates its result outside the timed operation. Artifact generation, assembly loading, module import, and workload setup are also outside the timed block.
 
-The final 2026-08-23 clean-head Windows run measured the typed CLR lane 39.0-43.4x faster than the original real function and 10.3x faster on the synthetic loop. It also measured packaged startup 2.29x slower than `pwsh -File`. See [PowerShell Compilation](../../Docs/PowerForge.PowerShellCompilation.md#measured-performance) for the full table, environment, run IDs, interpretation, and eligibility limits.
+See [PowerShell Compilation](../../Docs/PowerForge.PowerShellCompilation.md#measured-performance) for the clean-candidate tables, environment, run IDs, interpretation, and eligibility limits. Quick runs are smoke evidence only and record `gitWorktreeClean: false` when the candidate is still changing.
 
 Build or import the current PSPublishModule binary, then run:
 
@@ -27,6 +28,8 @@ Invoke-BenchmarkSuite `
     -RunMode quick
 ```
 
-Artifacts are written under `Ignore\Benchmarks\PowerShellCompilation`. The metadata pins SHA-256 values for the generated typed library, binary module, and packaged executable used by the run.
+Artifacts are written under `Ignore\Benchmarks\PowerShellCompilation`. The metadata pins SHA-256 values for the generated typed library, binary module, typed executable, and packaged executable used by the run, together with executable byte sizes.
 
 Do not interpret the binary-cmdlet lane as pure arithmetic throughput: it intentionally includes PowerShell command discovery, parameter binding, pipeline, and `PSCmdlet.WriteObject` overhead. The typed-CLR and hand-written-C# lanes perform their repeated calls inside C# and are the appropriate comparison for code-generation quality.
+
+The same quick matrix can run under Linux PowerShell. A host whose PowerShell runtime sits on an intermediate .NET major may emit reference-unification warnings while loading the supported `net8.0` benchmark artifact; those warnings must be disclosed with the run rather than treated as a clean standard baseline.

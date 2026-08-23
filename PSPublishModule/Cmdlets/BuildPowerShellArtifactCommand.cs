@@ -57,6 +57,31 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     [Parameter]
     public bool SingleFile { get; set; } = true;
 
+    /// <summary>Optional trimmed or native-AOT publication for a Strict typed executable.</summary>
+    [Parameter]
+    public PowerShellCompilationExecutableOptimization Optimization { get; set; }
+
+    /// <summary>Authenticode-sign generated signable files before integrity hashes are recorded.</summary>
+    [Parameter]
+    public SwitchParameter SignArtifact { get; set; }
+
+    /// <summary>Optional code-signing certificate thumbprint.</summary>
+    [Parameter]
+    public string? CertificateThumbprint { get; set; }
+
+    /// <summary>Certificate store used for Authenticode signing.</summary>
+    [Parameter]
+    public CertificateStoreLocation CertificateStoreLocation { get; set; } = CertificateStoreLocation.CurrentUser;
+
+    /// <summary>RFC3161 timestamp service used for Authenticode signing.</summary>
+    [Parameter]
+    public string TimeStampServer { get; set; } = "http://timestamp.digicert.com";
+
+    /// <summary>Maximum time allowed for Authenticode signing.</summary>
+    [Parameter]
+    [ValidateRange(1, int.MaxValue)]
+    public int SigningTimeoutSeconds { get; set; } = 120;
+
     /// <summary>Retain the generated project workspace for inspection.</summary>
     [Parameter]
     public SwitchParameter KeepBuildWorkspace { get; set; }
@@ -93,6 +118,12 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
             RuntimeIdentifier = RuntimeIdentifier,
             SelfContained = SelfContained.IsPresent,
             SingleFile = SingleFile,
+            Optimization = Optimization,
+            SignArtifact = SignArtifact.IsPresent,
+            CertificateThumbprint = CertificateThumbprint,
+            CertificateStoreLocation = (PowerForge.CertificateStoreLocation)(int)CertificateStoreLocation,
+            TimeStampServer = TimeStampServer,
+            SigningTimeoutSeconds = SigningTimeoutSeconds,
             KeepBuildWorkspace = KeepBuildWorkspace.IsPresent,
             TimeoutSeconds = TimeoutSeconds
         };

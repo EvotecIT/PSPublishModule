@@ -90,23 +90,35 @@ public sealed class PowerShellCompilationAnalyzer
         }
 
         var units = new List<PowerShellCompilationUnitPlan>();
-        var topLevelStatements = GetEndStatements(ast, excludeFunctionDefinitions: true);
+        var topLevelStatements = GetEndStatements(
+            ast,
+            excludeFunctionDefinitions: true,
+            excludeModuleExports: Path.GetExtension(file).Equals(".psm1", StringComparison.OrdinalIgnoreCase));
         if (topLevelStatements.Length > 0 || ast.ParamBlock is not null || HasUnsupportedNamedBlocks(ast))
         {
             var scriptUnit = AnalyzeUnit("<script>", PowerShellCompilationUnitKind.Script, ast, file, topLevelStatements);
             if (scriptUnit.IsCompilable)
             {
-                scriptUnit = ReplaceUnit(
-                    scriptUnit,
-                    typeof(object),
-                    new[]
-                    {
-                        CreateDiagnostic(
-                            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                            "Typed top-level script code generation is not implemented; use Package mode for an executable or place typed logic in functions.",
-                            file,
-                            ast.Extent)
-                    });
+                try
+                {
+                    var emitted = new PowerShellCSharpMethodEmitter(file, ast, "<script>", "Invoke", topLevelStatements).Emit();
+                    scriptUnit = ReplaceUnit(scriptUnit, emitted.ReturnType, Array.Empty<PowerShellCompilationDiagnostic>());
+                }
+                catch (PowerShellCSharpEmissionException ex)
+                {
+                    scriptUnit = ReplaceUnit(
+                        scriptUnit,
+                        typeof(object),
+                        new[]
+                        {
+                            new PowerShellCompilationDiagnostic(
+                                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                                ex.Message,
+                                file,
+                                ex.Node.Extent.StartLineNumber,
+                                ex.Node.Extent.StartColumnNumber)
+                        });
+                }
             }
             units.Add(scriptUnit);
         }
@@ -122,7 +134,7 @@ public sealed class PowerShellCompilationAnalyzer
                 PowerShellCompilationUnitKind.Function,
                 function.Body,
                 file,
-                GetEndStatements(function.Body, excludeFunctionDefinitions: false));
+                GetEndStatements(function.Body, excludeFunctionDefinitions: false, excludeModuleExports: false));
             if (functionUnit.IsCompilable)
             {
                 try
@@ -399,12 +411,21 @@ public sealed class PowerShellCompilationAnalyzer
             ForStatementAst or WhileStatementAst or ForEachStatementAst or ReturnStatementAst or
             BreakStatementAst or ContinueStatementAst or BinaryExpressionAst or UnaryExpressionAst or
             ParenExpressionAst or ConvertExpressionAst or ConstantExpressionAst or StringConstantExpressionAst or
-            VariableExpressionAst or ArrayLiteralAst;
+            VariableExpressionAst or ArrayLiteralAst or TypeExpressionAst or MemberExpressionAst or
+            InvokeMemberExpressionAst;
 
-    private static StatementAst[] GetEndStatements(ScriptBlockAst scriptBlock, bool excludeFunctionDefinitions)
+    private static StatementAst[] GetEndStatements(ScriptBlockAst scriptBlock, bool excludeFunctionDefinitions, bool excludeModuleExports)
         => scriptBlock.EndBlock?.Statements
             .Where(statement => !excludeFunctionDefinitions || statement is not FunctionDefinitionAst)
+            .Where(statement => !excludeModuleExports || !IsExportModuleMemberStatement(statement))
             .ToArray() ?? Array.Empty<StatementAst>();
+
+    private static bool IsExportModuleMemberStatement(StatementAst statement)
+        => statement.FindAll(
+                static node => node is CommandAst command &&
+                               command.GetCommandName()?.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) == true,
+                searchNestedScriptBlocks: false)
+            .Any();
 
     private static bool HasUnsupportedNamedBlocks(ScriptBlockAst scriptBlock)
         => scriptBlock.DynamicParamBlock is not null || scriptBlock.BeginBlock is not null || scriptBlock.ProcessBlock is not null || GetNamedBlock(scriptBlock, "CleanBlock") is not null;

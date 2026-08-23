@@ -7,7 +7,7 @@ internal static partial class Program
     private const string PowerShellAnalyzeUsage =
         "Usage: powerforge powershell analyze <path> [--mode <Analyze|Package|Hybrid|Strict>] [--no-recurse] [--output json]";
     private const string PowerShellBuildUsage =
-        "Usage: powerforge powershell build <path> --kind <exe|dll|library> [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--no-single-file] [--output json]";
+        "Usage: powerforge powershell build <path> --kind <exe|dll|library> [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--output json]";
 
     private static int CommandPowerShell(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -61,14 +61,32 @@ internal static partial class Program
             var fullPath = Path.GetFullPath(path.Trim().Trim('"'));
             var outputDirectory = TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? Path.Combine(Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory(), "artifacts");
             var artifactName = TryGetOptionValue(args, "--name") ?? Path.GetFileNameWithoutExtension(fullPath);
+            var optimizationValue = TryGetOptionValue(args, "--optimization") ?? nameof(PowerShellCompilationExecutableOptimization.None);
+            if (!Enum.TryParse<PowerShellCompilationExecutableOptimization>(optimizationValue, ignoreCase: true, out var optimization))
+                return WritePowerShellError(outputJson, 2, $"Unknown executable optimization '{optimizationValue}'. Use None, Trimmed, or NativeAot.", logger, "powershell.build");
+            var certificateStoreValue = TryGetOptionValue(args, "--certificate-store") ?? nameof(CertificateStoreLocation.CurrentUser);
+            if (!Enum.TryParse<CertificateStoreLocation>(certificateStoreValue, ignoreCase: true, out var certificateStore))
+                return WritePowerShellError(outputJson, 2, $"Unknown certificate store '{certificateStoreValue}'. Use CurrentUser or LocalMachine.", logger, "powershell.build");
             var spec = new PowerShellCompilationBuildSpec(fullPath, outputDirectory, artifactName, kind, mode)
             {
                 TargetFramework = TryGetOptionValue(args, "--framework") ?? "net8.0",
                 RuntimeIdentifier = TryGetOptionValue(args, "--rid"),
                 SelfContained = args.Any(static argument => argument.Equals("--self-contained", StringComparison.OrdinalIgnoreCase)),
                 SingleFile = !args.Any(static argument => argument.Equals("--no-single-file", StringComparison.OrdinalIgnoreCase)),
+                Optimization = optimization,
+                SignArtifact = args.Any(static argument => argument.Equals("--sign", StringComparison.OrdinalIgnoreCase)),
+                CertificateThumbprint = TryGetOptionValue(args, "--certificate-thumbprint"),
+                CertificateStoreLocation = certificateStore,
+                TimeStampServer = TryGetOptionValue(args, "--timestamp-server") ?? "http://timestamp.digicert.com",
                 KeepBuildWorkspace = args.Any(static argument => argument.Equals("--keep-workspace", StringComparison.OrdinalIgnoreCase))
             };
+            var signingTimeoutValue = TryGetOptionValue(args, "--signing-timeout");
+            if (!string.IsNullOrWhiteSpace(signingTimeoutValue))
+            {
+                if (!int.TryParse(signingTimeoutValue, out var signingTimeoutSeconds) || signingTimeoutSeconds < 1)
+                    return WritePowerShellError(outputJson, 2, "--signing-timeout must be a positive number of seconds.", logger, "powershell.build");
+                spec.SigningTimeoutSeconds = signingTimeoutSeconds;
+            }
             var timeoutValue = TryGetOptionValue(args, "--timeout");
             if (!string.IsNullOrWhiteSpace(timeoutValue))
             {

@@ -17,6 +17,19 @@ public enum PowerShellCompilationArtifactKind
     BinaryModule
 }
 
+/// <summary>Optional size and native-publication mode for a genuinely typed executable.</summary>
+public enum PowerShellCompilationExecutableOptimization
+{
+    /// <summary>Normal managed .NET publication.</summary>
+    None,
+
+    /// <summary>Self-contained single-file publication with unused managed code trimmed.</summary>
+    Trimmed,
+
+    /// <summary>Self-contained native AOT publication.</summary>
+    NativeAot
+}
+
 /// <summary>
 /// Configuration for building a PowerShell compilation artifact.
 /// </summary>
@@ -67,6 +80,24 @@ public sealed class PowerShellCompilationBuildSpec
     /// <summary>Whether executable publication requests a single-file bundle.</summary>
     public bool SingleFile { get; set; } = true;
 
+    /// <summary>Optional optimization for a genuinely typed executable.</summary>
+    public PowerShellCompilationExecutableOptimization Optimization { get; set; }
+
+    /// <summary>Whether generated signable files should receive Authenticode signatures before hashes are recorded.</summary>
+    public bool SignArtifact { get; set; }
+
+    /// <summary>Optional code-signing certificate thumbprint. A unique code-signing certificate may be selected when omitted.</summary>
+    public string? CertificateThumbprint { get; set; }
+
+    /// <summary>Certificate store used for Authenticode signing.</summary>
+    public CertificateStoreLocation CertificateStoreLocation { get; set; } = CertificateStoreLocation.CurrentUser;
+
+    /// <summary>RFC3161 timestamp service used for Authenticode signing.</summary>
+    public string TimeStampServer { get; set; } = "http://timestamp.digicert.com";
+
+    /// <summary>Maximum time allowed for the Authenticode signing command.</summary>
+    public int SigningTimeoutSeconds { get; set; } = 120;
+
     /// <summary>Whether the generated build workspace should be retained for inspection.</summary>
     public bool KeepBuildWorkspace { get; set; }
 
@@ -112,6 +143,21 @@ public sealed class PowerShellCompilationArtifactManifest
     /// <summary>Whether single-file publication was requested.</summary>
     public bool SingleFile { get; set; }
 
+    /// <summary>Executable size/native-publication mode.</summary>
+    public PowerShellCompilationExecutableOptimization Optimization { get; set; }
+
+    /// <summary>Size of the primary artifact in bytes.</summary>
+    public long ArtifactSizeBytes { get; set; }
+
+    /// <summary>Whether signable artifact files were Authenticode-signed before hashing.</summary>
+    public bool AuthenticodeSigned { get; set; }
+
+    /// <summary>Thumbprint of the certificate used to sign generated files.</summary>
+    public string? SigningCertificateThumbprint { get; set; }
+
+    /// <summary>Number of generated files signed before publication.</summary>
+    public int AuthenticodeSignedFiles { get; set; }
+
     /// <summary>Number of genuinely typed methods in the artifact.</summary>
     public int CompiledMethods { get; set; }
 
@@ -150,6 +196,9 @@ public sealed class PowerShellCompilationArtifactFile
 
     /// <summary>SHA-256 of the file content.</summary>
     public string Sha256 { get; set; } = string.Empty;
+
+    /// <summary>File size in bytes.</summary>
+    public long SizeBytes { get; set; }
 }
 
 /// <summary>

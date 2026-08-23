@@ -35,7 +35,8 @@ internal static class PowerShellArtifactSetPublisher
         {
             Path = RebasePath(file.Path, stagingDirectory, outputDirectory),
             Role = file.Role,
-            Sha256 = file.Sha256
+            Sha256 = file.Sha256,
+            SizeBytes = file.SizeBytes
         }).ToArray();
 
     internal static void Commit(string stagingDirectory, string outputDirectory, string artifactName)

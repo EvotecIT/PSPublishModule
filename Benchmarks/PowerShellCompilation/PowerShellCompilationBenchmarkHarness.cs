@@ -44,4 +44,20 @@ public static class PowerShellCompilationBenchmarkHarness
         }
         return result;
     }
+
+    public static long RunTypedRepeatedLoop(int calls, int count)
+        => PowerForge_CompilationBenchmarkMethods.Get_RepeatedTriangularNumber(calls, count);
+
+    public static long RunHandWrittenRepeatedLoop(int calls, int count)
+    {
+        var result = 0L;
+        for (var call = 0; call < calls; call++)
+        {
+            var total = 0L;
+            for (var value = 1; value <= count; value++)
+                total += value;
+            result = total;
+        }
+        return result;
+    }
 }

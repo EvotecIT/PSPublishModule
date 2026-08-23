@@ -6,6 +6,66 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeCliPowerShellCompilationTests
 {
     [Fact]
+    public async Task BuildStrictTypedExecutable_ExposesRuntimeIndependentCliContract()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Typed Executable Tests", Guid.NewGuid().ToString("N"));
+        var output = Path.Combine(root, "compiled output");
+        Directory.CreateDirectory(output);
+        var source = Path.Combine(root, "Typed Script.ps1");
+        File.WriteAllText(
+            source,
+            """
+            param([int] $Count)
+            [long] $total = 0
+            for ([int] $value = 1; $value -le $Count; $value++) { $total += $value }
+            return $total
+            """);
+
+        try
+        {
+            var build = await RunCliAsync(
+                repositoryRoot,
+                $"powershell build \"{source}\" --kind exe --mode Strict --framework net10.0 --out \"{output}\" --name TypedCliProof --output json");
+            Assert.True(build.ExitCode == 0, FormatFailure("typed executable build", build));
+            string artifactPath;
+            using (var document = JsonDocument.Parse(build.StdOut))
+            {
+                Assert.True(document.RootElement.GetProperty("success").GetBoolean());
+                var manifest = document.RootElement.GetProperty("result").GetProperty("manifest");
+                Assert.Equal(1, manifest.GetProperty("compiledMethods").GetInt32());
+                Assert.False(manifest.GetProperty("requiresPowerShellRuntime").GetBoolean());
+                Assert.False(manifest.GetProperty("usesPowerShellRuntimeFallback").GetBoolean());
+                artifactPath = manifest.GetProperty("artifactPath").GetString()!;
+            }
+
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = artifactPath,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            process.StartInfo.ArgumentList.Add("--Count=100");
+            process.Start();
+            var standardOutput = await process.StandardOutput.ReadToEndAsync();
+            var standardError = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            Assert.True(process.ExitCode == 0, standardError);
+            Assert.Equal("5050", standardOutput.Trim());
+            Assert.True(string.IsNullOrWhiteSpace(standardError), standardError);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task AnalyzeAndBuildTypedLibrary_ExposeStableJsonCliContract()
     {
         var repositoryRoot = FindRepositoryRoot();
