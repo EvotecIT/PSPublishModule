@@ -1,4 +1,4 @@
-﻿---
+---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
@@ -66,7 +66,7 @@ Accept wildcard characters: False
 ```
 
 ### -Mode
-Fallback policy. Defaults to Package for EXE, Strict for binary modules, and Hybrid for CLR libraries.
+Fallback policy. Defaults to Package for EXE, Strict for binary modules, and Hybrid for CLR libraries. Analyze is not a build mode.
 
 ```yaml
 Type: PowerShellCompilationMode

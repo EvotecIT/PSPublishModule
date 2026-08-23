@@ -152,11 +152,37 @@ public sealed class PowerShellCompilationAnalyzerTests
                 [ulong] $result = $Value
                 return $result
             }
+            function Convert-TextValue {
+                param([string] $Value)
+                return [int] $Value
+            }
+            function Convert-RoundingValue {
+                param([double] $Value)
+                return [int] $Value
+            }
+            function Get-HeterogeneousValue {
+                param([bool] $UseWide, [long] $Wide)
+                if ($UseWide) { return $Wide }
+                return 1
+            }
+            function Stop-LabeledLoop {
+                param([bool] $KeepGoing)
+                :outer while ($KeepGoing) { break outer }
+                return 1
+            }
+            function Stop-OutsideLoop {
+                break
+                return 1
+            }
+            function Get-DynamicDivision {
+                param([int] $Left, [int] $Right)
+                return $Left / $Right
+            }
             """);
 
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
 
-        Assert.Equal(8, plan.RuntimeFallbackUnits);
+        Assert.Equal(14, plan.RuntimeFallbackUnits);
         Assert.All(Assert.Single(plan.Files).Units, static unit => Assert.False(unit.IsCompilable));
         var messages = string.Join(Environment.NewLine, plan.Files.SelectMany(static file => file.Units).SelectMany(static unit => unit.Diagnostics).Select(static diagnostic => diagnostic.Message));
         Assert.Contains("truthiness", messages, StringComparison.OrdinalIgnoreCase);
@@ -166,6 +192,11 @@ public sealed class PowerShellCompilationAnalyzerTests
         Assert.Contains("collides with another function", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("outside the loop scope", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("not an implicit CLR conversion", messages, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("runtime conversion semantics", messages, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("branch-specific runtime types", messages, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Labeled break", messages, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("break must be inside", messages, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("integral division changes runtime result type", messages, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class CompilationFixture : IDisposable

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Management.Automation.Language;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -51,6 +50,10 @@ public sealed class PowerShellCompilationArtifactBuilder
             {
                 if (spec.Mode == PowerShellCompilationMode.Package)
                     throw new InvalidOperationException("DLL artifacts require Hybrid or Strict mode because they contain genuinely typed methods.");
+                if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
+                    spec.Mode == PowerShellCompilationMode.Hybrid &&
+                    (ContainsExplicitExportModuleMember(spec.SourcePath) || HasSiblingModuleManifest(spec.SourcePath)))
+                    throw new InvalidOperationException("Hybrid binary modules with explicit Export-ModuleMember declarations or a sibling module manifest are not supported yet because compilation must not broaden or change the module's public surface.");
 
                 typed = new PowerShellTypedCompilationTranspiler().Transpile(
                     spec.SourcePath,
@@ -85,7 +88,11 @@ public sealed class PowerShellCompilationArtifactBuilder
                     Path.Combine(workspace, "Source.ps1"),
                     GeneratePackagedScript(spec.SourcePath),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                File.WriteAllText(Path.Combine(workspace, "Program.cs"), ReadTemplate(PackagedProgramTemplate), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                File.WriteAllText(
+                    Path.Combine(workspace, "Program.cs"),
+                    ReadTemplate(PackagedProgramTemplate)
+                        .Replace("{{SWITCH_PARAMETERS}}", GenerateSwitchParameterInitializer(spec.SourcePath)),
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 projectPath = Path.Combine(workspace, artifactName + ".csproj");
                 File.WriteAllText(
                     projectPath,
@@ -164,6 +171,8 @@ public sealed class PowerShellCompilationArtifactBuilder
 
     private static void ValidateSpec(PowerShellCompilationBuildSpec spec)
     {
+        if (spec.Mode == PowerShellCompilationMode.Analyze)
+            throw new ArgumentException("Analyze mode reports eligibility and does not produce artifacts. Use the analyzer API or CLI analyze command.", nameof(spec));
         if (!File.Exists(spec.SourcePath))
             throw new FileNotFoundException("PowerShell source file was not found.", spec.SourcePath);
         var extension = Path.GetExtension(spec.SourcePath);
@@ -201,33 +210,17 @@ public sealed class PowerShellCompilationArtifactBuilder
             arguments.Add(runtimeIdentifier!);
         }
 
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            WorkingDirectory = Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        WindowsProcessArguments.Add(startInfo, arguments.ToArray());
-        ProcessStartInfoEncoding.TryApplyUtf8(startInfo);
-        using var process = new Process { StartInfo = startInfo };
-        var output = new StringBuilder();
-        process.OutputDataReceived += (_, eventArgs) => { if (eventArgs.Data is not null) output.AppendLine(eventArgs.Data); };
-        process.ErrorDataReceived += (_, eventArgs) => { if (eventArgs.Data is not null) output.AppendLine(eventArgs.Data); };
-        if (!process.Start())
-            throw new InvalidOperationException("Failed to start dotnet artifact build.");
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-        var exited = process.WaitForExit(checked(spec.TimeoutSeconds * 1000));
-        if (!exited)
-        {
-            try { process.Kill(); } catch { }
-            return new GeneratedBuildProcessResult(-1, output.ToString(), timedOut: true);
-        }
-        process.WaitForExit();
-        return new GeneratedBuildProcessResult(process.ExitCode, output.ToString(), timedOut: false);
+        var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
+                "dotnet",
+                Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
+                arguments,
+                TimeSpan.FromSeconds(spec.TimeoutSeconds)))
+            .GetAwaiter()
+            .GetResult();
+        var output = string.IsNullOrWhiteSpace(run.StdErr)
+            ? run.StdOut
+            : run.StdOut + Environment.NewLine + run.StdErr;
+        return new GeneratedBuildProcessResult(run.ExitCode, output, run.TimedOut);
     }
 
     private static CopiedArtifact CopyArtifact(
@@ -247,24 +240,46 @@ public sealed class PowerShellCompilationArtifactBuilder
 
             var target = Path.Combine(spec.OutputDirectory, artifactName + ".dll");
             File.Copy(source, target, overwrite: true);
-            return CreateCopiedArtifact(target, "Primary");
+            return CreateCopiedArtifactWithSymbols(source, target, "Primary");
         }
 
-        var executableFileName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? artifactName + ".exe" : artifactName;
+        var executableFileName = GetExecutableFileName(artifactName, spec.RuntimeIdentifier);
         var executable = Path.Combine(publishDirectory, executableFileName);
         if (!File.Exists(executable)) throw new FileNotFoundException("Generated executable was not found.", executable);
         if (spec.SingleFile)
         {
             var target = Path.Combine(spec.OutputDirectory, executableFileName);
             File.Copy(executable, target, overwrite: true);
-            return CreateCopiedArtifact(target, "Primary");
+            return CreateCopiedArtifactWithSymbols(executable, target, "Primary");
         }
 
         var targetDirectory = Path.Combine(spec.OutputDirectory, artifactName);
         Directory.CreateDirectory(targetDirectory);
-        foreach (var file in Directory.EnumerateFiles(publishDirectory))
-            File.Copy(file, Path.Combine(targetDirectory, Path.GetFileName(file)), overwrite: true);
-        return CreateCopiedArtifact(Path.Combine(targetDirectory, executableFileName), "Primary");
+        foreach (var directory in Directory.EnumerateDirectories(publishDirectory, "*", SearchOption.AllDirectories))
+            Directory.CreateDirectory(Path.Combine(targetDirectory, FrameworkCompatibility.GetRelativePath(publishDirectory, directory)));
+        foreach (var file in Directory.EnumerateFiles(publishDirectory, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = FrameworkCompatibility.GetRelativePath(publishDirectory, file);
+            var target = Path.Combine(targetDirectory, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(target) ?? targetDirectory);
+            File.Copy(file, target, overwrite: true);
+        }
+        var primaryPath = Path.Combine(targetDirectory, executableFileName);
+        var files = Directory.EnumerateFiles(targetDirectory, "*", SearchOption.AllDirectories)
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .Select(path => CreateArtifactFile(
+                path,
+                path.Equals(primaryPath, StringComparison.OrdinalIgnoreCase) ? "Primary" : "RuntimeDependency"))
+            .ToArray();
+        return new CopiedArtifact(primaryPath, files);
+    }
+
+    internal static string GetExecutableFileName(string artifactName, string? runtimeIdentifier)
+    {
+        var targetsWindows = string.IsNullOrWhiteSpace(runtimeIdentifier)
+            ? RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            : runtimeIdentifier!.StartsWith("win", StringComparison.OrdinalIgnoreCase);
+        return targetsWindows ? artifactName + ".exe" : artifactName;
     }
 
     private static CopiedArtifact CopyHybridModule(
@@ -278,17 +293,15 @@ public sealed class PowerShellCompilationArtifactBuilder
         var assemblyPath = Path.Combine(moduleDirectory, artifactName + ".dll");
         var modulePath = Path.Combine(moduleDirectory, artifactName + ".psm1");
         File.Copy(compiledAssembly, assemblyPath, overwrite: true);
+        var files = new List<PowerShellCompilationArtifactFile>();
         File.WriteAllText(
             modulePath,
             GenerateHybridModuleScript(spec.SourcePath, Path.GetFileName(assemblyPath), typed),
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-        return new CopiedArtifact(
-            modulePath,
-            new[]
-            {
-                CreateArtifactFile(modulePath, "PrimaryModule"),
-                CreateArtifactFile(assemblyPath, "TypedAssembly")
-            });
+        files.Add(CreateArtifactFile(modulePath, "PrimaryModule"));
+        files.Add(CreateArtifactFile(assemblyPath, "TypedAssembly"));
+        CopyDebugSymbolsIfPresent(compiledAssembly, assemblyPath, files);
+        return new CopiedArtifact(modulePath, files.ToArray());
     }
 
     private static string GeneratePackagedScript(string sourcePath)
@@ -302,8 +315,21 @@ public sealed class PowerShellCompilationArtifactBuilder
         var source = new StringBuilder(File.ReadAllText(sourcePath));
         var exits = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
             .Cast<ExitStatementAst>()
-            .OrderByDescending(static exit => exit.Extent.StartOffset);
+            .ToArray();
+        if (exits.Length > 0 && ast.FindAll(static node => node is TrapStatementAst, searchNestedScriptBlocks: true).Any())
+            throw new InvalidOperationException("Packaged scripts that combine exit with trap are not supported because exception instrumentation would change trap semantics.");
         foreach (var exit in exits)
+        {
+            for (var parent = exit.Parent; parent is not null && !ReferenceEquals(parent, ast); parent = parent.Parent)
+            {
+                if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst ||
+                    parent is ScriptBlockAst scriptBlock && !ReferenceEquals(scriptBlock, ast) ||
+                    parent is TryStatementAst tryStatement && tryStatement.CatchClauses.Count > 0)
+                    throw new InvalidOperationException($"exit at line {exit.Extent.StartLineNumber} cannot be packaged safely because exception instrumentation would change nested or catch behavior.");
+            }
+        }
+
+        foreach (var exit in exits.OrderByDescending(static exit => exit.Extent.StartOffset))
         {
             var expression = exit.Pipeline?.Extent.Text;
             var exitCode = string.IsNullOrWhiteSpace(expression) ? "0" : "[int](" + expression + ")";
@@ -312,6 +338,23 @@ public sealed class PowerShellCompilationArtifactBuilder
             source.Insert(exit.Extent.StartOffset, replacement);
         }
         return source.ToString();
+    }
+
+    private static string GenerateSwitchParameterInitializer(string sourcePath)
+    {
+        Token[] tokens;
+        ParseError[] errors;
+        var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
+        if (errors.Length > 0)
+            throw new InvalidOperationException("Packaged script parameters could not be parsed for native argument binding.");
+        var switchParameters = ast.ParamBlock?.Parameters
+            .Where(static parameter => parameter.StaticType == typeof(System.Management.Automation.SwitchParameter))
+            .Select(static parameter => parameter.Name.VariablePath.UserPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .Select(name => "\"" + EscapeCSharpString(name) + "\"")
+            .ToArray() ?? Array.Empty<string>();
+        return string.Join(", ", switchParameters);
     }
 
     private static string GenerateHybridModuleScript(
@@ -328,6 +371,9 @@ public sealed class PowerShellCompilationArtifactBuilder
         var compiled = new HashSet<string>(
             typed.Methods.Select(static method => method.SourceName + "\0" + method.SourceLine),
             StringComparer.OrdinalIgnoreCase);
+        var prologueEndOffset = ast.ParamBlock?.Extent.EndOffset ?? 0;
+        foreach (var usingStatement in ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false).Cast<UsingStatementAst>())
+            prologueEndOffset = Math.Max(prologueEndOffset, usingStatement.Extent.EndOffset);
         var functions = ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
             .Cast<FunctionDefinitionAst>()
             .OrderByDescending(static function => function.Extent.StartOffset)
@@ -337,6 +383,8 @@ public sealed class PowerShellCompilationArtifactBuilder
         {
             if (!compiled.Contains(function.Name + "\0" + function.Extent.StartLineNumber))
                 continue;
+            if (function.Extent.StartOffset < prologueEndOffset)
+                throw new InvalidOperationException($"Compiled function '{function.Name}' overlaps the module prologue and cannot be composed safely.");
             source.Remove(function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset);
         }
 
@@ -350,16 +398,33 @@ public sealed class PowerShellCompilationArtifactBuilder
             .Select(static method => method.SourceName)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var builder = new StringBuilder();
-        builder.AppendLine("# Generated by PowerForge hybrid PowerShell compilation.");
-        builder.AppendLine("Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath '" + EscapePowerShellSingleQuotedString(assemblyFileName) + "') -Force -ErrorAction Stop");
-        builder.AppendLine();
-        builder.Append(source);
+        var import = new StringBuilder();
+        if (prologueEndOffset > 0 && source[prologueEndOffset - 1] is not '\r' and not '\n') import.AppendLine();
+        import.AppendLine("# Generated by PowerForge hybrid PowerShell compilation.");
+        import.AppendLine("Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath '" + EscapePowerShellSingleQuotedString(assemblyFileName) + "') -Force -ErrorAction Stop");
+        import.AppendLine();
+        source.Insert(prologueEndOffset, import.ToString());
+        var builder = new StringBuilder(source.ToString());
         if (source.Length > 0 && source[source.Length - 1] != '\n') builder.AppendLine();
         builder.AppendLine();
-        builder.AppendLine("Export-ModuleMember -Function @(" + JoinPowerShellNames(fallbackFunctions) + ") -Cmdlet @(" + JoinPowerShellNames(compiledCmdlets) + ")");
+        builder.AppendLine("Export-ModuleMember -Function @(" + JoinPowerShellNames(fallbackFunctions) + ") -Cmdlet @(" + JoinPowerShellNames(compiledCmdlets) + ") -Alias *");
         return builder.ToString();
     }
+
+    private static bool ContainsExplicitExportModuleMember(string sourcePath)
+    {
+        Token[] tokens;
+        ParseError[] errors;
+        var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
+        return errors.Length == 0 && ast.FindAll(
+                static node => node is CommandAst command && command.GetCommandName()?.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) == true,
+                searchNestedScriptBlocks: true)
+            .Any();
+    }
+
+    private static bool HasSiblingModuleManifest(string sourcePath)
+        => Path.GetExtension(sourcePath).Equals(".psm1", StringComparison.OrdinalIgnoreCase) &&
+           File.Exists(Path.ChangeExtension(sourcePath, ".psd1"));
 
     private static string JoinPowerShellNames(IEnumerable<string> names)
         => string.Join(", ", names.Select(name => "'" + EscapePowerShellSingleQuotedString(name) + "'"));
@@ -367,8 +432,24 @@ public sealed class PowerShellCompilationArtifactBuilder
     private static string EscapePowerShellSingleQuotedString(string value)
         => value.Replace("'", "''");
 
-    private static CopiedArtifact CreateCopiedArtifact(string primaryPath, string role)
-        => new(primaryPath, new[] { CreateArtifactFile(primaryPath, role) });
+    private static CopiedArtifact CreateCopiedArtifactWithSymbols(string sourcePath, string targetPath, string role)
+    {
+        var files = new List<PowerShellCompilationArtifactFile> { CreateArtifactFile(targetPath, role) };
+        CopyDebugSymbolsIfPresent(sourcePath, targetPath, files);
+        return new CopiedArtifact(targetPath, files.ToArray());
+    }
+
+    private static void CopyDebugSymbolsIfPresent(
+        string sourceArtifact,
+        string targetArtifact,
+        ICollection<PowerShellCompilationArtifactFile> files)
+    {
+        var sourcePdb = Path.ChangeExtension(sourceArtifact, ".pdb");
+        if (!File.Exists(sourcePdb)) return;
+        var targetPdb = Path.ChangeExtension(targetArtifact, ".pdb");
+        File.Copy(sourcePdb, targetPdb, overwrite: true);
+        files.Add(CreateArtifactFile(targetPdb, "DebugSymbols"));
+    }
 
     private static PowerShellCompilationArtifactFile CreateArtifactFile(string path, string role)
         => new() { Path = path, Role = role, Sha256 = ComputeSha256(path) };

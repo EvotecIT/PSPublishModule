@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace PowerForge;
@@ -512,7 +513,26 @@ public sealed class ProcessRunner : IProcessRunner
             if (!process.HasExited)
             {
 #if NET472
-                process.Kill();
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    try
+                    {
+                        using var treeKill = Process.Start(new ProcessStartInfo
+                        {
+                            FileName = "taskkill.exe",
+                            Arguments = $"/PID {process.Id} /T /F",
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        });
+                        treeKill?.WaitForExit(5000);
+                    }
+                    catch
+                    {
+                        // Fall through to the direct-process kill below.
+                    }
+                }
+                if (!process.HasExited)
+                    process.Kill();
 #else
                 process.Kill(entireProcessTree: true);
 #endif

@@ -307,10 +307,19 @@ public sealed class PowerShellCompilationAnalyzer
                         file,
                         candidate.Extent));
                     break;
-                case ConvertExpressionAst conversion when !IsSupportedParameterType(conversion.StaticType):
+                case ConvertExpressionAst conversion when conversion.Parent is AssignmentStatementAst assignment && ReferenceEquals(assignment.Left, conversion) && !IsSupportedParameterType(conversion.StaticType):
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                        $"Conversion to '{conversion.StaticType.FullName}' is not supported by the typed compiler.",
+                        $"Typed local declaration '{conversion.StaticType.FullName}' is not supported by the typed compiler.",
+                        file,
+                        conversion.Extent));
+                    break;
+                case ConvertExpressionAst conversion when conversion.Parent is AssignmentStatementAst assignment && ReferenceEquals(assignment.Left, conversion):
+                    break;
+                case ConvertExpressionAst conversion:
+                    diagnostics.Add(CreateDiagnostic(
+                        PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                        $"Explicit conversion to '{conversion.StaticType.FullName}' requires PowerShell runtime conversion semantics.",
                         file,
                         conversion.Extent));
                     break;

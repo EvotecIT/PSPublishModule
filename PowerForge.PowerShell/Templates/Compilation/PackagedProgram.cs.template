@@ -7,6 +7,7 @@ namespace PowerForge.Compiled;
 internal static class Program
 {
     private const string ScriptResourceName = "PowerForge.Compiled.Source.ps1";
+    private static readonly HashSet<string> SwitchParameters = new(StringComparer.OrdinalIgnoreCase) { {{SWITCH_PARAMETERS}} };
 
     private static int Main(string[] args)
     {
@@ -89,7 +90,7 @@ internal static class Program
 
             if (!positionalOnly && TryParseParameter(value, out var name, out var inlineValue))
             {
-                if (inlineValue is null && index + 1 < arguments.Count && !LooksLikeParameter(arguments[index + 1]))
+                if (inlineValue is null && !SwitchParameters.Contains(name) && index + 1 < arguments.Count && !LooksLikeParameter(arguments[index + 1]))
                     inlineValue = arguments[++index];
                 yield return new ScriptArgument(name, inlineValue);
                 continue;

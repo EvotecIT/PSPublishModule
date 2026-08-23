@@ -34,11 +34,6 @@ public sealed class PowerShellTypedCompilationDifferentialTests
                 return $total
             }
 
-            function Get-Half {
-                param([int] $Value)
-                return $Value / 2
-            }
-
             function Test-Label {
                 param([string] $Left, [string] $Right)
                 if ($Left -eq $Right) { return $true }
@@ -133,10 +128,6 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             {
                 new object[] { -5 }, new object[] { 0 }, new object[] { 1 }, new object[] { 10 }, new object[] { 10_000 }
             });
-            AssertDifferential(type, runspace, "Get-Half", "Get_Half", new[]
-            {
-                new object[] { -5 }, new object[] { 0 }, new object[] { 5 }, new object[] { int.MaxValue }
-            });
             AssertDifferential(type, runspace, "Test-Label", "Test_Label", new[]
             {
                 new object[] { "PowerForge", "powerforge" },
@@ -153,7 +144,7 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             });
             AssertDifferential(type, runspace, "Get-ArrayTotal", "Get_ArrayTotal", new[]
             {
-                new object[] { Array.Empty<int>() }, new object[] { new[] { 1 } }, new object[] { new[] { -2, 3, 10 } }
+                new object[] { null! }, new object[] { Array.Empty<int>() }, new object[] { new[] { 1 } }, new object[] { new[] { -2, 3, 10 } }
             });
             AssertDifferential(type, runspace, "Get-BoundedTotal", "Get_BoundedTotal", new[]
             {
@@ -211,6 +202,9 @@ public sealed class PowerShellTypedCompilationDifferentialTests
 
     private static void AssertEquivalent(object? expected, object? actual, string caseName)
     {
+        Assert.True(
+            expected?.GetType() == actual?.GetType(),
+            $"{caseName}: PowerShell returned type '{expected?.GetType().FullName ?? "<null>"}', compiled CLR returned '{actual?.GetType().FullName ?? "<null>"}'.");
         if (expected is double || actual is double)
         {
             Assert.Equal(

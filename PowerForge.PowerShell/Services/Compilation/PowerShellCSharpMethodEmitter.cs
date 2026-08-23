@@ -144,6 +144,18 @@ internal sealed class PowerShellCSharpMethodEmitter
         return false;
     }
 
+    private static bool HasLoopAncestor(Ast node)
+    {
+        for (var parent = node.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is ForStatementAst or WhileStatementAst or ForEachStatementAst)
+                return true;
+            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst)
+                return false;
+        }
+        return false;
+    }
+
     private void ValidateVariableReferences(IEnumerable<StatementAst> statements)
     {
         foreach (var variable in statements
@@ -198,7 +210,9 @@ internal sealed class PowerShellCSharpMethodEmitter
         foreach (var statement in returns)
         {
             var current = statement.Pipeline is null ? typeof(void) : InferExpressionType(statement.Pipeline);
-            result = result is null ? current : UnifyTypes(result, current, statement);
+            if (result is not null && result != current)
+                throw Error(statement, $"Return type '{current.FullName}' differs from earlier return type '{result.FullName}'; preserving PowerShell's branch-specific runtime types requires fallback.");
+            result ??= current;
         }
 
         return result ?? typeof(void);
@@ -229,9 +243,17 @@ internal sealed class PowerShellCSharpMethodEmitter
             case ForEachStatementAst forEachStatement:
                 EmitForEach(forEachStatement, returnType);
                 return;
+            case BreakStatementAst breakStatement when breakStatement.Label is not null:
+                throw Error(breakStatement, "Labeled break is not supported by the typed compiler.");
+            case BreakStatementAst breakStatement when !HasLoopAncestor(breakStatement):
+                throw Error(breakStatement, "break must be inside a supported loop.");
             case BreakStatementAst:
                 AppendLine("break;");
                 return;
+            case ContinueStatementAst continueStatement when continueStatement.Label is not null:
+                throw Error(continueStatement, "Labeled continue is not supported by the typed compiler.");
+            case ContinueStatementAst continueStatement when !HasLoopAncestor(continueStatement):
+                throw Error(continueStatement, "continue must be inside a supported loop.");
             case ContinueStatementAst:
                 AppendLine("continue;");
                 return;
@@ -302,8 +324,12 @@ internal sealed class PowerShellCSharpMethodEmitter
     private void EmitForEach(ForEachStatementAst statement, Type returnType)
     {
         var name = statement.Variable.VariablePath.UserPath;
+        var collectionType = InferExpressionType(statement.Condition);
+        var elementType = collectionType.GetElementType()
+            ?? throw Error(statement.Condition, "foreach requires a statically typed one-dimensional array.");
+        var collection = EmitExpression(statement.Condition);
         _declaredLocals.Add(name);
-        AppendLine($"foreach ({GetTypeName(_variables[name])} {GetVariableIdentifier(name)} in {EmitExpression(statement.Condition)})");
+        AppendLine($"foreach ({GetTypeName(_variables[name])} {GetVariableIdentifier(name)} in ({collection} ?? global::System.Array.Empty<{GetTypeName(elementType)}>()))");
         EmitBlock(statement.Body, returnType);
     }
 
@@ -343,7 +369,7 @@ internal sealed class PowerShellCSharpMethodEmitter
             ConstantExpressionAst constant => EmitConstant(constant),
             VariableExpressionAst variable => EmitVariable(variable),
             ParenExpressionAst parenthesized => $"({EmitExpression(parenthesized.Pipeline)})",
-            ConvertExpressionAst conversion => $"(({GetTypeName(conversion.StaticType)})({EmitExpression(conversion.Child)}))",
+            ConvertExpressionAst conversion => throw Error(conversion, "Explicit PowerShell conversion expressions require runtime conversion semantics and are not supported by the typed compiler."),
             BinaryExpressionAst binary => EmitBinary(binary),
             UnaryExpressionAst unary => EmitUnary(unary),
             ArrayLiteralAst array => EmitArray(array),
@@ -384,6 +410,8 @@ internal sealed class PowerShellCSharpMethodEmitter
             {
                 if ((leftType == typeof(decimal)) != (rightType == typeof(decimal)))
                     throw Error(binary, "Mixed decimal and non-decimal arithmetic relies on PowerShell coercion and is not supported.");
+                if (operation == "Divide" && IsIntegral(leftType) && IsIntegral(rightType))
+                    throw Error(binary, "PowerShell integral division changes runtime result type based on the quotient and is not supported by one static CLR return type.");
                 if (operation != "Divide" && IsIntegral(leftType) && IsIntegral(rightType))
                     throw Error(binary, "Unconstrained integral arithmetic can promote on overflow in PowerShell; use an explicitly typed accumulator with compound assignment.");
             }
@@ -414,8 +442,6 @@ internal sealed class PowerShellCSharpMethodEmitter
             "And" => "&&", "Or" => "||",
             _ => throw Error(binary, $"Binary operator '{binary.Operator}' is not implemented.")
         };
-        if (operation == "Divide" && IsIntegral(leftType) && IsIntegral(rightType))
-            return $"(((double)({left})) / ((double)({right})))";
         return $"({left} {symbol} {right})";
     }
 
@@ -488,7 +514,7 @@ internal sealed class PowerShellCSharpMethodEmitter
             ConstantExpressionAst constant => constant.Value?.GetType() ?? typeof(object),
             VariableExpressionAst variable => InferVariableType(variable),
             ParenExpressionAst parenthesized => InferExpressionType(parenthesized.Pipeline),
-            ConvertExpressionAst conversion => conversion.StaticType,
+            ConvertExpressionAst conversion => throw Error(conversion, "Explicit PowerShell conversion expressions require runtime conversion semantics and are not supported by the typed compiler."),
             BinaryExpressionAst binary => InferBinaryType(binary),
             UnaryExpressionAst unary => InferExpressionType(unary.Child),
             ArrayLiteralAst array when array.Elements.Count > 0 => array.Elements.Select(InferExpressionType).Aggregate((left, right) => UnifyTypes(left, right, array)).MakeArrayType(),

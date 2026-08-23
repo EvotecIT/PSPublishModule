@@ -36,7 +36,7 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     [Parameter]
     public string? Name { get; set; }
 
-    /// <summary>Fallback policy. Defaults to Package for EXE, Strict for binary modules, and Hybrid for CLR libraries.</summary>
+    /// <summary>Fallback policy. Defaults to Package for EXE, Strict for binary modules, and Hybrid for CLR libraries. Analyze is not a build mode.</summary>
     [Parameter]
     public PowerShellCompilationMode? Mode { get; set; }
 
@@ -75,6 +75,15 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
             : SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputDirectory);
         var artifactName = string.IsNullOrWhiteSpace(Name) ? System.IO.Path.GetFileNameWithoutExtension(sourcePath) : Name!;
         var mode = Mode ?? GetDefaultMode(Kind);
+        if (mode == PowerShellCompilationMode.Analyze)
+        {
+            ThrowTerminatingError(new ErrorRecord(
+                new ArgumentException("Analyze mode reports eligibility and does not produce artifacts."),
+                "PowerShellArtifactAnalyzeModeDoesNotBuild",
+                ErrorCategory.InvalidArgument,
+                Mode));
+            return;
+        }
         if (!ShouldProcess(outputPath, $"Build {Kind} artifact '{artifactName}' from '{sourcePath}'"))
             return;
 

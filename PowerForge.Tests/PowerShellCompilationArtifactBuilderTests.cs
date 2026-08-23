@@ -43,6 +43,7 @@ public sealed class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         Assert.Equal(0, result.Manifest.OmittedUnits);
         Assert.Equal(64, result.Manifest.ArtifactSha256.Length);
+        Assert.Contains(result.Manifest.Files, file => file.Role == "DebugSymbols" && file.Path.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase));
 
         using var assemblyStream = File.OpenRead(result.ArtifactPath);
         var loadContext = new AssemblyLoadContext("PowerForgeCompilationProof", isCollectible: true);
@@ -65,12 +66,12 @@ public sealed class PowerShellCompilationArtifactBuilderTests
     {
         using var fixture = ArtifactFixture.Create(
             """
-            param([string] $Name)
+            param([switch] $Force, [string] $Name)
             if ($Name -eq 'Fail') {
                 Write-Error 'Requested failure'
                 exit 7
             }
-            "Hello, $Name"
+            "Hello, $Name; Force=$($Force.IsPresent)"
             """);
         var spec = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -99,14 +100,14 @@ public sealed class PowerShellCompilationArtifactBuilderTests
             RedirectStandardError = true,
             CreateNoWindow = true
         };
-        startInfo.ArgumentList.Add("--Name");
+        startInfo.ArgumentList.Add("--Force");
         startInfo.ArgumentList.Add("Ada");
         using var process = Process.Start(startInfo)!;
         var standardOutput = process.StandardOutput.ReadToEnd();
         var standardError = process.StandardError.ReadToEnd();
         Assert.True(process.WaitForExit(60_000), "Packaged executable did not exit within 60 seconds.");
         Assert.True(process.ExitCode == 0, $"Exit code: {process.ExitCode}{Environment.NewLine}{standardError}{Environment.NewLine}{standardOutput}");
-        Assert.Contains("Hello, Ada", standardOutput, StringComparison.Ordinal);
+        Assert.Contains("Hello, Ada; Force=True", standardOutput, StringComparison.Ordinal);
         Assert.True(string.IsNullOrWhiteSpace(standardError), standardError);
 
         var failureStartInfo = new ProcessStartInfo
@@ -150,6 +151,10 @@ public sealed class PowerShellCompilationArtifactBuilderTests
             "PowerForge.BinaryProof",
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Strict);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath, PowerShellCompilationMode.Strict));
+        Assert.True(
+            plan.CanProceed,
+            string.Join(Environment.NewLine, plan.Files.SelectMany(file => file.Diagnostics.Concat(file.Units.SelectMany(unit => unit.Diagnostics))).Select(diagnostic => diagnostic.Message)));
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -190,6 +195,9 @@ public sealed class PowerShellCompilationArtifactBuilderTests
     {
         using var fixture = ArtifactFixture.Create(
             """
+            using namespace System
+            param([string] $Prefix = 'Hello')
+
             function Get-AllowedAverageMs {
                 param([double] $BaselineMs, [double] $RelativeTolerance, [double] $AbsoluteToleranceMs)
                 $relativeCap = $BaselineMs * (1.0 + $RelativeTolerance)
@@ -200,7 +208,7 @@ public sealed class PowerShellCompilationArtifactBuilderTests
 
             function Get-Greeting {
                 param([string] $Name)
-                Write-Output "Hello, $Name"
+                Write-Output "$Prefix, $Name"
             }
             """);
         var spec = new PowerShellCompilationBuildSpec(
@@ -219,11 +227,12 @@ public sealed class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Manifest.RequiresPowerShellRuntime);
         Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
         Assert.Equal(1, result.Manifest.CompiledMethods);
-        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(2, result.Manifest.RuntimeFallbackUnits);
         Assert.Equal(0, result.Manifest.OmittedUnits);
-        Assert.Equal(2, result.Manifest.Files.Length);
+        Assert.True(result.Manifest.Files.Length >= 2);
         Assert.All(result.Manifest.Files, file => Assert.True(File.Exists(file.Path), file.Path));
         Assert.Contains(result.Manifest.Files, file => file.Role == "TypedAssembly" && file.Path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Manifest.Files, file => file.Role == "DebugSymbols" && file.Path.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase));
 
         var escapedModulePath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var command = $"Import-Module -Name '{escapedModulePath}' -Force; Get-AllowedAverageMs 100 0.5 30; Get-Greeting Ada";
@@ -279,6 +288,144 @@ public sealed class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         Assert.Equal(1, result.Manifest.OmittedUnits);
         Assert.Contains(result.Manifest.Diagnostics, diagnostic => diagnostic.Code == PowerShellCompilationDiagnosticCode.CommandInvocation);
+    }
+
+    [Fact]
+    public void Build_RejectsAnalyzeModeBecauseItCannotProduceAnArtifact()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-Value { return 1 }");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.AnalyzeOnly",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Analyze);
+
+        var exception = Assert.Throws<ArgumentException>(() => new PowerShellCompilationArtifactBuilder().Build(spec));
+
+        Assert.Contains("does not produce artifacts", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_HybridModuleRejectsSelectiveExportsInsteadOfBroadeningPublicSurface()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Get-PublicValue { return 1 }
+            function Get-PrivateValue { return 2 }
+            Export-ModuleMember -Function Get-PublicValue
+            """);
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.SelectiveExport",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("must not broaden", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_PackagedExecutableRejectsCaughtExitInstrumentation()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            try { exit 7 }
+            catch { 'caught' }
+            """);
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.CaughtExit",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("catch behavior", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_MultiFileExecutablePreservesNestedPowerShellRuntimeTree()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            Import-Module Microsoft.PowerShell.Utility
+            (Get-Command ConvertTo-Json).Name
+            """);
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.MultiFileProof",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package)
+        {
+            SingleFile = false
+        };
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.NotNull(result.Manifest);
+        Assert.False(result.Manifest.SingleFile);
+        Assert.True(result.Manifest.Files.Length > 1);
+        Assert.Contains(result.Manifest.Files, file => file.Path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains("Modules", StringComparer.OrdinalIgnoreCase));
+        Assert.All(result.Manifest.Files, file => Assert.True(File.Exists(file.Path), file.Path));
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = result.ArtifactPath,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        using var process = Process.Start(startInfo)!;
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(60_000), "Multi-file executable did not exit within 60 seconds.");
+        Assert.True(process.ExitCode == 0, $"Exit code: {process.ExitCode}{Environment.NewLine}{standardError}{Environment.NewLine}{standardOutput}");
+        Assert.Contains("ConvertTo-Json", standardOutput, StringComparison.Ordinal);
+        Assert.True(string.IsNullOrWhiteSpace(standardError), standardError);
+    }
+
+    [Theory]
+    [InlineData("win-x64", "Proof.exe")]
+    [InlineData("win-arm64", "Proof.exe")]
+    [InlineData("linux-x64", "Proof")]
+    [InlineData("osx-arm64", "Proof")]
+    public void GetExecutableFileName_UsesTargetRidInsteadOfHost(string runtimeIdentifier, string expected)
+        => Assert.Equal(expected, PowerShellCompilationArtifactBuilder.GetExecutableFileName("Proof", runtimeIdentifier));
+
+    [Fact]
+    public void Build_CrossRidExecutableUsesTargetPlatformFileName()
+    {
+        using var fixture = ArtifactFixture.Create("'cross-rid proof'");
+        var targetRid = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "linux-x64" : "win-x64";
+        var expectedFileName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "PowerForge.CrossRidProof" : "PowerForge.CrossRidProof.exe";
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.CrossRidProof",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package)
+        {
+            RuntimeIdentifier = targetRid
+        };
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(targetRid, result.Manifest!.RuntimeIdentifier);
+        Assert.Equal(expectedFileName, Path.GetFileName(result.ArtifactPath));
+        Assert.True(File.Exists(result.ArtifactPath), result.ArtifactPath);
     }
 
     [Fact]
