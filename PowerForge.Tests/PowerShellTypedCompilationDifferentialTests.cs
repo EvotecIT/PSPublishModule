@@ -109,6 +109,21 @@ public sealed class PowerShellTypedCompilationDifferentialTests
                 $value = [System.TimeSpan]::new(0, 0, $Seconds)
                 return $value.TotalSeconds
             }
+
+            function Get-ArrayLength {
+                param([int[]] $Values)
+                return $Values.Length
+            }
+
+            function Get-IndexedValue {
+                param([int[]] $Values, [int] $Index)
+                return $Values[$Index]
+            }
+
+            function Get-IndexedCharacter {
+                param([string] $Value, [int] $Index)
+                return $Value[$Index]
+            }
             """;
         using var fixture = DifferentialFixture.Create(source);
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath, PowerShellCompilationMode.Strict));
@@ -164,6 +179,18 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             AssertDifferential(type, runspace, "Get-TimeSpanSeconds", "Get_TimeSpanSeconds", new[]
             {
                 new object[] { 0 }, new object[] { 59 }, new object[] { 90 }, new object[] { -10 }
+            });
+            AssertDifferential(type, runspace, "Get-ArrayLength", "Get_ArrayLength", new[]
+            {
+                new object[] { null! }, new object[] { Array.Empty<int>() }, new object[] { new[] { 1, 2, 3 } }
+            });
+            AssertDifferential(type, runspace, "Get-IndexedValue", "Get_IndexedValue", new[]
+            {
+                new object[] { new[] { 10, 20, 30 }, 0 }, new object[] { new[] { 10, 20, 30 }, 2 }, new object[] { new[] { 10, 20, 30 }, -1 }
+            });
+            AssertDifferential(type, runspace, "Get-IndexedCharacter", "Get_IndexedCharacter", new[]
+            {
+                new object[] { "PowerForge", 0 }, new object[] { "PowerForge", 5 }, new object[] { "PowerForge", -1 }
             });
         }
         finally
@@ -379,6 +406,11 @@ public sealed class PowerShellTypedCompilationDifferentialTests
                 Convert.ToDouble(expected, CultureInfo.InvariantCulture),
                 Convert.ToDouble(actual, CultureInfo.InvariantCulture),
                 precision: 12);
+            return;
+        }
+        if (expected is char || actual is char)
+        {
+            Assert.Equal(expected, actual);
             return;
         }
         if (expected is IConvertible && actual is IConvertible && expected is not string && actual is not string && expected is not bool && actual is not bool)

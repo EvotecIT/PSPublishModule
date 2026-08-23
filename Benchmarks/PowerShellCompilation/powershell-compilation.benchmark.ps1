@@ -233,6 +233,63 @@ New-BenchmarkSuite 'powershell-compilation-synthetic-loop' -OutputRoot $outputRo
     Add-BenchmarkComparison -Dimension Engine -Baseline HandWrittenCSharp -Metric MedianMs -TieTolerance 0.05
 }
 
+New-BenchmarkSuite 'powershell-compilation-indexed-array' -OutputRoot $outputRoot {
+    Add-BenchmarkMetadata Workload 'Typed indexed traversal over an Int32 array'
+    Add-BenchmarkMetadata TypedArtifactSha256 $typedHash
+    Add-BenchmarkMetadata BinaryModuleSha256 $moduleHash
+    Set-BenchmarkPolicy -Warmup $warmup -Iterations $iterations -Order GroupedRotated -OutlierMode ExcludeMinMax
+    Add-BenchmarkCase Indexed @{ Calls = $loopCalls; Values = [int[]](1..1000); Expected = 500500L }
+
+    Set-BenchmarkSetup {
+        param($case, $run)
+        . $workloadPath
+        Set-Item -Path Function:\global:Get-IndexedSum -Value ${function:Get-IndexedSum}
+        Import-Module -Name $moduleResult.ArtifactPath -Global -Force -ErrorAction Stop
+    }
+
+    Add-BenchmarkEngine PowerShellFunction {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            [long] $result = 0
+            for ([int] $call = 0; $call -lt $case.Calls; $call++) {
+                $result = Get-IndexedSum $case.Values
+            }
+            $run.Result = $result
+        }
+    }
+
+    Add-BenchmarkEngine BinaryCmdlet {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            [long] $result = 0
+            for ([int] $call = 0; $call -lt $case.Calls; $call++) {
+                $result = & "$moduleQualifier\Get-IndexedSum" $case.Values
+            }
+            $run.Result = $result
+        }
+    }
+
+    Add-BenchmarkEngine TypedClr {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = [PowerForge.CompilationBenchmarks.PowerShellCompilationBenchmarkHarness]::RunTypedIndexedSum($case.Calls, $case.Values)
+        }
+    }
+
+    Add-BenchmarkEngine HandWrittenCSharp {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = [PowerForge.CompilationBenchmarks.PowerShellCompilationBenchmarkHarness]::RunHandWrittenIndexedSum($case.Calls, $case.Values)
+        }
+    }
+
+    Add-BenchmarkValidation {
+        param($case, $run)
+        Assert-BenchmarkValue -Actual ([long] $run.Result) -Expected ([long] $case.Expected)
+    }
+    Add-BenchmarkComparison -Dimension Engine -Baseline HandWrittenCSharp -Metric MedianMs -TieTolerance 0.05
+}
+
 New-BenchmarkSuite 'powershell-compilation-binary-dispatch-amortization' -OutputRoot $outputRoot {
     Add-BenchmarkMetadata Workload 'Equivalent triangular-number work through fine or coarse generated commands'
     Add-BenchmarkMetadata BinaryModuleSha256 $moduleHash

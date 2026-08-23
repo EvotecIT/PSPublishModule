@@ -65,6 +65,8 @@ internal sealed class PowerShellCSharpMethodEmitter
         foreach (var parameter in parameters)
         {
             var name = parameter.Name.VariablePath.UserPath;
+            if (!PowerShellGeneratedTypePolicy.IsSupported(parameter.StaticType))
+                throw Error(parameter, $"Parameter '${name}' uses CLR type '{parameter.StaticType.FullName}' outside the generated project reference set.");
             if (_variables.ContainsKey(name))
                 throw Error(parameter, $"Parameter '${name}' duplicates another parameter under PowerShell's case-insensitive naming rules.");
             var identifier = SanitizeIdentifier(name);
@@ -422,6 +424,7 @@ internal sealed class PowerShellCSharpMethodEmitter
             ArrayLiteralAst array => EmitArray(array),
             InvokeMemberExpressionAst invocation => _memberEmitter.EmitInvocation(invocation),
             MemberExpressionAst member => _memberEmitter.EmitMember(member),
+            IndexExpressionAst index => _memberEmitter.EmitIndex(index),
             _ => throw Error(ast, $"Expression '{ast.GetType().Name}' is not implemented by the C# emitter.")
         };
     }
@@ -603,6 +606,7 @@ internal sealed class PowerShellCSharpMethodEmitter
             ArrayLiteralAst array => throw Error(array, "Heterogeneous or empty PowerShell array literals cannot be represented by one inferred CLR array element type."),
             InvokeMemberExpressionAst invocation => _memberEmitter.InferInvocationType(invocation),
             MemberExpressionAst member => _memberEmitter.InferMemberType(member),
+            IndexExpressionAst index => _memberEmitter.InferIndexType(index),
             _ => throw Error(ast, $"The CLR type of '{ast.GetType().Name}' cannot be inferred.")
         };
     }
@@ -717,6 +721,8 @@ internal sealed class PowerShellCSharpMethodEmitter
     internal static string GetTypeName(Type type)
     {
         if (type.IsArray) return GetTypeName(type.GetElementType()!) + "[]";
+        if (type.IsGenericType)
+            throw new InvalidOperationException($"Constructed generic CLR type '{type.FullName}' is not supported by the conservative generated project.");
         if (type == typeof(void)) return "void";
         if (type == typeof(bool)) return "bool";
         if (type == typeof(byte)) return "byte";

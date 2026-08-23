@@ -83,6 +83,32 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         Assert.False(result.Success);
     }
 
+    [Fact]
+    public void Transpile_EmitsPowerShellNegativeIndexNormalizationForArrays()
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Get-Value { param([int[]] $Values, [int] $Index); return $Values[$Index] }");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        Assert.Single(result.Methods);
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains("(Values)[(Index) < 0 ? (Values).Length + (Index) : (Index)]", result.SourceCode, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("return [System.Collections.Generic.List[int]]::new()", "reference set")]
+    [InlineData("return [System.Management.Automation.PSVersionInfo]::PSEdition", "reference set")]
+    public void Transpile_RejectsTypesUnavailableToGeneratedRuntimeIndependentProjects(string body, string expectedMessage)
+    {
+        using var fixture = TranspilerFixture.Create($"function Get-Value {{ {body} }}");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains(expectedMessage, StringComparison.OrdinalIgnoreCase));
+    }
+
     private sealed class TranspilerFixture : IDisposable
     {
         private TranspilerFixture(string rootPath, string scriptPath)

@@ -427,7 +427,7 @@ public sealed class PowerShellCompilationAnalyzer
             BreakStatementAst or ContinueStatementAst or BinaryExpressionAst or UnaryExpressionAst or
             ParenExpressionAst or ConvertExpressionAst or ConstantExpressionAst or StringConstantExpressionAst or
             VariableExpressionAst or ArrayLiteralAst or TypeExpressionAst or MemberExpressionAst or
-            InvokeMemberExpressionAst;
+            InvokeMemberExpressionAst or IndexExpressionAst;
 
     private static StatementAst[] GetEndStatements(ScriptBlockAst scriptBlock, bool excludeFunctionDefinitions, bool excludeModuleExports)
         => scriptBlock.EndBlock?.Statements
@@ -436,11 +436,9 @@ public sealed class PowerShellCompilationAnalyzer
             .ToArray() ?? Array.Empty<StatementAst>();
 
     private static bool IsExportModuleMemberStatement(StatementAst statement)
-        => statement.FindAll(
-                static node => node is CommandAst command &&
-                               command.GetCommandName()?.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) == true,
-                searchNestedScriptBlocks: false)
-            .Any();
+        => statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+           pipeline.PipelineElements[0] is CommandAst command &&
+           command.GetCommandName()?.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) == true;
 
     private static bool HasUnsupportedNamedBlocks(ScriptBlockAst scriptBlock)
         => scriptBlock.DynamicParamBlock is not null || scriptBlock.BeginBlock is not null || scriptBlock.ProcessBlock is not null || GetNamedBlock(scriptBlock, "CleanBlock") is not null;

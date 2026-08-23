@@ -32,7 +32,14 @@ internal static class Program
             int? requestedExitCode = null;
             using var output = new PSDataCollection<PSObject>();
             output.DataAdded += (_, eventArgs) => Console.Out.WriteLine(output[eventArgs.Index]?.ToString());
-            powerShell.Streams.Information.DataAdded += (_, eventArgs) => Console.Out.WriteLine(powerShell.Streams.Information[eventArgs.Index].MessageData?.ToString());
+            powerShell.Streams.Information.DataAdded += (_, eventArgs) =>
+            {
+                var record = powerShell.Streams.Information[eventArgs.Index];
+                if (record.MessageData is HostInformationMessage { NoNewLine: true } hostMessage)
+                    Console.Out.Write(hostMessage.Message);
+                else
+                    Console.Out.WriteLine(record.MessageData?.ToString());
+            };
             powerShell.Streams.Verbose.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"VERBOSE: {powerShell.Streams.Verbose[eventArgs.Index].Message}");
             powerShell.Streams.Debug.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"DEBUG: {powerShell.Streams.Debug[eventArgs.Index].Message}");
             powerShell.Streams.Warning.DataAdded += (_, eventArgs) => Console.Error.WriteLine($"WARNING: {powerShell.Streams.Warning[eventArgs.Index].Message}");
@@ -93,7 +100,10 @@ internal static class Program
                         throw new ArgumentException($"Parameter '-{name}' requires a value. Use '-{name}=value' when the value begins with '-'.");
                     inlineValue = arguments[++index];
                 }
-                yield return new ScriptArgument(name, inlineValue);
+                object? boundValue = inlineValue;
+                if (SwitchParameters.Contains(name) && inlineValue is not null)
+                    boundValue = ParseSwitchValue(name, inlineValue);
+                yield return new ScriptArgument(name, boundValue);
                 continue;
             }
 
@@ -128,6 +138,14 @@ internal static class Program
         return index < value.Length && (char.IsLetter(value[index]) || value[index] == '_');
     }
 
+    private static bool ParseSwitchValue(string name, string value)
+        => value.ToLowerInvariant() switch
+        {
+            "$true" or "true" => true,
+            "$false" or "false" => false,
+            _ => throw new ArgumentException($"Switch parameter '-{name}' requires an explicit Boolean value such as '$true' or '$false'.")
+        };
+
     private static bool TryGetScriptExitCode(Exception exception, out int exitCode)
     {
         if (exception is PowerForgeScriptExitException scriptExit)
@@ -148,14 +166,14 @@ internal static class Program
 
     private sealed class ScriptArgument
     {
-        internal ScriptArgument(string? name, string? value)
+        internal ScriptArgument(string? name, object? value)
         {
             Name = name;
             Value = value;
         }
 
         internal string? Name { get; }
-        internal string? Value { get; }
+        internal object? Value { get; }
     }
 }
 

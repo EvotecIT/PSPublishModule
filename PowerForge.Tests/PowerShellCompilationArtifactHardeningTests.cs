@@ -14,9 +14,12 @@ public sealed class PowerShellCompilationArtifactHardeningTests
         using var fixture = ArtifactFixture.Create(
             """
             [CmdletBinding()]
-            param([string] $Name)
+            param([string] $Name, [switch] $Force)
+            Write-Host 'host-' -NoNewline
+            Write-Host 'joined'
             Write-Information 'information-before' -InformationAction Continue
             "output:$Name"
+            "switch:$($Force.IsPresent)"
             Write-Information 'information-after' -InformationAction Continue
             "root:$PSScriptRoot"
             "path:$PSCommandPath"
@@ -31,15 +34,17 @@ public sealed class PowerShellCompilationArtifactHardeningTests
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        var success = Run(result.ArtifactPath!, "--Name", "Ada");
+        var success = Run(result.ArtifactPath!, "--Name", "Ada", "--Force:$false");
         Assert.True(success.ExitCode == 0, success.StandardError + Environment.NewLine + success.StandardOutput);
         Assert.True(string.IsNullOrWhiteSpace(success.StandardError), success.StandardError);
         var lines = success.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal("information-before", lines[0]);
-        Assert.Equal("output:Ada", lines[1]);
-        Assert.Equal("information-after", lines[2]);
-        AssertPathsEqual(Path.GetDirectoryName(result.ArtifactPath!)!, lines[3].Substring("root:".Length));
-        AssertPathsEqual(result.ArtifactPath!, lines[4].Substring("path:".Length));
+        Assert.Equal("host-joined", lines[0]);
+        Assert.Equal("information-before", lines[1]);
+        Assert.Equal("output:Ada", lines[2]);
+        Assert.Equal("switch:False", lines[3]);
+        Assert.Equal("information-after", lines[4]);
+        AssertPathsEqual(Path.GetDirectoryName(result.ArtifactPath!)!, lines[5].Substring("root:".Length));
+        AssertPathsEqual(result.ArtifactPath!, lines[6].Substring("path:".Length));
 
         var missingValue = Run(result.ArtifactPath!, "--Name", "--Verbose");
         Assert.Equal(1, missingValue.ExitCode);
@@ -68,6 +73,47 @@ public sealed class PowerShellCompilationArtifactHardeningTests
         Assert.False(result.Succeeded);
         Assert.Contains("common parameter", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_StrictBinaryModuleRejectsManifestRuntimeScriptHooks()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(fixture.ScriptPath)!, "initialize.ps1"), "Set-Variable -Name Initialized -Value $true -Scope Script");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); ScriptsToProcess = @('initialize.ps1') }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.StrictManifestHook",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("runtime script hook", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_HybridBinaryModuleReportsManifestRuntimeScriptHooksAsFallback()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(fixture.ScriptPath)!, "initialize.ps1"), "Set-Variable -Name Initialized -Value $true -Scope Script");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); ScriptsToProcess = @('initialize.ps1') }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.HybridManifestHook",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(result.Manifest!.UsesPowerShellRuntimeFallback);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        Assert.Contains(result.Manifest.Files, file => file.Path.EndsWith("initialize.ps1", StringComparison.OrdinalIgnoreCase));
     }
 
     [Theory]
@@ -199,6 +245,33 @@ public sealed class PowerShellCompilationArtifactHardeningTests
             $"Import-Module -Name '{escapedPath}' -Force; [bool](Get-Command Get-ConditionalValue -ErrorAction SilentlyContinue); Get-TopValue");
         Assert.Equal(0, run.ExitCode);
         Assert.Equal(new[] { "False", "2" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Build_HybridModuleDoesNotTreatConditionalExportAsUnconditional()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-HiddenValue { return 1 }; function Get-PublicValue { return 2 }; if ($false) { Export-ModuleMember -Function Get-HiddenValue }; Export-ModuleMember -Function Get-PublicValue",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ConditionalExport",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(result.Manifest!.UsesPowerShellRuntimeFallback);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; [bool](Get-Command Get-HiddenValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-PublicValue -ErrorAction SilentlyContinue); Get-PublicValue");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal(new[] { "False", "True", "2" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
         Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
     }
 

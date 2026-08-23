@@ -48,6 +48,27 @@ public static class PowerShellCompilationBenchmarkHarness
     public static long RunTypedRepeatedLoop(int calls, int count)
         => PowerForge_CompilationBenchmarkMethods.Get_RepeatedTriangularNumber(calls, count);
 
+    public static long RunTypedIndexedSum(int calls, int[] values)
+    {
+        var result = 0L;
+        for (var call = 0; call < calls; call++)
+            result = PowerForge_CompilationBenchmarkMethods.Get_IndexedSum(values);
+        return result;
+    }
+
+    public static long RunHandWrittenIndexedSum(int calls, int[] values)
+    {
+        var result = 0L;
+        for (var call = 0; call < calls; call++)
+        {
+            var total = 0L;
+            for (var index = 0; index < values.Length; index++)
+                total += values[index];
+            result = total;
+        }
+        return result;
+    }
+
     public static long RunHandWrittenRepeatedLoop(int calls, int count)
     {
         var result = 0L;

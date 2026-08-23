@@ -40,3 +40,14 @@ function Get-RepeatedTriangularNumber {
 
     return $result
 }
+
+function Get-IndexedSum {
+    param([int[]] $Values)
+
+    [long] $total = 0
+    for ([int] $index = 0; $index -lt $Values.Length; $index++) {
+        $total += $Values[$index]
+    }
+
+    return $total
+}

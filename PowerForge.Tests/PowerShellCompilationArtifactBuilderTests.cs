@@ -393,7 +393,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 ModuleVersion = '1.0.0'
                 GUID = '936a8f5f-156a-470b-ad57-262cafb46748'
                 FunctionsToExport = @('Get-PublicValue')
-                CmdletsToExport = @()
+                CmdletsToExport = '*'
                 VariablesToExport = @()
                 AliasesToExport = @()
             }

@@ -9,6 +9,22 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellCompiledModuleManifest
 {
+    internal static string[] GetRuntimeScriptHooks(string sourcePath)
+    {
+        var sourceManifest = Path.ChangeExtension(sourcePath, ".psd1");
+        if (!File.Exists(sourceManifest))
+            return Array.Empty<string>();
+
+        var hooks = new List<string>();
+        hooks.AddRange(ModuleManifestValueReader.ReadTopLevelStringOrArray(sourceManifest, "ScriptsToProcess"));
+        hooks.AddRange(ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules")
+            .Where(static reference => !Path.GetExtension(reference).Equals(".dll", StringComparison.OrdinalIgnoreCase)));
+        return hooks
+            .Where(static reference => !string.IsNullOrWhiteSpace(reference))
+            .Distinct(GetPathComparer())
+            .ToArray();
+    }
+
     internal static string[]? Create(
         string sourcePath,
         string moduleDirectory,
@@ -36,12 +52,14 @@ internal static class PowerShellCompiledModuleManifest
         var manifestVariables = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "VariablesToExport");
         var selectedCompiled = Select(explicitCompiled, manifestFunctions);
         var selectedFallback = Select(explicitFallback, manifestFunctions);
-        var selectedCmdlets = manifestCmdlets?.Contains("*", StringComparer.OrdinalIgnoreCase) == true
-            ? new[] { "*" }
-            : (manifestCmdlets ?? Array.Empty<string>())
-                .Concat(selectedCompiled)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+        var explicitCmdlets = explicitExports?.Cmdlets ?? Array.Empty<string>();
+        var selectedSourceCmdlets = manifestCmdlets?.Contains("*", StringComparer.OrdinalIgnoreCase) == true
+            ? explicitCmdlets
+            : Select(explicitCmdlets, manifestCmdlets);
+        var selectedCmdlets = selectedSourceCmdlets
+            .Concat(selectedCompiled)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         var mutator = new AstModuleManifestMutator();
         if (!mutator.TrySetTopLevelString(targetManifest, "RootModule", rootModuleFileName))

@@ -47,6 +47,12 @@ public sealed class PowerShellCompilationArtifactBuilder
             bool usesPowerShellRuntimeFallback;
             int compiledUnits;
             int runtimeRoutedUnits;
+            var runtimeManifestHooks = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
+                ? PowerShellCompiledModuleManifest.GetRuntimeScriptHooks(spec.SourcePath)
+                : Array.Empty<string>();
+            if (spec.Mode == PowerShellCompilationMode.Strict && runtimeManifestHooks.Length > 0)
+                throw new InvalidOperationException(
+                    $"Strict binary-module compilation rejected manifest runtime script hook(s): {string.Join(", ", runtimeManifestHooks)}.");
             if (spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Strict)
             {
                 var executable = PowerShellTypedExecutableEmitter.Emit(spec.SourcePath, plan);
@@ -112,7 +118,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                 requiresPowerShellRuntime = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule;
                 usesPowerShellRuntimeFallback = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
                     spec.Mode == PowerShellCompilationMode.Hybrid &&
-                    runtimeRoutedUnits != plan.TotalUnits;
+                    (runtimeRoutedUnits != plan.TotalUnits || runtimeManifestHooks.Length > 0);
                 compiledUnits = typed.Methods.Length;
             }
             else
@@ -165,7 +171,9 @@ public sealed class PowerShellCompilationArtifactBuilder
                 }
                 var artifactPath = PowerShellArtifactSetPublisher.RebasePath(stagedArtifact.PrimaryPath, artifactStagingDirectory, spec.OutputDirectory);
                 var nonCompiledUnits = Math.Max(0, plan.TotalUnits - compiledUnits);
-                var fallbackUnits = usesPowerShellRuntimeFallback ? Math.Max(0, plan.TotalUnits - runtimeRoutedUnits) : 0;
+                var fallbackUnits = usesPowerShellRuntimeFallback
+                    ? Math.Max(0, plan.TotalUnits - runtimeRoutedUnits) + runtimeManifestHooks.Length
+                    : 0;
                 var omittedUnits = spec.Kind == PowerShellCompilationArtifactKind.Library ? nonCompiledUnits : 0;
                 var diagnostics = typed?.Diagnostics ?? plan.Files
                     .SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics)))

@@ -30,11 +30,12 @@ internal sealed class PowerShellModuleExportContract
 
     internal static PowerShellModuleExportContract? TryRead(ScriptBlockAst ast)
     {
-        var commands = ast.FindAll(
-                static node => node is CommandAst command &&
-                               command.GetCommandName()?.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) == true,
-                searchNestedScriptBlocks: false)
-            .Cast<CommandAst>()
+        var commands = (ast.EndBlock?.Statements.AsEnumerable() ?? Enumerable.Empty<StatementAst>())
+            .OfType<PipelineAst>()
+            .Where(static pipeline => pipeline.PipelineElements.Count == 1)
+            .Select(static pipeline => pipeline.PipelineElements[0])
+            .OfType<CommandAst>()
+            .Where(static command => command.GetCommandName()?.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) == true)
             .OrderBy(static command => command.Extent.StartOffset)
             .ToArray();
         if (commands.Length == 0)

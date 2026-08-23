@@ -51,11 +51,30 @@ internal sealed class PowerShellCSharpMemberEmitter
         var name = GetMemberName(member);
         var resolved = ResolveFieldOrProperty(member, target.Type, target.IsStatic, name);
         var actualName = resolved.Name;
+        if (!target.IsStatic && target.Type.IsArray && actualName.Equals("Length", StringComparison.Ordinal))
+        {
+            var elementType = target.Type.GetElementType()!;
+            return $"({target.Code} ?? global::System.Array.Empty<{_getTypeName(elementType)}>()).Length";
+        }
         return $"{EmitTarget(target)}.{actualName}";
     }
 
     internal Type InferInvocationType(InvokeMemberExpressionAst invocation)
         => ResolveInvocation(invocation).ReturnType;
+
+    internal Type InferIndexType(IndexExpressionAst index)
+    {
+        var target = ResolveIndexTarget(index);
+        return target.Type == typeof(string) ? typeof(char) : target.Type.GetElementType()!;
+    }
+
+    internal string EmitIndex(IndexExpressionAst index)
+    {
+        var target = ResolveIndexTarget(index);
+        var targetCode = EmitTarget(target);
+        var indexCode = _emitExpression(index.Index);
+        return $"{targetCode}[({indexCode}) < 0 ? {targetCode}.Length + ({indexCode}) : ({indexCode})]";
+    }
 
     internal string EmitInvocation(InvokeMemberExpressionAst invocation)
     {
@@ -194,11 +213,34 @@ internal sealed class PowerShellCSharpMemberEmitter
         {
             var type = typeExpression.TypeName.GetReflectionType()
                 ?? throw _error(typeExpression, $"CLR type '{typeExpression.TypeName.FullName}' could not be resolved.");
+            if (!PowerShellGeneratedTypePolicy.IsSupported(type))
+                throw _error(typeExpression, $"CLR type '{typeExpression.TypeName.FullName}' is not available in the generated runtime-independent project reference set.");
             return new Target(type, true, _getTypeName(type));
         }
         var instanceType = _inferExpressionType(expression);
         return new Target(instanceType, false, _emitExpression(expression), _canNormalizeNullStringReceiver(expression));
     }
+
+    private Target ResolveIndexTarget(IndexExpressionAst index)
+    {
+        if (index.Target is not VariableExpressionAst and not StringConstantExpressionAst and not ArrayLiteralAst)
+            throw _error(index.Target, "Typed indexing requires a side-effect-free local, parameter, string literal, or array literal target.");
+        var target = ResolveTarget(index.Target);
+        if (target.IsStatic || target.Type != typeof(string) && !target.Type.IsArray)
+            throw _error(index.Target, "Typed indexing currently supports strings and one-dimensional CLR arrays only.");
+        if (target.Type.IsArray && target.Type.GetArrayRank() != 1)
+            throw _error(index.Target, "Typed indexing currently supports one-dimensional CLR arrays only.");
+        if (_inferExpressionType(index.Index) != typeof(int))
+            throw _error(index.Index, "Typed indexing requires one scalar Int32 index.");
+        if (!IsSideEffectFreeIndex(index.Index))
+            throw _error(index.Index, "Typed indexing requires a side-effect-free Int32 variable or constant index.");
+        return target;
+    }
+
+    private static bool IsSideEffectFreeIndex(ExpressionAst index)
+        => index is VariableExpressionAst or ConstantExpressionAst ||
+           index is UnaryExpressionAst { Child: ConstantExpressionAst } unary &&
+           unary.TokenKind.ToString() is "Plus" or "Minus";
 
     private static string GetMemberName(MemberExpressionAst member)
         => member.Member is StringConstantExpressionAst name && !string.IsNullOrWhiteSpace(name.Value)
