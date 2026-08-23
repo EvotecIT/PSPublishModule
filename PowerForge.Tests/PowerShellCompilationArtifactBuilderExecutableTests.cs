@@ -130,6 +130,25 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_StrictTypedExecutableTreatsNegativeNumericTokenAsPositionalValue()
+    {
+        using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedExecutableNegativePositional",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var processResult = RunProcess(result.ArtifactPath!, "-3");
+
+        Assert.Equal(0, processResult.ExitCode);
+        Assert.Equal("-3", processResult.StandardOutput.Trim());
+        Assert.True(string.IsNullOrWhiteSpace(processResult.StandardError), processResult.StandardError);
+    }
+
+    [Fact]
     public void Build_RejectsOptimizationOutsideSelfContainedStrictTypedExecutable()
     {
         using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");
@@ -206,7 +225,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
-    private static (int ExitCode, string StandardOutput, string StandardError) RunProcess(string fileName)
+    private static (int ExitCode, string StandardOutput, string StandardError) RunProcess(string fileName, params string[] arguments)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -216,6 +235,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             RedirectStandardError = true,
             CreateNoWindow = true
         };
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo)!;
         var standardOutput = process.StandardOutput.ReadToEnd();
         var standardError = process.StandardError.ReadToEnd();

@@ -15,6 +15,8 @@ internal static class PowerShellCSharpOperatorPolicy
             return true;
         if (!IsNumeric(left) || !IsNumeric(right))
             return false;
+        if (IsIntegral(left) && (operation == "DivideEquals" || !IsIntegral(right)))
+            return false;
         if (left == typeof(ulong) && IsSignedIntegral(right) || right == typeof(ulong) && IsSignedIntegral(left))
             return false;
         if ((left == typeof(decimal)) != (right == typeof(decimal)))
@@ -49,4 +51,8 @@ internal static class PowerShellCSharpOperatorPolicy
 
     private static bool IsSignedIntegral(Type type)
         => type == typeof(sbyte) || type == typeof(short) || type == typeof(int) || type == typeof(long);
+
+    private static bool IsIntegral(Type type)
+        => type == typeof(byte) || type == typeof(sbyte) || type == typeof(short) || type == typeof(ushort) ||
+           type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong);
 }

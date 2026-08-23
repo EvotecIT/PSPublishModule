@@ -556,7 +556,9 @@ public sealed class PowerShellCompilationArtifactBuilder
             .Select(static method => method.SourceName)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var exportedFallbackFunctions = exportContract?.SelectFunctions(fallbackFunctions) ?? fallbackFunctions;
+        var exportedFallbackFunctions = PowerShellCompiledModuleManifest.HasNestedModuleWildcardFunctionExports(sourcePath)
+            ? new[] { "*" }
+            : exportContract?.SelectFunctions(fallbackFunctions) ?? fallbackFunctions;
         var exportedCompiledCmdlets = exportContract?.SelectFunctions(compiledCmdlets) ?? compiledCmdlets;
         var additionalCmdlets = exportContract?.Cmdlets ?? Array.Empty<string>();
         var aliases = exportContract?.Aliases ?? new[] { "*" };

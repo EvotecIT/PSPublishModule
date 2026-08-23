@@ -237,7 +237,34 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-TypedValue; Get-NestedValue");
-        Assert.Equal(0, run.ExitCode);
+        Assert.True(run.ExitCode == 0, $"Exit code: {run.ExitCode}{Environment.NewLine}{run.StandardError}{Environment.NewLine}{run.StandardOutput}");
+        Assert.Equal(new[] { "1", "9" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Build_HybridModulePreservesWildcardFunctionExportsFromNestedScriptModule()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-TypedValue { return 1 }; Export-ModuleMember -Function Get-TypedValue",
+            ".psm1");
+        File.WriteAllText(
+            Path.Combine(fixture.RootPath, "NestedFunctions.psm1"),
+            "function Get-NestedValue { return 9 }; Export-ModuleMember -Function Get-NestedValue");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; GUID = 'c51a5825-020c-4e2f-a60f-191490fd31ba'; NestedModules = @('NestedFunctions.psm1'); FunctionsToExport = '*'; CmdletsToExport = @() }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ExternalNestedFunctions",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-TypedValue; Get-NestedValue");
+        Assert.True(run.ExitCode == 0, $"Exit code: {run.ExitCode}{Environment.NewLine}{run.StandardError}{Environment.NewLine}{run.StandardOutput}");
         Assert.Equal(new[] { "1", "9" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
         Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
     }

@@ -159,7 +159,7 @@ internal static class Program
         name = string.Empty;
         value = null;
         var prefixLength = token.StartsWith("--", StringComparison.Ordinal) ? 2 : token.StartsWith("-", StringComparison.Ordinal) ? 1 : 0;
-        if (prefixLength == 0 || token.Length == prefixLength)
+        if (prefixLength == 0 || token.Length == prefixLength || !IsParameterNameStart(token[prefixLength]))
             return false;
         var separator = token.IndexOf('=', prefixLength);
         name = separator < 0 ? token.Substring(prefixLength) : token.Substring(prefixLength, separator - prefixLength);
@@ -168,7 +168,15 @@ internal static class Program
     }
 
     private static bool LooksLikeNamedToken(string token)
-        => token.Length > 1 && token[0] == '-';
+    {
+        if (token.Length < 2 || token[0] != '-')
+            return false;
+        var prefixLength = token.StartsWith("--", StringComparison.Ordinal) ? 2 : 1;
+        return token.Length > prefixLength && IsParameterNameStart(token[prefixLength]);
+    }
+
+    private static bool IsParameterNameStart(char value)
+        => char.IsLetter(value) || value == '_';
 
     private static void WriteResult(object? value)
     {

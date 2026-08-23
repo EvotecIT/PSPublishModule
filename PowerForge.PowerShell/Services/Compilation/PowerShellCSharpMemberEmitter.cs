@@ -43,6 +43,7 @@ internal sealed class PowerShellCSharpMemberEmitter
     {
         var target = ResolveTarget(member.Expression);
         var name = GetMemberName(member);
+        EnsureSupportedArrayMember(member, target, name);
         var resolved = ResolveFieldOrProperty(member, target.Type, target.IsStatic, name);
         var type = resolved switch
         {
@@ -59,6 +60,7 @@ internal sealed class PowerShellCSharpMemberEmitter
     {
         var target = ResolveTarget(member.Expression);
         var name = GetMemberName(member);
+        EnsureSupportedArrayMember(member, target, name);
         var resolved = ResolveFieldOrProperty(member, target.Type, target.IsStatic, name);
         var actualName = resolved.Name;
         if (!target.IsStatic && target.Type.IsArray && actualName.Equals("Length", StringComparison.Ordinal))
@@ -69,6 +71,12 @@ internal sealed class PowerShellCSharpMemberEmitter
         if (!target.IsStatic && target.Type == typeof(string))
             return $"({target.Code} ?? string.Empty).{actualName}";
         return $"{EmitTarget(target)}.{actualName}";
+    }
+
+    private void EnsureSupportedArrayMember(Ast node, Target target, string name)
+    {
+        if (!target.IsStatic && target.Type.IsArray && !name.Equals("Length", StringComparison.OrdinalIgnoreCase))
+            throw _error(node, $"CLR array member '{name}' does not preserve PowerShell null-member semantics on the conservative compilation path; only Length is currently eligible.");
     }
 
     internal Type InferInvocationType(InvokeMemberExpressionAst invocation)

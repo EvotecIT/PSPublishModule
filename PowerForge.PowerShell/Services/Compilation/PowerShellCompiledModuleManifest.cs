@@ -95,9 +95,12 @@ internal static class PowerShellCompiledModuleManifest
         var manifestAliases = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "AliasesToExport");
         var manifestVariables = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "VariablesToExport");
         var selectedCompiled = Select(explicitCompiled, manifestFunctions);
-        var selectedFallback = Select(explicitFallback, manifestFunctions);
         var explicitCmdlets = explicitExports?.Cmdlets ?? Array.Empty<string>();
         var hasNestedModules = ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules").Any();
+        var preserveWildcardFunctions = HasNestedModuleWildcardFunctionExports(sourcePath);
+        var selectedFallback = preserveWildcardFunctions
+            ? new[] { "*" }
+            : Select(explicitFallback, manifestFunctions);
         var preserveWildcardCmdlets = hasNestedModules && manifestCmdlets?.Contains("*", StringComparer.OrdinalIgnoreCase) == true;
         var selectedSourceCmdlets = manifestCmdlets?.Contains("*", StringComparer.OrdinalIgnoreCase) == true
             ? explicitCmdlets
@@ -148,6 +151,15 @@ internal static class PowerShellCompiledModuleManifest
             copied.Add(targetFile);
         }
         return copied.ToArray();
+    }
+
+    internal static bool HasNestedModuleWildcardFunctionExports(string sourcePath)
+    {
+        var sourceManifest = Path.ChangeExtension(sourcePath, ".psd1");
+        return File.Exists(sourceManifest) &&
+               ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules").Any() &&
+               ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "FunctionsToExport")
+                   ?.Contains("*", StringComparer.OrdinalIgnoreCase) == true;
     }
 
     private static void ApplyTargetCompatibility(

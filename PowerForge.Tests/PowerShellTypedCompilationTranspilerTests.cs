@@ -122,6 +122,33 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("compound assignment", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData("[int] $Total = 0; $Total += 1.9")]
+    [InlineData("[long] $Total = 10; $Total -= 0.5")]
+    [InlineData("[int] $Total = 3; $Total /= 2")]
+    public void Transpile_RoutesIntegralCompoundAssignmentsWithDifferentPowerShellConversionToFallback(string operation)
+    {
+        using var fixture = TranspilerFixture.Create(
+            $"function Update-Value {{ {operation}; return $Total }}");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("compound assignment", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Transpile_RoutesNullableArrayMembersOtherThanLengthToFallback()
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Get-ArrayRank { param([int[]] $Values); return $Values.Rank }");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("null-member semantics", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public void Transpile_RoutesStructEqualityWithoutClrOperatorToFallback()
     {
