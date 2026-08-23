@@ -411,34 +411,6 @@ internal static class PowerShellCompiledModuleManifest
             yield return new ManifestFileReference(value, IsContainedModulePath(value));
     }
 
-    private static IEnumerable<ManifestFileReference> ReadReferencedFilesRecursive(string manifestPath)
-    {
-        var moduleRoot = Path.GetDirectoryName(Path.GetFullPath(manifestPath)) ?? Directory.GetCurrentDirectory();
-        var visited = new HashSet<string>(GetPathComparer());
-        return ReadReferencedFilesRecursiveCore(Path.GetFullPath(manifestPath), moduleRoot, visited).ToArray();
-    }
-
-    private static IEnumerable<ManifestFileReference> ReadReferencedFilesRecursiveCore(
-        string manifestPath,
-        string moduleRoot,
-        HashSet<string> visited)
-    {
-        if (!visited.Add(manifestPath))
-            yield break;
-        var manifestDirectory = Path.GetDirectoryName(manifestPath) ?? moduleRoot;
-        foreach (var reference in ReadReferencedFiles(manifestPath))
-        {
-            var sourceFile = ResolveContainedPath(manifestDirectory, reference.Path);
-            var rootRelative = FrameworkCompatibility.GetRelativePath(moduleRoot, sourceFile);
-            yield return new ManifestFileReference(rootRelative, reference.Required);
-            if (Path.GetExtension(sourceFile).Equals(".psd1", StringComparison.OrdinalIgnoreCase) && File.Exists(sourceFile))
-            {
-                foreach (var nested in ReadReferencedFilesRecursiveCore(sourceFile, moduleRoot, visited))
-                    yield return nested;
-            }
-        }
-    }
-
     private static void CollectRuntimeScriptFiles(
         string manifestPath,
         string moduleRoot,
@@ -505,6 +477,18 @@ internal static class PowerShellCompiledModuleManifest
         var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var fullPath = Path.GetFullPath(Path.Combine(baseDirectory, normalizedPath));
         if (!fullPath.StartsWith(fullRoot, PowerShellCompilationPathSafety.PathComparison))
+            throw new InvalidOperationException($"Module manifest file reference '{relativePath}' escapes the module root.");
+        return fullPath;
+    }
+
+    private static string ResolveContainedPath(string root, string baseDirectory, string relativePath)
+    {
+        var normalizedPath = NormalizeManifestRelativePath(relativePath);
+        if (Path.IsPathRooted(normalizedPath) || LooksLikeWindowsRootedPath(relativePath))
+            throw new InvalidOperationException($"Module manifest file reference '{relativePath}' must remain relative to the module root.");
+        var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var fullPath = Path.GetFullPath(Path.Combine(baseDirectory, normalizedPath));
+        if (!fullPath.StartsWith(fullRoot, GetPathComparison()))
             throw new InvalidOperationException($"Module manifest file reference '{relativePath}' escapes the module root.");
         return fullPath;
     }
