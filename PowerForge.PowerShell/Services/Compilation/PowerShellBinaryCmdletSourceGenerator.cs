@@ -133,7 +133,11 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         if (returnType.EndsWith("[]", StringComparison.Ordinal))
             return returnType.Substring(0, returnType.Length - 2);
         var type = Type.GetType(returnType, throwOnError: false);
-        return type is not null && type != typeof(string) && typeof(System.Collections.IEnumerable).IsAssignableFrom(type)
+        if (type is null)
+            return typeof(object).FullName;
+        if (typeof(System.Collections.IDictionary).IsAssignableFrom(type))
+            return returnType;
+        return type != typeof(string) && typeof(System.Collections.IEnumerable).IsAssignableFrom(type)
             ? typeof(object).FullName
             : returnType;
     }

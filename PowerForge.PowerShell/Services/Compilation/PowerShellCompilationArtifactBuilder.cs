@@ -406,7 +406,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                 files.Add(CreateArtifactFile(manifestFile, manifestFile.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
         }
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
-        var runtimeHooks = PowerShellCompiledModuleManifest.GetRuntimeScriptHooks(spec.SourcePath)
+        var runtimeHooks = PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(spec.SourcePath)
             .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, reference)))
             .ToArray();
         foreach (var dependency in PowerShellHybridDependencyResolver.CopyDependencies(spec.SourcePath, moduleDirectory, runtimeHooks))

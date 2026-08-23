@@ -25,6 +25,28 @@ internal static class PowerShellCompiledModuleManifest
             .ToArray();
     }
 
+    internal static string[] GetContainedRuntimeScriptFiles(string sourcePath)
+    {
+        var sourceManifest = Path.ChangeExtension(sourcePath, ".psd1");
+        if (!File.Exists(sourceManifest))
+            return Array.Empty<string>();
+
+        var scripts = new List<string>();
+        scripts.AddRange(ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "ScriptsToProcess") ?? Array.Empty<string>());
+        scripts.AddRange(ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules")
+            .Where(static reference =>
+            {
+                var extension = Path.GetExtension(reference);
+                return extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                       extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase) ||
+                       extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase);
+            }));
+        return scripts
+            .Where(static reference => !string.IsNullOrWhiteSpace(reference))
+            .Distinct(GetPathComparer())
+            .ToArray();
+    }
+
     internal static string[]? Create(
         string sourcePath,
         string moduleDirectory,

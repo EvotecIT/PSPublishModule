@@ -93,7 +93,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     public void Build_BinaryModuleEnumeratesPowerShellEnumerableReturnValues()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-Items { return [System.Collections.ArrayList]::new() }");
+            "function Get-Items { return [System.Collections.ArrayList]::new() }; function Get-Map { return [System.Collections.Hashtable]::new() }");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
@@ -108,9 +108,9 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            $"Import-Module -Name '{escapedPath}' -Force; (Get-Command Get-Items).OutputType[0].Type.FullName; (Get-Items | Measure-Object).Count");
+            $"Import-Module -Name '{escapedPath}' -Force; (Get-Command Get-Items).OutputType[0].Type.FullName; (Get-Items | Measure-Object).Count; (Get-Command Get-Map).OutputType[0].Type.FullName; (Get-Map | Measure-Object).Count");
         Assert.Equal(0, run.ExitCode);
-        Assert.Equal(new[] { "System.Object", "0" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.Equal(new[] { "System.Object", "0", "System.Collections.Hashtable", "1" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
         Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
     }
 
@@ -203,6 +203,30 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             $"Import-Module -Name '{escapedPath}' -Force; $global:PowerForgeCompilationHookValue; Get-TypedValue");
         Assert.Equal(0, run.ExitCode);
         Assert.Equal(new[] { "42", "1" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Build_HybridModulePreservesNamedExternalNestedModule()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-TypedValue { return 1 }; Export-ModuleMember -Function Get-TypedValue",
+            ".psm1");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; GUID = 'b02be75a-f6a9-421e-94fb-02d51178eeba'; NestedModules = @('Microsoft.PowerShell.Utility'); FunctionsToExport = @('Get-TypedValue') }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ExternalNestedModule",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-TypedValue");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal("1", run.StandardOutput.Trim());
         Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
     }
 

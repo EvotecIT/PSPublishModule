@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace PowerForge;
 
@@ -123,13 +121,7 @@ internal static class PowerShellArtifactSetPublisher
 
     private static FileStream AcquirePublicationLock(string outputDirectory, string artifactName)
     {
-        var identity = (PathComparison == StringComparison.OrdinalIgnoreCase ? outputDirectory.ToUpperInvariant() : outputDirectory) + "\n" + artifactName.ToUpperInvariant();
-        string hash;
-        using (var sha256 = SHA256.Create())
-            hash = BitConverter.ToString(sha256.ComputeHash(Encoding.UTF8.GetBytes(identity))).Replace("-", string.Empty);
-        var lockDirectory = Path.Combine(Path.GetTempPath(), "PowerForge", "ArtifactPublicationLocks");
-        Directory.CreateDirectory(lockDirectory);
-        var lockPath = Path.Combine(lockDirectory, hash + ".lock");
+        var lockPath = Path.Combine(outputDirectory, "." + artifactName + ".artifact-publish.lock");
         var stopwatch = Stopwatch.StartNew();
         while (true)
         {
