@@ -66,7 +66,8 @@ public sealed class PowerShellCompilationArtifactBuilderTests
     {
         using var fixture = ArtifactFixture.Create(
             """
-            param([switch] $Force, [string] $Name)
+            [CmdletBinding()]
+            param([Alias('f')] [switch] $Force, [string] $Name)
             if ($Name -eq 'Fail') {
                 Write-Error 'Requested failure'
                 exit 7
@@ -100,7 +101,7 @@ public sealed class PowerShellCompilationArtifactBuilderTests
             RedirectStandardError = true,
             CreateNoWindow = true
         };
-        startInfo.ArgumentList.Add("--Force");
+        startInfo.ArgumentList.Add("-f");
         startInfo.ArgumentList.Add("Ada");
         using var process = Process.Start(startInfo)!;
         var standardOutput = process.StandardOutput.ReadToEnd();
@@ -109,6 +110,24 @@ public sealed class PowerShellCompilationArtifactBuilderTests
         Assert.True(process.ExitCode == 0, $"Exit code: {process.ExitCode}{Environment.NewLine}{standardError}{Environment.NewLine}{standardOutput}");
         Assert.Contains("Hello, Ada; Force=True", standardOutput, StringComparison.Ordinal);
         Assert.True(string.IsNullOrWhiteSpace(standardError), standardError);
+
+        var commonSwitchStartInfo = new ProcessStartInfo
+        {
+            FileName = result.ArtifactPath,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        commonSwitchStartInfo.ArgumentList.Add("--Verbose");
+        commonSwitchStartInfo.ArgumentList.Add("Grace");
+        using var commonSwitchProcess = Process.Start(commonSwitchStartInfo)!;
+        var commonSwitchOutput = commonSwitchProcess.StandardOutput.ReadToEnd();
+        var commonSwitchError = commonSwitchProcess.StandardError.ReadToEnd();
+        Assert.True(commonSwitchProcess.WaitForExit(60_000), "Packaged executable common-switch case did not exit within 60 seconds.");
+        Assert.True(commonSwitchProcess.ExitCode == 0, $"Exit code: {commonSwitchProcess.ExitCode}{Environment.NewLine}{commonSwitchError}{Environment.NewLine}{commonSwitchOutput}");
+        Assert.Contains("Hello, Grace; Force=False", commonSwitchOutput, StringComparison.Ordinal);
+        Assert.True(string.IsNullOrWhiteSpace(commonSwitchError), commonSwitchError);
 
         var failureStartInfo = new ProcessStartInfo
         {
@@ -331,6 +350,27 @@ public sealed class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_StrictBinaryModuleRejectsSiblingManifestInsteadOfBroadeningPublicSurface()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue') }");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ManifestExport",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("sibling module manifest", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
     public void Build_PackagedExecutableRejectsCaughtExitInstrumentation()
     {
         using var fixture = ArtifactFixture.Create(
@@ -394,6 +434,18 @@ public sealed class PowerShellCompilationArtifactBuilderTests
         Assert.True(process.ExitCode == 0, $"Exit code: {process.ExitCode}{Environment.NewLine}{standardError}{Environment.NewLine}{standardOutput}");
         Assert.Contains("ConvertTo-Json", standardOutput, StringComparison.Ordinal);
         Assert.True(string.IsNullOrWhiteSpace(standardError), standardError);
+
+        var artifactDirectory = Path.GetDirectoryName(result.ArtifactPath)!;
+        var stalePath = Path.Combine(artifactDirectory, "stale.dll");
+        File.WriteAllText(stalePath, "stale");
+
+        var rebuilt = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(rebuilt.Succeeded, rebuilt.Error + Environment.NewLine + rebuilt.BuildOutput);
+        Assert.False(File.Exists(stalePath));
+        Assert.DoesNotContain(rebuilt.Manifest!.Files, file => Path.GetFileName(file.Path).Equals("stale.dll", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(Directory.EnumerateDirectories(fixture.OutputPath, ".PowerForge.MultiFileProof.staging-*"));
+        Assert.Empty(Directory.EnumerateDirectories(fixture.OutputPath, "PowerForge.MultiFileProof.backup-*"));
     }
 
     [Theory]
@@ -490,12 +542,12 @@ public sealed class PowerShellCompilationArtifactBuilderTests
         public string ScriptPath { get; }
         public string OutputPath { get; }
 
-        public static ArtifactFixture Create(string source)
+        public static ArtifactFixture Create(string source, string extension = ".ps1")
         {
             var rootPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
             var outputPath = Path.Combine(rootPath, "output");
             Directory.CreateDirectory(outputPath);
-            var scriptPath = Path.Combine(rootPath, "input.ps1");
+            var scriptPath = Path.Combine(rootPath, "input" + extension);
             File.WriteAllText(scriptPath, source);
             return new ArtifactFixture(rootPath, scriptPath, outputPath);
         }

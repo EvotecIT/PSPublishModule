@@ -478,7 +478,10 @@ internal sealed class PowerShellCSharpMethodEmitter
     {
         if (array.Elements.Count == 0)
             throw Error(array, "Empty array literals require an explicit element type.");
-        var elementType = array.Elements.Select(InferExpressionType).Aggregate((left, right) => UnifyTypes(left, right, array));
+        var elementTypes = array.Elements.Select(InferExpressionType).Distinct().ToArray();
+        if (elementTypes.Length != 1)
+            throw Error(array, "Heterogeneous PowerShell array literals preserve per-element runtime types and are not supported by one CLR array element type.");
+        var elementType = elementTypes[0];
         return $"new {GetTypeName(elementType)}[] {{ {string.Join(", ", array.Elements.Select(EmitExpression))} }}";
     }
 
@@ -517,7 +520,8 @@ internal sealed class PowerShellCSharpMethodEmitter
             ConvertExpressionAst conversion => throw Error(conversion, "Explicit PowerShell conversion expressions require runtime conversion semantics and are not supported by the typed compiler."),
             BinaryExpressionAst binary => InferBinaryType(binary),
             UnaryExpressionAst unary => InferExpressionType(unary.Child),
-            ArrayLiteralAst array when array.Elements.Count > 0 => array.Elements.Select(InferExpressionType).Aggregate((left, right) => UnifyTypes(left, right, array)).MakeArrayType(),
+            ArrayLiteralAst array when array.Elements.Count > 0 && array.Elements.Select(InferExpressionType).Distinct().Count() == 1 => InferExpressionType(array.Elements[0]).MakeArrayType(),
+            ArrayLiteralAst array => throw Error(array, "Heterogeneous or empty PowerShell array literals cannot be represented by one inferred CLR array element type."),
             _ => throw Error(ast, $"The CLR type of '{ast.GetType().Name}' cannot be inferred.")
         };
     }

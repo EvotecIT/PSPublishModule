@@ -51,9 +51,9 @@ public sealed class PowerShellCompilationArtifactBuilder
                 if (spec.Mode == PowerShellCompilationMode.Package)
                     throw new InvalidOperationException("DLL artifacts require Hybrid or Strict mode because they contain genuinely typed methods.");
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
-                    spec.Mode == PowerShellCompilationMode.Hybrid &&
-                    (ContainsExplicitExportModuleMember(spec.SourcePath) || HasSiblingModuleManifest(spec.SourcePath)))
-                    throw new InvalidOperationException("Hybrid binary modules with explicit Export-ModuleMember declarations or a sibling module manifest are not supported yet because compilation must not broaden or change the module's public surface.");
+                    (HasSiblingModuleManifest(spec.SourcePath) ||
+                     spec.Mode == PowerShellCompilationMode.Hybrid && ContainsExplicitExportModuleMember(spec.SourcePath)))
+                    throw new InvalidOperationException("Binary modules with explicit Export-ModuleMember declarations or a sibling module manifest are not supported yet because compilation must not broaden or change the module's public surface.");
 
                 typed = new PowerShellTypedCompilationTranspiler().Transpile(
                     spec.SourcePath,
@@ -254,15 +254,27 @@ public sealed class PowerShellCompilationArtifactBuilder
         }
 
         var targetDirectory = Path.Combine(spec.OutputDirectory, artifactName);
-        Directory.CreateDirectory(targetDirectory);
-        foreach (var directory in Directory.EnumerateDirectories(publishDirectory, "*", SearchOption.AllDirectories))
-            Directory.CreateDirectory(Path.Combine(targetDirectory, FrameworkCompatibility.GetRelativePath(publishDirectory, directory)));
-        foreach (var file in Directory.EnumerateFiles(publishDirectory, "*", SearchOption.AllDirectories))
+        var stagingDirectory = Path.Combine(spec.OutputDirectory, "." + artifactName + ".staging-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(stagingDirectory);
+        try
         {
-            var relativePath = FrameworkCompatibility.GetRelativePath(publishDirectory, file);
-            var target = Path.Combine(targetDirectory, relativePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(target) ?? targetDirectory);
-            File.Copy(file, target, overwrite: true);
+            foreach (var directory in Directory.EnumerateDirectories(publishDirectory, "*", SearchOption.AllDirectories))
+                Directory.CreateDirectory(Path.Combine(stagingDirectory, FrameworkCompatibility.GetRelativePath(publishDirectory, directory)));
+            foreach (var file in Directory.EnumerateFiles(publishDirectory, "*", SearchOption.AllDirectories))
+            {
+                var relativePath = FrameworkCompatibility.GetRelativePath(publishDirectory, file);
+                var target = Path.Combine(stagingDirectory, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(target) ?? stagingDirectory);
+                File.Copy(file, target, overwrite: true);
+            }
+            ReplaceDirectory(stagingDirectory, targetDirectory);
+        }
+        finally
+        {
+            if (Directory.Exists(stagingDirectory))
+            {
+                try { Directory.Delete(stagingDirectory, recursive: true); } catch { }
+            }
         }
         var primaryPath = Path.Combine(targetDirectory, executableFileName);
         var files = Directory.EnumerateFiles(targetDirectory, "*", SearchOption.AllDirectories)
@@ -272,6 +284,31 @@ public sealed class PowerShellCompilationArtifactBuilder
                 path.Equals(primaryPath, StringComparison.OrdinalIgnoreCase) ? "Primary" : "RuntimeDependency"))
             .ToArray();
         return new CopiedArtifact(primaryPath, files);
+    }
+
+    private static void ReplaceDirectory(string stagingDirectory, string targetDirectory)
+    {
+        var backupDirectory = targetDirectory + ".backup-" + Guid.NewGuid().ToString("N");
+        var movedExisting = false;
+        try
+        {
+            if (Directory.Exists(targetDirectory))
+            {
+                Directory.Move(targetDirectory, backupDirectory);
+                movedExisting = true;
+            }
+            Directory.Move(stagingDirectory, targetDirectory);
+        }
+        catch
+        {
+            if (!Directory.Exists(targetDirectory) && movedExisting && Directory.Exists(backupDirectory))
+                Directory.Move(backupDirectory, targetDirectory);
+            throw;
+        }
+        if (movedExisting && Directory.Exists(backupDirectory))
+        {
+            try { Directory.Delete(backupDirectory, recursive: true); } catch { }
+        }
     }
 
     internal static string GetExecutableFileName(string artifactName, string? runtimeIdentifier)
@@ -347,14 +384,28 @@ public sealed class PowerShellCompilationArtifactBuilder
         var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
         if (errors.Length > 0)
             throw new InvalidOperationException("Packaged script parameters could not be parsed for native argument binding.");
-        var switchParameters = ast.ParamBlock?.Parameters
-            .Where(static parameter => parameter.StaticType == typeof(System.Management.Automation.SwitchParameter))
-            .Select(static parameter => parameter.Name.VariablePath.UserPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        var switchParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var parameter in ast.ParamBlock?.Parameters.Where(static parameter => parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)) ?? Array.Empty<ParameterAst>())
+        {
+            switchParameters.Add(parameter.Name.VariablePath.UserPath);
+            foreach (var alias in parameter.Attributes.OfType<AttributeAst>().Where(static attribute => IsAttributeNamed(attribute, "Alias")))
+            foreach (var value in alias.PositionalArguments.OfType<StringConstantExpressionAst>())
+                switchParameters.Add(value.Value);
+        }
+        if (ast.ParamBlock?.Attributes.OfType<AttributeAst>().Any(static attribute => IsAttributeNamed(attribute, "CmdletBinding")) == true)
+            switchParameters.UnionWith(new[] { "Verbose", "Debug", "WhatIf", "Confirm" });
+        return string.Join(", ", switchParameters
             .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
             .Select(name => "\"" + EscapeCSharpString(name) + "\"")
-            .ToArray() ?? Array.Empty<string>();
-        return string.Join(", ", switchParameters);
+            .ToArray());
+    }
+
+    private static bool IsAttributeNamed(AttributeAst attribute, string name)
+    {
+        var fullName = attribute.TypeName.FullName;
+        return fullName.Equals(name, StringComparison.OrdinalIgnoreCase) ||
+               fullName.Equals(name + "Attribute", StringComparison.OrdinalIgnoreCase) ||
+               fullName.EndsWith("." + name + "Attribute", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GenerateHybridModuleScript(
