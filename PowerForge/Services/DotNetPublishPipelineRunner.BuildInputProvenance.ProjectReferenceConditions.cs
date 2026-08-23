@@ -99,16 +99,13 @@ public sealed partial class DotNetPublishPipelineRunner
                      StringComparer.OrdinalIgnoreCase))
         {
             if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
-                property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
-                property.Key.Equals("BuildProjectReferences", StringComparison.OrdinalIgnoreCase))
+                property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
             arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
         }
-        arguments.Add("-p:BuildProjectReferences=false");
-
         try
         {
             var process = RunBuildInputEvaluationProcess(

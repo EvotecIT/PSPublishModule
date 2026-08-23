@@ -37,7 +37,8 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             properties[property.Key] = property.Value;
         }
-        properties["BuildProjectReferences"] = "false";
+        if (!properties.ContainsKey("BuildProjectReferences"))
+            properties["BuildProjectReferences"] = "false";
         if (request.Configuration is not null)
             properties["Configuration"] = request.Configuration;
         if (request.TargetFramework is not null)

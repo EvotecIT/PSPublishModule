@@ -19,7 +19,9 @@ public sealed partial class DotNetPublishPipelineRunner
         try
         {
             if (HasAuthenticodeCertificateTable(candidatePath) ||
-                HasAuthenticodeCertificateTable(controlledPath))
+                HasAuthenticodeCertificateTable(controlledPath) ||
+                HasPeOverlay(candidatePath) ||
+                HasPeOverlay(controlledPath))
             {
                 return false;
             }
@@ -47,6 +49,15 @@ public sealed partial class DotNetPublishPipelineRunner
         using FileStream stream = File.OpenRead(path);
         using var reader = new PEReader(stream);
         return reader.PEHeaders.PEHeader?.CertificateTableDirectory.Size > 0;
+    }
+
+    private static bool HasPeOverlay(string path)
+    {
+        using FileStream stream = File.OpenRead(path);
+        using var reader = new PEReader(stream);
+        int imageEnd = reader.PEHeaders.SectionHeaders.Max(section =>
+            checked(section.PointerToRawData + section.SizeOfRawData));
+        return stream.Length > imageEnd;
     }
 
     private static byte[] ReadManagedProvenanceContent(string path)

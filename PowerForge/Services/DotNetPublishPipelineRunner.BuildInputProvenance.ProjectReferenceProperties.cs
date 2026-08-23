@@ -21,7 +21,17 @@ public sealed partial class DotNetPublishPipelineRunner
         out List<Dictionary<string, string>> results)
     {
         results = new List<Dictionary<string, string>>();
-        if (string.IsNullOrEmpty(assignments))
+        bool hasPreResolveLiteralAssignment = projectReferenceDeclarations.Any(declaration =>
+            declaration.IsTargetTime &&
+            declaration.RunsBeforeResolveReferences &&
+            (declaration.Element.Attributes().Any(attribute => attribute.Name.LocalName.Equals(
+                 metadataName,
+                 StringComparison.OrdinalIgnoreCase)) ||
+             declaration.Element.Elements().Any(element => element.Name.LocalName.Equals(
+                 metadataName,
+                 StringComparison.OrdinalIgnoreCase))));
+        if (string.IsNullOrEmpty(assignments) &&
+            (!preferEffectiveLiteralAssignments || !hasPreResolveLiteralAssignment))
         {
             results.AddRange(propertyContexts.Select(context =>
                 new Dictionary<string, string>(context, StringComparer.OrdinalIgnoreCase)));

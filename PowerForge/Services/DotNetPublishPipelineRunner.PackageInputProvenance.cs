@@ -28,10 +28,13 @@ public sealed partial class DotNetPublishPipelineRunner
         };
         if (request.Configuration is not null)
             arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
-        if (!string.IsNullOrEmpty(request.TargetFramework) &&
-            !ProjectDeclaresUnconditionalTargetFramework(request.ProjectPath))
+        string? requestedFramework = request.TargetFramework;
+        if (!string.IsNullOrEmpty(requestedFramework) &&
+            !ProjectDeclaresRequestedTargetFrameworkUnconditionally(
+                request.ProjectPath,
+                requestedFramework!))
         {
-            arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
+            arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(requestedFramework!));
         }
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
                      entry => entry.Key,
@@ -75,18 +78,24 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static bool ProjectDeclaresUnconditionalTargetFramework(string projectPath)
+    private static bool ProjectDeclaresRequestedTargetFrameworkUnconditionally(
+        string projectPath,
+        string requestedFramework)
     {
         try
         {
             XDocument project = XDocument.Load(projectPath, LoadOptions.None);
-            return project.Descendants().Any(element =>
+            return project.Descendants().Where(element =>
                 (element.Name.LocalName.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
                  element.Name.LocalName.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase)) &&
                 !string.IsNullOrWhiteSpace(element.Value) &&
                 !element.AncestorsAndSelf().Any(candidate => candidate.Attributes().Any(attribute =>
                     attribute.Name.LocalName.Equals("Condition", StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(attribute.Value))));
+                    !string.IsNullOrWhiteSpace(attribute.Value))))
+                .SelectMany(element => element.Value.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                .Any(framework => framework.Trim().Equals(
+                    requestedFramework,
+                    StringComparison.OrdinalIgnoreCase));
         }
         catch
         {

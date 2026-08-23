@@ -426,7 +426,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void ReadSourceProvenance_PreprocessesWithBuildProjectReferencesDisabled()
+    public void ReadSourceProvenance_HonorsDisabledBuildProjectReferencesRequest()
     {
         DotNetPublishPipelineRunner.SourceProvenance provenance = ReadProjectReferencePropertyRecoveryFixture(
             appProjectXml: """
@@ -456,7 +456,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     """,
                 ["inputs/Selected.cs"] = "public static class SelectedInput { }"
             },
-            mutatedPath: "inputs/Selected.cs");
+            mutatedPath: "inputs/Selected.cs",
+            buildProperties: new Dictionary<string, string>
+            {
+                ["BuildProjectReferences"] = "false"
+            },
+            buildFramework: "net8.0");
 
         Assert.True(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
         Assert.Contains(
