@@ -73,6 +73,7 @@ public sealed partial class DotNetPublishPipelineRunner
             PropertyDefinitions = declaration.PropertyDefinitions;
             InitialProperties = declaration.InitialProperties;
             ConditionProperties = conditionProperties;
+            IsPreResolveTargetTime = declaration.IsTargetTime && declaration.RunsBeforeResolveReferences;
         }
 
         internal LiteralProjectReferenceMetadataAssignment(
@@ -84,6 +85,7 @@ public sealed partial class DotNetPublishPipelineRunner
             PropertyDefinitions = source.PropertyDefinitions;
             InitialProperties = source.InitialProperties;
             ConditionProperties = source.ConditionProperties;
+            IsPreResolveTargetTime = source.IsPreResolveTargetTime;
         }
 
         internal string Value { get; }
@@ -95,6 +97,8 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyDictionary<string, string> InitialProperties { get; }
 
         internal IReadOnlyDictionary<string, string> ConditionProperties { get; }
+
+        internal bool IsPreResolveTargetTime { get; }
     }
 
     private static LiteralProjectReferenceMetadataAssignment[]

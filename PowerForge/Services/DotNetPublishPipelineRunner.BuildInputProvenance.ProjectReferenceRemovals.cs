@@ -97,7 +97,13 @@ public sealed partial class DotNetPublishPipelineRunner
                         var candidateNames = new HashSet<string>(
                             ReadProjectReferencePropertyNames(decoded),
                             StringComparer.OrdinalIgnoreCase);
-                        if (candidateNames.SetEquals(evaluatedNames) &&
+                        bool matchesResolvedMetadata = candidateNames.SetEquals(evaluatedNames);
+                        // The metadata query does not execute pre-resolution targets.
+                        // Exact scheduled replay is authoritative for that missing value.
+                        bool recoversPreResolveTargetMetadata = evaluatedNames.Count == 0 &&
+                                                               candidateNames.Count > 0 &&
+                                                               assignment.IsPreResolveTargetTime;
+                        if ((matchesResolvedMetadata || recoversPreResolveTargetMetadata) &&
                             !matchingMetadataContexts.Any(existing => existing.SetEquals(candidateNames)))
                         {
                             matchingMetadataContexts.Add(candidateNames);

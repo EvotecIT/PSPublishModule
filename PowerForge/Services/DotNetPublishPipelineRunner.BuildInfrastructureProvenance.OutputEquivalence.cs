@@ -79,11 +79,28 @@ public sealed partial class DotNetPublishPipelineRunner
         MetadataReader metadataReader = reader.GetMetadataReader();
         Guid moduleVersionId = metadataReader.GetGuid(metadataReader.GetModuleDefinition().Mvid);
         NormalizeNonIdentityGuidHeapEntries(metadata, moduleVersionId);
-        ZeroDirectory(image, reader.PEHeaders, peHeader.ImportAddressTableDirectory);
-
-        int sectionStart = reader.PEHeaders.SectionHeaders.Min(section => section.PointerToRawData);
         int metadataStart = reader.PEHeaders.MetadataStartOffset;
-        if (sectionStart < 0 || metadataStart < sectionStart || metadataStart > image.Length)
+        if (metadataStart < 0 || metadataStart > image.Length - metadata.Length)
+            throw new InvalidDataException("The managed metadata is outside the PE image.");
+        Buffer.BlockCopy(metadata, 0, image, metadataStart, metadata.Length);
+        ZeroDirectory(image, reader.PEHeaders, peHeader.ImportAddressTableDirectory);
+        // Controlled rebuild paths can change non-semantic debug records. Normalize
+        // only those declared ranges; every other mapped byte remains provenance.
+        foreach (DebugDirectoryEntry entry in reader.ReadDebugDirectory())
+        {
+            ZeroRange(image, entry.DataPointer, entry.DataSize);
+        }
+        ZeroDirectory(image, reader.PEHeaders, peHeader.DebugTableDirectory);
+
+        SectionHeader[] mappedSections = reader.PEHeaders.SectionHeaders
+            .Where(section => section.SizeOfRawData > 0)
+            .ToArray();
+        if (mappedSections.Length == 0)
+            throw new InvalidDataException("The managed PE image has no mapped section data.");
+        int sectionStart = mappedSections.Min(section => section.PointerToRawData);
+        int sectionEnd = mappedSections.Max(section =>
+            checked(section.PointerToRawData + section.SizeOfRawData));
+        if (sectionStart < 0 || sectionEnd < sectionStart || sectionEnd > image.Length)
             throw new InvalidDataException("The managed PE section layout is invalid.");
 
         using var content = new MemoryStream();
@@ -94,10 +111,7 @@ public sealed partial class DotNetPublishPipelineRunner
         WriteInt32(content, (int)peHeader.DllCharacteristics);
         WriteInt32(content, (int)corHeader.Flags);
         WriteInt32(content, corHeader.EntryPointTokenOrRelativeVirtualAddress);
-        content.Write(image, sectionStart, metadataStart - sectionStart);
-        content.Write(metadata, 0, metadata.Length);
-        WriteDirectoryContent(content, image, reader.PEHeaders, corHeader.ResourcesDirectory);
-        WriteDirectoryContent(content, image, reader.PEHeaders, peHeader.ResourceTableDirectory);
+        content.Write(image, sectionStart, sectionEnd - sectionStart);
         return content.ToArray();
     }
 
@@ -151,21 +165,6 @@ public sealed partial class DotNetPublishPipelineRunner
             return;
         int offset = MapRvaToFileOffset(headers, directory.RelativeVirtualAddress);
         ZeroRange(image, offset, directory.Size);
-    }
-
-    private static void WriteDirectoryContent(
-        Stream destination,
-        byte[] image,
-        PEHeaders headers,
-        DirectoryEntry directory)
-    {
-        WriteInt32(destination, directory.Size);
-        if (directory.RelativeVirtualAddress == 0 || directory.Size == 0)
-            return;
-        int offset = MapRvaToFileOffset(headers, directory.RelativeVirtualAddress);
-        if (offset < 0 || directory.Size < 0 || offset > image.Length - directory.Size)
-            throw new InvalidDataException("The PE directory is outside the image.");
-        destination.Write(image, offset, directory.Size);
     }
 
     private static void WriteInt32(Stream destination, int value)

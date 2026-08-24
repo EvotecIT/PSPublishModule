@@ -163,6 +163,18 @@ public sealed partial class DotNetPublishPipelineRunner
                                  assignment.DefiningProjectPath,
                                  assignment.Value))
                     {
+                        if (preferEffectiveLiteralAssignments &&
+                            TryUnescapeMsBuildLiteral(candidateAssignments, out string? decodedAssignments) &&
+                            string.IsNullOrWhiteSpace(decodedAssignments))
+                        {
+                            // A definite empty update clears the metadata overlay and
+                            // therefore preserves the build request's base context.
+                            var emptyTable = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                            if (keys.Add(BuildProjectReferencePropertyTableKey(emptyTable)))
+                                results.Add(emptyTable);
+                            continue;
+                        }
+
                         bool parsed = preferEffectiveLiteralAssignments
                             ? candidateAssignments.IndexOf("$(", StringComparison.Ordinal) >= 0 &&
                               !hasPostResolveAssignments
@@ -239,8 +251,10 @@ public sealed partial class DotNetPublishPipelineRunner
         string metadataDefinitionPath,
         string? rawAssignments)
     {
-        if (string.IsNullOrWhiteSpace(rawAssignments))
+        if (rawAssignments is null)
             return Array.Empty<string>();
+        if (string.IsNullOrWhiteSpace(rawAssignments))
+            return [rawAssignments];
 
         var propertyValueCache = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         var pending = new Queue<string>();
