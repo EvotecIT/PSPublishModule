@@ -136,6 +136,12 @@ internal static class PowerShellArtifactSetPublisher
     /// <param name="parameterName">Public parameter name to report when validation fails.</param>
     internal static void EnsureArtifactNameIsNotReserved(string artifactName, string parameterName)
     {
+        if (artifactName.EndsWith(".", StringComparison.Ordinal) || IsWindowsDeviceName(artifactName))
+        {
+            throw new ArgumentException(
+                "Artifact name is not stable under Windows file-name normalization or uses a reserved Windows device name.",
+                parameterName);
+        }
         if (!artifactName.StartsWith(".", StringComparison.Ordinal))
             return;
         var marker = artifactName.IndexOf(".artifact-", 1, StringComparison.OrdinalIgnoreCase);
@@ -150,6 +156,19 @@ internal static class PowerShellArtifactSetPublisher
                 "Artifact name overlaps the reserved publication-control namespace used for locks, staging, and rollback.",
                 parameterName);
         }
+    }
+
+    private static bool IsWindowsDeviceName(string artifactName)
+    {
+        var stem = artifactName.Split('.')[0];
+        if (stem.Equals("CON", StringComparison.OrdinalIgnoreCase) ||
+            stem.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
+            stem.Equals("AUX", StringComparison.OrdinalIgnoreCase) ||
+            stem.Equals("NUL", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return stem.Length == 4 &&
+               (stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase) || stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
+               stem[3] is >= '1' and <= '9';
     }
 
     private static bool EntryExists(string path) => File.Exists(path) || Directory.Exists(path);

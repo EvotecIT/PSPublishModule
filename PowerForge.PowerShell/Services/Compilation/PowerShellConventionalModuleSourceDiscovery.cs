@@ -32,13 +32,15 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         {
             var acceptedLoaders = FindConventionalLoaders(command, ast, rootPath).ToArray();
             if (acceptedLoaders.Length == 0 ||
-                !TryReadPathPattern(command, out var relativePattern) ||
+                !TryReadPathPattern(command, out var relativePattern, out var isLiteralPath) ||
                 !Path.GetExtension(relativePattern).Equals(".ps1", StringComparison.OrdinalIgnoreCase))
                 continue;
             foreach (var loader in acceptedLoaders)
                 loaders[loader.StartOffset] = loader;
 
             var normalized = relativePattern.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+            if (isLiteralPath && WildcardPattern.ContainsWildcardCharacters(relativePattern))
+                throw new InvalidOperationException($"Conventional module source LiteralPath '{relativePattern}' at {rootPath}:{command.Extent.StartLineNumber} cannot contain wildcard characters.");
             if (Path.IsPathRooted(normalized) || LooksLikeWindowsRootedPath(relativePattern))
                 throw new InvalidOperationException($"Conventional module source pattern '{relativePattern}' at {rootPath}:{command.Extent.StartLineNumber} must remain relative to $PSScriptRoot.");
             var directoryPart = Path.GetDirectoryName(normalized) ?? string.Empty;
@@ -56,7 +58,9 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 .Any(static parameter => parameter.ParameterName.Equals("Recurse", StringComparison.OrdinalIgnoreCase))
                 ? SearchOption.AllDirectories
                 : SearchOption.TopDirectoryOnly;
-            foreach (var file in Directory.EnumerateFiles(searchRoot, filePattern, searchOption))
+            var wildcard = new WildcardPattern(filePattern, WildcardOptions.IgnoreCase | WildcardOptions.Compiled);
+            foreach (var file in Directory.EnumerateFiles(searchRoot, "*", searchOption)
+                         .Where(path => wildcard.IsMatch(Path.GetFileName(path))))
             {
                 var fullPath = Path.GetFullPath(file);
                 PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, fullPath, $"Conventional module source '{fullPath}' traverses a symbolic link or junction.");
@@ -71,9 +75,10 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             loaders.Values.OrderBy(static loader => loader.StartOffset).ToArray());
     }
 
-    private static bool TryReadPathPattern(CommandAst command, out string relativePattern)
+    private static bool TryReadPathPattern(CommandAst command, out string relativePattern, out bool isLiteralPath)
     {
         relativePattern = string.Empty;
+        isLiteralPath = false;
         for (var index = 1; index < command.CommandElements.Count - 1; index++)
         {
             if (command.CommandElements[index] is not CommandParameterAst parameter ||
@@ -89,6 +94,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             if (!match.Success)
                 return false;
             relativePattern = match.Groups["suffix"].Value.TrimStart('\\', '/');
+            isLiteralPath = parameter.ParameterName.Equals("LiteralPath", StringComparison.OrdinalIgnoreCase);
             return true;
         }
         return false;
@@ -98,8 +104,10 @@ internal static class PowerShellConventionalModuleSourceDiscovery
     {
         for (var parent = node.Parent; parent is not null && !ReferenceEquals(parent, root); parent = parent.Parent)
         {
-            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst ||
+            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst or IfStatementAst or WhileStatementAst or ForStatementAst or SwitchStatementAst or TryStatementAst or TrapStatementAst ||
                 parent is ScriptBlockAst scriptBlock && !ReferenceEquals(scriptBlock, root))
+                return false;
+            if (parent is ForEachStatementAst loop && !IsDescendantOf(node, loop.Condition))
                 return false;
         }
         return true;

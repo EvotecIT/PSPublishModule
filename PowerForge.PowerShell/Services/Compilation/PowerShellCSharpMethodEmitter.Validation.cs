@@ -22,6 +22,14 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             }
             if (metadata.Validations.Length == 0)
                 continue;
+            var skipWhenOmitted = !metadata.IsMandatory &&
+                                  _capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters);
+            if (skipWhenOmitted)
+            {
+                AppendLine($"if (__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(metadata.Name)}))");
+                AppendLine("{");
+                _indent++;
+            }
             if (parameterType.IsArray)
             {
                 var elementType = parameterType.GetElementType()!;
@@ -37,6 +45,11 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             else
             {
                 EmitValidationRules(metadata, identifier, parameterType);
+            }
+            if (skipWhenOmitted)
+            {
+                _indent--;
+                AppendLine("}");
             }
         }
     }
@@ -111,7 +124,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private static string EmitValidatePatternFailure(string value, string pattern)
     {
         var actual = $"global::System.Convert.ToString({value}, global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty";
-        return $"!global::System.Text.RegularExpressions.Regex.IsMatch({actual}, {PowerShellCSharpLiteral.QuoteString(pattern)}, global::System.Text.RegularExpressions.RegexOptions.IgnoreCase | global::System.Text.RegularExpressions.RegexOptions.CultureInvariant)";
+        return $"!global::System.Text.RegularExpressions.Regex.IsMatch({actual}, {PowerShellCSharpLiteral.QuoteString(pattern)}, global::System.Text.RegularExpressions.RegexOptions.IgnoreCase)";
     }
 
     private static string GetValidationMessage(string parameterName, PowerShellCompilationValidationKind kind)

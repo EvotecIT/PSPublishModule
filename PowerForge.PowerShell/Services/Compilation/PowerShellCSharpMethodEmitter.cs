@@ -113,9 +113,10 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
         var statements = _statements ?? _body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         _requiresBoundParameters = _capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters) &&
-            statements.SelectMany(static statement => statement.FindAll(static node => node is InvokeMemberExpressionAst, searchNestedScriptBlocks: false))
-                .OfType<InvokeMemberExpressionAst>()
-                .Any(static invocation => PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out _));
+            (_parameterMetadata.Values.Any(static parameter => !parameter.IsMandatory && parameter.Validations.Length > 0) ||
+             statements.SelectMany(static statement => statement.FindAll(static node => node is InvokeMemberExpressionAst, searchNestedScriptBlocks: false))
+                 .OfType<InvokeMemberExpressionAst>()
+                 .Any(static invocation => PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out _)));
         var runtimeTailStart = _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
             ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(statements, _body, _localFunctionNames)
             : -1;
@@ -216,7 +217,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             .Select(static parameter => parameter.Name.VariablePath.UserPath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var parameterBlock = "param(" + string.Join(", ", referencedNames.Select(name =>
-            (switchParameters.Contains(name) ? "[switch] " : string.Empty) + "$" + name)) + ")";
+            (switchParameters.Contains(name) ? "[switch] " : string.Empty) + EmitBracedPowerShellVariable(name))) + ")";
         var script = parameterBlock + Environment.NewLine + string.Join(Environment.NewLine, statements.Select(static statement => statement.Extent.Text));
         var arguments = string.Join(", ", referencedNames.Select(GetVariableIdentifier));
         AppendLine($"__invokePowerShellRegion({PowerShellCSharpLiteral.QuoteString(script)}, new object?[] {{ {arguments} }});");
@@ -293,6 +294,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             }
             if (!CanAssign(existingType, rightType))
                 throw Error(assignment, $"Assignment changes '${name}' from '{existingType.FullName}' to incompatible type '{rightType.FullName}'.");
+            if (!_explicitlyTypedVariables.Contains(name) && existingType != rightType)
+                throw Error(assignment, $"Assignment changes inferred local '${name}' from '{existingType.FullName}' to '{rightType.FullName}'. Add an explicit type constraint to preserve CLR conversion semantics.");
             return;
         }
 
@@ -314,42 +317,6 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         if (assignment.Left is ConvertExpressionAst)
             _explicitlyTypedVariables.Add(name);
     }
-
-    private static bool HasAncestor<TAst>(Ast node) where TAst : Ast
-    {
-        for (var parent = node.Parent; parent is not null; parent = parent.Parent)
-        {
-            if (parent is TAst) return true;
-        }
-        return false;
-    }
-
-    private static bool HasBreakableAncestor(Ast node)
-    {
-        for (var parent = node.Parent; parent is not null; parent = parent.Parent)
-        {
-            if (parent is ForStatementAst or WhileStatementAst or ForEachStatementAst or SwitchStatementAst)
-                return true;
-            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst)
-                return false;
-        }
-        return false;
-    }
-
-    private static bool HasLoopAncestor(Ast node)
-    {
-        for (var parent = node.Parent; parent is not null; parent = parent.Parent)
-        {
-            if (parent is ForStatementAst or WhileStatementAst or ForEachStatementAst)
-                return true;
-            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst)
-                return false;
-        }
-        return false;
-    }
-
-    private static bool HasContinuableAncestor(Ast node)
-        => HasLoopAncestor(node) || HasAncestor<SwitchStatementAst>(node);
 
     private void ValidateVariableReferences(IEnumerable<StatementAst> statements)
     {

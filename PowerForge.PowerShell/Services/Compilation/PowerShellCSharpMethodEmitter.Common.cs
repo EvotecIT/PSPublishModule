@@ -6,6 +6,45 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellCSharpMethodEmitter
 {
+    private static string EmitBracedPowerShellVariable(string name)
+        => "${" + name.Replace("`", "``").Replace("}", "`}") + "}";
+
+    private static bool HasAncestor<TAst>(Ast node) where TAst : Ast
+    {
+        for (var parent = node.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is TAst) return true;
+        }
+        return false;
+    }
+
+    private static bool HasBreakableAncestor(Ast node)
+    {
+        for (var parent = node.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is ForStatementAst or WhileStatementAst or ForEachStatementAst or SwitchStatementAst)
+                return true;
+            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst)
+                return false;
+        }
+        return false;
+    }
+
+    private static bool HasLoopAncestor(Ast node)
+    {
+        for (var parent = node.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is ForStatementAst or WhileStatementAst or ForEachStatementAst)
+                return true;
+            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst)
+                return false;
+        }
+        return false;
+    }
+
+    private static bool HasContinuableAncestor(Ast node)
+        => HasLoopAncestor(node) || HasAncestor<SwitchStatementAst>(node);
+
     private static Type GetCompiledParameterType(ParameterAst parameter)
         => parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
             ? typeof(bool)

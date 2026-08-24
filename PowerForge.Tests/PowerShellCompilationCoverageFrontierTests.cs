@@ -212,7 +212,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal("7", RunModuleProof(result.ArtifactPath!, "Write-FrontierValue -Value 7"));
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
         Assert.Contains("new object?[] { captured }", generated, StringComparison.Ordinal);
-        Assert.Contains("param($captured)", generated, StringComparison.Ordinal);
+        Assert.Contains("param(${captured})", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -235,7 +235,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal("False", RunModuleProof(result.ArtifactPath!, "Get-FrontierSwitch"));
         Assert.Equal("True", RunModuleProof(result.ArtifactPath!, "Get-FrontierSwitch -Force"));
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
-        Assert.Contains("param([switch] $Force)", generated, StringComparison.Ordinal);
+        Assert.Contains("param([switch] ${Force})", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -268,10 +268,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 "(Get-FrontierTail -Headers $headers).Value; " +
                 "$hostType = [AppDomain]::CurrentDomain.GetAssemblies().GetTypes() | " +
                 "Where-Object Name -Like '*PowerShellRegionHost' | Select-Object -First 1; " +
-                "$dispatcher = $hostType.GetProperty('Dispatcher'); " +
-                "$null -ne $dispatcher.GetValue($null); " +
+                "$runspaceId = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.InstanceId; " +
+                "$getDispatcher = $hostType.GetMethod('GetDispatcher'); " +
+                "$null -ne $getDispatcher.Invoke($null, @($runspaceId)); " +
                 "Remove-Module -Name 'PowerForge.CommandTail'; " +
-                "$null -eq $dispatcher.GetValue($null)")
+                "$null -eq $getDispatcher.Invoke($null, @($runspaceId))")
             .Split(Environment.NewLine));
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
         Assert.Contains("$Output = Invoke-FrontierFallback", generated, StringComparison.Ordinal);

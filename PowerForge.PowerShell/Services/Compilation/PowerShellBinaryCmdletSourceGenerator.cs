@@ -120,7 +120,10 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         {
             builder.AppendLine($"public static class {GetRuntimeRegionHostTypeName(typed)}");
             builder.AppendLine("{");
-            builder.AppendLine("    public static ScriptBlock? Dispatcher { get; set; }");
+            builder.AppendLine("    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<global::System.Guid, ScriptBlock> Dispatchers = new();");
+            builder.AppendLine("    public static void SetDispatcher(global::System.Guid runspaceId, ScriptBlock dispatcher) => Dispatchers[runspaceId] = dispatcher;");
+            builder.AppendLine("    public static ScriptBlock? GetDispatcher(global::System.Guid runspaceId) => Dispatchers.TryGetValue(runspaceId, out var dispatcher) ? dispatcher : null;");
+            builder.AppendLine("    public static void ClearDispatcher(global::System.Guid runspaceId) => Dispatchers.TryRemove(runspaceId, out _);");
             builder.AppendLine("}");
             builder.AppendLine();
         }
@@ -198,7 +201,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         {
             builder.AppendLine("    private void InvokePowerShellRegion(string script, object?[] arguments)");
             builder.AppendLine("    {");
-            builder.AppendLine($"        var dispatcher = {GetRuntimeRegionHostTypeName(typed)}.Dispatcher;");
+            builder.AppendLine("        var runspaceId = global::System.Management.Automation.Runspaces.Runspace.DefaultRunspace?.InstanceId ?? global::System.Guid.Empty;");
+            builder.AppendLine($"        var dispatcher = {GetRuntimeRegionHostTypeName(typed)}.GetDispatcher(runspaceId);");
             builder.AppendLine("        var values = dispatcher is null");
             builder.AppendLine("            ? InvokeCommand.InvokeScript(SessionState, ScriptBlock.Create(script), arguments)");
             builder.AppendLine("            : dispatcher.Invoke(script, arguments);");

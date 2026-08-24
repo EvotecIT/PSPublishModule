@@ -11,7 +11,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
         PowerShellTypedCompilationResult typed,
         string? targetFramework)
     {
-        var definitions = new List<(string Path, FunctionDefinitionAst Function)>();
+        var definitions = new List<(string Path, ScriptBlockAst Root, FunctionDefinitionAst Function)>();
         foreach (var sourcePath in typed.SourcePaths)
         {
             Token[] tokens;
@@ -21,7 +21,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
                 return typed;
             definitions.AddRange(ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
                 .Cast<FunctionDefinitionAst>()
-                .Select(function => (sourcePath, function)));
+                .Select(function => (sourcePath, ast, function)));
         }
 
         var duplicateNames = definitions
@@ -29,15 +29,26 @@ internal static class PowerShellHybridFunctionCollisionResolver
             .Where(static group => group.Count() > 1)
             .Select(static group => group.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var earlyAvailabilityNames = definitions
+            .Where(static definition => definition.Root.FindAll(
+                    node => node is CommandAst command &&
+                            command.Extent.StartOffset < definition.Function.Extent.StartOffset &&
+                            IsModuleScope(command, definition.Root),
+                    searchNestedScriptBlocks: true)
+                .OfType<CommandAst>()
+                .Any(command => command.GetCommandName()?.Equals(definition.Function.Name, StringComparison.OrdinalIgnoreCase) == true))
+            .Select(static definition => definition.Function.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var fallbackNames = duplicateNames.Concat(earlyAvailabilityNames).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var excludedMethods = typed.Methods
-            .Where(method => duplicateNames.Contains(method.SourceName))
+            .Where(method => fallbackNames.Contains(method.SourceName))
             .Select(method => Path.GetFullPath(string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath) + "\0" + method.SourceName + "\0" + method.SourceLine)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (excludedMethods.Count == 0)
             return typed;
 
         var excludedNames = typed.Methods
-            .Where(method => duplicateNames.Contains(method.SourceName))
+            .Where(method => fallbackNames.Contains(method.SourceName))
             .Select(static method => method.SourceName)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var filtered = new PowerShellTypedCompilationTranspiler().TranspileExcluding(
@@ -46,21 +57,22 @@ internal static class PowerShellHybridFunctionCollisionResolver
             typed.TypeName,
             targetFramework,
             excludedMethods,
-            typed.Methods.Any(static method => method.RequiresPowerShellStreams)
-                ? PowerShellCompilationCapability.PowerShellStreams |
-                  PowerShellCompilationCapability.LocalFunctionCalls |
-                  PowerShellCompilationCapability.BoundParameters |
-                  PowerShellCompilationCapability.PowerShellObjects
-                : PowerShellCompilationCapability.None);
+            PowerShellCompilationCapability.PowerShellStreams |
+            PowerShellCompilationCapability.LocalFunctionCalls |
+            PowerShellCompilationCapability.BoundParameters |
+            PowerShellCompilationCapability.PowerShellObjects);
         var diagnostics = excludedNames.Select(name =>
         {
             var definition = definitions
                 .Where(item => item.Function.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(static item => item.Function.Extent.StartOffset)
                 .First();
+            var message = duplicateNames.Contains(name)
+                ? $"Function '{name}' has multiple retained definitions, so hybrid compilation keeps PowerShell's runtime replacement semantics."
+                : $"Function '{name}' is referenced by retained module-scope code before its declaration, so hybrid compilation preserves PowerShell's command-availability timing.";
             return new PowerShellCompilationDiagnostic(
                 PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                $"Function '{name}' has multiple retained definitions, so hybrid compilation keeps PowerShell's runtime replacement semantics.",
+                message,
                 definition.Path,
                 definition.Function.Extent.StartLineNumber,
                 definition.Function.Extent.StartColumnNumber);
@@ -76,5 +88,16 @@ internal static class PowerShellHybridFunctionCollisionResolver
                 .ThenBy(static diagnostic => diagnostic.Column)
                 .ToArray(),
             filtered.SourcePaths);
+    }
+
+    private static bool IsModuleScope(Ast node, ScriptBlockAst root)
+    {
+        for (var parent = node.Parent; parent is not null && !ReferenceEquals(parent, root); parent = parent.Parent)
+        {
+            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst ||
+                parent is ScriptBlockAst scriptBlock && !ReferenceEquals(scriptBlock, root))
+                return false;
+        }
+        return true;
     }
 }

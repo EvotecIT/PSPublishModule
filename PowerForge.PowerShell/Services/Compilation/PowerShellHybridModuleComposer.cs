@@ -70,7 +70,8 @@ internal static class PowerShellHybridModuleComposer
         if (typed.Methods.Any(static method => method.RequiresPowerShellCommandRegions))
         {
             var hostType = "[" + typed.NamespaceName + "." + PowerShellBinaryCmdletSourceGenerator.GetRuntimeRegionHostTypeName(typed) + "]";
-            import.Append(hostType).AppendLine("::Dispatcher = { param($script, [object[]] $arguments) & ([scriptblock]::Create($script)) @arguments }");
+            import.AppendLine("$__powerForgeRunspaceId = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.InstanceId");
+            import.Append(hostType).AppendLine("::SetDispatcher($__powerForgeRunspaceId, { param($script, [object[]] $arguments) & ([scriptblock]::Create($script)) @arguments })");
         }
         import.AppendLine();
         source.Insert(prologueEndOffset, import.ToString());
@@ -99,7 +100,7 @@ internal static class PowerShellHybridModuleComposer
         builder.AppendLine("$__powerForgeModule = $ExecutionContext.SessionState.Module");
         builder.AppendLine("$__powerForgePreviousOnRemove = $__powerForgeModule.OnRemove");
         builder.AppendLine("$__powerForgeModule.OnRemove = {");
-        builder.Append("    ").Append(hostType).AppendLine("::Dispatcher = $null");
+        builder.Append("    ").Append(hostType).AppendLine("::ClearDispatcher($__powerForgeRunspaceId)");
         builder.AppendLine("    if ($null -ne $__powerForgePreviousOnRemove) { & $__powerForgePreviousOnRemove }");
         builder.AppendLine("}.GetNewClosure()");
     }

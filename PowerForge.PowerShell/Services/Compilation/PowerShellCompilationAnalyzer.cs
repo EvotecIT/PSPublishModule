@@ -299,6 +299,8 @@ public sealed partial class PowerShellCompilationAnalyzer
             }
         }
 
+        ValidateParameterBindingNames(paramBlock, file, diagnostics);
+
         return result.ToArray();
     }
 

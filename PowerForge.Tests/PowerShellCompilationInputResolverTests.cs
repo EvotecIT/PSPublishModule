@@ -182,6 +182,57 @@ public sealed class PowerShellCompilationInputResolverTests
     }
 
     [Fact]
+    public void Resolve_RejectsWildcardExpansionAuthoredAsLiteralPath()
+    {
+        using var fixture = ResolverFixture.Create("LiteralConventionalModule");
+        fixture.Write("LiteralConventionalModule.psd1", "@{ RootModule = 'LiteralConventionalModule.psm1' }");
+        fixture.Write(
+            "LiteralConventionalModule.psm1",
+            "$Files = @(Get-ChildItem -LiteralPath $PSScriptRoot/Public/*.ps1); foreach ($File in $Files) { . $File.FullName }");
+        fixture.Write("Public/Get-UnloadedProof.ps1", "function Get-UnloadedProof { return 1 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("LiteralPath", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("wildcard", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_RejectsConditionalConventionalSourceProducer()
+    {
+        using var fixture = ResolverFixture.Create("ConditionalProducerModule");
+        fixture.Write("ConditionalProducerModule.psd1", "@{ RootModule = 'ConditionalProducerModule.psm1' }");
+        fixture.Write(
+            "ConditionalProducerModule.psm1",
+            "if ($false) { $Files = @(Get-ChildItem -Path $PSScriptRoot/Public/*.ps1) }; foreach ($File in $Files) { . $File.FullName }");
+        fixture.Write("Public/Get-UnloadedProof.ps1", "function Get-UnloadedProof { return 1 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_UsesPowerShellCharacterClassSemanticsForConventionalGlob()
+    {
+        using var fixture = ResolverFixture.Create("CharacterClassModule");
+        fixture.Write("CharacterClassModule.psd1", "@{ RootModule = 'CharacterClassModule.psm1' }");
+        var root = fixture.Write(
+            "CharacterClassModule.psm1",
+            "$Files = @(Get-ChildItem -Path $PSScriptRoot/Public/[AB]*.ps1); foreach ($File in $Files) { . $File.FullName }");
+        var alpha = fixture.Write("Public/Alpha.ps1", "function Get-Alpha { return 1 }");
+        var beta = fixture.Write("Public/Beta.ps1", "function Get-Beta { return 2 }");
+        var charlie = fixture.Write("Public/Charlie.ps1", "function Get-Charlie { return 3 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.Root);
+
+        Assert.Equal(new[] { alpha, beta, root }.OrderBy(static path => path), resolved.CompilationSourceFiles.OrderBy(static path => path));
+        Assert.DoesNotContain(charlie, resolved.SourceFiles);
+    }
+
+    [Fact]
     public void Resolve_ConventionalModuleLoaderAcceptsUnconditionalTryWrappedDotSourceAttempt()
     {
         using var fixture = ResolverFixture.Create("TryWrappedLoader");
