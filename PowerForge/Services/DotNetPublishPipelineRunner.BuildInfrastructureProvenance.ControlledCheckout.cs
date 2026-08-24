@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
@@ -129,167 +127,6 @@ public sealed partial class DotNetPublishPipelineRunner
         return false;
     }
 
-    private static bool TryCollectControlledGitFilterNames(
-        string gitRoot,
-        out string[] filterNames)
-    {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var pending = new Queue<string>();
-        var visited = new HashSet<string>(
-            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-        pending.Enqueue(Path.GetFullPath(gitRoot));
-        while (pending.Count > 0)
-        {
-            string repositoryRoot = pending.Dequeue();
-            if (!visited.Add(repositoryRoot))
-                continue;
-            if (!TryReadConfiguredGitFilterNames(repositoryRoot, names))
-            {
-                filterNames = Array.Empty<string>();
-                return false;
-            }
-
-            string? index = ReadGitRawText(repositoryRoot, "ls-files --stage -z");
-            if (index is null)
-            {
-                filterNames = Array.Empty<string>();
-                return false;
-            }
-            foreach (string entry in index.Split(
-                         new[] { '\0' },
-                         StringSplitOptions.RemoveEmptyEntries))
-            {
-                int tab = entry.IndexOf('\t');
-                if (tab <= 0)
-                    continue;
-                string[] metadata = entry.Substring(0, tab).Split(' ');
-                if (metadata.Length < 2 || !metadata[0].Equals("160000", StringComparison.Ordinal))
-                    continue;
-
-                string submoduleRoot = Path.GetFullPath(Path.Combine(
-                    repositoryRoot,
-                    entry.Substring(tab + 1)));
-                string? submoduleRevision = Directory.Exists(submoduleRoot)
-                    ? ReadGitText(submoduleRoot, "rev-parse HEAD")
-                    : null;
-                if (!IsSameOrBelowBuildInputPath(submoduleRoot, repositoryRoot) ||
-                    !string.Equals(metadata[1], submoduleRevision, StringComparison.OrdinalIgnoreCase))
-                {
-                    filterNames = Array.Empty<string>();
-                    return false;
-                }
-                pending.Enqueue(submoduleRoot);
-            }
-        }
-
-        filterNames = names.OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
-        return true;
-    }
-
-    private static bool TryReadConfiguredGitFilterNames(
-        string repositoryRoot,
-        ISet<string> filterNames)
-    {
-        var process = RunBuildInputEvaluationProcess(
-            "git",
-            repositoryRoot,
-            new[]
-            {
-                "config",
-                "--name-only",
-                "--get-regexp",
-                "^filter\\..*\\.(clean|smudge|process|required)$"
-            },
-            environmentVariables: null,
-            TimeSpan.FromSeconds(30));
-        if (process.TimedOut || (process.ExitCode != 0 && process.ExitCode != 1))
-            return false;
-
-        foreach (string line in process.StdOut.Split(
-                     new[] { '\r', '\n' },
-                     StringSplitOptions.RemoveEmptyEntries))
-        {
-            Match match = Regex.Match(
-                line.Trim(),
-                @"^filter\.(?<name>[A-Za-z0-9_.-]+)\.(?:clean|smudge|process|required)$",
-                RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-            if (!match.Success)
-                return false;
-            filterNames.Add(match.Groups["name"].Value);
-        }
-        return true;
-    }
-
-    private static string[] BuildControlledGitArguments(
-        IEnumerable<string> filterNames,
-        params string[] command)
-    {
-        var arguments = new List<string>
-        {
-            "-c",
-            "core.hooksPath=" + (IsWindows() ? "NUL" : "/dev/null")
-        };
-        foreach (string filterName in filterNames)
-        {
-            arguments.Add("-c");
-            arguments.Add("filter." + filterName + ".clean=");
-            arguments.Add("-c");
-            arguments.Add("filter." + filterName + ".smudge=");
-            arguments.Add("-c");
-            arguments.Add("filter." + filterName + ".process=");
-            arguments.Add("-c");
-            arguments.Add("filter." + filterName + ".required=false");
-        }
-        arguments.AddRange(command);
-        return arguments.ToArray();
-    }
-
-    private static bool TryInitializeControlledSubmodules(
-        string checkoutRoot,
-        IReadOnlyCollection<string> filterNames)
-    {
-        if (!File.Exists(Path.Combine(checkoutRoot, ".gitmodules")))
-            return true;
-
-        string[] updateCommand =
-        [
-            "-c",
-            "protocol.allow=never",
-            "-c",
-            "protocol.file.allow=always",
-            "submodule",
-            "update",
-            "--init",
-            "--recursive",
-            "--no-fetch"
-        ];
-        var update = RunBuildInputEvaluationProcess(
-            "git",
-            checkoutRoot,
-            BuildControlledGitArguments(filterNames, updateCommand),
-            environmentVariables: null,
-            TimeSpan.FromMinutes(2));
-        if (update.ExitCode != 0 || update.TimedOut)
-            return false;
-
-        var status = RunBuildInputEvaluationProcess(
-            "git",
-            checkoutRoot,
-            BuildControlledGitArguments(
-                filterNames,
-                "submodule",
-                "status",
-                "--recursive"),
-            environmentVariables: null,
-            TimeSpan.FromMinutes(1));
-        return status.ExitCode == 0 &&
-               !status.TimedOut &&
-               status.StdOut.Split(
-                       new[] { '\r', '\n' },
-                       StringSplitOptions.RemoveEmptyEntries)
-                   .All(line => line.Length > 0 && line[0] == ' ');
-    }
-
     private static bool TryCreateControlledSourceCheckout(
         string projectPath,
         string checkoutRoot,
@@ -317,7 +154,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!IsSameOrBelowBuildInputPath(controlledProjectPath, checkoutRoot))
                 return false;
 
-            if (!TryCollectControlledGitFilterNames(gitRoot!, out string[] filterNames))
+            if (!TryCollectControlledGitFilterNames(gitRoot!, revision!, out string[] filterNames))
                 return false;
             var checkout = RunBuildInputEvaluationProcess(
                 "git",

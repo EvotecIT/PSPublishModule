@@ -61,46 +61,6 @@ public sealed partial class DotNetPublishPipelineRunner
         internal bool ExecutionMayBeSkipped { get; }
     }
 
-    private sealed class LiteralProjectReferenceMetadataAssignment
-    {
-        internal LiteralProjectReferenceMetadataAssignment(
-            string value,
-            PreprocessedProjectReferenceDeclaration declaration,
-            IReadOnlyDictionary<string, string> conditionProperties)
-        {
-            Value = value;
-            DefiningProjectPath = declaration.DefiningProjectPath;
-            PropertyDefinitions = declaration.PropertyDefinitions;
-            InitialProperties = declaration.InitialProperties;
-            ConditionProperties = conditionProperties;
-            IsPreResolveTargetTime = declaration.IsTargetTime && declaration.RunsBeforeResolveReferences;
-        }
-
-        internal LiteralProjectReferenceMetadataAssignment(
-            string value,
-            LiteralProjectReferenceMetadataAssignment source)
-        {
-            Value = value;
-            DefiningProjectPath = source.DefiningProjectPath;
-            PropertyDefinitions = source.PropertyDefinitions;
-            InitialProperties = source.InitialProperties;
-            ConditionProperties = source.ConditionProperties;
-            IsPreResolveTargetTime = source.IsPreResolveTargetTime;
-        }
-
-        internal string Value { get; }
-
-        internal string DefiningProjectPath { get; }
-
-        internal IReadOnlyList<PreprocessedProjectPropertyDefinition> PropertyDefinitions { get; }
-
-        internal IReadOnlyDictionary<string, string> InitialProperties { get; }
-
-        internal IReadOnlyDictionary<string, string> ConditionProperties { get; }
-
-        internal bool IsPreResolveTargetTime { get; }
-    }
-
     private static LiteralProjectReferenceMetadataAssignment[]
         ReadEffectiveLiteralProjectReferenceMetadataAssignments(
             string declaringProjectPath,
@@ -628,23 +588,4 @@ public sealed partial class DotNetPublishPipelineRunner
         return assignments;
     }
 
-    private static List<LiteralProjectReferenceMetadataAssignment>
-        MergeLiteralProjectReferenceMetadataAssignments(
-            IEnumerable<LiteralProjectReferenceMetadataAssignment> first,
-            IEnumerable<LiteralProjectReferenceMetadataAssignment> second)
-    {
-        return first.Concat(second)
-            .GroupBy(BuildLiteralProjectReferenceMetadataAssignmentKey, StringComparer.Ordinal)
-            .Select(group => group.First())
-            .ToList();
-    }
-
-    private static string BuildLiteralProjectReferenceMetadataAssignmentKey(
-        LiteralProjectReferenceMetadataAssignment assignment)
-    {
-        string path = IsWindows()
-            ? assignment.DefiningProjectPath.ToUpperInvariant()
-            : assignment.DefiningProjectPath;
-        return path.Length + ":" + path + assignment.Value.Length + ":" + assignment.Value;
-    }
 }
