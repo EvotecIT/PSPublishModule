@@ -145,6 +145,7 @@ public sealed class PowerShellCompilationArtifactBuilder
             }
             else
             {
+                var parameterInitializers = GeneratePackagedParameterInitializers(spec.SourcePath);
                 File.WriteAllText(
                     Path.Combine(workspace, "Source.ps1"),
                     GeneratePackagedScript(spec.SourcePath),
@@ -152,7 +153,8 @@ public sealed class PowerShellCompilationArtifactBuilder
                 File.WriteAllText(
                     Path.Combine(workspace, "Program.cs"),
                     ReadTemplate(PackagedProgramTemplate)
-                        .Replace("{{SWITCH_PARAMETERS}}", GenerateSwitchParameterInitializer(spec.SourcePath)),
+                        .Replace("{{PARAMETERS}}", parameterInitializers.Parameters)
+                        .Replace("{{SWITCH_PARAMETERS}}", parameterInitializers.SwitchParameters),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 projectPath = Path.Combine(workspace, artifactName + ".csproj");
                 File.WriteAllText(
@@ -484,28 +486,39 @@ public sealed class PowerShellCompilationArtifactBuilder
     private static string GeneratePackagedScript(string sourcePath)
         => PowerShellPackagedScriptRewriter.Rewrite(sourcePath);
 
-    private static string GenerateSwitchParameterInitializer(string sourcePath)
+    private static (string Parameters, string SwitchParameters) GeneratePackagedParameterInitializers(string sourcePath)
     {
         Token[] tokens;
         ParseError[] errors;
         var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
         if (errors.Length > 0)
             throw new InvalidOperationException("Packaged script parameters could not be parsed for native argument binding.");
+        var parameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var switchParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var parameter in ast.ParamBlock?.Parameters.Where(static parameter => parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)) ?? Array.Empty<ParameterAst>())
+        foreach (var parameter in ast.ParamBlock?.Parameters.AsEnumerable() ?? Enumerable.Empty<ParameterAst>())
         {
-            switchParameters.Add(parameter.Name.VariablePath.UserPath);
+            var names = new List<string> { parameter.Name.VariablePath.UserPath };
             foreach (var alias in parameter.Attributes.OfType<AttributeAst>().Where(static attribute => IsAttributeNamed(attribute, "Alias")))
             foreach (var value in alias.PositionalArguments.OfType<StringConstantExpressionAst>())
-                switchParameters.Add(value.Value);
+                names.Add(value.Value);
+            parameters.UnionWith(names);
+            if (parameter.StaticType == typeof(System.Management.Automation.SwitchParameter))
+                switchParameters.UnionWith(names);
         }
         if (ast.ParamBlock?.Attributes.OfType<AttributeAst>().Any(static attribute => IsAttributeNamed(attribute, "CmdletBinding")) == true)
-            switchParameters.UnionWith(new[] { "Verbose", "Debug", "WhatIf", "Confirm" });
-        return string.Join(", ", switchParameters
+        {
+            var commonSwitches = new[] { "Verbose", "Debug", "WhatIf", "Confirm" };
+            parameters.UnionWith(commonSwitches);
+            switchParameters.UnionWith(commonSwitches);
+        }
+        return (GenerateInitializer(parameters), GenerateInitializer(switchParameters));
+    }
+
+    private static string GenerateInitializer(IEnumerable<string> values)
+        => string.Join(", ", values
             .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
             .Select(name => "\"" + EscapeCSharpString(name) + "\"")
             .ToArray());
-    }
 
     private static bool IsAttributeNamed(AttributeAst attribute, string name)
     {
@@ -661,7 +674,7 @@ public sealed class PowerShellCompilationArtifactBuilder
             : $"<PackageReference Include=\"Microsoft.PowerShell.SDK\" Version=\"{GetPowerShellSdkVersion(targetFramework)}\" PrivateAssets=\"all\" ExcludeAssets=\"runtime\" />";
 
     private static string EscapeCSharpString(string value)
-        => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        => PowerShellCSharpLiteral.EscapeStringContent(value);
 
     private static string ReadTemplate(string resourceName)
     {

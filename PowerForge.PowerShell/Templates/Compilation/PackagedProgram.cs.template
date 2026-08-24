@@ -7,6 +7,7 @@ namespace PowerForge.Compiled;
 internal static class Program
 {
     private const string ScriptResourceName = "PowerForge.Compiled.Source.ps1";
+    private static readonly HashSet<string> Parameters = new(StringComparer.OrdinalIgnoreCase) { {{PARAMETERS}} };
     private static readonly HashSet<string> SwitchParameters = new(StringComparer.OrdinalIgnoreCase) { {{SWITCH_PARAMETERS}} };
 
     private static int Main(string[] args)
@@ -97,6 +98,7 @@ internal static class Program
 
             if (!positionalOnly && TryParseParameter(value, out var name, out var inlineValue))
             {
+                name = ResolveParameterName(name);
                 if (inlineValue is null && !SwitchParameters.Contains(name))
                 {
                     if (index + 1 >= arguments.Count || LooksLikeParameter(arguments[index + 1]))
@@ -112,6 +114,22 @@ internal static class Program
 
             yield return new ScriptArgument(null, value);
         }
+    }
+
+    private static string ResolveParameterName(string name)
+    {
+        var exact = Parameters.FirstOrDefault(candidate => candidate.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null) return exact;
+        var matches = Parameters
+            .Where(candidate => candidate.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToArray();
+        return matches.Length switch
+        {
+            0 => name,
+            1 => matches[0],
+            _ => throw new ArgumentException($"Parameter name '-{name}' is ambiguous.")
+        };
     }
 
     private static bool TryParseParameter(string value, out string name, out string? inlineValue)

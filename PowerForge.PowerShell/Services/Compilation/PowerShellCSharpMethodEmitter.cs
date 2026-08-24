@@ -714,19 +714,10 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     }
 
     private static string EmitString(string value)
-        => "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n") + "\"";
+        => PowerShellCSharpLiteral.QuoteString(value);
 
     private static string EmitChar(char value)
-        => value switch
-        {
-            '\\' => "'\\\\'",
-            '\'' => "'\\\''",
-            '\0' => "'\\0'",
-            '\r' => "'\\r'",
-            '\n' => "'\\n'",
-            '\t' => "'\\t'",
-            _ => "'" + value + "'"
-        };
+        => PowerShellCSharpLiteral.QuoteChar(value);
 
     private void AppendLine(string text)
         => _builder.Append(' ', _indent * 4).AppendLine(text);

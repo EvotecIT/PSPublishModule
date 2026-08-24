@@ -36,13 +36,17 @@ public sealed class PowerShellCompilationAnalyzer
         if (spec is null)
             throw new ArgumentNullException(nameof(spec));
 
-        PowerShellGeneratedTargetFrameworkPolicy.EnsureHostCanAnalyze(spec.TargetFramework);
-        PowerShellGeneratedReferenceAssemblyResolver.EnsureAvailable(spec.TargetFramework);
+        var analysisTargetFramework = spec.Mode == PowerShellCompilationMode.Package ? null : spec.TargetFramework;
+        if (analysisTargetFramework is not null)
+        {
+            PowerShellGeneratedTargetFrameworkPolicy.EnsureHostCanAnalyze(analysisTargetFramework);
+            PowerShellGeneratedReferenceAssemblyResolver.EnsureAvailable(analysisTargetFramework);
+        }
         var files = DiscoverFiles(spec);
         var basePath = Directory.Exists(spec.Path) ? spec.Path : Path.GetDirectoryName(spec.Path) ?? Directory.GetCurrentDirectory();
         return new PowerShellCompilationPlan(
             spec.Mode,
-            files.Select(file => AnalyzeFile(file, basePath, spec.TargetFramework)).ToArray(),
+            files.Select(file => AnalyzeFile(file, basePath, analysisTargetFramework)).ToArray(),
             spec.TargetFramework);
     }
 

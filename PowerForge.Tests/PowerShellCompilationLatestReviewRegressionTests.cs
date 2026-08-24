@@ -244,4 +244,78 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var result = new PowerShellCompilationArtifactBuilder().Build(library);
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
     }
+
+    [Fact]
+    public void Analyze_PackageModeDoesNotApplyTypedTargetFrameworkSurface()
+    {
+        using var fixture = ArtifactFixture.Create("return [System.DateOnly]::MinValue");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Package,
+            targetFramework: "net472"));
+
+        Assert.Equal("net472", plan.TargetFramework);
+        Assert.Equal(1, plan.TotalUnits);
+        Assert.Equal(1, plan.CompilableUnits);
+    }
+
+    [Fact]
+    public void Build_HybridLibraryRoutesNormalizedMethodNameCollisionsToDiagnostics()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-A-B { return 1 }; function Get-A_B { return 2 }; function Get-SafeValue { return 3 }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.NormalizedCollision",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Equal(2, result.Manifest.OmittedUnits);
+        Assert.Equal(2, result.Manifest.Diagnostics.Count(diagnostic =>
+            diagnostic.Message.Contains("collides with another function", StringComparison.OrdinalIgnoreCase)));
+        var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
+        var type = assembly.GetType("PowerForge.Compiled.PowerForge_NormalizedCollisionMethods", throwOnError: true)!;
+        Assert.Null(type.GetMethod("Get_A_B"));
+        Assert.Equal(3, type.GetMethod("Get_SafeValue")!.Invoke(null, null));
+    }
+
+    [Fact]
+    public void Build_PackagedExecutableRecognizesUniqueSwitchAbbreviationBeforeConsumingPositionals()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([switch] $Force, [string] $Name); return \"$($Force.IsPresent)|$Name\"");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.PackagedAbbreviation",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(result.ArtifactPath!, "-Fo", "Ada");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal("True|Ada", run.StandardOutput.Trim());
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Build_StrictLibraryEscapesControlAndUnicodeLineSeparatorConstants()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-ControlText { return \"`0" + "\u0085\u2028\u2029" + "\" }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ControlConstants",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
+        var type = assembly.GetType("PowerForge.Compiled.PowerForge_ControlConstantsMethods", throwOnError: true)!;
+        Assert.Equal("\0\u0085\u2028\u2029", type.GetMethod("Get_ControlText")!.Invoke(null, null));
+    }
 }
