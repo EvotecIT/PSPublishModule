@@ -198,6 +198,25 @@ public sealed class PowerShellCompilationInputResolverTests
         Assert.Contains("wildcard", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("-Exclude Disabled.ps1", "Exclude")]
+    [InlineData("-Recurse:$false", "Recurse")]
+    public void Resolve_RejectsUnmodeledConventionalLoaderOptions(string option, string expectedOption)
+    {
+        using var fixture = ResolverFixture.Create("UnsupportedConventionalOption");
+        fixture.Write("UnsupportedConventionalOption.psd1", "@{ RootModule = 'UnsupportedConventionalOption.psm1' }");
+        fixture.Write(
+            "UnsupportedConventionalOption.psm1",
+            $"$Files = @(Get-ChildItem -Path $PSScriptRoot/Public/*.ps1 {option}); foreach ($File in $Files) {{ . $File.FullName }}");
+        fixture.Write("Public/Get-Proof.ps1", "function Get-Proof { return 1 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("does not support loader option", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(expectedOption, exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Resolve_RejectsConditionalConventionalSourceProducer()
     {

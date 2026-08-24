@@ -70,7 +70,7 @@ public sealed class PowerShellCompilationBuildSpec
         => kind switch
         {
             PowerShellCompilationArtifactKind.Executable => PowerShellCompilationMode.Package,
-            PowerShellCompilationArtifactKind.BinaryModule => PowerShellCompilationMode.Strict,
+            PowerShellCompilationArtifactKind.BinaryModule => PowerShellCompilationMode.Hybrid,
             PowerShellCompilationArtifactKind.Library => PowerShellCompilationMode.Hybrid,
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };

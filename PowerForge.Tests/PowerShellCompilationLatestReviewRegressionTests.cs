@@ -238,7 +238,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationArtifactKind.Executable);
 
         Assert.Equal(PowerShellCompilationMode.Hybrid, library.Mode);
-        Assert.Equal(PowerShellCompilationMode.Strict, module.Mode);
+        Assert.Equal(PowerShellCompilationMode.Hybrid, module.Mode);
         Assert.Equal(PowerShellCompilationMode.Package, executable.Mode);
         var result = new PowerShellCompilationArtifactBuilder().Build(library);
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);

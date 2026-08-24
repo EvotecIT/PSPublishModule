@@ -16,7 +16,8 @@ internal static class PowerShellPackagedScriptRewriter
     internal static string Rewrite(
         string sourcePath,
         string? packagedCommandPathExpression = null,
-        bool allowDotSource = false)
+        bool allowDotSource = false,
+        string? dependencyCommandPathExpression = null)
     {
         var commandPathExpression = string.IsNullOrWhiteSpace(packagedCommandPathExpression)
             ? PackagedCommandPathExpression
@@ -61,6 +62,9 @@ internal static class PowerShellPackagedScriptRewriter
 
         var invocationPaths = FindInvocationPaths(ast).ToArray();
         var parameterBindingPaths = FindParameterBindingPaths(ast).ToArray();
+        var dependencyLoadPaths = string.IsNullOrWhiteSpace(dependencyCommandPathExpression)
+            ? Array.Empty<VariableExpressionAst>()
+            : FindDependencyLoadPaths(ast).ToArray();
         var replacements = exits.Select(exit => CreateExitReplacement(exit, invocationPaths, commandPathExpression))
             .Concat(invocationPaths
                 .Where(path => !exits.Any(exit => Contains(exit.Extent, path.Extent)))
@@ -74,6 +78,12 @@ internal static class PowerShellPackagedScriptRewriter
                 path.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase)
                     ? "$([System.IO.Path]::GetDirectoryName(" + commandPathExpression + "))"
                     : commandPathExpression)))
+            .Concat(dependencyLoadPaths.Select(path => new SourceReplacement(
+                path.Extent.StartOffset,
+                path.Extent.EndOffset,
+                path.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase)
+                    ? "$([System.IO.Path]::GetDirectoryName(" + dependencyCommandPathExpression + "))"
+                    : dependencyCommandPathExpression!)))
             .OrderByDescending(static replacement => replacement.StartOffset)
             .ToArray();
 
@@ -170,6 +180,26 @@ internal static class PowerShellPackagedScriptRewriter
         {
             foreach (var variable in parameter
                          .FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
+                         .Cast<VariableExpressionAst>())
+            {
+                if (variable.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase) ||
+                    variable.VariablePath.UserPath.Equals("PSCommandPath", StringComparison.OrdinalIgnoreCase))
+                    yield return variable;
+            }
+        }
+    }
+
+    private static IEnumerable<VariableExpressionAst> FindDependencyLoadPaths(ScriptBlockAst ast)
+    {
+        foreach (var command in ast.FindAll(
+                     static node => node is CommandAst { InvocationOperator: TokenKind.Dot },
+                     searchNestedScriptBlocks: true).Cast<CommandAst>())
+        {
+            foreach (var variable in command.CommandElements
+                         .Take(1)
+                         .SelectMany(static element => element.FindAll(
+                             static node => node is VariableExpressionAst,
+                             searchNestedScriptBlocks: true))
                          .Cast<VariableExpressionAst>())
             {
                 if (variable.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase) ||

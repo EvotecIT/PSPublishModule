@@ -640,8 +640,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static string GeneratePackagedScript(string sourcePath, bool hasDependencies)
         => PowerShellPackagedScriptRewriter.Rewrite(
             sourcePath,
-            hasDependencies ? "[PowerForge.Compiled.PowerForgePackagedEntryPoint]::Path" : null,
-            allowDotSource: hasDependencies);
+            allowDotSource: hasDependencies,
+            dependencyCommandPathExpression: hasDependencies
+                ? "[PowerForge.Compiled.PowerForgePackagedEntryPoint]::Path"
+                : null);
 
     private static PackagedSourceSet PreparePackagedSources(
         string workspace,

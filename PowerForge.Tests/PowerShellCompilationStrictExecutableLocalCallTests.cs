@@ -151,6 +151,30 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_StrictTypedExecutableRejectsNaNInLocalValidateRange()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([double] $Value); function Get-Value { param([ValidateRange(0.0, 10.0)] [double] $InputValue) return $InputValue }; " +
+            "return Get-Value -InputValue $Value");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedLocalNaNValidation",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict)
+        {
+            EmitSource = true
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var invalid = RunProcess(result.ArtifactPath!, "--Value=NaN");
+        Assert.NotEqual(0, invalid.ExitCode);
+        Assert.Contains("outside its validation range", invalid.StandardError, StringComparison.OrdinalIgnoreCase);
+        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShellScript.cs"));
+        Assert.Contains("Double.IsNaN", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_StrictTypedExecutableCompilesCatchAllTryStatement()
     {
         using var fixture = ArtifactFixture.Create(

@@ -34,6 +34,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 !TryReadPathPattern(command, out var relativePattern, out var isLiteralPath) ||
                 !Path.GetExtension(relativePattern).Equals(".ps1", StringComparison.OrdinalIgnoreCase))
                 continue;
+            var recurse = ReadLoaderOptions(command, rootPath);
             foreach (var loader in acceptedLoaders)
                 loaders[loader.StartOffset] = loader;
 
@@ -52,11 +53,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             if (!Directory.Exists(searchRoot))
                 continue;
             PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, searchRoot, $"Conventional module source pattern '{relativePattern}' traverses a symbolic link or junction.");
-            var searchOption = command.CommandElements
-                .OfType<CommandParameterAst>()
-                .Any(static parameter => parameter.ParameterName.Equals("Recurse", StringComparison.OrdinalIgnoreCase))
-                ? SearchOption.AllDirectories
-                : SearchOption.TopDirectoryOnly;
+            var searchOption = recurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
             var wildcard = new WildcardPattern(filePattern, WildcardOptions.IgnoreCase | WildcardOptions.Compiled);
             foreach (var file in Directory.EnumerateFiles(searchRoot, "*", searchOption)
                          .Where(path => wildcard.IsMatch(Path.GetFileName(path))))
@@ -98,6 +95,52 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         }
         return false;
     }
+
+    private static bool ReadLoaderOptions(CommandAst command, string sourcePath)
+    {
+        var recurse = false;
+        for (var index = 1; index < command.CommandElements.Count; index++)
+        {
+            if (command.CommandElements[index] is not CommandParameterAst parameter)
+                throw new InvalidOperationException(
+                    $"Conventional module source discovery does not support loader argument '{command.CommandElements[index].Extent.Text}' at {sourcePath}:{command.Extent.StartLineNumber}; every value must belong to an explicitly modeled option.");
+            var name = parameter.ParameterName;
+            if (name.Equals("Path", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("LiteralPath", StringComparison.OrdinalIgnoreCase))
+            {
+                if (parameter.Argument is null) index++;
+                continue;
+            }
+            if (name.Equals("Recurse", StringComparison.OrdinalIgnoreCase))
+            {
+                if (parameter.Argument is not null)
+                    throw UnsupportedLoaderOption(command, sourcePath, parameter);
+                recurse = true;
+                continue;
+            }
+            if (name.Equals("ErrorAction", StringComparison.OrdinalIgnoreCase))
+            {
+                var argument = parameter.Argument;
+                if (argument is null && index + 1 < command.CommandElements.Count)
+                    argument = command.CommandElements[++index] as ExpressionAst;
+                if (argument is StringConstantExpressionAst action &&
+                    action.Value.Equals("SilentlyContinue", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                throw UnsupportedLoaderOption(command, sourcePath, parameter);
+            }
+            if (name.Equals("File", StringComparison.OrdinalIgnoreCase) && parameter.Argument is null)
+                continue;
+            throw UnsupportedLoaderOption(command, sourcePath, parameter);
+        }
+        return recurse;
+    }
+
+    private static InvalidOperationException UnsupportedLoaderOption(
+        CommandAst command,
+        string sourcePath,
+        CommandParameterAst parameter)
+        => new(
+            $"Conventional module source discovery does not support loader option '{parameter.Extent.Text}' at {sourcePath}:{command.Extent.StartLineNumber}; use -Path/-LiteralPath, bare -Recurse, optional -File, and optional -ErrorAction SilentlyContinue only.");
 
     private static bool IsTopLevel(Ast node, ScriptBlockAst root)
     {

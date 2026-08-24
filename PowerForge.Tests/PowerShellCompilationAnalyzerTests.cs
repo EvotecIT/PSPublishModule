@@ -8,6 +8,24 @@ namespace PowerForge.Tests;
 
 public sealed class PowerShellCompilationAnalyzerTests
 {
+    [Theory]
+    [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package)]
+    [InlineData(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Hybrid)]
+    [InlineData(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid)]
+    public void PublicBuildSpecUsesArtifactKindAwareDefaultMode(
+        PowerShellCompilationArtifactKind kind,
+        PowerShellCompilationMode expectedMode)
+    {
+        var spec = new PowerShellCompilationBuildSpec(
+            "input.ps1",
+            Path.GetTempPath(),
+            "DefaultMode",
+            kind);
+
+        Assert.Equal(expectedMode, spec.Mode);
+        Assert.Equal(expectedMode, PowerShellCompilationBuildSpec.GetDefaultMode(kind));
+    }
+
     [Fact]
     public void PublicCompilationSpecsRejectUndefinedModesAndKinds()
     {

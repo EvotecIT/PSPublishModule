@@ -113,7 +113,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             var actual = $"global::System.Convert.ToDouble({value}, global::System.Globalization.CultureInfo.InvariantCulture)";
             var minimum = $"global::System.Double.Parse({PowerShellCSharpLiteral.QuoteString(arguments[0])}, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture)";
             var maximum = $"global::System.Double.Parse({PowerShellCSharpLiteral.QuoteString(arguments[1])}, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture)";
-            return $"{actual} < {minimum} || {actual} > {maximum}";
+            return $"global::System.Double.IsNaN({actual}) || {actual} < {minimum} || {actual} > {maximum}";
         }
         var decimalValue = $"global::System.Convert.ToDecimal({value}, global::System.Globalization.CultureInfo.InvariantCulture)";
         var decimalMinimum = $"global::System.Decimal.Parse({PowerShellCSharpLiteral.QuoteString(arguments[0])}, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture)";
