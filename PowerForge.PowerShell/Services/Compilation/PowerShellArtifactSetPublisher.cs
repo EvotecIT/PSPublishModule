@@ -7,15 +7,6 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellArtifactSetPublisher
 {
-    private static readonly StringComparison PathComparison =
-        System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-    private static readonly StringComparer PathComparer =
-        System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal;
-
     internal static string CreateStagingDirectory(string outputDirectory, string artifactName)
     {
         var path = Path.Combine(outputDirectory, "." + artifactName + ".artifact-staging-" + Guid.NewGuid().ToString("N"));
@@ -47,13 +38,12 @@ internal static class PowerShellArtifactSetPublisher
 
     internal static void Commit(string stagingDirectory, string outputDirectory, string artifactName, IEnumerable<string> protectedSourcePaths)
     {
-        PowerShellCompilationPathSafety.EnsureNoLinks(
-            outputDirectory,
+        PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(
             outputDirectory,
             $"PowerShell compilation output directory '{outputDirectory}' must not be a symbolic link or junction.");
         var stagingPath = NormalizeDirectoryPath(stagingDirectory);
         var outputPath = NormalizeDirectoryPath(outputDirectory);
-        if (!string.Equals(Path.GetDirectoryName(stagingPath), outputPath, PathComparison))
+        if (!string.Equals(Path.GetDirectoryName(stagingPath), outputPath, PowerShellCompilationPathSafety.PathComparison))
             throw new InvalidOperationException("Artifact staging must be a direct child of the durable output directory.");
         using var publicationLock = AcquirePublicationLock(outputPath, artifactName);
 
@@ -130,13 +120,13 @@ internal static class PowerShellArtifactSetPublisher
 
     private static void EnsureOwnedEntriesDoNotContainSource(string outputDirectory, IEnumerable<string> ownedNames, IEnumerable<string> sourcePaths)
     {
-        var protectedPaths = sourcePaths.Select(Path.GetFullPath).Distinct(PathComparer).ToArray();
+        var protectedPaths = sourcePaths.Select(Path.GetFullPath).Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
         foreach (var name in ownedNames)
         {
             var target = Path.GetFullPath(Path.Combine(outputDirectory, name));
             if (!EntryExists(target)) continue;
             var protectedPath = protectedPaths.FirstOrDefault(path =>
-                string.Equals(target, path, PathComparison) ||
+                string.Equals(target, path, PowerShellCompilationPathSafety.PathComparison) ||
                 Directory.Exists(target) && IsSameOrDescendant(path, target));
             if (protectedPath is not null)
                 throw new InvalidOperationException($"Artifact publication target '{target}' contains the input source '{protectedPath}' and cannot be replaced.");
@@ -146,9 +136,9 @@ internal static class PowerShellArtifactSetPublisher
     private static bool IsSameOrDescendant(string path, string directory)
     {
         var normalizedDirectory = NormalizeDirectoryPath(directory);
-        return string.Equals(path, normalizedDirectory, PathComparison) ||
-               path.StartsWith(normalizedDirectory + Path.DirectorySeparatorChar, PathComparison) ||
-               path.StartsWith(normalizedDirectory + Path.AltDirectorySeparatorChar, PathComparison);
+        return string.Equals(path, normalizedDirectory, PowerShellCompilationPathSafety.PathComparison) ||
+               path.StartsWith(normalizedDirectory + Path.DirectorySeparatorChar, PowerShellCompilationPathSafety.PathComparison) ||
+               path.StartsWith(normalizedDirectory + Path.AltDirectorySeparatorChar, PowerShellCompilationPathSafety.PathComparison);
     }
 
     private static IDisposable AcquirePublicationLock(string outputDirectory, string artifactName)

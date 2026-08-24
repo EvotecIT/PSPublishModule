@@ -1,6 +1,5 @@
 using System.Management.Automation;
 using System.Management.Automation.Language;
-using System.Runtime.InteropServices;
 
 namespace PowerForge;
 
@@ -27,7 +26,7 @@ internal static class PowerShellCompiledModuleManifest
                 .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, reference)));
             protectedFiles.AddRange(PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath, runtimeHooks));
         }
-        return protectedFiles.Distinct(GetPathComparer()).ToArray();
+        return protectedFiles.Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
     }
 
     internal static string[] GetRuntimeScriptHooks(string sourcePath)
@@ -97,7 +96,7 @@ internal static class PowerShellCompiledModuleManifest
             !string.Equals(
                 ModuleManifestValueReader.ReadTopLevelString(targetManifest, "RootModule"),
                 rootModuleFileName,
-                GetPathComparison()))
+                PowerShellCompilationPathSafety.PathComparison))
             throw new InvalidOperationException($"Module manifest '{sourceManifest}' does not contain a literal RootModule entry that can be updated.");
         ApplyTargetCompatibility(sourceManifest, targetManifest, targetFramework, mutator);
         mutator.TrySetManifestExports(
@@ -132,8 +131,8 @@ internal static class PowerShellCompiledModuleManifest
                 Path.GetDirectoryName(sourceManifest)!,
                 sourceFile,
                 $"Module manifest file reference '{reference.RelativePath}' traverses a symbolic link or junction, which is not allowed for artifact staging.");
-            if (sourceFile.Equals(sourcePath, GetPathComparison()) ||
-                sourceFile.Equals(sourceManifest, GetPathComparison()))
+            if (sourceFile.Equals(sourcePath, PowerShellCompilationPathSafety.PathComparison) ||
+                sourceFile.Equals(sourceManifest, PowerShellCompilationPathSafety.PathComparison))
                 continue;
             var targetFile = ResolveContainedPath(moduleDirectory, reference.RelativePath);
             if (File.Exists(targetFile))
@@ -157,9 +156,9 @@ internal static class PowerShellCompiledModuleManifest
         foreach (var entry in sourceEntries)
         {
             var resolved = ResolveContainedPath(sourceDirectory, entry);
-            if (resolved.Equals(sourcePath, GetPathComparison()))
+            if (resolved.Equals(sourcePath, PowerShellCompilationPathSafety.PathComparison))
                 continue;
-            if (resolved.Equals(sourceManifest, GetPathComparison()))
+            if (resolved.Equals(sourceManifest, PowerShellCompilationPathSafety.PathComparison))
             {
                 rewritten.Add(artifactName + ".psd1");
                 continue;
@@ -250,8 +249,8 @@ internal static class PowerShellCompiledModuleManifest
         var rootManifest = Path.GetFullPath(manifestPath);
         var rootDirectory = Path.GetDirectoryName(rootManifest) ?? Directory.GetCurrentDirectory();
         var pending = new Stack<(string ManifestPath, bool IsRoot)>();
-        var visitedManifests = new HashSet<string>(GetPathComparer());
-        var references = new Dictionary<string, ResolvedManifestFileReference>(GetPathComparer());
+        var visitedManifests = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
+        var references = new Dictionary<string, ResolvedManifestFileReference>(PowerShellCompilationPathSafety.PathComparer);
         pending.Push((rootManifest, true));
 
         while (pending.Count > 0)
@@ -281,7 +280,7 @@ internal static class PowerShellCompiledModuleManifest
         }
 
         return references.Values
-            .OrderBy(static reference => reference.RelativePath, GetPathComparer())
+            .OrderBy(static reference => reference.RelativePath, PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
     }
 
@@ -289,10 +288,10 @@ internal static class PowerShellCompiledModuleManifest
     {
         var rootManifest = Path.GetFullPath(manifestPath);
         var rootDirectory = Path.GetDirectoryName(rootManifest) ?? Directory.GetCurrentDirectory();
-        var scripts = new HashSet<string>(GetPathComparer());
-        var visited = new HashSet<string>(GetPathComparer());
+        var scripts = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
+        var visited = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         CollectRuntimeScriptFiles(rootManifest, rootDirectory, includeRootModule: false, scripts, visited);
-        return scripts.OrderBy(static path => path, GetPathComparer()).ToArray();
+        return scripts.OrderBy(static path => path, PowerShellCompilationPathSafety.PathComparer).ToArray();
     }
 
     private static void CollectRuntimeScriptFiles(
@@ -394,7 +393,7 @@ internal static class PowerShellCompiledModuleManifest
             throw new InvalidOperationException($"Module manifest file reference '{relativePath}' must remain relative to the module root.");
         var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var fullPath = Path.GetFullPath(Path.Combine(root, normalizedPath));
-        if (!fullPath.StartsWith(fullRoot, GetPathComparison()))
+        if (!fullPath.StartsWith(fullRoot, PowerShellCompilationPathSafety.PathComparison))
             throw new InvalidOperationException($"Module manifest file reference '{relativePath}' escapes the module root.");
         return fullPath;
     }
@@ -406,7 +405,7 @@ internal static class PowerShellCompiledModuleManifest
             throw new InvalidOperationException($"Module manifest file reference '{relativePath}' must remain relative to the module root.");
         var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var fullPath = Path.GetFullPath(Path.Combine(baseDirectory, normalizedPath));
-        if (!fullPath.StartsWith(fullRoot, GetPathComparison()))
+        if (!fullPath.StartsWith(fullRoot, PowerShellCompilationPathSafety.PathComparison))
             throw new InvalidOperationException($"Module manifest file reference '{relativePath}' escapes the module root.");
         return fullPath;
     }
@@ -418,16 +417,6 @@ internal static class PowerShellCompiledModuleManifest
         => path.StartsWith("\\\\", StringComparison.Ordinal) ||
            path.StartsWith("//", StringComparison.Ordinal) ||
            path.Length >= 2 && char.IsLetter(path[0]) && path[1] == ':';
-
-    private static StringComparison GetPathComparison()
-        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-
-    private static StringComparer GetPathComparer()
-        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal;
 
     private sealed class ManifestFileReference
     {

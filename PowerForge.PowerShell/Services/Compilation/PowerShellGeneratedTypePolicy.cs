@@ -50,7 +50,7 @@ internal static class PowerShellGeneratedTypePolicy
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!Path.GetFullPath(location).StartsWith(
                 runtimeDirectory,
-                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                PowerShellCompilationPathSafety.PathComparison))
             return false;
         if (string.IsNullOrWhiteSpace(targetFramework))
             return true;

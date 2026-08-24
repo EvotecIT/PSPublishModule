@@ -80,6 +80,8 @@ internal static class Program
                     : null!;
                 continue;
             }
+            if (parameter.IsRequired && parameter.Type == typeof(string) && values[0].Length == 0)
+                throw new ArgumentException($"Required parameter '--{parameter.Name}' cannot be an empty string.");
             if (parameter.IsArray)
             {
                 var elementType = parameter.Type.GetElementType()!;

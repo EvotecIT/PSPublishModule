@@ -589,6 +589,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.NotNull(result.Manifest);
         Assert.False(result.Manifest.SingleFile);
         Assert.True(result.Manifest.Files.Length > 1);
+        var generatedAssembly = Assert.Single(result.Manifest.Files, file => file.Role == "GeneratedAssembly");
+        Assert.Equal("PowerForge.MultiFileProof.dll", Path.GetFileName(generatedAssembly.Path));
+        Assert.Contains(generatedAssembly.Path, PowerShellCompilationArtifactSigner.GetBuildOwnedSignableFiles(result.Manifest.Files));
         Assert.Contains(result.Manifest.Files, file => file.Path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains("Modules", StringComparer.OrdinalIgnoreCase));
         Assert.All(result.Manifest.Files, file => Assert.True(File.Exists(file.Path), file.Path));
 

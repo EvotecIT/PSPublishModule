@@ -1,6 +1,5 @@
 using System.Management.Automation;
 using System.Management.Automation.Language;
-using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
 namespace PowerForge;
@@ -20,7 +19,7 @@ internal static class PowerShellHybridDependencyResolver
         IEnumerable<string>? additionalEntryPaths = null)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
-        var comparer = GetPathComparer();
+        var comparer = PowerShellCompilationPathSafety.PathComparer;
         var entryPaths = new HashSet<string>(
             new[] { sourcePath }.Concat(additionalEntryPaths ?? Array.Empty<string>()).Select(Path.GetFullPath),
             comparer);
@@ -51,7 +50,7 @@ internal static class PowerShellHybridDependencyResolver
         IEnumerable<string>? additionalEntryPaths = null)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
-        var discovered = new HashSet<string>(GetPathComparer());
+        var discovered = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         var pending = new Queue<string>();
         foreach (var entryPath in new[] { sourcePath }.Concat(additionalEntryPaths ?? Array.Empty<string>()))
         {
@@ -111,6 +110,4 @@ internal static class PowerShellHybridDependencyResolver
     private static string NormalizeRelativePath(string path)
         => path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
 
-    private static StringComparer GetPathComparer()
-        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 }

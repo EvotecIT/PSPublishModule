@@ -43,11 +43,13 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
-    public void Build_RejectsLinkedOutputDirectoryBeforeReplacingProtectedSource()
+    public void Build_RejectsLinkedOutputAncestorBeforeReplacingProtectedSource()
     {
         var container = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
-        var physicalOutput = Path.Combine(container, "physical-output");
-        var linkedOutput = Path.Combine(container, "linked-output");
+        var physicalRoot = Path.Combine(container, "physical-root");
+        var physicalOutput = Path.Combine(physicalRoot, "nested-output");
+        var linkedRoot = Path.Combine(container, "linked-root");
+        var linkedOutput = Path.Combine(linkedRoot, "nested-output");
         const string artifactName = "PowerForge.LinkedOutput";
         var protectedDirectory = Path.Combine(physicalOutput, artifactName);
         var sourcePath = Path.Combine(protectedDirectory, "input.ps1");
@@ -55,7 +57,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         File.WriteAllText(sourcePath, "function Get-Value { return 1 }");
         try
         {
-            Directory.CreateSymbolicLink(linkedOutput, physicalOutput);
+            Directory.CreateSymbolicLink(linkedRoot, physicalRoot);
         }
         catch (UnauthorizedAccessException)
         {
@@ -84,7 +86,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         }
         finally
         {
-            try { Directory.Delete(linkedOutput); } catch { }
+            try { Directory.Delete(linkedRoot); } catch { }
             try { Directory.Delete(container, recursive: true); } catch { }
         }
     }

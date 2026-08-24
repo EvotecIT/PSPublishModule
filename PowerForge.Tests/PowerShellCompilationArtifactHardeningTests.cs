@@ -332,7 +332,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     public void Build_HybridModuleRoutesNonCmdletFunctionNameToScriptFallback()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-TypedValue { return 7 }; function Helper { return 11 }",
+            "function Get-TypedValue { return 7 }; function Helper" + Environment.NewLine + "{ return 11 }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -402,6 +402,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             new PowerShellCompilationArtifactFile { Path = "tool.exe", Role = "Primary" },
             new PowerShellCompilationArtifactFile { Path = "module.psm1", Role = "PrimaryModule" },
             new PowerShellCompilationArtifactFile { Path = "typed.dll", Role = "TypedAssembly" },
+            new PowerShellCompilationArtifactFile { Path = "tool.dll", Role = "GeneratedAssembly" },
             new PowerShellCompilationArtifactFile { Path = "module.psd1", Role = "PrimaryModuleManifest" },
             new PowerShellCompilationArtifactFile { Path = "Microsoft.PowerShell.SDK.dll", Role = "RuntimeDependency" },
             new PowerShellCompilationArtifactFile { Path = "Vendor.Cmdlets.dll", Role = "ModuleDependency" },
@@ -410,7 +411,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 
         var selected = PowerShellCompilationArtifactSigner.GetBuildOwnedSignableFiles(files);
 
-        Assert.Equal(new[] { "tool.exe", "module.psm1", "typed.dll", "module.psd1" }, selected);
+        Assert.Equal(new[] { "tool.exe", "module.psm1", "typed.dll", "tool.dll", "module.psd1" }, selected);
     }
 
     [Fact]

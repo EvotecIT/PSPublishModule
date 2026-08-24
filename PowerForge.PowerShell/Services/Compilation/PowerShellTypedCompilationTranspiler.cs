@@ -55,8 +55,7 @@ public sealed class PowerShellTypedCompilationTranspiler
 
         var eligible = filePlan.Units
             .Where(unit => unit.Kind == PowerShellCompilationUnitKind.Function &&
-                           unit.IsCompilable &&
-                           (excludedMethods is null || !excludedMethods.Contains(GetMethodKey(unit.Name, unit.StartLine))))
+                           unit.IsCompilable)
             .ToDictionary(static unit => (unit.Name, unit.StartLine));
         var methods = new List<PowerShellCompiledMethod>();
         var methodSources = new List<string>();
@@ -64,6 +63,9 @@ public sealed class PowerShellTypedCompilationTranspiler
                      .Cast<FunctionDefinitionAst>()
                      .OrderBy(static function => function.Extent.StartOffset))
         {
+            if (excludedMethods is not null &&
+                excludedMethods.Contains(GetMethodKey(function.Name, function.Extent.StartLineNumber)))
+                continue;
             if (!eligible.TryGetValue((function.Name, function.Body.Extent.StartLineNumber), out var unit))
                 continue;
 

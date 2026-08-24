@@ -28,6 +28,25 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_StrictTypedExecutableRejectsEmptyMandatoryString()
+    {
+        using var fixture = ArtifactFixture.Create("param([Parameter(Mandatory)] [string] $Name); return $Name");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedExecutableMandatoryString",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var processResult = RunProcess(result.ArtifactPath!, "--Name=");
+
+        Assert.Equal(1, processResult.ExitCode);
+        Assert.Contains("cannot be an empty string", processResult.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.True(string.IsNullOrWhiteSpace(processResult.StandardOutput), processResult.StandardOutput);
+    }
+
+    [Fact]
     public void Build_StrictTypedExecutableRunsWithoutPowerShellRuntime()
     {
         using var fixture = ArtifactFixture.Create(

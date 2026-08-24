@@ -25,8 +25,7 @@ public sealed class PowerShellCompilationArtifactBuilder
         ValidateSpec(spec);
 
         Directory.CreateDirectory(spec.OutputDirectory);
-        PowerShellCompilationPathSafety.EnsureNoLinks(
-            spec.OutputDirectory,
+        PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(
             spec.OutputDirectory,
             $"PowerShell compilation output directory '{spec.OutputDirectory}' must not be a symbolic link or junction.");
         var artifactName = SanitizeArtifactName(spec.ArtifactName);
@@ -390,11 +389,16 @@ public sealed class PowerShellCompilationArtifactBuilder
             File.Copy(file, target, overwrite: true);
         }
         var primaryPath = Path.Combine(targetDirectory, executableFileName);
+        var generatedAssemblyPath = Path.Combine(targetDirectory, artifactName + ".dll");
         var files = Directory.EnumerateFiles(targetDirectory, "*", SearchOption.AllDirectories)
             .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .Select(path => CreateArtifactFile(
                 path,
-                path.Equals(primaryPath, StringComparison.OrdinalIgnoreCase) ? "Primary" : "RuntimeDependency"))
+                path.Equals(primaryPath, StringComparison.OrdinalIgnoreCase)
+                    ? "Primary"
+                    : path.Equals(generatedAssemblyPath, StringComparison.OrdinalIgnoreCase)
+                        ? "GeneratedAssembly"
+                        : "RuntimeDependency"))
             .ToArray();
         return new CopiedArtifact(primaryPath, files);
     }

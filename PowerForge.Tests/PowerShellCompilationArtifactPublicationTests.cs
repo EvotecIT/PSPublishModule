@@ -37,6 +37,39 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_RefusesCaseAliasedSourceReplacementOnCaseInsensitivePlatforms()
+    {
+        Assert.Equal(
+            StringComparison.OrdinalIgnoreCase,
+            PowerShellCompilationPathSafety.GetPathComparison(isWindows: false, isMacOS: true));
+        if (PowerShellCompilationPathSafety.PathComparison != StringComparison.OrdinalIgnoreCase) return;
+
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var sourceDirectory = Path.Combine(root, "Foo");
+        Directory.CreateDirectory(sourceDirectory);
+        var sourcePath = Path.Combine(sourceDirectory, "input.ps1");
+        const string source = "function Get-Value { return 1 }";
+        File.WriteAllText(sourcePath, source);
+        try
+        {
+            var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                sourcePath,
+                root,
+                "foo",
+                PowerShellCompilationArtifactKind.Library,
+                PowerShellCompilationMode.Strict));
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("contains the input source", result.Error, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(source, File.ReadAllText(sourcePath));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Build_ReplacesTheCompleteArtifactShapeWithoutLeavingPriorFiles()
     {
         using var fixture = ArtifactFixture.Create(
