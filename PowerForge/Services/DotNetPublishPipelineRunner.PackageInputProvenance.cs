@@ -364,11 +364,13 @@ public sealed partial class DotNetPublishPipelineRunner
         private readonly string[] _packageRoots;
         private readonly IReadOnlyDictionary<string, string> _lockedPackageHashes;
         private readonly VerifiedPackageArchiveCache _archives;
+        private readonly string[] _archivePaths;
 
         private VerifiedPackageInputCatalog(
             IEnumerable<string> packageRoots,
             IReadOnlyDictionary<string, string> lockedPackageHashes,
-            VerifiedPackageArchiveCache archives)
+            VerifiedPackageArchiveCache archives,
+            string[] archivePaths)
         {
             _packageRoots = packageRoots
                 .Select(Path.GetFullPath)
@@ -376,6 +378,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 .ToArray();
             _lockedPackageHashes = lockedPackageHashes;
             _archives = archives;
+            _archivePaths = archivePaths;
         }
 
         internal static VerifiedPackageInputCatalog? TryCreate(
@@ -408,10 +411,10 @@ public sealed partial class DotNetPublishPipelineRunner
             AddSdkManagedPackageHashes(properties, projectDirectory, allRoots, hashes);
             if (allRoots.Count == 0)
                 return null;
-            if (!TryPrimeLockedPackageArchives(allRoots, hashes, archives))
+            if (!TryPrimeLockedPackageArchives(allRoots, hashes, archives, out string[] archivePaths))
                 return null;
 
-            return new VerifiedPackageInputCatalog(allRoots, hashes, archives);
+            return new VerifiedPackageInputCatalog(allRoots, hashes, archives, archivePaths);
         }
 
         internal bool TryVerify(string path, out bool isPackageInput)

@@ -111,23 +111,6 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(runtimeRoot))
             yield return Path.Combine(runtimeRoot!, executableName);
 
-        string? configuredRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
-        if (!string.IsNullOrWhiteSpace(configuredRoot))
-            yield return Path.Combine(configuredRoot!, executableName);
-        if (IsWindows())
-        {
-            string? configuredX86Root = Environment.GetEnvironmentVariable("DOTNET_ROOT(x86)");
-            if (!string.IsNullOrWhiteSpace(configuredX86Root))
-                yield return Path.Combine(configuredX86Root!, executableName);
-        }
-
-        string? userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        if (!string.IsNullOrWhiteSpace(userProfile))
-            yield return Path.Combine(userProfile!, ".dotnet", executableName);
-        string? runnerToolCache = Environment.GetEnvironmentVariable("RUNNER_TOOL_CACHE");
-        if (!string.IsNullOrWhiteSpace(runnerToolCache))
-            yield return Path.Combine(runnerToolCache!, "dotnet", executableName);
-
         if (IsWindows())
         {
             string? programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
@@ -201,4 +184,5 @@ public sealed partial class DotNetPublishPipelineRunner
         yield return "/usr/local/bin/git";
         yield return "/opt/homebrew/bin/git";
     }
+
 }

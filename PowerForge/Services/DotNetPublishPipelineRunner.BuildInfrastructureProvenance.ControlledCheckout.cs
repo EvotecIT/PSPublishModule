@@ -155,8 +155,9 @@ public sealed partial class DotNetPublishPipelineRunner
         return true;
     }
 
-    private static bool ContainsRootedBuildValue(string value, string? gitRoot)
+    internal static bool ContainsRootedBuildValue(string value, string? gitRoot)
     {
+        value = DecodeMsBuildEscapes(value);
         StringComparison comparison = IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
@@ -177,6 +178,69 @@ public sealed partial class DotNetPublishPipelineRunner
                 return true;
         }
         return false;
+    }
+
+    internal static bool ContainsUncontrolledEnvironmentReference(string value)
+    {
+        value = DecodeMsBuildEscapes(value);
+        string[] names =
+        {
+            "SystemRoot",
+            "WINDIR",
+            "ProgramFiles",
+            "ProgramFiles(x86)",
+            "ProgramW6432",
+            "CommonProgramFiles",
+            "CommonProgramFiles(x86)",
+            "CommonProgramW6432",
+            "SystemDrive"
+        };
+        return names.Any(name =>
+            value.IndexOf("$(" + name + ")", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            value.IndexOf("%" + name + "%", StringComparison.OrdinalIgnoreCase) >= 0);
+    }
+
+    internal static string DecodeMsBuildEscapes(string value)
+    {
+        if (value.IndexOf('%') < 0)
+            return value;
+        var decoded = new System.Text.StringBuilder(value.Length);
+        for (int index = 0; index < value.Length; index++)
+        {
+            if (value[index] == '%' && index + 2 < value.Length &&
+                TryReadHex(value[index + 1], out int high) &&
+                TryReadHex(value[index + 2], out int low))
+            {
+                decoded.Append((char)((high << 4) | low));
+                index += 2;
+            }
+            else
+            {
+                decoded.Append(value[index]);
+            }
+        }
+        return decoded.ToString();
+
+        bool TryReadHex(char character, out int result)
+        {
+            if (character >= '0' && character <= '9')
+            {
+                result = character - '0';
+                return true;
+            }
+            if (character >= 'a' && character <= 'f')
+            {
+                result = character - 'a' + 10;
+                return true;
+            }
+            if (character >= 'A' && character <= 'F')
+            {
+                result = character - 'A' + 10;
+                return true;
+            }
+            result = 0;
+            return false;
+        }
     }
 
     private static bool TryCreateControlledSourceCheckout(
@@ -276,7 +340,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     string extension = Path.GetExtension(path);
                     if (extension.Equals(".rsp", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (File.ReadLines(path).Any(value => ContainsRootedBuildValue(value, checkoutRoot)))
+                        if (File.ReadLines(path).Any(value =>
+                                ContainsRootedBuildValue(value, checkoutRoot) ||
+                                ContainsUncontrolledEnvironmentReference(value)))
                             return false;
                         continue;
                     }
@@ -310,7 +376,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         .OfType<XText>()
                         .Select(text => text.Value)
                         .Concat(document.Descendants().Attributes().Select(attribute => attribute.Value))
-                        .Any(value => ContainsRootedBuildValue(value, checkoutRoot)))
+                        .Any(value => ContainsRootedBuildValue(value, checkoutRoot) ||
+                                      ContainsUncontrolledEnvironmentReference(value)))
                     {
                         return false;
                     }

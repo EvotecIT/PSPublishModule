@@ -93,7 +93,7 @@ public sealed partial class DotNetPublishPipelineRunner
         ProjectEvaluationRequest request,
         string candidatePath,
         string? evaluatedPathMap,
-        VerifiedPackageArchiveCache verifiedPackageArchives,
+        VerifiedPackageInputCatalog? verifiedPackages,
         IDictionary<string, bool> cache)
     {
         string fullCandidatePath = Path.GetFullPath(candidatePath);
@@ -130,7 +130,8 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             string offlinePackageSource = Directory.CreateDirectory(
                 Path.Combine(controlledOutputRoot, "packages-source")).FullName;
-            if (!verifiedPackageArchives.TrySeedControlledPackageSource(offlinePackageSource))
+            if (verifiedPackages is not null &&
+                !verifiedPackages.TrySeedControlledPackageSource(offlinePackageSource))
                 return Cache(false);
             string controlledNuGetConfig = Path.Combine(controlledOutputRoot, "NuGet.Config");
             new XDocument(
@@ -153,31 +154,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 "-getProperty:TargetPath",
                 "-getItem:FileWrites"
             };
-            arguments.Add("-p:RestoreConfigFile=" + EscapeMsBuildPropertyValue(controlledNuGetConfig));
-            arguments.Add("-p:RestoreSources=" + EscapeMsBuildPropertyValue(offlinePackageSource));
-            arguments.Add("-p:RestoreAdditionalProjectSources=");
-            arguments.Add("-p:RestoreFallbackFolders=");
-            arguments.Add("-p:RestoreNoCache=true");
-            arguments.Add("-p:RestoreIgnoreFailedSources=false");
-            arguments.Add("-p:RestoreLockedMode=false");
-            arguments.Add("-p:RestorePackagesWithLockFile=true");
-            arguments.Add("-p:RestoreForceEvaluate=true");
-            arguments.Add("-p:NuGetLockFilePath=" + EscapeMsBuildPropertyValue(
-                Path.Combine(controlledOutputRoot, "packages.lock.json")));
-            arguments.Add("-p:NuGetAudit=false");
-            arguments.Add("-p:RunAnalyzers=false");
-            arguments.Add("-p:RunAnalyzersDuringBuild=false");
-            arguments.Add("-p:RunAnalyzersDuringLiveAnalysis=false");
-            arguments.Add("-p:PreBuildEvent=");
-            arguments.Add("-p:PostBuildEvent=");
-            arguments.Add("-p:RunPostBuildEvent=Never");
-            arguments.Add("-p:UseSharedCompilation=false");
-            arguments.Add("-p:CscToolPath=");
-            arguments.Add("-p:CscToolExe=");
-            arguments.Add("-p:VbcToolPath=");
-            arguments.Add("-p:VbcToolExe=");
-            arguments.Add("-p:FscToolPath=");
-            arguments.Add("-p:FscToolExe=");
             if (request.Configuration is not null)
             {
                 if (!TryRemapControlledBuildValue(
@@ -234,6 +210,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 return Cache(false);
             }
             arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));
+            AppendControlledProofSafeguards(
+                arguments,
+                controlledNuGetConfig,
+                offlinePackageSource,
+                Path.Combine(controlledOutputRoot, "packages.lock.json"));
 
             var process = RunBuildInputEvaluationProcess(
                 "dotnet",
@@ -309,6 +290,38 @@ public sealed partial class DotNetPublishPipelineRunner
             cache[cacheKey] = result;
             return result;
         }
+    }
+
+    internal static void AppendControlledProofSafeguards(
+        ICollection<string> arguments,
+        string nuGetConfig,
+        string packageSource,
+        string lockFilePath)
+    {
+        arguments.Add("-p:RestoreConfigFile=" + EscapeMsBuildPropertyValue(nuGetConfig));
+        arguments.Add("-p:RestoreSources=" + EscapeMsBuildPropertyValue(packageSource));
+        arguments.Add("-p:RestoreAdditionalProjectSources=");
+        arguments.Add("-p:RestoreFallbackFolders=");
+        arguments.Add("-p:RestoreNoCache=true");
+        arguments.Add("-p:RestoreIgnoreFailedSources=false");
+        arguments.Add("-p:RestoreLockedMode=false");
+        arguments.Add("-p:RestorePackagesWithLockFile=true");
+        arguments.Add("-p:RestoreForceEvaluate=true");
+        arguments.Add("-p:NuGetLockFilePath=" + EscapeMsBuildPropertyValue(lockFilePath));
+        arguments.Add("-p:NuGetAudit=false");
+        arguments.Add("-p:RunAnalyzers=false");
+        arguments.Add("-p:RunAnalyzersDuringBuild=false");
+        arguments.Add("-p:RunAnalyzersDuringLiveAnalysis=false");
+        arguments.Add("-p:PreBuildEvent=");
+        arguments.Add("-p:PostBuildEvent=");
+        arguments.Add("-p:RunPostBuildEvent=Never");
+        arguments.Add("-p:UseSharedCompilation=false");
+        arguments.Add("-p:CscToolPath=");
+        arguments.Add("-p:CscToolExe=");
+        arguments.Add("-p:VbcToolPath=");
+        arguments.Add("-p:VbcToolExe=");
+        arguments.Add("-p:FscToolPath=");
+        arguments.Add("-p:FscToolExe=");
     }
 
     private static bool TryBuildControlledPathMap(
@@ -655,7 +668,8 @@ public sealed partial class DotNetPublishPipelineRunner
             string? intermediateRoot,
             string? intermediateOutputPath,
             string? pathMap,
-            GeneratedProjectReferenceOutput[] generatedProjectReferenceOutputs)
+            GeneratedProjectReferenceOutput[] generatedProjectReferenceOutputs,
+            VerifiedPackageInputCatalog? verifiedPackages)
         {
             BuildInputs = buildInputs;
             SourceInputs = sourceInputs;
@@ -667,6 +681,7 @@ public sealed partial class DotNetPublishPipelineRunner
             IntermediateOutputPath = intermediateOutputPath;
             PathMap = pathMap;
             GeneratedProjectReferenceOutputs = generatedProjectReferenceOutputs;
+            VerifiedPackages = verifiedPackages;
         }
 
         internal string[] BuildInputs { get; }
@@ -679,6 +694,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string? IntermediateOutputPath { get; }
         internal string? PathMap { get; }
         internal GeneratedProjectReferenceOutput[] GeneratedProjectReferenceOutputs { get; }
+        internal VerifiedPackageInputCatalog? VerifiedPackages { get; }
     }
 
     private sealed class EvaluatedProjectReference

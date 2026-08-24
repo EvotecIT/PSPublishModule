@@ -10,8 +10,11 @@ public sealed partial class DotNetPublishPipelineRunner
         private static bool TryPrimeLockedPackageArchives(
             IEnumerable<string> packageRoots,
             IReadOnlyDictionary<string, string> lockedPackageHashes,
-            VerifiedPackageArchiveCache archives)
+            VerifiedPackageArchiveCache archives,
+            out string[] archivePaths)
         {
+            var paths = new List<string>();
+            archivePaths = Array.Empty<string>();
             try
             {
                 foreach (KeyValuePair<string, string> package in lockedPackageHashes)
@@ -42,7 +45,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         return false;
                     }
+                    paths.Add(Path.GetFullPath(archivePath!));
                 }
+                archivePaths = paths.ToArray();
                 return true;
             }
             catch
@@ -50,25 +55,30 @@ public sealed partial class DotNetPublishPipelineRunner
                 return false;
             }
         }
+
+        internal bool TrySeedControlledPackageSource(string destination)
+            => _archives.TrySeedControlledPackageSource(destination, _archivePaths);
     }
 
     private sealed partial class VerifiedPackageArchiveCache
     {
-        internal bool TrySeedControlledPackageSource(string destination)
+        internal bool TrySeedControlledPackageSource(
+            string destination,
+            IReadOnlyCollection<string> archivePaths)
         {
             try
             {
                 Directory.CreateDirectory(destination);
-                foreach (CacheEntry cached in _archives.Values.OrderBy(
-                             entry => entry.ExpectedContentHash,
-                             StringComparer.Ordinal))
+                foreach (string archivePath in archivePaths.OrderBy(path => path, StringComparer.Ordinal))
                 {
+                    if (!_archives.TryGetValue(Path.GetFullPath(archivePath), out CacheEntry? cached))
+                        return false;
                     if (!cached.Archive.HasOnlyControlledBuildInputs())
                         return false;
-                    string archivePath = Path.Combine(destination, Path.GetFileName(cached.SourcePath));
-                    if (File.Exists(archivePath))
+                    string destinationPath = Path.Combine(destination, Path.GetFileName(cached.SourcePath));
+                    if (File.Exists(destinationPath))
                         return false;
-                    cached.Archive.CopyTo(archivePath);
+                    cached.Archive.CopyTo(destinationPath);
                 }
                 return true;
             }
@@ -89,21 +99,33 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     string name = pair.Key.Replace('\\', '/').TrimStart('/');
                     string extension = Path.GetExtension(name);
-                    if (!extension.Equals(".props", StringComparison.OrdinalIgnoreCase) &&
-                        !extension.Equals(".targets", StringComparison.OrdinalIgnoreCase))
+                    bool knownProjectExtension =
+                        extension.Equals(".props", StringComparison.OrdinalIgnoreCase) ||
+                        extension.Equals(".targets", StringComparison.OrdinalIgnoreCase);
+                    XDocument document;
+                    try
+                    {
+                        using Stream stream = pair.Value.Open();
+                        document = XDocument.Load(stream, LoadOptions.PreserveWhitespace);
+                    }
+                    catch when (!knownProjectExtension)
                     {
                         continue;
                     }
-
-                    using Stream stream = pair.Value.Open();
-                    XDocument document = XDocument.Load(stream, LoadOptions.PreserveWhitespace);
+                    if (!knownProjectExtension &&
+                        (document.Root is null ||
+                         !document.Root.Name.LocalName.Equals("Project", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
                     if (ContainsNetworkCapableControlledBuildTask(document) ||
                         ContainsControlledBuildPropertyEscape(document) ||
                         document.DescendantNodes()
                             .OfType<XText>()
                             .Select(text => text.Value)
                             .Concat(document.Descendants().Attributes().Select(attribute => attribute.Value))
-                            .Any(value => ContainsRootedBuildValue(value, gitRoot: null)))
+                            .Any(value => ContainsRootedBuildValue(value, gitRoot: null) ||
+                                          ContainsUncontrolledEnvironmentReference(value)))
                     {
                         return false;
                     }

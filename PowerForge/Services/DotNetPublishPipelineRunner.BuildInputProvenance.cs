@@ -314,6 +314,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var expectedOutputPathsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var pathMapsByEvaluation = new Dictionary<string, string?>(StringComparer.Ordinal);
         var controlledGeneratedOutputProofs = new Dictionary<string, bool>(StringComparer.Ordinal);
+        var verifiedPackagesByEvaluation = new Dictionary<string, VerifiedPackageInputCatalog?>(StringComparer.Ordinal);
         var generatedProjectReferenceOutputs = new List<(ProjectEvaluationRequest Request, GeneratedProjectReferenceOutput Output)>();
         using var verifiedPackageArchives = new VerifiedPackageArchiveCache();
         buildInputs = new HashSet<string>(comparison);
@@ -358,6 +359,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 outputRootsByEvaluation[visitKey] = evaluation.OutputRoots;
                 expectedOutputPathsByEvaluation[visitKey] = evaluation.ExpectedOutputPaths;
                 pathMapsByEvaluation[visitKey] = evaluation.PathMap;
+                verifiedPackagesByEvaluation[visitKey] = evaluation.VerifiedPackages;
                 generatedProjectReferenceOutputs.AddRange(
                     evaluation.GeneratedProjectReferenceOutputs.Select(output => (request, output)));
                 if (string.IsNullOrEmpty(request.TargetFramework))
@@ -402,7 +404,11 @@ public sealed partial class DotNetPublishPipelineRunner
                         out string? pathMap)
                         ? pathMap
                         : null,
-                    verifiedPackageArchives,
+                    verifiedPackagesByEvaluation.TryGetValue(
+                        referencedProject.BuildVisitKey(),
+                        out VerifiedPackageInputCatalog? verifiedPackages)
+                        ? verifiedPackages
+                        : null,
                     controlledGeneratedOutputProofs))
             {
                 continue;
@@ -616,6 +622,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 Array.Empty<PreprocessedProjectPropertyDefinition>();
             bool hasDynamicProjectReferenceTaskOutputs = false;
             EvaluatedProjectItem[] dynamicProjectReferences = Array.Empty<EvaluatedProjectItem>();
+            VerifiedPackageInputCatalog? verifiedPackages = null;
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
                 AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
@@ -658,8 +665,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (targetFrameworks.Count == 0)
                     AddSemicolonSeparatedValues(properties, "TargetFramework", targetFrameworks);
 
-                VerifiedPackageInputCatalog? verifiedPackages =
-                    VerifiedPackageInputCatalog.TryCreate(
+                verifiedPackages = VerifiedPackageInputCatalog.TryCreate(
                         request.ProjectPath,
                         properties,
                         packageRoots,
@@ -883,7 +889,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 intermediateRoot,
                 intermediateOutputPath,
                 pathMap,
-                generatedProjectReferenceOutputs.ToArray());
+                generatedProjectReferenceOutputs.ToArray(),
+                verifiedPackages);
             return true;
         }
         catch
