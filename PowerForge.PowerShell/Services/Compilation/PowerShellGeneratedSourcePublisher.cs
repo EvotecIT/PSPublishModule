@@ -11,7 +11,7 @@ internal static class PowerShellGeneratedSourcePublisher
         string artifactName,
         string artifactStagingDirectory,
         PowerShellCompilationBuildSpec spec,
-        PowerShellTypedCompilationResult? typed)
+        IReadOnlyCollection<PowerShellCompiledMethod>? methods)
     {
         var sourceDirectory = Path.Combine(artifactStagingDirectory, artifactName + ".generated");
         Directory.CreateDirectory(sourceDirectory);
@@ -38,7 +38,7 @@ internal static class PowerShellGeneratedSourcePublisher
                 File.Copy(dependency, Path.Combine(targetDependencies, Path.GetFileName(dependency)), overwrite: false);
         }
         WriteBuildIsolationFiles(sourceDirectory, spec.TargetFramework);
-        WriteSourceMap(sourceDirectory, spec, typed);
+        WriteSourceMap(sourceDirectory, spec, methods);
         return sourceDirectory;
     }
 
@@ -61,7 +61,7 @@ internal static class PowerShellGeneratedSourcePublisher
     private static void WriteSourceMap(
         string sourceDirectory,
         PowerShellCompilationBuildSpec spec,
-        PowerShellTypedCompilationResult? typed)
+        IReadOnlyCollection<PowerShellCompiledMethod>? methods)
     {
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
         var sourcePaths = new[] { spec.SourcePath }
@@ -76,7 +76,7 @@ internal static class PowerShellGeneratedSourcePublisher
             schemaVersion = 1,
             rootSource = ToPortableRelativePath(sourceRoot, spec.SourcePath),
             sourceFiles = sourcePaths.Select(path => ToPortableRelativePath(sourceRoot, path)).ToArray(),
-            methods = (typed?.Methods ?? Array.Empty<PowerShellCompiledMethod>()).Select(method => new
+            methods = (methods ?? Array.Empty<PowerShellCompiledMethod>()).Select(method => new
             {
                 powershellName = method.SourceName,
                 generatedMethod = method.GeneratedName,

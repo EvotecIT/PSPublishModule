@@ -23,7 +23,10 @@ public enum PowerShellCompilationCapability
     None = 0,
 
     /// <summary>Binary-module methods may route supported Write-* stream commands through their generated PSCmdlet.</summary>
-    PowerShellStreams = 1
+    PowerShellStreams = 1,
+
+    /// <summary>Strict executable analysis may defer direct local-function binding to the executable emitter.</summary>
+    LocalFunctionCalls = 2
 }
 
 /// <summary>
@@ -263,7 +266,7 @@ public sealed class PowerShellCompilationSpec
             throw new ArgumentException("An input path is required.", nameof(path));
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             throw new ArgumentOutOfRangeException(nameof(mode));
-        if ((capabilities & ~PowerShellCompilationCapability.PowerShellStreams) != 0)
+        if ((capabilities & ~(PowerShellCompilationCapability.PowerShellStreams | PowerShellCompilationCapability.LocalFunctionCalls)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)

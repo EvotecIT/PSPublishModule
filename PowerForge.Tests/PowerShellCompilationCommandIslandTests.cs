@@ -103,6 +103,46 @@ public sealed class PowerShellCompilationCommandIslandTests
     }
 
     [Fact]
+    public void Build_StrictBinaryModuleCoalescesConditionalAndAdjacentCommandRegions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForgeCommandIslands", Guid.NewGuid().ToString("N"));
+        var output = Path.Combine(root, "out");
+        Directory.CreateDirectory(output);
+        var source = Path.Combine(root, "CoarseIsland.psm1");
+        File.WriteAllText(
+            source,
+            "function Get-CoarseIsland { param([string] $Name, [bool] $Upper); " +
+            "if ($Upper) { Write-Output $Name.ToUpperInvariant() } else { Write-Output $Name }; " +
+            "Write-Output 'tail-region'; return $Name }");
+
+        try
+        {
+            var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                source,
+                output,
+                "PowerForge.CoarseCommandIsland",
+                PowerShellCompilationArtifactKind.BinaryModule,
+                PowerShellCompilationMode.Strict)
+            {
+                TargetFramework = "net10.0",
+                EmitSource = true
+            });
+
+            Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+            var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
+            Assert.Equal(1, generated.Split(new[] { "__invokePowerShellRegion(\"" }, StringSplitOptions.None).Length - 1);
+            var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+            var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module '{escapedPath}' -Force; Get-CoarseIsland -Name Ada -Upper $true");
+            Assert.True(run.ExitCode == 0, run.StandardError + Environment.NewLine + run.StandardOutput);
+            Assert.Equal(new[] { "ADA", "tail-region", "Ada" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Analyze_CommandRegionRejectsTopLevelPipelineAutomaticVariable()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForgeCommandIslands", Guid.NewGuid().ToString("N"));

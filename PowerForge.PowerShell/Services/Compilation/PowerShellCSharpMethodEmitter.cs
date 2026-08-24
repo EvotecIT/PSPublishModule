@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Management.Automation.Language;
 using System.Text;
 
@@ -23,6 +22,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private readonly PowerShellCSharpMemberEmitter _memberEmitter;
     private readonly string? _targetFramework;
     private readonly PowerShellCompilationCapability _capabilities;
+    private readonly IReadOnlyDictionary<string, PowerShellLocalFunctionSignature> _localFunctions;
     private bool _requiresPowerShellStreams;
     private bool _requiresPowerShellCommandRegions;
     private int _indent = 1;
@@ -32,8 +32,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         string filePath,
         FunctionDefinitionAst function,
         string? targetFramework = null,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
-        : this(filePath, function.Body, function.Name, SanitizeIdentifier(function.Name), null, targetFramework, capabilities, initialize: true)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
+        IReadOnlyDictionary<string, PowerShellLocalFunctionSignature>? localFunctions = null)
+        : this(filePath, function.Body, function.Name, SanitizeIdentifier(function.Name), null, targetFramework, capabilities, localFunctions, initialize: true)
     {
     }
 
@@ -44,8 +45,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         string generatedName,
         StatementAst[] statements,
         string? targetFramework = null,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
-        : this(filePath, body, sourceName, SanitizeIdentifier(generatedName), statements, targetFramework, capabilities, initialize: true)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
+        IReadOnlyDictionary<string, PowerShellLocalFunctionSignature>? localFunctions = null)
+        : this(filePath, body, sourceName, SanitizeIdentifier(generatedName), statements, targetFramework, capabilities, localFunctions, initialize: true)
     {
     }
 
@@ -57,6 +59,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         StatementAst[]? statements,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
+        IReadOnlyDictionary<string, PowerShellLocalFunctionSignature>? localFunctions,
         bool initialize)
     {
         _filePath = filePath;
@@ -66,6 +69,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         _statements = statements;
         _targetFramework = targetFramework;
         _capabilities = capabilities;
+        _localFunctions = localFunctions ?? new Dictionary<string, PowerShellLocalFunctionSignature>(StringComparer.OrdinalIgnoreCase);
         _memberEmitter = new PowerShellCSharpMemberEmitter(
             InferExpressionType,
             EmitExpression,
@@ -103,7 +107,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
                 .OfType<CommandAst>()
                 .Any(static command => PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _));
         _requiresPowerShellCommandRegions = _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
-            statements.OfType<PipelineAst>().Any(pipeline => PowerShellCommandIslandPolicy.IsRuntimeRegion(pipeline, _body));
+            statements.Any(statement => PowerShellCommandIslandPolicy.IsRuntimeRegion(statement, _body));
         InferLocalTypes(statements);
         ValidateVariableReferences(statements);
         var returnType = InferReturnType(statements);
@@ -139,14 +143,13 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         }
         for (var index = 0; index < statements.Length; index++)
         {
-            if (_requiresPowerShellCommandRegions && statements[index] is PipelineAst regionStart && PowerShellCommandIslandPolicy.IsRuntimeRegion(regionStart, _body))
+            if (_requiresPowerShellCommandRegions && PowerShellCommandIslandPolicy.IsRuntimeRegion(statements[index], _body))
             {
-                var region = new List<PipelineAst> { regionStart };
+                var region = new List<StatementAst> { statements[index] };
                 while (index + 1 < statements.Length &&
-                       statements[index + 1] is PipelineAst adjacent &&
-                       PowerShellCommandIslandPolicy.IsRuntimeRegion(adjacent, _body))
+                       PowerShellCommandIslandPolicy.IsRuntimeRegion(statements[index + 1], _body))
                 {
-                    region.Add(adjacent);
+                    region.Add(statements[index + 1]);
                     index++;
                 }
                 EmitRuntimeRegion(region);
@@ -167,11 +170,11 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             _requiresPowerShellCommandRegions);
     }
 
-    private void EmitRuntimeRegion(IReadOnlyList<PipelineAst> pipelines)
+    private void EmitRuntimeRegion(IReadOnlyList<StatementAst> statements)
     {
         var parameters = _body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
         var parameterBlock = "param(" + string.Join(", ", parameters.Select(static parameter => parameter.Name.Extent.Text)) + ")";
-        var script = parameterBlock + Environment.NewLine + string.Join(Environment.NewLine, pipelines.Select(static pipeline => pipeline.Extent.Text));
+        var script = parameterBlock + Environment.NewLine + string.Join(Environment.NewLine, statements.Select(static statement => statement.Extent.Text));
         var arguments = string.Join(", ", parameters.Select(parameter => GetVariableIdentifier(parameter.Name.VariablePath.UserPath)));
         AppendLine($"__invokePowerShellRegion({PowerShellCSharpLiteral.QuoteString(script)}, new object?[] {{ {arguments} }});");
     }
@@ -365,8 +368,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         }
 
         var terminal = statements.LastOrDefault();
-        if (terminal is PipelineAst { PipelineElements.Count: 1, PipelineElements: var elements } &&
-            elements[0] is CommandExpressionAst)
+        if (terminal is PipelineAst { PipelineElements.Count: 1 } terminalPipeline &&
+            (terminalPipeline.PipelineElements[0] is CommandExpressionAst || IsLocalFunctionPipeline(terminalPipeline)))
         {
             var current = InferExpressionType(terminal);
             if (current != typeof(void))
@@ -409,6 +412,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             case ForEachStatementAst forEachStatement:
                 EmitForEach(forEachStatement, returnType);
                 return;
+            case TryStatementAst tryStatement:
+                EmitTry(tryStatement, returnType);
+                return;
             case BreakStatementAst breakStatement when breakStatement.Label is not null:
                 throw Error(breakStatement, "Labeled break is not supported by the typed compiler.");
             case BreakStatementAst breakStatement when !HasBreakableAncestor(breakStatement):
@@ -437,6 +443,20 @@ internal sealed partial class PowerShellCSharpMethodEmitter
                 };
                 AppendLine($"{sink}(global::System.Convert.ToString({EmitExpression(message)}, global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty);");
                 return;
+            case PipelineAst pipeline when IsLocalFunctionPipeline(pipeline):
+                var localType = InferLocalFunctionType(pipeline);
+                var localCall = EmitLocalFunctionCall(pipeline);
+                if (localType == typeof(void))
+                {
+                    AppendLine($"{localCall};");
+                    return;
+                }
+                if (allowImplicitReturn && returnType == localType)
+                {
+                    AppendLine($"return {localCall};");
+                    return;
+                }
+                throw Error(pipeline, "A value-producing local function call is supported only when returned, assigned, or used as the terminal typed value.");
             case PipelineAst pipeline when pipeline.PipelineElements.Count == 1 && pipeline.PipelineElements[0] is CommandExpressionAst:
                 var expressionType = InferExpressionType(pipeline);
                 if (expressionType == typeof(void))
@@ -514,6 +534,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             ConstantExpressionAst constant => EmitConstant(constant),
             VariableExpressionAst variable => EmitVariable(variable),
             ParenExpressionAst parenthesized => $"({EmitExpression(parenthesized.Pipeline)})",
+            ConvertExpressionAst conversion when IsOrderedHashtableConversion(conversion) => EmitOrderedStringDictionary(conversion),
             ConvertExpressionAst conversion => throw Error(conversion, "Explicit PowerShell conversion expressions require runtime conversion semantics and are not supported by the typed compiler."),
             BinaryExpressionAst binary => EmitBinary(binary),
             UnaryExpressionAst unary => EmitUnary(unary),
@@ -523,6 +544,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             InvokeMemberExpressionAst invocation => _memberEmitter.EmitInvocation(invocation),
             MemberExpressionAst member => _memberEmitter.EmitMember(member),
             IndexExpressionAst index => _memberEmitter.EmitIndex(index),
+            PipelineAst pipeline when IsLocalFunctionPipeline(pipeline) => EmitLocalFunctionCall(pipeline),
+            CommandAst command when IsLocalFunctionCommand(command) => EmitLocalFunctionCall(command),
             _ => throw Error(ast, $"Expression '{ast.GetType().Name}' is not implemented by the C# emitter.")
         };
     }
@@ -639,6 +662,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             ConstantExpressionAst constant => constant.Value?.GetType() ?? typeof(object),
             VariableExpressionAst variable => InferVariableType(variable),
             ParenExpressionAst parenthesized => InferExpressionType(parenthesized.Pipeline),
+            ConvertExpressionAst conversion when IsOrderedHashtableConversion(conversion) => InferOrderedStringDictionaryType(conversion),
             ConvertExpressionAst conversion => throw Error(conversion, "Explicit PowerShell conversion expressions require runtime conversion semantics and are not supported by the typed compiler."),
             BinaryExpressionAst binary => InferBinaryType(binary),
             UnaryExpressionAst unary when IsIncrementOrDecrement(unary) => typeof(void),
@@ -650,6 +674,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             InvokeMemberExpressionAst invocation => _memberEmitter.InferInvocationType(invocation),
             MemberExpressionAst member => _memberEmitter.InferMemberType(member),
             IndexExpressionAst index => _memberEmitter.InferIndexType(index),
+            PipelineAst pipeline when IsLocalFunctionPipeline(pipeline) => InferLocalFunctionType(pipeline),
+            CommandAst command when IsLocalFunctionCommand(command) => InferLocalFunctionType(command),
             _ => throw Error(ast, $"The CLR type of '{ast.GetType().Name}' cannot be inferred.")
         };
     }
@@ -698,96 +724,6 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         }
         throw new PowerShellCSharpEmissionException(node, $"Types '{left.FullName}' and '{right.FullName}' cannot be unified without dynamic PowerShell coercion.");
     }
-
-    private static bool CanAssign(Type target, Type source)
-    {
-        if (target == source || target.IsAssignableFrom(source)) return true;
-        if (!IsNumeric(target) || !IsNumeric(source)) return false;
-        return source == typeof(sbyte) && (target == typeof(short) || target == typeof(int) || target == typeof(long) || target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(byte) && (target == typeof(short) || target == typeof(ushort) || target == typeof(int) || target == typeof(uint) || target == typeof(long) || target == typeof(ulong) || target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(short) && (target == typeof(int) || target == typeof(long) || target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(ushort) && (target == typeof(int) || target == typeof(uint) || target == typeof(long) || target == typeof(ulong) || target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(int) && (target == typeof(long) || target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(uint) && (target == typeof(long) || target == typeof(ulong) || target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(long) && (target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(ulong) && (target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(float) && target == typeof(double);
-    }
-
-    internal static string SanitizeIdentifier(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return "Generated";
-        var builder = new StringBuilder(value.Length + 1);
-        if (!char.IsLetter(value[0]) && value[0] != '_') builder.Append('_');
-        foreach (var character in value)
-            builder.Append(char.IsLetterOrDigit(character) || character == '_' ? character : '_');
-        var identifier = builder.ToString();
-        return CSharpKeywords.Contains(identifier) ? "@" + identifier : identifier;
-    }
-
-    private static readonly HashSet<string> CSharpKeywords = new(StringComparer.Ordinal)
-    {
-        "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked", "class", "const", "continue",
-        "decimal", "default", "delegate", "do", "double", "else", "enum", "event", "explicit", "extern", "false", "finally", "fixed",
-        "float", "for", "foreach", "goto", "if", "implicit", "in", "int", "interface", "internal", "is", "lock", "long", "namespace",
-        "new", "null", "object", "operator", "out", "override", "params", "private", "protected", "public", "readonly", "ref", "return",
-        "sbyte", "sealed", "short", "sizeof", "stackalloc", "static", "string", "struct", "switch", "this", "throw", "true", "try",
-        "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort", "using", "virtual", "void", "volatile", "while"
-    };
-
-    internal static string GetTypeName(Type type)
-    {
-        if (type.IsArray) return GetTypeName(type.GetElementType()!) + "[]";
-        if (type.IsGenericType)
-        {
-            var definitionName = (type.GetGenericTypeDefinition().FullName ?? type.Name).Split('`')[0].Replace('+', '.');
-            return $"global::{definitionName}<{string.Join(", ", type.GetGenericArguments().Select(GetTypeName))}>";
-        }
-        if (type == typeof(void)) return "void";
-        if (type == typeof(bool)) return "bool";
-        if (type == typeof(byte)) return "byte";
-        if (type == typeof(sbyte)) return "sbyte";
-        if (type == typeof(short)) return "short";
-        if (type == typeof(ushort)) return "ushort";
-        if (type == typeof(int)) return "int";
-        if (type == typeof(uint)) return "uint";
-        if (type == typeof(long)) return "long";
-        if (type == typeof(ulong)) return "ulong";
-        if (type == typeof(float)) return "float";
-        if (type == typeof(double)) return "double";
-        if (type == typeof(decimal)) return "decimal";
-        if (type == typeof(char)) return "char";
-        if (type == typeof(string)) return "string";
-        if (type == typeof(object)) return "object";
-        return "global::" + (type.FullName ?? type.Name).Replace('+', '.');
-    }
-
-    private static string EmitConstant(ConstantExpressionAst constant)
-    {
-        return constant.Value switch
-        {
-            null => "null",
-            bool value => value ? "true" : "false",
-            string value => EmitString(value),
-            char value => EmitChar(value),
-            float value => value.ToString("R", CultureInfo.InvariantCulture) + "F",
-            double value => value.ToString("R", CultureInfo.InvariantCulture) + "D",
-            decimal value => value.ToString(CultureInfo.InvariantCulture) + "M",
-            long value => value.ToString(CultureInfo.InvariantCulture) + "L",
-            ulong value => value.ToString(CultureInfo.InvariantCulture) + "UL",
-            uint value => value.ToString(CultureInfo.InvariantCulture) + "U",
-            System.Numerics.BigInteger value =>
-                $"global::System.Numerics.BigInteger.Parse({EmitString(value.ToString(CultureInfo.InvariantCulture))}, global::System.Globalization.CultureInfo.InvariantCulture)",
-            IFormattable value => value.ToString(null, CultureInfo.InvariantCulture),
-            _ => throw new PowerShellCSharpEmissionException(constant, $"Constant type '{constant.Value.GetType().FullName}' is not supported.")
-        };
-    }
-
-    private static string EmitString(string value)
-        => PowerShellCSharpLiteral.QuoteString(value);
-
-    private static string EmitChar(char value)
-        => PowerShellCSharpLiteral.QuoteChar(value);
 
     private void AppendLine(string text)
         => _builder.Append(' ', _indent * 4).AppendLine(text);

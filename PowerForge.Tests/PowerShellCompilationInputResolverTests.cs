@@ -182,6 +182,66 @@ public sealed class PowerShellCompilationInputResolverTests
     }
 
     [Fact]
+    public void Resolve_ConventionalModuleLoaderAcceptsUnconditionalTryWrappedDotSourceAttempt()
+    {
+        using var fixture = ResolverFixture.Create("TryWrappedLoader");
+        fixture.Write("TryWrappedLoader.psd1", "@{ RootModule = 'TryWrappedLoader.psm1' }");
+        var root = fixture.Write(
+            "TryWrappedLoader.psm1",
+            "$Public = @(Get-ChildItem -Path $PSScriptRoot/Public/*.ps1); foreach ($Import in $Public) { try { . $Import.FullName } catch { Write-Warning 'load failed' } }");
+        var function = fixture.Write("Public/Get-Proof.ps1", "function Get-Proof { return 1 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.Root);
+
+        Assert.Equal(new[] { function, root }.OrderBy(static path => path), resolved.CompilationSourceFiles.OrderBy(static path => path));
+    }
+
+    [Fact]
+    public void Resolve_RejectsTryWrappedConventionalLoaderWithPrecedingStatement()
+    {
+        using var fixture = ResolverFixture.Create("TryWrappedUnreachableLoader");
+        fixture.Write("TryWrappedUnreachableLoader.psd1", "@{ RootModule = 'TryWrappedUnreachableLoader.psm1' }");
+        fixture.Write(
+            "TryWrappedUnreachableLoader.psm1",
+            "$Public = @(Get-ChildItem -Path $PSScriptRoot/Public/*.ps1); foreach ($Import in $Public) { try { throw 'skip'; . $Import.FullName } catch {} }");
+        fixture.Write("Public/Get-UnreachableProof.ps1", "function Get-UnreachableProof { return 1 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_RejectsTryWrappedConventionalLoaderPrecededByLoopControlFlow()
+    {
+        using var fixture = ResolverFixture.Create("TryWrappedSkippedLoader");
+        fixture.Write("TryWrappedSkippedLoader.psd1", "@{ RootModule = 'TryWrappedSkippedLoader.psm1' }");
+        fixture.Write(
+            "TryWrappedSkippedLoader.psm1",
+            "$Public = @(Get-ChildItem -Path $PSScriptRoot/Public/*.ps1); foreach ($Import in $Public) { continue; try { . $Import.FullName } catch {} }");
+        fixture.Write("Public/Get-UnreachableProof.ps1", "function Get-UnreachableProof { return 1 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_RejectsDirectConventionalLoaderPrecededByLoopControlFlow()
+    {
+        using var fixture = ResolverFixture.Create("DirectSkippedLoader");
+        fixture.Write("DirectSkippedLoader.psd1", "@{ RootModule = 'DirectSkippedLoader.psm1' }");
+        fixture.Write(
+            "DirectSkippedLoader.psm1",
+            "$Public = @(Get-ChildItem -Path $PSScriptRoot/Public/*.ps1); foreach ($Import in $Public) { continue; . $Import.FullName }");
+        fixture.Write("Public/Get-UnreachableProof.ps1", "function Get-UnreachableProof { return 1 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Resolve_ConventionalModuleLoaderDoesNotHideUnrelatedDynamicDotSource()
     {
         using var fixture = ResolverFixture.Create("ConventionalModule");

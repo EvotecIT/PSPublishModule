@@ -129,7 +129,7 @@ public sealed class PowerShellCompilationAnalyzer
         if (topLevelStatements.Length > 0 || ast.ParamBlock is not null || HasUnsupportedNamedBlocks(ast))
         {
             var scriptUnit = AnalyzeUnit("<script>", PowerShellCompilationUnitKind.Script, ast, file, topLevelStatements, capabilities);
-            if (scriptUnit.IsCompilable)
+            if (scriptUnit.IsCompilable && !capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls))
             {
                 try
                 {
@@ -183,7 +183,7 @@ public sealed class PowerShellCompilationAnalyzer
                             function.Extent)
                     });
             }
-            if (functionUnit.IsCompilable)
+            if (functionUnit.IsCompilable && !capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls))
             {
                 try
                 {
@@ -415,6 +415,8 @@ public sealed class PowerShellCompilationAnalyzer
                     break;
                 case ConvertExpressionAst conversion when conversion.Parent is AssignmentStatementAst assignment && ReferenceEquals(assignment.Left, conversion):
                     break;
+                case ConvertExpressionAst conversion when IsOrderedHashtableConversion(conversion):
+                    break;
                 case ConvertExpressionAst conversion:
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
@@ -426,8 +428,10 @@ public sealed class PowerShellCompilationAnalyzer
                     if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
                         (PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _) ||
                          (unitRoot is ScriptBlockAst commandBody &&
-                          command.Parent is PipelineAst commandPipeline &&
-                          PowerShellCommandIslandPolicy.IsRuntimeRegion(commandPipeline, commandBody))))
+                          PowerShellCommandIslandPolicy.TryGetRuntimeRegion(command, commandBody, out _))))
+                        break;
+                    if (capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls) &&
+                        (command.InvocationOperator == TokenKind.Dot || command.GetCommandName() is not null))
                         break;
                     var commandName = command.GetCommandName();
                     diagnostics.Add(CreateDiagnostic(
@@ -502,6 +506,16 @@ public sealed class PowerShellCompilationAnalyzer
                     break;
                 case SwitchStatementAst:
                     break;
+                case CatchClauseAst catchClause when catchClause.CatchTypes.Count > 0:
+                    diagnostics.Add(CreateDiagnostic(
+                        PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                        "Typed catch filters require PowerShell exception-unwrapping semantics; use one catch-all clause on the conservative typed path.",
+                        file,
+                        catchClause.Extent));
+                    break;
+                case CatchClauseAst:
+                case TryStatementAst:
+                    break;
                 default:
                     if (!IsSupportedNode(candidate, unitRoot))
                     {
@@ -540,7 +554,7 @@ public sealed class PowerShellCompilationAnalyzer
         => ReferenceEquals(candidate, unitRoot) || candidate is
             NamedBlockAst or StatementBlockAst or ParamBlockAst or ParameterAst or TypeConstraintAst or
             PipelineAst or CommandExpressionAst or AssignmentStatementAst or IfStatementAst or
-            SwitchStatementAst or ForStatementAst or WhileStatementAst or ForEachStatementAst or ReturnStatementAst or
+            SwitchStatementAst or ForStatementAst or WhileStatementAst or ForEachStatementAst or TryStatementAst or CatchClauseAst or ReturnStatementAst or
             BreakStatementAst or ContinueStatementAst or BinaryExpressionAst or UnaryExpressionAst or
             ParenExpressionAst or ConvertExpressionAst or ConstantExpressionAst or StringConstantExpressionAst or ExpandableStringExpressionAst or
             VariableExpressionAst or ArrayLiteralAst or HashtableAst or TypeExpressionAst or MemberExpressionAst or
@@ -548,6 +562,10 @@ public sealed class PowerShellCompilationAnalyzer
 
     private static bool HasUnsupportedSwitchFlags(SwitchFlags flags)
         => (flags & (SwitchFlags.File | SwitchFlags.Regex | SwitchFlags.Wildcard | SwitchFlags.Parallel)) != 0;
+
+    private static bool IsOrderedHashtableConversion(ConvertExpressionAst conversion)
+        => conversion.StaticType == typeof(System.Collections.Specialized.OrderedDictionary) &&
+           conversion.Child is HashtableAst;
 
     private static bool IsMandatoryParameter(ParameterAst parameter)
         => parameter.Attributes

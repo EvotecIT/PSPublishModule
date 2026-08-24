@@ -108,8 +108,6 @@ public sealed class PowerShellCompilationInputResolver
             if (unreachable.Length > 0)
                 throw new InvalidOperationException($"Executable path set contains source file(s) unreachable from the entrypoint: {string.Join(", ", unreachable.Select(Path.GetFileName))}.");
             var executableMode = mode ?? PowerShellCompilationMode.Package;
-            if (executableMode != PowerShellCompilationMode.Package && closure.Length > 1)
-                throw new InvalidOperationException("Multi-file typed executables are not yet eligible for Strict compilation; use Package mode until compiled local-function calls are supported.");
             return new PowerShellCompilationResolvedInput(
                 entryPoint,
                 entryPoint,
@@ -210,8 +208,6 @@ public sealed class PowerShellCompilationInputResolver
         if (resolvedKind == PowerShellCompilationArtifactKind.Executable)
         {
             compilationSourceFiles = PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath);
-            if (resolvedMode != PowerShellCompilationMode.Package && compilationSourceFiles.Length > 1)
-                throw new InvalidOperationException("Multi-file typed executables are not yet eligible for Strict compilation; use Package mode until compiled local-function calls are supported.");
             sourceFiles = compilationSourceFiles;
         }
         else

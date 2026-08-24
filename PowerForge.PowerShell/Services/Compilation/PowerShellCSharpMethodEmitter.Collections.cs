@@ -6,11 +6,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 {
     private Type InferStringDictionaryType(HashtableAst hashtable)
     {
-        var assignment = hashtable.Parent is CommandExpressionAst { Parent: AssignmentStatementAst directAssignment }
-            ? directAssignment
-            : hashtable.Parent as AssignmentStatementAst;
+        var assignment = FindDictionaryAssignment(hashtable);
         if (assignment is null ||
-            !ReferenceEquals(UnwrapTransparentExpression(assignment.Right), hashtable) ||
             FindAssignedVariable(assignment.Left) is not { } variable)
             throw Error(hashtable, "Typed hashtable literals are currently supported only as lookup-only local dictionaries.");
         var variableName = variable.VariablePath.UserPath;
@@ -38,8 +35,39 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         _ = InferStringDictionaryType(hashtable);
         var entries = hashtable.KeyValuePairs.Select(pair =>
             $"{{ {EmitExpression(pair.Item1)}, {EmitExpression(GetHashtableValue(pair.Item2))} }}");
-        return "new global::System.Collections.Generic.Dictionary<string, string>(global::System.StringComparer.OrdinalIgnoreCase) { " +
-               string.Join(", ", entries) + " }";
+        return $"new global::System.Collections.Generic.Dictionary<string, string>(global::System.StringComparer.OrdinalIgnoreCase) {{ {string.Join(", ", entries)} }}";
+    }
+
+    private Type InferOrderedStringDictionaryType(ConvertExpressionAst conversion)
+    {
+        var hashtable = GetOrderedHashtable(conversion);
+        _ = InferStringDictionaryType(hashtable);
+        return typeof(System.Collections.Specialized.OrderedDictionary);
+    }
+
+    private string EmitOrderedStringDictionary(ConvertExpressionAst conversion)
+    {
+        var hashtable = GetOrderedHashtable(conversion);
+        _ = InferStringDictionaryType(hashtable);
+        var entries = hashtable.KeyValuePairs.Select(pair =>
+            $"{{ {EmitExpression(pair.Item1)}, {EmitExpression(GetHashtableValue(pair.Item2))} }}");
+        return $"new global::System.Collections.Specialized.OrderedDictionary(global::System.StringComparer.OrdinalIgnoreCase) {{ {string.Join(", ", entries)} }}";
+    }
+
+    private static bool IsOrderedHashtableConversion(ConvertExpressionAst conversion)
+        => conversion.StaticType == typeof(System.Collections.Specialized.OrderedDictionary) && conversion.Child is HashtableAst;
+
+    private HashtableAst GetOrderedHashtable(ConvertExpressionAst conversion)
+        => conversion.Child as HashtableAst ?? throw Error(conversion, "[ordered] must directly wrap a hashtable literal.");
+
+    private AssignmentStatementAst? FindDictionaryAssignment(HashtableAst hashtable)
+    {
+        Ast candidate = hashtable;
+        if (candidate.Parent is ConvertExpressionAst conversion && IsOrderedHashtableConversion(conversion))
+            candidate = conversion;
+        if (candidate.Parent is CommandExpressionAst commandExpression)
+            candidate = commandExpression;
+        return candidate.Parent as AssignmentStatementAst;
     }
 
     private Ast GetHashtableValue(StatementAst statement)
@@ -70,8 +98,14 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var terminal = statements.LastOrDefault();
         if (terminal is ReturnStatementAst)
             return true;
+        if (terminal is TryStatementAst tryStatement)
+            return BlockReturns(tryStatement.Body) &&
+                   tryStatement.CatchClauses.All(static clause => BlockReturns(clause.Body));
         return terminal is PipelineAst { PipelineElements.Count: 1 } pipeline &&
-               pipeline.PipelineElements[0] is CommandExpressionAst &&
+               (pipeline.PipelineElements[0] is CommandExpressionAst || IsLocalFunctionPipeline(pipeline)) &&
                InferExpressionType(pipeline) != typeof(void);
     }
+
+    private static bool BlockReturns(StatementBlockAst block)
+        => block.Statements.LastOrDefault() is ReturnStatementAst;
 }

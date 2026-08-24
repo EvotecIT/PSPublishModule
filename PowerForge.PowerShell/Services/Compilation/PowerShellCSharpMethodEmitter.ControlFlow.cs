@@ -101,6 +101,28 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         EmitBlock(statement.Body, returnType);
     }
 
+    private void EmitTry(TryStatementAst statement, Type returnType)
+    {
+        if (statement.CatchClauses.Any(static clause => clause.CatchTypes.Count > 0))
+            throw Error(statement, "Typed catch filters require PowerShell exception-unwrapping semantics; use one catch-all clause.");
+        if (statement.CatchClauses.Count > 1)
+            throw Error(statement, "A conservative typed try statement accepts at most one catch-all clause.");
+        if (statement.Finally?.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or ContinueStatementAst, searchNestedScriptBlocks: true).Any() == true)
+            throw Error(statement.Finally, "Typed finally blocks cannot alter enclosing return, break, or continue control flow.");
+        AppendLine("try");
+        EmitBlock(statement.Body, returnType);
+        foreach (var clause in statement.CatchClauses)
+        {
+            AppendLine("catch (global::System.Exception)");
+            EmitBlock(clause.Body, returnType);
+        }
+        if (statement.Finally is not null)
+        {
+            AppendLine("finally");
+            EmitBlock(statement.Finally, returnType);
+        }
+    }
+
     private void EmitBlock(StatementBlockAst block, Type returnType)
     {
         AppendLine("{");

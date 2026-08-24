@@ -4,6 +4,8 @@ $buildRoot = Join-Path $outputRoot 'artifacts'
 $workloadPath = Join-Path $PSScriptRoot 'compiler-workloads.ps1'
 $startupScriptPath = Join-Path $PSScriptRoot 'packaged-startup.ps1'
 $optimizedExecutableScriptPath = Join-Path $PSScriptRoot 'typed-executable-optimization.ps1'
+$localCallEntryPath = Join-Path $PSScriptRoot 'typed-local-call-main.ps1'
+$localCallHelperPath = Join-Path $PSScriptRoot 'typed-local-call-helper.ps1'
 $harnessPath = Join-Path $PSScriptRoot 'PowerShellCompilationBenchmarkHarness.cs'
 $quick = Get-BenchmarkInput Quick $false -Bool
 $calls = [int](Get-BenchmarkInput Calls $(if ($quick) { 2000 } else { 50000 }))
@@ -67,6 +69,19 @@ if (-not $typedExecutableResult.Succeeded) {
     throw "Typed benchmark executable failed: $($typedExecutableResult.Error)`n$($typedExecutableResult.BuildOutput)"
 }
 
+$localCallSpec = [PowerForge.PowerShellCompilationBuildSpec]::new(
+    $localCallEntryPath,
+    $buildRoot,
+    'PowerForge.CompilationBenchmark.TypedLocalCalls',
+    [PowerForge.PowerShellCompilationArtifactKind]::Executable,
+    [PowerForge.PowerShellCompilationMode]::Strict)
+$localCallSpec.TargetFramework = $targetFramework
+$localCallSpec.CompilationSourcePaths = @($localCallEntryPath, $localCallHelperPath)
+$localCallResult = $builder.Build($localCallSpec)
+if (-not $localCallResult.Succeeded) {
+    throw "Typed local-call benchmark executable failed: $($localCallResult.Error)`n$($localCallResult.BuildOutput)"
+}
+
 $optimizedExecutableEvidence = [ordered]@{}
 if ($includeOptimizedExecutables) {
     foreach ($optimization in @(
@@ -105,6 +120,7 @@ $typedHash = (Get-FileHash -LiteralPath $typedResult.ArtifactPath -Algorithm SHA
 $moduleHash = (Get-FileHash -LiteralPath $moduleResult.ArtifactPath -Algorithm SHA256).Hash
 $executableHash = (Get-FileHash -LiteralPath $executableResult.ArtifactPath -Algorithm SHA256).Hash
 $typedExecutableHash = (Get-FileHash -LiteralPath $typedExecutableResult.ArtifactPath -Algorithm SHA256).Hash
+$localCallExecutableHash = (Get-FileHash -LiteralPath $localCallResult.ArtifactPath -Algorithm SHA256).Hash
 $currentPowerShell = (Get-Process -Id $PID).Path
 $moduleQualifier = [System.IO.Path]::GetFileNameWithoutExtension($moduleResult.ArtifactPath)
 
@@ -444,6 +460,34 @@ New-BenchmarkSuite 'powershell-compilation-packaged-startup' -OutputRoot $output
     Add-BenchmarkValidation {
         param($case, $run)
         Assert-BenchmarkValue -Actual ([double] $run.Result) -Expected ([double] $case.Expected)
+    }
+    Add-BenchmarkComparison -Dimension Engine -Baseline PowerShellFile -Metric MedianMs -TieTolerance 0.05
+}
+
+New-BenchmarkSuite 'powershell-compilation-typed-local-calls' -OutputRoot $outputRoot {
+    Add-BenchmarkMetadata Workload 'Repeated local function calls through a multi-file Strict executable'
+    Add-BenchmarkMetadata TypedExecutableSha256 $localCallExecutableHash
+    Add-BenchmarkMetadata TypedExecutableBytes (Get-Item -LiteralPath $localCallResult.ArtifactPath).Length
+    Set-BenchmarkPolicy -Warmup 2 -Iterations $(if ($quick) { 3 } else { 10 }) -Order Rotated -OutlierMode ExcludeMinMax
+    Add-BenchmarkCase LocalCalls @{ Calls = $(if ($quick) { 2000 } else { 20000 }); Expected = $(if ($quick) { 2000L } else { 20000L }) }
+
+    Add-BenchmarkEngine PowerShellFile {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = & $currentPowerShell -NoProfile -NonInteractive -File $localCallEntryPath $case.Calls
+        }
+    }
+
+    Add-BenchmarkEngine TypedExecutable {
+        Add-BenchmarkOperation Invoke {
+            param($case, $run)
+            $run.Result = & $localCallResult.ArtifactPath $case.Calls
+        }
+    }
+
+    Add-BenchmarkValidation {
+        param($case, $run)
+        Assert-BenchmarkValue -Actual ([long] $run.Result) -Expected ([long] $case.Expected)
     }
     Add-BenchmarkComparison -Dimension Engine -Baseline PowerShellFile -Metric MedianMs -TieTolerance 0.05
 }

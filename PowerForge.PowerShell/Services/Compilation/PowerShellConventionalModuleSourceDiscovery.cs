@@ -148,7 +148,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 searchNestedScriptBlocks: false)
             .Cast<CommandAst>()
             .Where(command => command.Parent is PipelineAst pipeline &&
-                              ReferenceEquals(pipeline.Parent, loader.Body) &&
+                              IsUnconditionallyAttemptedLoader(pipeline, loader.Body) &&
                               command.CommandElements.Count == 1 &&
                               command.CommandElements[0] is MemberExpressionAst
                               {
@@ -157,6 +157,20 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                               } &&
                               variable.VariablePath.UserPath.Equals(loopVariable, StringComparison.OrdinalIgnoreCase) &&
                               member.Value.Equals("FullName", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsUnconditionallyAttemptedLoader(PipelineAst pipeline, StatementBlockAst loopBody)
+    {
+        if (ReferenceEquals(pipeline.Parent, loopBody))
+            return loopBody.Statements.Count == 1 && ReferenceEquals(loopBody.Statements[0], pipeline);
+        return pipeline.Parent is StatementBlockAst tryBody &&
+               tryBody.Parent is TryStatementAst tryStatement &&
+               ReferenceEquals(tryStatement.Body, tryBody) &&
+               ReferenceEquals(tryStatement.Parent, loopBody) &&
+               loopBody.Statements.Count == 1 &&
+               ReferenceEquals(loopBody.Statements[0], tryStatement) &&
+               tryBody.Statements.Count == 1 &&
+               ReferenceEquals(tryBody.Statements[0], pipeline);
     }
 
     private static bool HasInterveningAssignment(ScriptBlockAst root, string variableName, int producerOffset, int loaderOffset)

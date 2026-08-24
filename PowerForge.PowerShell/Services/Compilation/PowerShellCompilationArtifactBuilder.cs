@@ -48,7 +48,9 @@ public sealed class PowerShellCompilationArtifactBuilder
             ValidateRuntimeHookSourceOwnership(spec, compilationSourcePaths);
             var capabilities = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
                 ? PowerShellCompilationCapability.PowerShellStreams
-                : PowerShellCompilationCapability.None;
+                : spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Strict
+                    ? PowerShellCompilationCapability.LocalFunctionCalls
+                    : PowerShellCompilationCapability.None;
             var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, capabilities);
             if (plan.ParseErrorFiles > 0)
                 throw new InvalidOperationException("PowerShell source contains parser errors; no artifact was produced.");
@@ -60,7 +62,9 @@ public sealed class PowerShellCompilationArtifactBuilder
             bool requiresPowerShellRuntime;
             bool usesPowerShellRuntimeFallback;
             int compiledUnits;
+            int compiledMethods;
             int runtimeRoutedUnits;
+            IReadOnlyCollection<PowerShellCompiledMethod> compiledMethodDetails = Array.Empty<PowerShellCompiledMethod>();
             var runtimeManifestHooks = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
                 ? PowerShellCompiledModuleManifest.GetRuntimeScriptHooks(spec.SourcePath, spec.ModuleManifestPath)
                 : Array.Empty<string>();
@@ -69,9 +73,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                     $"Strict binary-module compilation rejected manifest runtime script hook(s): {string.Join(", ", runtimeManifestHooks)}.");
             if (spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Strict)
             {
-                if (compilationSourcePaths.Length != 1)
-                    throw new InvalidOperationException("Strict typed executable generation currently accepts one entrypoint file; use Package mode for an entrypoint with bundled dot-source dependencies.");
-                var executable = PowerShellTypedExecutableEmitter.Emit(spec.SourcePath, plan, spec.TargetFramework);
+                var executable = PowerShellTypedExecutableEmitter.Emit(spec.SourcePath, compilationSourcePaths, plan, spec.TargetFramework);
                 File.WriteAllText(Path.Combine(workspace, "CompiledPowerShellScript.cs"), executable.CompiledSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 File.WriteAllText(Path.Combine(workspace, "Program.cs"), executable.ProgramSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 projectPath = Path.Combine(workspace, artifactName + ".csproj");
@@ -88,8 +90,10 @@ public sealed class PowerShellCompilationArtifactBuilder
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 requiresPowerShellRuntime = false;
                 usesPowerShellRuntimeFallback = false;
-                compiledUnits = 1;
-                runtimeRoutedUnits = 1;
+                compiledUnits = plan.TotalUnits;
+                compiledMethods = executable.Methods.Length;
+                compiledMethodDetails = executable.Methods;
+                runtimeRoutedUnits = plan.TotalUnits;
             }
             else if (spec.Kind is PowerShellCompilationArtifactKind.Library or PowerShellCompilationArtifactKind.BinaryModule)
             {
@@ -160,6 +164,8 @@ public sealed class PowerShellCompilationArtifactBuilder
                     spec.Mode == PowerShellCompilationMode.Hybrid &&
                     (runtimeRoutedUnits != plan.TotalUnits || runtimeManifestHooks.Length > 0);
                 compiledUnits = typed.Methods.Length;
+                compiledMethods = typed.Methods.Length;
+                compiledMethodDetails = typed.Methods;
             }
             else
             {
@@ -193,6 +199,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                 requiresPowerShellRuntime = true;
                 usesPowerShellRuntimeFallback = true;
                 compiledUnits = 0;
+                compiledMethods = 0;
                 runtimeRoutedUnits = 0;
             }
 
@@ -217,7 +224,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                         artifactName,
                         artifactStagingDirectory,
                         spec,
-                        typed);
+                        compiledMethodDetails);
                     stagedArtifact = stagedArtifact.WithAdditionalFiles(
                         Directory.EnumerateFiles(stagedGeneratedSourcePath, "*", SearchOption.AllDirectories)
                             .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
@@ -269,7 +276,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                     SelfContained = spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.SelfContained,
                     SingleFile = spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.SingleFile,
                     Optimization = spec.Optimization,
-                    CompiledMethods = compiledUnits,
+                    CompiledMethods = compiledMethods,
                     RuntimeFallbackUnits = fallbackUnits,
                     OmittedUnits = omittedUnits,
                     CompilationCoveragePercentage = plan.TotalUnits == 0 ? 0 : compiledUnits * 100d / plan.TotalUnits,

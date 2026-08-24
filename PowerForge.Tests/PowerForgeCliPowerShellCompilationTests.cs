@@ -82,6 +82,50 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     }
 
     [Fact]
+    public async Task BuildStrictMultiFileExecutable_UsesExplicitEntrypointAndDirectLocalCalls()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Multi File Typed Tests", Guid.NewGuid().ToString("N"));
+        var output = Path.Combine(root, "compiled output");
+        Directory.CreateDirectory(output);
+        var entryPoint = Path.Combine(root, "Tool.ps1");
+        var helper = Path.Combine(root, "Helper.ps1");
+        File.WriteAllText(entryPoint, "param([int] $Value); . \"$PSScriptRoot/Helper.ps1\"; return Get-Value -Value $Value");
+        File.WriteAllText(helper, "function Get-Value { param([int] $Value) return $Value }");
+
+        try
+        {
+            var build = await RunCliAsync(
+                repositoryRoot,
+                $"powershell build \"{entryPoint}\" --path \"{helper}\" --entry-point \"{entryPoint}\" --kind exe --mode Strict --framework net10.0 --out \"{output}\" --name TypedMultiCliProof --output json");
+            Assert.True(build.ExitCode == 0, FormatFailure("multi-file typed executable build", build));
+            string artifactPath;
+            using (var document = JsonDocument.Parse(build.StdOut))
+            {
+                var manifest = document.RootElement.GetProperty("result").GetProperty("manifest");
+                Assert.Equal(2, manifest.GetProperty("compiledMethods").GetInt32());
+                Assert.False(manifest.GetProperty("requiresPowerShellRuntime").GetBoolean());
+                artifactPath = manifest.GetProperty("artifactPath").GetString()!;
+            }
+            using var process = Process.Start(new ProcessStartInfo(artifactPath, "--Value=73")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            })!;
+            var standardOutput = await process.StandardOutput.ReadToEndAsync();
+            var standardError = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            Assert.Equal((0, "73", string.Empty), (process.ExitCode, standardOutput.Trim(), standardError.Trim()));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task AnalyzeAndBuildTypedLibrary_ExposeStableJsonCliContract()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -162,7 +206,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
                 Assert.True(result.GetProperty("passed").GetBoolean());
             }
 
-            File.WriteAllText(source, "function Add-TypedValue { try { return 1 } catch { return 2 } }");
+            File.WriteAllText(source, "function Add-TypedValue { throw 'regression' }");
             var regression = await RunCliAsync(
                 repositoryRoot,
                 $"powershell census \"{product}\" --framework net10.0 --baseline \"{baseline}\" --output json");

@@ -125,6 +125,8 @@ internal sealed class PowerShellCSharpMemberEmitter
         var indexCode = _emitExpression(index.Index);
         if (IsStringDictionary(target.Type))
         {
+            if (IsOrderedStringDictionary(target.Type))
+                return $"({targetCode} is null ? throw new global::System.InvalidOperationException(\"Cannot index into a null dictionary.\") : {targetCode}.Contains({indexCode}) ? (string?){targetCode}[{indexCode}] : null)";
             var temporary = "__powerForgeDictionaryValue" + _temporaryIndex++.ToString(CultureInfo.InvariantCulture);
             return $"({targetCode} is null ? throw new global::System.InvalidOperationException(\"Cannot index into a null dictionary.\") : {targetCode}.TryGetValue({indexCode}, out var {temporary}) ? {temporary} : null)";
         }
@@ -360,9 +362,13 @@ internal sealed class PowerShellCSharpMemberEmitter
     }
 
     private static bool IsStringDictionary(Type type)
-        => type.IsGenericType &&
+        => IsOrderedStringDictionary(type) ||
+           type.IsGenericType &&
            type.GetGenericTypeDefinition() == typeof(Dictionary<,>) &&
            type.GetGenericArguments().SequenceEqual(new[] { typeof(string), typeof(string) });
+
+    private static bool IsOrderedStringDictionary(Type type)
+        => type == typeof(System.Collections.Specialized.OrderedDictionary);
 
     private static bool IsSideEffectFreeIndex(ExpressionAst index)
         => index is VariableExpressionAst or ConstantExpressionAst ||
