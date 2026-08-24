@@ -8,6 +8,38 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellCompiledModuleManifest
 {
+    internal static void EnsureManifestOwnsSource(string sourcePath, string manifestPath)
+    {
+        var source = Path.GetFullPath(sourcePath);
+        var manifest = Path.GetFullPath(manifestPath);
+        var moduleRoot = Path.GetDirectoryName(manifest) ?? Directory.GetCurrentDirectory();
+        var rootModule = ModuleManifestValueReader.ReadTopLevelLiteralStringOrThrow(manifest, "RootModule");
+        string expectedSource;
+        if (!string.IsNullOrWhiteSpace(rootModule))
+        {
+            expectedSource = ResolveContainedPath(moduleRoot, rootModule!);
+        }
+        else
+        {
+            var modules = Directory.EnumerateFiles(moduleRoot, "*", SearchOption.TopDirectoryOnly)
+                .Where(static path => Path.GetExtension(path).Equals(".psm1", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var preferredName = Path.GetFileNameWithoutExtension(manifest);
+            expectedSource = modules.FirstOrDefault(path =>
+                    Path.GetFileNameWithoutExtension(path).Equals(preferredName, StringComparison.OrdinalIgnoreCase))
+                ?? (modules.Length == 1
+                    ? modules[0]
+                    : throw new InvalidOperationException($"Module manifest '{manifest}' has no literal RootModule and no unambiguous top-level .psm1 entrypoint."));
+        }
+
+        if (!expectedSource.Equals(source, PowerShellCompilationPathSafety.PathComparison))
+        {
+            throw new InvalidOperationException(
+                $"Module manifest '{manifest}' does not own selected compilation source '{source}'; its RootModule resolves to '{expectedSource}'.");
+        }
+    }
+
     internal static string[] GetProtectedSourceFiles(string sourcePath, bool includeHybridDependencies, string? moduleManifestPath = null)
     {
         var protectedFiles = new List<string> { Path.GetFullPath(sourcePath) };
@@ -80,6 +112,7 @@ internal static class PowerShellCompiledModuleManifest
         var manifestAliases = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "AliasesToExport");
         var manifestVariables = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "VariablesToExport");
         var manifestFileList = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "FileList");
+        var typedSourcePaths = typed.SourcePaths.Select(Path.GetFullPath).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var selectedCompiled = Select(explicitCompiled, manifestFunctions);
         var explicitCmdlets = explicitExports?.Cmdlets ?? Array.Empty<string>();
         var nestedModules = ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules").ToArray();
@@ -133,12 +166,12 @@ internal static class PowerShellCompiledModuleManifest
                 sourcePath,
                 artifactName,
                 rootModuleFileName,
+                typedSourcePaths,
                 manifestFileList);
             mutator.TrySetTopLevelStringArray(targetManifest, "FileList", rewrittenFileList);
         }
 
         var copied = new List<string> { targetManifest };
-        var typedSourcePaths = typed.SourcePaths.Select(Path.GetFullPath).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         foreach (var reference in ReadReferencedFileClosure(sourceManifest))
         {
             var sourceFile = reference.SourcePath;
@@ -171,6 +204,7 @@ internal static class PowerShellCompiledModuleManifest
         string sourcePath,
         string artifactName,
         string rootModuleFileName,
+        ISet<string> typedSourcePaths,
         IEnumerable<string> sourceEntries)
     {
         var sourceDirectory = Path.GetDirectoryName(sourceManifest) ?? Directory.GetCurrentDirectory();
@@ -178,7 +212,7 @@ internal static class PowerShellCompiledModuleManifest
         foreach (var entry in sourceEntries)
         {
             var resolved = ResolveContainedPath(sourceDirectory, entry);
-            if (resolved.Equals(sourcePath, PowerShellCompilationPathSafety.PathComparison))
+            if (resolved.Equals(sourcePath, PowerShellCompilationPathSafety.PathComparison) || typedSourcePaths.Contains(resolved))
                 continue;
             if (resolved.Equals(sourceManifest, PowerShellCompilationPathSafety.PathComparison))
             {
@@ -413,11 +447,11 @@ internal static class PowerShellCompiledModuleManifest
                 yield return new ManifestFileReference(rootModule!, required: true);
         }
         foreach (var key in new[] { "FormatsToProcess", "TypesToProcess", "ScriptsToProcess" })
-        foreach (var value in ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, key))
+        foreach (var value in ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifestPath, key) ?? Array.Empty<string>())
             yield return new ManifestFileReference(value, required: true);
-        foreach (var value in ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, "RequiredAssemblies"))
+        foreach (var value in ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifestPath, "RequiredAssemblies") ?? Array.Empty<string>())
             yield return new ManifestFileReference(value, IsContainedModulePath(value));
-        foreach (var value in ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, "FileList"))
+        foreach (var value in ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifestPath, "FileList") ?? Array.Empty<string>())
             yield return new ManifestFileReference(value, required: false);
         foreach (var value in ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifestPath, "NestedModules"))
             yield return new ManifestFileReference(value, IsContainedModulePath(value));

@@ -67,7 +67,7 @@ internal static class PowerShellPackagedScriptRewriter
                 .Select(path => new SourceReplacement(
                     path.Extent.StartOffset,
                     path.Extent.EndOffset,
-                    commandPathExpression)))
+                    GetInvocationMetadataExpression(path, commandPathExpression))))
             .Concat(parameterBindingPaths.Select(path => new SourceReplacement(
                 path.Extent.StartOffset,
                 path.Extent.EndOffset,
@@ -141,7 +141,7 @@ internal static class PowerShellPackagedScriptRewriter
             {
                 var offset = path.Extent.StartOffset - exit.Pipeline!.Extent.StartOffset;
                 rewritten.Remove(offset, path.Extent.EndOffset - path.Extent.StartOffset);
-                rewritten.Insert(offset, commandPathExpression);
+                rewritten.Insert(offset, GetInvocationMetadataExpression(path, commandPathExpression));
             }
             exitCode = "[int](" + rewritten + ")";
         }
@@ -183,7 +183,8 @@ internal static class PowerShellPackagedScriptRewriter
     {
         if (member.Member is not StringConstantExpressionAst path ||
             (!path.Value.Equals("Path", StringComparison.OrdinalIgnoreCase) &&
-             !path.Value.Equals("Definition", StringComparison.OrdinalIgnoreCase)) ||
+             !path.Value.Equals("Definition", StringComparison.OrdinalIgnoreCase) &&
+             !path.Value.Equals("Name", StringComparison.OrdinalIgnoreCase)) ||
             member.Expression is not MemberExpressionAst command ||
             command.Member is not StringConstantExpressionAst myCommand || !myCommand.Value.Equals("MyCommand", StringComparison.OrdinalIgnoreCase) ||
             command.Expression is not VariableExpressionAst invocation || !invocation.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase))
@@ -198,8 +199,20 @@ internal static class PowerShellPackagedScriptRewriter
         return true;
     }
 
+    private static string GetInvocationMetadataExpression(MemberExpressionAst member, string commandPathExpression)
+        => member.Member is StringConstantExpressionAst name && name.Value.Equals("Name", StringComparison.OrdinalIgnoreCase)
+            ? "$([System.IO.Path]::GetFileName(" + commandPathExpression + "))"
+            : commandPathExpression;
+
     private static void ValidateHostInteraction(ScriptBlockAst ast)
     {
+        var confirmationInvocation = FindConfirmationInvocation(ast);
+        if (SupportsShouldProcess(ast) || confirmationInvocation is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged executable generation does not support confirmation-capable script interaction '{confirmationInvocation?.Extent.Text ?? "SupportsShouldProcess"}' because the embedded runspace has no console-backed PSHost.");
+        }
+
         var hostReference = ast.FindAll(
                 static node => node is VariableExpressionAst variable &&
                                variable.VariablePath.UserPath.Equals("Host", StringComparison.OrdinalIgnoreCase),
@@ -230,6 +243,39 @@ internal static class PowerShellPackagedScriptRewriter
                unqualifiedName.Equals("Get-Credential", StringComparison.OrdinalIgnoreCase) ||
                unqualifiedName.Equals("Show-Command", StringComparison.OrdinalIgnoreCase) ||
                unqualifiedName.Equals("Out-GridView", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool SupportsShouldProcess(ScriptBlockAst ast)
+        => ast.ParamBlock?.Attributes
+            .OfType<AttributeAst>()
+            .Where(static attribute => attribute.TypeName.Name.Equals("CmdletBinding", StringComparison.OrdinalIgnoreCase) ||
+                                       attribute.TypeName.Name.Equals("CmdletBindingAttribute", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(static attribute => attribute.NamedArguments)
+            .Any(static argument => argument.ArgumentName.Equals("SupportsShouldProcess", StringComparison.OrdinalIgnoreCase) &&
+                                    IsConfirmationCapable(argument)) == true;
+
+    private static InvokeMemberExpressionAst? FindConfirmationInvocation(ScriptBlockAst ast)
+        => ast.FindAll(
+                static node => node is InvokeMemberExpressionAst invocation &&
+                               invocation.Expression is VariableExpressionAst variable &&
+                               variable.VariablePath.UserPath.Equals("PSCmdlet", StringComparison.OrdinalIgnoreCase) &&
+                               invocation.Member is StringConstantExpressionAst member &&
+                               (member.Value.Equals("ShouldProcess", StringComparison.OrdinalIgnoreCase) ||
+                                member.Value.Equals("ShouldContinue", StringComparison.OrdinalIgnoreCase)),
+                searchNestedScriptBlocks: true)
+            .Cast<InvokeMemberExpressionAst>()
+            .FirstOrDefault();
+
+    private static bool IsConfirmationCapable(NamedAttributeArgumentAst argument)
+    {
+        try
+        {
+            return argument.Argument.SafeGetValue() is not bool value || value;
+        }
+        catch (InvalidOperationException)
+        {
+            return true;
+        }
     }
 
     private readonly struct SourceReplacement

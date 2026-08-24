@@ -46,13 +46,21 @@ internal static class PowerShellTypedExecutableCompiler
             .FirstOrDefault(static group => group.Count() > 1);
         if (generatedCollision is not null)
             throw new InvalidOperationException($"Typed executable local functions collide after CLR identifier normalization: {string.Join(", ", generatedCollision.Select(static item => item.Function.Name))}.");
+        var entryPointCollision = definitions.FirstOrDefault(static definition =>
+            PowerShellCSharpMethodEmitter.SanitizeIdentifier(definition.Function.Name).Equals("Invoke", StringComparison.Ordinal));
+        if (entryPointCollision is not null)
+            throw new InvalidOperationException($"Typed executable local function '{entryPointCollision.Function.Name}' collides with the reserved generated entry-point method 'Invoke'.");
 
         foreach (var source in parsed.Values.Where(source => !source.Path.Equals(entryPoint, PowerShellCompilationPathSafety.PathComparison)))
         {
+            if (source.Ast.ParamBlock is not null)
+                throw new InvalidOperationException($"Typed executable dependency '{source.Path}' declares a parameter block whose dot-source binding semantics are not yet supported.");
             var unsupported = source.Ast.EndBlock?.Statements.FirstOrDefault(static statement => statement is not FunctionDefinitionAst && !IsTopLevelDotSource(statement));
             if (unsupported is not null)
                 throw new InvalidOperationException($"Typed executable dependency '{source.Path}' contains executable module-scope statement '{unsupported.GetType().Name}'. Dependencies may declare functions and top-level literal dot-source includes only.");
         }
+
+        ValidateEntryPointDeclarationOrder(entrySource);
 
         var byName = definitions.ToDictionary(static definition => definition.Function.Name, StringComparer.OrdinalIgnoreCase);
         var signatures = new Dictionary<string, PowerShellLocalFunctionSignature>(StringComparer.OrdinalIgnoreCase);
@@ -177,6 +185,25 @@ internal static class PowerShellTypedExecutableCompiler
     private static bool IsTopLevelDotSource(StatementAst statement)
         => statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
            pipeline.PipelineElements[0] is CommandAst { InvocationOperator: TokenKind.Dot };
+
+    private static void ValidateEntryPointDeclarationOrder(ParsedSource entrySource)
+    {
+        var executableStatementSeen = false;
+        var statements = entrySource.Ast.EndBlock?.Statements.AsEnumerable() ?? Enumerable.Empty<StatementAst>();
+        foreach (var statement in statements)
+        {
+            if (statement is FunctionDefinitionAst || IsTopLevelDotSource(statement))
+            {
+                if (executableStatementSeen)
+                {
+                    throw new InvalidOperationException(
+                        $"Typed executable declaration '{statement.Extent.Text}' at {entrySource.Path}:{statement.Extent.StartLineNumber} appears after executable code. Local functions and dot-source includes must execute before the compiled entrypoint body.");
+                }
+                continue;
+            }
+            executableStatementSeen = true;
+        }
+    }
 
     private static InvalidOperationException CreatePlanFailure(PowerShellCompilationPlan plan)
     {

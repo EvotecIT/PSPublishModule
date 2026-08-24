@@ -29,4 +29,75 @@ public sealed class PowerShellCompilationCensusTests
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
     }
+
+    [Fact]
+    public void Run_CountsManifestRuntimeHooksAsFallbackUnits()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Runtime Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "Module.psm1"), "function Get-Compiled { return 1 }");
+        File.WriteAllText(Path.Combine(root, "Runtime.ps1"), "function Get-Runtime { return 2 }");
+        File.WriteAllText(
+            Path.Combine(root, "Module.psd1"),
+            "@{ RootModule = 'Module.psm1'; ModuleVersion = '1.0.0'; ScriptsToProcess = @('Runtime.ps1') }");
+        try
+        {
+            var result = new PowerShellCompilationCensusRunner().Run(new[] { root }, "net10.0");
+            var product = Assert.Single(result.Products);
+
+            Assert.Equal(2, product.SourceFiles);
+            Assert.Equal(2, product.TotalUnits);
+            Assert.Equal(1, product.CompilableUnits);
+            Assert.Equal(1, product.RuntimeFallbackUnits);
+            Assert.Contains(product.Blockers, blocker => blocker.Message.Contains("manifest runtime hook", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Run_ReportsDisappearingUnitsAsCoverageRegression()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Shrink Tests", Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "Module.psm1");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(source, "function Get-One { return 1 }; function Get-Two { return 2 }");
+        try
+        {
+            var runner = new PowerShellCompilationCensusRunner();
+            var baseline = runner.Run(new[] { source }, "net10.0");
+            File.WriteAllText(source, "function Get-One { return 1 }");
+            var current = runner.Run(new[] { source }, "net10.0", baseline);
+
+            Assert.Contains(current.Regressions, regression => regression.Metric == "TotalUnits");
+            Assert.False(current.Passed);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsBaselineFromDifferentTargetFramework()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Framework Tests", Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "Module.psm1");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(source, "function Get-One { return 1 }");
+        try
+        {
+            var runner = new PowerShellCompilationCensusRunner();
+            var baseline = runner.Run(new[] { source }, "net8.0");
+
+            var exception = Assert.Throws<ArgumentException>(() => runner.Run(new[] { source }, "net10.0", baseline));
+            Assert.Contains("target framework", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
 }

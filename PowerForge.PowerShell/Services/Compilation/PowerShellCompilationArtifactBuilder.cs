@@ -349,18 +349,20 @@ public sealed class PowerShellCompilationArtifactBuilder
             throw new ArgumentException("PowerShell artifacts accept .ps1 and .psm1 source files.", nameof(spec));
         if (!string.IsNullOrWhiteSpace(spec.ModuleManifestPath))
         {
-            if (!File.Exists(spec.ModuleManifestPath))
-                throw new FileNotFoundException("PowerShell module manifest was not found.", spec.ModuleManifestPath);
-            if (!Path.GetExtension(spec.ModuleManifestPath).Equals(".psd1", StringComparison.OrdinalIgnoreCase))
+            var moduleManifestPath = spec.ModuleManifestPath!;
+            if (!File.Exists(moduleManifestPath))
+                throw new FileNotFoundException("PowerShell module manifest was not found.", moduleManifestPath);
+            if (!Path.GetExtension(moduleManifestPath).Equals(".psd1", StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("ModuleManifestPath must reference a .psd1 file.", nameof(spec));
             var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath));
-            var manifestDirectory = Path.GetDirectoryName(Path.GetFullPath(spec.ModuleManifestPath));
+            var manifestDirectory = Path.GetDirectoryName(Path.GetFullPath(moduleManifestPath));
             if (!string.Equals(sourceDirectory, manifestDirectory, RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                 throw new ArgumentException("The source .psm1 and module manifest must reside in the same module directory.", nameof(spec));
+            PowerShellCompiledModuleManifest.EnsureManifestOwnsSource(spec.SourcePath, moduleManifestPath);
             PowerShellCompilationPathSafety.EnsureNoLinks(
                 sourceDirectory!,
-                Path.GetFullPath(spec.ModuleManifestPath),
-                $"PowerShell module manifest '{spec.ModuleManifestPath}' traverses a symbolic link or junction.");
+                Path.GetFullPath(moduleManifestPath),
+                $"PowerShell module manifest '{moduleManifestPath}' traverses a symbolic link or junction.");
         }
         if (spec.TimeoutSeconds < 1)
             throw new ArgumentOutOfRangeException(nameof(spec), "Build timeout must be positive.");
@@ -420,14 +422,11 @@ public sealed class PowerShellCompilationArtifactBuilder
         PowerShellCompilationCapability capabilities)
     {
         var analyzer = new PowerShellCompilationAnalyzer();
-        var files = sourcePaths
-            .SelectMany(path => analyzer.Analyze(new PowerShellCompilationSpec(
-                path,
-                mode,
-                targetFramework: targetFramework,
-                capabilities: capabilities)).Files)
-            .ToArray();
-        return new PowerShellCompilationPlan(mode, files);
+        var paths = sourcePaths.Select(Path.GetFullPath).Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
+        var basePath = paths.Length == 0
+            ? Directory.GetCurrentDirectory()
+            : Path.GetDirectoryName(paths[0]) ?? Directory.GetCurrentDirectory();
+        return analyzer.AnalyzeFiles(mode, paths, basePath, targetFramework, capabilities);
     }
 
     private static void ValidateRuntimeHookSourceOwnership(

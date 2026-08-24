@@ -63,7 +63,7 @@ internal static class Program
                 continue;
             }
 
-            while (positionalIndex < Parameters.Length && !Parameters[positionalIndex].IsArray && raw[Parameters[positionalIndex].Name].Count > 0)
+            while (positionalIndex < Parameters.Length && raw[Parameters[positionalIndex].Name].Count > 0)
                 positionalIndex++;
             if (positionalIndex >= Parameters.Length)
                 throw new ArgumentException($"Unexpected positional argument '{token}'.");
@@ -202,10 +202,7 @@ internal static class Program
                     case ValidationKind.Set when !validation.Arguments.Contains(ToCurrentCultureString(item), StringComparer.OrdinalIgnoreCase):
                         throw new ArgumentException($"Value '{ToCurrentCultureString(item)}' is not valid for parameter '--{parameter.Name}'. Allowed values: {string.Join(", ", validation.Arguments)}.");
                     case ValidationKind.Range:
-                        var numeric = Convert.ToDecimal(item, CultureInfo.InvariantCulture);
-                        var minimum = decimal.Parse(validation.Arguments[0], NumberStyles.Number, CultureInfo.InvariantCulture);
-                        var maximum = decimal.Parse(validation.Arguments[1], NumberStyles.Number, CultureInfo.InvariantCulture);
-                        if (numeric < minimum || numeric > maximum)
+                        if (!IsWithinRange(item, validation.Arguments[0], validation.Arguments[1]))
                             throw new ArgumentException($"Value '{ToCurrentCultureString(item)}' is outside the valid range for parameter '--{parameter.Name}'.");
                         break;
                     case ValidationKind.Pattern when !Regex.IsMatch(ToCurrentCultureString(item), validation.Arguments[0], RegexOptions.IgnoreCase | RegexOptions.CultureInvariant):
@@ -213,6 +210,22 @@ internal static class Program
                 }
             }
         }
+    }
+
+    private static bool IsWithinRange(object? value, string minimumText, string maximumText)
+    {
+        if (value is float or double)
+        {
+            var numeric = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+            var minimum = double.Parse(minimumText, NumberStyles.Float, CultureInfo.InvariantCulture);
+            var maximum = double.Parse(maximumText, NumberStyles.Float, CultureInfo.InvariantCulture);
+            return numeric >= minimum && numeric <= maximum;
+        }
+
+        var decimalValue = Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+        var decimalMinimum = decimal.Parse(minimumText, NumberStyles.Float, CultureInfo.InvariantCulture);
+        var decimalMaximum = decimal.Parse(maximumText, NumberStyles.Float, CultureInfo.InvariantCulture);
+        return decimalValue >= decimalMinimum && decimalValue <= decimalMaximum;
     }
 
     private static bool TryParseNamedToken(string token, out string name, out string? value)
