@@ -47,6 +47,15 @@ internal sealed class PowerShellModuleExportContract
             .Where(static command => command.GetCommandName()?.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) == true)
             .OrderBy(static command => command.Extent.StartOffset)
             .ToArray();
+        if (commands.Length != allCommands.Length)
+        {
+            return new PowerShellModuleExportContract(
+                Array.Empty<CommandAst>(),
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<string>());
+        }
         var values = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
         {
             ["Function"] = new List<string>(),

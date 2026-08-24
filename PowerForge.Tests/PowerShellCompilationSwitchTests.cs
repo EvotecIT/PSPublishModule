@@ -63,6 +63,25 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_TypedLibraryUsesPowerShellCultureSemanticsForUnicodeSwitch()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-UnicodeSwitch { param([string] $Value) [int] $result = 0; switch ($Value) { 'e\u0301' { $result = 1 } }; return $result }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.UnicodeSwitch",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var assembly = Assembly.LoadFile(result.ArtifactPath!);
+        var method = assembly.GetType("PowerForge.Compiled.PowerForge_UnicodeSwitchMethods", throwOnError: true)!
+            .GetMethod("Get_UnicodeSwitch")!;
+        Assert.Equal(1, method.Invoke(null, new object[] { "\u00e9" }));
+    }
+
+    [Fact]
     public void Build_ScalarSwitchContinuePreservesPowerShellSwitchScopeInsideAndOutsideLoops()
     {
         using var fixture = ArtifactFixture.Create(

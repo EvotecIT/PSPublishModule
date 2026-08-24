@@ -138,10 +138,7 @@ public sealed class PowerShellCompilationCensusRunner
         foreach (var expected in baseline)
         {
             var actual = unmatched.FirstOrDefault(candidate => PathsEqual(candidate.Path, expected.Path))
-                         ?? unmatched.FirstOrDefault(candidate =>
-                             GetPortableProductIdentity(candidate).Equals(
-                                 GetPortableProductIdentity(expected),
-                                 StringComparison.OrdinalIgnoreCase));
+                         ?? FindUniquePortableMatch(expected, unmatched);
             if (actual is null)
             {
                 regressions.Add(new PowerShellCompilationCensusRegression(expected.Name, "ProductPresent", 1, 0));
@@ -171,21 +168,32 @@ public sealed class PowerShellCompilationCensusRunner
         }
     }
 
-    private static string GetPortableProductIdentity(PowerShellCompilationCensusProduct product)
+    private static PowerShellCompilationCensusProduct? FindUniquePortableMatch(
+        PowerShellCompilationCensusProduct expected,
+        IEnumerable<PowerShellCompilationCensusProduct> candidates)
     {
-        var segments = product.Path
-            .Replace('\\', '/')
-            .TrimEnd('/')
-            .Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length == 0)
-            return product.Name;
-        var leaf = segments[segments.Length - 1];
-        if (segments.Length > 1 &&
-            (leaf.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ||
-             leaf.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase) ||
-             leaf.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase)))
-            return segments[segments.Length - 2] + "/" + leaf;
-        return leaf;
+        var expectedSegments = GetPortablePathSegments(expected.Path);
+        var ranked = candidates
+            .Select(candidate => new { Product = candidate, Score = CountCommonSuffix(expectedSegments, GetPortablePathSegments(candidate.Path)) })
+            .Where(static item => item.Score > 0)
+            .ToArray();
+        if (ranked.Length == 0)
+            return null;
+        var bestScore = ranked.Max(static item => item.Score);
+        var best = ranked.Where(item => item.Score == bestScore).ToArray();
+        return best.Length == 1 ? best[0].Product : null;
+    }
+
+    private static string[] GetPortablePathSegments(string path)
+        => path.Replace('\\', '/').TrimEnd('/').Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+
+    private static int CountCommonSuffix(IReadOnlyList<string> left, IReadOnlyList<string> right)
+    {
+        var count = 0;
+        while (count < left.Count && count < right.Count &&
+               left[left.Count - count - 1].Equals(right[right.Count - count - 1], StringComparison.OrdinalIgnoreCase))
+            count++;
+        return count;
     }
 
     private static void AddLowerIsRegression(

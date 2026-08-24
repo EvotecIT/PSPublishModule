@@ -1,3 +1,5 @@
+using System.Management.Automation.Language;
+
 namespace PowerForge;
 
 public sealed partial class PowerShellCompilationAnalyzer
@@ -85,4 +87,27 @@ public sealed partial class PowerShellCompilationAnalyzer
             directory.Equals(exclusion, StringComparison.OrdinalIgnoreCase) ||
             ((exclusion.Equals("bin", StringComparison.OrdinalIgnoreCase) || exclusion.Equals("obj", StringComparison.OrdinalIgnoreCase)) &&
              directory.StartsWith(exclusion + "-", StringComparison.OrdinalIgnoreCase)));
+
+    private static bool RequiresArtifactGraphEmission(
+        IEnumerable<StatementAst> statements,
+        PowerShellCompilationCapability capabilities,
+        ISet<string>? localFunctionNames)
+    {
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls) || localFunctionNames is null)
+            return false;
+
+        var materialized = statements as StatementAst[] ?? statements.ToArray();
+        if (materialized.Any(static statement =>
+                statement is PipelineAst { PipelineElements.Count: > 0 } pipeline &&
+                pipeline.PipelineElements[0] is CommandAst { InvocationOperator: TokenKind.Dot }))
+            return true;
+
+        return materialized
+            .SelectMany(static statement => statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false))
+            .OfType<CommandAst>()
+            .Any(command =>
+                command.InvocationOperator == TokenKind.Unknown &&
+                command.GetCommandName() is { } name &&
+                localFunctionNames.Contains(name));
+    }
 }

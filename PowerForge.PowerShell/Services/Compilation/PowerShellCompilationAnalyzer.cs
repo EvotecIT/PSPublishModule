@@ -61,7 +61,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         if (topLevelStatements.Length > 0 || ast.ParamBlock is not null || HasUnsupportedNamedBlocks(ast))
         {
             var scriptUnit = AnalyzeUnit("<script>", PowerShellCompilationUnitKind.Script, ast, file, topLevelStatements, capabilities, localFunctionNames);
-            if (scriptUnit.IsCompilable && !capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls))
+            if (scriptUnit.IsCompilable && !RequiresArtifactGraphEmission(topLevelStatements, capabilities, localFunctionNames))
             {
                 try
                 {
@@ -116,7 +116,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                             function.Extent)
                     });
             }
-            if (functionUnit.IsCompilable && !capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls))
+            var functionStatements = GetEndStatements(function.Body, excludeFunctionDefinitions: false, excludeModuleExports: false);
+            if (functionUnit.IsCompilable && !RequiresArtifactGraphEmission(functionStatements, capabilities, localFunctionNames))
             {
                 try
                 {

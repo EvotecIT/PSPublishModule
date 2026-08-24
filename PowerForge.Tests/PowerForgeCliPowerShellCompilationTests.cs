@@ -181,6 +181,31 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     }
 
     [Fact]
+    public async Task AnalyzeStrictExecutableUsesBuildCapabilityPolicyForLocalCalls()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Analyze Capability Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "Tool.ps1");
+        File.WriteAllText(source, "function Get-Inner { param([int] $Value) return $Value }; function Get-Outer { return Get-Inner -Value 7 }; return Get-Outer");
+        try
+        {
+            var analyze = await RunCliAsync(
+                FindRepositoryRoot(),
+                $"powershell analyze \"{source}\" --kind exe --mode Strict --framework net10.0 --output json");
+
+            Assert.True(analyze.ExitCode == 0, FormatFailure("strict executable analyze", analyze));
+            using var document = JsonDocument.Parse(analyze.StdOut);
+            var result = document.RootElement.GetProperty("result");
+            Assert.Equal(3, result.GetProperty("compilableUnits").GetInt32());
+            Assert.Equal(0, result.GetProperty("runtimeFallbackUnits").GetInt32());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task Census_WritesAndEnforcesRepeatableCoverageBaseline()
     {
         var repositoryRoot = FindRepositoryRoot();

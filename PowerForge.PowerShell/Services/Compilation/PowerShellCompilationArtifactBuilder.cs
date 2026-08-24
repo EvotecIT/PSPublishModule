@@ -46,15 +46,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     $"PowerShell compilation source '{sourcePath}' must not traverse a symbolic link or junction.");
             }
             ValidateRuntimeHookSourceOwnership(spec, compilationSourcePaths);
-            var capabilities = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
-                ? PowerShellCompilationCapability.PowerShellStreams |
-                  PowerShellCompilationCapability.LocalFunctionCalls |
-                  PowerShellCompilationCapability.BoundParameters |
-                  PowerShellCompilationCapability.PowerShellObjects
-                : spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Strict
-                    ? PowerShellCompilationCapability.LocalFunctionCalls |
-                      PowerShellCompilationCapability.BoundParameters
-                    : PowerShellCompilationCapability.None;
+            var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(spec.Kind, spec.Mode);
             var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, capabilities);
             if (plan.ParseErrorFiles > 0)
                 throw new InvalidOperationException("PowerShell source contains parser errors; no artifact was produced.");
@@ -592,6 +584,16 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         }
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
         var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(spec.SourcePath);
+        foreach (var sourceDirectory in conventionalDiscovery.SourceDirectories)
+        {
+            var relativeDirectory = FrameworkCompatibility.GetRelativePath(sourceRoot, sourceDirectory);
+            var targetDirectory = Path.GetFullPath(Path.Combine(moduleDirectory, relativeDirectory));
+            PowerShellCompilationPathSafety.EnsureContained(
+                moduleDirectory,
+                targetDirectory,
+                $"Conventional module source directory '{sourceDirectory}' escapes the generated module root.");
+            Directory.CreateDirectory(targetDirectory);
+        }
         var runtimeHooks = PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(spec.SourcePath, spec.ModuleManifestPath)
             .Select(reference => Path.GetFullPath(Path.Combine(
                 sourceRoot,
@@ -670,6 +672,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         {
             var dependency = dependencies[index];
             PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency, $"Packaged dependency '{dependency}' escapes the executable entrypoint root.");
+            RejectDependencyExits(dependency);
             var fileName = $"Dependency{index:D4}.ps1";
             File.Copy(dependency, Path.Combine(dependencyDirectory, fileName), overwrite: false);
             var logicalName = $"PowerForge.Compiled.{Path.GetFileNameWithoutExtension(fileName)}.ps1";
@@ -682,6 +685,21 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             string.Join(Environment.NewLine, projectResources),
             string.Join(Environment.NewLine, dependencySpecs),
             hasDependencies: true);
+    }
+
+    private static void RejectDependencyExits(string dependencyPath)
+    {
+        var ast = Parser.ParseFile(dependencyPath, out _, out var errors);
+        if (errors.Length > 0)
+            throw new InvalidOperationException($"Packaged dependency '{dependencyPath}' could not be parsed while validating exit semantics.");
+        var exit = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
+            .Cast<ExitStatementAst>()
+            .FirstOrDefault();
+        if (exit is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged dependency '{dependencyPath}' contains exit at line {exit.Extent.StartLineNumber}; dependency exits cannot preserve executable process-exit semantics and must remain in the root entry script.");
+        }
     }
 
     private static (string Parameters, string SwitchParameters, string ParameterAliases) GeneratePackagedParameterInitializers(string sourcePath)

@@ -10,6 +10,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         if (elements.Length == 0)
             return GetContextualArrayType(array)
                    ?? throw Error(array, "Empty @() requires an explicit one-dimensional array type on its assignment target.");
+        if (elements.Any(element => InferExpressionType(element).IsArray || IsNullExpression(element)))
+            throw Error(array, "Typed @() expressions do not accept array-valued or null pipeline output; use Hybrid fallback for PowerShell enumeration and null-suppression semantics.");
         var elementTypes = elements.Select(InferExpressionType).Distinct().ToArray();
         if (elementTypes.Length != 1)
             throw Error(array, "Typed @() expressions require one homogeneous CLR element type.");

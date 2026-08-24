@@ -75,6 +75,24 @@ public sealed class PowerShellCompilationBuildSpec
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };
 
+    /// <summary>Returns the typed-language capabilities enabled by an artifact build.</summary>
+    public static PowerShellCompilationCapability GetCapabilities(
+        PowerShellCompilationArtifactKind kind,
+        PowerShellCompilationMode mode)
+    {
+        if (!Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), kind)) throw new ArgumentOutOfRangeException(nameof(kind));
+        if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        return kind == PowerShellCompilationArtifactKind.BinaryModule
+            ? PowerShellCompilationCapability.PowerShellStreams |
+              PowerShellCompilationCapability.LocalFunctionCalls |
+              PowerShellCompilationCapability.BoundParameters |
+              PowerShellCompilationCapability.PowerShellObjects
+            : kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Strict
+                ? PowerShellCompilationCapability.LocalFunctionCalls |
+                  PowerShellCompilationCapability.BoundParameters
+                : PowerShellCompilationCapability.None;
+    }
+
     /// <summary>PowerShell source file.</summary>
     public string SourcePath { get; }
 

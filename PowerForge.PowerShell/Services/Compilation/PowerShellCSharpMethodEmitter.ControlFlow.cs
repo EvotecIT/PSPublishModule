@@ -64,7 +64,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     {
         var clauseSource = EmitExpression(clause);
         if (conditionType != typeof(string)) return $"{valueName} == {clauseSource}";
-        var comparison = (flags & SwitchFlags.CaseSensitive) != 0 ? "Ordinal" : "OrdinalIgnoreCase";
+        var comparison = (flags & SwitchFlags.CaseSensitive) != 0 ? "InvariantCulture" : "InvariantCultureIgnoreCase";
         return $"global::System.String.Equals({valueName}, {clauseSource}, global::System.StringComparison.{comparison})";
     }
 

@@ -59,6 +59,33 @@ public sealed class PowerShellCompilationCensusTests
     }
 
     [Fact]
+    public void Run_DisambiguatesRepeatedPortableDirectoryNamesAcrossCheckoutRoots()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Repeated Directory Tests", Guid.NewGuid().ToString("N"));
+        var baselineRoot = Path.Combine(root, "Baseline");
+        var currentRoot = Path.Combine(root, "Current");
+        try
+        {
+            foreach (var checkout in new[] { baselineRoot, currentRoot })
+            foreach (var parent in new[] { "One", "Two" })
+                Directory.CreateDirectory(Path.Combine(checkout, parent, "Module"));
+            File.WriteAllText(Path.Combine(baselineRoot, "One", "Module", "Module.psm1"), "function Get-One { return 1 }; function Get-Two { return 2 }");
+            File.WriteAllText(Path.Combine(baselineRoot, "Two", "Module", "Module.psm1"), "function Get-Other { return 3 }");
+            File.WriteAllText(Path.Combine(currentRoot, "One", "Module", "Module.psm1"), "function Get-One { return 1 }");
+            File.WriteAllText(Path.Combine(currentRoot, "Two", "Module", "Module.psm1"), "function Get-Other { return 3 }");
+            var runner = new PowerShellCompilationCensusRunner();
+            var baseline = runner.Run(new[] { Path.Combine(baselineRoot, "One", "Module"), Path.Combine(baselineRoot, "Two", "Module") }, "net10.0");
+            var current = runner.Run(new[] { Path.Combine(currentRoot, "Two", "Module"), Path.Combine(currentRoot, "One", "Module") }, "net10.0", baseline);
+
+            Assert.Contains(current.Regressions, regression => regression.Metric == "TotalUnits" && regression.Baseline == 2 && regression.Current == 1);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Run_CountsManifestRuntimeHooksAsFallbackUnits()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Runtime Tests", Guid.NewGuid().ToString("N"));

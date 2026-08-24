@@ -5,7 +5,7 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string PowerShellAnalyzeUsage =
-        "Usage: powerforge powershell analyze <path> [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--no-recurse] [--output json]";
+        "Usage: powerforge powershell analyze <path> [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--no-recurse] [--output json]";
     private const string PowerShellBuildUsage =
         "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
     private const string PowerShellCensusUsage =
@@ -171,7 +171,7 @@ internal static partial class Program
 
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--mode", "--framework", "--output" },
+                new[] { "--path", "--kind", "--mode", "--framework", "--output" },
                 new[] { "--no-recurse", "--json", "--output-json" },
                 out var argumentError))
             return WritePowerShellError(outputJson, 2, argumentError, logger);
@@ -182,6 +182,15 @@ internal static partial class Program
         if (string.IsNullOrWhiteSpace(path))
             return WritePowerShellError(outputJson, 2, "A PowerShell file or directory path is required.", logger);
 
+        var kindValue = TryGetOptionValue(args, "--kind");
+        PowerShellCompilationArtifactKind? kindOverride = null;
+        if (!string.IsNullOrWhiteSpace(kindValue))
+        {
+            if (!TryParseArtifactKind(kindValue, out var parsedKind))
+                return WritePowerShellError(outputJson, 2, "Artifact kind must be 'exe', 'dll', or 'library'.", logger, "powershell.analyze");
+            kindOverride = parsedKind;
+        }
+
         var modeValue = TryGetOptionValue(args, "--mode") ?? nameof(PowerShellCompilationMode.Analyze);
         if (!Enum.TryParse<PowerShellCompilationMode>(modeValue, ignoreCase: true, out var mode) ||
             !Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
@@ -190,11 +199,13 @@ internal static partial class Program
         try
         {
             var recurse = !args.Any(static argument => argument.Equals("--no-recurse", StringComparison.OrdinalIgnoreCase));
+            var resolved = new PowerShellCompilationInputResolver().Resolve(path, kindOverride, mode);
             var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
                 path,
                 mode,
                 recurse,
-                targetFramework: TryGetOptionValue(args, "--framework")));
+                targetFramework: TryGetOptionValue(args, "--framework"),
+                capabilities: PowerShellCompilationBuildSpec.GetCapabilities(resolved.Kind, resolved.Mode)));
             var exitCode = plan.CanProceed ? 0 : 1;
             if (outputJson)
             {

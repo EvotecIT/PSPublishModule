@@ -130,6 +130,13 @@ internal static class PowerShellCompiledModuleManifest
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var preserveWildcardCmdlets = hasNestedModules && manifestCmdlets?.Contains("*", StringComparer.OrdinalIgnoreCase) == true;
+        var nestedModuleCmdletPatterns = hasNestedModules
+            ? (manifestCmdlets ?? Array.Empty<string>())
+                .Where(WildcardPattern.ContainsWildcardCharacters)
+                .Concat(SelectPatternsWithoutMatches(explicitCmdlets.Concat(selectedCompiled), manifestCmdlets))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : Array.Empty<string>();
         var selectedSourceCmdlets = manifestCmdlets?.Contains("*", StringComparer.OrdinalIgnoreCase) == true
             ? explicitCmdlets
             : Select(explicitCmdlets, manifestCmdlets);
@@ -137,6 +144,7 @@ internal static class PowerShellCompiledModuleManifest
             ? new[] { "*" }
             : selectedSourceCmdlets
                 .Concat(selectedCompiled)
+                .Concat(nestedModuleCmdletPatterns)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         var hasRuntimeControlledExports = explicitExports is { Commands.Length: 0 };
