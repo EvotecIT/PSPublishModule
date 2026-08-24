@@ -59,7 +59,10 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var name = variable.VariablePath.UserPath;
         if (!_declaredLocals.Contains(name))
             throw Error(assignment, $"Inline assignment target '${name}' was not safely predeclared.");
-        return $"({GetVariableIdentifier(name)} = {EmitExpression(assignment.Right)})";
+        var right = EmitExpression(assignment.Right);
+        if (_variables[name] == typeof(string) && _explicitlyTypedVariables.Contains(name))
+            right = $"({right} ?? string.Empty)";
+        return $"({GetVariableIdentifier(name)} = {right})";
     }
 
     private bool HasTerminalValue(StatementAst[] statements)

@@ -197,6 +197,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
         if (assignment.Parent is not NamedBlockAst && assignment.Parent is not ForStatementAst && assignment.Parent is not IfStatementAst)
             throw Error(assignment, $"Local '${name}' must be declared at function scope or in a for initializer before it can be compiled safely.");
+        if (assignment.Parent is IfStatementAst && IsNonNullableValueType(declaredType))
+            throw Error(assignment, $"Conditionally assigned value-type local '${name}' may remain unassigned on a reachable PowerShell path and cannot be predeclared with a CLR default.");
 
         _variables.Add(name, declaredType);
         AddVariableIdentifier(name, variable);

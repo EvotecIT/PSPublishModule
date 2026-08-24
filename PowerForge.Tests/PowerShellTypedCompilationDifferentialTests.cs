@@ -231,6 +231,16 @@ public sealed class PowerShellTypedCompilationDifferentialTests
                 param([string] $Value, [int] $Index)
                 return $Value[$Index]
             }
+
+            function Get-LastIndexedValue {
+                param([int[]] $Values)
+                return $Values[-1]
+            }
+
+            function Get-LastIndexedCharacter {
+                param([string] $Value)
+                return $Value[-1]
+            }
             """;
         using var fixture = DifferentialFixture.Create(source);
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath, PowerShellCompilationMode.Strict));
@@ -301,7 +311,50 @@ public sealed class PowerShellTypedCompilationDifferentialTests
                 new object[] { "PowerForge", 0 }, new object[] { "PowerForge", 5 }, new object[] { "PowerForge", -1 },
                 new object[] { "PowerForge", 99 }, new object[] { "PowerForge", -99 }, new object[] { string.Empty, 0 }, new object[] { null!, 0 }
             });
+            AssertDifferential(type, runspace, "Get-LastIndexedValue", "Get_LastIndexedValue", new[]
+            {
+                new object[] { new[] { 10, 20, 30 } }, new object[] { Array.Empty<int>() }
+            });
+            AssertDifferential(type, runspace, "Get-LastIndexedCharacter", "Get_LastIndexedCharacter", new[]
+            {
+                new object[] { "PowerForge" }, new object[] { string.Empty }, new object[] { null! }
+            });
             AssertIndexingNullArrayFails(type, runspace);
+        }
+        finally
+        {
+            loadContext.Unload();
+        }
+    }
+
+    [Fact]
+    public void TypedInlineStringAssignmentPreservesConstrainedNullNormalization()
+    {
+        const string source =
+            "function Get-InlineEnvironmentValue { param([string] $Name); [string] $value = 'seed'; if ((($value = [Environment]::GetEnvironmentVariable($Name)) -eq '')) { }; return $value }";
+        using var fixture = DifferentialFixture.Create(source);
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.InlineStringDifferential",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+
+        using var assemblyStream = File.OpenRead(build.ArtifactPath!);
+        var loadContext = new AssemblyLoadContext("PowerForgeInlineStringDifferential", isCollectible: true);
+        using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        runspace.Open();
+        InitializePowerShellSource(runspace, source);
+        var missingName = "POWERFORGE_MISSING_" + Guid.NewGuid().ToString("N");
+        try
+        {
+            var generatedType = loadContext.LoadFromStream(assemblyStream)
+                .GetType("PowerForge.Compiled.PowerForge_InlineStringDifferentialMethods", throwOnError: true)!;
+            AssertDifferential(generatedType, runspace, "Get-InlineEnvironmentValue", "Get_InlineEnvironmentValue", new[]
+            {
+                new object[] { missingName }
+            });
         }
         finally
         {

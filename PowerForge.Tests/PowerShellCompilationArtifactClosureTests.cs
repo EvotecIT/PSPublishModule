@@ -54,7 +54,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     [Fact]
     public void Build_PackagedExecutableDoesNotFailForNonterminatingErrorRecords()
     {
-        using var fixture = ArtifactFixture.Create("param([switch] $Terminate); if ($Terminate) { throw 'stopped' }; Write-Error 'reported'; 'completed'");
+        using var fixture = ArtifactFixture.Create("param([switch] $Terminate, [switch] $StopError); if ($Terminate) { throw 'stopped' }; if ($StopError) { Write-Error 'stopped-error' -ErrorAction Stop }; Write-Error 'reported'; 'completed'");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
@@ -71,6 +71,10 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var terminatingRun = Run(result.ArtifactPath!, "--Terminate");
         Assert.Equal(1, terminatingRun.ExitCode);
         Assert.Contains("stopped", terminatingRun.StandardError, StringComparison.OrdinalIgnoreCase);
+
+        var stopErrorRun = Run(result.ArtifactPath!, "--StopError");
+        Assert.Equal(1, stopErrorRun.ExitCode);
+        Assert.Contains("stopped-error", stopErrorRun.StandardError, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

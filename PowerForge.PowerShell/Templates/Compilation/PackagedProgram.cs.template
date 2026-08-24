@@ -64,6 +64,8 @@ internal static class Program
 
             if (requestedExitCode.HasValue)
                 return requestedExitCode.Value;
+            if (powerShell.InvocationStateInfo.State == PSInvocationState.Failed)
+                return 1;
             return 0;
         }
         catch (Exception exception)

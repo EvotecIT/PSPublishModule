@@ -104,7 +104,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var childType = InferExpressionType(unary.Child);
         if ((operation is "Not" or "Exclaim") && childType != typeof(bool))
             throw Error(unary, "Typed logical negation requires a Boolean operand.");
-        if ((operation is "Plus" or "Minus") && (!IsNumeric(childType) || IsIntegral(childType)))
+        if ((operation is "Plus" or "Minus") &&
+            (!IsNumeric(childType) || IsIntegral(childType) && !IsSafeIntegralIndexLiteral(unary)))
             throw Error(unary, "Integral unary arithmetic can promote dynamically in PowerShell and is not supported.");
         if (operation is "PlusPlus" or "MinusMinus" or "PostfixPlusPlus" or "PostfixMinusMinus")
         {
@@ -127,6 +128,11 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             _ => throw Error(unary, $"Unary operator '{unary.TokenKind}' is not implemented.")
         };
     }
+
+    private static bool IsSafeIntegralIndexLiteral(UnaryExpressionAst unary)
+        => unary.Child is ConstantExpressionAst &&
+           unary.Parent is IndexExpressionAst index &&
+           ReferenceEquals(index.Index, unary);
 
     private Type InferBinaryType(BinaryExpressionAst binary)
     {

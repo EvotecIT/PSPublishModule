@@ -24,6 +24,31 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_PackagedExecutableRejectsExplicitNamedBlocksBeforePublishing()
+    {
+        var sources = new[]
+        {
+            "dynamicparam { } end { 'done' }",
+            "begin { 'begin' } process { 'process' } end { 'end' }",
+            "clean { 'clean' } end { 'end' }"
+        };
+        foreach (var source in sources)
+        {
+            using var fixture = ArtifactFixture.Create(source);
+            var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                fixture.ScriptPath,
+                fixture.OutputPath,
+                "PowerForge.PackagedNamedBlock",
+                PowerShellCompilationArtifactKind.Executable,
+                PowerShellCompilationMode.Package));
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("named block", result.Error, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+        }
+    }
+
+    [Fact]
     public void Analyze_RejectsIndexedAndMemberAssignmentInsteadOfCompilingTheContainedVariable()
     {
         using var fixture = ArtifactFixture.Create(
@@ -60,6 +85,25 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             Assert.False(unit.IsCompilable);
             Assert.Contains(unit.Diagnostics, diagnostic =>
                 diagnostic.Message.Contains("read-only automatic variable", StringComparison.OrdinalIgnoreCase));
+        });
+    }
+
+    [Fact]
+    public void Analyze_RejectsConditionallyUnassignedValueTypeLocals()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-ConditionalBoolean { if ($value = $true) { }; return $value } " +
+            "function Get-ConditionalInteger { if ($value = 9) { }; return $value }");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
+
+        var units = Assert.Single(plan.Files).Units;
+        Assert.Equal(2, units.Length);
+        Assert.All(units, static unit =>
+        {
+            Assert.False(unit.IsCompilable);
+            Assert.Contains(unit.Diagnostics, diagnostic =>
+                diagnostic.Message.Contains("may remain unassigned", StringComparison.OrdinalIgnoreCase));
         });
     }
 

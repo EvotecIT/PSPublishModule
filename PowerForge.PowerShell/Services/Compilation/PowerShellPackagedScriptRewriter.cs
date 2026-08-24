@@ -34,6 +34,13 @@ internal static class PowerShellPackagedScriptRewriter
                 $"Packaged executable generation does not support dot-sourced command '{dotSource.Extent.Text}' because the dependency is not embedded with file-backed path semantics.");
         }
 
+        var explicitNamedBlock = FindExplicitNamedBlock(ast);
+        if (explicitNamedBlock is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged executable generation does not support the explicit '{explicitNamedBlock.BlockKind.ToString().ToLowerInvariant()}' named block because embedded AddScript execution cannot preserve script pipeline lifecycle semantics.");
+        }
+
         var exits = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
             .Cast<ExitStatementAst>()
             .ToArray();
@@ -69,6 +76,15 @@ internal static class PowerShellPackagedScriptRewriter
         pathSemantics.AppendLine("$script:PSScriptRoot = [System.IO.Path]::GetDirectoryName($script:PSCommandPath)");
         source.Insert(prologueEndOffset, pathSemantics.ToString());
         return source.ToString();
+    }
+
+    private static NamedBlockAst? FindExplicitNamedBlock(ScriptBlockAst ast)
+    {
+        if (ast.DynamicParamBlock is not null) return ast.DynamicParamBlock;
+        if (ast.BeginBlock is not null) return ast.BeginBlock;
+        if (ast.ProcessBlock is not null) return ast.ProcessBlock;
+        if (ast.GetType().GetProperty("CleanBlock")?.GetValue(ast) is NamedBlockAst cleanBlock) return cleanBlock;
+        return ast.EndBlock is { Unnamed: false } ? ast.EndBlock : null;
     }
 
     private static void ValidateExits(ScriptBlockAst ast, ExitStatementAst[] exits)
