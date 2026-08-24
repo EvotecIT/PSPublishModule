@@ -24,6 +24,11 @@ public sealed class PowerShellCompilationCommandIslandTests
                 Write-Output $Name
                 return $Name
             }
+
+            function Get-PipelineIsland {
+                param([string] $Name)
+                $Name | ForEach-Object { $_.ToUpperInvariant() }
+            }
             """);
 
         try
@@ -36,7 +41,7 @@ public sealed class PowerShellCompilationCommandIslandTests
                 PowerShellCompilationMode.Strict,
                 targetFramework: "net10.0",
                 capabilities: PowerShellCompilationCapability.PowerShellStreams));
-            Assert.Equal(1, binaryModulePlan.CompilableUnits);
+            Assert.Equal(2, binaryModulePlan.CompilableUnits);
 
             var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
                 source,
@@ -48,11 +53,11 @@ public sealed class PowerShellCompilationCommandIslandTests
                 TargetFramework = "net10.0"
             });
             Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-            Assert.Equal(1, result.Manifest!.CompiledMethods);
+            Assert.Equal(2, result.Manifest!.CompiledMethods);
             Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
 
             var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
-            var invocation = $"$DebugPreference='Continue'; Import-Module -Name '{escapedPath}' -Force; Get-IslandValue -Name Ada -Verbose";
+            var invocation = $"$DebugPreference='Continue'; Import-Module -Name '{escapedPath}' -Force; Get-IslandValue -Name Ada -Verbose; Get-PipelineIsland -Name Ada";
             var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", invocation);
             Assert.True(run.ExitCode == 0, run.StandardError + Environment.NewLine + run.StandardOutput);
             Assert.Contains("VERBOSE: verbose-record", run.StandardOutput, StringComparison.Ordinal);
@@ -60,6 +65,63 @@ public sealed class PowerShellCompilationCommandIslandTests
             Assert.Contains("WARNING: warning-record", run.StandardOutput, StringComparison.Ordinal);
             Assert.Contains("region-one", run.StandardOutput, StringComparison.Ordinal);
             Assert.Equal(2, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Count(line => line == "Ada"));
+            Assert.Contains("ADA", run.StandardOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Analyze_CommandRegionRejectsVariablesHiddenInsideNestedScriptBlocks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForgeCommandIslands", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "UnsafeClosure.psm1");
+        File.WriteAllText(
+            source,
+            "function Get-UnsafeClosure { $Uri = 'https://example.test'; Invoke-Thing -ScriptBlock { $Uri } }");
+
+        try
+        {
+            var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+                source,
+                PowerShellCompilationMode.Hybrid,
+                targetFramework: "net10.0",
+                capabilities: PowerShellCompilationCapability.PowerShellStreams));
+
+            var unit = Assert.Single(Assert.Single(plan.Files).Units);
+            Assert.False(unit.IsCompilable);
+            Assert.Contains(unit.Diagnostics, diagnostic =>
+                diagnostic.Code == PowerShellCompilationDiagnosticCode.CommandInvocation);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Analyze_CommandRegionRejectsTopLevelPipelineAutomaticVariable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForgeCommandIslands", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "UnsafeAutomaticVariable.psm1");
+        File.WriteAllText(source, "function Get-UnsafeAutomaticVariable { Write-Output $_ }");
+
+        try
+        {
+            var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+                source,
+                PowerShellCompilationMode.Hybrid,
+                targetFramework: "net10.0",
+                capabilities: PowerShellCompilationCapability.PowerShellStreams));
+
+            var unit = Assert.Single(Assert.Single(plan.Files).Units);
+            Assert.False(unit.IsCompilable);
+            Assert.Contains(unit.Diagnostics, diagnostic =>
+                diagnostic.Code == PowerShellCompilationDiagnosticCode.CommandInvocation);
         }
         finally
         {

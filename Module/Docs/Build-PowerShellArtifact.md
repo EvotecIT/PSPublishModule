@@ -11,7 +11,7 @@ Builds a packaged executable, typed CLR library, or importable binary/hybrid mod
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Build-PowerShellArtifact [-Path] <string> -Kind <PowerShellCompilationArtifactKind> [-OutputDirectory <string>] [-Name <string>] [-Mode <PowerShellCompilationMode>] [-TargetFramework <string>] [-RuntimeIdentifier <string>] [-SelfContained] [-SingleFile <bool>] [-Optimization <PowerShellCompilationExecutableOptimization>] [-SignArtifact] [-CertificateThumbprint <string>] [-CertificateStoreLocation <CertificateStoreLocation>] [-TimeStampServer <string>] [-SigningTimeoutSeconds <int>] [-KeepBuildWorkspace] [-TimeoutSeconds <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Build-PowerShellArtifact [-Path] <string[]> [-EntryPoint <string>] [-Kind <PowerShellCompilationArtifactKind>] [-OutputDirectory <string>] [-Name <string>] [-Mode <PowerShellCompilationMode>] [-TargetFramework <string>] [-RuntimeIdentifier <string>] [-SelfContained] [-SingleFile <bool>] [-Optimization <PowerShellCompilationExecutableOptimization>] [-SignArtifact] [-CertificateThumbprint <string>] [-CertificateStoreLocation <CertificateStoreLocation>] [-TimeStampServer <string>] [-SigningTimeoutSeconds <int>] [-KeepBuildWorkspace] [-EmitSource] [-TimeoutSeconds <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -28,6 +28,12 @@ Build-PowerShellArtifact -Path .\MyModule -EmitSource
 ### EXAMPLE 2
 ```powershell
 Build-PowerShellArtifact -Path .\tool.ps1
+```
+
+
+### EXAMPLE 3
+```powershell
+Build-PowerShellArtifact -Path .\Public\Get-One.ps1, .\Public\Get-Two.ps1 -Kind BinaryModule
 ```
 
 
@@ -51,6 +57,38 @@ Accept wildcard characters: False
 
 ### -CertificateThumbprint
 Optional code-signing certificate thumbprint.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -EmitSource
+Publish an independently buildable generated C# source project beside the artifact.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -EntryPoint
+Explicit root .ps1 application entrypoint when several script paths are supplied for an executable.
 
 ```yaml
 Type: String
@@ -162,10 +200,10 @@ Accept wildcard characters: False
 ```
 
 ### -Path
-PowerShell script, module manifest, script module, or module directory.
+One PowerShell script/module path, or several loose .ps1 files for a typed library or strict binary module.
 
 ```yaml
-Type: String
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

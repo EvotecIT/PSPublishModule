@@ -62,7 +62,26 @@ Build-PowerShellArtifact `
     -EmitSource
 ```
 
-Loose binary-module file sets are Strict by default because there is no `.psm1` entrypoint in which unsupported functions could remain as fallback. All files must be contained by the first file's directory. A multi-file executable is deliberately rejected for now: an EXE has one `Main`, so that feature needs an explicit entrypoint plus dependency bundling rather than a first-file guess.
+Loose binary-module file sets are Strict by default because there is no `.psm1` entrypoint in which unsupported functions could remain as fallback. All files must be contained by the first file's directory.
+
+A multi-file executable has one explicit root script. The root `param()` block remains the process argument contract, and PowerForge follows reachable unconditional literal dot-sources recursively from that entrypoint. Every supplied `--path` must belong to that contained dependency closure; unrelated files are rejected instead of being bundled speculatively:
+
+```powershell
+powerforge powershell build .\Tool.ps1 `
+    --path .\Private\Helpers.ps1 `
+    --entry-point .\Tool.ps1 `
+    --kind exe `
+    --mode Package `
+    --out .\artifacts
+
+Build-PowerShellArtifact `
+    -Path .\Tool.ps1, .\Private\Helpers.ps1 `
+    -EntryPoint .\Tool.ps1 `
+    -Kind Executable `
+    -Mode Package
+```
+
+The dependency tree is extracted with its relative layout before the embedded script runs, so `$PSScriptRoot`, `$PSCommandPath`, and nested literal dot-sources retain file-backed behavior. Dynamic, escaping, missing, or linked dependencies fail closed. Multi-file Strict EXEs remain unsupported until local PowerShell function declarations and calls have a typed entrypoint contract.
 
 Analyze a file or a complete source tree before building:
 
@@ -90,7 +109,7 @@ powerforge powershell build .\Measure-Threshold.ps1 `
     --name Measure-Threshold
 ```
 
-Strict typed executables accept required, explicitly typed scalar and one-dimensional array parameters. Their generated CLI supports positional values, repeated array options, `--Name value`, `--Name=value`, and `--`. It rejects missing, duplicate, or unknown parameters before invoking compiled code.
+Strict typed executables accept explicitly typed scalar, switch, and one-dimensional array parameters. Their generated CLI preserves required parameters, aliases, `AllowNull`, and the supported `ValidateNotNull`, `ValidateNotNullOrEmpty`, `ValidateSet`, `ValidateRange`, and `ValidatePattern` metadata. It supports exact names, aliases, unambiguous abbreviations, positional values, repeated array options, `--Name value`, `--Name=value`, switches, and `--`. Missing, duplicate, ambiguous, unknown, or validation-failing parameters are rejected before invoking compiled code.
 
 The generated host accepts positional arguments, `--Name value`, `--Name=value`, switches and aliases such as `--Force`, common switches on advanced scripts, and `--` to stop named-argument parsing. A non-switch named parameter must have a value; use `--Name=-value` when that value begins with `-`. Pipeline objects use PowerShell's normal formatting system before going to stdout; information records also go to stdout, while warnings and errors go to stderr. Nonterminating error records do not by themselves change a successful process exit code; a top-level explicit `exit <code>` becomes the process exit code, and a terminating exception fails the process. `$PSScriptRoot` resolves to the packaged artifact directory and `$PSCommandPath` to the running artifact path. Packaging rejects `exit` inside a function, nested script block, trap, or caught region because exception instrumentation would change PowerShell behavior. It also rejects `using module` and `using assembly` because those directives are resolved before an embedded script can receive file-backed path metadata.
 
@@ -148,6 +167,8 @@ It supports `-WhatIf`, returns `PowerShellCompilationBuildResult`, and uses the 
 
 `Hybrid` compiles complete eligible functions and retains diagnostics for everything else. A hybrid binary module removes compiled function definitions from its generated `.psm1`, imports the typed DLL, and keeps unsupported functions on the script path. Literal `$PSScriptRoot` dot-source dependencies are staged recursively with their relative layout, including dependencies reached from manifest runtime hooks. Dynamic, missing, wildcard, working-directory-relative, source-root-escaping, or symbolic-link/junction paths fail before publication. A hybrid CLR library extracts eligible methods without carrying script fallback because it is intended for direct .NET consumption.
 
+Binary modules can also compile typed control flow around deliberately bounded PowerShell command regions. Direct `Write-Verbose`, `Write-Debug`, and `Write-Warning` calls use the generated `PSCmdlet` stream APIs. Adjacent top-level command pipelines that depend only on function parameters, constants, and pipeline-local `$_`/`$PSItem` state are grouped into one PowerShell invocation so binding and dispatch are amortized across the region. A nested script block that captures another local, module, environment, or automatic variable is not eligible; the complete function stays on the Hybrid script path. Runtime-free CLR libraries and Strict typed EXEs never enable these PowerShell-backed regions.
+
 Only unconditional top-level literal dot-sourced files participate in the root module's typed source set. Conditional and function-local dot-sources plus manifest runtime hooks are still discovered and staged, but are counted as runtime fallback rather than being flattened into a different scope. Nested script modules and nested manifests keep their relative layout, manifest closure, and export policy.
 
 `Strict` fails the build when any executable unit needs fallback. For an executable it compiles one eligible top-level script body into a native .NET entrypoint with no PowerShell SDK dependency. For a DLL it guarantees that the artifact contains only behavior covered by the typed compiler contract.
@@ -156,12 +177,13 @@ Only unconditional top-level literal dot-sourced files participate in the root m
 
 Eligibility is whole-function and intentionally conservative. One unsupported construct keeps the complete function on the PowerShell path.
 
-The first subset supports:
+The current subset supports:
 
-- explicitly typed scalar parameters and one-dimensional typed arrays, including preserved `Parameter(Mandatory)` metadata;
+- explicitly typed scalar, `SwitchParameter`, and one-dimensional typed-array parameters;
+- preserved function and parameter aliases plus `Parameter(Mandatory)`, `AllowNull`, `ValidateNotNull`, `ValidateNotNullOrEmpty`, `ValidateSet`, `ValidateRange`, and `ValidatePattern` metadata;
 - typed or safely inferred local variables;
 - explicit `return` values and one terminal implicit-output expression;
-- `if`/`elseif`/`else`, `for`, `while`, and `foreach` over typed arrays or an explicitly typed scalar string;
+- `if`/`elseif`/`else`, conservative scalar `switch`, `for`, `while`, and `foreach` over typed arrays or an explicitly typed scalar string;
 - Boolean logic and scalar comparisons with known compatible types;
 - string equality with PowerShell case-sensitive or case-insensitive behavior;
 - scalar string `-split` and string-array `-join`;
@@ -173,15 +195,16 @@ The first subset supports:
 - unlabeled `break` and `continue` inside supported loops;
 - one-dimensional typed-array and string indexing with PowerShell-compatible negative and missing-index behavior for direct returns and compound-assignment operands;
 - statically resolved CLR constructors, static fields/properties, instance fields/properties, and exact method overloads for supported typed arguments, including defined enum names supplied as string literals.
+- PowerShell stream calls and bounded, adjacent top-level command/pipeline regions when generating a binary module.
 
 Member compilation is intentionally exact. The emitter resolves a single CLR member or overload at build time, applies only supported assignable/numeric/one-character conversions, and falls back when resolution is missing or ambiguous. Both the type and selected constructor, method, property, or field must exist in the requested target framework's reference assemblies; analyzer-host-only APIs and general constructed generic types are rejected before `dotnet` compilation. The compiler-owned homogeneous string dictionary is the current narrow generic exception. Null typed arrays preserve PowerShell's zero-length `.Length` behavior, and a nullable inferred string's property access uses PowerShell's empty-string property semantics while method invocation retains CLR null failure behavior.
 
 The analyzer rejects dynamic behavior rather than guessing. Current blockers include:
 
-- command, provider, pipeline, and dynamic command invocation;
+- commands and pipelines outside the bounded binary-module region contract, including nested closures over unresolved runtime variables;
 - dynamic member names, PowerShell-adapted properties, ambiguous overloads, and general object-property semantics;
 - script blocks, closures, runtime scopes such as `$env:`, and untyped parameters;
-- parameter attributes beyond empty `CmdletBinding()` and `Parameter(Mandatory)`, default expressions, and `dynamicparam`, `begin`, `process`, or `clean` blocks;
+- unsupported parameter attributes, PowerShell default expressions, and `dynamicparam`, `begin`, `process`, or `clean` blocks;
 - nonterminal or nested implicit pipeline output;
 - PowerShell truthiness conversions, element-wise array comparison, and coercion between incompatible CLR types;
 - string relational operators whose culture-aware ordering has not yet been translated;
@@ -274,23 +297,41 @@ See [the benchmark README](../Benchmarks/PowerShellCompilation/README.md) for th
 
 The canonical census uses exact committed source from six PowerShell-first products. It scans only authored module trees (`Public`, `Private`, and PSSharedGoods `Enums`), not dirty working-tree changes, generated modules, examples, tests, build scripts, or website assets. The pinned inputs are Testimo `f7550cf661ebaf97ae38f96b664aee09efd9cbde`, PSWriteHTML `fa88b1bbecc539b59c9a82cd4b95efc6cc951244`, O365Essentials `fad82882ff116c262ffd3c2c3fdb2781a8ddf0f3`, PSSharedGoods `12e9c2520d347df2988286ea1ba3e81e011ef0de`, ADEssentials `b2b1f760853becb773841f744bea196d02aa6c2b`, and PowerInfoBlox `9de3730afbfd61ed6bec59bc78e9e7a8d91b6233`.
 
-That lane contains 1,249 files and 1,340 whole script/function units with no parse-error files. Before the common-module language slice, one unit compiled. The current candidate compiles nine units (0.672%): one PSWriteHTML unit, six PSSharedGoods units, PowerInfoBlox `Convert-IpAddressToPtrString`, and O365Essentials `Get-ProcessEnvironmentValue`. The PowerInfoBlox helper is also built and invoked as a strict generated binary cmdlet with mandatory parameter metadata, while PSSharedGoods `ConvertFrom-OperationType` is differentially checked for known, case-insensitive, and missing dictionary keys. O365 enum-name overload binding was verified against the original private function. Testimo and ADEssentials remain at zero typed units; their current blockers are reported rather than hidden.
+That archived six-product lane contains 1,249 files and 1,340 whole script/function units with no parse-error files. Before the common-module language slice, one unit compiled; the parent candidate compiled nine. The PowerInfoBlox helper is also built and invoked as a strict generated binary cmdlet with mandatory parameter metadata, while PSSharedGoods `ConvertFrom-OperationType` is differentially checked for known, case-insensitive, and missing dictionary keys. O365 enum-name overload binding was verified against the original private function.
+
+The CLI now makes this a repeatable regression gate rather than a one-off research script. It records per-product discovery, typed/fallback coverage, parse errors, analyzer duration, and the most frequent blockers. `--write-baseline` creates a JSON baseline; `--baseline` returns a failing exit code when a product disappears, typed coverage decreases, fallback increases, or parse errors increase:
+
+```powershell
+$root = if ($env:EVOTEC_GITHUB_ROOT) { $env:EVOTEC_GITHUB_ROOT } else { 'C:\Support\GitHub' }
+
+powerforge powershell census `
+    (Join-Path $root 'PowerInfoBlox\PowerInfoBlox.psd1') `
+    --path (Join-Path $root 'PSSharedGoods\PSSharedGoods.psd1') `
+    --path (Join-Path $root 'PSWriteHTML\PSWriteHTML.psd1') `
+    --path (Join-Path $root 'O365Essentials\O365Essentials.psd1') `
+    --path (Join-Path $root 'ADEssentials\ADEssentials.psd1') `
+    --framework net10.0 `
+    --write-baseline .\artifacts\powershell-compilation-census.json `
+    --output json
+```
+
+The corrected five-product candidate reports 1,132 authored files, 1,222 units, 14 typed, 1,208 fallback, and zero parse errors. An earlier exploratory count reached 18, but inspection of the emitted C# showed that four command regions contained nested closures over locals or module state that the generated cmdlet did not bind. Those functions now correctly fall back. This is the intended gate behavior: semantic safety wins over a larger eligibility number.
 
 Low initial coverage is not hidden by Hybrid mode. It is written to the manifest, and every fallback has a diagnostic explaining what needs compiler support. Diagnostics are deliberately blocker-masked to avoid cascades, so accepting one outer construct can reveal deeper runtime semantics without increasing coverage. Roadmap priority therefore comes from repeated full-corpus passes and executable differential proof, not raw syntax-occurrence counts.
 
 ### Real product rebuild matrix
 
-The module rebuilder was then run from each repository directory using archived committed source, not the maintainers' working trees. All five generated modules imported successfully, preserved the complete exported command-name and alias surface, and produced independently rebuildable emitted C# projects with zero NuGet audit warnings and zero vulnerable packages reported by `dotnet list package --vulnerable --include-transitive`.
+The module rebuilder was then run from `git archive` snapshots at the exact commits above, not the maintainers' working trees. All five generated modules imported successfully, preserved the complete exported command-name and alias surface, and produced independently rebuildable emitted C# projects. Every emitted project rebuilt with zero compiler warnings and zero errors.
 
-| Product | Source files | Units | Typed / fallback | Coverage | Exported surface after rebuild | Complete artifact set | Generated C# |
+| Product | Source files | Units | Typed / fallback | Coverage | Exported commands before / after | Complete module set | Generated C# |
 | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
-| PowerInfoBlox `9de3730` | 58 | 58 | 1 / 57 | 1.72% | 45 functions, 6 aliases | 207,473 bytes | 2 files, 39 lines, 1 mapped method |
-| PSSharedGoods `12e9c25` | 283 | 285 | 6 / 279 | 2.11% | 186 functions + 5 cmdlets, 35 aliases | 1,347,652 bytes | 2 files, 136 lines, 6 mapped methods |
-| PSWriteHTML `fa88b1b` | 242 | 323 | 1 / 322 | 0.31% | 152 functions + 1 cmdlet, 138 aliases | 1,438,860 bytes | 2 files, 30 lines, 1 mapped method |
-| O365Essentials `fad8288` | 284 | 286 | 1 / 285 | 0.35% | 213 functions, 1 alias | 759,908 bytes | 2 files, 36 lines, 1 mapped method |
-| ADEssentials `b2b1f76` | 265 | 270 | 0 / 270 | 0% | 133 functions, 24 aliases | 1,892,221 bytes | 2 files, 16 lines |
+| PowerInfoBlox `9de3730` | 58 | 58 | 1 / 57 | 1.72% | 51 / 51 | 202,171 bytes | 2 files, 41 lines, 1 mapped method |
+| PSSharedGoods `12e9c25` | 283 | 285 | 7 / 278 | 2.46% | 226 / 226 | 1,326,576 bytes | 2 files, 161 lines, 7 mapped methods |
+| PSWriteHTML `fa88b1b` | 242 | 323 | 4 / 319 | 1.24% | 291 / 291 | 1,429,719 bytes | 2 files, 126 lines, 4 mapped methods |
+| O365Essentials `fad8288` | 284 | 286 | 2 / 284 | 0.70% | 214 / 214 | 745,914 bytes | 2 files, 64 lines, 2 mapped methods |
+| ADEssentials `b2b1f76` | 265 | 270 | 0 / 270 | 0% | 157 / 157 | 1,878,997 bytes | 2 files, 18 lines, 0 mapped methods |
 
-The function/cmdlet split is intentional: for example, PSSharedGoods begins with 191 exported functions and finishes with the same 191 command names, but five eligible functions are now real cmdlets. Differential execution matched for PowerInfoBlox `Convert-IpAddressToPtrString`, PSSharedGoods `ConvertFrom-OperationType`, PSWriteHTML `New-HTMLCarouselStyle`, and O365Essentials `Get-ProcessEnvironmentValue`.
+The function/cmdlet split is intentional: eligible functions become real cmdlets while Hybrid fallback functions keep their script definitions. Differential execution matched for PowerInfoBlox `Convert-IpAddressToPtrString`, PSSharedGoods `ConvertFrom-OperationType`, PSWriteHTML `New-HTMLCarouselStyle`, and O365Essentials `Get-ProcessEnvironmentValue`.
 
 A small seven-sample, 10,000-call dispatch probe measured rebuilt/original medians of 204.30/251.44 ms for PowerInfoBlox (1.23x), 143.90/160.04 ms for PSSharedGoods (1.11x), and 215.20/224.98 ms for PSWriteHTML (1.05x). These are intentionally modest: they measure repeated PowerShell command dispatch, not direct CLR execution. The clean direct-CLR PowerInfoBlox benchmark remains 16.2x faster than its PowerShell function. Together the results point to the next optimization target: compile coarser command regions so useful work amortizes binding and pipeline dispatch.
 

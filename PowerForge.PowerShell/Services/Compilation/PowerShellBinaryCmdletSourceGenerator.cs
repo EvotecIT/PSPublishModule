@@ -172,7 +172,12 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             foreach (var validation in parameter.Validations)
                 builder.AppendLine("    " + GenerateValidationAttribute(validation));
             var propertyType = parameter.IsSwitch ? "SwitchParameter" : GetGeneratedTypeName(parameter.TypeName);
-            builder.AppendLine($"    public {propertyType} {PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name)} {{ get; set; }}{(!parameter.IsSwitch && parameter.TypeName == typeof(string).FullName ? " = string.Empty;" : string.Empty)}");
+            var initializer = parameter.IsSwitch || IsGeneratedValueType(parameter.TypeName)
+                ? string.Empty
+                : parameter.TypeName == typeof(string).FullName
+                    ? " = string.Empty;"
+                    : " = default!;";
+            builder.AppendLine($"    public {propertyType} {PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name)} {{ get; set; }}{initializer}");
             builder.AppendLine();
         }
         if (cmdlet.Method.RequiresPowerShellCommandRegions)
@@ -236,6 +241,12 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         if (fullName == typeof(char).FullName) return "char";
         if (fullName == typeof(string).FullName) return "string";
         return "global::" + fullName.Replace('+', '.');
+    }
+
+    private static bool IsGeneratedValueType(string fullName)
+    {
+        var resolved = Type.GetType(fullName, throwOnError: false);
+        return resolved?.IsValueType == true || fullName == typeof(bool).FullName;
     }
 
     private static string? GetCmdletOutputTypeName(string returnType)

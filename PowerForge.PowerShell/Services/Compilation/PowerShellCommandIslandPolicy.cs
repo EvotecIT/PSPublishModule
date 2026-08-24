@@ -26,7 +26,7 @@ internal static class PowerShellCommandIslandPolicy
         var parameters = body.ParamBlock?.Parameters
             .Select(static parameter => parameter.Name.VariablePath.UserPath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        return pipeline.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: false)
+        return pipeline.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
             .Cast<VariableExpressionAst>()
             .All(variable =>
             {
@@ -34,8 +34,29 @@ internal static class PowerShellCommandIslandPolicy
                 return parameters.Contains(name) ||
                        name.Equals("true", StringComparison.OrdinalIgnoreCase) ||
                        name.Equals("false", StringComparison.OrdinalIgnoreCase) ||
-                       name.Equals("null", StringComparison.OrdinalIgnoreCase);
+                       name.Equals("null", StringComparison.OrdinalIgnoreCase) ||
+                       IsNestedPipelineVariable(variable, pipeline, name);
             });
+    }
+
+    private static bool IsNestedPipelineVariable(
+        VariableExpressionAst variable,
+        PipelineAst pipeline,
+        string name)
+    {
+        if (!name.Equals("_", StringComparison.OrdinalIgnoreCase) &&
+            !name.Equals("PSItem", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        for (Ast? ancestor = variable.Parent;
+             ancestor is not null && !ReferenceEquals(ancestor, pipeline);
+             ancestor = ancestor.Parent)
+        {
+            if (ancestor is ScriptBlockExpressionAst)
+                return true;
+        }
+
+        return false;
     }
 
     internal static bool TryGetStreamCommand(

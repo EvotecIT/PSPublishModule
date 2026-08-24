@@ -59,7 +59,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Fact]
     public void Build_EmittedProjectIsShieldedFromAncestorMsBuildAndSdkPolicy()
     {
-        using var fixture = ArtifactFixture.Create("function Get-IsolatedProof { return 42 }");
+        using var fixture = ArtifactFixture.Create(
+            "function Get-IsolatedProof { return 42 }\n" +
+            "function Get-NullableEnvironmentProof { param([string] $Name) return [Environment]::GetEnvironmentVariable($Name, [EnvironmentVariableTarget]::Process) }\n" +
+            "function Get-LegacyMemberProof { return [TimeZone]::CurrentTimeZone.StandardName }");
         File.WriteAllText(Path.Combine(fixture.RootPath, "Directory.Build.targets"), "<Project><Target Name=\"RejectInheritedBuild\" BeforeTargets=\"Build\"><Error Text=\"ancestor target imported\" /></Target></Project>");
         File.WriteAllText(Path.Combine(fixture.RootPath, "Directory.Packages.props"), "<Project><PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup></Project>");
         File.WriteAllText(Path.Combine(fixture.RootPath, "global.json"), "{ \"sdk\": { \"version\": \"3.1.100\", \"rollForward\": \"disable\" } }");
@@ -93,6 +96,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(process.WaitForExit(120_000), "Independent generated-project rebuild did not exit within 120 seconds.");
         Assert.True(process.ExitCode == 0, error + Environment.NewLine + output);
         Assert.DoesNotContain("ancestor target imported", output + error, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("warning CS", output + error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
