@@ -700,10 +700,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     evaluatedProjectReferenceConditionProperties =
                         ReadEvaluatedProjectReferenceConditionProperties(request, importPaths);
-                    taskWideProjectReferencePropertyRemovals =
-                        ReadPreResolveTaskWideProjectReferencePropertyRemovals(
+                    if (!TryReadPreResolveTaskWideProjectReferencePropertyRemovals(
                             preResolvePropertyDefinitions,
-                            evaluatedProjectReferenceConditionProperties);
+                            evaluatedProjectReferenceConditionProperties,
+                            out taskWideProjectReferencePropertyRemovals))
+                    {
+                        return false;
+                    }
                 }
                 foreach (string importPath in importPaths)
                 {
@@ -831,6 +834,16 @@ public sealed partial class DotNetPublishPipelineRunner
                     !TryReadResolvedProjectReferences(
                         resolvedItems,
                         request.ProjectPath,
+                        importPaths,
+                        projectReferenceDeclarations,
+                        evaluatedProjectReferenceConditionProperties,
+                        taskWideProjectReferencePropertyRemovals,
+                        hasDynamicProjectReferenceTaskOutputs,
+                        out EvaluatedProjectReference[] finalResolvedReferences) ||
+                    !TryReadAuthoritativeResolvedProjectReferences(
+                        request,
+                        rawReferences.Values.ToArray(),
+                        finalResolvedReferences,
                         importPaths,
                         projectReferenceDeclarations,
                         evaluatedProjectReferenceConditionProperties,

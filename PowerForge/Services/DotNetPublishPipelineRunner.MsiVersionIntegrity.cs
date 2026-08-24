@@ -171,18 +171,32 @@ public sealed partial class DotNetPublishPipelineRunner
             buildProjectPaths,
             buildConfiguration,
             buildPlan);
+        var postEvaluationTrackedStatus = ReadGitRawText(
+            gitRoot!,
+            "status --porcelain=v1 -z --untracked-files=no");
+        var postEvaluationUntrackedOutput = ReadGitText(
+            gitRoot!,
+            "ls-files --others --exclude-standard -z");
+        bool evaluationStatusChanged =
+            !string.Equals(finalTrackedStatus, postEvaluationTrackedStatus, StringComparison.Ordinal) ||
+            !string.Equals(untrackedOutput, postEvaluationUntrackedOutput, StringComparison.Ordinal);
         string[]? trackedSourceChanges = FindTrackedSourceChanges(
             projectRoot,
             gitRoot!,
-            finalTrackedStatus,
+            postEvaluationTrackedStatus,
             trackedGeneratedPaths,
             dirtyScope);
         string[] untrackedSourceFiles = FindUntrackedSourceFiles(
             projectRoot,
             gitRoot!,
-            untrackedOutput,
+            postEvaluationUntrackedOutput,
             allGeneratedPaths,
             dirtyScope);
+        statusChangedDuringVerification = statusChangedDuringVerification ||
+            (evaluationStatusChanged &&
+             (trackedSourceChanges is null ||
+              trackedSourceChanges.Length > 0 ||
+              untrackedSourceFiles.Length > 0));
         bool generatedOutputOverlapsInput = HasGeneratedOutputInputOverlap(
             projectRoot,
             allGeneratedPaths,
@@ -199,9 +213,9 @@ public sealed partial class DotNetPublishPipelineRunner
             dirtyScope);
         bool untrustedIgnoredBuildInput = untrustedBuildInputs.Length > 0;
         var dirtyReasons = new List<string>();
-        if (trackedStatus is null)
+        if (trackedStatus is null || postEvaluationTrackedStatus is null)
             dirtyReasons.Add("tracked Git status query failed");
-        if (untrackedOutput is null)
+        if (untrackedOutput is null || postEvaluationUntrackedOutput is null)
             dirtyReasons.Add("untracked Git status query failed");
         if (statusChangedDuringVerification)
             dirtyReasons.Add("Git status changed during provenance verification");
@@ -219,7 +233,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 summary += $" (+{untrustedBuildInputs.Length - maximumReportedBuildInputs} more)";
             dirtyReasons.Add("untrusted evaluated build input(s): " + summary);
         }
-        bool? dirty = trackedStatus is null || untrackedOutput is null
+        bool? dirty = trackedStatus is null || untrackedOutput is null ||
+                      postEvaluationTrackedStatus is null || postEvaluationUntrackedOutput is null
             ? null
             : statusChangedDuringVerification
               || generatedOutputOverlapsInput

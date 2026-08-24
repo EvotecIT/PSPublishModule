@@ -5,26 +5,43 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private static string[] ReadPreResolveTaskWideProjectReferencePropertyRemovals(
+    private static bool TryReadPreResolveTaskWideProjectReferencePropertyRemovals(
         IReadOnlyList<PreprocessedProjectPropertyDefinition> propertyDefinitions,
-        IReadOnlyDictionary<string, string> evaluatedConditionProperties)
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
+        out string[] removals)
     {
+        removals = Array.Empty<string>();
         IReadOnlyDictionary<string, string> preResolveProperties =
             BuildTargetTimeConditionProperties(
                 evaluatedConditionProperties,
                 propertyDefinitions);
         if (!preResolveProperties.TryGetValue(
                 "_GlobalPropertiesToRemoveFromProjectReferences",
-                out string? value) ||
-            value.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+                out string? value))
+        {
+            if (propertyDefinitions.Any(definition =>
+                    definition.Element.Name.LocalName.Equals(
+                        "_GlobalPropertiesToRemoveFromProjectReferences",
+                        StringComparison.OrdinalIgnoreCase) &&
+                    !IsDefinitelyInactiveMsBuildElement(
+                        definition.Element,
+                        evaluatedConditionProperties,
+                        definition.DefiningProjectPath)))
+            {
+                return false;
+            }
+            return true;
+        }
+        if (value.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
             value.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
             value.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
             !TryUnescapeMsBuildLiteral(value, out string? decoded))
         {
-            return Array.Empty<string>();
+            return false;
         }
 
-        return ReadProjectReferencePropertyNames(decoded);
+        removals = ReadProjectReferencePropertyNames(decoded);
+        return true;
     }
 
     private static bool TryReadEffectiveProjectReferencePropertyRemovals(

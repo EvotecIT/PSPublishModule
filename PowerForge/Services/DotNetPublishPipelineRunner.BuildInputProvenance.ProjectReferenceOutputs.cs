@@ -224,6 +224,124 @@ public sealed partial class DotNetPublishPipelineRunner
         return true;
     }
 
+    private static bool TryReadResolvedProjectReferencesAtBoundary(
+        ProjectEvaluationRequest request,
+        string declaringProjectPath,
+        IReadOnlyCollection<string> propertyDefinitionPaths,
+        IReadOnlyList<PreprocessedProjectReferenceDeclaration> projectReferenceDeclarations,
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
+        IReadOnlyCollection<string> taskWidePropertyRemovals,
+        bool allowAmbiguousEvaluatedAssignments,
+        out EvaluatedProjectReference[] references)
+    {
+        references = Array.Empty<EvaluatedProjectReference>();
+        var arguments = new List<string>
+        {
+            "msbuild",
+            request.ProjectPath,
+            "-nologo",
+            "-verbosity:quiet",
+            "-target:ResolveProjectReferences",
+            "-getItem:_MSBuildProjectReferenceExistent"
+        };
+        if (request.Configuration is not null)
+            arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
+        if (request.TargetFramework is not null)
+            arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
+        foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
+                     entry => entry.Key,
+                     StringComparer.OrdinalIgnoreCase))
+        {
+            if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
+                property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
+                property.Key.Equals("BuildProjectReferences", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
+        }
+        arguments.Add("-p:BuildProjectReferences=false");
+
+        try
+        {
+            var process = RunBuildInputEvaluationProcess(
+                "dotnet",
+                Path.GetDirectoryName(request.ProjectPath)!,
+                arguments,
+                request.EnvironmentVariables,
+                TimeSpan.FromMinutes(2));
+            if (process.ExitCode != 0 || process.TimedOut)
+                return false;
+
+            int jsonStart = process.StdOut.IndexOf('{');
+            int jsonEnd = process.StdOut.LastIndexOf('}');
+            if (jsonStart < 0 || jsonEnd < jsonStart)
+                return false;
+            using JsonDocument document = JsonDocument.Parse(
+                process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
+            if (!document.RootElement.TryGetProperty("Items", out JsonElement items))
+                return false;
+
+            return TryReadResolvedProjectReferences(
+                items,
+                declaringProjectPath,
+                propertyDefinitionPaths,
+                projectReferenceDeclarations,
+                evaluatedConditionProperties,
+                taskWidePropertyRemovals,
+                allowAmbiguousEvaluatedAssignments,
+                out references);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryReadAuthoritativeResolvedProjectReferences(
+        ProjectEvaluationRequest request,
+        IReadOnlyCollection<EvaluatedProjectReference> rawReferences,
+        IReadOnlyCollection<EvaluatedProjectReference> finalResolvedReferences,
+        IReadOnlyCollection<string> propertyDefinitionPaths,
+        IReadOnlyList<PreprocessedProjectReferenceDeclaration> projectReferenceDeclarations,
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
+        IReadOnlyCollection<string> taskWidePropertyRemovals,
+        bool allowAmbiguousEvaluatedAssignments,
+        out EvaluatedProjectReference[] references)
+    {
+        StringComparison pathComparison = IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        bool finalResolutionDroppedRawReference = rawReferences.Any(rawReference =>
+            !finalResolvedReferences.Any(resolvedReference => string.Equals(
+                Path.GetFullPath(rawReference.ProjectPath),
+                Path.GetFullPath(resolvedReference.ProjectPath),
+                pathComparison)));
+        EvaluatedProjectReference[] boundaryResolvedReferences =
+            Array.Empty<EvaluatedProjectReference>();
+        if (finalResolutionDroppedRawReference &&
+            !TryReadResolvedProjectReferencesAtBoundary(
+                request,
+                request.ProjectPath,
+                propertyDefinitionPaths,
+                projectReferenceDeclarations,
+                evaluatedConditionProperties,
+                taskWidePropertyRemovals,
+                allowAmbiguousEvaluatedAssignments,
+                out boundaryResolvedReferences))
+        {
+            references = Array.Empty<EvaluatedProjectReference>();
+            return false;
+        }
+
+        references = finalResolvedReferences
+            .Concat(boundaryResolvedReferences)
+            .GroupBy(BuildEvaluatedProjectReferenceKey, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToArray();
+        return true;
+    }
+
     private static void AppendProjectReferenceKeySegment(StringBuilder key, string value)
         => key.Append(value.Length).Append(':').Append(value);
 

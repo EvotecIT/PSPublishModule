@@ -83,14 +83,11 @@ public sealed partial class DotNetPublishPipelineRunner
         if (metadataStart < 0 || metadataStart > image.Length - metadata.Length)
             throw new InvalidDataException("The managed metadata is outside the PE image.");
         Buffer.BlockCopy(metadata, 0, image, metadataStart, metadata.Length);
+        int peHeaderStart = reader.PEHeaders.PEHeaderStartOffset;
+        ZeroRange(image, peHeaderStart - 16, sizeof(uint));
+        ZeroRange(image, peHeaderStart + 64, sizeof(uint));
         ZeroDirectory(image, reader.PEHeaders, peHeader.ImportAddressTableDirectory);
-        // Controlled rebuild paths can change non-semantic debug records. Normalize
-        // only those declared ranges; every other mapped byte remains provenance.
-        foreach (DebugDirectoryEntry entry in reader.ReadDebugDirectory())
-        {
-            ZeroRange(image, entry.DataPointer, entry.DataSize);
-        }
-        ZeroDirectory(image, reader.PEHeaders, peHeader.DebugTableDirectory);
+        NormalizeDebugRecords(image, reader, peHeader.DebugTableDirectory);
 
         SectionHeader[] mappedSections = reader.PEHeaders.SectionHeaders
             .Where(section => section.SizeOfRawData > 0)
@@ -103,16 +100,43 @@ public sealed partial class DotNetPublishPipelineRunner
         if (sectionStart < 0 || sectionEnd < sectionStart || sectionEnd > image.Length)
             throw new InvalidDataException("The managed PE section layout is invalid.");
 
-        using var content = new MemoryStream();
-        WriteInt32(content, (int)reader.PEHeaders.CoffHeader.Machine);
-        WriteInt32(content, (int)reader.PEHeaders.CoffHeader.Characteristics);
-        WriteInt32(content, (int)peHeader.Magic);
-        WriteInt32(content, (int)peHeader.Subsystem);
-        WriteInt32(content, (int)peHeader.DllCharacteristics);
-        WriteInt32(content, (int)corHeader.Flags);
-        WriteInt32(content, corHeader.EntryPointTokenOrRelativeVirtualAddress);
-        content.Write(image, sectionStart, sectionEnd - sectionStart);
-        return content.ToArray();
+        // Compare the complete mapped image, including the DOS, COFF, optional,
+        // and section headers. Only explicitly identified build-path/timestamp
+        // fields above are normalized.
+        return image.AsSpan(0, sectionEnd).ToArray();
+    }
+
+    private static void NormalizeDebugRecords(
+        byte[] image,
+        PEReader reader,
+        DirectoryEntry debugDirectory)
+    {
+        DebugDirectoryEntry[] entries = reader.ReadDebugDirectory().ToArray();
+        if (entries.Length == 0)
+            return;
+        if (debugDirectory.Size != checked(entries.Length * 28))
+            throw new InvalidDataException("The PE debug directory size is invalid.");
+
+        int tableOffset = MapRvaToFileOffset(
+            reader.PEHeaders,
+            debugDirectory.RelativeVirtualAddress);
+        for (int index = 0; index < entries.Length; index++)
+        {
+            DebugDirectoryEntry entry = entries[index];
+            // IMAGE_DEBUG_DIRECTORY.TimeDateStamp is non-semantic build time.
+            ZeroRange(image, checked(tableOffset + (index * 28) + 4), sizeof(uint));
+            if (entry.Type != DebugDirectoryEntryType.CodeView)
+                continue;
+            if (entry.DataSize < 24 || entry.DataPointer < 0 ||
+                entry.DataPointer > image.Length - entry.DataSize)
+            {
+                throw new InvalidDataException("The CodeView debug record is outside the PE image.");
+            }
+
+            // Preserve the RSDS signature, PDB identity, and age. Only the
+            // machine-local PDB path that follows them is normalized.
+            ZeroRange(image, checked(entry.DataPointer + 24), entry.DataSize - 24);
+        }
     }
 
     private static void NormalizeNonIdentityGuidHeapEntries(byte[] metadata, Guid moduleVersionId)
@@ -165,12 +189,6 @@ public sealed partial class DotNetPublishPipelineRunner
             return;
         int offset = MapRvaToFileOffset(headers, directory.RelativeVirtualAddress);
         ZeroRange(image, offset, directory.Size);
-    }
-
-    private static void WriteInt32(Stream destination, int value)
-    {
-        byte[] bytes = BitConverter.GetBytes(value);
-        destination.Write(bytes, 0, bytes.Length);
     }
 
     private static int MapRvaToFileOffset(PEHeaders headers, int relativeVirtualAddress)
