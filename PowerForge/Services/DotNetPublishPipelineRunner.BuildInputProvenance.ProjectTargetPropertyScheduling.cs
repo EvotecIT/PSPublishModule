@@ -12,6 +12,37 @@ public sealed partial class DotNetPublishPipelineRunner
         ISet<string> immutableGlobalProperties,
         ISet<string> scheduledPropertyNames)
     {
+        foreach (XElement output in target.Descendants().Where(element =>
+                     element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase) &&
+                     element.Attribute("PropertyName") is not null))
+        {
+            string propertyNameExpression = output.Attribute("PropertyName")!.Value;
+            foreach (IReadOnlyDictionary<string, string> context in propertyContexts)
+            {
+                if (IsDefinitelyInactiveMsBuildElement(output, context))
+                    continue;
+                if (!TryExpandTargetTimePropertyValue(propertyNameExpression, context, out string? propertyName) ||
+                    propertyName!.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+                    propertyName.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+                    propertyName.IndexOf("%(", StringComparison.Ordinal) >= 0)
+                {
+                    if (scheduledPropertyNames.Any(name =>
+                            propertyNameExpression.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        throw new InvalidOperationException(
+                            "A scheduled target task output property name could not be resolved for provenance evaluation.");
+                    }
+                    continue;
+                }
+                if (scheduledPropertyNames.Contains(propertyName!) &&
+                    !immutableGlobalProperties.Contains(propertyName!))
+                {
+                    throw new InvalidOperationException(
+                        $"Scheduled target property '{propertyName}' is assigned by a task output and cannot be replayed safely.");
+                }
+            }
+        }
+
         foreach (XElement definition in target.Descendants().Where(element =>
                      element.Parent?.Name.LocalName.Equals(
                          "PropertyGroup",

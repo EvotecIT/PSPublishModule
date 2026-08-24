@@ -247,6 +247,23 @@ public sealed partial class DotNetPublishPipelineRunner
             value.IndexOf("%" + name + "%", StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
+    internal static bool ContainsUncontrolledFileSystemPropertyFunction(string value)
+    {
+        value = DecodeMsBuildEscapes(value);
+        string[] prefixes =
+        {
+            "$([System.IO.Path]::",
+            "$([System.IO.File]::",
+            "$([System.IO.Directory]::",
+            "$([MSBuild]::NormalizePath(",
+            "$([MSBuild]::NormalizeDirectory(",
+            "$([MSBuild]::GetDirectoryNameOfFileAbove(",
+            "$([MSBuild]::GetPathOfFileAbove("
+        };
+        return prefixes.Any(prefix =>
+            value.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0);
+    }
+
     internal static string DecodeMsBuildEscapes(string value)
     {
         if (value.IndexOf('%') < 0)
@@ -393,7 +410,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                     value,
                                     Path.GetDirectoryName(path)!,
                                     checkoutRoot) ||
-                                ContainsUncontrolledEnvironmentReference(value)))
+                                ContainsUncontrolledEnvironmentReference(value) ||
+                                ContainsUncontrolledFileSystemPropertyFunction(value)))
                             return false;
                         continue;
                     }
@@ -432,7 +450,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                           value,
                                           Path.GetDirectoryName(path)!,
                                           checkoutRoot) ||
-                                      ContainsUncontrolledEnvironmentReference(value)))
+                                      ContainsUncontrolledEnvironmentReference(value) ||
+                                      ContainsUncontrolledFileSystemPropertyFunction(value)))
                     {
                         return false;
                     }

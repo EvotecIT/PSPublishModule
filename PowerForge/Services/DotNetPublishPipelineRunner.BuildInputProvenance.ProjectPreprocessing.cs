@@ -132,11 +132,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 ReadProjectReferenceEvaluationTargetNames(
                     taskOutputProperties,
                     scheduledTargets);
-            IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItemLists =
-                ReadEvaluatedProjectItemPaths(
+            bool evaluatedItemListsSucceeded = TryReadEvaluatedProjectItemPaths(
                     request,
                     ReadProjectReferenceItemListNames(document, taskOutputProperties),
-                    projectReferenceEvaluationTargets);
+                    projectReferenceEvaluationTargets,
+                    out IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItemLists);
+            if (!evaluatedItemListsSucceeded && hasDynamicProjectReferenceTaskOutputs)
+            {
+                return false;
+            }
             if (hasDynamicProjectReferenceTaskOutputs &&
                 evaluatedItemLists.TryGetValue(
                     "ProjectReference",
@@ -394,6 +398,14 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (string expression in targetExpressions.Where(value => !string.IsNullOrWhiteSpace(value))!)
         {
             AddConditionPropertyNames(expression, propertyNames);
+        }
+        foreach (string propertyNameExpression in effectiveTargets.Values
+                     .SelectMany(target => target.Descendants().Where(element =>
+                         element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase)))
+                     .Select(output => output.Attribute("PropertyName")?.Value)
+                     .Where(value => !string.IsNullOrWhiteSpace(value))!)
+        {
+            AddConditionPropertyNames(propertyNameExpression, propertyNames);
         }
 
         IReadOnlyDictionary<string, string> evaluatedProperties =

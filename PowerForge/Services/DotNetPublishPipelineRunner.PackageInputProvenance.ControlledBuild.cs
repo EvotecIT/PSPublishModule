@@ -99,6 +99,25 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     string name = pair.Key.Replace('\\', '/').TrimStart('/');
                     string extension = Path.GetExtension(name);
+                    string packageDirectory = Path.Combine(
+                        "package-root",
+                        Path.GetDirectoryName(name) ?? string.Empty);
+                    if (extension.Equals(".rsp", StringComparison.OrdinalIgnoreCase))
+                    {
+                        using Stream responseStream = pair.Value.Open();
+                        using var responseReader = new StreamReader(responseStream);
+                        while (responseReader.ReadLine() is string value)
+                        {
+                            if (ContainsRootedBuildValue(value, gitRoot: null) ||
+                                ContainsEscapingRelativeBuildValue(value, packageDirectory, "package-root") ||
+                                ContainsUncontrolledEnvironmentReference(value) ||
+                                ContainsUncontrolledFileSystemPropertyFunction(value))
+                            {
+                                return false;
+                            }
+                        }
+                        continue;
+                    }
                     bool knownProjectExtension =
                         extension.Equals(".props", StringComparison.OrdinalIgnoreCase) ||
                         extension.Equals(".targets", StringComparison.OrdinalIgnoreCase);
@@ -127,9 +146,10 @@ public sealed partial class DotNetPublishPipelineRunner
                             .Any(value => ContainsRootedBuildValue(value, gitRoot: null) ||
                                           ContainsEscapingRelativeBuildValue(
                                               value,
-                                              Path.Combine("package-root", Path.GetDirectoryName(name) ?? string.Empty),
+                                              packageDirectory,
                                               "package-root") ||
-                                          ContainsUncontrolledEnvironmentReference(value)))
+                                          ContainsUncontrolledEnvironmentReference(value) ||
+                                          ContainsUncontrolledFileSystemPropertyFunction(value)))
                     {
                         return false;
                     }

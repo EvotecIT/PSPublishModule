@@ -64,10 +64,24 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool HasCleanNestedGitWorktree(string repositoryRoot)
     {
-        string? status = ReadGitRawText(
+        string? revision = ReadGitText(repositoryRoot, "rev-parse HEAD");
+        if (string.IsNullOrWhiteSpace(revision) ||
+            !TryCollectControlledGitFilterNames(repositoryRoot, revision!, out string[] filterNames))
+        {
+            return false;
+        }
+        var status = RunBuildInputEvaluationProcess(
+            "git",
             repositoryRoot,
-            "status --porcelain=v1 -z --untracked-files=all");
-        return status is not null && status.Length == 0;
+            BuildControlledGitArguments(
+                filterNames,
+                "status",
+                "--porcelain=v1",
+                "-z",
+                "--untracked-files=all"),
+            environmentVariables: null,
+            TimeSpan.FromSeconds(30));
+        return status.ExitCode == 0 && !status.TimedOut && status.StdOut.Length == 0;
     }
 
     private static bool HasNoGitReplacementRefs(string repositoryRoot)

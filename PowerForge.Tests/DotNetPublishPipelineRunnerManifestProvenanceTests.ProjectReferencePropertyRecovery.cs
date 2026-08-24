@@ -430,6 +430,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             }
             File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
             RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            string libraryProject = Path.Combine(libraryDirectory, "Library.csproj");
+            if (!File.Exists(Path.Combine(libraryDirectory, "obj", "project.assets.json")))
+                RunDotNet(root, $"restore \"{libraryProject}\" --use-lock-file --nologo");
             RunGit(root, "add .");
             RunGit(root, "commit -m \"approved source\"");
             string mutatedFile = Path.Combine(root, mutatedPath.Replace('/', Path.DirectorySeparatorChar));

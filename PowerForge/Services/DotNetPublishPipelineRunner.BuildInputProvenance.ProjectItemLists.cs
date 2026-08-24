@@ -65,13 +65,15 @@ public sealed partial class DotNetPublishPipelineRunner
         return names.ToArray();
     }
 
-    private static IReadOnlyDictionary<string, EvaluatedProjectItem[]> ReadEvaluatedProjectItemPaths(
+    private static bool TryReadEvaluatedProjectItemPaths(
         ProjectEvaluationRequest request,
         IReadOnlyCollection<string> itemNames,
-        IReadOnlyCollection<string> evaluationTargets)
+        IReadOnlyCollection<string> evaluationTargets,
+        out IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItems)
     {
+        evaluatedItems = new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
         if (itemNames.Count == 0)
-            return new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
+            return true;
 
         var arguments = new List<string>
         {
@@ -114,17 +116,20 @@ public sealed partial class DotNetPublishPipelineRunner
                 request.EnvironmentVariables,
                 TimeSpan.FromMinutes(2));
             if (process.ExitCode != 0 || process.TimedOut)
-                return new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
+                return false;
 
-            int jsonStart = process.StdOut.IndexOf('{');
+            int itemsMarker = process.StdOut.LastIndexOf("\"Items\"", StringComparison.Ordinal);
+            int jsonStart = itemsMarker < 0
+                ? -1
+                : process.StdOut.LastIndexOf('{', itemsMarker);
             int jsonEnd = process.StdOut.LastIndexOf('}');
             if (jsonStart < 0 || jsonEnd < jsonStart)
-                return new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
+                return false;
 
             using JsonDocument document = JsonDocument.Parse(
                 process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
             if (!document.RootElement.TryGetProperty("Items", out JsonElement items))
-                return new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
+                return false;
 
             string projectDirectory = Path.GetDirectoryName(request.ProjectPath)!;
             var results = new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
@@ -141,11 +146,12 @@ public sealed partial class DotNetPublishPipelineRunner
                     .OfType<EvaluatedProjectItem>()
                     .ToArray();
             }
-            return results;
+            evaluatedItems = results;
+            return true;
         }
         catch
         {
-            return new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
+            return false;
         }
     }
 
