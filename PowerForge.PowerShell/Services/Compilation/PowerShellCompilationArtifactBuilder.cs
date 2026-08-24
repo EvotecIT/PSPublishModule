@@ -589,7 +589,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                 files.Add(CreateArtifactFile(manifestFile, manifestFile.Equals(primaryManifest, StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
         }
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
-        var conventionalSources = PowerShellConventionalModuleSourceDiscovery.Discover(spec.SourcePath);
+        var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(spec.SourcePath);
         var runtimeHooks = PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(spec.SourcePath, spec.ModuleManifestPath)
             .Select(reference => Path.GetFullPath(Path.Combine(
                 sourceRoot,
@@ -604,7 +604,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                      typed.SourcePaths.Where(path => !path.Equals(
                          spec.SourcePath,
                          RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)),
-                     allowConventionalLoader: conventionalSources.Length > 0))
+                     conventionalLoaders: conventionalDiscovery.Loaders))
             files.Add(CreateArtifactFile(dependency, "ModuleDependency"));
         var primaryPath = manifestFiles?.First(path => path.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase)) ?? modulePath;
         return new CopiedArtifact(primaryPath, files.ToArray());

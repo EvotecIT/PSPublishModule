@@ -201,6 +201,100 @@ public sealed class PowerShellCompilationInputResolverTests
     }
 
     [Fact]
+    public void Resolve_DoesNotCompileFilesFromAnUnconsumedConventionalGlob()
+    {
+        using var fixture = ResolverFixture.Create("ConventionalInspection");
+        fixture.Write("ConventionalInspection.psd1", "@{ RootModule = 'ConventionalInspection.psm1' }");
+        var root = fixture.Write(
+            "ConventionalInspection.psm1",
+            "$Inspected = @(Get-ChildItem -Path $PSScriptRoot\\Public\\*.ps1 -Recurse); $Inspected.Count");
+        fixture.Write("Public/Get-UnloadedProof.ps1", "function Get-UnloadedProof { return 3 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.Root);
+
+        Assert.Equal(new[] { root }, resolved.CompilationSourceFiles);
+        Assert.DoesNotContain(resolved.SourceFiles, path => path.Contains("Get-UnloadedProof.ps1", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Resolve_RejectsConventionalGlobWhoseVariableIsReassignedBeforeLoading()
+    {
+        using var fixture = ResolverFixture.Create("ConventionalReassignment");
+        fixture.Write("ConventionalReassignment.psd1", "@{ RootModule = 'ConventionalReassignment.psm1' }");
+        fixture.Write(
+            "ConventionalReassignment.psm1",
+            "$Files = @(Get-ChildItem -Path $PSScriptRoot\\Public\\*.ps1); $Files = @(); foreach ($File in $Files) { . $File.FullName }");
+        fixture.Write("Public/Get-UnloadedProof.ps1", "function Get-UnloadedProof { return 3 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_RejectsConventionalGlobReassignedInsideLoaderCondition()
+    {
+        using var fixture = ResolverFixture.Create("ConventionalConditionReassignment");
+        fixture.Write("ConventionalConditionReassignment.psd1", "@{ RootModule = 'ConventionalConditionReassignment.psm1' }");
+        fixture.Write(
+            "ConventionalConditionReassignment.psm1",
+            "$Files = @(Get-ChildItem -Path $PSScriptRoot\\Public\\*.ps1); foreach ($File in ($Files = @())) { . $File.FullName }");
+        fixture.Write("Public/Get-UnloadedProof.ps1", "function Get-UnloadedProof { return 3 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_AllowsEverySupportedLoaderThatConsumesOneConventionalProducer()
+    {
+        using var fixture = ResolverFixture.Create("RepeatedConventionalLoader");
+        fixture.Write("RepeatedConventionalLoader.psd1", "@{ RootModule = 'RepeatedConventionalLoader.psm1' }");
+        var root = fixture.Write(
+            "RepeatedConventionalLoader.psm1",
+            "$Files = @(Get-ChildItem -Path $PSScriptRoot\\Public\\*.ps1); " +
+            "foreach ($First in $Files) { . $First.FullName }; foreach ($Second in $Files) { . $Second.FullName }");
+        var loaded = fixture.Write("Public/Get-LoadedProof.ps1", "function Get-LoadedProof { return 3 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.Root);
+
+        Assert.Equal(new[] { loaded, root }.OrderBy(static path => path), resolved.CompilationSourceFiles.OrderBy(static path => path));
+    }
+
+    [Fact]
+    public void Resolve_RejectsConditionalDotSourceAsAConventionalLoader()
+    {
+        using var fixture = ResolverFixture.Create("ConditionalConventionalLoader");
+        fixture.Write("ConditionalConventionalLoader.psd1", "@{ RootModule = 'ConditionalConventionalLoader.psm1' }");
+        fixture.Write(
+            "ConditionalConventionalLoader.psm1",
+            "$Files = @(Get-ChildItem -Path $PSScriptRoot\\Public\\*.ps1); foreach ($File in $Files) { if ($false) { . $File.FullName } }");
+        fixture.Write("Public/Get-UnloadedProof.ps1", "function Get-UnloadedProof { return 3 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_RejectsUnrelatedDynamicLoaderAlongsideAcceptedConventionalLoader()
+    {
+        using var fixture = ResolverFixture.Create("MixedConventionalLoaders");
+        fixture.Write("MixedConventionalLoaders.psd1", "@{ RootModule = 'MixedConventionalLoaders.psm1' }");
+        fixture.Write(
+            "MixedConventionalLoaders.psm1",
+            "$Public = @(Get-ChildItem -Path $PSScriptRoot\\Public\\*.ps1); " +
+            "foreach ($Import in $Public) { . $Import.FullName }; " +
+            "foreach ($Other in $ExternalFiles) { . $Other.FullName }");
+        fixture.Write("Public/Get-PublicProof.ps1", "function Get-PublicProof { return 1 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Resolve_BackslashScriptRootPathIsPortable()
     {
         using var fixture = ResolverFixture.Create("PortableModule");

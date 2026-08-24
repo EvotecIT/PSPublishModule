@@ -305,6 +305,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         return false;
     }
 
+    private static bool HasContinuableAncestor(Ast node)
+        => HasLoopAncestor(node) || HasAncestor<SwitchStatementAst>(node);
+
     private void ValidateVariableReferences(IEnumerable<StatementAst> statements)
     {
         foreach (var variable in statements
@@ -415,8 +418,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
                 return;
             case ContinueStatementAst continueStatement when continueStatement.Label is not null:
                 throw Error(continueStatement, "Labeled continue is not supported by the typed compiler.");
-            case ContinueStatementAst continueStatement when !HasLoopAncestor(continueStatement):
-                throw Error(continueStatement, "continue must be inside a supported loop.");
+            case ContinueStatementAst continueStatement when !HasContinuableAncestor(continueStatement):
+                throw Error(continueStatement, "continue must be inside a supported loop or scalar switch.");
             case ContinueStatementAst:
                 AppendLine("continue;");
                 return;

@@ -210,6 +210,33 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
+    [Fact]
+    public void Build_UsesExplicitManifestWhenPreservingNestedModuleFunctionExports()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-RootValue { return 1 }; Export-ModuleMember -Function Get-RootValue",
+            ".psm1");
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Nested.psm1"), "function Get-NestedValue { return 9 }; Export-ModuleMember -Function Get-NestedValue");
+        var manifest = Path.Combine(fixture.RootPath, "Product.psd1");
+        File.WriteAllText(
+            manifest,
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; NestedModules = @('Nested.psm1'); FunctionsToExport = @('Get-RootValue', 'Get-NestedValue'); CmdletsToExport = @() }");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ExplicitManifestNested",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid)
+        {
+            ModuleManifestPath = manifest,
+            CompilationSourcePaths = new[] { fixture.ScriptPath }
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(new[] { "1", "9" }, RunModuleProof(result.ArtifactPath!, "Get-RootValue; Get-NestedValue").Split(Environment.NewLine));
+    }
+
     private static PowerShellCompilationBuildResult BuildResolvedModule(string inputPath, string outputPath, string artifactName)
     {
         var resolved = new PowerShellCompilationInputResolver().Resolve(inputPath);

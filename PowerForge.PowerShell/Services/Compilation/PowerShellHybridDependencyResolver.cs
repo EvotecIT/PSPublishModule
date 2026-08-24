@@ -19,7 +19,7 @@ internal static class PowerShellHybridDependencyResolver
         IEnumerable<string>? additionalEntryPaths = null,
         Func<string, string?>? contentTransformer = null,
         IEnumerable<string>? explicitDependencyPaths = null,
-        bool allowConventionalLoader = false)
+        IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders = null)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
         var comparer = PowerShellCompilationPathSafety.PathComparer;
@@ -29,7 +29,7 @@ internal static class PowerShellHybridDependencyResolver
         var discoveryEntries = (additionalEntryPaths ?? Array.Empty<string>())
             .Concat(explicitDependencyPaths ?? Array.Empty<string>());
         var copied = new List<string>();
-        foreach (var dependency in DiscoverDependencies(sourcePath, discoveryEntries, allowConventionalLoader))
+        foreach (var dependency in DiscoverDependencies(sourcePath, discoveryEntries, conventionalLoaders))
         {
             if (entryPaths.Contains(dependency))
                 continue;
@@ -62,17 +62,17 @@ internal static class PowerShellHybridDependencyResolver
     internal static string[] DiscoverDependencies(
         string sourcePath,
         IEnumerable<string>? additionalEntryPaths = null,
-        bool allowConventionalLoader = false)
-        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: false, allowConventionalLoader);
+        IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders = null)
+        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: false, conventionalLoaders);
 
     internal static string[] DiscoverModuleScopeDependencies(string sourcePath)
-        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths: null, moduleScopeOnly: true, allowConventionalLoader: false);
+        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths: null, moduleScopeOnly: true, conventionalLoaders: null);
 
     private static string[] DiscoverDependenciesCore(
         string sourcePath,
         IEnumerable<string>? additionalEntryPaths,
         bool moduleScopeOnly,
-        bool allowConventionalLoader)
+        IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
         var discovered = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
@@ -111,7 +111,7 @@ internal static class PowerShellHybridDependencyResolver
             {
                 var expression = command.CommandElements.FirstOrDefault()
                     ?? throw new InvalidOperationException($"Dot-source expression at {current}:{command.Extent.StartLineNumber} has no path.");
-                if (allowConventionalLoader && IsConventionalImportExpression(expression, command))
+                if (IsAcceptedConventionalLoader(current, command, conventionalLoaders))
                     continue;
                 var relativePath = NormalizeRelativePath(ReadLiteralPath(expression, current, command.Extent.StartLineNumber));
                 if (Path.IsPathRooted(relativePath) || WildcardPattern.ContainsWildcardCharacters(relativePath))
@@ -129,23 +129,13 @@ internal static class PowerShellHybridDependencyResolver
         return discovered.ToArray();
     }
 
-    private static bool IsConventionalImportExpression(CommandElementAst expression, CommandAst command)
-    {
-        if (expression is not MemberExpressionAst
-        {
-            Expression: VariableExpressionAst variable,
-            Member: StringConstantExpressionAst member
-        } || !member.Value.Equals("FullName", StringComparison.OrdinalIgnoreCase))
-            return false;
-        for (var ancestor = command.Parent; ancestor is not null; ancestor = ancestor.Parent)
-        {
-            if (ancestor is ForEachStatementAst loop)
-                return loop.Variable.VariablePath.UserPath.Equals(variable.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase);
-            if (ancestor is FunctionDefinitionAst or ScriptBlockAst)
-                return false;
-        }
-        return false;
-    }
+    private static bool IsAcceptedConventionalLoader(
+        string sourcePath,
+        CommandAst command,
+        IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders)
+        => conventionalLoaders?.Any(loader =>
+            loader.StartOffset == command.Extent.StartOffset &&
+            loader.SourcePath.Equals(sourcePath, PowerShellCompilationPathSafety.PathComparison)) == true;
 
     private static string ReadLiteralPath(CommandElementAst expression, string sourcePath, int line)
     {

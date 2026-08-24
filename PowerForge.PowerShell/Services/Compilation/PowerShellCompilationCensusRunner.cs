@@ -94,10 +94,12 @@ public sealed class PowerShellCompilationCensusRunner
         IReadOnlyList<PowerShellCompilationCensusProduct> baseline)
     {
         var regressions = new List<PowerShellCompilationCensusRegression>();
-        var currentByName = current.ToDictionary(static product => product.Name, StringComparer.OrdinalIgnoreCase);
+        var currentByPath = current.ToDictionary(
+            static product => Path.GetFullPath(product.Path),
+            PowerShellCompilationPathSafety.PathComparer);
         foreach (var expected in baseline)
         {
-            if (!currentByName.TryGetValue(expected.Name, out var actual))
+            if (!currentByPath.TryGetValue(Path.GetFullPath(expected.Path), out var actual))
             {
                 regressions.Add(new PowerShellCompilationCensusRegression(expected.Name, "ProductPresent", 1, 0));
                 continue;

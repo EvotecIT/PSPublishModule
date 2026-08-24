@@ -22,14 +22,15 @@ internal static class PowerShellCompiledModuleManifest
         if (includeHybridDependencies)
         {
             var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? Directory.GetCurrentDirectory();
-            var conventionalSources = PowerShellConventionalModuleSourceDiscovery.Discover(sourcePath);
+            var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath);
+            var conventionalSources = conventionalDiscovery.SourcePaths;
             var runtimeHooks = GetContainedRuntimeScriptFiles(sourcePath, sourceManifest)
                 .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, NormalizeManifestRelativePath(reference))))
                 .Concat(conventionalSources);
             protectedFiles.AddRange(PowerShellHybridDependencyResolver.DiscoverDependencies(
                 sourcePath,
                 runtimeHooks,
-                allowConventionalLoader: conventionalSources.Length > 0));
+                conventionalLoaders: conventionalDiscovery.Loaders));
         }
         return protectedFiles.Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
     }
@@ -90,7 +91,7 @@ internal static class PowerShellCompiledModuleManifest
                    extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase) ||
                    extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase);
         });
-        var nestedModuleFunctionPatterns = GetNestedModuleFunctionExportPatterns(sourcePath, allFunctions);
+        var nestedModuleFunctionPatterns = GetNestedModuleFunctionExportPatterns(sourcePath, allFunctions, sourceManifest);
         var selectedFallback = Select(explicitFallback, manifestFunctions)
             .Concat(nestedModuleFunctionPatterns)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -193,9 +194,10 @@ internal static class PowerShellCompiledModuleManifest
 
     internal static string[] GetNestedModuleFunctionExportPatterns(
         string sourcePath,
-        IEnumerable<string> sourceFunctionNames)
+        IEnumerable<string> sourceFunctionNames,
+        string? moduleManifestPath = null)
     {
-        var sourceManifest = Path.ChangeExtension(sourcePath, ".psd1");
+        var sourceManifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
         if (!File.Exists(sourceManifest) ||
             !ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules").Any())
         {

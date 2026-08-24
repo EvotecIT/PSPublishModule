@@ -216,7 +216,8 @@ public sealed class PowerShellCompilationInputResolver
         }
         else
         {
-            var conventionalSources = PowerShellConventionalModuleSourceDiscovery.Discover(sourcePath);
+            var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath);
+            var conventionalSources = conventionalDiscovery.SourcePaths;
             var runtimeHooks = manifestPath is null
                 ? Array.Empty<string>()
                 : PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(sourcePath, manifestPath)
@@ -232,7 +233,7 @@ public sealed class PowerShellCompilationInputResolver
             sourceFiles = PowerShellHybridDependencyResolver.DiscoverDependencies(
                     sourcePath,
                     runtimeHooks.Concat(conventionalSources),
-                    allowConventionalLoader: conventionalSources.Length > 0)
+                    conventionalLoaders: conventionalDiscovery.Loaders)
                 .Where(file => IsPowerShellSource(file))
                 .OrderBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
