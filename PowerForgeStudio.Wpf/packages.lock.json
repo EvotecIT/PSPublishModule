@@ -182,7 +182,7 @@
       "dbaclientx.sqlite": {
         "type": "Project",
         "dependencies": {
-          "DBAClientX.Core": "[1.0.1, )",
+          "DBAClientX.Core": "[1.0.8, )",
           "Microsoft.Data.Sqlite": "[10.0.10, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )",
           "SQLitePCLRaw.core": "[3.0.5, )"
@@ -203,8 +203,8 @@
       "powerforgestudio.orchestrator": {
         "type": "Project",
         "dependencies": {
-          "DBAClientX.Core": "[1.0.1, )",
-          "DBAClientX.SQLite": "[0.15.0, )",
+          "DBAClientX.Core": "[1.0.8, )",
+          "DBAClientX.SQLite": "[1.0.8, )",
           "Microsoft.Data.Sqlite": "[10.0.11, )",
           "PowerForge": "[3.0.124, )",
           "PowerForgeStudio.Domain": "[1.0.0, )"
