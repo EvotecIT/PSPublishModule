@@ -32,7 +32,10 @@ public enum PowerShellCompilationCapability
     BoundParameters = 4,
 
     /// <summary>Binary-module methods may construct genuine PowerShell objects.</summary>
-    PowerShellObjects = 8
+    PowerShellObjects = 8,
+
+    /// <summary>Strict executable entry-point parameters must be bindable from process arguments.</summary>
+    ExecutableParameterBinding = 16
 }
 
 /// <summary>

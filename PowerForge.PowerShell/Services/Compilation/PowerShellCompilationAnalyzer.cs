@@ -227,7 +227,15 @@ public sealed partial class PowerShellCompilationAnalyzer
     {
         var diagnostics = new List<PowerShellCompilationDiagnostic>();
         var localVariables = CollectLocalVariables(root);
-        var parameters = AnalyzeParameters(root.ParamBlock, root, file, diagnostics, localVariables, capabilities, localFunctionNames);
+        var parameters = AnalyzeParameters(
+            root.ParamBlock,
+            root,
+            file,
+            diagnostics,
+            localVariables,
+            capabilities,
+            localFunctionNames,
+            kind == PowerShellCompilationUnitKind.Script);
 
         AnalyzeUnsupportedNamedBlock(root.DynamicParamBlock, "dynamicparam", root, file, diagnostics, localVariables, capabilities, localFunctionNames);
         AnalyzeUnsupportedNamedBlock(root.BeginBlock, "begin", root, file, diagnostics, localVariables, capabilities, localFunctionNames);
@@ -247,68 +255,6 @@ public sealed partial class PowerShellCompilationAnalyzer
             parameters,
             Deduplicate(diagnostics));
     }
-
-    private static PowerShellCompilationParameter[] AnalyzeParameters(
-        ParamBlockAst? paramBlock,
-        Ast unitRoot,
-        string file,
-        List<PowerShellCompilationDiagnostic> diagnostics,
-        HashSet<string> localVariables,
-        PowerShellCompilationCapability capabilities,
-        ISet<string>? localFunctionNames)
-    {
-        if (paramBlock is null)
-            return Array.Empty<PowerShellCompilationParameter>();
-
-        foreach (var attribute in paramBlock.Attributes)
-            AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, capabilities, localFunctionNames);
-
-        var result = new List<PowerShellCompilationParameter>();
-        foreach (var parameter in paramBlock.Parameters)
-        {
-            var type = parameter.StaticType;
-            if (!IsSupportedParameterType(type))
-            {
-                diagnostics.Add(CreateDiagnostic(
-                    PowerShellCompilationDiagnosticCode.UnsupportedParameterType,
-                    $"Parameter '${parameter.Name.VariablePath.UserPath}' must declare a supported scalar or one-dimensional array type; resolved type was '{type.FullName}'.",
-                    file,
-                    parameter.Extent));
-            }
-
-            var isSwitch = type == typeof(System.Management.Automation.SwitchParameter);
-            result.Add(new PowerShellCompilationParameter(
-                parameter.Name.VariablePath.UserPath,
-                (isSwitch ? typeof(bool) : type).FullName ?? type.Name,
-                parameter.DefaultValue is not null,
-                IsMandatoryParameter(parameter),
-                isSwitch,
-                GetAliases(parameter),
-                HasMetadataAttribute(parameter, "AllowNull"),
-                GetValidations(parameter)));
-
-            foreach (var attribute in parameter.Attributes.Where(static attribute => attribute is not TypeConstraintAst))
-                AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, capabilities, localFunctionNames);
-            if (parameter.DefaultValue is not null)
-            {
-                diagnostics.Add(CreateDiagnostic(
-                    PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                    $"Parameter '${parameter.Name.VariablePath.UserPath}' declares a PowerShell default value, which is not supported by the typed compiler.",
-                    file,
-                    parameter.DefaultValue.Extent));
-                AnalyzeNode(parameter.DefaultValue, unitRoot, file, diagnostics, localVariables, capabilities, localFunctionNames);
-            }
-        }
-
-        ValidateParameterBindingNames(paramBlock, file, diagnostics);
-
-        return result.ToArray();
-    }
-
-    private static bool IsSupportedParameterType(Type type)
-        => type == typeof(System.Management.Automation.SwitchParameter) ||
-           SupportedParameterTypes.Contains(type) ||
-           (type.IsArray && type.GetArrayRank() == 1 && SupportedParameterTypes.Contains(type.GetElementType()!));
 
     private static void AnalyzeNode(
         Ast node,

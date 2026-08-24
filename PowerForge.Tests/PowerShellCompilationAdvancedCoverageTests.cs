@@ -162,7 +162,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(new[] { "visible", "2" }, RunModuleProof(result.ArtifactPath!, "Invoke-FrontierRegion -Value 1").Split(Environment.NewLine));
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
         Assert.Contains("$null = Write-Output 'hidden'", generated, StringComparison.Ordinal);
-        Assert.Contains("result += 1", generated, StringComparison.Ordinal);
+        Assert.Contains("result = checked((int)(result + 1))", generated, StringComparison.Ordinal);
     }
 
     [Fact]

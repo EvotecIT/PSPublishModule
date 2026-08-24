@@ -209,7 +209,7 @@ internal static class Program
                         if (!IsWithinRange(item, validation.Arguments[0], validation.Arguments[1]))
                             throw new ArgumentException($"Value '{ToCurrentCultureString(item)}' is outside the valid range for parameter '--{parameter.Name}'.");
                         break;
-                    case ValidationKind.Pattern when !Regex.IsMatch(ToCurrentCultureString(item), validation.Arguments[0], RegexOptions.IgnoreCase | RegexOptions.CultureInvariant):
+                    case ValidationKind.Pattern when !Regex.IsMatch(ToCurrentCultureString(item), validation.Arguments[0], RegexOptions.IgnoreCase):
                         throw new ArgumentException($"Value '{ToCurrentCultureString(item)}' does not match the validation pattern for parameter '--{parameter.Name}'.");
                 }
             }

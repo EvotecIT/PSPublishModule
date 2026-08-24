@@ -89,7 +89,8 @@ public sealed class PowerShellCompilationBuildSpec
               PowerShellCompilationCapability.PowerShellObjects
             : kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Strict
                 ? PowerShellCompilationCapability.LocalFunctionCalls |
-                  PowerShellCompilationCapability.BoundParameters
+                  PowerShellCompilationCapability.BoundParameters |
+                  PowerShellCompilationCapability.ExecutableParameterBinding
                 : PowerShellCompilationCapability.None;
     }
 

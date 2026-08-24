@@ -35,6 +35,8 @@ internal static class PowerShellTypedExecutableEmitter
             .ToString();
 
         var parameters = ast.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
+        foreach (var parameter in parameters)
+            PowerShellTypedExecutableParameterPolicy.EnsureSupported(parameter);
         var analyzedParameters = scriptUnit.Parameters.ToDictionary(static parameter => parameter.Name, StringComparer.OrdinalIgnoreCase);
         var parameterSpecs = string.Join(Environment.NewLine, parameters.Select(parameter =>
         {
@@ -64,9 +66,7 @@ internal static class PowerShellTypedExecutableEmitter
     }
 
     private static Type GetCompiledParameterType(ParameterAst parameter)
-        => parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
-            ? typeof(bool)
-            : parameter.StaticType;
+        => PowerShellTypedExecutableParameterPolicy.GetCompiledType(parameter.StaticType);
 
     private static string GenerateStringArray(IEnumerable<string> values)
         => "new string[] { " + string.Join(", ", values.Select(PowerShellCSharpLiteral.QuoteString)) + " }";

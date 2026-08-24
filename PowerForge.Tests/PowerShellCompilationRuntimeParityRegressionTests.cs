@@ -6,6 +6,117 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
     [Fact]
+    public void AnalyzeAndBuild_StrictExecutableRejectUnbindableDictionaryEntryParameter()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([Parameter(Mandatory)] [hashtable] $Map); return $Map['value']");
+        var resolved = new PowerShellCompilationInputResolver().Resolve(
+            fixture.ScriptPath,
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict);
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(resolved, PowerShellCompilationMode.Strict, "net8.0");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.UnbindableEntryParameter",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict));
+
+        Assert.False(plan.CanProceed);
+        Assert.Contains(plan.Files.SelectMany(static file => file.Units).SelectMany(static unit => unit.Diagnostics), static diagnostic =>
+            diagnostic.Message.Contains("process arguments", StringComparison.OrdinalIgnoreCase));
+        Assert.False(result.Succeeded);
+        Assert.Contains("process arguments", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_StrictLibraryUsesCheckedIntegralCompoundAssignments()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Add-Overflow { param([byte] $value, [byte] $operand) $value += $operand; return $value } " +
+            "function Subtract-Overflow { param([byte] $value, [byte] $operand) $value -= $operand; return $value } " +
+            "function Multiply-Overflow { param([byte] $value, [byte] $operand) $value *= $operand; return $value }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.CheckedCompoundAssignments",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict)
+        {
+            EmitSource = true
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var assembly = System.Reflection.Assembly.LoadFrom(result.ArtifactPath!);
+        var cases = new (string Name, object?[] Arguments)[]
+        {
+            ("Add_Overflow", new object?[] { byte.MaxValue, (byte)1 }),
+            ("Subtract_Overflow", new object?[] { byte.MinValue, (byte)1 }),
+            ("Multiply_Overflow", new object?[] { byte.MaxValue, (byte)2 })
+        };
+        foreach (var item in cases)
+        {
+            var method = assembly.GetTypes().SelectMany(static type => type.GetMethods()).Single(candidate => candidate.Name == item.Name);
+            var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() => method.Invoke(null, item.Arguments));
+            Assert.IsType<OverflowException>(exception.InnerException);
+        }
+        var source = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
+        Assert.Equal(3, source.Split(new[] { "checked(" }, StringSplitOptions.None).Length - 1);
+
+        var engines = new List<string> { "pwsh" };
+        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+            engines.Add("powershell.exe");
+        foreach (var engine in engines)
+        {
+            var native = Run(
+                engine,
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "$ErrorActionPreference = 'Stop'; [byte] $value = 255; [byte] $operand = 1; $value += $operand");
+            Assert.NotEqual(0, native.ExitCode);
+        }
+    }
+
+    [Fact]
+    public void Build_StrictExecutableUsesCurrentCultureForValidatePattern()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([ValidatePattern('^i$')] [string] $Value); return $Value");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ExecutableCulturePattern",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict)
+        {
+            EmitSource = true,
+            SingleFile = false
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "Program.cs"));
+        Assert.DoesNotContain("RegexOptions.CultureInvariant", generated, StringComparison.Ordinal);
+        var generatedAssembly = Assert.Single(result.Manifest!.Files, static file => file.Role == "GeneratedAssembly");
+        var assembly = System.Reflection.Assembly.LoadFrom(generatedAssembly.Path);
+        var entryPoint = assembly.EntryPoint;
+        Assert.NotNull(entryPoint);
+        var previousCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+            var exitCode = entryPoint!.Invoke(null, new object?[] { new[] { "--Value=İ" } });
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
     public void Build_StrictLibraryReturnsNullWhenIndexingNullDictionary()
     {
         using var fixture = ArtifactFixture.Create(

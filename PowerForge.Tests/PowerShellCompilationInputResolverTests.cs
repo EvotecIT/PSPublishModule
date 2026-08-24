@@ -218,6 +218,25 @@ public sealed class PowerShellCompilationInputResolverTests
             resolved.CompilationSourceFiles.OrderBy(static path => path));
     }
 
+    [Theory]
+    [InlineData("Path", "Public/*.ps1")]
+    [InlineData("LiteralPath", "Public/Get-AttachedProof.ps1")]
+    public void Resolve_ConventionalModuleLoaderAcceptsAttachedPathArguments(string parameterName, string relativePath)
+    {
+        using var fixture = ResolverFixture.Create("AttachedPathModule");
+        fixture.Write("AttachedPathModule.psd1", "@{ RootModule = 'AttachedPathModule.psm1' }");
+        var root = fixture.Write(
+            "AttachedPathModule.psm1",
+            $"$Files = @(Get-ChildItem -{parameterName}:\"$PSScriptRoot/{relativePath}\"); foreach ($File in $Files) {{ . $File.FullName }}");
+        var function = fixture.Write("Public/Get-AttachedProof.ps1", "function Get-AttachedProof { return 1 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.Root);
+
+        Assert.Equal(
+            new[] { function, root }.OrderBy(static path => path),
+            resolved.CompilationSourceFiles.OrderBy(static path => path));
+    }
+
     [Fact]
     public void Resolve_RecursiveConventionalLoaderSkipsInaccessibleDirectories()
     {

@@ -129,13 +129,16 @@ internal static class PowerShellConventionalModuleSourceDiscovery
     {
         relativePattern = string.Empty;
         isLiteralPath = false;
-        for (var index = 1; index < command.CommandElements.Count - 1; index++)
+        for (var index = 1; index < command.CommandElements.Count; index++)
         {
             if (command.CommandElements[index] is not CommandParameterAst parameter ||
                 !parameter.ParameterName.Equals("Path", StringComparison.OrdinalIgnoreCase) &&
                 !parameter.ParameterName.Equals("LiteralPath", StringComparison.OrdinalIgnoreCase))
                 continue;
-            if (command.CommandElements[index + 1] is not ExpandableStringExpressionAst expandable ||
+            var argument = parameter.Argument;
+            if (argument is null && index + 1 < command.CommandElements.Count)
+                argument = command.CommandElements[index + 1] as ExpressionAst;
+            if (argument is not ExpandableStringExpressionAst expandable ||
                 expandable.NestedExpressions.Count != 1 ||
                 expandable.NestedExpressions[0] is not VariableExpressionAst variable ||
                 !variable.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase))
