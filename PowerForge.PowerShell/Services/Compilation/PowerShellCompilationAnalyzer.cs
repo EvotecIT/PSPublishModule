@@ -1,4 +1,5 @@
 using System.Management.Automation.Language;
+using System.Globalization;
 
 namespace PowerForge;
 
@@ -332,11 +333,16 @@ public sealed class PowerShellCompilationAnalyzer
                     parameter.Extent));
             }
 
+            var isSwitch = type == typeof(System.Management.Automation.SwitchParameter);
             result.Add(new PowerShellCompilationParameter(
                 parameter.Name.VariablePath.UserPath,
-                type.FullName ?? type.Name,
+                (isSwitch ? typeof(bool) : type).FullName ?? type.Name,
                 parameter.DefaultValue is not null,
-                IsMandatoryParameter(parameter)));
+                IsMandatoryParameter(parameter),
+                isSwitch,
+                GetAliases(parameter),
+                HasMetadataAttribute(parameter, "AllowNull"),
+                GetValidations(parameter)));
 
             foreach (var attribute in parameter.Attributes.Where(static attribute => attribute is not TypeConstraintAst))
                 AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables);
@@ -355,7 +361,9 @@ public sealed class PowerShellCompilationAnalyzer
     }
 
     private static bool IsSupportedParameterType(Type type)
-        => SupportedParameterTypes.Contains(type) || (type.IsArray && type.GetArrayRank() == 1 && SupportedParameterTypes.Contains(type.GetElementType()!));
+        => type == typeof(System.Management.Automation.SwitchParameter) ||
+           SupportedParameterTypes.Contains(type) ||
+           (type.IsArray && type.GetArrayRank() == 1 && SupportedParameterTypes.Contains(type.GetElementType()!));
 
     private static void AnalyzeNode(Ast node, Ast unitRoot, string file, List<PowerShellCompilationDiagnostic> diagnostics, HashSet<string> localVariables)
     {
@@ -466,6 +474,15 @@ public sealed class PowerShellCompilationAnalyzer
                             assignment.Extent));
                     }
                     break;
+                case SwitchStatementAst switchStatement when HasUnsupportedSwitchFlags(switchStatement.Flags):
+                    diagnostics.Add(CreateDiagnostic(
+                        PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                        $"Switch flags '{switchStatement.Flags}' require PowerShell runtime matching semantics.",
+                        file,
+                        switchStatement.Extent));
+                    break;
+                case SwitchStatementAst:
+                    break;
                 default:
                     if (!IsSupportedNode(candidate, unitRoot))
                     {
@@ -504,11 +521,14 @@ public sealed class PowerShellCompilationAnalyzer
         => ReferenceEquals(candidate, unitRoot) || candidate is
             NamedBlockAst or StatementBlockAst or ParamBlockAst or ParameterAst or TypeConstraintAst or
             PipelineAst or CommandExpressionAst or AssignmentStatementAst or IfStatementAst or
-            ForStatementAst or WhileStatementAst or ForEachStatementAst or ReturnStatementAst or
+            SwitchStatementAst or ForStatementAst or WhileStatementAst or ForEachStatementAst or ReturnStatementAst or
             BreakStatementAst or ContinueStatementAst or BinaryExpressionAst or UnaryExpressionAst or
             ParenExpressionAst or ConvertExpressionAst or ConstantExpressionAst or StringConstantExpressionAst or ExpandableStringExpressionAst or
             VariableExpressionAst or ArrayLiteralAst or HashtableAst or TypeExpressionAst or MemberExpressionAst or
             InvokeMemberExpressionAst or IndexExpressionAst;
+
+    private static bool HasUnsupportedSwitchFlags(SwitchFlags flags)
+        => (flags & (SwitchFlags.File | SwitchFlags.Regex | SwitchFlags.Wildcard | SwitchFlags.Parallel)) != 0;
 
     private static bool IsMandatoryParameter(ParameterAst parameter)
         => parameter.Attributes
@@ -523,11 +543,88 @@ public sealed class PowerShellCompilationAnalyzer
     {
         if (IsAttributeNamed(attribute, "CmdletBinding"))
             return attribute.PositionalArguments.Count == 0 && attribute.NamedArguments.Count == 0;
-        if (!IsAttributeNamed(attribute, "Parameter") || attribute.PositionalArguments.Count != 0)
+        if (IsAttributeNamed(attribute, "Parameter"))
+        {
+            return attribute.PositionalArguments.Count == 0 && attribute.NamedArguments.All(static argument =>
+                argument.ArgumentName.Equals("Mandatory", StringComparison.OrdinalIgnoreCase) &&
+                TryGetBooleanAttributeValue(argument, out _));
+        }
+        if (IsAttributeNamed(attribute, "Alias"))
+            return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count > 0 &&
+                   attribute.PositionalArguments.All(static argument => argument is StringConstantExpressionAst { Value.Length: > 0 });
+        if (IsAttributeNamed(attribute, "AllowNull") ||
+            IsAttributeNamed(attribute, "ValidateNotNull") ||
+            IsAttributeNamed(attribute, "ValidateNotNullOrEmpty"))
+            return attribute.PositionalArguments.Count == 0 && attribute.NamedArguments.Count == 0;
+        if (IsAttributeNamed(attribute, "ValidateSet"))
+            return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count > 0 &&
+                   attribute.PositionalArguments.All(static argument => argument is StringConstantExpressionAst);
+        if (IsAttributeNamed(attribute, "ValidatePattern"))
+            return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count == 1 &&
+                   attribute.PositionalArguments[0] is StringConstantExpressionAst;
+        if (IsAttributeNamed(attribute, "ValidateRange"))
+            return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count == 2 &&
+                   attribute.PositionalArguments.All(static argument => TryGetInvariantNumericLiteral(argument, out _));
+        return false;
+    }
+
+    private static string[] GetAliases(ParameterAst parameter)
+        => parameter.Attributes
+            .OfType<AttributeAst>()
+            .Where(static attribute => IsAttributeNamed(attribute, "Alias"))
+            .SelectMany(static attribute => attribute.PositionalArguments.OfType<StringConstantExpressionAst>())
+            .Select(static argument => argument.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static bool HasMetadataAttribute(ParameterAst parameter, string name)
+        => parameter.Attributes.OfType<AttributeAst>().Any(attribute => IsAttributeNamed(attribute, name));
+
+    private static PowerShellCompilationValidation[] GetValidations(ParameterAst parameter)
+    {
+        var validations = new List<PowerShellCompilationValidation>();
+        foreach (var attribute in parameter.Attributes.OfType<AttributeAst>())
+        {
+            if (IsAttributeNamed(attribute, "ValidateNotNull"))
+                validations.Add(new PowerShellCompilationValidation(PowerShellCompilationValidationKind.NotNull));
+            else if (IsAttributeNamed(attribute, "ValidateNotNullOrEmpty"))
+                validations.Add(new PowerShellCompilationValidation(PowerShellCompilationValidationKind.NotNullOrEmpty));
+            else if (IsAttributeNamed(attribute, "ValidateSet"))
+                validations.Add(new PowerShellCompilationValidation(
+                    PowerShellCompilationValidationKind.Set,
+                    attribute.PositionalArguments.OfType<StringConstantExpressionAst>().Select(static argument => argument.Value).ToArray()));
+            else if (IsAttributeNamed(attribute, "ValidatePattern") &&
+                     attribute.PositionalArguments.Count == 1 &&
+                     attribute.PositionalArguments[0] is StringConstantExpressionAst pattern)
+                validations.Add(new PowerShellCompilationValidation(PowerShellCompilationValidationKind.Pattern, new[] { pattern.Value }));
+            else if (IsAttributeNamed(attribute, "ValidateRange") && attribute.PositionalArguments.Count == 2)
+                validations.Add(new PowerShellCompilationValidation(
+                    PowerShellCompilationValidationKind.Range,
+                    attribute.PositionalArguments.Select(argument =>
+                        TryGetInvariantNumericLiteral(argument, out var literal) ? literal : string.Empty).ToArray()));
+        }
+        return validations.ToArray();
+    }
+
+    private static bool TryGetInvariantNumericLiteral(ExpressionAst expression, out string literal)
+    {
+        object? value;
+        try
+        {
+            value = expression.SafeGetValue();
+        }
+        catch (InvalidOperationException)
+        {
+            literal = string.Empty;
             return false;
-        return attribute.NamedArguments.All(static argument =>
-            argument.ArgumentName.Equals("Mandatory", StringComparison.OrdinalIgnoreCase) &&
-            TryGetBooleanAttributeValue(argument, out _));
+        }
+        if (value is not byte and not sbyte and not short and not ushort and not int and not uint and not long and not ulong and not float and not double and not decimal)
+        {
+            literal = string.Empty;
+            return false;
+        }
+        literal = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
+        return literal.Length > 0;
     }
 
     private static bool TryGetBooleanAttributeValue(NamedAttributeArgumentAst argument, out bool value)

@@ -169,9 +169,10 @@ public sealed class PowerShellCompilationAnalyzerTests
         var unit = Assert.Single(Assert.Single(plan.Files).Units);
         Assert.False(unit.IsCompilable);
         Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedSyntax && diagnostic.Message.Contains("process", StringComparison.Ordinal));
-        Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedSyntax && diagnostic.Message.Contains("AttributeAst", StringComparison.Ordinal));
         Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.Code == PowerShellCompilationDiagnosticCode.CommandInvocation && diagnostic.Message.Contains("Get-Random", StringComparison.Ordinal));
-        Assert.True(Assert.Single(unit.Parameters).IsMandatory);
+        var parameter = Assert.Single(unit.Parameters);
+        Assert.True(parameter.IsMandatory);
+        Assert.Equal(PowerShellCompilationValidationKind.Range, Assert.Single(parameter.Validations).Kind);
     }
 
     [Fact]

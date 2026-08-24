@@ -72,11 +72,29 @@ public sealed class PowerShellCompilationParameter
 
     /// <summary>Creates a parameter description including preserved binding metadata.</summary>
     public PowerShellCompilationParameter(string name, string typeName, bool hasDefaultValue, bool isMandatory)
+        : this(name, typeName, hasDefaultValue, isMandatory, false, null, false, null)
+    {
+    }
+
+    /// <summary>Creates a parameter description including PowerShell binding and validation metadata.</summary>
+    public PowerShellCompilationParameter(
+        string name,
+        string typeName,
+        bool hasDefaultValue,
+        bool isMandatory,
+        bool isSwitch,
+        string[]? aliases,
+        bool allowNull,
+        PowerShellCompilationValidation[]? validations)
     {
         Name = name ?? string.Empty;
         TypeName = typeName ?? string.Empty;
         HasDefaultValue = hasDefaultValue;
         IsMandatory = isMandatory;
+        IsSwitch = isSwitch;
+        Aliases = aliases ?? Array.Empty<string>();
+        AllowNull = allowNull;
+        Validations = validations ?? Array.Empty<PowerShellCompilationValidation>();
     }
 
     /// <summary>PowerShell parameter name without the dollar prefix.</summary>
@@ -90,6 +108,56 @@ public sealed class PowerShellCompilationParameter
 
     /// <summary>Whether source parameter metadata requires a bound value.</summary>
     public bool IsMandatory { get; }
+
+    /// <summary>Whether the source declares a PowerShell <c>[switch]</c> parameter.</summary>
+    public bool IsSwitch { get; }
+
+    /// <summary>Alternative PowerShell binding names.</summary>
+    public string[] Aliases { get; }
+
+    /// <summary>Whether <c>[AllowNull]</c> is declared.</summary>
+    public bool AllowNull { get; }
+
+    /// <summary>Validation metadata preserved for generated executable and cmdlet binders.</summary>
+    public PowerShellCompilationValidation[] Validations { get; }
+}
+
+/// <summary>Supported PowerShell validation metadata preserved by typed compilation.</summary>
+public enum PowerShellCompilationValidationKind
+{
+    /// <summary>Reject null values.</summary>
+    NotNull,
+
+    /// <summary>Reject null and empty values.</summary>
+    NotNullOrEmpty,
+
+    /// <summary>Require one value from a literal set.</summary>
+    Set,
+
+    /// <summary>Require a numeric value within an inclusive literal range.</summary>
+    Range,
+
+    /// <summary>Require a string matching a regular-expression pattern.</summary>
+    Pattern
+}
+
+/// <summary>One safely resolved validation attribute.</summary>
+public sealed class PowerShellCompilationValidation
+{
+    /// <summary>Creates validation metadata.</summary>
+    public PowerShellCompilationValidation(PowerShellCompilationValidationKind kind, string[]? arguments = null)
+    {
+        if (!Enum.IsDefined(typeof(PowerShellCompilationValidationKind), kind))
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        Kind = kind;
+        Arguments = arguments ?? Array.Empty<string>();
+    }
+
+    /// <summary>Validation behavior.</summary>
+    public PowerShellCompilationValidationKind Kind { get; }
+
+    /// <summary>Invariant literal arguments used by the validation behavior.</summary>
+    public string[] Arguments { get; }
 }
 
 /// <summary>

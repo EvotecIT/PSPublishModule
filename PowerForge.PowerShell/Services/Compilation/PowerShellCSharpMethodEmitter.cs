@@ -23,6 +23,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private readonly PowerShellCSharpMemberEmitter _memberEmitter;
     private readonly string? _targetFramework;
     private int _indent = 1;
+    private int _switchIndex;
 
     internal PowerShellCSharpMethodEmitter(string filePath, FunctionDefinitionAst function, string? targetFramework = null)
         : this(filePath, function.Body, function.Name, SanitizeIdentifier(function.Name), null, targetFramework, initialize: true)
@@ -73,14 +74,15 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         foreach (var parameter in parameters)
         {
             var name = parameter.Name.VariablePath.UserPath;
-            if (!PowerShellGeneratedTypePolicy.IsSupported(parameter.StaticType, _targetFramework))
-                throw Error(parameter, $"Parameter '${name}' uses CLR type '{parameter.StaticType.FullName}' outside the generated project reference set.");
+            var parameterType = GetCompiledParameterType(parameter);
+            if (!PowerShellGeneratedTypePolicy.IsSupported(parameterType, _targetFramework))
+                throw Error(parameter, $"Parameter '${name}' uses CLR type '{parameterType.FullName}' outside the generated project reference set.");
             if (_variables.ContainsKey(name))
                 throw Error(parameter, $"Parameter '${name}' duplicates another parameter under PowerShell's case-insensitive naming rules.");
             var identifier = SanitizeIdentifier(name);
             if (_variableIdentifiers.Values.Contains(identifier, StringComparer.Ordinal))
                 throw Error(parameter, $"Parameter '${name}' collides with another parameter after CLR identifier normalization.");
-            _variables.Add(name, parameter.StaticType);
+            _variables.Add(name, parameterType);
             _variableIdentifiers.Add(name, identifier);
             _explicitlyTypedVariables.Add(name);
         }
@@ -92,7 +94,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         if (returnType != typeof(void) && !HasTerminalValue(statements))
             throw Error(_body, $"Typed non-void unit '{_sourceName}' must end with an explicit return statement on the conservative compilation path.");
         var parameterSource = string.Join(", ", parameters.Select(parameter =>
-            $"{GetTypeName(parameter.StaticType)} {SanitizeIdentifier(parameter.Name.VariablePath.UserPath)}"));
+            $"{GetTypeName(GetCompiledParameterType(parameter))} {SanitizeIdentifier(parameter.Name.VariablePath.UserPath)}"));
 
         AppendLine($"public static {GetTypeName(returnType)} {_generatedName}({parameterSource})");
         AppendLine("{");
@@ -100,7 +102,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         AppendLine("checked");
         AppendLine("{");
         _indent++;
-        foreach (var parameter in parameters.Where(static parameter => parameter.StaticType == typeof(string)))
+        foreach (var parameter in parameters.Where(static parameter => GetCompiledParameterType(parameter) == typeof(string)))
         {
             var identifier = GetVariableIdentifier(parameter.Name.VariablePath.UserPath);
             AppendLine($"{identifier} = {identifier} ?? string.Empty;");
@@ -119,6 +121,11 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
         return new PowerShellCSharpMethodEmission(_generatedName, returnType, _builder.ToString().TrimEnd());
     }
+
+    private static Type GetCompiledParameterType(ParameterAst parameter)
+        => parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
+            ? typeof(bool)
+            : parameter.StaticType;
 
     private void InferLocalTypes(IEnumerable<StatementAst> statements)
     {
@@ -216,6 +223,18 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         for (var parent = node.Parent; parent is not null; parent = parent.Parent)
         {
             if (parent is TAst) return true;
+        }
+        return false;
+    }
+
+    private static bool HasBreakableAncestor(Ast node)
+    {
+        for (var parent = node.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is ForStatementAst or WhileStatementAst or ForEachStatementAst or SwitchStatementAst)
+                return true;
+            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst)
+                return false;
         }
         return false;
     }
@@ -321,6 +340,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             case IfStatementAst ifStatement:
                 EmitIf(ifStatement, returnType);
                 return;
+            case SwitchStatementAst switchStatement:
+                EmitSwitch(switchStatement, returnType);
+                return;
             case ForStatementAst forStatement:
                 EmitFor(forStatement, returnType);
                 return;
@@ -332,8 +354,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
                 return;
             case BreakStatementAst breakStatement when breakStatement.Label is not null:
                 throw Error(breakStatement, "Labeled break is not supported by the typed compiler.");
-            case BreakStatementAst breakStatement when !HasLoopAncestor(breakStatement):
-                throw Error(breakStatement, "break must be inside a supported loop.");
+            case BreakStatementAst breakStatement when !HasBreakableAncestor(breakStatement):
+                throw Error(breakStatement, "break must be inside a supported loop or scalar switch.");
             case BreakStatementAst:
                 AppendLine("break;");
                 return;
@@ -409,6 +431,66 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             EmitBlock(statement.ElseClause, returnType);
         }
     }
+
+    private void EmitSwitch(SwitchStatementAst statement, Type returnType)
+    {
+        if ((statement.Flags & (SwitchFlags.File | SwitchFlags.Regex | SwitchFlags.Wildcard | SwitchFlags.Parallel)) != 0)
+            throw Error(statement, $"Switch flags '{statement.Flags}' require PowerShell runtime matching semantics.");
+
+        var conditionType = InferExpressionType(statement.Condition);
+        if (!IsConservativeSwitchScalar(conditionType))
+            throw Error(statement.Condition, $"Scalar switch requires a Boolean, character, string, or numeric condition; resolved type was '{conditionType.FullName}'.");
+        var clauseTypes = statement.Clauses.Select(clause => InferExpressionType(clause.Item1)).ToArray();
+        var incompatibleClause = statement.Clauses
+            .Zip(clauseTypes, static (clause, type) => new { Clause = clause, Type = type })
+            .FirstOrDefault(item => item.Type != conditionType);
+        if (incompatibleClause is not null)
+            throw Error(incompatibleClause.Clause.Item1, $"Scalar switch clause type '{incompatibleClause.Type.FullName}' must exactly match condition type '{conditionType.FullName}' to avoid PowerShell coercion semantics.");
+
+        var index = _switchIndex++;
+        var valueName = $"__switchValue{index}";
+        var matchedName = $"__switchMatched{index}";
+        AppendLine($"{GetTypeName(conditionType)} {valueName} = {EmitExpression(statement.Condition)};");
+        AppendLine($"bool {matchedName} = false;");
+        AppendLine("do");
+        AppendLine("{");
+        _indent++;
+        for (var clauseIndex = 0; clauseIndex < statement.Clauses.Count; clauseIndex++)
+        {
+            var clause = statement.Clauses[clauseIndex];
+            var comparison = EmitSwitchComparison(valueName, conditionType, clause.Item1, statement.Flags);
+            AppendLine($"if ({comparison})");
+            AppendLine("{");
+            _indent++;
+            AppendLine($"{matchedName} = true;");
+            foreach (var bodyStatement in clause.Item2.Statements)
+                EmitStatement(bodyStatement, returnType);
+            _indent--;
+            AppendLine("}");
+        }
+        if (statement.Default is not null)
+        {
+            AppendLine($"if (!{matchedName})");
+            EmitBlock(statement.Default, returnType);
+        }
+        _indent--;
+        AppendLine("}");
+        AppendLine("while (false);");
+    }
+
+    private string EmitSwitchComparison(string valueName, Type conditionType, ExpressionAst clause, SwitchFlags flags)
+    {
+        var clauseSource = EmitExpression(clause);
+        if (conditionType == typeof(string))
+        {
+            var comparison = (flags & SwitchFlags.CaseSensitive) != 0 ? "Ordinal" : "OrdinalIgnoreCase";
+            return $"global::System.String.Equals({valueName}, {clauseSource}, global::System.StringComparison.{comparison})";
+        }
+        return $"{valueName} == {clauseSource}";
+    }
+
+    private static bool IsConservativeSwitchScalar(Type type)
+        => type == typeof(bool) || type == typeof(char) || type == typeof(string) || IsNumeric(type);
 
     private void EmitFor(ForStatementAst statement, Type returnType)
     {

@@ -2,6 +2,7 @@
 #nullable enable
 using System.Collections;
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Compiled;
 
@@ -49,6 +50,11 @@ internal static class Program
                 var value = inlineValue;
                 if (value is null)
                 {
+                    if (parameter.IsSwitch)
+                    {
+                        AddRawValue(raw, parameter, "true");
+                        continue;
+                    }
                     if (index + 1 >= args.Length || LooksLikeNamedToken(args[index + 1]))
                         throw new ArgumentException($"Parameter '--{parameter.Name}' requires a value. Use --{parameter.Name}=<value> for values beginning with '-'.");
                     value = args[++index];
@@ -90,6 +96,7 @@ internal static class Program
             {
                 converted[parameter.Name] = ParseScalar(values[0], parameter.Type, parameter.Name);
             }
+            ValidateValue(parameter, converted[parameter.Name]);
         }
         return converted;
     }
@@ -99,8 +106,13 @@ internal static class Program
         var exact = Parameters.FirstOrDefault(candidate => candidate.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (exact is not null)
             return exact;
+        exact = Parameters.FirstOrDefault(candidate => candidate.Aliases.Any(alias => alias.Equals(name, StringComparison.OrdinalIgnoreCase)));
+        if (exact is not null)
+            return exact;
         var matches = Parameters
-            .Where(candidate => candidate.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+            .Where(candidate => candidate.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase) ||
+                                candidate.Aliases.Any(alias => alias.StartsWith(name, StringComparison.OrdinalIgnoreCase)))
+            .Distinct()
             .Take(2)
             .ToArray();
         return matches.Length switch
@@ -172,6 +184,37 @@ internal static class Program
         return result;
     }
 
+    private static void ValidateValue(ParameterSpec parameter, object? value)
+    {
+        var values = value is IEnumerable enumerable and not string
+            ? enumerable.Cast<object?>().ToArray()
+            : new[] { value };
+        foreach (var validation in parameter.Validations)
+        {
+            foreach (var item in values)
+            {
+                switch (validation.Kind)
+                {
+                    case ValidationKind.NotNull when item is null:
+                        throw new ArgumentException($"Parameter '--{parameter.Name}' does not allow null values.");
+                    case ValidationKind.NotNullOrEmpty when item is null || item is string { Length: 0 }:
+                        throw new ArgumentException($"Parameter '--{parameter.Name}' does not allow null or empty values.");
+                    case ValidationKind.Set when !validation.Arguments.Contains(ToCurrentCultureString(item), StringComparer.OrdinalIgnoreCase):
+                        throw new ArgumentException($"Value '{ToCurrentCultureString(item)}' is not valid for parameter '--{parameter.Name}'. Allowed values: {string.Join(", ", validation.Arguments)}.");
+                    case ValidationKind.Range:
+                        var numeric = Convert.ToDecimal(item, CultureInfo.InvariantCulture);
+                        var minimum = decimal.Parse(validation.Arguments[0], NumberStyles.Number, CultureInfo.InvariantCulture);
+                        var maximum = decimal.Parse(validation.Arguments[1], NumberStyles.Number, CultureInfo.InvariantCulture);
+                        if (numeric < minimum || numeric > maximum)
+                            throw new ArgumentException($"Value '{ToCurrentCultureString(item)}' is outside the valid range for parameter '--{parameter.Name}'.");
+                        break;
+                    case ValidationKind.Pattern when !Regex.IsMatch(ToCurrentCultureString(item), validation.Arguments[0], RegexOptions.IgnoreCase | RegexOptions.CultureInvariant):
+                        throw new ArgumentException($"Value '{ToCurrentCultureString(item)}' does not match the validation pattern for parameter '--{parameter.Name}'.");
+                }
+            }
+        }
+    }
+
     private static bool TryParseNamedToken(string token, out string name, out string? value)
     {
         name = string.Empty;
@@ -216,16 +259,52 @@ internal static class Program
 
     private sealed class ParameterSpec
     {
-        internal ParameterSpec(string name, Type type, bool isRequired)
+        internal ParameterSpec(
+            string name,
+            Type type,
+            bool isRequired,
+            bool isSwitch,
+            string[] aliases,
+            bool allowNull,
+            ValidationSpec[] validations)
         {
             Name = name;
             Type = type;
             IsRequired = isRequired;
+            IsSwitch = isSwitch;
+            Aliases = aliases;
+            AllowNull = allowNull;
+            Validations = validations;
         }
 
         internal string Name { get; }
         internal Type Type { get; }
         internal bool IsRequired { get; }
+        internal bool IsSwitch { get; }
+        internal string[] Aliases { get; }
+        internal bool AllowNull { get; }
+        internal ValidationSpec[] Validations { get; }
         internal bool IsArray => Type.IsArray;
+    }
+
+    private enum ValidationKind
+    {
+        NotNull,
+        NotNullOrEmpty,
+        Set,
+        Range,
+        Pattern
+    }
+
+    private sealed class ValidationSpec
+    {
+        internal ValidationSpec(ValidationKind kind, string[] arguments)
+        {
+            Kind = kind;
+            Arguments = arguments;
+        }
+
+        internal ValidationKind Kind { get; }
+        internal string[] Arguments { get; }
     }
 }

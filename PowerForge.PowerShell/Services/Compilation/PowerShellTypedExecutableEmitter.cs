@@ -51,12 +51,20 @@ internal static class PowerShellTypedExecutableEmitter
             .ToString();
 
         var parameters = ast.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
+        var analyzedParameters = scriptUnits[0].Parameters.ToDictionary(static parameter => parameter.Name, StringComparer.OrdinalIgnoreCase);
         var parameterSpecs = string.Join(Environment.NewLine, parameters.Select(parameter =>
-            "        new ParameterSpec(" + PowerShellCSharpLiteral.QuoteString(parameter.Name.VariablePath.UserPath) + ", typeof(" +
-            PowerShellCSharpMethodEmitter.GetTypeName(parameter.StaticType) + "), " +
-            (IsMandatory(parameter) ? "true" : "false") + "),"));
+        {
+            var metadata = analyzedParameters[parameter.Name.VariablePath.UserPath];
+            return "        new ParameterSpec(" + PowerShellCSharpLiteral.QuoteString(metadata.Name) + ", typeof(" +
+                   PowerShellCSharpMethodEmitter.GetTypeName(GetCompiledParameterType(parameter)) + "), " +
+                   (metadata.IsMandatory ? "true" : "false") + ", " +
+                   (metadata.IsSwitch ? "true" : "false") + ", " +
+                   GenerateStringArray(metadata.Aliases) + ", " +
+                   (metadata.AllowNull ? "true" : "false") + ", " +
+                   GenerateValidations(metadata.Validations) + "),";
+        }));
         var arguments = string.Join(", ", parameters.Select(parameter =>
-            "(" + PowerShellCSharpMethodEmitter.GetTypeName(parameter.StaticType) + ")values[" +
+            "(" + PowerShellCSharpMethodEmitter.GetTypeName(GetCompiledParameterType(parameter)) + ")values[" +
             PowerShellCSharpLiteral.QuoteString(parameter.Name.VariablePath.UserPath) + "]"));
         var invocation = "CompiledPowerShellScript." + method.GeneratedName + "(" + arguments + ")";
         var invocationSource = method.ReturnType == typeof(void)
@@ -69,30 +77,17 @@ internal static class PowerShellTypedExecutableEmitter
         return new PowerShellTypedExecutableEmission(compiledSource, programSource);
     }
 
-    private static bool IsMandatory(ParameterAst parameter)
-    {
-        foreach (var attribute in parameter.Attributes.OfType<AttributeAst>())
-        {
-            if (!attribute.TypeName.Name.Equals("Parameter", StringComparison.OrdinalIgnoreCase) &&
-                !attribute.TypeName.Name.Equals("ParameterAttribute", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
+    private static Type GetCompiledParameterType(ParameterAst parameter)
+        => parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
+            ? typeof(bool)
+            : parameter.StaticType;
 
-            foreach (var argument in attribute.NamedArguments)
-            {
-                if (!argument.ArgumentName.Equals("Mandatory", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                if (argument.ExpressionOmitted)
-                    return true;
-                if (argument.Argument is ConstantExpressionAst { Value: bool constant })
-                    return constant;
-                if (argument.Argument is VariableExpressionAst variable)
-                    return variable.VariablePath.UserPath.Equals("true", StringComparison.OrdinalIgnoreCase);
-            }
-        }
-        return false;
-    }
+    private static string GenerateStringArray(IEnumerable<string> values)
+        => "new string[] { " + string.Join(", ", values.Select(PowerShellCSharpLiteral.QuoteString)) + " }";
+
+    private static string GenerateValidations(IEnumerable<PowerShellCompilationValidation> validations)
+        => "new ValidationSpec[] { " + string.Join(", ", validations.Select(validation =>
+            "new ValidationSpec(ValidationKind." + validation.Kind + ", " + GenerateStringArray(validation.Arguments) + ")")) + " }";
 
     private static string ReadTemplate(string resourceName)
     {

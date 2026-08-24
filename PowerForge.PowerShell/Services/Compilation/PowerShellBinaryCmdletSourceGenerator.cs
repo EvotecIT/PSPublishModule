@@ -162,12 +162,20 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         {
             var parameter = cmdlet.Method.Parameters[index];
             builder.AppendLine($"    [Parameter(Position = {index}{(parameter.IsMandatory ? ", Mandatory = true" : string.Empty)})]");
-            builder.AppendLine($"    public {GetGeneratedTypeName(parameter.TypeName)} {PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name)} {{ get; set; }}{(parameter.TypeName == typeof(string).FullName ? " = string.Empty;" : string.Empty)}");
+            if (parameter.Aliases.Length > 0)
+                builder.AppendLine($"    [Alias({string.Join(", ", parameter.Aliases.Select(PowerShellCSharpLiteral.QuoteString))})]");
+            if (parameter.AllowNull)
+                builder.AppendLine("    [AllowNull]");
+            foreach (var validation in parameter.Validations)
+                builder.AppendLine("    " + GenerateValidationAttribute(validation));
+            var propertyType = parameter.IsSwitch ? "SwitchParameter" : GetGeneratedTypeName(parameter.TypeName);
+            builder.AppendLine($"    public {propertyType} {PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name)} {{ get; set; }}{(!parameter.IsSwitch && parameter.TypeName == typeof(string).FullName ? " = string.Empty;" : string.Empty)}");
             builder.AppendLine();
         }
         builder.AppendLine("    protected override void ProcessRecord()");
         builder.AppendLine("    {");
-        var arguments = string.Join(", ", cmdlet.Method.Parameters.Select(parameter => PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name)));
+        var arguments = string.Join(", ", cmdlet.Method.Parameters.Select(parameter =>
+            PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name) + (parameter.IsSwitch ? ".IsPresent" : string.Empty)));
         var invocation = $"{typed.TypeName}.{cmdlet.Method.GeneratedName}({arguments})";
         if (cmdlet.Method.ReturnType.Equals(typeof(void).FullName, StringComparison.Ordinal))
             builder.AppendLine($"        {invocation};");
@@ -177,6 +185,17 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         builder.AppendLine("}");
         builder.AppendLine();
     }
+
+    private static string GenerateValidationAttribute(PowerShellCompilationValidation validation)
+        => validation.Kind switch
+        {
+            PowerShellCompilationValidationKind.NotNull => "[ValidateNotNull]",
+            PowerShellCompilationValidationKind.NotNullOrEmpty => "[ValidateNotNullOrEmpty]",
+            PowerShellCompilationValidationKind.Set => $"[ValidateSet({string.Join(", ", validation.Arguments.Select(PowerShellCSharpLiteral.QuoteString))})]",
+            PowerShellCompilationValidationKind.Pattern => $"[ValidatePattern({PowerShellCSharpLiteral.QuoteString(validation.Arguments.Single())})]",
+            PowerShellCompilationValidationKind.Range => $"[ValidateRange({string.Join(", ", validation.Arguments)})]",
+            _ => throw new InvalidOperationException($"Unsupported generated validation kind '{validation.Kind}'.")
+        };
 
     private static string GetGeneratedTypeName(string fullName)
     {
