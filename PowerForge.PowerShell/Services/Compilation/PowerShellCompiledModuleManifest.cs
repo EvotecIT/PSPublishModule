@@ -81,7 +81,15 @@ internal static class PowerShellCompiledModuleManifest
         var manifestFileList = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "FileList");
         var selectedCompiled = Select(explicitCompiled, manifestFunctions);
         var explicitCmdlets = explicitExports?.Cmdlets ?? Array.Empty<string>();
-        var hasNestedModules = ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules").Any();
+        var nestedModules = ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules").ToArray();
+        var hasNestedModules = nestedModules.Length > 0;
+        var hasScriptNestedModules = nestedModules.Any(static reference =>
+        {
+            var extension = Path.GetExtension(reference);
+            return extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                   extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase) ||
+                   extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase);
+        });
         var nestedModuleFunctionPatterns = GetNestedModuleFunctionExportPatterns(sourcePath, allFunctions);
         var selectedFallback = Select(explicitFallback, manifestFunctions)
             .Concat(nestedModuleFunctionPatterns)
@@ -111,7 +119,7 @@ internal static class PowerShellCompiledModuleManifest
         {
             mutator.TrySetManifestExports(
                 targetManifest,
-                selectedFallback,
+                hasScriptNestedModules && manifestFunctions is null ? null : selectedFallback,
                 selectedCmdlets,
                 manifestAliases);
         }
@@ -129,6 +137,7 @@ internal static class PowerShellCompiledModuleManifest
         }
 
         var copied = new List<string> { targetManifest };
+        var typedSourcePaths = typed.SourcePaths.Select(Path.GetFullPath).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         foreach (var reference in ReadReferencedFileClosure(sourceManifest))
         {
             var sourceFile = reference.SourcePath;
@@ -143,7 +152,8 @@ internal static class PowerShellCompiledModuleManifest
                 sourceFile,
                 $"Module manifest file reference '{reference.RelativePath}' traverses a symbolic link or junction, which is not allowed for artifact staging.");
             if (sourceFile.Equals(sourcePath, PowerShellCompilationPathSafety.PathComparison) ||
-                sourceFile.Equals(sourceManifest, PowerShellCompilationPathSafety.PathComparison))
+                sourceFile.Equals(sourceManifest, PowerShellCompilationPathSafety.PathComparison) ||
+                typedSourcePaths.Contains(sourceFile))
                 continue;
             var targetFile = ResolveContainedPath(moduleDirectory, reference.RelativePath);
             if (File.Exists(targetFile))
@@ -481,18 +491,6 @@ internal static class PowerShellCompiledModuleManifest
         return fullPath;
     }
 
-    private static string ResolveContainedPath(string root, string baseDirectory, string relativePath)
-    {
-        var normalizedPath = NormalizeManifestRelativePath(relativePath);
-        if (Path.IsPathRooted(normalizedPath) || LooksLikeWindowsRootedPath(relativePath))
-            throw new InvalidOperationException($"Module manifest file reference '{relativePath}' must remain relative to the module root.");
-        var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var fullPath = Path.GetFullPath(Path.Combine(baseDirectory, normalizedPath));
-        if (!fullPath.StartsWith(fullRoot, GetPathComparison()))
-            throw new InvalidOperationException($"Module manifest file reference '{relativePath}' escapes the module root.");
-        return fullPath;
-    }
-
     internal static string NormalizeManifestRelativePath(string path)
         => path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
 
@@ -500,6 +498,11 @@ internal static class PowerShellCompiledModuleManifest
         => path.StartsWith("\\\\", StringComparison.Ordinal) ||
            path.StartsWith("//", StringComparison.Ordinal) ||
            path.Length >= 2 && char.IsLetter(path[0]) && path[1] == ':';
+
+    private static string ResolveSourceManifest(string sourcePath, string? moduleManifestPath)
+        => string.IsNullOrWhiteSpace(moduleManifestPath)
+            ? Path.ChangeExtension(sourcePath, ".psd1")
+            : Path.GetFullPath(moduleManifestPath!.Trim().Trim('"'));
 
     private sealed class ManifestFileReference
     {

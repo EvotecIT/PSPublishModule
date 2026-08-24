@@ -103,13 +103,8 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     /// <inheritdoc />
     protected override void ProcessRecord()
     {
-        var sourcePath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
-        var outputPath = string.IsNullOrWhiteSpace(OutputDirectory)
-            ? System.IO.Path.Combine(System.IO.Path.GetDirectoryName(sourcePath) ?? SessionState.Path.CurrentFileSystemLocation.Path, "artifacts")
-            : SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputDirectory);
-        var artifactName = string.IsNullOrWhiteSpace(Name) ? System.IO.Path.GetFileNameWithoutExtension(sourcePath) : Name!;
-        var mode = Mode ?? PowerShellCompilationBuildSpec.GetDefaultMode(Kind);
-        if (mode == PowerShellCompilationMode.Analyze)
+        var requestedPaths = Path.Select(path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path)).ToArray();
+        if (Mode == PowerShellCompilationMode.Analyze)
         {
             ThrowTerminatingError(new ErrorRecord(
                 new ArgumentException("Analyze mode reports eligibility and does not produce artifacts."),

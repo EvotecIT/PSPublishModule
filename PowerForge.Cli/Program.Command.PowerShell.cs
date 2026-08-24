@@ -59,12 +59,16 @@ internal static partial class Program
             kindOverride = parsedKind;
         }
 
-        var defaultMode = PowerShellCompilationBuildSpec.GetDefaultMode(kind);
-        var modeValue = TryGetOptionValue(args, "--mode") ?? defaultMode.ToString();
-        if (!Enum.TryParse<PowerShellCompilationMode>(modeValue, ignoreCase: true, out var mode) ||
-            !Enum.IsDefined(typeof(PowerShellCompilationMode), mode) ||
-            mode == PowerShellCompilationMode.Analyze)
-            return WritePowerShellError(outputJson, 2, $"Unknown artifact compilation mode '{modeValue}'.", logger, "powershell.build");
+        var modeValue = TryGetOptionValue(args, "--mode");
+        PowerShellCompilationMode? modeOverride = null;
+        if (!string.IsNullOrWhiteSpace(modeValue))
+        {
+            if (!Enum.TryParse<PowerShellCompilationMode>(modeValue, ignoreCase: true, out var parsedMode) ||
+                !Enum.IsDefined(typeof(PowerShellCompilationMode), parsedMode) ||
+                parsedMode == PowerShellCompilationMode.Analyze)
+                return WritePowerShellError(outputJson, 2, $"Unknown artifact compilation mode '{modeValue}'.", logger, "powershell.build");
+            modeOverride = parsedMode;
+        }
 
         try
         {

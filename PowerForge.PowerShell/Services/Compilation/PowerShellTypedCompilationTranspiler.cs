@@ -48,34 +48,22 @@ public sealed class PowerShellTypedCompilationTranspiler
         if (string.IsNullOrWhiteSpace(typeName))
             throw new ArgumentException("A generated type name is required.", nameof(typeName));
 
-        var fullPath = Path.GetFullPath(sourcePath.Trim().Trim('"'));
-        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fullPath, targetFramework: targetFramework));
-        var filePlan = plan.Files.Single();
-        var diagnostics = new List<PowerShellCompilationDiagnostic>(filePlan.Diagnostics);
-        diagnostics.AddRange(filePlan.Units.SelectMany(static unit => unit.Diagnostics));
+        var fullPaths = sourcePaths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(path.Trim().Trim('"')))
+            .Distinct(GetPathComparer())
+            .ToArray();
+        if (fullPaths.Length == 0)
+            throw new ArgumentException("At least one PowerShell source path is required.", nameof(sourcePaths));
 
-        Token[] tokens;
-        ParseError[] parseErrors;
-        var ast = Parser.ParseFile(fullPath, out tokens, out parseErrors);
-        if (parseErrors.Length > 0)
-            return CreateResult(fullPath, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics);
-        typeName = ResolveCollisionFreeTypeName(typeName, ast);
-
-        var eligible = filePlan.Units
-            .Where(unit => unit.Kind == PowerShellCompilationUnitKind.Function &&
-                           unit.IsCompilable)
-            .ToDictionary(static unit => (unit.Name, unit.StartLine));
-        var methods = new List<PowerShellCompiledMethod>();
-        var methodSources = new List<string>();
-        foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-                     .Cast<FunctionDefinitionAst>()
-                     .OrderBy(static function => function.Extent.StartOffset))
+        var diagnostics = new List<PowerShellCompilationDiagnostic>();
+        var parsedFiles = new List<ParsedSource>();
+        foreach (var fullPath in fullPaths)
         {
-            if (excludedMethods is not null &&
-                excludedMethods.Contains(GetMethodKey(function.Name, function.Extent.StartLineNumber)))
-                continue;
-            if (!eligible.TryGetValue((function.Name, function.Body.Extent.StartLineNumber), out var unit))
-                continue;
+            var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fullPath, targetFramework: targetFramework));
+            var filePlan = plan.Files.Single();
+            diagnostics.AddRange(filePlan.Diagnostics);
+            diagnostics.AddRange(filePlan.Units.SelectMany(static unit => unit.Diagnostics));
 
             Token[] tokens;
             ParseError[] parseErrors;
@@ -97,7 +85,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             {
                 diagnostics.Add(new PowerShellCompilationDiagnostic(
                     PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                    $"Function '{item.Function.Name}' is declared more than once across the resolved module source scope.",
+                    $"Function '{item.Function.Name}' is declared more than once and has multiple retained definitions across the resolved module source scope.",
                     item.Path,
                     item.Function.Extent.StartLineNumber,
                     item.Function.Extent.StartColumnNumber));

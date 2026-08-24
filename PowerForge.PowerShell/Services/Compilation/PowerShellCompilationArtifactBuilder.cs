@@ -38,13 +38,15 @@ public sealed class PowerShellCompilationArtifactBuilder
 
         try
         {
-            PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(
-                spec.SourcePath,
-                $"PowerShell compilation source '{spec.SourcePath}' must not traverse a symbolic link or junction.");
-            var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
-                spec.SourcePath,
-                spec.Mode,
-                targetFramework: spec.TargetFramework));
+            var compilationSourcePaths = ResolveCompilationSourcePaths(spec);
+            foreach (var sourcePath in compilationSourcePaths)
+            {
+                PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(
+                    sourcePath,
+                    $"PowerShell compilation source '{sourcePath}' must not traverse a symbolic link or junction.");
+            }
+            ValidateRuntimeHookSourceOwnership(spec, compilationSourcePaths);
+            var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework);
             if (plan.ParseErrorFiles > 0)
                 throw new InvalidOperationException("PowerShell source contains parser errors; no artifact was produced.");
 
@@ -390,11 +392,14 @@ public sealed class PowerShellCompilationArtifactBuilder
         return paths;
     }
 
-    private static PowerShellCompilationPlan AnalyzeCompilationSources(IEnumerable<string> sourcePaths, PowerShellCompilationMode mode)
+    private static PowerShellCompilationPlan AnalyzeCompilationSources(
+        IEnumerable<string> sourcePaths,
+        PowerShellCompilationMode mode,
+        string targetFramework)
     {
         var analyzer = new PowerShellCompilationAnalyzer();
         var files = sourcePaths
-            .SelectMany(path => analyzer.Analyze(new PowerShellCompilationSpec(path, mode)).Files)
+            .SelectMany(path => analyzer.Analyze(new PowerShellCompilationSpec(path, mode, targetFramework: targetFramework)).Files)
             .ToArray();
         return new PowerShellCompilationPlan(mode, files);
     }
@@ -758,6 +763,12 @@ public sealed class PowerShellCompilationArtifactBuilder
     private static bool HasSiblingModuleManifest(string sourcePath)
         => Path.GetExtension(sourcePath).Equals(".psm1", StringComparison.OrdinalIgnoreCase) &&
            File.Exists(Path.ChangeExtension(sourcePath, ".psd1"));
+
+    private static string JoinPowerShellNames(IEnumerable<string> names)
+        => string.Join(", ", names.Select(name => "'" + EscapePowerShellSingleQuotedString(name) + "'"));
+
+    private static string EscapePowerShellSingleQuotedString(string value)
+        => value.Replace("'", "''");
 
     private static CopiedArtifact CreateCopiedArtifactWithSymbols(string sourcePath, string targetPath, string role)
     {

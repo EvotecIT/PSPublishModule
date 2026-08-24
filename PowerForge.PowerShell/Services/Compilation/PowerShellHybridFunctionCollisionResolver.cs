@@ -11,21 +11,27 @@ internal static class PowerShellHybridFunctionCollisionResolver
         PowerShellTypedCompilationResult typed,
         string? targetFramework)
     {
-        Token[] tokens;
-        ParseError[] errors;
-        var ast = Parser.ParseFile(typed.SourcePath, out tokens, out errors);
-        if (errors.Length > 0)
-            return typed;
+        var definitions = new List<(string Path, FunctionDefinitionAst Function)>();
+        foreach (var sourcePath in typed.SourcePaths)
+        {
+            Token[] tokens;
+            ParseError[] errors;
+            var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
+            if (errors.Length > 0)
+                return typed;
+            definitions.AddRange(ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+                .Cast<FunctionDefinitionAst>()
+                .Select(function => (sourcePath, function)));
+        }
 
-        var duplicateNames = ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-            .Cast<FunctionDefinitionAst>()
-            .GroupBy(static function => function.Name, StringComparer.OrdinalIgnoreCase)
+        var duplicateNames = definitions
+            .GroupBy(static item => item.Function.Name, StringComparer.OrdinalIgnoreCase)
             .Where(static group => group.Count() > 1)
             .Select(static group => group.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var excludedMethods = typed.Methods
             .Where(method => duplicateNames.Contains(method.SourceName))
-            .Select(static method => method.SourceName + "\0" + method.SourceLine)
+            .Select(method => Path.GetFullPath(string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath) + "\0" + method.SourceName + "\0" + method.SourceLine)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (excludedMethods.Count == 0)
             return typed;
@@ -35,25 +41,23 @@ internal static class PowerShellHybridFunctionCollisionResolver
             .Select(static method => method.SourceName)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var filtered = new PowerShellTypedCompilationTranspiler().TranspileExcluding(
-            typed.SourcePath,
+            typed.SourcePaths,
             typed.NamespaceName,
             typed.TypeName,
             targetFramework,
             excludedMethods);
         var diagnostics = excludedNames.Select(name =>
         {
-            var definition = ast.FindAll(
-                    node => node is FunctionDefinitionAst function && function.Name.Equals(name, StringComparison.OrdinalIgnoreCase),
-                    searchNestedScriptBlocks: false)
-                .Cast<FunctionDefinitionAst>()
-                .OrderBy(static function => function.Extent.StartOffset)
+            var definition = definitions
+                .Where(item => item.Function.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(static item => item.Function.Extent.StartOffset)
                 .First();
             return new PowerShellCompilationDiagnostic(
                 PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                 $"Function '{name}' has multiple retained definitions, so hybrid compilation keeps PowerShell's runtime replacement semantics.",
-                typed.SourcePath,
-                definition.Extent.StartLineNumber,
-                definition.Extent.StartColumnNumber);
+                definition.Path,
+                definition.Function.Extent.StartLineNumber,
+                definition.Function.Extent.StartColumnNumber);
         });
         return new PowerShellTypedCompilationResult(
             filtered.SourcePath,
@@ -64,6 +68,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
             filtered.Diagnostics.Concat(diagnostics)
                 .OrderBy(static diagnostic => diagnostic.Line)
                 .ThenBy(static diagnostic => diagnostic.Column)
-                .ToArray());
+                .ToArray(),
+            filtered.SourcePaths);
     }
 }
