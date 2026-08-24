@@ -15,7 +15,7 @@ internal static class PowerShellCSharpLiteral
         return escaped.Append('\'').ToString();
     }
 
-    internal static string EscapeStringContent(string value)
+    private static string EscapeStringContent(string value)
     {
         var escaped = new StringBuilder(value.Length);
         foreach (var character in value)

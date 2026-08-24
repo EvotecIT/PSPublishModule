@@ -52,12 +52,12 @@ internal static class PowerShellTypedExecutableEmitter
 
         var parameters = ast.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
         var parameterSpecs = string.Join(Environment.NewLine, parameters.Select(parameter =>
-            "        new ParameterSpec(\"" + EscapeCSharpString(parameter.Name.VariablePath.UserPath) + "\", typeof(" +
+            "        new ParameterSpec(" + PowerShellCSharpLiteral.QuoteString(parameter.Name.VariablePath.UserPath) + ", typeof(" +
             PowerShellCSharpMethodEmitter.GetTypeName(parameter.StaticType) + "), " +
             (IsMandatory(parameter) ? "true" : "false") + "),"));
         var arguments = string.Join(", ", parameters.Select(parameter =>
-            "(" + PowerShellCSharpMethodEmitter.GetTypeName(parameter.StaticType) + ")values[\"" +
-            EscapeCSharpString(parameter.Name.VariablePath.UserPath) + "\"]"));
+            "(" + PowerShellCSharpMethodEmitter.GetTypeName(parameter.StaticType) + ")values[" +
+            PowerShellCSharpLiteral.QuoteString(parameter.Name.VariablePath.UserPath) + "]"));
         var invocation = "CompiledPowerShellScript." + method.GeneratedName + "(" + arguments + ")";
         var invocationSource = method.ReturnType == typeof(void)
             ? "            " + invocation + ";" + Environment.NewLine + "            return 0;"
@@ -101,9 +101,6 @@ internal static class PowerShellTypedExecutableEmitter
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
     }
-
-    private static string EscapeCSharpString(string value)
-        => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 }
 
 internal sealed class PowerShellTypedExecutableEmission

@@ -9,6 +9,7 @@ internal static class PowerShellArtifactSetPublisher
 {
     internal static string CreateStagingDirectory(string outputDirectory, string artifactName)
     {
+        EnsureArtifactNameIsNotReserved(artifactName, nameof(artifactName));
         var path = Path.Combine(outputDirectory, "." + artifactName + ".artifact-staging-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
@@ -38,6 +39,7 @@ internal static class PowerShellArtifactSetPublisher
 
     internal static void Commit(string stagingDirectory, string outputDirectory, string artifactName, IEnumerable<string> protectedSourcePaths)
     {
+        EnsureArtifactNameIsNotReserved(artifactName, nameof(artifactName));
         PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(
             outputDirectory,
             $"PowerShell compilation output directory '{outputDirectory}' must not be a symbolic link or junction.");
@@ -114,6 +116,27 @@ internal static class PowerShellArtifactSetPublisher
     {
         if (!Directory.Exists(path)) return;
         try { Directory.Delete(path, recursive: true); } catch { }
+    }
+
+    /// <summary>Rejects durable artifact names that can occupy publisher lock, staging, or rollback paths.</summary>
+    /// <param name="artifactName">Sanitized artifact name to validate.</param>
+    /// <param name="parameterName">Public parameter name to report when validation fails.</param>
+    internal static void EnsureArtifactNameIsNotReserved(string artifactName, string parameterName)
+    {
+        if (!artifactName.StartsWith(".", StringComparison.Ordinal))
+            return;
+        var marker = artifactName.IndexOf(".artifact-", 1, StringComparison.OrdinalIgnoreCase);
+        if (marker < 2)
+            return;
+        var controlName = artifactName.Substring(marker + ".artifact-".Length);
+        if (controlName.Equals("publish.lock", StringComparison.OrdinalIgnoreCase) ||
+            controlName.StartsWith("staging-", StringComparison.OrdinalIgnoreCase) ||
+            controlName.StartsWith("backup-", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "Artifact name overlaps the reserved publication-control namespace used for locks, staging, and rollback.",
+                parameterName);
+        }
     }
 
     private static bool EntryExists(string path) => File.Exists(path) || Directory.Exists(path);

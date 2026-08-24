@@ -151,7 +151,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
     {
         ValidateDescriptor(cmdlet);
 
-        builder.AppendLine($"[Cmdlet(\"{EscapeCSharpString(cmdlet.Verb)}\", \"{EscapeCSharpString(cmdlet.Noun)}\")]");
+        builder.AppendLine($"[Cmdlet({PowerShellCSharpLiteral.QuoteString(cmdlet.Verb)}, {PowerShellCSharpLiteral.QuoteString(cmdlet.Noun)})]");
         var outputType = GetCmdletOutputTypeName(cmdlet.Method.ReturnType);
         if (outputType is not null)
             builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(outputType)}))]");
@@ -217,9 +217,6 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             ? typeof(object).FullName
             : returnType;
     }
-
-    private static string EscapeCSharpString(string value)
-        => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
     private static PowerShellCompilationDiagnostic CreateDiagnostic(
         PowerShellTypedCompilationResult typed,

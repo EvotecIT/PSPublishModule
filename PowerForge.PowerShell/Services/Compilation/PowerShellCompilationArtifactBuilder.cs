@@ -517,7 +517,7 @@ public sealed class PowerShellCompilationArtifactBuilder
     private static string GenerateInitializer(IEnumerable<string> values)
         => string.Join(", ", values
             .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
-            .Select(name => "\"" + EscapeCSharpString(name) + "\"")
+            .Select(PowerShellCSharpLiteral.QuoteString)
             .ToArray());
 
     private static bool IsAttributeNamed(AttributeAst attribute, string name)
@@ -673,9 +673,6 @@ public sealed class PowerShellCompilationArtifactBuilder
             ? "<PackageReference Include=\"Microsoft.PowerShell.5.ReferenceAssemblies\" Version=\"1.1.0\" PrivateAssets=\"all\" />"
             : $"<PackageReference Include=\"Microsoft.PowerShell.SDK\" Version=\"{GetPowerShellSdkVersion(targetFramework)}\" PrivateAssets=\"all\" ExcludeAssets=\"runtime\" />";
 
-    private static string EscapeCSharpString(string value)
-        => PowerShellCSharpLiteral.EscapeStringContent(value);
-
     private static string ReadTemplate(string resourceName)
     {
         using var stream = typeof(PowerShellCompilationArtifactBuilder).Assembly.GetManifestResourceStream(resourceName)
@@ -706,6 +703,7 @@ public sealed class PowerShellCompilationArtifactBuilder
         if (new[] { ".exe", ".dll", ".pdb", ".powerforge-compilation.json" }
             .Any(suffix => sanitized.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
             throw new ArgumentException("Artifact name must not end with a generated artifact suffix because it can overlap another artifact set.", nameof(value));
+        PowerShellArtifactSetPublisher.EnsureArtifactNameIsNotReserved(sanitized, nameof(value));
         return sanitized;
     }
 

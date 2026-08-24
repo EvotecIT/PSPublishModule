@@ -318,4 +318,50 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var type = assembly.GetType("PowerForge.Compiled.PowerForge_ControlConstantsMethods", throwOnError: true)!;
         Assert.Equal("\0\u0085\u2028\u2029", type.GetMethod("Get_ControlText")!.Invoke(null, null));
     }
+
+    [Fact]
+    public void Build_StrictExecutableEscapesUnicodeLineSeparatorsInParameterNames()
+    {
+        var parameterName = "Value\u2028Part";
+        using var fixture = ArtifactFixture.Create(
+            "param([string] ${" + parameterName + "}); return ${" + parameterName + "}");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ParameterLiteral",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(result.ArtifactPath!, "--" + parameterName, "accepted");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal("accepted", run.StandardOutput.Trim());
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Build_RejectsArtifactNamesInThePublicationControlNamespace()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-Value { return 1 }");
+        var names = new[]
+        {
+            ".PowerForge.Value.artifact-publish.lock",
+            ".PowerForge.Value.artifact-staging-owned",
+            ".PowerForge.Value.artifact-backup-owned"
+        };
+
+        foreach (var name in names)
+        {
+            var exception = Assert.Throws<ArgumentException>(() =>
+                new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                    fixture.ScriptPath,
+                    fixture.OutputPath,
+                    name,
+                    PowerShellCompilationArtifactKind.Library,
+                    PowerShellCompilationMode.Hybrid)));
+
+            Assert.Contains("reserved publication-control namespace", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+        }
+    }
 }
