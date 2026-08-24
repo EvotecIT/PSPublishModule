@@ -45,6 +45,18 @@ internal static class PowerShellArtifactSetPublisher
             $"PowerShell compilation output directory '{outputDirectory}' must not be a symbolic link or junction.");
         var stagingPath = NormalizeDirectoryPath(stagingDirectory);
         var outputPath = NormalizeDirectoryPath(outputDirectory);
+        var protectedPaths = protectedSourcePaths
+            .Select(Path.GetFullPath)
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
+            .ToArray();
+        foreach (var protectedPath in protectedPaths)
+        {
+            if (!File.Exists(protectedPath) && !Directory.Exists(protectedPath))
+                continue;
+            PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(
+                protectedPath,
+                $"Protected compilation source '{protectedPath}' must not traverse a symbolic link or junction.");
+        }
         if (!string.Equals(Path.GetDirectoryName(stagingPath), outputPath, PowerShellCompilationPathSafety.PathComparison))
             throw new InvalidOperationException("Artifact staging must be a direct child of the durable output directory.");
         using var publicationLock = AcquirePublicationLock(outputPath, artifactName);
@@ -61,7 +73,7 @@ internal static class PowerShellArtifactSetPublisher
             artifactName + ".pdb",
             artifactName + ".powerforge-compilation.json"
         }.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        EnsureOwnedEntriesDoNotContainSource(outputPath, ownedNames, protectedSourcePaths);
+        EnsureOwnedEntriesDoNotContainSource(outputPath, ownedNames, protectedPaths);
         var backupDirectory = Path.Combine(outputPath, "." + artifactName + ".artifact-backup-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(backupDirectory);
         var backups = new List<(string Backup, string Target)>();

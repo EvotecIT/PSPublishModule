@@ -364,4 +364,189 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
         }
     }
+
+    [Fact]
+    public void Build_RejectsLinkedSourceAliasBeforeReplacingItsPhysicalOutputEntry()
+    {
+        var container = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var outputPath = Path.Combine(container, "output");
+        var physicalSourceDirectory = Path.Combine(outputPath, "PowerForge.LinkedAlias");
+        var linkedSourceDirectory = Path.Combine(container, "linked-source");
+        var physicalSourcePath = Path.Combine(physicalSourceDirectory, "input.ps1");
+        const string source = "function Get-Value { return 1 }";
+        Directory.CreateDirectory(physicalSourceDirectory);
+        File.WriteAllText(physicalSourcePath, source);
+        try
+        {
+            Directory.CreateSymbolicLink(linkedSourceDirectory, physicalSourceDirectory);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Directory.Delete(container, recursive: true);
+            return;
+        }
+        catch (PlatformNotSupportedException)
+        {
+            Directory.Delete(container, recursive: true);
+            return;
+        }
+
+        try
+        {
+            var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                Path.Combine(linkedSourceDirectory, "input.ps1"),
+                outputPath,
+                "PowerForge.LinkedAlias",
+                PowerShellCompilationArtifactKind.Library,
+                PowerShellCompilationMode.Strict));
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("symbolic link or junction", result.Error, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(physicalSourcePath));
+            Assert.Equal(source, File.ReadAllText(physicalSourcePath));
+        }
+        finally
+        {
+            try { Directory.Delete(linkedSourceDirectory); } catch { }
+            try { Directory.Delete(container, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Build_HybridModulePreservesManifestAllowanceForConditionalExports()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-PublicValue { return 7 }; if ($true) { Export-ModuleMember -Function Get-PublicValue }",
+            ".psm1");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @() }");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ConditionalManifestExport",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; Get-PublicValue");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal("7", run.StandardOutput.Trim());
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Build_MultiFilePackagedExecutableUsesManagedEntryPathWhenLaunchedThroughDotnet()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([string] $DefaultPath = $PSCommandPath, [string] $DefaultRoot = $PSScriptRoot); $DefaultPath; $DefaultRoot; $PSCommandPath; $PSScriptRoot");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.DotnetEntryPath",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package)
+        {
+            SingleFile = false
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var assemblyPath = Assert.Single(result.Manifest!.Files, file => file.Role == "GeneratedAssembly").Path;
+        var run = Run("dotnet", assemblyPath);
+        Assert.Equal(0, run.ExitCode);
+        var output = run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(4, output.Length);
+        AssertPathsEqual(assemblyPath, output[0]);
+        AssertPathsEqual(Path.GetDirectoryName(assemblyPath)!, output[1]);
+        AssertPathsEqual(assemblyPath, output[2]);
+        AssertPathsEqual(Path.GetDirectoryName(assemblyPath)!, output[3]);
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Build_StrictExecutableResolvesUniqueParameterAbbreviation()
+    {
+        using var fixture = ArtifactFixture.Create("param([string] $Name, [string] $Number); return $Name");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedAbbreviation",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(result.ArtifactPath!, "-Na", "Ada");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal("Ada", run.StandardOutput.Trim());
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+
+        var ambiguous = Run(result.ArtifactPath!, "-N", "Ada");
+        Assert.Equal(1, ambiguous.ExitCode);
+        Assert.Contains("ambiguous", ambiguous.StandardError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("$Other = $Value++")]
+    [InlineData("return ($Value++ + 1)")]
+    [InlineData("if ($Value++) { return 1 }")]
+    public void Analyze_RoutesValueProducingIncrementContextsToFallback(string statement)
+    {
+        using var fixture = ArtifactFixture.Create($"function Invoke-ValueContext {{ [int] $Value = 1; {statement} }}");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.False(unit.IsCompilable);
+        Assert.NotEmpty(unit.Diagnostics);
+    }
+
+    [Fact]
+    public void Build_StrictLibraryTreatsIncrementAndDecrementAsOutputFreeMutations()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Invoke-Increment { [int] $Value = 1; $Value++; return $Value++ } " +
+            "function Get-LoopValue { [int] $Sum = 0; for ([int] $Index = 0; $Index -lt 3; $Index++) { $Sum += $Index }; return $Sum }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.IncrementSemantics",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
+        var type = assembly.GetType("PowerForge.Compiled.PowerForge_IncrementSemanticsMethods", throwOnError: true)!;
+        var increment = type.GetMethod("Invoke_Increment")!;
+        Assert.Equal(typeof(void), increment.ReturnType);
+        Assert.Null(increment.Invoke(null, null));
+        Assert.Equal(3, type.GetMethod("Get_LoopValue")!.Invoke(null, null));
+    }
+
+    [Fact]
+    public void Build_StrictLibraryEmitsOversizedIntegerAsBigIntegerParse()
+    {
+        const string value = "1234567890123456789012345678901234567890";
+        using var fixture = ArtifactFixture.Create($"function Get-BigValue {{ return {value}n }}");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.BigIntegerLiteral",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
+        var type = assembly.GetType("PowerForge.Compiled.PowerForge_BigIntegerLiteralMethods", throwOnError: true)!;
+        Assert.Equal(
+            System.Numerics.BigInteger.Parse(value, System.Globalization.CultureInfo.InvariantCulture),
+            type.GetMethod("Get_BigValue")!.Invoke(null, null));
+    }
 }

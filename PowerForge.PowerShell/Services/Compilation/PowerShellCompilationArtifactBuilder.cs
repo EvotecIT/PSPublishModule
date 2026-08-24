@@ -38,6 +38,9 @@ public sealed class PowerShellCompilationArtifactBuilder
 
         try
         {
+            PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(
+                spec.SourcePath,
+                $"PowerShell compilation source '{spec.SourcePath}' must not traverse a symbolic link or junction.");
             var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
                 spec.SourcePath,
                 spec.Mode,

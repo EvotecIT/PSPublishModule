@@ -45,8 +45,7 @@ internal static class Program
 
             if (!positionalOnly && TryParseNamedToken(token, out var name, out var inlineValue))
             {
-                var parameter = Parameters.FirstOrDefault(candidate => candidate.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
-                    ?? throw new ArgumentException($"Unknown parameter '--{name}'.");
+                var parameter = ResolveParameter(name);
                 var value = inlineValue;
                 if (value is null)
                 {
@@ -93,6 +92,23 @@ internal static class Program
             }
         }
         return converted;
+    }
+
+    private static ParameterSpec ResolveParameter(string name)
+    {
+        var exact = Parameters.FirstOrDefault(candidate => candidate.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null)
+            return exact;
+        var matches = Parameters
+            .Where(candidate => candidate.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToArray();
+        return matches.Length switch
+        {
+            0 => throw new ArgumentException($"Unknown parameter '--{name}'."),
+            1 => matches[0],
+            _ => throw new ArgumentException($"Parameter '--{name}' is ambiguous.")
+        };
     }
 
     private static void AddRawValue(IDictionary<string, List<string>> raw, ParameterSpec parameter, string value)

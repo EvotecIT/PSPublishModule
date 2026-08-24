@@ -90,6 +90,7 @@ internal static class PowerShellCompiledModuleManifest
                 .Concat(selectedCompiled)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+        var hasRuntimeControlledExports = explicitExports is { Commands.Length: 0 };
 
         var mutator = new AstModuleManifestMutator();
         if (!mutator.TrySetTopLevelString(targetManifest, "RootModule", rootModuleFileName) &&
@@ -99,11 +100,14 @@ internal static class PowerShellCompiledModuleManifest
                 PowerShellCompilationPathSafety.PathComparison))
             throw new InvalidOperationException($"Module manifest '{sourceManifest}' does not contain a literal RootModule entry that can be updated.");
         ApplyTargetCompatibility(sourceManifest, targetManifest, targetFramework, mutator);
-        mutator.TrySetManifestExports(
-            targetManifest,
-            selectedFallback,
-            selectedCmdlets,
-            manifestAliases);
+        if (!hasRuntimeControlledExports)
+        {
+            mutator.TrySetManifestExports(
+                targetManifest,
+                selectedFallback,
+                selectedCmdlets,
+                manifestAliases);
+        }
         if (manifestVariables is not null)
             mutator.TrySetTopLevelStringArray(targetManifest, "VariablesToExport", manifestVariables);
         if (manifestFileList is not null)

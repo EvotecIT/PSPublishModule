@@ -574,6 +574,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             ParenExpressionAst parenthesized => InferExpressionType(parenthesized.Pipeline),
             ConvertExpressionAst conversion => throw Error(conversion, "Explicit PowerShell conversion expressions require runtime conversion semantics and are not supported by the typed compiler."),
             BinaryExpressionAst binary => InferBinaryType(binary),
+            UnaryExpressionAst unary when IsIncrementOrDecrement(unary) => typeof(void),
             UnaryExpressionAst unary => InferExpressionType(unary.Child),
             ArrayLiteralAst array when array.Elements.Count > 0 && array.Elements.Select(InferExpressionType).Distinct().Count() == 1 => InferExpressionType(array.Elements[0]).MakeArrayType(),
             ArrayLiteralAst array => throw Error(array, "Heterogeneous or empty PowerShell array literals cannot be represented by one inferred CLR array element type."),
@@ -708,6 +709,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             long value => value.ToString(CultureInfo.InvariantCulture) + "L",
             ulong value => value.ToString(CultureInfo.InvariantCulture) + "UL",
             uint value => value.ToString(CultureInfo.InvariantCulture) + "U",
+            System.Numerics.BigInteger value =>
+                $"global::System.Numerics.BigInteger.Parse({EmitString(value.ToString(CultureInfo.InvariantCulture))}, global::System.Globalization.CultureInfo.InvariantCulture)",
             IFormattable value => value.ToString(null, CultureInfo.InvariantCulture),
             _ => throw new PowerShellCSharpEmissionException(constant, $"Constant type '{constant.Value.GetType().FullName}' is not supported.")
         };

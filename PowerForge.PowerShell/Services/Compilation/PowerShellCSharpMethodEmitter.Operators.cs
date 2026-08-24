@@ -134,6 +134,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
            unary.Parent is IndexExpressionAst index &&
            ReferenceEquals(index.Index, unary);
 
+    private static bool IsIncrementOrDecrement(UnaryExpressionAst unary)
+        => unary.TokenKind.ToString() is "PlusPlus" or "MinusMinus" or "PostfixPlusPlus" or "PostfixMinusMinus";
+
     private Type InferBinaryType(BinaryExpressionAst binary)
     {
         var operation = binary.Operator.ToString();

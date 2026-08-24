@@ -8,6 +8,11 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellPackagedScriptRewriter
 {
+    private const string PackagedCommandPathExpression =
+        "$(& { $entryPath = [System.Reflection.Assembly]::GetEntryAssembly().Location; " +
+        "if ([System.IO.Path]::GetFileNameWithoutExtension([System.Environment]::ProcessPath) -eq 'dotnet' -and " +
+        "-not [string]::IsNullOrWhiteSpace($entryPath)) { $entryPath } else { [System.Environment]::ProcessPath } })";
+
     internal static string Rewrite(string sourcePath)
     {
         var ast = Parser.ParseFile(sourcePath, out _, out var errors);
@@ -53,16 +58,16 @@ internal static class PowerShellPackagedScriptRewriter
         var replacements = exits.Select(exit => CreateExitReplacement(exit, invocationPaths))
             .Concat(invocationPaths
                 .Where(path => !exits.Any(exit => Contains(exit.Extent, path.Extent)))
-                .Select(static path => new SourceReplacement(
+                .Select(path => new SourceReplacement(
                     path.Extent.StartOffset,
                     path.Extent.EndOffset,
-                    "[System.Environment]::ProcessPath")))
-            .Concat(parameterBindingPaths.Select(static path => new SourceReplacement(
+                    PackagedCommandPathExpression)))
+            .Concat(parameterBindingPaths.Select(path => new SourceReplacement(
                 path.Extent.StartOffset,
                 path.Extent.EndOffset,
                 path.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase)
-                    ? "$([System.IO.Path]::GetDirectoryName([System.Environment]::ProcessPath))"
-                    : "$([System.Environment]::ProcessPath)")))
+                    ? "$([System.IO.Path]::GetDirectoryName(" + PackagedCommandPathExpression + "))"
+                    : PackagedCommandPathExpression)))
             .OrderByDescending(static replacement => replacement.StartOffset)
             .ToArray();
 
@@ -81,7 +86,7 @@ internal static class PowerShellPackagedScriptRewriter
             .Sum(static replacement => replacement.Text.Length - (replacement.EndOffset - replacement.StartOffset));
         var pathSemantics = new StringBuilder();
         if (prologueEndOffset > 0 && source[prologueEndOffset - 1] is not '\r' and not '\n') pathSemantics.AppendLine();
-        pathSemantics.AppendLine("$script:PSCommandPath = [System.Environment]::ProcessPath");
+        pathSemantics.Append("$script:PSCommandPath = ").AppendLine(PackagedCommandPathExpression);
         pathSemantics.AppendLine("$script:PSScriptRoot = [System.IO.Path]::GetDirectoryName($script:PSCommandPath)");
         source.Insert(prologueEndOffset, pathSemantics.ToString());
         return source.ToString();
@@ -127,7 +132,7 @@ internal static class PowerShellPackagedScriptRewriter
             {
                 var offset = path.Extent.StartOffset - exit.Pipeline!.Extent.StartOffset;
                 rewritten.Remove(offset, path.Extent.EndOffset - path.Extent.StartOffset);
-                rewritten.Insert(offset, "[System.Environment]::ProcessPath");
+                rewritten.Insert(offset, PackagedCommandPathExpression);
             }
             exitCode = "[int](" + rewritten + ")";
         }
