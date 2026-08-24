@@ -10,12 +10,14 @@ public sealed partial class DotNetPublishPipelineRunner
         out string[] imports,
         out PreprocessedProjectReferenceDeclaration[] projectReferenceDeclarations,
         out PreprocessedProjectPropertyDefinition[] preResolvePropertyDefinitions,
-        out bool hasDynamicProjectReferenceTaskOutputs)
+        out bool hasDynamicProjectReferenceTaskOutputs,
+        out EvaluatedProjectItem[] dynamicProjectReferences)
     {
         imports = Array.Empty<string>();
         projectReferenceDeclarations = Array.Empty<PreprocessedProjectReferenceDeclaration>();
         preResolvePropertyDefinitions = Array.Empty<PreprocessedProjectPropertyDefinition>();
         hasDynamicProjectReferenceTaskOutputs = false;
+        dynamicProjectReferences = Array.Empty<EvaluatedProjectItem>();
         string outputPath = Path.Combine(
             Path.GetTempPath(),
             "powerforge-msbuild-imports-" + Guid.NewGuid().ToString("N") + ".xml");
@@ -94,6 +96,10 @@ public sealed partial class DotNetPublishPipelineRunner
             if (document.Root is null)
                 return false;
 
+            IReadOnlyDictionary<string, string> taskOutputProperties =
+                ReadEvaluatedProjectProperties(
+                    request,
+                    ReadProjectReferenceTaskOutputPropertyNames(document));
             bool hasDeclaredProjectReferences = document.Descendants().Any(element =>
                 element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase));
             bool hasDeclaredTargetTimeProjectReferences = document.Descendants().Any(element =>
@@ -104,7 +110,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase) &&
                 element.Attributes().Any(attribute =>
                     attribute.Name.LocalName.Equals("ItemName", StringComparison.OrdinalIgnoreCase) &&
-                    attribute.Value.Trim().Equals("ProjectReference", StringComparison.OrdinalIgnoreCase)) &&
+                    IsPotentialProjectReferenceTaskOutput(attribute.Value, taskOutputProperties)) &&
                 element.Ancestors().Any(ancestor =>
                     ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)));
             bool hasTargetTimeRemovalProperty = document.Descendants().Any(element =>
@@ -122,13 +128,22 @@ public sealed partial class DotNetPublishPipelineRunner
             ScheduledProjectReferenceTargetGraph scheduledTargets = requiresTargetGraph
                 ? ReadScheduledProjectReferenceTargets(request, document, initialTargetExpressions)
                 : ScheduledProjectReferenceTargetGraph.Empty;
+            string[] projectReferenceEvaluationTargets =
+                ReadProjectReferenceEvaluationTargetNames(
+                    taskOutputProperties,
+                    scheduledTargets);
             IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItemLists =
                 ReadEvaluatedProjectItemPaths(
                     request,
-                    ReadProjectReferenceItemListNames(document),
-                    executeResolveReferences:
-                        hasDynamicProjectReferenceTaskOutputs ||
-                        RequiresTargetExecutionForProjectReferenceIdentities(document));
+                    ReadProjectReferenceItemListNames(document, taskOutputProperties),
+                    projectReferenceEvaluationTargets);
+            if (hasDynamicProjectReferenceTaskOutputs &&
+                evaluatedItemLists.TryGetValue(
+                    "ProjectReference",
+                    out EvaluatedProjectItem[]? evaluatedProjectReferences))
+            {
+                dynamicProjectReferences = evaluatedProjectReferences;
+            }
             HashSet<string> immutableGlobalProperties = ReadImmutableGlobalPropertyNames(
                 request,
                 document.Root);
@@ -288,6 +303,64 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    private static string[] ReadProjectReferenceTaskOutputPropertyNames(XDocument document)
+    {
+        return document.Descendants().Where(element =>
+                element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(element => element.Attributes().Where(attribute =>
+                attribute.Name.LocalName.Equals("ItemName", StringComparison.OrdinalIgnoreCase)))
+            .SelectMany(attribute => Regex.Matches(
+                    attribute.Value,
+                    @"\$\(([A-Za-z_][A-Za-z0-9_.-]*)\)",
+                    RegexOptions.CultureInvariant)
+                .Cast<Match>()
+                .Select(match => match.Groups[1].Value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool IsPotentialProjectReferenceTaskOutput(
+        string itemName,
+        IReadOnlyDictionary<string, string> evaluatedProperties)
+    {
+        string value = itemName.Trim();
+        if (value.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        string expanded = Regex.Replace(
+            value,
+            @"\$\(([A-Za-z_][A-Za-z0-9_.-]*)\)",
+            match => evaluatedProperties.TryGetValue(match.Groups[1].Value, out string? propertyValue)
+                ? propertyValue
+                : match.Value,
+            RegexOptions.CultureInvariant);
+        return expanded.Trim().Equals("ProjectReference", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string[] ReadProjectReferenceEvaluationTargetNames(
+        IReadOnlyDictionary<string, string> evaluatedProperties,
+        ScheduledProjectReferenceTargetGraph scheduledTargets)
+    {
+        return scheduledTargets.ReadExecutionOrder()
+            .Where(target => target.Descendants().Any(element =>
+                (element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase) &&
+                 element.Attributes().Any(attribute =>
+                     attribute.Name.LocalName.Equals("ItemName", StringComparison.OrdinalIgnoreCase) &&
+                     IsPotentialProjectReferenceTaskOutput(attribute.Value, evaluatedProperties))) ||
+                (element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase) &&
+                 element.Attributes().Any(attribute =>
+                     (attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
+                      attribute.Name.LocalName.Equals("Update", StringComparison.OrdinalIgnoreCase) ||
+                      attribute.Name.LocalName.Equals("Remove", StringComparison.OrdinalIgnoreCase)) &&
+                     (attribute.Value.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+                      IsMsBuildPropertyFunctionExpression(attribute.Value))))))
+            .Select(target => target.Attribute("Name")?.Value.Trim())
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private static ScheduledProjectReferenceTargetGraph ReadScheduledProjectReferenceTargets(
         ProjectEvaluationRequest request,
         XDocument document,
@@ -339,6 +412,26 @@ public sealed partial class DotNetPublishPipelineRunner
         var afterTargets = new Dictionary<string, List<XElement>>(StringComparer.OrdinalIgnoreCase);
         foreach (XElement target in effectiveTargetOrder)
         {
+            bool hasProvenanceMutation = target.Descendants().Any(element =>
+                element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase) ||
+                element.Name.LocalName.Equals(
+                    "_GlobalPropertiesToRemoveFromProjectReferences",
+                    StringComparison.OrdinalIgnoreCase) ||
+                (element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase) &&
+                 element.Attributes().Any(attribute =>
+                     attribute.Name.LocalName.Equals("ItemName", StringComparison.OrdinalIgnoreCase) &&
+                     IsPotentialProjectReferenceTaskOutput(attribute.Value, evaluatedProperties))));
+            if (hasProvenanceMutation && new[]
+                {
+                    target.Attribute("DependsOnTargets")?.Value,
+                    target.Attribute("BeforeTargets")?.Value,
+                    target.Attribute("AfterTargets")?.Value
+                }.Any(expression => HasUnresolvedMsBuildTargetList(expression, evaluatedProperties)))
+            {
+                throw new InvalidOperationException(
+                    "A provenance-sensitive MSBuild target list could not be resolved.");
+            }
+
             foreach (string destination in ReadExpandedMsBuildTargetList(
                          target.Attribute("BeforeTargets")?.Value,
                          evaluatedProperties))

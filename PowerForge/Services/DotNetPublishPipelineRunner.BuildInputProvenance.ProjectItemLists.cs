@@ -19,7 +19,9 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyDictionary<string, string> Metadata { get; }
     }
 
-    private static string[] ReadProjectReferenceItemListNames(XDocument document)
+    private static string[] ReadProjectReferenceItemListNames(
+        XDocument document,
+        IReadOnlyDictionary<string, string> evaluatedProperties)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (string itemSpec in document.Descendants().Where(element =>
@@ -54,7 +56,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase) &&
                 element.Attributes().Any(attribute =>
                     attribute.Name.LocalName.Equals("ItemName", StringComparison.OrdinalIgnoreCase) &&
-                    attribute.Value.Trim().Equals("ProjectReference", StringComparison.OrdinalIgnoreCase)) &&
+                    IsPotentialProjectReferenceTaskOutput(attribute.Value, evaluatedProperties)) &&
                 element.Ancestors().Any(ancestor =>
                     ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase))))
         {
@@ -63,25 +65,10 @@ public sealed partial class DotNetPublishPipelineRunner
         return names.ToArray();
     }
 
-    private static bool RequiresTargetExecutionForProjectReferenceIdentities(XDocument document)
-    {
-        return document.Descendants().Where(element =>
-                element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase) &&
-                element.Ancestors().Any(ancestor =>
-                    ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)))
-            .SelectMany(element => element.Attributes().Where(attribute =>
-                attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
-                attribute.Name.LocalName.Equals("Update", StringComparison.OrdinalIgnoreCase) ||
-                attribute.Name.LocalName.Equals("Remove", StringComparison.OrdinalIgnoreCase)))
-            .Any(attribute =>
-                attribute.Value.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
-                IsMsBuildPropertyFunctionExpression(attribute.Value));
-    }
-
     private static IReadOnlyDictionary<string, EvaluatedProjectItem[]> ReadEvaluatedProjectItemPaths(
         ProjectEvaluationRequest request,
         IReadOnlyCollection<string> itemNames,
-        bool executeResolveReferences)
+        IReadOnlyCollection<string> evaluationTargets)
     {
         if (itemNames.Count == 0)
             return new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
@@ -95,8 +82,8 @@ public sealed partial class DotNetPublishPipelineRunner
         };
         foreach (string itemName in itemNames)
             arguments.Add("-getItem:" + itemName);
-        if (executeResolveReferences)
-            arguments.Add("-target:ResolveReferences");
+        if (evaluationTargets.Count > 0)
+            arguments.Add("-target:" + string.Join(";", evaluationTargets));
         if (request.Configuration is not null)
             arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
         if (request.TargetFramework is not null)
@@ -113,7 +100,10 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
         }
-        arguments.Add("-p:BuildProjectReferences=false");
+        AddProjectReferenceExecutionProperties(
+            arguments,
+            request,
+            preservePublishBuildProjectReferences: evaluationTargets.Count > 0);
 
         try
         {
@@ -157,6 +147,22 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
         }
+    }
+
+    private static void AddProjectReferenceExecutionProperties(
+        ICollection<string> arguments,
+        ProjectEvaluationRequest request,
+        bool preservePublishBuildProjectReferences)
+    {
+        string buildProjectReferences = request.GlobalProperties.TryGetValue(
+            "BuildProjectReferences",
+            out string? requestedBuildProjectReferences)
+            ? requestedBuildProjectReferences
+            : "true";
+        arguments.Add("-p:BuildProjectReferences=" + EscapeMsBuildPropertyValue(
+            preservePublishBuildProjectReferences ? buildProjectReferences : "false"));
+        if (preservePublishBuildProjectReferences)
+            arguments.Add("-p:BuildingProject=false");
     }
 
     private static EvaluatedProjectItem? ReadEvaluatedProjectItem(

@@ -456,29 +456,25 @@ public sealed partial class DotNetPublishPipelineRunner
                         continue;
                     }
 
-                    foreach (string baseDirectory in identityBaseDirectories.Distinct(
-                                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
-                    {
-                        if (TryResolveLiteralProjectReferencePath(
+                    bool[] baseMatches = identityBaseDirectories.Distinct(
+                            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                        .Select(baseDirectory =>
+                            TryResolveLiteralProjectReferencePath(
                                 baseDirectory,
                                 expandedItemSpec,
                                 out string? declaredPath) &&
-                            string.Equals(declaredPath, referencedPath, comparison))
-                        {
-                            candidateMatches = true;
-                            break;
-                        }
-
-                        if (TryMatchProjectReferenceGlob(
+                            string.Equals(declaredPath, referencedPath, comparison) ||
+                            TryMatchProjectReferenceGlob(
                                 baseDirectory,
                                 expandedItemSpec,
                                 referencedPath,
                                 comparison))
-                        {
-                            candidateMatches = true;
-                            break;
-                        }
+                        .ToArray();
+                    if (baseMatches.Distinct().Count() > 1)
+                    {
+                        candidateIsCertain = false;
                     }
+                    candidateMatches = baseMatches.Any(matches => matches);
                     if (candidateMatches)
                         break;
                 }

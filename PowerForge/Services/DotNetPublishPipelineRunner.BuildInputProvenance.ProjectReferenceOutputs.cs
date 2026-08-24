@@ -42,6 +42,29 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     private static bool TryReadEvaluatedProjectReferences(
+        EvaluatedProjectItem item,
+        string declaringProjectPath,
+        IReadOnlyCollection<string> propertyDefinitionPaths,
+        IReadOnlyList<PreprocessedProjectReferenceDeclaration> projectReferenceDeclarations,
+        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
+        IReadOnlyCollection<string> taskWidePropertyRemovals,
+        out EvaluatedProjectReference[] references)
+    {
+        using JsonDocument document = JsonDocument.Parse(
+            JsonSerializer.Serialize(item.Metadata));
+        return TryReadEvaluatedProjectReferences(
+            document.RootElement,
+            declaringProjectPath,
+            propertyDefinitionPaths,
+            projectReferenceDeclarations,
+            evaluatedConditionProperties,
+            taskWidePropertyRemovals,
+            preferEffectiveLiteralAssignments: true,
+            allowAmbiguousEvaluatedAssignments: true,
+            out references);
+    }
+
+    private static bool TryReadEvaluatedProjectReferences(
         JsonElement item,
         string declaringProjectPath,
         IReadOnlyCollection<string> propertyDefinitionPaths,
@@ -334,8 +357,19 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
 
+        EvaluatedProjectReference[] dynamicTaskOutputReferences = allowAmbiguousEvaluatedAssignments
+            ? rawReferences.Where(rawReference => !projectReferenceDeclarations.Any(declaration =>
+                    DoesProjectReferenceDeclarationMatch(
+                        request.ProjectPath,
+                        Path.GetFullPath(rawReference.ProjectPath),
+                        declaration,
+                        evaluatedConditionProperties) is not ProjectReferenceDeclarationMatch.NoMatch))
+                .ToArray()
+            : Array.Empty<EvaluatedProjectReference>();
+
         references = finalResolvedReferences
             .Concat(boundaryResolvedReferences)
+            .Concat(dynamicTaskOutputReferences)
             .GroupBy(BuildEvaluatedProjectReferenceKey, StringComparer.Ordinal)
             .Select(group => group.First())
             .ToArray();

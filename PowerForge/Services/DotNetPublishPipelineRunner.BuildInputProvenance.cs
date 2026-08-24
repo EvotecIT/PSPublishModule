@@ -564,7 +564,10 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
         }
-        arguments.Add("-p:BuildProjectReferences=false");
+        AddProjectReferenceExecutionProperties(
+            arguments,
+            request,
+            preservePublishBuildProjectReferences: false);
 
         try
         {
@@ -611,6 +614,7 @@ public sealed partial class DotNetPublishPipelineRunner
             PreprocessedProjectPropertyDefinition[] preResolvePropertyDefinitions =
                 Array.Empty<PreprocessedProjectPropertyDefinition>();
             bool hasDynamicProjectReferenceTaskOutputs = false;
+            EvaluatedProjectItem[] dynamicProjectReferences = Array.Empty<EvaluatedProjectItem>();
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
                 AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
@@ -671,7 +675,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         out string[] preprocessedImports,
                         out projectReferenceDeclarations,
                         out preResolvePropertyDefinitions,
-                        out hasDynamicProjectReferenceTaskOutputs))
+                        out hasDynamicProjectReferenceTaskOutputs,
+                        out dynamicProjectReferences))
                     return false;
                 importPaths.UnionWith(preprocessedImports);
                 importPaths.UnionWith(ReadDeclaredBuildInputCandidates(
@@ -693,6 +698,22 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         return false;
                     }
+                }
+                foreach (EvaluatedProjectItem dynamicProjectReference in dynamicProjectReferences)
+                {
+                    if (!TryReadEvaluatedProjectReferences(
+                            dynamicProjectReference,
+                            request.ProjectPath,
+                            importPaths,
+                            projectReferenceDeclarations,
+                            evaluatedProjectReferenceConditionProperties,
+                            taskWideProjectReferencePropertyRemovals,
+                            out EvaluatedProjectReference[] itemReferences))
+                    {
+                        return false;
+                    }
+                    foreach (EvaluatedProjectReference rawReference in itemReferences)
+                        rawReferences[BuildEvaluatedProjectReferenceKey(rawReference)] = rawReference;
                 }
                 foreach (string importPath in importPaths)
                 {
@@ -825,8 +846,11 @@ public sealed partial class DotNetPublishPipelineRunner
                         evaluatedProjectReferenceConditionProperties,
                         taskWideProjectReferencePropertyRemovals,
                         hasDynamicProjectReferenceTaskOutputs,
-                        out EvaluatedProjectReference[] finalResolvedReferences) ||
-                    !TryReadAuthoritativeResolvedProjectReferences(
+                        out EvaluatedProjectReference[] finalResolvedReferences))
+                {
+                    return false;
+                }
+                if (!TryReadAuthoritativeResolvedProjectReferences(
                         request,
                         rawReferences.Values.ToArray(),
                         finalResolvedReferences,
@@ -836,7 +860,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         taskWideProjectReferencePropertyRemovals,
                         hasDynamicProjectReferenceTaskOutputs,
                         out EvaluatedProjectReference[] resolvedReferences))
+                {
                     return false;
+                }
                 foreach (EvaluatedProjectReference reference in MergeResolvedProjectReferenceContexts(
                              rawReferences.Values,
                              resolvedReferences))
@@ -858,30 +884,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 pathMap,
                 generatedProjectReferenceOutputs.ToArray());
             return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static bool TryResolveEvaluatedItemPath(
-        JsonElement item,
-        string metadataName,
-        string baseDirectory,
-        out string? fullPath)
-    {
-        fullPath = null;
-        string? value = ReadItemText(item, metadataName);
-        if (string.IsNullOrWhiteSpace(value))
-            return false;
-
-        try
-        {
-            fullPath = Path.GetFullPath(Path.IsPathRooted(value)
-                ? value
-                : Path.Combine(baseDirectory, value));
-            return File.Exists(fullPath);
         }
         catch
         {
@@ -943,57 +945,5 @@ public sealed partial class DotNetPublishPipelineRunner
             arguments,
             timeout,
             environmentVariables);
-
-    private static bool IsOutputRelevantNoneItem(JsonElement item)
-        => HasRelevantMetadata(item, "CopyToOutputDirectory")
-           || HasRelevantMetadata(item, "CopyToPublishDirectory")
-           || (item.TryGetProperty("Pack", out JsonElement pack) &&
-               pack.ValueKind == JsonValueKind.String &&
-               bool.TryParse(pack.GetString(), out bool packs) && packs);
-
-    private static bool HasRelevantMetadata(JsonElement item, string name)
-        => item.TryGetProperty(name, out JsonElement value)
-           && value.ValueKind == JsonValueKind.String
-           && !string.IsNullOrWhiteSpace(value.GetString())
-           && !value.GetString()!.Equals("Never", StringComparison.OrdinalIgnoreCase);
-
-    private static string? ReadItemText(JsonElement item, string name)
-        => item.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
-
-    private static void AddSemicolonSeparatedPathValues(
-        JsonElement properties,
-        string name,
-        string baseDirectory,
-        HashSet<string> values)
-    {
-        if (!properties.TryGetProperty(name, out JsonElement property) || property.ValueKind != JsonValueKind.String)
-            return;
-        foreach (string value in (property.GetString() ?? string.Empty).Split(
-                     new[] { ';' },
-                     StringSplitOptions.RemoveEmptyEntries))
-        {
-            string fullPath = Path.GetFullPath(
-                Path.IsPathRooted(value) ? value : Path.Combine(baseDirectory, value));
-            if (File.Exists(fullPath) || Directory.Exists(fullPath))
-                values.Add(fullPath);
-        }
-    }
-
-    private static void AddSemicolonSeparatedValues(
-        JsonElement properties,
-        string name,
-        HashSet<string> values)
-    {
-        if (!properties.TryGetProperty(name, out JsonElement property) || property.ValueKind != JsonValueKind.String)
-            return;
-        foreach (string value in (property.GetString() ?? string.Empty).Split(
-                     new[] { ';' },
-                     StringSplitOptions.RemoveEmptyEntries))
-        {
-            values.Add(value.Trim());
-        }
-    }
 
 }

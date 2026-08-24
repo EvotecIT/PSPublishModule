@@ -23,7 +23,7 @@ on:
 jobs:
   DotNetPublishTests:
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","linux"]' || '["ubuntu-latest"]') }}
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v7

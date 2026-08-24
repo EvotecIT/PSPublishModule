@@ -200,7 +200,9 @@ public sealed partial class DotNetPublishPipelineRunner
         var arguments = new List<string>
         {
             "-c",
-            "core.hooksPath=" + (IsWindows() ? "NUL" : "/dev/null")
+            "core.hooksPath=" + (IsWindows() ? "NUL" : "/dev/null"),
+            "-c",
+            "core.fsmonitor=false"
         };
         foreach (string filterName in filterNames)
         {

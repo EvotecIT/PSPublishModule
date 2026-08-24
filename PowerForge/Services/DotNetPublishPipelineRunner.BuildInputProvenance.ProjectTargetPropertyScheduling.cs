@@ -99,15 +99,38 @@ public sealed partial class DotNetPublishPipelineRunner
             RegexOptions.CultureInvariant);
         return expanded.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(entry => entry.Trim())
-            .Where(entry => entry.Length > 0 && entry.IndexOf("$(", StringComparison.Ordinal) < 0)
+            .Where(entry => entry.Length > 0 &&
+                            entry.IndexOf("$(", StringComparison.Ordinal) < 0 &&
+                            entry.IndexOf("@(", StringComparison.Ordinal) < 0 &&
+                            entry.IndexOf("%(", StringComparison.Ordinal) < 0)
             .ToArray();
+    }
+
+    private static bool HasUnresolvedMsBuildTargetList(
+        string? value,
+        IReadOnlyDictionary<string, string> evaluatedProperties)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        string expanded = ExpandKnownMsBuildTargetPropertyFunctions(value!, evaluatedProperties);
+        expanded = Regex.Replace(
+            expanded,
+            @"\$\(([A-Za-z_][A-Za-z0-9_.-]*)\)",
+            match => evaluatedProperties.TryGetValue(match.Groups[1].Value, out string? propertyValue)
+                ? propertyValue
+                : match.Value,
+            RegexOptions.CultureInvariant);
+        return expanded.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+               expanded.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+               expanded.IndexOf("%(", StringComparison.Ordinal) >= 0;
     }
 
     private static string ExpandKnownMsBuildTargetPropertyFunctions(
         string value,
         IReadOnlyDictionary<string, string> evaluatedProperties)
     {
-        return Regex.Replace(
+        string expanded = Regex.Replace(
             value,
             @"\$\(\[System\.String\]::Concat\((?<arguments>.*?)\)\)",
             match => TryExpandStringConcatArguments(
@@ -115,6 +138,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 evaluatedProperties,
                 out string? expanded)
                     ? expanded!
+                    : match.Value,
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        return Regex.Replace(
+            expanded,
+            @"\$\(\[System\.String\]::Copy\(\s*(?:(?<quote>['""])(?<literal>.*?)\k<quote>|\$\((?<property>[A-Za-z_][A-Za-z0-9_.-]*)\))\s*\)\)",
+            match => match.Groups["literal"].Success
+                ? match.Groups["literal"].Value
+                : evaluatedProperties.TryGetValue(match.Groups["property"].Value, out string? propertyValue)
+                    ? propertyValue
                     : match.Value,
             RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Singleline);
     }

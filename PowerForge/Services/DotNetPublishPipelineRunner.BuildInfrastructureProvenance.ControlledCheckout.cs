@@ -1,3 +1,5 @@
+using System.Xml.Linq;
+
 namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
@@ -174,6 +176,9 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!TryInitializeControlledSubmodules(checkoutRoot, filterNames))
                 return false;
 
+            if (!HasOnlyControlledBuildFileInputs(checkoutRoot))
+                return false;
+
             string? controlledRevision = ReadGitText(checkoutRoot, "rev-parse HEAD");
             var controlledStatus = RunBuildInputEvaluationProcess(
                 "git",
@@ -190,6 +195,54 @@ public sealed partial class DotNetPublishPipelineRunner
                    controlledStatus.ExitCode == 0 &&
                    !controlledStatus.TimedOut &&
                    controlledStatus.StdOut.Length == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool HasOnlyControlledBuildFileInputs(string checkoutRoot)
+    {
+        try
+        {
+            var pending = new Stack<string>();
+            pending.Push(checkoutRoot);
+            while (pending.Count > 0)
+            {
+                string directory = pending.Pop();
+                foreach (string childDirectory in Directory.EnumerateDirectories(directory))
+                {
+                    if ((File.GetAttributes(childDirectory) & FileAttributes.ReparsePoint) == 0)
+                        pending.Push(childDirectory);
+                }
+
+                foreach (string path in Directory.EnumerateFiles(directory))
+                {
+                    string extension = Path.GetExtension(path);
+                    if (!extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase) &&
+                        !extension.Equals(".fsproj", StringComparison.OrdinalIgnoreCase) &&
+                        !extension.Equals(".vbproj", StringComparison.OrdinalIgnoreCase) &&
+                        !extension.Equals(".proj", StringComparison.OrdinalIgnoreCase) &&
+                        !extension.Equals(".props", StringComparison.OrdinalIgnoreCase) &&
+                        !extension.Equals(".targets", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    XDocument document = XDocument.Load(path, LoadOptions.PreserveWhitespace);
+                    if (document.DescendantNodes()
+                        .OfType<XText>()
+                        .Select(text => text.Value)
+                        .Concat(document.Descendants().Attributes().Select(attribute => attribute.Value))
+                        .Any(value => ContainsRootedBuildValue(value, checkoutRoot)))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
         }
         catch
         {
