@@ -51,6 +51,7 @@ internal sealed class PowerShellCSharpMemberEmitter
             FieldInfo field => field.FieldType,
             _ => throw _error(member, $"CLR member '{target.Type.FullName}.{name}' is not a readable field or property.")
         };
+        EnsureSupportedReferenceMember(member, target, name, type);
         if (!_isSupportedType(type))
             throw _error(member, $"CLR member '{target.Type.FullName}.{name}' returns type '{type.FullName}' outside the generated project reference set.");
         return type;
@@ -63,6 +64,8 @@ internal sealed class PowerShellCSharpMemberEmitter
         EnsureSupportedArrayMember(member, target, name);
         var resolved = ResolveFieldOrProperty(member, target.Type, target.IsStatic, name);
         var actualName = resolved.Name;
+        var resultType = resolved is PropertyInfo property ? property.PropertyType : ((FieldInfo)resolved).FieldType;
+        EnsureSupportedReferenceMember(member, target, name, resultType);
         if (!target.IsStatic && target.Type.IsArray && actualName.Equals("Length", StringComparison.Ordinal))
         {
             var elementType = target.Type.GetElementType()!;
@@ -70,6 +73,8 @@ internal sealed class PowerShellCSharpMemberEmitter
         }
         if (!target.IsStatic && target.Type == typeof(string))
             return $"({target.Code} ?? string.Empty).{actualName}";
+        if (RequiresNullPropagation(target))
+            return $"({target.Code})?.{actualName}";
         return $"{EmitTarget(target)}.{actualName}";
     }
 
@@ -78,6 +83,22 @@ internal sealed class PowerShellCSharpMemberEmitter
         if (!target.IsStatic && target.Type.IsArray && !name.Equals("Length", StringComparison.OrdinalIgnoreCase))
             throw _error(node, $"CLR array member '{name}' does not preserve PowerShell null-member semantics on the conservative compilation path; only Length is currently eligible.");
     }
+
+    private void EnsureSupportedReferenceMember(Ast node, Target target, string name, Type resultType)
+    {
+        if (!RequiresNullPropagation(target) || !resultType.IsValueType || Nullable.GetUnderlyingType(resultType) is not null)
+            return;
+        throw _error(
+            node,
+            $"CLR member '{target.Type.FullName}.{name}' on a nullable reference receiver returns non-nullable CLR value '{resultType.FullName}', so typed compilation cannot preserve PowerShell's missing-value result.");
+    }
+
+    private static bool RequiresNullPropagation(Target target)
+        => !target.IsStatic &&
+           !target.Type.IsValueType &&
+           target.Type != typeof(string) &&
+           !target.Type.IsArray &&
+           !target.IsKnownNonNull;
 
     internal Type InferInvocationType(InvokeMemberExpressionAst invocation)
     {
@@ -272,8 +293,21 @@ internal sealed class PowerShellCSharpMemberEmitter
             return new Target(type, true, _getTypeName(type));
         }
         var instanceType = _inferExpressionType(expression);
-        return new Target(instanceType, false, _emitExpression(expression), _canNormalizeNullStringReceiver(expression));
+        return new Target(
+            instanceType,
+            false,
+            _emitExpression(expression),
+            _canNormalizeNullStringReceiver(expression),
+            IsKnownNonNullReference(expression));
     }
+
+    private static bool IsKnownNonNullReference(ExpressionAst expression)
+        => expression is StringConstantExpressionAst or ArrayLiteralAst or HashtableAst ||
+           expression is InvokeMemberExpressionAst
+           {
+               Expression: TypeExpressionAst,
+               Member: StringConstantExpressionAst member
+           } && member.Value.Equals("new", StringComparison.OrdinalIgnoreCase);
 
     private Target ResolveIndexTarget(IndexExpressionAst index)
     {
@@ -347,18 +381,20 @@ internal sealed class PowerShellCSharpMemberEmitter
 
     private sealed class Target
     {
-        internal Target(Type type, bool isStatic, string code, bool normalizeNullString = false)
+        internal Target(Type type, bool isStatic, string code, bool normalizeNullString = false, bool isKnownNonNull = false)
         {
             Type = type;
             IsStatic = isStatic;
             Code = code;
             NormalizeNullString = normalizeNullString;
+            IsKnownNonNull = isKnownNonNull;
         }
 
         internal Type Type { get; }
         internal bool IsStatic { get; }
         internal string Code { get; }
         internal bool NormalizeNullString { get; }
+        internal bool IsKnownNonNull { get; }
     }
 
     private sealed class ResolvedInvocation

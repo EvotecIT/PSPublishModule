@@ -162,6 +162,49 @@ public sealed class PowerShellTypedCompilationDifferentialTests
     }
 
     [Fact]
+    public void TypedNullableReferencePropertyAccessPreservesPowerShellMissingValues()
+    {
+        const string source =
+            "function Get-ResolvedTypeName { param([string] $Name); return [Type]::GetType($Name).Name }";
+        using var fixture = DifferentialFixture.Create(source);
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.NullablePropertyDifferential",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+
+        using var assemblyStream = File.OpenRead(build.ArtifactPath!);
+        var loadContext = new AssemblyLoadContext("PowerForgeNullablePropertyDifferential", isCollectible: true);
+        using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        runspace.Open();
+        InitializePowerShellSource(runspace, source);
+        try
+        {
+            var generatedType = loadContext.LoadFromStream(assemblyStream)
+                .GetType("PowerForge.Compiled.PowerForge_NullablePropertyDifferentialMethods", throwOnError: true)!;
+            AssertDifferential(generatedType, runspace, "Get-ResolvedTypeName", "Get_ResolvedTypeName", new[]
+            {
+                new object[] { "System.String" },
+                new object[] { "PowerForge.Missing." + Guid.NewGuid().ToString("N") }
+            });
+        }
+        finally
+        {
+            loadContext.Unload();
+        }
+
+        using var valueFixture = DifferentialFixture.Create(
+            "function Get-ResolvedTypeToken { param([string] $Name); return [Type]::GetType($Name).MetadataToken }");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(valueFixture.ScriptPath));
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("nullable reference receiver", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void TypedVoidClrReturnLowersToInvocationThenReturn()
     {
         const string source = "function Write-TypedLine { param([string] $Value); return ([Console]::WriteLine($Value)) }";
