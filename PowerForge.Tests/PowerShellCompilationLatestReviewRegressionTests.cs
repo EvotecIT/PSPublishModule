@@ -6,10 +6,12 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
     [Fact]
-    public void Build_PackagedExecutablePreservesPathVariablesInOmittedParameterDefaults()
+    public void Build_PackagedExecutablePreservesPathVariablesDuringParameterBinding()
     {
         using var fixture = ArtifactFixture.Create(
-            "param([string] $Config = \"$PSScriptRoot/config.json\", [string] $Command = $PSCommandPath); $Config; $Command");
+            "param([string] $Config = \"$PSScriptRoot/config.json\", [string] $Command = $PSCommandPath, " +
+            "[ValidateScript({ (Test-Path \"$PSScriptRoot/config.json\") -and $PSCommandPath -eq [System.Environment]::ProcessPath })] [string] $Value); " +
+            "$Config; $Command; $Value");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
@@ -18,13 +20,26 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationMode.Package));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        var run = Run(result.ArtifactPath!);
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(result.ArtifactPath!)!, "config.json"), "{}");
+        var run = Run(result.ArtifactPath!, "-Value", "accepted");
         Assert.Equal(0, run.ExitCode);
         var output = run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal(2, output.Length);
+        Assert.Equal(3, output.Length);
         AssertPathsEqual(Path.Combine(Path.GetDirectoryName(result.ArtifactPath!)!, "config.json"), output[0]);
         AssertPathsEqual(result.ArtifactPath!, output[1]);
+        Assert.Equal("accepted", output[2]);
         Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void TargetFrameworkAnalysisRequiresAHostAtLeastAsNewAsTheModernTarget()
+    {
+        Assert.True(PowerShellGeneratedTargetFrameworkPolicy.IsHostCompatible(null, 4, isNetFrameworkHost: true));
+        Assert.True(PowerShellGeneratedTargetFrameworkPolicy.IsHostCompatible("net472", 4, isNetFrameworkHost: true));
+        Assert.False(PowerShellGeneratedTargetFrameworkPolicy.IsHostCompatible("net8.0", 4, isNetFrameworkHost: true));
+        Assert.True(PowerShellGeneratedTargetFrameworkPolicy.IsHostCompatible("net8.0", 8, isNetFrameworkHost: false));
+        Assert.False(PowerShellGeneratedTargetFrameworkPolicy.IsHostCompatible("net10.0", 8, isNetFrameworkHost: false));
+        Assert.True(PowerShellGeneratedTargetFrameworkPolicy.IsHostCompatible("net10.0", 10, isNetFrameworkHost: false));
     }
 
     [Fact]

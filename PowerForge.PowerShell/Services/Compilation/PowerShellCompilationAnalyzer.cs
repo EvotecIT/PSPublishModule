@@ -36,6 +36,7 @@ public sealed class PowerShellCompilationAnalyzer
         if (spec is null)
             throw new ArgumentNullException(nameof(spec));
 
+        PowerShellGeneratedTargetFrameworkPolicy.EnsureHostCanAnalyze(spec.TargetFramework);
         PowerShellGeneratedReferenceAssemblyResolver.EnsureAvailable(spec.TargetFramework);
         var files = DiscoverFiles(spec);
         var basePath = Directory.Exists(spec.Path) ? spec.Path : Path.GetDirectoryName(spec.Path) ?? Directory.GetCurrentDirectory();
