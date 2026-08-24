@@ -125,6 +125,10 @@ public sealed partial class DotNetPublishPipelineRunner
                             .Select(text => text.Value)
                             .Concat(document.Descendants().Attributes().Select(attribute => attribute.Value))
                             .Any(value => ContainsRootedBuildValue(value, gitRoot: null) ||
+                                          ContainsEscapingRelativeBuildValue(
+                                              value,
+                                              Path.Combine("package-root", Path.GetDirectoryName(name) ?? string.Empty),
+                                              "package-root") ||
                                           ContainsUncontrolledEnvironmentReference(value)))
                     {
                         return false;

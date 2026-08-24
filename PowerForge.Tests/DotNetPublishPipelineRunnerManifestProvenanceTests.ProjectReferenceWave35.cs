@@ -103,7 +103,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void ReadSourceProvenance_RebuildsRecordedSubmoduleInsideControlledCheckout()
+    public void ReadSourceProvenance_RejectsGeneratedOutputInsideRecordedSubmodule()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         string leafRoot = Directory.CreateTempSubdirectory().FullName;
@@ -116,6 +116,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 Path.Combine(leafRoot, "Leaf.csproj"),
                 "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
             File.WriteAllText(Path.Combine(leafRoot, "Leaf.cs"), "public static class Leaf { public const int Value = 1; }");
+            File.WriteAllText(Path.Combine(leafRoot, ".gitignore"), "bin/\nobj/\n");
+            RunDotNet(
+                leafRoot,
+                "restore \"Leaf.csproj\" --use-lock-file --nologo -p:BaseIntermediateOutputPath=obj/");
             RunGit(leafRoot, "add .");
             RunGit(leafRoot, "commit -m \"approved leaf\"");
 
@@ -124,20 +128,18 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
             RunGit(root, "config protocol.file.allow always");
             string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
-            string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "Library")).FullName;
             string appProject = Path.Combine(appDirectory, "App.csproj");
-            string libraryProject = Path.Combine(libraryDirectory, "Library.csproj");
-            File.WriteAllText(appProject, EmbeddedLibraryAppProject);
-            File.WriteAllText(libraryProject, """
+            File.WriteAllText(appProject, """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-                  <ItemGroup><ProjectReference Include="../Leaf/Leaf.csproj" /></ItemGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Leaf/Leaf.csproj"
+                                      ReferenceOutputAssembly="false"
+                                      OutputItemType="EmbeddedResource" />
+                  </ItemGroup>
                 </Project>
                 """);
             File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { }");
-            File.WriteAllText(
-                Path.Combine(libraryDirectory, "Library.cs"),
-                "public static class Library { public static int Value => Leaf.Value; }");
             File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
             RunGit(
                 root,
@@ -145,7 +147,16 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
             RunGit(root, "add .");
             RunGit(root, "commit -m \"approved source\"");
-            RunDotNet(root, $"build \"{libraryProject}\" -c Release --no-restore --nologo");
+            string submoduleRoot = Path.Combine(root, "src", "Leaf");
+            string leafProject = Path.Combine(submoduleRoot, "Leaf.csproj");
+            RunDotNet(root, $"build \"{leafProject}\" -c Release --no-restore --nologo");
+            Assert.Equal(
+                string.Empty,
+                RunGit(submoduleRoot, "status --porcelain=v1 --untracked-files=all").Trim());
+            Assert.Contains(
+                RunGit(submoduleRoot, "rev-parse HEAD").Trim(),
+                RunGit(root, "ls-files --stage -- src/Leaf"),
+                StringComparison.OrdinalIgnoreCase);
 
             DotNetPublishPipelineRunner.SourceProvenance provenance =
                 DotNetPublishPipelineRunner.ReadSourceProvenance(
@@ -153,8 +164,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     buildProjectPaths: [appProject],
                     buildConfiguration: "Release");
 
-            Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
-            Assert.Empty(provenance.DirtyPaths);
+            Assert.True(provenance.Dirty);
+            Assert.Contains(
+                provenance.DirtyReasons,
+                reason => reason.Contains("Leaf.dll", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

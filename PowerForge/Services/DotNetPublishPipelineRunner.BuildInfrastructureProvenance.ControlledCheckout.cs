@@ -180,9 +180,56 @@ public sealed partial class DotNetPublishPipelineRunner
         return false;
     }
 
+    internal static bool ContainsEscapingRelativeBuildValue(
+        string value,
+        string baseDirectory,
+        string allowedRoot)
+    {
+        value = DecodeMsBuildEscapes(value);
+        string normalized = value.Replace('\\', '/');
+        for (int index = 0; index < normalized.Length; index++)
+        {
+            if (index > 0 &&
+                !char.IsWhiteSpace(normalized[index - 1]) &&
+                "=,;|([{'\"".IndexOf(normalized[index - 1]) < 0)
+            {
+                continue;
+            }
+            string candidate = normalized.Substring(index).TrimStart('\'', '"');
+            int end = candidate.IndexOfAny(new[] { ';', ',', '|', ')', ']', '}', '\'', '"', ' ', '\t', '\r', '\n' });
+            if (end >= 0)
+                candidate = candidate.Substring(0, end);
+            string[] segments = candidate.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            if (!segments.Any(segment => segment == ".."))
+                continue;
+            if (candidate.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+                candidate.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+                candidate.IndexOf("%(", StringComparison.Ordinal) >= 0)
+            {
+                return true;
+            }
+            try
+            {
+                string resolved = Path.GetFullPath(Path.Combine(baseDirectory, candidate));
+                if (!IsSameOrBelowBuildInputPath(resolved, allowedRoot))
+                    return true;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     internal static bool ContainsUncontrolledEnvironmentReference(string value)
     {
         value = DecodeMsBuildEscapes(value);
+        if (value.IndexOf("System.Environment", StringComparison.OrdinalIgnoreCase) >= 0 &&
+            value.IndexOf("GetEnvironmentVariable", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return true;
+        }
         string[] names =
         {
             "SystemRoot",
@@ -342,6 +389,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         if (File.ReadLines(path).Any(value =>
                                 ContainsRootedBuildValue(value, checkoutRoot) ||
+                                ContainsEscapingRelativeBuildValue(
+                                    value,
+                                    Path.GetDirectoryName(path)!,
+                                    checkoutRoot) ||
                                 ContainsUncontrolledEnvironmentReference(value)))
                             return false;
                         continue;
@@ -377,6 +428,10 @@ public sealed partial class DotNetPublishPipelineRunner
                         .Select(text => text.Value)
                         .Concat(document.Descendants().Attributes().Select(attribute => attribute.Value))
                         .Any(value => ContainsRootedBuildValue(value, checkoutRoot) ||
+                                      ContainsEscapingRelativeBuildValue(
+                                          value,
+                                          Path.GetDirectoryName(path)!,
+                                          checkoutRoot) ||
                                       ContainsUncontrolledEnvironmentReference(value)))
                     {
                         return false;

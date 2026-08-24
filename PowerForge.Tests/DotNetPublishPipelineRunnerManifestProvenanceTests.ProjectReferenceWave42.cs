@@ -17,6 +17,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             "$(WINDIR)\\Temp\\payload.dll"));
         Assert.True(DotNetPublishPipelineRunner.ContainsUncontrolledEnvironmentReference(
             "$(ProgramFiles)\\tool\\payload.dll"));
+        Assert.True(DotNetPublishPipelineRunner.ContainsEscapingRelativeBuildValue(
+            "../../../../outside/payload.dll",
+            Path.Combine(Path.GetTempPath(), "controlled", "src", "App"),
+            Path.Combine(Path.GetTempPath(), "controlled")));
+        Assert.True(DotNetPublishPipelineRunner.ContainsUncontrolledEnvironmentReference(
+            "$([System.Environment]::GetEnvironmentVariable('WINDIR'))\\Temp\\payload.dll"));
     }
 
     [Fact]
@@ -189,6 +195,117 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         {
             DeleteTestRepository(root);
             DeleteTestRepository(externalRoot);
+        }
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_RejectsDirtyRecordedSubmoduleIgnoredByOuterStatus()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        string leafRoot = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(leafRoot, "init");
+            RunGit(leafRoot, "config user.name \"PowerForge Tests\"");
+            RunGit(leafRoot, "config user.email \"powerforge-tests@example.invalid\"");
+            File.WriteAllText(
+                Path.Combine(leafRoot, "Leaf.cs"),
+                "public static class Leaf { public const int Value = 1; }");
+            RunGit(leafRoot, "add .");
+            RunGit(leafRoot, "commit -m \"approved leaf\"");
+
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            RunGit(root, "config protocol.file.allow always");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup><Compile Include="../Leaf/Leaf.cs" Link="Leaf.cs" /></ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunGit(
+                root,
+                $"-c protocol.file.allow=always submodule add \"{leafRoot.Replace('\\', '/')}\" src/Leaf");
+            File.AppendAllText(Path.Combine(root, ".gitmodules"), "\n\tignore = all\n");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+
+            File.WriteAllText(
+                Path.Combine(root, "src", "Leaf", "Leaf.cs"),
+                "public static class Leaf { public const int Value = 2; }");
+            Assert.Equal(string.Empty, RunGit(root, "status --porcelain").Trim());
+            Assert.NotEqual(
+                string.Empty,
+                RunGit(Path.Combine(root, "src", "Leaf"), "status --porcelain").Trim());
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [appProject],
+                    buildConfiguration: "Release");
+
+            Assert.True(provenance.Dirty);
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+            DeleteTestRepository(leafRoot);
+        }
+    }
+
+    [Fact]
+    public void Run_BlocksTamperedProjectOutputBeforePublishConsumesIt()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            (string appProject, string libraryProject, string libraryOutput) =
+                CreateWave40EmbeddedProjectFixture(root, packageReferenceXml: null);
+            RunDotNet(root, $"build \"{libraryProject}\" -c Release --no-restore --nologo");
+            File.AppendAllText(libraryOutput, "tampered before publish");
+            string revision = RunGit(root, "rev-parse HEAD").Trim();
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                SourceRevision = revision,
+                Configuration = "Release",
+                Targets =
+                [
+                    new DotNetPublishTargetPlan
+                    {
+                        Name = "App",
+                        ProjectPath = appProject
+                    }
+                ],
+                Steps =
+                [
+                    new DotNetPublishStep
+                    {
+                        Key = "Publish App",
+                        Kind = DotNetPublishStepKind.Publish,
+                        TargetName = "App",
+                        Framework = "net8.0",
+                        Runtime = OperatingSystem.IsWindows() ? "win-x64" : "linux-x64",
+                        Style = DotNetPublishStyle.Portable
+                    }
+                ]
+            };
+
+            DotNetPublishResult result = new DotNetPublishPipelineRunner(new NullLogger()).Run(plan, progress: null);
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("Release source changed", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(result.Artefacts);
+        }
+        finally
+        {
+            DeleteTestRepository(root);
         }
     }
 }

@@ -272,7 +272,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             (string appProject, string libraryProject, _) = CreateWave40EmbeddedProjectFixture(
                 root,
                 "<PackageReference Include=\"Unsafe.Build\" Version=\"1.0.0\" PrivateAssets=\"all\" />");
-            RunDotNet(root, $"build \"{libraryProject}\" -c Release --no-restore --nologo");
+            // Keep the fixture buildable on every runner while leaving the package archive's
+            // unsafe compiler override intact for provenance inspection.
+            RunDotNet(root, $"build \"{libraryProject}\" -c Release --no-restore --nologo -p:CscToolPath=");
 
             DotNetPublishPipelineRunner.SourceProvenance provenance =
                 DotNetPublishPipelineRunner.ReadSourceProvenance(

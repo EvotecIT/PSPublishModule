@@ -9,7 +9,9 @@ public sealed partial class DotNetPublishPipelineRunner
         StringComparison comparison = IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
-        if (!HasNoGitReplacementRefs(currentRoot))
+        if (!HasNoGitReplacementRefs(currentRoot) ||
+            (!string.Equals(currentRoot, outerRoot, comparison) &&
+             !HasCleanNestedGitWorktree(currentRoot)))
             return false;
         while (!string.Equals(currentRoot, outerRoot, comparison))
         {
@@ -24,7 +26,9 @@ public sealed partial class DotNetPublishPipelineRunner
             if (string.Equals(parentRepository, currentRoot, comparison) ||
                 !IsSameOrBelowBuildInputPath(currentRoot, parentRepository) ||
                 !IsSameOrBelowBuildInputPath(parentRepository, outerRoot) ||
-                !HasNoGitReplacementRefs(parentRepository))
+                !HasNoGitReplacementRefs(parentRepository) ||
+                (!string.Equals(parentRepository, outerRoot, comparison) &&
+                 !HasCleanNestedGitWorktree(parentRepository)))
             {
                 return false;
             }
@@ -56,6 +60,14 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return true;
+    }
+
+    private static bool HasCleanNestedGitWorktree(string repositoryRoot)
+    {
+        string? status = ReadGitRawText(
+            repositoryRoot,
+            "status --porcelain=v1 -z --untracked-files=all");
+        return status is not null && status.Length == 0;
     }
 
     private static bool HasNoGitReplacementRefs(string repositoryRoot)

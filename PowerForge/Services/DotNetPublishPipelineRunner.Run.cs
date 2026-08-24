@@ -91,6 +91,9 @@ public sealed partial class DotNetPublishPipelineRunner
                             Build(plan, step);
                             break;
                         case DotNetPublishStepKind.Publish:
+                            // Bind provenance to the project-reference bytes available immediately
+                            // after BeforeTargetPublish hooks and before dotnet publish consumes them.
+                            _ = ReadPortableInventorySourceProvenance(plan);
                             artefacts.Add(Publish(
                                 plan,
                                 step.TargetName!,
