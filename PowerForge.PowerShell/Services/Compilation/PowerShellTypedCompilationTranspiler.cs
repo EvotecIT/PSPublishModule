@@ -369,7 +369,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.RequiresPowerShellStreams,
             emitted.RequiresPowerShellCommandRegions,
             GetFunctionAliases(source.Function),
-            emitted.RequiresPowerShellBoundParameters);
+            emitted.RequiresPowerShellBoundParameters,
+            PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function));
 
     private static PowerShellLocalFunctionSignature CreateSignature(FunctionSource source, PowerShellCSharpMethodEmission emitted)
         => new(

@@ -130,12 +130,12 @@ internal sealed class PowerShellCSharpMemberEmitter
         if (IsStringDictionary(target.Type))
         {
             if (IsOrderedStringDictionary(target.Type))
-                return $"({targetCode} is null ? throw new global::System.InvalidOperationException(\"Cannot index into a null dictionary.\") : {targetCode}.Contains({indexCode}) ? (string?){targetCode}[{indexCode}] : null)";
+                return $"({targetCode} is null ? null : {targetCode}.Contains({indexCode}) ? (string?){targetCode}[{indexCode}] : null)";
             var temporary = "__powerForgeDictionaryValue" + _temporaryIndex++.ToString(CultureInfo.InvariantCulture);
-            return $"({targetCode} is null ? throw new global::System.InvalidOperationException(\"Cannot index into a null dictionary.\") : {targetCode}.TryGetValue({indexCode}, out var {temporary}) ? {temporary} : null)";
+            return $"({targetCode} is null ? null : {targetCode}.TryGetValue({indexCode}, out var {temporary}) ? {temporary} : null)";
         }
         if (IsObjectDictionary(target.Type))
-            return $"({targetCode} is null ? throw new global::System.InvalidOperationException(\"Cannot index into a null dictionary.\") : {targetCode}[{indexCode}])";
+            return $"({targetCode} is null ? null : {targetCode}[{indexCode}])";
         var normalizedIndex = $"(({indexCode}) < 0 ? {targetCode}.Length + ({indexCode}) : ({indexCode}))";
         var missing = $"{normalizedIndex} < 0 || {normalizedIndex} >= {targetCode}.Length";
         var value = $"{targetCode}[{normalizedIndex}]";

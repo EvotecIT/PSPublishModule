@@ -569,8 +569,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             AssignmentStatementAst assignment => EmitAssignmentExpression(assignment),
             InvokeMemberExpressionAst invocation when PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out var parameterName) =>
                 EmitBoundParameterContainsKey(invocation, parameterName),
-            InvokeMemberExpressionAst invocation => _memberEmitter.EmitInvocation(invocation),
-            MemberExpressionAst member => _memberEmitter.EmitMember(member),
+            InvokeMemberExpressionAst invocation => EmitMemberInvocation(invocation),
+            MemberExpressionAst member => EmitMemberAccess(member),
             IndexExpressionAst index => _memberEmitter.EmitIndex(index),
             PipelineAst pipeline when IsLocalFunctionPipeline(pipeline) => EmitLocalFunctionCall(pipeline),
             CommandAst command when IsLocalFunctionCommand(command) => EmitLocalFunctionCall(command),
@@ -693,8 +693,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             AssignmentStatementAst assignment => InferExpressionType(assignment.Right),
             InvokeMemberExpressionAst invocation when PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out _) =>
                 EnsureBoundParametersAvailable(invocation),
-            InvokeMemberExpressionAst invocation => _memberEmitter.InferInvocationType(invocation),
-            MemberExpressionAst member => _memberEmitter.InferMemberType(member),
+            InvokeMemberExpressionAst invocation => InferMemberInvocationType(invocation),
+            MemberExpressionAst member => InferMemberAccessType(member),
             IndexExpressionAst index => _memberEmitter.InferIndexType(index),
             PipelineAst pipeline when IsLocalFunctionPipeline(pipeline) => InferLocalFunctionType(pipeline),
             CommandAst command when IsLocalFunctionCommand(command) => InferLocalFunctionType(command),

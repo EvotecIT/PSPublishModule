@@ -30,7 +30,8 @@ public sealed class PowerShellCompiledMethod
         bool requiresPowerShellStreams,
         bool requiresPowerShellCommandRegions = false,
         string[]? aliases = null,
-        bool requiresPowerShellBoundParameters = false)
+        bool requiresPowerShellBoundParameters = false,
+        bool isAdvancedFunction = false)
     {
         SourceName = sourceName ?? string.Empty;
         GeneratedName = generatedName ?? string.Empty;
@@ -42,6 +43,7 @@ public sealed class PowerShellCompiledMethod
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         Aliases = aliases ?? Array.Empty<string>();
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
+        IsAdvancedFunction = isAdvancedFunction;
     }
 
     /// <summary>Original PowerShell function name.</summary>
@@ -73,6 +75,9 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>PowerShell command aliases declared on the original function.</summary>
     public string[] Aliases { get; }
+
+    /// <summary>Whether the source function uses advanced-function parameter binding.</summary>
+    public bool IsAdvancedFunction { get; }
 }
 
 /// <summary>

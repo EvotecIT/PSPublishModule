@@ -12,6 +12,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
         string? targetFramework)
     {
         var definitions = new List<(string Path, ScriptBlockAst Root, FunctionDefinitionAst Function)>();
+        var sources = new List<(string Path, ScriptBlockAst Root)>();
         foreach (var sourcePath in typed.SourcePaths)
         {
             Token[] tokens;
@@ -19,6 +20,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
             var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
             if (errors.Length > 0)
                 return typed;
+            sources.Add((sourcePath, ast));
             definitions.AddRange(ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
                 .Cast<FunctionDefinitionAst>()
                 .Select(function => (sourcePath, ast, function)));
@@ -30,13 +32,14 @@ internal static class PowerShellHybridFunctionCollisionResolver
             .Select(static group => group.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var earlyAvailabilityNames = definitions
-            .Where(static definition => definition.Root.FindAll(
+            .Where(definition => sources.Any(source => source.Root.FindAll(
                     node => node is CommandAst command &&
-                            command.Extent.StartOffset < definition.Function.Extent.StartOffset &&
-                            IsModuleScope(command, definition.Root),
+                            (!PowerShellCompilationPathSafety.PathEquals(source.Path, definition.Path) ||
+                             command.Extent.StartOffset < definition.Function.Extent.StartOffset) &&
+                            IsModuleScope(command, source.Root),
                     searchNestedScriptBlocks: true)
                 .OfType<CommandAst>()
-                .Any(command => command.GetCommandName()?.Equals(definition.Function.Name, StringComparison.OrdinalIgnoreCase) == true))
+                .Any(command => command.GetCommandName()?.Equals(definition.Function.Name, StringComparison.OrdinalIgnoreCase) == true)))
             .Select(static definition => definition.Function.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fallbackNames = duplicateNames.Concat(earlyAvailabilityNames).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -69,7 +72,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
                 .First();
             var message = duplicateNames.Contains(name)
                 ? $"Function '{name}' has multiple retained definitions, so hybrid compilation keeps PowerShell's runtime replacement semantics."
-                : $"Function '{name}' is referenced by retained module-scope code before its declaration, so hybrid compilation preserves PowerShell's command-availability timing.";
+                : $"Function '{name}' is referenced by retained module-scope code before or across a separately loaded declaration boundary, so hybrid compilation preserves PowerShell's command-availability timing.";
             return new PowerShellCompilationDiagnostic(
                 PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                 message,

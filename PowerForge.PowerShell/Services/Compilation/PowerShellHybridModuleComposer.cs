@@ -102,6 +102,7 @@ internal static class PowerShellHybridModuleComposer
         builder.Append("    ").Append(hostType).AppendLine("::ClearDispatcher($__powerForgeRunspaceId)");
         builder.AppendLine("    if ($null -ne $__powerForgePreviousOnRemove) { & $__powerForgePreviousOnRemove }");
         builder.AppendLine("}.GetNewClosure()");
+        builder.AppendLine("Remove-Variable -Name __powerForgeRunspaceId, __powerForgeModule, __powerForgePreviousOnRemove -Scope Script -ErrorAction SilentlyContinue");
     }
 
     internal static string? ComposeDependency(

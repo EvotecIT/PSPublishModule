@@ -6,6 +6,7 @@ namespace PowerForge;
 
 internal static class PowerShellBinaryCmdletSourceGenerator
 {
+    private const string RemainingArgumentsMemberName = "__PowerForgeRemainingArguments";
     private static readonly HashSet<string> CommonParameterNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "Verbose", "Debug", "ErrorAction", "WarningAction", "InformationAction", "ProgressAction",
@@ -17,6 +18,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         .GetMembers(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
         .Select(static member => member.Name)
         .Append("ProcessRecord")
+        .Append(RemainingArgumentsMemberName)
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     internal static PowerShellTypedCompilationResult PrepareForBinaryModule(
@@ -195,6 +197,12 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                     ? " = string.Empty;"
                     : " = default!;";
             builder.AppendLine($"    public {propertyType} {PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name)} {{ get; set; }}{initializer}");
+            builder.AppendLine();
+        }
+        if (!cmdlet.Method.IsAdvancedFunction)
+        {
+            builder.AppendLine("    [Parameter(ValueFromRemainingArguments = true, DontShow = true)]");
+            builder.AppendLine($"    public object[] {RemainingArgumentsMemberName} {{ get; set; }} = global::System.Array.Empty<object>();");
             builder.AppendLine();
         }
         if (cmdlet.Method.RequiresPowerShellCommandRegions)

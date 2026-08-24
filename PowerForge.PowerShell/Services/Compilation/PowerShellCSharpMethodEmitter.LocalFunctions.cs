@@ -63,6 +63,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var name = command.GetCommandName();
         if (name is null || !_localFunctions.TryGetValue(name, out var signature))
             throw Error(command, $"Command '{name ?? command.Extent.Text}' is not a statically known local function.");
+        if (signature.ReturnType.IsArray && !IsDirectLocalFunctionOutput(command))
+            throw Error(command, $"Local function '{signature.SourceName}' returns an array whose PowerShell pipeline cardinality cannot be preserved when the result is consumed directly.");
 
         var bound = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var positionalIndex = 0;
@@ -165,6 +167,16 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private static CommandAst GetLocalCommand(PipelineAst pipeline)
         => pipeline.PipelineElements[0] as CommandAst
            ?? throw new InvalidOperationException("A local function pipeline must contain one command.");
+
+    private static bool IsDirectLocalFunctionOutput(CommandAst command)
+    {
+        Ast current = command;
+        while (current.Parent is PipelineAst or CommandExpressionAst or ParenExpressionAst)
+            current = current.Parent;
+        return current.Parent is ReturnStatementAst ||
+               current is PipelineAst pipeline && pipeline.Parent is NamedBlockAst namedBlock &&
+               ReferenceEquals(namedBlock.Statements.LastOrDefault(), pipeline);
+    }
 
     private sealed class BoundLocalFunctionCall
     {
