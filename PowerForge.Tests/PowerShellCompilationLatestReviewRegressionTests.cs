@@ -550,6 +550,28 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_StrictLibraryPreservesObservablePowerShellArrayTypes()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-LiteralType { $Values = 1, 2; return $Values.GetType().FullName } " +
+            "function Get-ExpressionType { $Values = @(1, 2); return $Values.GetType().FullName } " +
+            "function Get-ExplicitType { [int[]] $Values = @(1, 2); return $Values.GetType().FullName }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ArrayRuntimeTypes",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
+        var type = assembly.GetType("PowerForge.Compiled.PowerForge_ArrayRuntimeTypesMethods", throwOnError: true)!;
+        Assert.Equal("System.Object[]", type.GetMethod("Get_LiteralType")!.Invoke(null, null));
+        Assert.Equal("System.Object[]", type.GetMethod("Get_ExpressionType")!.Invoke(null, null));
+        Assert.Equal("System.Int32[]", type.GetMethod("Get_ExplicitType")!.Invoke(null, null));
+    }
+
+    [Fact]
     public void Build_PackagedExecutableRecognizesCommonSwitchAliases()
     {
         using var fixture = ArtifactFixture.Create(

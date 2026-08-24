@@ -8,6 +8,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     [Theory]
     [InlineData("powershell build missing.ps1 --kind exe --sing --output json", "powershell.build", "--sing")]
     [InlineData("powershell analyze missing.ps1 --recurs --output json", "powershell.analyze", "--recurs")]
+    [InlineData("powershell analyze missing.ps1 --no-recurse --output json", "powershell.analyze", "--no-recurse")]
     [InlineData("powershell analyze one.ps1 --path two.ps1 --output json", "powershell.analyze", "either positionally")]
     [InlineData("powershell build missing.ps1 --kind exe --mode 999 --output json", "powershell.build", "999")]
     public async Task Commands_RejectInvalidOptions(string arguments, string command, string errorFragment)
@@ -309,6 +310,17 @@ public sealed class PowerForgeCliPowerShellCompilationTests
                 Assert.Equal(0, result.GetProperty("compilableUnits").GetInt32());
             }
 
+            var defaultTarget = await RunCliAsync(
+                repositoryRoot,
+                $"powershell analyze \"{source}\" --mode Strict --output json");
+            Assert.Equal(1, defaultTarget.ExitCode);
+            using (var document = JsonDocument.Parse(defaultTarget.StdOut))
+            {
+                var result = document.RootElement.GetProperty("result");
+                Assert.Equal("net8.0", result.GetProperty("targetFramework").GetString());
+                Assert.Equal(0, result.GetProperty("compilableUnits").GetInt32());
+            }
+
             var net10 = await RunCliAsync(
                 repositoryRoot,
                 $"powershell analyze \"{source}\" --mode Strict --framework net10.0 --output json");
@@ -317,6 +329,41 @@ public sealed class PowerForgeCliPowerShellCompilationTests
             var net10Result = net10Document.RootElement.GetProperty("result");
             Assert.Equal("net10.0", net10Result.GetProperty("targetFramework").GetString());
             Assert.Equal(1, net10Result.GetProperty("compilableUnits").GetInt32());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task AnalyzeManifest_UsesTheResolvedBuildSourceGraph()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Resolved Analysis Tests", Guid.NewGuid().ToString("N"));
+        var publicDirectory = Path.Combine(root, "Public");
+        Directory.CreateDirectory(publicDirectory);
+        var manifest = Path.Combine(root, "Sample.psd1");
+        var module = Path.Combine(root, "Sample.psm1");
+        var included = Path.Combine(publicDirectory, "Get-Included.ps1");
+        var unrelated = Path.Combine(root, "Unrelated.ps1");
+        File.WriteAllText(manifest, "@{ RootModule = 'Sample.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-Included') }");
+        File.WriteAllText(module, ". \"$PSScriptRoot/Public/Get-Included.ps1\"; Export-ModuleMember -Function Get-Included");
+        File.WriteAllText(included, "function Get-Included { return 7 }");
+        File.WriteAllText(unrelated, "function Invoke-Unrelated { Invoke-DynamicCommand }");
+
+        try
+        {
+            var analyze = await RunCliAsync(
+                repositoryRoot,
+                $"powershell analyze \"{manifest}\" --mode Hybrid --output json");
+            Assert.Equal(0, analyze.ExitCode);
+            using var document = JsonDocument.Parse(analyze.StdOut);
+            var files = document.RootElement.GetProperty("result").GetProperty("files").EnumerateArray().ToArray();
+            Assert.Equal(2, files.Length);
+            Assert.Contains(files, file => Path.GetFullPath(file.GetProperty("fullPath").GetString()!) == Path.GetFullPath(module));
+            Assert.Contains(files, file => Path.GetFullPath(file.GetProperty("fullPath").GetString()!) == Path.GetFullPath(included));
+            Assert.DoesNotContain(files, file => Path.GetFullPath(file.GetProperty("fullPath").GetString()!) == Path.GetFullPath(unrelated));
         }
         finally
         {

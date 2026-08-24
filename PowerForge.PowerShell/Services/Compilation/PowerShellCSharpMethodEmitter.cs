@@ -617,17 +617,6 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         return EmitExpression(ast);
     }
 
-    private string EmitArray(ArrayLiteralAst array)
-    {
-        if (array.Elements.Count == 0)
-            throw Error(array, "Empty array literals require an explicit element type.");
-        var elementTypes = array.Elements.Select(InferExpressionType).Distinct().ToArray();
-        if (elementTypes.Length != 1)
-            throw Error(array, "Heterogeneous PowerShell array literals preserve per-element runtime types and are not supported by one CLR array element type.");
-        var elementType = elementTypes[0];
-        return $"new {GetTypeName(elementType)}[] {{ {string.Join(", ", array.Elements.Select(EmitExpression))} }}";
-    }
-
     private string EmitVariable(VariableExpressionAst variable)
     {
         var name = variable.VariablePath.UserPath;
@@ -698,8 +687,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             BinaryExpressionAst binary => InferBinaryType(binary),
             UnaryExpressionAst unary when IsIncrementOrDecrement(unary) => typeof(void),
             UnaryExpressionAst unary => InferExpressionType(unary.Child),
-            ArrayLiteralAst array when array.Elements.Count > 0 && array.Elements.Select(InferExpressionType).Distinct().Count() == 1 => InferExpressionType(array.Elements[0]).MakeArrayType(),
-            ArrayLiteralAst array => throw Error(array, "Heterogeneous or empty PowerShell array literals cannot be represented by one inferred CLR array element type."),
+            ArrayLiteralAst array => InferArrayLiteralType(array),
             ArrayExpressionAst array => InferArrayExpressionType(array),
             HashtableAst hashtable => InferStringDictionaryType(hashtable),
             AssignmentStatementAst assignment => InferExpressionType(assignment.Right),

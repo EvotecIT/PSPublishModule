@@ -15,6 +15,33 @@ public sealed partial class PowerShellCompilationAnalyzer
         return AnalyzeFiles(spec.Mode, files, basePath, spec.TargetFramework, spec.Capabilities);
     }
 
+    /// <summary>Analyzes the exact compilation source graph selected by the shared input resolver.</summary>
+    /// <param name="input">Resolved script or module input.</param>
+    /// <param name="mode">Requested analysis and fallback policy.</param>
+    /// <param name="targetFramework">Generated-project target framework used for CLR eligibility.</param>
+    public PowerShellCompilationPlan Analyze(
+        PowerShellCompilationResolvedInput input,
+        PowerShellCompilationMode mode = PowerShellCompilationMode.Analyze,
+        string? targetFramework = "net8.0")
+    {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+        if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
+            throw new ArgumentOutOfRangeException(nameof(mode));
+
+        var normalizedTargetFramework = new PowerShellCompilationSpec(
+            input.SourcePath,
+            mode,
+            targetFramework: targetFramework ?? "net8.0").TargetFramework;
+        var capabilityMode = mode == PowerShellCompilationMode.Analyze ? input.Mode : mode;
+        return AnalyzeFiles(
+            mode,
+            input.CompilationSourceFiles,
+            input.ModuleRoot,
+            normalizedTargetFramework,
+            PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, capabilityMode));
+    }
+
     internal PowerShellCompilationPlan AnalyzeFiles(
         PowerShellCompilationMode mode,
         IEnumerable<string> sourcePaths,

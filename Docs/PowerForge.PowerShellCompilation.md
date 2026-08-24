@@ -13,7 +13,7 @@ These are deliberately separate claims. Packaging makes a script easier to distr
 | Kind | Default mode | Result | PowerShell required at runtime | Typed speedup expected |
 | --- | --- | --- | --- | --- |
 | `Executable` / `exe` | `Package` | Single-file host with embedded script and PowerShell SDK | Embedded in the application | No |
-| `Executable` / `exe` | `Strict` | Runtime-independent typed .NET executable | No | Yes, for eligible CPU-bound work and process startup |
+| `Executable` / `exe` | `Strict` | PowerShell-free typed .NET executable | No | Yes, for eligible CPU-bound work and process startup |
 | `BinaryModule` / `dll` | `Strict` (explicit) | Importable DLL when every function compiles | Yes, as the cmdlet host | Only inside sufficiently coarse compiled work |
 | `BinaryModule` / `dll` | `Hybrid` (default) | Module folder with a typed DLL and `.psm1` fallback | Yes | For eligible functions; unsupported functions remain scripts |
 | `Library` / `library` | `Hybrid` | CLR DLL with eligible public static methods | No | Yes, when called as CLR code |
@@ -24,6 +24,36 @@ Supported target frameworks are:
 - CLR library or binary module: `net472`, `net8.0`, `net10.0`.
 
 The `net472` binary-module lane is tested by importing and invoking the generated DLL in Windows PowerShell 5.1. The modern lanes run in PowerShell 7.
+
+### Runtime and deployment profiles
+
+The target framework and publication profile determine what must already exist on the destination computer. An installed `powershell.exe` or `pwsh` is not used as the runtime for a generated executable.
+
+| Artifact | Target | PowerShell engine used | Destination requirement |
+| --- | --- | --- | --- |
+| Package EXE | `net8.0` | Embedded PowerShell SDK 7.4.18 | .NET 8 for a framework-dependent build; nothing separately installed for a self-contained build |
+| Package EXE | `net10.0` | Embedded PowerShell SDK 7.6.4 | .NET 10 for a framework-dependent build; nothing separately installed for a self-contained build |
+| Strict EXE | `net8.0` or `net10.0` | None | Matching .NET runtime for a framework-dependent build; nothing separately installed for a self-contained or NativeAOT build |
+| Binary module | `net472` | Windows PowerShell 5.1 Desktop host | Windows PowerShell 5.1 and its .NET Framework runtime |
+| Binary module | `net8.0` | PowerShell 7.4 Core host | A compatible PowerShell 7.4 host, which supplies .NET 8 |
+| Binary module | `net10.0` | PowerShell 7.6 Core host | A compatible PowerShell 7.6 host, which supplies .NET 10 |
+| CLR library | `net472`, `net8.0`, or `net10.0` | None | A consuming process on the matching CLR family |
+
+Framework-dependent executables are the smallest normal build, but require the matching .NET runtime. Self-contained builds carry that runtime and are therefore larger and platform-specific. Single-file publication still targets one runtime identifier such as `win-x64` or `linux-x64`; it does not make one binary portable across operating systems. NativeAOT removes both the PowerShell and installed-.NET requirements, but is available only to Strict typed executables and must be built for each target platform and architecture.
+
+PowerShell 5.1 compatibility currently means a `net472` generated binary module loaded by Windows PowerShell. PowerForge does not currently produce a Windows PowerShell 5.1 packaged EXE. A Strict EXE is also not a hidden choice between PowerShell 5.1, 7.4, and 7.6: no PowerShell engine runs after a successful Strict compilation.
+
+### Choosing the runtime model
+
+| Model | Best fit | Compatibility boundary | Distribution and security tradeoff |
+| --- | --- | --- | --- |
+| Package EXE | Existing scripts that need broad dynamic PowerShell behavior | Runs the embedded script through the bundled PowerShell SDK | Largest artifact and attack surface; embedded source is inspectable; rebuild when bundled PowerShell or .NET dependencies need security updates; generated-host similarity can contribute to antivirus reputation or heuristic detections |
+| Strict EXE | Deliberately typed utilities whose complete reachable program fits the supported compiler contract | Every reachable entrypoint statement and local function must compile | No PowerShell runtime or embedded script; smaller framework-dependent and NativeAOT options; still ordinary analyzable code and not immune to antivirus false positives |
+| Hybrid binary module | Real modules with a mixture of compiler-friendly and dynamic functions | Eligible functions become cmdlets while unsupported functions continue through PowerShell | Preserves broad module behavior, but requires a matching PowerShell host and carries the combined maintenance surface of generated code plus retained scripts |
+| Strict binary module | Modules intentionally constrained to the typed subset | Every exported implementation must compile, while PowerShell remains the cmdlet host | No script fallback, but still depends on the target PowerShell/.NET host contract |
+| CLR library | Typed functions intended for direct .NET consumption | Only eligible methods are emitted; no PowerShell fallback is carried | Normal managed-library deployment and analysis rules apply |
+
+Code signing establishes publisher identity and artifact integrity; it does not make arbitrary generated programs inherently trustworthy to antivirus products. Use a certificate only for code owned and distributed by that certificate's publisher. Do not submit private packaged executables to public malware-analysis services unless sharing the embedded source and dependencies with that service is acceptable.
 
 ## Use the CLI
 
@@ -194,7 +224,7 @@ The current subset supports:
 - floating-point and decimal arithmetic with compatible operands;
 - explicitly typed integral accumulators and loop counters with checked assignment semantics;
 - unlabeled `break` and `continue` inside supported loops;
-- homogeneous nonempty `@(...)` array expressions, context-typed empty `@()` assignments, and one-dimensional typed-array and string indexing with PowerShell-compatible negative and missing-index behavior;
+- untyped array literals and nonempty `@(...)` expressions that preserve PowerShell's observable `object[]` type, explicitly typed one-dimensional array assignments including context-typed empty `@()`, and typed-array or string indexing with PowerShell-compatible negative and missing-index behavior;
 - simple indexed assignment to one-dimensional typed arrays, including negative index normalization, and assignment to a statically resolved writable CLR property or field on a typed local or parameter;
 - statically resolved CLR constructors, static fields/properties, instance fields/properties, and exact method overloads for supported typed arguments, including defined enum names supplied as string literals;
 - genuine binary-module `PSObject` values constructed from bounded `[pscustomobject]@{ Name = Value }` literals with `PSNoteProperty` members;
@@ -220,6 +250,58 @@ The analyzer rejects dynamic behavior rather than guessing. Current blockers inc
 - control flow for which the conservative emitter cannot prove declaration or return behavior.
 
 This boundary is expected to expand through semantic proof, not syntax count. New constructs need differential tests against PowerShell before they become eligible.
+
+## Strict eligibility and realistic coverage
+
+Strict executable compilation is deliberately all-or-nothing. The root script is `Main`, its top-level `param()` block is the application argument contract, and every reachable statement and local function in its contained literal dot-source closure must have an equivalent typed lowering. One unsupported command, dynamic lookup, closure, coercion, or control-flow shape rejects the build rather than quietly placing PowerShell back into a supposedly runtime-free executable.
+
+That means an arbitrary existing automation script is unlikely to qualify for Strict today. The real-product matrix later in this document currently compiles between 1.48% and 26.57% of whole functions in Hybrid modules. A small purpose-built CLI can qualify completely because its entrypoint and helper graph can be designed around the supported subset; a command-heavy administration product usually cannot. Coverage should therefore be read as three separate outcomes:
+
+- **Strict program coverage:** the complete reachable application graph is eligible, so a PowerShell-free EXE can be produced;
+- **Hybrid function coverage:** complete eligible functions become generated cmdlets while other functions remain scripts;
+- **Hybrid region coverage:** typed code can surround bounded PowerShell command regions so fewer, coarser runtime dispatches are needed.
+
+PowerForge does not aim to reimplement the complete PowerShell language and runtime. Dynamic scope, providers, remoting, arbitrary command discovery, ETS adaptation, host interaction, and every coercion rule would effectively require another PowerShell engine. The useful goal is a well-specified typed subset that grows according to real-product impact, while unsupported behavior remains explicit and correct.
+
+A Hybrid executable is not implemented today. It is the natural future bridge for scripts that cannot become runtime-free: package the PowerShell runtime for unsupported behavior, compile eligible local function graphs or command regions into a companion assembly, and route calls across an explicit boundary. Such an artifact could improve selected workloads and startup organization, but it must continue to report `requiresPowerShellRuntime: true` and must never be presented as Strict compilation.
+
+## Compiler architecture and feature growth
+
+The current implementation is already staged rather than being a text replacement engine:
+
+1. input discovery resolves the root script or module and its contained authored dependency closure without executing it;
+2. the PowerShell parser produces ASTs and source extents;
+3. the analyzer creates file and unit plans, parameter metadata, target-framework checks, capabilities, and fail-closed diagnostics;
+4. the transpiler builds eligible local function graphs and rejects cycles, ambiguous identities, or incompatible dependencies;
+5. semantic policy components handle members, operators, assignments, binding, objects, command islands, and generated-type availability;
+6. target emitters generate a typed executable, CLR library, binary cmdlets, or Hybrid module composition;
+7. the artifact builder compiles, optionally signs, records hashes and source maps, and atomically publishes the complete artifact set.
+
+The emitter is split by semantic responsibility—control flow, local calls, arrays, collections, validation, objects, operators, and advanced binding—and reusable capability flags prevent a Strict target from accidentally using PowerShell-backed behavior. This structure has supported the current feature waves without putting compiler logic into the CLI or cmdlet surfaces.
+
+There is still an important scaling limit: several paths currently analyze the PowerShell AST and then lower it directly to C#. A substantial new feature can require coordinated changes to eligibility analysis, type inference, graph propagation, emission, diagnostics, and target capabilities. That is manageable for the present conservative subset, but it should not become the long-term extension model for broad coverage.
+
+The next architectural milestone is a typed bound intermediate representation between the PowerShell AST and generated C#. Each bound node should carry:
+
+- its resolved CLR type and PowerShell-specific conversion rule;
+- its source extent for diagnostics and generated-source mapping;
+- observable effects such as pipeline output, stream use, mutation, exception flow, or PowerShell runtime dispatch;
+- required target capabilities, for example pure CLR, cmdlet host, bound-parameter state, PowerShell objects, or a command region;
+- an explicit fallback reason when the semantic contract cannot be proven.
+
+With that boundary, a feature is bound once and target emitters consume the same proven semantic model. Strict EXEs accept only pure-CLR nodes; binary modules may admit cmdlet-host nodes; Hybrid artifacts may additionally admit bounded runtime regions. The transition can be incremental: new high-value features can use the bound representation first, and existing emitters can be migrated by semantic area instead of stopping current compilation work for a rewrite.
+
+Every newly eligible language feature should satisfy the same acceptance packet:
+
+1. define the supported PowerShell semantics and the deliberate rejection boundary;
+2. bind static types, effects, required capabilities, and source locations before emission;
+3. compare results and failure behavior with Windows PowerShell 5.1 and the supported PowerShell 7 lanes where the source feature applies;
+4. cover Strict rejection, Hybrid fallback, and each target framework that can observe different CLR behavior;
+5. inspect the emitted C# and preserve source-map evidence;
+6. rerun the real-product census and record which complete functions or regions became eligible;
+7. benchmark only workloads large enough to distinguish compiled work from host or cmdlet dispatch overhead.
+
+This makes coverage growth reviewable and maintainable. Success is not the number of AST node types recognized; it is more useful real-product work crossing a proven semantic boundary without changing PowerShell-visible behavior.
 
 ## Manifest evidence
 

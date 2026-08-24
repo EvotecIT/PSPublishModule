@@ -4,18 +4,40 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellCSharpMethodEmitter
 {
+    private Type InferArrayLiteralType(ArrayLiteralAst array)
+    {
+        if (array.Elements.Count == 0)
+            throw Error(array, "Empty array literals require an explicit element type.");
+
+        var contextualType = GetContextualArrayType(array);
+        if (contextualType is null)
+            return typeof(object[]);
+
+        EnsureArrayElementsAssignable(array.Elements, contextualType.GetElementType()!, array);
+        return contextualType;
+    }
+
+    private string EmitArray(ArrayLiteralAst array)
+    {
+        var arrayType = InferArrayLiteralType(array);
+        var elementType = arrayType.GetElementType()!;
+        return $"new {GetTypeName(elementType)}[] {{ {string.Join(", ", array.Elements.Select(EmitExpression))} }}";
+    }
+
     private Type InferArrayExpressionType(ArrayExpressionAst array)
     {
         var elements = GetArrayExpressionElements(array);
+        var contextualType = GetContextualArrayType(array);
         if (elements.Length == 0)
-            return GetContextualArrayType(array)
+            return contextualType
                    ?? throw Error(array, "Empty @() requires an explicit one-dimensional array type on its assignment target.");
         if (elements.Any(element => InferExpressionType(element).IsArray || IsNullExpression(element)))
             throw Error(array, "Typed @() expressions do not accept array-valued or null pipeline output; use Hybrid fallback for PowerShell enumeration and null-suppression semantics.");
-        var elementTypes = elements.Select(InferExpressionType).Distinct().ToArray();
-        if (elementTypes.Length != 1)
-            throw Error(array, "Typed @() expressions require one homogeneous CLR element type.");
-        return elementTypes[0].MakeArrayType();
+        if (contextualType is null)
+            return typeof(object[]);
+
+        EnsureArrayElementsAssignable(elements, contextualType.GetElementType()!, array);
+        return contextualType;
     }
 
     private string EmitArrayExpression(ArrayExpressionAst array)
@@ -45,7 +67,14 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         return result.ToArray();
     }
 
-    private static Type? GetContextualArrayType(ArrayExpressionAst array)
+    private void EnsureArrayElementsAssignable(IEnumerable<ExpressionAst> elements, Type elementType, Ast array)
+    {
+        var incompatible = elements.FirstOrDefault(element => !CanAssign(elementType, InferExpressionType(element)));
+        if (incompatible is not null)
+            throw Error(array, $"Array element type '{InferExpressionType(incompatible).FullName}' cannot be assigned to explicit element type '{elementType.FullName}' without PowerShell runtime conversion.");
+    }
+
+    private static Type? GetContextualArrayType(Ast array)
     {
         for (Ast? current = array.Parent; current is not null; current = current.Parent)
         {
