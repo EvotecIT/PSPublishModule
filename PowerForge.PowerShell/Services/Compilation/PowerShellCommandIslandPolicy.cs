@@ -22,6 +22,7 @@ internal static class PowerShellCommandIslandPolicy
         for (var index = 0; index < statements.Count; index++)
         {
             if (statements[index] is not AssignmentStatementAst assignment ||
+                IsDiscardAssignment(assignment) ||
                 !assignment.Right.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Any())
                 continue;
             if (statements.Take(index).Any(static statement =>
@@ -114,7 +115,10 @@ internal static class PowerShellCommandIslandPolicy
             pipeline.PipelineElements[0] is CommandAst stream &&
             TryGetStreamCommand(stream, out _, out _))
             return false;
-        if (statement.FindAll(static node => node is AssignmentStatementAst or ReturnStatementAst or BreakStatementAst or ContinueStatementAst or ThrowStatementAst, searchNestedScriptBlocks: true).Any())
+        if (statement.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or ContinueStatementAst or ThrowStatementAst, searchNestedScriptBlocks: true).Any() ||
+            statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: true)
+                .OfType<AssignmentStatementAst>()
+                .Any(static assignment => !IsDiscardAssignment(assignment)))
             return false;
 
         var parameters = allowedVariables ?? body.ParamBlock?.Parameters
@@ -168,6 +172,12 @@ internal static class PowerShellCommandIslandPolicy
 
     internal static bool TryGetRuntimeRegion(CommandAst command, ScriptBlockAst body, out StatementAst region)
         => TryGetRuntimeRegion(command, body, localFunctionNames: null, allowedVariables: null, out region);
+
+    internal static bool IsDiscardAssignment(AssignmentStatementAst assignment)
+        => assignment.Operator.ToString() == "Equals" &&
+           PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } variable &&
+           variable.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase) &&
+           assignment.Right.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Any();
 
     private static bool IsNestedPipelineVariable(
         VariableExpressionAst variable,

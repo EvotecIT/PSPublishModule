@@ -29,7 +29,8 @@ public sealed class PowerShellCompiledMethod
         string? sourcePath,
         bool requiresPowerShellStreams,
         bool requiresPowerShellCommandRegions = false,
-        string[]? aliases = null)
+        string[]? aliases = null,
+        bool requiresPowerShellBoundParameters = false)
     {
         SourceName = sourceName ?? string.Empty;
         GeneratedName = generatedName ?? string.Empty;
@@ -40,6 +41,7 @@ public sealed class PowerShellCompiledMethod
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         Aliases = aliases ?? Array.Empty<string>();
+        RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
     }
 
     /// <summary>Original PowerShell function name.</summary>
@@ -65,6 +67,9 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Whether adjacent command statements are dispatched as one PowerShell runtime region.</summary>
     public bool RequiresPowerShellCommandRegions { get; }
+
+    /// <summary>Whether the generated method expects the names of explicitly bound PowerShell parameters.</summary>
+    public bool RequiresPowerShellBoundParameters { get; }
 
     /// <summary>PowerShell command aliases declared on the original function.</summary>
     public string[] Aliases { get; }

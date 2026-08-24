@@ -37,7 +37,10 @@ public sealed class PowerShellTypedCompilationTranspiler
             typeName,
             targetFramework,
             excludedMethods: null,
-            PowerShellCompilationCapability.PowerShellStreams | PowerShellCompilationCapability.LocalFunctionCalls);
+            PowerShellCompilationCapability.PowerShellStreams |
+            PowerShellCompilationCapability.LocalFunctionCalls |
+            PowerShellCompilationCapability.BoundParameters |
+            PowerShellCompilationCapability.PowerShellObjects);
 
     internal PowerShellTypedCompilationResult TranspileExcluding(
         IEnumerable<string> sourcePaths,
@@ -365,7 +368,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             source.Parsed.Path,
             emitted.RequiresPowerShellStreams,
             emitted.RequiresPowerShellCommandRegions,
-            GetFunctionAliases(source.Function));
+            GetFunctionAliases(source.Function),
+            emitted.RequiresPowerShellBoundParameters);
 
     private static PowerShellLocalFunctionSignature CreateSignature(FunctionSource source, PowerShellCSharpMethodEmission emitted)
         => new(
@@ -386,7 +390,10 @@ public sealed class PowerShellTypedCompilationTranspiler
                         metadata.AllowNull,
                         metadata.Validations);
                 })
-                .ToArray());
+                .ToArray(),
+            emitted.RequiresPowerShellBoundParameters,
+            emitted.RequiresPowerShellStreams,
+            emitted.RequiresPowerShellCommandRegions);
 
     private static PowerShellCompilationDiagnostic CreateDiagnostic(FunctionSource source, Ast node, string message)
         => new(
@@ -519,13 +526,15 @@ internal sealed class PowerShellCSharpMethodEmission
         Type returnType,
         string source,
         bool requiresPowerShellStreams = false,
-        bool requiresPowerShellCommandRegions = false)
+        bool requiresPowerShellCommandRegions = false,
+        bool requiresPowerShellBoundParameters = false)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
         Source = source;
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
+        RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
     }
 
     internal string GeneratedName { get; }
@@ -533,4 +542,5 @@ internal sealed class PowerShellCSharpMethodEmission
     internal string Source { get; }
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
+    internal bool RequiresPowerShellBoundParameters { get; }
 }

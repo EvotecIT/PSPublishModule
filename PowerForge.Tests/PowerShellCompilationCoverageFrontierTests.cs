@@ -242,7 +242,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_HybridBinaryModuleCoalescesCommandResultAndDependentTail()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Invoke-FrontierFallback { param([System.Collections.IDictionary] $Headers) [PSCustomObject]@{ Value = $Headers['X-Test'] } }; " +
+            "function Invoke-FrontierFallback { [CmdletBinding()] param([System.Collections.IDictionary] $Headers) " +
+            "process { [PSCustomObject]@{ Value = $Headers['X-Test'] } } }; " +
             "function Get-FrontierTail { param([System.Collections.IDictionary] $Headers) $Uri = 'unused'; " +
             "$Output = Invoke-FrontierFallback -Headers $Headers; $Output }; Export-ModuleMember -Function Get-FrontierTail",
             ".psm1");

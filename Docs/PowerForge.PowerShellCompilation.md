@@ -167,7 +167,7 @@ It supports `-WhatIf`, returns `PowerShellCompilationBuildResult`, and uses the 
 
 `Hybrid` compiles complete eligible functions and retains diagnostics for everything else. A hybrid binary module removes compiled function definitions from its generated `.psm1`, imports the typed DLL, and keeps unsupported functions on the script path. Literal `$PSScriptRoot` dot-source dependencies are staged recursively with their relative layout, including dependencies reached from manifest runtime hooks. Dynamic, missing, wildcard, working-directory-relative, source-root-escaping, or symbolic-link/junction paths fail before publication. A hybrid CLR library extracts eligible methods without carrying script fallback because it is intended for direct .NET consumption.
 
-Binary modules can also compile typed control flow around deliberately bounded PowerShell command regions. Direct `Write-Verbose`, `Write-Debug`, and `Write-Warning` calls use the generated `PSCmdlet` stream APIs. Adjacent top-level command pipelines, parameter-only conditional command blocks, and a safe terminal command-result tail are grouped into one PowerShell invocation so binding and dispatch are amortized across the region. Parameters and typed locals created before the region are passed explicitly. A tail cannot write back to a CLR parameter or local, and a nested script block that captures unresolved module, environment, or automatic state is not eligible. The complete function stays on the Hybrid script path when either boundary cannot be preserved. The module-scoped dispatcher is cleared when the hybrid module is removed. Runtime-free CLR libraries and Strict typed EXEs never enable these PowerShell-backed regions.
+Binary modules can also compile typed control flow around deliberately bounded PowerShell command regions. Direct `Write-Verbose`, `Write-Debug`, and `Write-Warning` calls use the generated `PSCmdlet` stream APIs. Adjacent top-level command pipelines, parameter-only conditional command blocks, explicit discard assignments such as `$null = Invoke-Operation`, and a safe terminal command-result tail are grouped into one PowerShell invocation so binding and dispatch are amortized across the region. Parameters and typed locals created before the region are passed explicitly. Stream and command-region host requirements propagate through eligible local function graphs, so typed callers do not lose a callee's PowerShell host contract. A tail cannot write back to a CLR parameter or local, and a nested script block that captures unresolved module, environment, or automatic state is not eligible. The complete function stays on the Hybrid script path when either boundary cannot be preserved. The module-scoped dispatcher is cleared when the hybrid module is removed. Runtime-free CLR libraries and Strict typed EXEs never enable these PowerShell-backed regions.
 
 Only unconditional top-level literal dot-sourced files participate in the root module's typed source set. Conditional and function-local dot-sources plus manifest runtime hooks are still discovered and staged, but are counted as runtime fallback rather than being flattened into a different scope. Nested script modules and nested manifests keep their relative layout, manifest closure, and export policy.
 
@@ -181,9 +181,10 @@ The current subset supports:
 
 - explicitly typed scalar, `SwitchParameter`, and one-dimensional typed-array parameters;
 - preserved function and parameter aliases plus `Parameter(Mandatory)`, `AllowNull`, `ValidateNotNull`, `ValidateNotNullOrEmpty`, `ValidateSet`, `ValidateRange`, and `ValidatePattern` metadata;
+- bounded `$PSBoundParameters.ContainsKey('CanonicalParameterName')` queries, including metadata propagation across typed local calls and runtime-free Strict executable argument binding;
 - typed or safely inferred local variables;
 - explicit `return` values and one terminal implicit-output expression;
-- `if`/`elseif`/`else`, conservative scalar `switch`, `for`, `while`, `foreach` over typed arrays or an explicitly typed scalar string, and ordered CLR exception catches with bounded `finally` blocks;
+- `if`/`elseif`/`else`, conservative scalar `switch`, `for`, `while`, `foreach` over typed arrays or an explicitly typed scalar string, ordered CLR exception catches with bounded `finally` blocks, typed CLR exception throws, and bare rethrow inside a supported catch;
 - Boolean logic and scalar comparisons with known compatible types;
 - string equality with PowerShell case-sensitive or case-insensitive behavior;
 - scalar string `-split` and string-array `-join`;
@@ -193,8 +194,10 @@ The current subset supports:
 - floating-point and decimal arithmetic with compatible operands;
 - explicitly typed integral accumulators and loop counters with checked assignment semantics;
 - unlabeled `break` and `continue` inside supported loops;
-- one-dimensional typed-array and string indexing with PowerShell-compatible negative and missing-index behavior for direct returns and compound-assignment operands;
+- homogeneous nonempty `@(...)` array expressions, context-typed empty `@()` assignments, and one-dimensional typed-array and string indexing with PowerShell-compatible negative and missing-index behavior;
+- simple indexed assignment to one-dimensional typed arrays, including negative index normalization, and assignment to a statically resolved writable CLR property or field on a typed local or parameter;
 - statically resolved CLR constructors, static fields/properties, instance fields/properties, and exact method overloads for supported typed arguments, including defined enum names supplied as string literals;
+- genuine binary-module `PSObject` values constructed from bounded `[pscustomobject]@{ Name = Value }` literals with `PSNoteProperty` members;
 - direct local function graphs across Strict executables and generated binary modules, including positional, named, alias, unique-abbreviation, switch, mandatory, omitted-default, and supported validation-metadata binding;
 - PowerShell stream calls and bounded top-level command/pipeline regions that can capture parameters and typed locals or own a safe terminal dynamic tail when generating a binary module.
 
@@ -206,6 +209,7 @@ The analyzer rejects dynamic behavior rather than guessing. Current blockers inc
 - dynamic member names, PowerShell-adapted properties, ambiguous overloads, and general object-property semantics;
 - script blocks, closures, runtime scopes such as `$env:`, and untyped parameters;
 - unsupported parameter attributes, PowerShell default expressions, and `dynamicparam`, `begin`, `process`, or `clean` blocks;
+- dynamic `$PSBoundParameters` access, noncanonical or computed keys, dynamic/string throw operands, and `[pscustomobject]` construction outside generated binary modules;
 - nonterminal or nested implicit pipeline output;
 - PowerShell truthiness conversions, element-wise array comparison, and coercion between incompatible CLR types;
 - string relational operators whose culture-aware ordering has not yet been translated;
@@ -318,7 +322,7 @@ powerforge powershell census `
     --output json
 ```
 
-The current five-product frontier candidate reports 1,132 authored files, 1,222 units, 73 emitted typed methods, 1,149 fallback units, and zero parse errors. The per-product split is PowerInfoBlox 1/57, PSSharedGoods 15/270, PSWriteHTML 4/319, O365Essentials 52/234, and ADEssentials 1/269. This is the actual binary-module graph emitted after dependency and cmdlet-shape checks, not the larger analyzer-only eligibility count. It measures Hybrid compilation opportunity rather than runtime-free Strict coverage.
+The current five-product frontier candidate reports 1,132 authored files, 1,222 units, 103 emitted typed methods, 1,119 fallback units, and zero parse errors. The per-product split is PowerInfoBlox 2/56, PSSharedGoods 16/269, PSWriteHTML 5/318, O365Essentials 76/210, and ADEssentials 4/266. This is the actual binary-module graph emitted after export shaping, dependency closure, collision handling, and cmdlet-shape checks, not the larger analyzer-only eligibility count. It measures Hybrid compilation opportunity rather than runtime-free Strict coverage.
 
 Low initial coverage is not hidden by Hybrid mode. It is written to the manifest, and every fallback has a diagnostic explaining what needs compiler support. Diagnostics are deliberately blocker-masked to avoid cascades, so accepting one outer construct can reveal deeper runtime semantics without increasing coverage. Roadmap priority therefore comes from repeated full-corpus passes and executable differential proof, not raw syntax-occurrence counts.
 
@@ -328,15 +332,15 @@ The module rebuilder was then run from `git archive` snapshots at the exact comm
 
 | Product | Source files | Units | Typed / fallback | Coverage | Exported commands before / after | Complete module set | Generated C# |
 | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
-| PowerInfoBlox `9de3730` | 58 | 58 | 1 / 57 | 1.72% | 51 / 51 | 207,555 bytes | 2 files, 35 lines, 1 mapped method |
-| PSSharedGoods `12e9c25` | 283 | 285 | 15 / 270 | 5.26% | 226 / 226 | 1,366,924 bytes | 2 files, 354 lines, 15 mapped methods |
-| PSWriteHTML `fa88b1b` | 242 | 323 | 4 / 319 | 1.24% | 291 / 291 | 1,446,813 bytes | 2 files, 118 lines, 4 mapped methods |
-| O365Essentials `fad8288` | 284 | 286 | 52 / 234 | 18.18% | 214 / 214 | 853,608 bytes | 2 files, 1,468 lines, 52 mapped methods |
-| ADEssentials `b2b1f76` | 265 | 270 | 1 / 269 | 0.37% | 157 / 157 | 1,898,542 bytes | 2 files, 45 lines, 1 mapped method |
+| PowerInfoBlox `9de3730` | 58 | 58 | 2 / 56 | 3.45% | 51 / 51 | 203,956 bytes | 2 files, 61 lines, 2 mapped methods |
+| PSSharedGoods `12e9c25` | 283 | 285 | 16 / 269 | 5.61% | 226 / 226 | 1,338,876 bytes | 2 files, 381 lines, 16 mapped methods |
+| PSWriteHTML `fa88b1b` | 242 | 323 | 5 / 318 | 1.55% | 291 / 291 | 1,431,543 bytes | 2 files, 159 lines, 5 mapped methods |
+| O365Essentials `fad8288` | 284 | 286 | 76 / 210 | 26.57% | 214 / 214 | 783,806 bytes | 2 files, 2,159 lines, 76 mapped methods |
+| ADEssentials `b2b1f76` | 265 | 270 | 4 / 266 | 1.48% | 157 / 157 | 1,890,077 bytes | 2 files, 151 lines, 4 mapped methods |
 
-The function/cmdlet split is intentional: eligible functions become real cmdlets while Hybrid fallback functions keep their script definitions. Differential execution matched for PowerInfoBlox `Convert-IpAddressToPtrString`, PSSharedGoods `ConvertFrom-OperationType`, PSWriteHTML `New-HTMLCarouselStyle`, and O365Essentials `Get-ProcessEnvironmentValue`.
+The function/cmdlet split is intentional: eligible functions become real cmdlets while Hybrid fallback functions keep their script definitions. Differential execution matched for PowerInfoBlox `Convert-IpAddressToPtrString`, PSSharedGoods `ConvertFrom-OperationType`, PSWriteHTML `New-HTMLCarouselStyle`, and O365Essentials `Get-ProcessEnvironmentValue`. The newly eligible private PowerInfoBlox `ConvertTo-InfobloxMicrosoftDHCPServer` also changed from a script function to a generated cmdlet while preserving its `PSCustomObject` type and `_struct`/`ipv4addr` property values.
 
-A small seven-sample, 10,000-call dispatch probe measured rebuilt/original medians of 204.30/251.44 ms for PowerInfoBlox (1.23x), 143.90/160.04 ms for PSSharedGoods (1.11x), and 215.20/224.98 ms for PSWriteHTML (1.05x). These are intentionally modest: they measure repeated PowerShell command dispatch, not direct CLR execution. The clean direct-CLR PowerInfoBlox benchmark remains 16.2x faster than its PowerShell function. A 2026-08-24 quick smoke run of the shared benchmark suite measured a coarse generated command at 6.51 ms versus 10.73 ms for equivalent fine-grained binary-cmdlet dispatch (1.65x), and a multi-file typed local-call EXE at 35.50 ms versus 260.82 ms for `pwsh -File` (7.35x). The quick run used three samples on a changing worktree, so it is directional evidence rather than a clean release baseline.
+A small seven-sample, 10,000-call dispatch probe measured rebuilt/original medians of 204.30/251.44 ms for PowerInfoBlox (1.23x), 143.90/160.04 ms for PSSharedGoods (1.11x), and 215.20/224.98 ms for PSWriteHTML (1.05x). These are intentionally modest: they measure repeated PowerShell command dispatch, not direct CLR execution. The clean direct-CLR PowerInfoBlox benchmark remains 16.2x faster than its PowerShell function. A 2026-08-24 quick smoke run completed all seven shared benchmark suites with zero validation failures. It measured a coarse generated command at 2.71 ms versus 10.81 ms for equivalent fine-grained binary-cmdlet dispatch (**3.99x**), and a multi-file typed local-call EXE at 39.23 ms versus 259.36 ms for `pwsh -File` (**6.61x**). Runs `20260824-134510-7959872a` and `20260824-134535-c549415e` used three samples on a changing worktree, so they are directional evidence rather than clean release baselines.
 
 ## Security and distribution limits
 

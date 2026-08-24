@@ -47,10 +47,12 @@ internal static class PowerShellTypedExecutableEmitter
                    (metadata.AllowNull ? "true" : "false") + ", " +
                    GenerateValidations(metadata.Validations) + "),";
         }));
-        var arguments = string.Join(", ", parameters.Select(parameter =>
+        var arguments = parameters.Select(parameter =>
             "(" + PowerShellCSharpMethodEmitter.GetTypeName(GetCompiledParameterType(parameter)) + ")values[" +
-            PowerShellCSharpLiteral.QuoteString(parameter.Name.VariablePath.UserPath) + "]"));
-        var invocation = "CompiledPowerShellScript." + method.GeneratedName + "(" + arguments + ")";
+            PowerShellCSharpLiteral.QuoteString(parameter.Name.VariablePath.UserPath) + "]").ToList();
+        if (method.RequiresPowerShellBoundParameters)
+            arguments.Add("boundParameters");
+        var invocation = "CompiledPowerShellScript." + method.GeneratedName + "(" + string.Join(", ", arguments) + ")";
         var invocationSource = method.ReturnType == typeof(void)
             ? "            " + invocation + ";" + Environment.NewLine + "            return 0;"
             : "            var result = " + invocation + ";" + Environment.NewLine +

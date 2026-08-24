@@ -75,6 +75,9 @@ internal static class PowerShellTypedExecutableCompiler
             .Where(static statement => statement is not FunctionDefinitionAst && !IsTopLevelDotSource(statement))
             .ToArray() ?? Array.Empty<StatementAst>();
         ValidateCommands(entrySource.Path, statements, byName);
+        var entryUnit = plan.Files
+            .First(file => file.FullPath.Equals(entryPoint, PowerShellCompilationPathSafety.PathComparison))
+            .Units.Single(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
         var entryMethod = new PowerShellCSharpMethodEmitter(
             entrySource.Path,
             entrySource.Ast,
@@ -82,11 +85,10 @@ internal static class PowerShellTypedExecutableCompiler
             "Invoke",
             statements,
             targetFramework,
-            PowerShellCompilationCapability.LocalFunctionCalls,
-            signatures).Emit();
-        var entryUnit = plan.Files
-            .First(file => file.FullPath.Equals(entryPoint, PowerShellCompilationPathSafety.PathComparison))
-            .Units.Single(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
+            PowerShellCompilationCapability.LocalFunctionCalls |
+            PowerShellCompilationCapability.BoundParameters,
+            signatures,
+            entryUnit.Parameters).Emit();
         methodDescriptions.Add(CreateMethodDescription(entryUnit, entryMethod, entryPoint));
         return new PowerShellTypedExecutableCompilation(entrySource.Ast, entryUnit, entryMethod, methods.ToArray(), methodDescriptions.ToArray());
     }
@@ -122,7 +124,8 @@ internal static class PowerShellTypedExecutableCompiler
             definition.Path,
             definition.Function,
             targetFramework,
-            PowerShellCompilationCapability.LocalFunctionCalls,
+            PowerShellCompilationCapability.LocalFunctionCalls |
+            PowerShellCompilationCapability.BoundParameters,
             signatures,
             definition.Unit.Parameters).Emit();
         var parameters = definition.Function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
@@ -130,7 +133,10 @@ internal static class PowerShellTypedExecutableCompiler
             name,
             method.GeneratedName,
             method.ReturnType,
-            parameters.Select(parameter => CreateParameter(parameter, definition.Unit)).ToArray());
+            parameters.Select(parameter => CreateParameter(parameter, definition.Unit)).ToArray(),
+            method.RequiresPowerShellBoundParameters,
+            method.RequiresPowerShellStreams,
+            method.RequiresPowerShellCommandRegions);
         methods.Add(method);
         methodDescriptions.Add(CreateMethodDescription(definition.Unit, method, definition.Path));
         states[name] = VisitState.Complete;
@@ -146,7 +152,11 @@ internal static class PowerShellTypedExecutableCompiler
             method.ReturnType.FullName ?? method.ReturnType.Name,
             unit.Parameters,
             unit.StartLine,
-            sourcePath);
+            sourcePath,
+            requiresPowerShellStreams: false,
+            requiresPowerShellCommandRegions: false,
+            aliases: null,
+            requiresPowerShellBoundParameters: method.RequiresPowerShellBoundParameters);
 
     private static PowerShellLocalFunctionParameter CreateParameter(ParameterAst parameter, PowerShellCompilationUnitPlan unit)
     {
@@ -250,12 +260,30 @@ internal sealed class PowerShellTypedExecutableCompilation
 
 internal sealed class PowerShellLocalFunctionSignature
 {
-    internal PowerShellLocalFunctionSignature(string sourceName, string generatedName, Type returnType, PowerShellLocalFunctionParameter[] parameters)
-    { SourceName = sourceName; GeneratedName = generatedName; ReturnType = returnType; Parameters = parameters; }
+    internal PowerShellLocalFunctionSignature(
+        string sourceName,
+        string generatedName,
+        Type returnType,
+        PowerShellLocalFunctionParameter[] parameters,
+        bool requiresPowerShellBoundParameters = false,
+        bool requiresPowerShellStreams = false,
+        bool requiresPowerShellCommandRegions = false)
+    {
+        SourceName = sourceName;
+        GeneratedName = generatedName;
+        ReturnType = returnType;
+        Parameters = parameters;
+        RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
+        RequiresPowerShellStreams = requiresPowerShellStreams;
+        RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
+    }
     internal string SourceName { get; }
     internal string GeneratedName { get; }
     internal Type ReturnType { get; }
     internal PowerShellLocalFunctionParameter[] Parameters { get; }
+    internal bool RequiresPowerShellBoundParameters { get; }
+    internal bool RequiresPowerShellStreams { get; }
+    internal bool RequiresPowerShellCommandRegions { get; }
 }
 
 internal sealed class PowerShellLocalFunctionParameter

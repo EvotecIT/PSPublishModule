@@ -47,7 +47,10 @@ internal static class PowerShellHybridFunctionCollisionResolver
             targetFramework,
             excludedMethods,
             typed.Methods.Any(static method => method.RequiresPowerShellStreams)
-                ? PowerShellCompilationCapability.PowerShellStreams
+                ? PowerShellCompilationCapability.PowerShellStreams |
+                  PowerShellCompilationCapability.LocalFunctionCalls |
+                  PowerShellCompilationCapability.BoundParameters |
+                  PowerShellCompilationCapability.PowerShellObjects
                 : PowerShellCompilationCapability.None);
         var diagnostics = excludedNames.Select(name =>
         {

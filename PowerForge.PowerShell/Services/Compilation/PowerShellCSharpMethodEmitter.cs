@@ -27,8 +27,10 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private readonly IReadOnlyDictionary<string, PowerShellCompilationParameter> _parameterMetadata;
     private bool _requiresPowerShellStreams;
     private bool _requiresPowerShellCommandRegions;
+    private bool _requiresBoundParameters;
     private int _indent = 1;
     private int _switchIndex;
+    private int _objectIndex;
 
     internal PowerShellCSharpMethodEmitter(
         string filePath,
@@ -110,18 +112,26 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         }
 
         var statements = _statements ?? _body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
+        _requiresBoundParameters = _capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters) &&
+            statements.SelectMany(static statement => statement.FindAll(static node => node is InvokeMemberExpressionAst, searchNestedScriptBlocks: false))
+                .OfType<InvokeMemberExpressionAst>()
+                .Any(static invocation => PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out _));
         var runtimeTailStart = _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
             ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(statements, _body, _localFunctionNames)
             : -1;
         var typedStatements = runtimeTailStart >= 0 ? statements.Take(runtimeTailStart).ToArray() : statements;
         InferLocalTypes(typedStatements);
         var availableVariables = _variables.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var calledLocalFunctions = GetCalledLocalFunctions(statements);
         _requiresPowerShellStreams = _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
-            statements.SelectMany(static statement => statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false))
-                .OfType<CommandAst>()
-                .Any(static command => PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _));
+            (statements.SelectMany(static statement => statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false))
+                 .OfType<CommandAst>()
+                 .Any(static command => PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _)) ||
+             calledLocalFunctions.Any(static signature => signature.RequiresPowerShellStreams));
         _requiresPowerShellCommandRegions = _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
-            (runtimeTailStart >= 0 || typedStatements.Any(statement => PowerShellCommandIslandPolicy.IsRuntimeRegion(statement, _body, _localFunctionNames, availableVariables)));
+            (runtimeTailStart >= 0 ||
+             typedStatements.Any(statement => PowerShellCommandIslandPolicy.IsRuntimeRegion(statement, _body, _localFunctionNames, availableVariables)) ||
+             calledLocalFunctions.Any(static signature => signature.RequiresPowerShellCommandRegions));
         ValidateVariableReferences(typedStatements);
         var returnType = runtimeTailStart >= 0 ? typeof(void) : InferReturnType(typedStatements);
         if (returnType != typeof(void) && !HasTerminalValue(statements))
@@ -136,6 +146,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         }
         if (_requiresPowerShellCommandRegions)
             parameterParts.Add("global::System.Action<string, object?[]> __invokePowerShellRegion");
+        if (_requiresBoundParameters)
+            parameterParts.Add("global::System.Collections.Generic.ISet<string> __boundParameters");
         var parameterSource = string.Join(", ", parameterParts);
 
         AppendLine($"public static {GetTypeName(returnType)} {_generatedName}({parameterSource})");
@@ -186,7 +198,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             returnType,
             _builder.ToString().TrimEnd(),
             _requiresPowerShellStreams,
-            _requiresPowerShellCommandRegions);
+            _requiresPowerShellCommandRegions,
+            _requiresBoundParameters);
     }
 
     private void EmitRuntimeRegion(IReadOnlyList<StatementAst> statements)
@@ -209,16 +222,12 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         AppendLine($"__invokePowerShellRegion({PowerShellCSharpLiteral.QuoteString(script)}, new object?[] {{ {arguments} }});");
     }
 
-    private static Type GetCompiledParameterType(ParameterAst parameter)
-        => parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
-            ? typeof(bool)
-            : parameter.StaticType;
-
     private void InferLocalTypes(IEnumerable<StatementAst> statements)
     {
         var assignments = statements
             .SelectMany(static statement => statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false))
             .Cast<AssignmentStatementAst>()
+            .Where(static assignment => !PowerShellCommandIslandPolicy.IsDiscardAssignment(assignment))
             .Where(static assignment => PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is not null)
             .OrderBy(static assignment => assignment.Extent.StartOffset)
             .ToArray();
@@ -446,6 +455,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             case TryStatementAst tryStatement:
                 EmitTry(tryStatement, returnType);
                 return;
+            case ThrowStatementAst throwStatement:
+                EmitThrow(throwStatement);
+                return;
             case BreakStatementAst breakStatement when breakStatement.Label is not null:
                 throw Error(breakStatement, "Labeled break is not supported by the typed compiler.");
             case BreakStatementAst breakStatement when !HasBreakableAncestor(breakStatement):
@@ -510,7 +522,14 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     {
         if (assignment.Left is IndexExpressionAst index)
         {
-            EmitDictionaryIndexAssignment(assignment, index, terminate);
+            EmitIndexedAssignment(assignment, index, terminate);
+            return;
+        }
+        if (assignment.Left is MemberExpressionAst member)
+        {
+            if (assignment.Operator.ToString() != "Equals")
+                throw Error(assignment, "Typed CLR member assignment currently supports only simple '=' mutation.");
+            AppendLine(_memberEmitter.EmitMemberAssignment(member, assignment.Right) + (terminate ? ";" : string.Empty));
             return;
         }
         var variable = FindAssignedVariable(assignment.Left)
@@ -571,12 +590,18 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             VariableExpressionAst variable => EmitVariable(variable),
             ParenExpressionAst parenthesized => $"({EmitExpression(parenthesized.Pipeline)})",
             ConvertExpressionAst conversion when IsOrderedHashtableConversion(conversion) => EmitOrderedStringDictionary(conversion),
+            ConvertExpressionAst conversion when
+                _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) &&
+                PowerShellObjectConstructionPolicy.IsLiteral(conversion) => EmitPowerShellObject(conversion),
             ConvertExpressionAst conversion => throw Error(conversion, "Explicit PowerShell conversion expressions require runtime conversion semantics and are not supported by the typed compiler."),
             BinaryExpressionAst binary => EmitBinary(binary),
             UnaryExpressionAst unary => EmitUnary(unary),
             ArrayLiteralAst array => EmitArray(array),
+            ArrayExpressionAst array => EmitArrayExpression(array),
             HashtableAst hashtable => EmitStringDictionary(hashtable),
             AssignmentStatementAst assignment => EmitAssignmentExpression(assignment),
+            InvokeMemberExpressionAst invocation when PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out var parameterName) =>
+                EmitBoundParameterContainsKey(invocation, parameterName),
             InvokeMemberExpressionAst invocation => _memberEmitter.EmitInvocation(invocation),
             MemberExpressionAst member => _memberEmitter.EmitMember(member),
             IndexExpressionAst index => _memberEmitter.EmitIndex(index),
@@ -699,14 +724,20 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             VariableExpressionAst variable => InferVariableType(variable),
             ParenExpressionAst parenthesized => InferExpressionType(parenthesized.Pipeline),
             ConvertExpressionAst conversion when IsOrderedHashtableConversion(conversion) => InferOrderedStringDictionaryType(conversion),
+            ConvertExpressionAst conversion when
+                _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) &&
+                PowerShellObjectConstructionPolicy.IsLiteral(conversion) => typeof(System.Management.Automation.PSObject),
             ConvertExpressionAst conversion => throw Error(conversion, "Explicit PowerShell conversion expressions require runtime conversion semantics and are not supported by the typed compiler."),
             BinaryExpressionAst binary => InferBinaryType(binary),
             UnaryExpressionAst unary when IsIncrementOrDecrement(unary) => typeof(void),
             UnaryExpressionAst unary => InferExpressionType(unary.Child),
             ArrayLiteralAst array when array.Elements.Count > 0 && array.Elements.Select(InferExpressionType).Distinct().Count() == 1 => InferExpressionType(array.Elements[0]).MakeArrayType(),
             ArrayLiteralAst array => throw Error(array, "Heterogeneous or empty PowerShell array literals cannot be represented by one inferred CLR array element type."),
+            ArrayExpressionAst array => InferArrayExpressionType(array),
             HashtableAst hashtable => InferStringDictionaryType(hashtable),
             AssignmentStatementAst assignment => InferExpressionType(assignment.Right),
+            InvokeMemberExpressionAst invocation when PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out _) =>
+                EnsureBoundParametersAvailable(invocation),
             InvokeMemberExpressionAst invocation => _memberEmitter.InferInvocationType(invocation),
             MemberExpressionAst member => _memberEmitter.InferMemberType(member),
             IndexExpressionAst index => _memberEmitter.InferIndexType(index),

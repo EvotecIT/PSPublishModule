@@ -156,6 +156,55 @@ internal sealed class PowerShellCSharpMemberEmitter
             : emitted;
     }
 
+    internal string EmitIndexAssignment(IndexExpressionAst index, Ast value)
+    {
+        if (index.Target is not VariableExpressionAst)
+            throw _error(index.Target, "Typed array mutation requires a local or parameter array target.");
+        var target = ResolveIndexTarget(index);
+        if (!target.Type.IsArray || target.Type.GetArrayRank() != 1)
+            throw _error(index.Target, "Typed CLR indexed mutation currently supports one-dimensional arrays only.");
+        var elementType = target.Type.GetElementType()!;
+        var valueType = _inferExpressionType(value);
+        if (!_canAssign(elementType, valueType))
+            throw _error(value, $"Array assignment value type '{valueType.FullName}' is not assignable to element type '{elementType.FullName}'.");
+        var targetCode = EmitTarget(target);
+        var indexCode = _emitExpression(index.Index);
+        var checkedTarget = $"({targetCode} ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
+        var normalizedIndex = $"(({indexCode}) < 0 ? {checkedTarget}.Length + ({indexCode}) : ({indexCode}))";
+        return $"{checkedTarget}[{normalizedIndex}] = {_emitExpression(value)}";
+    }
+
+    internal string EmitMemberAssignment(MemberExpressionAst member, Ast value)
+    {
+        if (member.Expression is not VariableExpressionAst)
+            throw _error(member.Expression, "Typed CLR member mutation requires a local or parameter receiver.");
+        var target = ResolveTarget(member.Expression);
+        if (target.IsStatic)
+            throw _error(member.Expression, "Typed CLR member mutation does not modify static state.");
+        var name = GetMemberName(member);
+        var flags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase;
+        var members = target.Type.GetMember(name, MemberTypes.Field | MemberTypes.Property, flags)
+            .Where(_isSupportedMember)
+            .Where(candidate => candidate switch
+            {
+                PropertyInfo property => property.GetMethod is { IsPublic: true } &&
+                                         property.SetMethod is { IsPublic: true } &&
+                                         property.GetIndexParameters().Length == 0,
+                FieldInfo field => !field.IsInitOnly && !field.IsLiteral,
+                _ => false
+            })
+            .ToArray();
+        if (members.Length == 0)
+            throw _error(member, $"CLR member '{target.Type.FullName}.{name}' was not found as a readable and writable instance field or property.");
+        if (members.Length > 1)
+            throw _error(member, $"Writable CLR member '{target.Type.FullName}.{name}' is ambiguous on the conservative compilation path.");
+        var memberType = members[0] is PropertyInfo propertyInfo ? propertyInfo.PropertyType : ((FieldInfo)members[0]).FieldType;
+        var valueType = _inferExpressionType(value);
+        if (!_isSupportedType(memberType) || !_canAssign(memberType, valueType))
+            throw _error(value, $"Member assignment value type '{valueType.FullName}' is not assignable to '{memberType.FullName}'.");
+        return $"{EmitTarget(target)}.{members[0].Name} = {_emitExpression(value)}";
+    }
+
     internal string EmitInvocation(InvokeMemberExpressionAst invocation)
     {
         var resolved = ResolveInvocation(invocation);

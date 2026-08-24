@@ -160,22 +160,21 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
-    public void Analyze_RejectsIndexedAndMemberAssignmentInsteadOfCompilingTheContainedVariable()
+    public void Analyze_AllowsTypedArrayMutationAndRejectsStaticMemberMutation()
     {
         using var fixture = ArtifactFixture.Create(
             "function Set-Indexed { param([int[]] $Values) $Values[0] = 9; return $Values[0] } " +
-            "function Set-Member { param([string] $Value) $Value.Length = 1; return $Value.Length }");
+            "function Set-Member { [System.Environment]::ExitCode = 1; return 1 }");
 
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
 
         var units = Assert.Single(plan.Files).Units;
         Assert.Equal(2, units.Length);
-        Assert.All(units, static unit =>
-        {
-            Assert.False(unit.IsCompilable);
-            Assert.Contains(unit.Diagnostics, diagnostic =>
-                diagnostic.Message.Contains("direct local-variable assignment", StringComparison.OrdinalIgnoreCase));
-        });
+        Assert.True(units.Single(unit => unit.Name == "Set-Indexed").IsCompilable);
+        var unsafeMember = units.Single(unit => unit.Name == "Set-Member");
+        Assert.False(unsafeMember.IsCompilable);
+        Assert.Contains(unsafeMember.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("direct local-variable assignment", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

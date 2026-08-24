@@ -26,7 +26,13 @@ public enum PowerShellCompilationCapability
     PowerShellStreams = 1,
 
     /// <summary>Strict executable analysis may defer direct local-function binding to the executable emitter.</summary>
-    LocalFunctionCalls = 2
+    LocalFunctionCalls = 2,
+
+    /// <summary>Generated hosts can preserve which parameters were explicitly bound.</summary>
+    BoundParameters = 4,
+
+    /// <summary>Binary-module methods may construct genuine PowerShell objects.</summary>
+    PowerShellObjects = 8
 }
 
 /// <summary>
@@ -266,7 +272,10 @@ public sealed class PowerShellCompilationSpec
             throw new ArgumentException("An input path is required.", nameof(path));
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             throw new ArgumentOutOfRangeException(nameof(mode));
-        if ((capabilities & ~(PowerShellCompilationCapability.PowerShellStreams | PowerShellCompilationCapability.LocalFunctionCalls)) != 0)
+        if ((capabilities & ~(PowerShellCompilationCapability.PowerShellStreams |
+                              PowerShellCompilationCapability.LocalFunctionCalls |
+                              PowerShellCompilationCapability.BoundParameters |
+                              PowerShellCompilationCapability.PowerShellObjects)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)

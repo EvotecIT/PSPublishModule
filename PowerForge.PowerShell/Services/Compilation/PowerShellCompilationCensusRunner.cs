@@ -57,12 +57,19 @@ public sealed class PowerShellCompilationCensusRunner
                     resolved.CompilationSourceFiles,
                     Directory.Exists(path) ? path : Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory(),
                     targetFramework,
-                    PowerShellCompilationCapability.PowerShellStreams | PowerShellCompilationCapability.LocalFunctionCalls);
+                    PowerShellCompilationCapability.PowerShellStreams |
+                    PowerShellCompilationCapability.LocalFunctionCalls |
+                    PowerShellCompilationCapability.BoundParameters |
+                    PowerShellCompilationCapability.PowerShellObjects);
             var emitted = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
                 resolved.CompilationSourceFiles,
                 "PowerForge.Census",
                 "CompiledPowerShell",
                 targetFramework);
+            var exportContract = PowerShellModuleExportContract.TryRead(resolved.SourcePath);
+            var exportedFunctions = exportContract?.SelectFunctions(emitted.Methods.Select(static method => method.SourceName));
+            emitted = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(emitted, targetFramework);
+            emitted = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(emitted, exportedFunctions, targetFramework);
             var compiledFiles = ApplyEmittedGraphEvidence(analyzedCompilation.Files, emitted);
             var runtimeOnlyFiles = resolved.SourceFiles
                 .Where(source => !compilationSources.Contains(Path.GetFullPath(source)))
@@ -70,7 +77,10 @@ public sealed class PowerShellCompilationCensusRunner
                     source,
                     PowerShellCompilationMode.Analyze,
                     targetFramework: targetFramework,
-                    capabilities: PowerShellCompilationCapability.PowerShellStreams | PowerShellCompilationCapability.LocalFunctionCalls)).Files)
+                    capabilities: PowerShellCompilationCapability.PowerShellStreams |
+                                  PowerShellCompilationCapability.LocalFunctionCalls |
+                                  PowerShellCompilationCapability.BoundParameters |
+                                  PowerShellCompilationCapability.PowerShellObjects)).Files)
                 .Select(MarkRuntimeOnly)
                 .ToArray();
             var files = compiledFiles.Concat(runtimeOnlyFiles).ToArray();
@@ -84,7 +94,10 @@ public sealed class PowerShellCompilationCensusRunner
                 PowerShellCompilationMode.Analyze,
                 recurse: false,
                 targetFramework: targetFramework,
-                capabilities: PowerShellCompilationCapability.PowerShellStreams | PowerShellCompilationCapability.LocalFunctionCalls));
+                capabilities: PowerShellCompilationCapability.PowerShellStreams |
+                              PowerShellCompilationCapability.LocalFunctionCalls |
+                              PowerShellCompilationCapability.BoundParameters |
+                              PowerShellCompilationCapability.PowerShellObjects));
             sourceFiles = plan.Files.Length;
         }
         stopwatch.Stop();

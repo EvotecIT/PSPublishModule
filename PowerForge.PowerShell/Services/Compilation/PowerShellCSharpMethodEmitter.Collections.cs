@@ -113,19 +113,32 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         AppendLine($"{target}[{EmitExpression(index.Index)}] = {EmitExpression(assignment.Right)}{suffix}");
     }
 
+    private void EmitIndexedAssignment(AssignmentStatementAst assignment, IndexExpressionAst index, bool terminate)
+    {
+        if (assignment.Operator.ToString() != "Equals")
+            throw Error(assignment, "Typed indexed assignment currently supports only simple '=' mutation.");
+        var targetType = InferExpressionType(index.Target);
+        if (targetType.IsArray)
+        {
+            AppendLine(_memberEmitter.EmitIndexAssignment(index, assignment.Right) + (terminate ? ";" : string.Empty));
+            return;
+        }
+        EmitDictionaryIndexAssignment(assignment, index, terminate);
+    }
+
     private bool HasTerminalValue(StatementAst[] statements)
     {
         var terminal = statements.LastOrDefault();
         if (terminal is ReturnStatementAst)
             return true;
         if (terminal is TryStatementAst tryStatement)
-            return BlockReturns(tryStatement.Body) &&
-                   tryStatement.CatchClauses.All(static clause => BlockReturns(clause.Body));
+            return BlockTerminates(tryStatement.Body) &&
+                   tryStatement.CatchClauses.All(static clause => BlockTerminates(clause.Body));
         return terminal is PipelineAst { PipelineElements.Count: 1 } pipeline &&
                (pipeline.PipelineElements[0] is CommandExpressionAst || IsLocalFunctionPipeline(pipeline)) &&
                InferExpressionType(pipeline) != typeof(void);
     }
 
-    private static bool BlockReturns(StatementBlockAst block)
-        => block.Statements.LastOrDefault() is ReturnStatementAst;
+    private static bool BlockTerminates(StatementBlockAst block)
+        => block.Statements.LastOrDefault() is ReturnStatementAst or ThrowStatementAst;
 }

@@ -47,9 +47,13 @@ public sealed class PowerShellCompilationArtifactBuilder
             }
             ValidateRuntimeHookSourceOwnership(spec, compilationSourcePaths);
             var capabilities = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
-                ? PowerShellCompilationCapability.PowerShellStreams
+                ? PowerShellCompilationCapability.PowerShellStreams |
+                  PowerShellCompilationCapability.LocalFunctionCalls |
+                  PowerShellCompilationCapability.BoundParameters |
+                  PowerShellCompilationCapability.PowerShellObjects
                 : spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Strict
-                    ? PowerShellCompilationCapability.LocalFunctionCalls
+                    ? PowerShellCompilationCapability.LocalFunctionCalls |
+                      PowerShellCompilationCapability.BoundParameters
                     : PowerShellCompilationCapability.None;
             var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, capabilities);
             if (plan.ParseErrorFiles > 0)

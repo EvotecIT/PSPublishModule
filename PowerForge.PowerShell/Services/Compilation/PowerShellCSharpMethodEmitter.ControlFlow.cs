@@ -144,6 +144,24 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         }
     }
 
+    private void EmitThrow(ThrowStatementAst statement)
+    {
+        if (statement.IsRethrow)
+        {
+            if (!HasAncestor<CatchClauseAst>(statement))
+                throw Error(statement, "A bare typed rethrow is valid only inside a catch clause.");
+            AppendLine("throw;");
+            return;
+        }
+
+        if (statement.Pipeline is null)
+            throw Error(statement, "Typed throw requires a statically typed CLR exception expression.");
+        var exceptionType = InferExpressionType(statement.Pipeline);
+        if (!typeof(Exception).IsAssignableFrom(exceptionType))
+            throw Error(statement.Pipeline, $"Typed throw requires a CLR exception expression; resolved type was '{exceptionType.FullName}'.");
+        AppendLine($"throw {EmitExpression(statement.Pipeline)};");
+    }
+
     private Type ResolveCatchType(TypeConstraintAst constraint)
     {
         var type = constraint.TypeName.GetReflectionType();

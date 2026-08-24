@@ -353,6 +353,10 @@ public sealed partial class PowerShellCompilationAnalyzer
                     break;
                 case ConvertExpressionAst conversion when IsOrderedHashtableConversion(conversion):
                     break;
+                case ConvertExpressionAst conversion when
+                    capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) &&
+                    PowerShellObjectConstructionPolicy.IsLiteral(conversion):
+                    break;
                 case ConvertExpressionAst conversion:
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
@@ -379,6 +383,11 @@ public sealed partial class PowerShellCompilationAnalyzer
                             : $"Command invocation '{commandName}' requires the PowerShell runtime.",
                         file,
                         command.Extent));
+                    break;
+                case VariableExpressionAst variable when
+                    capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters) &&
+                    PowerShellBoundParametersPolicy.IsReference(variable) &&
+                    PowerShellBoundParametersPolicy.IsSupportedReference(variable):
                     break;
                 case VariableExpressionAst variable when IsRuntimeVariable(variable, localVariables):
                     diagnostics.Add(CreateDiagnostic(
@@ -408,15 +417,21 @@ public sealed partial class PowerShellCompilationAnalyzer
                         file,
                         unary.Extent));
                     break;
+                case AssignmentStatementAst discard when
+                    capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+                    unitRoot is ScriptBlockAst discardBody &&
+                    PowerShellCommandIslandPolicy.IsDiscardAssignment(discard) &&
+                    PowerShellCommandIslandPolicy.IsRuntimeRegion(discard, discardBody, localFunctionNames, localVariables):
+                    break;
                 case AssignmentStatementAst assignment:
                     var assignedVariable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);
-                    if (assignedVariable is null && IsPotentialDictionaryIndexAssignment(assignment, unitRoot))
+                    if (assignedVariable is null && IsPotentialTypedMutation(assignment, unitRoot))
                         break;
                     if (assignedVariable is null)
                     {
                         diagnostics.Add(CreateDiagnostic(
                             PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                            "Only direct local-variable assignment and simple typed dictionary index assignment are supported; other indexed and member assignment require PowerShell runtime semantics.",
+                            "Only direct local-variable assignment and conservative typed index/member mutation are supported; other assignment targets require PowerShell runtime semantics.",
                             file,
                             assignment.Left.Extent));
                     }
@@ -455,6 +470,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                     break;
                 case CatchClauseAst:
                 case TryStatementAst:
+                case ThrowStatementAst:
                     break;
                 default:
                     if (!IsSupportedNode(candidate, unitRoot))
@@ -495,9 +511,9 @@ public sealed partial class PowerShellCompilationAnalyzer
             NamedBlockAst or StatementBlockAst or ParamBlockAst or ParameterAst or TypeConstraintAst or
             PipelineAst or CommandExpressionAst or AssignmentStatementAst or IfStatementAst or
             SwitchStatementAst or ForStatementAst or WhileStatementAst or ForEachStatementAst or TryStatementAst or CatchClauseAst or ReturnStatementAst or
-            BreakStatementAst or ContinueStatementAst or BinaryExpressionAst or UnaryExpressionAst or
+            ThrowStatementAst or BreakStatementAst or ContinueStatementAst or BinaryExpressionAst or UnaryExpressionAst or
             ParenExpressionAst or ConvertExpressionAst or ConstantExpressionAst or StringConstantExpressionAst or ExpandableStringExpressionAst or
-            VariableExpressionAst or ArrayLiteralAst or HashtableAst or TypeExpressionAst or MemberExpressionAst or
+            VariableExpressionAst or ArrayLiteralAst or ArrayExpressionAst or HashtableAst or TypeExpressionAst or MemberExpressionAst or
             InvokeMemberExpressionAst or IndexExpressionAst;
 
     private static bool HasUnsupportedSwitchFlags(SwitchFlags flags)
@@ -509,16 +525,24 @@ public sealed partial class PowerShellCompilationAnalyzer
         return type is not null && typeof(Exception).IsAssignableFrom(type);
     }
 
-    private static bool IsPotentialDictionaryIndexAssignment(AssignmentStatementAst assignment, Ast unitRoot)
+    private static bool IsPotentialTypedMutation(AssignmentStatementAst assignment, Ast unitRoot)
     {
-        if (assignment.Operator.ToString() != "Equals" ||
-            assignment.Left is not IndexExpressionAst { Target: VariableExpressionAst target })
+        if (assignment.Operator.ToString() != "Equals")
+            return false;
+        if (assignment.Left is MemberExpressionAst
+            {
+                Expression: VariableExpressionAst,
+                Member: StringConstantExpressionAst
+            })
+            return true;
+        if (assignment.Left is not IndexExpressionAst { Target: VariableExpressionAst target })
             return false;
         var name = target.VariablePath.UserPath;
         if (unitRoot is ScriptBlockAst scriptBlock &&
             scriptBlock.ParamBlock?.Parameters.FirstOrDefault(parameter =>
                 parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } parameter &&
-            typeof(System.Collections.IDictionary).IsAssignableFrom(parameter.StaticType))
+            (parameter.StaticType.IsArray && parameter.StaticType.GetArrayRank() == 1 ||
+             typeof(System.Collections.IDictionary).IsAssignableFrom(parameter.StaticType)))
             return true;
         return unitRoot.FindAll(
                 node => node is AssignmentStatementAst candidate && candidate.Extent.StartOffset < assignment.Extent.StartOffset,
@@ -527,8 +551,12 @@ public sealed partial class PowerShellCompilationAnalyzer
             .Any(candidate =>
                 PowerShellAssignmentTargetPolicy.FindDirectVariable(candidate.Left) is { } variable &&
                 variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase) &&
-                UnwrapDictionaryLiteral(candidate.Right));
+                (UnwrapDictionaryLiteral(candidate.Right) || IsArrayProducingAssignment(candidate)));
     }
+
+    private static bool IsArrayProducingAssignment(AssignmentStatementAst assignment)
+        => assignment.Left is ConvertExpressionAst conversion && conversion.StaticType.IsArray ||
+           assignment.Right.FindAll(static node => node is ArrayLiteralAst or ArrayExpressionAst, searchNestedScriptBlocks: false).Any();
 
     private static bool UnwrapDictionaryLiteral(StatementAst right)
     {

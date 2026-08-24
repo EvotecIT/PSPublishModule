@@ -17,7 +17,7 @@ internal static class Program
     {
         try
         {
-            var values = ParseArguments(args);
+            var values = ParseArguments(args, out var boundParameters);
 {{INVOCATION}}
         }
         catch (Exception exception)
@@ -27,7 +27,7 @@ internal static class Program
         }
     }
 
-    private static IReadOnlyDictionary<string, object> ParseArguments(string[] args)
+    private static IReadOnlyDictionary<string, object> ParseArguments(string[] args, out HashSet<string> boundParameters)
     {
         var raw = Parameters.ToDictionary(
             static parameter => parameter.Name,
@@ -72,6 +72,10 @@ internal static class Program
             positionalIndex++;
         }
 
+        boundParameters = raw
+            .Where(static pair => pair.Value.Count > 0)
+            .Select(static pair => pair.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var converted = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
         foreach (var parameter in Parameters)
         {

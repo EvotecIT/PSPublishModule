@@ -15,6 +15,17 @@ internal sealed partial class PowerShellCSharpMethodEmitter
            command.GetCommandName() is { } name &&
            _localFunctions.ContainsKey(name);
 
+    private PowerShellLocalFunctionSignature[] GetCalledLocalFunctions(IEnumerable<StatementAst> statements)
+        => statements
+            .SelectMany(static statement => statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false))
+            .OfType<CommandAst>()
+            .Select(command => command.GetCommandName())
+            .Where(static name => name is not null)
+            .Select(name => _localFunctions.TryGetValue(name!, out var signature) ? signature : null)
+            .Where(static signature => signature is not null)
+            .Cast<PowerShellLocalFunctionSignature>()
+            .ToArray();
+
     private Type InferLocalFunctionType(PipelineAst pipeline)
         => BindLocalFunctionCall(GetLocalCommand(pipeline)).Signature.ReturnType;
 
@@ -27,7 +38,14 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private string EmitLocalFunctionCall(CommandAst command)
     {
         var call = BindLocalFunctionCall(command);
-        return $"{call.Signature.GeneratedName}({string.Join(", ", call.Arguments)})";
+        var arguments = call.Arguments.ToList();
+        if (call.Signature.RequiresPowerShellStreams)
+            arguments.AddRange(new[] { "__writeVerbose", "__writeDebug", "__writeWarning" });
+        if (call.Signature.RequiresPowerShellCommandRegions)
+            arguments.Add("__invokePowerShellRegion");
+        if (call.Signature.RequiresPowerShellBoundParameters)
+            arguments.Add(EmitBoundParameterSet(call.BoundParameterNames));
+        return $"{call.Signature.GeneratedName}({string.Join(", ", arguments)})";
     }
 
     private BoundLocalFunctionCall BindLocalFunctionCall(CommandAst command)
@@ -88,8 +106,17 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             if (parameter.Type == typeof(string)) return "string.Empty";
             if (parameter.Type == typeof(bool)) return "false";
             return $"default({GetTypeName(parameter.Type)})";
-        }).ToArray();
-        return new BoundLocalFunctionCall(signature, arguments);
+        }).ToList();
+        return new BoundLocalFunctionCall(signature, arguments.ToArray(), bound.Keys.ToArray());
+    }
+
+    private static string EmitBoundParameterSet(IEnumerable<string> boundParameterNames)
+    {
+        var names = boundParameterNames
+            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .Select(PowerShellCSharpLiteral.QuoteString);
+        return "new global::System.Collections.Generic.HashSet<string>(global::System.StringComparer.OrdinalIgnoreCase) { " +
+               string.Join(", ", names) + " }";
     }
 
     private string BindArgument(PowerShellLocalFunctionParameter parameter, Ast argument)
@@ -124,9 +151,10 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
     private sealed class BoundLocalFunctionCall
     {
-        internal BoundLocalFunctionCall(PowerShellLocalFunctionSignature signature, string[] arguments)
-        { Signature = signature; Arguments = arguments; }
+        internal BoundLocalFunctionCall(PowerShellLocalFunctionSignature signature, string[] arguments, string[] boundParameterNames)
+        { Signature = signature; Arguments = arguments; BoundParameterNames = boundParameterNames; }
         internal PowerShellLocalFunctionSignature Signature { get; }
         internal string[] Arguments { get; }
+        internal string[] BoundParameterNames { get; }
     }
 }
