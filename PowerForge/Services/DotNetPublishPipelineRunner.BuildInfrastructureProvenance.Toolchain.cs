@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+
 namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
@@ -9,14 +12,19 @@ public sealed partial class DotNetPublishPipelineRunner
             : toolName.Equals("git", StringComparison.OrdinalIgnoreCase)
                 ? EnumerateGitCandidates()
                 : Array.Empty<string>();
+        var seen = new HashSet<string>(
+            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         foreach (string candidate in candidates)
         {
             try
             {
                 string fullPath = Path.GetFullPath(candidate);
-                if (!File.Exists(fullPath) ||
+                if (!seen.Add(fullPath) ||
+                    !File.Exists(fullPath) ||
                     (File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) != 0 ||
-                    !HasSinglePhysicalLink(fullPath))
+                    !HasSinglePhysicalLink(fullPath) ||
+                    (toolName.Equals("dotnet", StringComparison.OrdinalIgnoreCase) &&
+                     !IsUsableDotNetInstallation(fullPath)))
                 {
                     continue;
                 }
@@ -72,6 +80,54 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static IEnumerable<string> EnumerateDotNetCandidates()
     {
+        string executableName = IsWindows() ? "dotnet.exe" : "dotnet";
+        string? processPath = null;
+        try
+        {
+            processPath = Process.GetCurrentProcess().MainModule?.FileName;
+        }
+        catch
+        {
+            // The active runtime directory and configured installation roots remain available.
+        }
+        if (!string.IsNullOrWhiteSpace(processPath) &&
+            Path.GetFileName(processPath!).Equals(executableName, StringComparison.OrdinalIgnoreCase))
+        {
+            yield return processPath!;
+        }
+
+        string? runtimeDirectory = null;
+        try
+        {
+            runtimeDirectory = RuntimeEnvironment.GetRuntimeDirectory();
+        }
+        catch
+        {
+            // A non-dotnet runtime has no active runtime directory to contribute.
+        }
+        string? runtimeRoot = string.IsNullOrWhiteSpace(runtimeDirectory)
+            ? null
+            : TryGetDotNetRootFromRuntimeDirectory(runtimeDirectory!);
+        if (!string.IsNullOrWhiteSpace(runtimeRoot))
+            yield return Path.Combine(runtimeRoot!, executableName);
+
+        string? configuredRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
+        if (!string.IsNullOrWhiteSpace(configuredRoot))
+            yield return Path.Combine(configuredRoot!, executableName);
+        if (IsWindows())
+        {
+            string? configuredX86Root = Environment.GetEnvironmentVariable("DOTNET_ROOT(x86)");
+            if (!string.IsNullOrWhiteSpace(configuredX86Root))
+                yield return Path.Combine(configuredX86Root!, executableName);
+        }
+
+        string? userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(userProfile))
+            yield return Path.Combine(userProfile!, ".dotnet", executableName);
+        string? runnerToolCache = Environment.GetEnvironmentVariable("RUNNER_TOOL_CACHE");
+        if (!string.IsNullOrWhiteSpace(runnerToolCache))
+            yield return Path.Combine(runnerToolCache!, "dotnet", executableName);
+
         if (IsWindows())
         {
             string? programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
@@ -88,6 +144,40 @@ public sealed partial class DotNetPublishPipelineRunner
         yield return "/usr/local/share/dotnet/dotnet";
         yield return "/usr/local/share/dotnet/x64/dotnet";
         yield return "/opt/homebrew/share/dotnet/dotnet";
+    }
+
+    internal static string? TryGetDotNetRootFromRuntimeDirectory(string runtimeDirectory)
+    {
+        try
+        {
+            DirectoryInfo? directory = new(runtimeDirectory);
+            while (directory is not null)
+            {
+                if (directory.Name.Equals("shared", StringComparison.OrdinalIgnoreCase))
+                    return directory.Parent?.FullName;
+                directory = directory.Parent;
+            }
+        }
+        catch
+        {
+            // A non-dotnet runtime has no active dotnet installation to contribute.
+        }
+        return null;
+    }
+
+    private static bool IsUsableDotNetInstallation(string executablePath)
+    {
+        try
+        {
+            string root = Path.GetDirectoryName(executablePath)!;
+            return Directory.Exists(Path.Combine(root, "host", "fxr")) &&
+                   Directory.Exists(Path.Combine(root, "shared", "Microsoft.NETCore.App")) &&
+                   Directory.Exists(Path.Combine(root, "sdk"));
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static IEnumerable<string> EnumerateGitCandidates()
