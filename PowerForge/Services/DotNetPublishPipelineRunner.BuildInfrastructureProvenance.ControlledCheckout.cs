@@ -2,6 +2,131 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    private static bool TryCreateControlledBuildEnvironment(
+        IReadOnlyDictionary<string, string?> environmentVariables,
+        string gitRoot,
+        string controlledSourceRoot,
+        out IReadOnlyDictionary<string, string?> controlledEnvironment)
+    {
+        var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, string?> variable in environmentVariables)
+        {
+            if (variable.Value is null)
+            {
+                values[variable.Key] = null;
+                continue;
+            }
+            if (!TryRemapControlledBuildValue(
+                    variable.Value,
+                    gitRoot,
+                    controlledSourceRoot,
+                    out string remappedValue))
+            {
+                controlledEnvironment = values;
+                return false;
+            }
+            values[variable.Key] = remappedValue;
+        }
+        controlledEnvironment = values;
+        return true;
+    }
+
+    private static bool TryRemapControlledBuildValue(
+        string value,
+        string gitRoot,
+        string controlledSourceRoot,
+        out string remappedValue)
+    {
+        string[] segments = value.Split(';');
+        for (int index = 0; index < segments.Length; index++)
+        {
+            string segment = segments[index];
+            int start = 0;
+            while (start < segment.Length && char.IsWhiteSpace(segment[start]))
+                start++;
+            int end = segment.Length;
+            while (end > start && char.IsWhiteSpace(segment[end - 1]))
+                end--;
+            char quote = '\0';
+            if (end - start >= 2 &&
+                (segment[start] == '\'' || segment[start] == '"') &&
+                segment[end - 1] == segment[start])
+            {
+                quote = segment[start];
+                start++;
+                end--;
+            }
+
+            string candidate = segment.Substring(start, end - start);
+            if (Path.IsPathRooted(candidate))
+            {
+                string fullPath;
+                try
+                {
+                    fullPath = Path.GetFullPath(candidate);
+                }
+                catch
+                {
+                    remappedValue = string.Empty;
+                    return false;
+                }
+                if (!IsSameOrBelowBuildInputPath(fullPath, gitRoot))
+                {
+                    remappedValue = string.Empty;
+                    return false;
+                }
+                string relativePath = FrameworkCompatibility.GetRelativePath(gitRoot, fullPath);
+                string controlledPath = Path.GetFullPath(Path.Combine(controlledSourceRoot, relativePath));
+                if (!IsSameOrBelowBuildInputPath(controlledPath, controlledSourceRoot))
+                {
+                    remappedValue = string.Empty;
+                    return false;
+                }
+
+                string prefix = segment.Substring(0, quote == '\0' ? start : start - 1);
+                string suffix = segment.Substring(quote == '\0' ? end : end + 1);
+                segments[index] = prefix +
+                    (quote == '\0' ? string.Empty : quote.ToString()) +
+                    controlledPath +
+                    (quote == '\0' ? string.Empty : quote.ToString()) +
+                    suffix;
+                continue;
+            }
+
+            if (ContainsRootedBuildValue(candidate, gitRoot))
+            {
+                remappedValue = string.Empty;
+                return false;
+            }
+        }
+
+        remappedValue = string.Join(";", segments);
+        return true;
+    }
+
+    private static bool ContainsRootedBuildValue(string value, string gitRoot)
+    {
+        StringComparison comparison = IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (value.IndexOf(Path.GetFullPath(gitRoot), comparison) >= 0)
+            return true;
+
+        for (int index = 0; index < value.Length; index++)
+        {
+            if (index > 0 &&
+                !char.IsWhiteSpace(value[index - 1]) &&
+                "=,|([{'\"".IndexOf(value[index - 1]) < 0)
+            {
+                continue;
+            }
+            string candidate = value.Substring(index).TrimStart('\'', '"');
+            if (Path.IsPathRooted(candidate))
+                return true;
+        }
+        return false;
+    }
+
     private static bool TryCreateControlledSourceCheckout(
         string projectPath,
         string checkoutRoot,

@@ -312,8 +312,6 @@ public sealed partial class DotNetPublishPipelineRunner
         var directories = new HashSet<string>(comparison);
         var outputRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var expectedOutputPathsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
-        var intermediateRootsByEvaluation = new Dictionary<string, string?>(StringComparer.Ordinal);
-        var intermediateOutputPathsByEvaluation = new Dictionary<string, string?>(StringComparer.Ordinal);
         var pathMapsByEvaluation = new Dictionary<string, string?>(StringComparer.Ordinal);
         var controlledGeneratedOutputProofs = new Dictionary<string, bool>(StringComparer.Ordinal);
         var generatedProjectReferenceOutputs = new List<(ProjectEvaluationRequest Request, GeneratedProjectReferenceOutput Output)>();
@@ -359,8 +357,6 @@ public sealed partial class DotNetPublishPipelineRunner
                     sourceInputs.Add(input);
                 outputRootsByEvaluation[visitKey] = evaluation.OutputRoots;
                 expectedOutputPathsByEvaluation[visitKey] = evaluation.ExpectedOutputPaths;
-                intermediateRootsByEvaluation[visitKey] = evaluation.IntermediateRoot;
-                intermediateOutputPathsByEvaluation[visitKey] = evaluation.IntermediateOutputPath;
                 pathMapsByEvaluation[visitKey] = evaluation.PathMap;
                 generatedProjectReferenceOutputs.AddRange(
                     evaluation.GeneratedProjectReferenceOutputs.Select(output => (request, output)));
@@ -401,16 +397,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 TryProveControlledGeneratedOutput(
                     referencedProject,
                     output.OutputPath,
-                    intermediateRootsByEvaluation.TryGetValue(
-                        referencedProject.BuildVisitKey(),
-                        out string? intermediateRoot)
-                        ? intermediateRoot
-                        : null,
-                    intermediateOutputPathsByEvaluation.TryGetValue(
-                        referencedProject.BuildVisitKey(),
-                        out string? intermediateOutputPath)
-                        ? intermediateOutputPath
-                        : null,
                     pathMapsByEvaluation.TryGetValue(
                         referencedProject.BuildVisitKey(),
                         out string? pathMap)
