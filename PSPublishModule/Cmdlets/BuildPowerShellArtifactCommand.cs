@@ -29,6 +29,10 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string[] Path { get; set; } = Array.Empty<string>();
 
+    /// <summary>Explicit root .ps1 application entrypoint when several script paths are supplied for an executable.</summary>
+    [Parameter]
+    public string? EntryPoint { get; set; }
+
     /// <summary>Optional artifact shape. Defaults to Executable for .ps1 and BinaryModule for module inputs.</summary>
     [Parameter]
     public PowerShellCompilationArtifactKind? Kind { get; set; }
@@ -104,6 +108,9 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var requestedPaths = Path.Select(path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path)).ToArray();
+        var entryPointPath = string.IsNullOrWhiteSpace(EntryPoint)
+            ? null
+            : SessionState.Path.GetUnresolvedProviderPathFromPSPath(EntryPoint);
         if (Mode == PowerShellCompilationMode.Analyze)
         {
             ThrowTerminatingError(new ErrorRecord(
@@ -116,7 +123,7 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
         PowerShellCompilationResolvedInput resolved;
         try
         {
-            resolved = new PowerShellCompilationInputResolver().Resolve(requestedPaths, Kind, Mode);
+            resolved = new PowerShellCompilationInputResolver().Resolve(requestedPaths, Kind, Mode, entryPointPath);
         }
         catch (Exception ex)
         {

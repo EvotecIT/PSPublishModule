@@ -13,8 +13,14 @@ internal static class PowerShellPackagedScriptRewriter
         "if ([System.IO.Path]::GetFileNameWithoutExtension([System.Environment]::ProcessPath) -eq 'dotnet' -and " +
         "-not [string]::IsNullOrWhiteSpace($entryPath)) { $entryPath } else { [System.Environment]::ProcessPath } })";
 
-    internal static string Rewrite(string sourcePath)
+    internal static string Rewrite(
+        string sourcePath,
+        string? packagedCommandPathExpression = null,
+        bool allowDotSource = false)
     {
+        var commandPathExpression = string.IsNullOrWhiteSpace(packagedCommandPathExpression)
+            ? PackagedCommandPathExpression
+            : packagedCommandPathExpression!;
         var ast = Parser.ParseFile(sourcePath, out _, out var errors);
         if (errors.Length > 0)
             throw new InvalidOperationException("Packaged script could not be parsed while preserving script semantics.");
@@ -33,7 +39,7 @@ internal static class PowerShellPackagedScriptRewriter
                 searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
             .FirstOrDefault();
-        if (dotSource is not null)
+        if (dotSource is not null && !allowDotSource)
         {
             throw new InvalidOperationException(
                 $"Packaged executable generation does not support dot-sourced command '{dotSource.Extent.Text}' because the dependency is not embedded with file-backed path semantics.");
@@ -55,19 +61,19 @@ internal static class PowerShellPackagedScriptRewriter
 
         var invocationPaths = FindInvocationPaths(ast).ToArray();
         var parameterBindingPaths = FindParameterBindingPaths(ast).ToArray();
-        var replacements = exits.Select(exit => CreateExitReplacement(exit, invocationPaths))
+        var replacements = exits.Select(exit => CreateExitReplacement(exit, invocationPaths, commandPathExpression))
             .Concat(invocationPaths
                 .Where(path => !exits.Any(exit => Contains(exit.Extent, path.Extent)))
                 .Select(path => new SourceReplacement(
                     path.Extent.StartOffset,
                     path.Extent.EndOffset,
-                    PackagedCommandPathExpression)))
+                    commandPathExpression)))
             .Concat(parameterBindingPaths.Select(path => new SourceReplacement(
                 path.Extent.StartOffset,
                 path.Extent.EndOffset,
                 path.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase)
-                    ? "$([System.IO.Path]::GetDirectoryName(" + PackagedCommandPathExpression + "))"
-                    : PackagedCommandPathExpression)))
+                    ? "$([System.IO.Path]::GetDirectoryName(" + commandPathExpression + "))"
+                    : commandPathExpression)))
             .OrderByDescending(static replacement => replacement.StartOffset)
             .ToArray();
 
@@ -86,7 +92,7 @@ internal static class PowerShellPackagedScriptRewriter
             .Sum(static replacement => replacement.Text.Length - (replacement.EndOffset - replacement.StartOffset));
         var pathSemantics = new StringBuilder();
         if (prologueEndOffset > 0 && source[prologueEndOffset - 1] is not '\r' and not '\n') pathSemantics.AppendLine();
-        pathSemantics.Append("$script:PSCommandPath = ").AppendLine(PackagedCommandPathExpression);
+        pathSemantics.Append("$script:PSCommandPath = ").AppendLine(commandPathExpression);
         pathSemantics.AppendLine("$script:PSScriptRoot = [System.IO.Path]::GetDirectoryName($script:PSCommandPath)");
         source.Insert(prologueEndOffset, pathSemantics.ToString());
         return source.ToString();
@@ -119,7 +125,10 @@ internal static class PowerShellPackagedScriptRewriter
         }
     }
 
-    private static SourceReplacement CreateExitReplacement(ExitStatementAst exit, MemberExpressionAst[] invocationPaths)
+    private static SourceReplacement CreateExitReplacement(
+        ExitStatementAst exit,
+        MemberExpressionAst[] invocationPaths,
+        string commandPathExpression)
     {
         var expression = exit.Pipeline?.Extent.Text;
         var exitCode = "0";
@@ -132,7 +141,7 @@ internal static class PowerShellPackagedScriptRewriter
             {
                 var offset = path.Extent.StartOffset - exit.Pipeline!.Extent.StartOffset;
                 rewritten.Remove(offset, path.Extent.EndOffset - path.Extent.StartOffset);
-                rewritten.Insert(offset, PackagedCommandPathExpression);
+                rewritten.Insert(offset, commandPathExpression);
             }
             exitCode = "[int](" + rewritten + ")";
         }

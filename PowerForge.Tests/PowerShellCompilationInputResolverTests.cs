@@ -52,17 +52,21 @@ public sealed class PowerShellCompilationInputResolverTests
     }
 
     [Fact]
-    public void Resolve_LooseScriptSetRequiresOneExplicitExecutableEntrypoint()
+    public void Resolve_LooseExecutableSetUsesExplicitEntrypointAndReachableDependencyClosure()
     {
         using var fixture = ResolverFixture.Create();
-        var first = fixture.Write("Main.ps1", "return 1");
+        var first = fixture.Write("Main.ps1", ". \"$PSScriptRoot/Helper.ps1\"; Get-Helper");
         var second = fixture.Write("Helper.ps1", "function Get-Helper { return 2 }");
 
-        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver().Resolve(
+        var resolved = new PowerShellCompilationInputResolver().Resolve(
             new[] { first, second },
-            PowerShellCompilationArtifactKind.Executable));
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package,
+            first);
 
-        Assert.Contains("one explicit .ps1 entrypoint", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(first, resolved.SourcePath);
+        Assert.Equal(new[] { first, second }, resolved.CompilationSourceFiles);
+        Assert.Equal(PowerShellCompilationMode.Package, resolved.Mode);
     }
 
     [Fact]

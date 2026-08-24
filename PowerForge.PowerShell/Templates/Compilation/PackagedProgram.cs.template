@@ -7,6 +7,11 @@ namespace PowerForge.Compiled;
 internal static class Program
 {
     private const string ScriptResourceName = "PowerForge.Compiled.Source.ps1";
+    private static readonly string EntryRelativePath = {{ENTRY_RELATIVE_PATH}};
+    private static readonly EmbeddedDependency[] Dependencies =
+    {
+{{DEPENDENCY_SPECS}}
+    };
     private static readonly HashSet<string> Parameters = new(StringComparer.OrdinalIgnoreCase) { {{PARAMETERS}} };
     private static readonly HashSet<string> SwitchParameters = new(StringComparer.OrdinalIgnoreCase) { {{SWITCH_PARAMETERS}} };
     private static readonly Dictionary<string, string> ParameterAliases = new(StringComparer.OrdinalIgnoreCase) { {{PARAMETER_ALIASES}} };
@@ -16,7 +21,11 @@ internal static class Program
         try
         {
             var source = ReadEmbeddedScript();
-            using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+            using var extractedSources = ExtractEmbeddedSources(source);
+            PowerForgePackagedEntryPoint.Path = extractedSources.EntryPath;
+            var initialState = InitialSessionState.CreateDefault2();
+            initialState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
+            using var runspace = RunspaceFactory.CreateRunspace(initialState);
             runspace.Open();
             using var powerShell = PowerShell.Create();
             powerShell.Runspace = runspace;
@@ -83,6 +92,39 @@ internal static class Program
             ?? throw new InvalidOperationException($"Embedded PowerShell script '{ScriptResourceName}' was not found.");
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    private static ExtractedSourceSet ExtractEmbeddedSources(string entrySource)
+    {
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "PowerForge", "packaged-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var entryPath = ResolveContainedExtractionPath(root, EntryRelativePath);
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(entryPath)!);
+        File.WriteAllText(entryPath, entrySource, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        foreach (var dependency in Dependencies)
+        {
+            var target = ResolveContainedExtractionPath(root, dependency.RelativePath);
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(target)!);
+            using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(dependency.ResourceName)
+                ?? throw new InvalidOperationException($"Embedded PowerShell dependency '{dependency.ResourceName}' was not found.");
+            using var file = File.Create(target);
+            stream.CopyTo(file);
+        }
+        return new ExtractedSourceSet(root, entryPath);
+    }
+
+    private static string ResolveContainedExtractionPath(string root, string relativePath)
+    {
+        if (System.IO.Path.IsPathRooted(relativePath))
+            throw new InvalidOperationException($"Embedded PowerShell dependency path '{relativePath}' must be relative.");
+        var fullRoot = System.IO.Path.GetFullPath(root).TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar;
+        var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(root, relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar)));
+        var comparison = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!fullPath.StartsWith(fullRoot, comparison))
+            throw new InvalidOperationException($"Embedded PowerShell dependency path '{relativePath}' escapes its extraction root.");
+        return fullPath;
     }
 
     private static IEnumerable<ScriptArgument> ParseArguments(IReadOnlyList<string> arguments)
@@ -202,6 +244,40 @@ internal static class Program
         internal string? Name { get; }
         internal object? Value { get; }
     }
+
+    private sealed class EmbeddedDependency
+    {
+        internal EmbeddedDependency(string resourceName, string relativePath)
+        {
+            ResourceName = resourceName;
+            RelativePath = relativePath;
+        }
+
+        internal string ResourceName { get; }
+        internal string RelativePath { get; }
+    }
+
+    private sealed class ExtractedSourceSet : IDisposable
+    {
+        internal ExtractedSourceSet(string root, string entryPath)
+        {
+            Root = root;
+            EntryPath = entryPath;
+        }
+
+        internal string Root { get; }
+        internal string EntryPath { get; }
+
+        public void Dispose()
+        {
+            try { Directory.Delete(Root, recursive: true); } catch { }
+        }
+    }
+}
+
+public static class PowerForgePackagedEntryPoint
+{
+    public static string Path { get; internal set; } = string.Empty;
 }
 
 public sealed class PowerForgeScriptExitException : Exception

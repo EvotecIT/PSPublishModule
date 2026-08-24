@@ -66,6 +66,8 @@ public sealed class PowerShellCompilationArtifactBuilder
                     $"Strict binary-module compilation rejected manifest runtime script hook(s): {string.Join(", ", runtimeManifestHooks)}.");
             if (spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Strict)
             {
+                if (compilationSourcePaths.Length != 1)
+                    throw new InvalidOperationException("Strict typed executable generation currently accepts one entrypoint file; use Package mode for an entrypoint with bundled dot-source dependencies.");
                 var executable = PowerShellTypedExecutableEmitter.Emit(spec.SourcePath, plan, spec.TargetFramework);
                 File.WriteAllText(Path.Combine(workspace, "CompiledPowerShellScript.cs"), executable.CompiledSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 File.WriteAllText(Path.Combine(workspace, "Program.cs"), executable.ProgramSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -151,17 +153,20 @@ public sealed class PowerShellCompilationArtifactBuilder
             }
             else
             {
+                var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths);
                 var parameterInitializers = GeneratePackagedParameterInitializers(spec.SourcePath);
                 File.WriteAllText(
                     Path.Combine(workspace, "Source.ps1"),
-                    GeneratePackagedScript(spec.SourcePath),
+                    GeneratePackagedScript(spec.SourcePath, packagedSources.HasDependencies),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 File.WriteAllText(
                     Path.Combine(workspace, "Program.cs"),
                     ReadTemplate(PackagedProgramTemplate)
                         .Replace("{{PARAMETERS}}", parameterInitializers.Parameters)
                         .Replace("{{SWITCH_PARAMETERS}}", parameterInitializers.SwitchParameters)
-                        .Replace("{{PARAMETER_ALIASES}}", parameterInitializers.ParameterAliases),
+                        .Replace("{{PARAMETER_ALIASES}}", parameterInitializers.ParameterAliases)
+                        .Replace("{{ENTRY_RELATIVE_PATH}}", PowerShellCSharpLiteral.QuoteString(packagedSources.EntryRelativePath))
+                        .Replace("{{DEPENDENCY_SPECS}}", packagedSources.DependencySpecs),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 projectPath = Path.Combine(workspace, artifactName + ".csproj");
                 File.WriteAllText(
@@ -172,7 +177,8 @@ public sealed class PowerShellCompilationArtifactBuilder
                         .Replace("{{SINGLE_FILE}}", spec.SingleFile ? "true" : "false")
                         .Replace("{{SELF_CONTAINED}}", spec.SelfContained ? "true" : "false")
                         .Replace("{{POWERSHELL_SDK_VERSION}}", GetPowerShellSdkVersion(spec.TargetFramework))
-                        .Replace("{{SECURITY_XML_VERSION}}", GetSecurityXmlVersion(spec.TargetFramework)),
+                        .Replace("{{SECURITY_XML_VERSION}}", GetSecurityXmlVersion(spec.TargetFramework))
+                        .Replace("{{DEPENDENCY_RESOURCES}}", packagedSources.ProjectResources),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 requiresPowerShellRuntime = true;
                 usesPowerShellRuntimeFallback = true;
@@ -387,8 +393,6 @@ public sealed class PowerShellCompilationArtifactBuilder
                 PowerShellCompilationPathSafety.EnsureContained(sourceRoot, path, $"Additional compilation source '{path}' escapes the root module directory.");
             PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, path, $"Compilation source '{path}' traverses a symbolic link or junction.");
         }
-        if (spec.Kind == PowerShellCompilationArtifactKind.Executable && paths.Length != 1)
-            throw new ArgumentException("Executable compilation accepts one script entrypoint; module-scope source sets are supported by library and binary-module artifacts.", nameof(spec));
         return paths;
     }
 
@@ -619,8 +623,49 @@ public sealed class PowerShellCompilationArtifactBuilder
         return new CopiedArtifact(manifestPath, files.ToArray());
     }
 
-    private static string GeneratePackagedScript(string sourcePath)
-        => PowerShellPackagedScriptRewriter.Rewrite(sourcePath);
+    private static string GeneratePackagedScript(string sourcePath, bool hasDependencies)
+        => PowerShellPackagedScriptRewriter.Rewrite(
+            sourcePath,
+            hasDependencies ? "[PowerForge.Compiled.PowerForgePackagedEntryPoint]::Path" : null,
+            allowDotSource: hasDependencies);
+
+    private static PackagedSourceSet PreparePackagedSources(
+        string workspace,
+        string sourcePath,
+        IEnumerable<string> compilationSourcePaths)
+    {
+        var fullSourcePath = Path.GetFullPath(sourcePath);
+        var sourceRoot = Path.GetDirectoryName(fullSourcePath) ?? Directory.GetCurrentDirectory();
+        var dependencies = compilationSourcePaths
+            .Select(Path.GetFullPath)
+            .Where(path => !path.Equals(fullSourcePath, PowerShellCompilationPathSafety.PathComparison))
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
+            .OrderBy(path => FrameworkCompatibility.GetRelativePath(sourceRoot, path), StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (dependencies.Length == 0)
+            return new PackagedSourceSet(Path.GetFileName(fullSourcePath), string.Empty, string.Empty, hasDependencies: false);
+
+        var dependencyDirectory = Path.Combine(workspace, "EmbeddedDependencies");
+        Directory.CreateDirectory(dependencyDirectory);
+        var projectResources = new List<string>();
+        var dependencySpecs = new List<string>();
+        for (var index = 0; index < dependencies.Length; index++)
+        {
+            var dependency = dependencies[index];
+            PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency, $"Packaged dependency '{dependency}' escapes the executable entrypoint root.");
+            var fileName = $"Dependency{index:D4}.ps1";
+            File.Copy(dependency, Path.Combine(dependencyDirectory, fileName), overwrite: false);
+            var logicalName = $"PowerForge.Compiled.{Path.GetFileNameWithoutExtension(fileName)}.ps1";
+            var relativePath = FrameworkCompatibility.GetRelativePath(sourceRoot, dependency).Replace('\\', '/');
+            projectResources.Add($"    <EmbeddedResource Include=\"EmbeddedDependencies/{fileName}\" LogicalName=\"{EscapeXml(logicalName)}\" />");
+            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(relativePath)}),");
+        }
+        return new PackagedSourceSet(
+            Path.GetFileName(fullSourcePath),
+            string.Join(Environment.NewLine, projectResources),
+            string.Join(Environment.NewLine, dependencySpecs),
+            hasDependencies: true);
+    }
 
     private static (string Parameters, string SwitchParameters, string ParameterAliases) GeneratePackagedParameterInitializers(string sourcePath)
     {
@@ -892,6 +937,22 @@ public sealed class PowerShellCompilationArtifactBuilder
         internal int ExitCode { get; }
         internal string Output { get; }
         internal bool TimedOut { get; }
+    }
+
+    private sealed class PackagedSourceSet
+    {
+        internal PackagedSourceSet(string entryRelativePath, string projectResources, string dependencySpecs, bool hasDependencies)
+        {
+            EntryRelativePath = entryRelativePath;
+            ProjectResources = projectResources;
+            DependencySpecs = dependencySpecs;
+            HasDependencies = hasDependencies;
+        }
+
+        internal string EntryRelativePath { get; }
+        internal string ProjectResources { get; }
+        internal string DependencySpecs { get; }
+        internal bool HasDependencies { get; }
     }
 
 }

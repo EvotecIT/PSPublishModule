@@ -7,7 +7,7 @@ internal static partial class Program
     private const string PowerShellAnalyzeUsage =
         "Usage: powerforge powershell analyze <path> [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--no-recurse] [--output json]";
     private const string PowerShellBuildUsage =
-        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
+        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
 
     private static int CommandPowerShell(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -39,7 +39,7 @@ internal static partial class Program
 
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--framework", "--rid", "--optimization", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
+                new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--framework", "--rid", "--optimization", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
                 new[] { "--self-contained", "--emit-source", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
                 out var argumentError))
             return WritePowerShellError(outputJson, 2, argumentError, logger, "powershell.build");
@@ -73,7 +73,9 @@ internal static partial class Program
         try
         {
             var fullPaths = paths.Select(path => Path.GetFullPath(path.Trim().Trim('"'))).ToArray();
-            var resolved = new PowerShellCompilationInputResolver().Resolve(fullPaths, kindOverride, modeOverride);
+            var entryPoint = TryGetOptionValue(args, "--entry-point");
+            var fullEntryPoint = string.IsNullOrWhiteSpace(entryPoint) ? null : Path.GetFullPath(entryPoint.Trim().Trim('"'));
+            var resolved = new PowerShellCompilationInputResolver().Resolve(fullPaths, kindOverride, modeOverride, fullEntryPoint);
             var outputDirectory = TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? Path.Combine(resolved.ModuleRoot, "artifacts");
             var artifactName = TryGetOptionValue(args, "--name") ?? resolved.ArtifactName;
             var optimizationValue = TryGetOptionValue(args, "--optimization") ?? nameof(PowerShellCompilationExecutableOptimization.None);

@@ -29,6 +29,14 @@ internal static class PowerShellGeneratedSourcePublisher
 
         foreach (var file in files)
             File.Copy(file, Path.Combine(sourceDirectory, Path.GetFileName(file)), overwrite: false);
+        var embeddedDependencies = Path.Combine(workspace, "EmbeddedDependencies");
+        if (Directory.Exists(embeddedDependencies))
+        {
+            var targetDependencies = Path.Combine(sourceDirectory, "EmbeddedDependencies");
+            Directory.CreateDirectory(targetDependencies);
+            foreach (var dependency in Directory.EnumerateFiles(embeddedDependencies, "*", SearchOption.TopDirectoryOnly))
+                File.Copy(dependency, Path.Combine(targetDependencies, Path.GetFileName(dependency)), overwrite: false);
+        }
         WriteBuildIsolationFiles(sourceDirectory, spec.TargetFramework);
         WriteSourceMap(sourceDirectory, spec, typed);
         return sourceDirectory;

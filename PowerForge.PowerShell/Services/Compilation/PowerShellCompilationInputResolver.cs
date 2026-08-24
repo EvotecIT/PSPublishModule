@@ -66,7 +66,8 @@ public sealed class PowerShellCompilationInputResolver
     public PowerShellCompilationResolvedInput Resolve(
         IEnumerable<string> paths,
         PowerShellCompilationArtifactKind? kind = null,
-        PowerShellCompilationMode? mode = null)
+        PowerShellCompilationMode? mode = null,
+        string? entryPointPath = null)
     {
         if (paths is null) throw new ArgumentNullException(nameof(paths));
         var requestedPaths = paths
@@ -76,12 +77,12 @@ public sealed class PowerShellCompilationInputResolver
             .ToArray();
         if (requestedPaths.Length == 0)
             throw new ArgumentException("At least one PowerShell script path is required.", nameof(paths));
-        if (requestedPaths.Length == 1)
+        if (requestedPaths.Length == 1 && string.IsNullOrWhiteSpace(entryPointPath))
             return Resolve(requestedPaths[0], kind, mode);
         if (kind.HasValue && !Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), kind.Value))
             throw new ArgumentOutOfRangeException(nameof(kind));
-        if (mode.HasValue && (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode.Value) || mode.Value is PowerShellCompilationMode.Analyze or PowerShellCompilationMode.Package))
-            throw new ArgumentOutOfRangeException(nameof(mode), "Loose file-set builds accept Hybrid or Strict mode.");
+        if (mode.HasValue && (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode.Value) || mode.Value == PowerShellCompilationMode.Analyze))
+            throw new ArgumentOutOfRangeException(nameof(mode), "Artifact builds accept Package, Hybrid, or Strict mode.");
 
         foreach (var requestedPath in requestedPaths)
         {
@@ -93,8 +94,33 @@ public sealed class PowerShellCompilationInputResolver
 
         var resolvedKind = kind ?? PowerShellCompilationArtifactKind.Library;
         if (resolvedKind == PowerShellCompilationArtifactKind.Executable)
-            throw new InvalidOperationException(
-                "Executable compilation currently accepts one explicit .ps1 entrypoint. Multi-file executables require entrypoint-aware dependency bundling; use one root script that literal-dot-sources its dependencies, or build a Library/BinaryModule file set.");
+        {
+            if (requestedPaths.Length > 1 && string.IsNullOrWhiteSpace(entryPointPath))
+                throw new InvalidOperationException("A multi-file executable requires an explicit .ps1 entrypoint.");
+            var entryPoint = string.IsNullOrWhiteSpace(entryPointPath)
+                ? requestedPaths[0]
+                : Path.GetFullPath(entryPointPath!.Trim().Trim('"'));
+            if (!requestedPaths.Contains(entryPoint, GetPathComparer()))
+                throw new InvalidOperationException("The executable entrypoint must also be present in the requested path set.");
+            var sourceRoot = Path.GetDirectoryName(entryPoint) ?? Directory.GetCurrentDirectory();
+            var closure = PowerShellHybridDependencyResolver.DiscoverDependencies(entryPoint);
+            var unreachable = requestedPaths.Where(path => !closure.Contains(path, GetPathComparer())).ToArray();
+            if (unreachable.Length > 0)
+                throw new InvalidOperationException($"Executable path set contains source file(s) unreachable from the entrypoint: {string.Join(", ", unreachable.Select(Path.GetFileName))}.");
+            var executableMode = mode ?? PowerShellCompilationMode.Package;
+            if (executableMode != PowerShellCompilationMode.Package && closure.Length > 1)
+                throw new InvalidOperationException("Multi-file typed executables are not yet eligible for Strict compilation; use Package mode until compiled local-function calls are supported.");
+            return new PowerShellCompilationResolvedInput(
+                entryPoint,
+                entryPoint,
+                null,
+                sourceRoot,
+                Path.GetFileNameWithoutExtension(entryPoint),
+                resolvedKind,
+                executableMode,
+                closure,
+                closure);
+        }
         var resolvedMode = mode ?? PowerShellCompilationMode.Strict;
         if (resolvedKind == PowerShellCompilationArtifactKind.BinaryModule && resolvedMode != PowerShellCompilationMode.Strict)
             throw new InvalidOperationException(
@@ -183,7 +209,9 @@ public sealed class PowerShellCompilationInputResolver
         string[] sourceFiles;
         if (resolvedKind == PowerShellCompilationArtifactKind.Executable)
         {
-            compilationSourceFiles = new[] { sourcePath };
+            compilationSourceFiles = PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath);
+            if (resolvedMode != PowerShellCompilationMode.Package && compilationSourceFiles.Length > 1)
+                throw new InvalidOperationException("Multi-file typed executables are not yet eligible for Strict compilation; use Package mode until compiled local-function calls are supported.");
             sourceFiles = compilationSourceFiles;
         }
         else
