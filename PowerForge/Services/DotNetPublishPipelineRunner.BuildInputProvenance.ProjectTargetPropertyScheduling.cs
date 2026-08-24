@@ -34,7 +34,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 bool definitelyActive = IsDefinitelyActiveMsBuildElement(definition, context);
                 if (!definitelyActive)
                     nextContexts.Add(context);
-                if (TryExpandTargetTimePropertyValue(definition.Value, context, out string? value))
+                if (!TryExpandTargetTimePropertyValue(definition.Value, context, out string? value))
+                {
+                    throw new InvalidOperationException(
+                        $"Scheduled target property '{propertyName}' could not be expanded for provenance evaluation.");
+                }
+                else
                 {
                     var assigned = new Dictionary<string, string>(
                         context,

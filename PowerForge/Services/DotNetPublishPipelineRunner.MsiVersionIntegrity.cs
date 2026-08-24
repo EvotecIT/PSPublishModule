@@ -177,6 +177,11 @@ public sealed partial class DotNetPublishPipelineRunner
         var postEvaluationUntrackedOutput = ReadGitText(
             gitRoot!,
             "ls-files --others --exclude-standard -z");
+        var postEvaluationRevision = ReadGitText(projectRoot, "rev-parse HEAD");
+        bool revisionChangedDuringVerification =
+            string.IsNullOrWhiteSpace(gitRevision) ||
+            string.IsNullOrWhiteSpace(postEvaluationRevision) ||
+            !string.Equals(gitRevision, postEvaluationRevision, StringComparison.OrdinalIgnoreCase);
         bool evaluationStatusChanged =
             !string.Equals(finalTrackedStatus, postEvaluationTrackedStatus, StringComparison.Ordinal) ||
             !string.Equals(untrackedOutput, postEvaluationUntrackedOutput, StringComparison.Ordinal);
@@ -219,6 +224,8 @@ public sealed partial class DotNetPublishPipelineRunner
             dirtyReasons.Add("untracked Git status query failed");
         if (statusChangedDuringVerification)
             dirtyReasons.Add("Git status changed during provenance verification");
+        if (revisionChangedDuringVerification)
+            dirtyReasons.Add("Git HEAD changed during provenance verification");
         if (generatedOutputOverlapsInput)
             dirtyReasons.Add("a generated output overlaps a release input");
         if (trackedSourceChanges is null)
@@ -242,7 +249,8 @@ public sealed partial class DotNetPublishPipelineRunner
               || trackedSourceChanges.Length > 0
               || untrackedSourceFiles.Length > 0
               || untrustedExplicitInput
-              || untrustedIgnoredBuildInput;
+              || untrustedIgnoredBuildInput
+              || revisionChangedDuringVerification;
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
             dirty,

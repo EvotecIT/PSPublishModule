@@ -327,13 +327,22 @@ public sealed partial class DotNetPublishPipelineRunner
         if (value.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase))
             return true;
 
-        string expanded = Regex.Replace(
-            value,
+        string expanded = ExpandKnownMsBuildTargetPropertyFunctions(value, evaluatedProperties);
+        expanded = Regex.Replace(
+            expanded,
             @"\$\(([A-Za-z_][A-Za-z0-9_.-]*)\)",
             match => evaluatedProperties.TryGetValue(match.Groups[1].Value, out string? propertyValue)
                 ? propertyValue
                 : match.Value,
             RegexOptions.CultureInvariant);
+        if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+            expanded.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+            expanded.IndexOf("%(", StringComparison.Ordinal) >= 0)
+        {
+            // A property-function result can still materialize ProjectReference at execution time.
+            // Include that target conservatively without treating ordinary SDK item/metadata outputs as references.
+            return IsMsBuildPropertyFunctionExpression(value);
+        }
         return expanded.Trim().Equals("ProjectReference", StringComparison.OrdinalIgnoreCase);
     }
 

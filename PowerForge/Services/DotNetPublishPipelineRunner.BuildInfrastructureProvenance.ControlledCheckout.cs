@@ -4,13 +4,29 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private static bool TryCreateControlledBuildEnvironment(
+    internal static bool TryCreateControlledBuildEnvironment(
         IReadOnlyDictionary<string, string?> environmentVariables,
         string gitRoot,
         string controlledSourceRoot,
         out IReadOnlyDictionary<string, string?> controlledEnvironment)
     {
         var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var inheritedVariables = Environment.GetEnvironmentVariables();
+        foreach (object? key in inheritedVariables.Keys)
+        {
+            string? name = key?.ToString();
+            if (!string.IsNullOrWhiteSpace(name) && !IsApprovedControlledBuildEnvironmentVariable(name!))
+                values[name!] = null;
+        }
+        string environmentRoot = Path.Combine(
+            Path.GetDirectoryName(Path.GetFullPath(controlledSourceRoot))!,
+            "environment");
+        string configurationRoot = Directory.CreateDirectory(Path.Combine(environmentRoot, "config")).FullName;
+        string cacheRoot = Directory.CreateDirectory(Path.Combine(environmentRoot, "cache")).FullName;
+        values["APPDATA"] = configurationRoot;
+        values["LOCALAPPDATA"] = cacheRoot;
+        values["XDG_CONFIG_HOME"] = configurationRoot;
+        values["XDG_CACHE_HOME"] = cacheRoot;
         foreach (KeyValuePair<string, string?> variable in environmentVariables)
         {
             if (variable.Value is null)
@@ -32,6 +48,25 @@ public sealed partial class DotNetPublishPipelineRunner
         controlledEnvironment = values;
         return true;
     }
+
+    private static bool IsApprovedControlledBuildEnvironmentVariable(string name)
+        => name.Equals("PATH", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("PATHEXT", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("SystemRoot", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("WINDIR", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("ComSpec", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TEMP", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TMP", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TMPDIR", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("HOME", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("USERPROFILE", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("DOTNET_ROOT", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("DOTNET_ROOT(x86)", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("PROCESSOR_ARCHITECTURE", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("PROCESSOR_ARCHITEW6432", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("ProgramFiles", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("ProgramFiles(x86)", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("ProgramW6432", StringComparison.OrdinalIgnoreCase);
 
     private static bool TryRemapControlledBuildValue(
         string value,
@@ -202,7 +237,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static bool HasOnlyControlledBuildFileInputs(string checkoutRoot)
+    internal static bool HasOnlyControlledBuildFileInputs(string checkoutRoot)
     {
         try
         {
@@ -213,24 +248,46 @@ public sealed partial class DotNetPublishPipelineRunner
                 string directory = pending.Pop();
                 foreach (string childDirectory in Directory.EnumerateDirectories(directory))
                 {
-                    if ((File.GetAttributes(childDirectory) & FileAttributes.ReparsePoint) == 0)
-                        pending.Push(childDirectory);
+                    if ((File.GetAttributes(childDirectory) & FileAttributes.ReparsePoint) != 0)
+                        return false;
+                    pending.Push(childDirectory);
                 }
 
                 foreach (string path in Directory.EnumerateFiles(directory))
                 {
+                    if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+                        return false;
+
                     string extension = Path.GetExtension(path);
-                    if (!extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase) &&
-                        !extension.Equals(".fsproj", StringComparison.OrdinalIgnoreCase) &&
-                        !extension.Equals(".vbproj", StringComparison.OrdinalIgnoreCase) &&
-                        !extension.Equals(".proj", StringComparison.OrdinalIgnoreCase) &&
-                        !extension.Equals(".props", StringComparison.OrdinalIgnoreCase) &&
-                        !extension.Equals(".targets", StringComparison.OrdinalIgnoreCase))
+                    if (extension.Equals(".rsp", StringComparison.OrdinalIgnoreCase))
                     {
+                        if (File.ReadLines(path).Any(value => ContainsRootedBuildValue(value, checkoutRoot)))
+                            return false;
                         continue;
                     }
 
-                    XDocument document = XDocument.Load(path, LoadOptions.PreserveWhitespace);
+                    bool knownProjectExtension =
+                        extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase) ||
+                        extension.Equals(".fsproj", StringComparison.OrdinalIgnoreCase) ||
+                        extension.Equals(".vbproj", StringComparison.OrdinalIgnoreCase) ||
+                        extension.Equals(".proj", StringComparison.OrdinalIgnoreCase) ||
+                        extension.Equals(".props", StringComparison.OrdinalIgnoreCase) ||
+                        extension.Equals(".targets", StringComparison.OrdinalIgnoreCase);
+                    XDocument document;
+                    try
+                    {
+                        document = XDocument.Load(path, LoadOptions.PreserveWhitespace);
+                    }
+                    catch when (!knownProjectExtension)
+                    {
+                        continue;
+                    }
+                    if (!knownProjectExtension &&
+                        (document.Root is null ||
+                         !document.Root.Name.LocalName.Equals("Project", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
                     if (document.DescendantNodes()
                         .OfType<XText>()
                         .Select(text => text.Value)
