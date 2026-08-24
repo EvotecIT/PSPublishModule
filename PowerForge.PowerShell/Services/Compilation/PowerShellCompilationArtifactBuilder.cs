@@ -186,7 +186,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         .Replace("{{SWITCH_PARAMETERS}}", parameterInitializers.SwitchParameters)
                         .Replace("{{PARAMETER_ALIASES}}", parameterInitializers.ParameterAliases)
                         .Replace("{{ENTRY_RELATIVE_PATH}}", PowerShellCSharpLiteral.QuoteString(packagedSources.EntryRelativePath))
-                        .Replace("{{DEPENDENCY_SPECS}}", packagedSources.DependencySpecs),
+                        .Replace("{{DEPENDENCY_SPECS}}", packagedSources.DependencySpecs)
+                        .Replace("{{TARGET_FRAMEWORK}}", PowerShellCSharpLiteral.QuoteString(spec.TargetFramework)),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 projectPath = Path.Combine(workspace, artifactName + ".csproj");
                 File.WriteAllText(

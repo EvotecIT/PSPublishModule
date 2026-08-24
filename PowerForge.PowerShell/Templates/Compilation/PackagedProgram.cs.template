@@ -23,8 +23,10 @@ internal static class Program
             var source = ReadEmbeddedScript();
             using var extractedSources = ExtractEmbeddedSources(source);
             PowerForgePackagedEntryPoint.Path = extractedSources.EntryPath;
+            ConfigureBundledModules();
             var initialState = InitialSessionState.CreateDefault2();
-            initialState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                initialState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
             using var runspace = RunspaceFactory.CreateRunspace(initialState);
             runspace.Open();
             using var powerShell = PowerShell.Create();
@@ -84,6 +86,32 @@ internal static class Program
             Console.Error.WriteLine(exception.ToString());
             return 1;
         }
+    }
+
+    private static void ConfigureBundledModules()
+    {
+        var powerShellHome = Path.GetDirectoryName(typeof(PSObject).Assembly.Location);
+        if (string.IsNullOrWhiteSpace(powerShellHome))
+            return;
+        var runtimeFamily = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
+            ? "win"
+            : "unix";
+        var bundledModules = new[]
+            {
+                Path.Combine(powerShellHome, "Modules"),
+                Path.Combine(powerShellHome, "runtimes", runtimeFamily, "lib", {{TARGET_FRAMEWORK}}, "Modules"),
+                Path.Combine(AppContext.BaseDirectory, "Modules"),
+                Path.Combine(AppContext.BaseDirectory, "runtimes", runtimeFamily, "lib", {{TARGET_FRAMEWORK}}, "Modules")
+            }
+            .FirstOrDefault(Directory.Exists);
+        if (bundledModules is null)
+            return;
+        var existing = Environment.GetEnvironmentVariable("PSModulePath");
+        Environment.SetEnvironmentVariable(
+            "PSModulePath",
+            string.IsNullOrWhiteSpace(existing)
+                ? bundledModules
+                : bundledModules + Path.PathSeparator + existing);
     }
 
     private static string ReadEmbeddedScript()

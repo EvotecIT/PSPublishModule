@@ -43,7 +43,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(2, result.Manifest!.SourceFiles.Length);
         File.WriteAllText(Path.Combine(fixture.OutputPath, "settings.txt"), "durable");
         var process = RunProcess(result.ArtifactPath!, "--Name=Ada");
-        Assert.Equal(0, process.ExitCode);
+        Assert.True(
+            process.ExitCode == 0,
+            $"Expected packaged dependency executable to succeed. Exit={process.ExitCode}; stdout={process.StandardOutput}; stderr={process.StandardError}");
         var lines = process.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
         AssertPackagedPathsEqual(Path.GetDirectoryName(result.ArtifactPath!)!, lines[0].Substring("default:".Length));
         AssertPackagedPathsEqual(Path.GetDirectoryName(result.ArtifactPath!)!, lines[1].Substring("root:".Length));
