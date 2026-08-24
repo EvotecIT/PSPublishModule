@@ -166,6 +166,35 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
+    [Fact]
+    public void Build_HybridModuleRewritesManifestFileListForGeneratedLayout()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-PublicValue { return 1 }; function Get-FallbackValue { Get-Date }",
+            ".psm1");
+        var assets = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Assets"));
+        File.WriteAllText(Path.Combine(assets.FullName, "data.txt"), "payload");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue', 'Get-FallbackValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); FileList = @('input.psm1', 'Assets/data.txt') }");
+        const string artifactName = "PowerForge.FileListManifest";
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            artifactName,
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var fileList = ModuleManifestValueReader.ReadTopLevelStringOrArray(result.ArtifactPath!, "FileList");
+        Assert.DoesNotContain("input.psm1", fileList, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(artifactName + ".psm1", fileList, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(artifactName + ".dll", fileList, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("Assets/data.txt", fileList, StringComparer.OrdinalIgnoreCase);
+        Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(result.ArtifactPath!)!, "Assets", "data.txt")));
+    }
+
     private static PowerShellCompilationBuildResult BuildManifestFixture(ArtifactFixture fixture, string artifactName)
         => new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,

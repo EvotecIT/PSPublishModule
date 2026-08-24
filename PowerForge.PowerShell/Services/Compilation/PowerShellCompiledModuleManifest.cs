@@ -73,6 +73,7 @@ internal static class PowerShellCompiledModuleManifest
         var manifestCmdlets = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "CmdletsToExport");
         var manifestAliases = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "AliasesToExport");
         var manifestVariables = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "VariablesToExport");
+        var manifestFileList = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "FileList");
         var selectedCompiled = Select(explicitCompiled, manifestFunctions);
         var explicitCmdlets = explicitExports?.Cmdlets ?? Array.Empty<string>();
         var hasNestedModules = ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules").Any();
@@ -106,6 +107,16 @@ internal static class PowerShellCompiledModuleManifest
             manifestAliases);
         if (manifestVariables is not null)
             mutator.TrySetTopLevelStringArray(targetManifest, "VariablesToExport", manifestVariables);
+        if (manifestFileList is not null)
+        {
+            var rewrittenFileList = RewriteFileList(
+                sourceManifest,
+                sourcePath,
+                artifactName,
+                rootModuleFileName,
+                manifestFileList);
+            mutator.TrySetTopLevelStringArray(targetManifest, "FileList", rewrittenFileList);
+        }
 
         var copied = new List<string> { targetManifest };
         foreach (var reference in ReadReferencedFileClosure(sourceManifest))
@@ -132,6 +143,32 @@ internal static class PowerShellCompiledModuleManifest
             copied.Add(targetFile);
         }
         return copied.ToArray();
+    }
+
+    private static string[] RewriteFileList(
+        string sourceManifest,
+        string sourcePath,
+        string artifactName,
+        string rootModuleFileName,
+        IEnumerable<string> sourceEntries)
+    {
+        var sourceDirectory = Path.GetDirectoryName(sourceManifest) ?? Directory.GetCurrentDirectory();
+        var rewritten = new List<string>();
+        foreach (var entry in sourceEntries)
+        {
+            var resolved = ResolveContainedPath(sourceDirectory, entry);
+            if (resolved.Equals(sourcePath, GetPathComparison()))
+                continue;
+            if (resolved.Equals(sourceManifest, GetPathComparison()))
+            {
+                rewritten.Add(artifactName + ".psd1");
+                continue;
+            }
+            rewritten.Add(entry);
+        }
+        rewritten.Add(rootModuleFileName);
+        rewritten.Add(artifactName + ".dll");
+        return rewritten.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     internal static bool HasNestedModuleWildcardFunctionExports(string sourcePath)

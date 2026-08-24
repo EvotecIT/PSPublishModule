@@ -98,6 +98,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             "root:$PSScriptRoot"
             "path:$PSCommandPath"
             "invocation:$($MyInvocation.MyCommand.Path)"
+            "definition:$($MyInvocation.MyCommand.Definition)"
             function Get-NestedInvocationPath { "nested:$($MyInvocation.MyCommand.Path)" }
             Get-NestedInvocationPath
             """);
@@ -123,7 +124,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         AssertPathsEqual(Path.GetDirectoryName(result.ArtifactPath!)!, lines[5].Substring("root:".Length));
         AssertPathsEqual(result.ArtifactPath!, lines[6].Substring("path:".Length));
         AssertPathsEqual(result.ArtifactPath!, lines[7].Substring("invocation:".Length));
-        Assert.Equal("nested:", lines[8]);
+        AssertPathsEqual(result.ArtifactPath!, lines[8].Substring("definition:".Length));
+        Assert.Equal("nested:", lines[9]);
 
         var missingValue = Run(result.ArtifactPath!, "--Name", "--Verbose");
         Assert.Equal(1, missingValue.ExitCode);

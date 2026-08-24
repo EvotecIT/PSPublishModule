@@ -54,24 +54,42 @@ public sealed class PowerShellCompilationAnalyzer
         if (!Directory.Exists(spec.Path))
             throw new DirectoryNotFoundException($"PowerShell compilation input was not found: {spec.Path}");
 
-        var searchOption = spec.Recurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-        return Directory.EnumerateFiles(spec.Path, "*.*", searchOption)
-            .Where(static file => Path.GetExtension(file).Equals(".ps1", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(file).Equals(".psm1", StringComparison.OrdinalIgnoreCase))
-            .Where(file => !IsExcluded(file, spec.Path, spec.ExcludeDirectories))
+        return EnumerateSourceFiles(spec.Path, spec.Recurse, spec.ExcludeDirectories)
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
-    private static bool IsExcluded(string file, string root, string[] exclusions)
+    private static IEnumerable<string> EnumerateSourceFiles(string root, bool recurse, string[] exclusions)
     {
-        var relative = FrameworkCompatibility.GetRelativePath(root, file);
-        var directories = (Path.GetDirectoryName(relative) ?? string.Empty)
-            .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
-        return directories.Any(directory => exclusions.Any(exclusion =>
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            foreach (var file in Directory.GetFiles(current, "*", SearchOption.TopDirectoryOnly))
+            {
+                var extension = Path.GetExtension(file);
+                if (extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                    extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase))
+                    yield return file;
+            }
+
+            if (!recurse) continue;
+            foreach (var directory in Directory.GetDirectories(current, "*", SearchOption.TopDirectoryOnly))
+            {
+                var name = Path.GetFileName(directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (IsExcludedDirectory(name, exclusions)) continue;
+                if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) continue;
+                pending.Push(directory);
+            }
+        }
+    }
+
+    private static bool IsExcludedDirectory(string directory, string[] exclusions)
+        => exclusions.Any(exclusion =>
             directory.Equals(exclusion, StringComparison.OrdinalIgnoreCase) ||
             ((exclusion.Equals("bin", StringComparison.OrdinalIgnoreCase) || exclusion.Equals("obj", StringComparison.OrdinalIgnoreCase)) &&
-             directory.StartsWith(exclusion + "-", StringComparison.OrdinalIgnoreCase))));
-    }
+             directory.StartsWith(exclusion + "-", StringComparison.OrdinalIgnoreCase)));
 
     private static PowerShellCompilationFilePlan AnalyzeFile(string file, string basePath)
     {

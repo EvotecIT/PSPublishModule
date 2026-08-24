@@ -112,6 +112,46 @@ public sealed class PowerShellCompilationAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_PrunesExcludedAndLinkedDirectoriesDuringDiscovery()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var outside = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var linkedSource = Path.Combine(root, "LinkedSource");
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(outside);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "included.ps1"), "return 1");
+            var nested = Directory.CreateDirectory(Path.Combine(root, "Source"));
+            File.WriteAllText(Path.Combine(nested.FullName, "included.psm1"), "function Get-Value { return 1 }");
+            var excluded = Directory.CreateDirectory(Path.Combine(root, "node_modules"));
+            File.WriteAllText(Path.Combine(excluded.FullName, "excluded.ps1"), "return 2");
+            File.WriteAllText(Path.Combine(outside, "linked.ps1"), "return 3");
+            try
+            {
+                Directory.CreateSymbolicLink(linkedSource, outside);
+            }
+            catch (Exception exception) when (exception is PlatformNotSupportedException or UnauthorizedAccessException or IOException)
+            {
+                // The exclusion contract remains covered when the host cannot create directory links.
+            }
+
+            var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(root));
+
+            Assert.Equal(2, plan.Files.Length);
+            Assert.All(plan.Files, file => Assert.DoesNotContain("node_modules", file.FullPath, StringComparison.OrdinalIgnoreCase));
+            Assert.All(plan.Files, file => Assert.DoesNotContain("LinkedSource", file.FullPath, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(linkedSource) && (File.GetAttributes(linkedSource) & FileAttributes.ReparsePoint) != 0)
+                Directory.Delete(linkedSource);
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            if (Directory.Exists(outside)) Directory.Delete(outside, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Analyze_DoesNotIgnoreProcessBlockOrParameterDefaultSemantics()
     {
         using var fixture = CompilationFixture.Create(

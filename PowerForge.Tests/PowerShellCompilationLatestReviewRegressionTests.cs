@@ -49,6 +49,31 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_PackagedExecutableRejectsInteractiveHostRequirements()
+    {
+        var sources = new[]
+        {
+            "Read-Host -Prompt 'Name'",
+            "$Host.UI.PromptForChoice('Title', 'Question', @(), 0)",
+            "Get-Credential"
+        };
+        foreach (var source in sources)
+        {
+            using var fixture = ArtifactFixture.Create(source);
+            var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                fixture.ScriptPath,
+                fixture.OutputPath,
+                "PowerForge.PackagedInteractiveHost",
+                PowerShellCompilationArtifactKind.Executable,
+                PowerShellCompilationMode.Package));
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("interactive", result.Error, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+        }
+    }
+
+    [Fact]
     public void Analyze_RejectsIndexedAndMemberAssignmentInsteadOfCompilingTheContainedVariable()
     {
         using var fixture = ArtifactFixture.Create(

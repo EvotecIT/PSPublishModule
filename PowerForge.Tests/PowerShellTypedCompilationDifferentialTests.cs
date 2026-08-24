@@ -15,9 +15,11 @@ namespace PowerForge.Tests;
 public sealed class PowerShellTypedCompilationDifferentialTests
 {
     [Fact]
-    public void TypedFloatDivisionPromotesOperandsBeforeEvaluation()
+    public void TypedFloatingDivisionPromotesOperandsAndPreservesZeroSemantics()
     {
-        const string source = "function Divide-Single { param([float] $Left, [float] $Right); return $Left / $Right }";
+        const string source =
+            "function Divide-Single { param([float] $Left, [float] $Right); return $Left / $Right }; " +
+            "function Divide-Double { param([double] $Left, [double] $Right); return $Left / $Right }";
         using var fixture = DifferentialFixture.Create(source);
         var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -39,7 +41,16 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             AssertDifferential(generatedType, runspace, "Divide-Single", "Divide_Single", new[]
             {
                 new object[] { 1f, 3f },
-                new object[] { 16_777_215f, 3f }
+                new object[] { 16_777_215f, 3f },
+                new object[] { 1f, 0f },
+                new object[] { 0f, 0f }
+            });
+            AssertDifferential(generatedType, runspace, "Divide-Double", "Divide_Double", new[]
+            {
+                new object[] { 1d, 3d },
+                new object[] { -10d, 4d },
+                new object[] { -1d, 0d },
+                new object[] { 0d, 0d }
             });
         }
         finally

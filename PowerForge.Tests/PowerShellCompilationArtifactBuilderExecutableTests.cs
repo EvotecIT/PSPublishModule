@@ -149,6 +149,25 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_StrictTypedExecutableUsesCurrentCultureForOutput()
+    {
+        using var fixture = ArtifactFixture.Create("return 1.5");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedExecutableCulture",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var processResult = RunProcess(result.ArtifactPath!);
+
+        Assert.Equal(0, processResult.ExitCode);
+        Assert.Equal(1.5d.ToString(System.Globalization.CultureInfo.CurrentCulture), processResult.StandardOutput.Trim());
+        Assert.True(string.IsNullOrWhiteSpace(processResult.StandardError), processResult.StandardError);
+    }
+
+    [Fact]
     public void Build_RejectsOptimizationOutsideSelfContainedStrictTypedExecutable()
     {
         using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");

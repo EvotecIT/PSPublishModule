@@ -185,15 +185,15 @@ internal static class Program
         if (value is IEnumerable values && value is not string)
         {
             foreach (var item in values)
-                Console.WriteLine(ToInvariantString(item));
+                Console.WriteLine(ToCurrentCultureString(item));
             return;
         }
-        Console.WriteLine(ToInvariantString(value));
+        Console.WriteLine(ToCurrentCultureString(value));
     }
 
-    private static string ToInvariantString(object? value)
+    private static string ToCurrentCultureString(object? value)
         => value is IFormattable formattable
-            ? formattable.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty
+            ? formattable.ToString(null, CultureInfo.CurrentCulture) ?? string.Empty
             : value?.ToString() ?? string.Empty;
 
     private sealed class ParameterSpec

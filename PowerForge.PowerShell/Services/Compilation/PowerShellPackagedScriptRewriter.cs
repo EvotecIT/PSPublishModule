@@ -34,6 +34,8 @@ internal static class PowerShellPackagedScriptRewriter
                 $"Packaged executable generation does not support dot-sourced command '{dotSource.Extent.Text}' because the dependency is not embedded with file-backed path semantics.");
         }
 
+        ValidateHostInteraction(ast);
+
         var explicitNamedBlock = FindExplicitNamedBlock(ast);
         if (explicitNamedBlock is not null)
         {
@@ -142,7 +144,9 @@ internal static class PowerShellPackagedScriptRewriter
 
     private static bool IsTopLevelInvocationPath(MemberExpressionAst member, ScriptBlockAst root)
     {
-        if (member.Member is not StringConstantExpressionAst path || !path.Value.Equals("Path", StringComparison.OrdinalIgnoreCase) ||
+        if (member.Member is not StringConstantExpressionAst path ||
+            (!path.Value.Equals("Path", StringComparison.OrdinalIgnoreCase) &&
+             !path.Value.Equals("Definition", StringComparison.OrdinalIgnoreCase)) ||
             member.Expression is not MemberExpressionAst command ||
             command.Member is not StringConstantExpressionAst myCommand || !myCommand.Value.Equals("MyCommand", StringComparison.OrdinalIgnoreCase) ||
             command.Expression is not VariableExpressionAst invocation || !invocation.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase))
@@ -155,6 +159,40 @@ internal static class PowerShellPackagedScriptRewriter
                 return false;
         }
         return true;
+    }
+
+    private static void ValidateHostInteraction(ScriptBlockAst ast)
+    {
+        var hostReference = ast.FindAll(
+                static node => node is VariableExpressionAst variable &&
+                               variable.VariablePath.UserPath.Equals("Host", StringComparison.OrdinalIgnoreCase),
+                searchNestedScriptBlocks: true)
+            .Cast<VariableExpressionAst>()
+            .FirstOrDefault();
+        if (hostReference is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged executable generation does not support interactive PSHost access '{hostReference.Extent.Text}'. Use a typed console entry point or keep this script on pwsh -File.");
+        }
+
+        var interactiveCommand = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
+            .Cast<CommandAst>()
+            .FirstOrDefault(static command => IsInteractiveCommand(command.GetCommandName()));
+        if (interactiveCommand is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged executable generation does not support interactive command '{interactiveCommand.GetCommandName()}' because the embedded runspace has no console-backed PSHost.");
+        }
+    }
+
+    private static bool IsInteractiveCommand(string? commandName)
+    {
+        if (string.IsNullOrWhiteSpace(commandName)) return false;
+        var unqualifiedName = commandName!.Split('\\').Last();
+        return unqualifiedName.Equals("Read-Host", StringComparison.OrdinalIgnoreCase) ||
+               unqualifiedName.Equals("Get-Credential", StringComparison.OrdinalIgnoreCase) ||
+               unqualifiedName.Equals("Show-Command", StringComparison.OrdinalIgnoreCase) ||
+               unqualifiedName.Equals("Out-GridView", StringComparison.OrdinalIgnoreCase);
     }
 
     private readonly struct SourceReplacement

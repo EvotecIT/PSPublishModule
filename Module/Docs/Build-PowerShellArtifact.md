@@ -11,7 +11,7 @@ Builds a packaged executable, typed CLR library, or importable binary/hybrid mod
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Build-PowerShellArtifact [-Path] <string> -Kind <PowerShellCompilationArtifactKind> [-OutputDirectory <string>] [-Name <string>] [-Mode <PowerShellCompilationMode>] [-TargetFramework <string>] [-RuntimeIdentifier <string>] [-SelfContained] [-SingleFile <bool>] [-KeepBuildWorkspace] [-TimeoutSeconds <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Build-PowerShellArtifact [-Path] <string> -Kind <PowerShellCompilationArtifactKind> [-OutputDirectory <string>] [-Name <string>] [-Mode <PowerShellCompilationMode>] [-TargetFramework <string>] [-RuntimeIdentifier <string>] [-SelfContained] [-SingleFile <bool>] [-Optimization <PowerShellCompilationExecutableOptimization>] [-SignArtifact] [-CertificateThumbprint <string>] [-CertificateStoreLocation <CertificateStoreLocation>] [-TimeStampServer <string>] [-SigningTimeoutSeconds <int>] [-KeepBuildWorkspace] [-TimeoutSeconds <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -32,6 +32,38 @@ Build-PowerShellArtifact -Path .\module.psm1 -Kind BinaryModule -Mode Hybrid -Ou
 
 
 ## PARAMETERS
+
+### -CertificateStoreLocation
+Certificate store used for Authenticode signing.
+
+```yaml
+Type: CertificateStoreLocation
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: CurrentUser, LocalMachine
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -CertificateThumbprint
+Optional code-signing certificate thumbprint.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
 ### -KeepBuildWorkspace
 Retain the generated project workspace for inspection.
@@ -89,6 +121,22 @@ Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Optimization
+Optional trimmed or native-AOT publication for a Strict typed executable.
+
+```yaml
+Type: PowerShellCompilationExecutableOptimization
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: None, Trimmed, NativeAot
 
 Required: False
 Position: named
@@ -161,6 +209,38 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -SignArtifact
+Authenticode-sign generated signable files before integrity hashes are recorded.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SigningTimeoutSeconds
+Maximum time allowed for Authenticode signing.
+
+```yaml
+Type: Int32
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -SingleFile
 Publish an executable as one file.
 
@@ -198,6 +278,22 @@ Maximum restore and compile time in seconds.
 
 ```yaml
 Type: Int32
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -TimeStampServer
+RFC3161 timestamp service used for Authenticode signing.
+
+```yaml
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

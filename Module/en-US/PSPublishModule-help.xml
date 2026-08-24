@@ -1917,6 +1917,34 @@
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Build-PowerShellArtifact</maml:name>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CertificateStoreLocation</maml:name>
+          <maml:description>
+            <maml:para>Certificate store used for Authenticode signing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">CertificateStoreLocation</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">CurrentUser</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">LocalMachine</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>CertificateStoreLocation</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CertificateThumbprint</maml:name>
+          <maml:description>
+            <maml:para>Optional code-signing certificate thumbprint.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>KeepBuildWorkspace</maml:name>
           <maml:description>
             <maml:para>Retain the generated project workspace for inspection.</maml:para>
@@ -1976,6 +2004,23 @@
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Optimization</maml:name>
+          <maml:description>
+            <maml:para>Optional trimmed or native-AOT publication for a Strict typed executable.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PowerShellCompilationExecutableOptimization</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Trimmed</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">NativeAot</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>PowerShellCompilationExecutableOptimization</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>OutputDirectory</maml:name>
           <maml:description>
             <maml:para>Destination for durable artifacts and the compilation manifest.</maml:para>
@@ -2024,6 +2069,30 @@
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignArtifact</maml:name>
+          <maml:description>
+            <maml:para>Authenticode-sign generated signable files before integrity hashes are recorded.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SigningTimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Maximum time allowed for Authenticode signing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>SingleFile</maml:name>
           <maml:description>
             <maml:para>Publish an executable as one file.</maml:para>
@@ -2059,9 +2128,49 @@
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TimeStampServer</maml:name>
+          <maml:description>
+            <maml:para>RFC3161 timestamp service used for Authenticode signing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>CertificateStoreLocation</maml:name>
+        <maml:description>
+          <maml:para>Certificate store used for Authenticode signing.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">CertificateStoreLocation</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">CurrentUser</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">LocalMachine</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>CertificateStoreLocation</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>CertificateThumbprint</maml:name>
+        <maml:description>
+          <maml:para>Optional code-signing certificate thumbprint.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>KeepBuildWorkspace</maml:name>
         <maml:description>
@@ -2122,6 +2231,23 @@
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Optimization</maml:name>
+        <maml:description>
+          <maml:para>Optional trimmed or native-AOT publication for a Strict typed executable.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">PowerShellCompilationExecutableOptimization</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Trimmed</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">NativeAot</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>PowerShellCompilationExecutableOptimization</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>OutputDirectory</maml:name>
         <maml:description>
           <maml:para>Destination for durable artifacts and the compilation manifest.</maml:para>
@@ -2170,6 +2296,30 @@
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignArtifact</maml:name>
+        <maml:description>
+          <maml:para>Authenticode-sign generated signable files before integrity hashes are recorded.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SigningTimeoutSeconds</maml:name>
+        <maml:description>
+          <maml:para>Maximum time allowed for Authenticode signing.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>SingleFile</maml:name>
         <maml:description>
           <maml:para>Publish an executable as one file.</maml:para>
@@ -2201,6 +2351,18 @@
         <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
           <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>TimeStampServer</maml:name>
+        <maml:description>
+          <maml:para>RFC3161 timestamp service used for Authenticode signing.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
