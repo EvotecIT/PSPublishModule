@@ -31,6 +31,34 @@ public sealed class PowerShellCompilationCensusTests
     }
 
     [Fact]
+    public void Run_MatchesPortableProductIdentitiesAcrossCheckoutRoots()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Portable Identity Tests", Guid.NewGuid().ToString("N"));
+        var baselineRoot = Path.Combine(root, "Baseline");
+        var currentRoot = Path.Combine(root, "Current");
+        var relativePaths = new[] { Path.Combine("One", "Product.psm1"), Path.Combine("Two", "Product.psm1") };
+        foreach (var relativePath in relativePaths)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(baselineRoot, relativePath))!);
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(currentRoot, relativePath))!);
+            File.WriteAllText(Path.Combine(baselineRoot, relativePath), "function Get-Value { return 1 }");
+            File.WriteAllText(Path.Combine(currentRoot, relativePath), "function Get-Value { return 1 }");
+        }
+        try
+        {
+            var runner = new PowerShellCompilationCensusRunner();
+            var baseline = runner.Run(relativePaths.Select(path => Path.Combine(baselineRoot, path)), "net10.0");
+            var current = runner.Run(relativePaths.Select(path => Path.Combine(currentRoot, path)), "net10.0", baseline);
+
+            Assert.Empty(current.Regressions);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Run_CountsManifestRuntimeHooksAsFallbackUnits()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Runtime Tests", Guid.NewGuid().ToString("N"));

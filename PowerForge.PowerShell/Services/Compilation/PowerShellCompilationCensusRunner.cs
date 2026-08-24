@@ -121,16 +121,20 @@ public sealed class PowerShellCompilationCensusRunner
         IReadOnlyList<PowerShellCompilationCensusProduct> baseline)
     {
         var regressions = new List<PowerShellCompilationCensusRegression>();
-        var currentByPath = current.ToDictionary(
-            static product => Path.GetFullPath(product.Path),
-            PowerShellCompilationPathSafety.PathComparer);
+        var unmatched = current.ToList();
         foreach (var expected in baseline)
         {
-            if (!currentByPath.TryGetValue(Path.GetFullPath(expected.Path), out var actual))
+            var actual = unmatched.FirstOrDefault(candidate => PathsEqual(candidate.Path, expected.Path))
+                         ?? unmatched.FirstOrDefault(candidate =>
+                             GetPortableProductIdentity(candidate).Equals(
+                                 GetPortableProductIdentity(expected),
+                                 StringComparison.OrdinalIgnoreCase));
+            if (actual is null)
             {
                 regressions.Add(new PowerShellCompilationCensusRegression(expected.Name, "ProductPresent", 1, 0));
                 continue;
             }
+            unmatched.Remove(actual);
 
             AddLowerIsRegression(regressions, actual.Name, "CompilableUnits", expected.CompilableUnits, actual.CompilableUnits);
             AddLowerIsRegression(regressions, actual.Name, "SourceFiles", expected.SourceFiles, actual.SourceFiles);
@@ -140,6 +144,35 @@ public sealed class PowerShellCompilationCensusRunner
         }
 
         return regressions.ToArray();
+    }
+
+    private static bool PathsEqual(string left, string right)
+    {
+        try
+        {
+            return Path.GetFullPath(left).Equals(Path.GetFullPath(right), PowerShellCompilationPathSafety.PathComparison);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static string GetPortableProductIdentity(PowerShellCompilationCensusProduct product)
+    {
+        var segments = product.Path
+            .Replace('\\', '/')
+            .TrimEnd('/')
+            .Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0)
+            return product.Name;
+        var leaf = segments[segments.Length - 1];
+        if (segments.Length > 1 &&
+            (leaf.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ||
+             leaf.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase) ||
+             leaf.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase)))
+            return segments[segments.Length - 2] + "/" + leaf;
+        return leaf;
     }
 
     private static void AddLowerIsRegression(

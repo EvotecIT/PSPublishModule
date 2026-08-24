@@ -198,7 +198,12 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             .Where(name => _variables.ContainsKey(name))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var parameterBlock = "param(" + string.Join(", ", referencedNames.Select(static name => "$" + name)) + ")";
+        var switchParameters = _body.ParamBlock?.Parameters
+            .Where(static parameter => parameter.StaticType == typeof(System.Management.Automation.SwitchParameter))
+            .Select(static parameter => parameter.Name.VariablePath.UserPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parameterBlock = "param(" + string.Join(", ", referencedNames.Select(name =>
+            (switchParameters.Contains(name) ? "[switch] " : string.Empty) + "$" + name)) + ")";
         var script = parameterBlock + Environment.NewLine + string.Join(Environment.NewLine, statements.Select(static statement => statement.Extent.Text));
         var arguments = string.Join(", ", referencedNames.Select(GetVariableIdentifier));
         AppendLine($"__invokePowerShellRegion({PowerShellCSharpLiteral.QuoteString(script)}, new object?[] {{ {arguments} }});");

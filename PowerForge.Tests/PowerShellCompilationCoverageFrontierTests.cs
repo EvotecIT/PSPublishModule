@@ -87,6 +87,33 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_StrictBinaryModuleRejectsEmptyMandatoryStringAcrossTypedLocalCall()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Invoke-RequiredName { param([string] $Name) return Get-RequiredName -Name $Name }",
+            ".psm1");
+        var helper = Path.Combine(fixture.RootPath, "Private.RequiredName.ps1");
+        File.WriteAllText(
+            helper,
+            "function Get-RequiredName { param([Parameter(Mandatory)] [string] $Name) return $Name }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedMandatoryString",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict)
+        {
+            CompilationSourcePaths = new[] { fixture.ScriptPath, helper }
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal("Ada", RunModuleProof(result.ArtifactPath!, "Invoke-RequiredName -Name Ada"));
+        var empty = RunModuleFailureProof(result.ArtifactPath!, "Invoke-RequiredName -Name ''");
+        Assert.NotEqual(0, empty.ExitCode);
+        Assert.Contains("empty string", empty.StandardError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Build_StrictExecutableMutatesOrderedStringDictionary()
     {
         using var fixture = ArtifactFixture.Create(
@@ -101,6 +128,25 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var process = RunProcess(result.ArtifactPath!, "--Key=BETA", "--Value=two");
         Assert.Equal((0, "two", string.Empty), (process.ExitCode, process.StandardOutput.Trim(), process.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_StrictBinaryModuleNormalizesNullableStringBeforeIndexing()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-FrontierCharacter { param([string] $Key) $lookup = @{ Known = 'value' }; " +
+            "$value = $lookup[$Key]; return $value[0] }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.NullableStringIndex",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal("v", RunModuleProof(result.ArtifactPath!, "Get-FrontierCharacter -Key Known"));
+        Assert.Equal(string.Empty, RunModuleProof(result.ArtifactPath!, "Get-FrontierCharacter -Key Missing"));
     }
 
     [Fact]
@@ -167,6 +213,29 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
         Assert.Contains("new object?[] { captured }", generated, StringComparison.Ordinal);
         Assert.Contains("param($captured)", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_StrictBinaryModulePreservesSwitchParameterInsideCommandRegion()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-FrontierSwitch { param([switch] $Force) Write-Output $Force.IsPresent }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.SwitchRegion",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict)
+        {
+            EmitSource = true
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal("False", RunModuleProof(result.ArtifactPath!, "Get-FrontierSwitch"));
+        Assert.Equal("True", RunModuleProof(result.ArtifactPath!, "Get-FrontierSwitch -Force"));
+        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
+        Assert.Contains("param([switch] $Force)", generated, StringComparison.Ordinal);
     }
 
     [Fact]

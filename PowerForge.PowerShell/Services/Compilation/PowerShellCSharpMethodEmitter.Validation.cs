@@ -10,11 +10,18 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         {
             var parameter = parameters[index];
             var name = parameter.Name.VariablePath.UserPath;
-            if (!_parameterMetadata.TryGetValue(name, out var metadata) || metadata.Validations.Length == 0)
+            if (!_parameterMetadata.TryGetValue(name, out var metadata))
                 continue;
 
             var parameterType = GetCompiledParameterType(parameter);
             var identifier = GetVariableIdentifier(name);
+            if (metadata.IsMandatory && parameterType == typeof(string))
+            {
+                AppendLine($"if (global::System.String.IsNullOrEmpty({identifier}))");
+                AppendLine($"    throw new global::System.ArgumentException({PowerShellCSharpLiteral.QuoteString($"Mandatory parameter '-{metadata.Name}' does not allow an empty string.")}, {PowerShellCSharpLiteral.QuoteString(metadata.Name)});");
+            }
+            if (metadata.Validations.Length == 0)
+                continue;
             if (parameterType.IsArray)
             {
                 var elementType = parameterType.GetElementType()!;

@@ -124,6 +124,8 @@ internal sealed class PowerShellCSharpMemberEmitter
     {
         var target = ResolveIndexTarget(index);
         var targetCode = EmitTarget(target);
+        if (target.Type == typeof(string))
+            targetCode = $"({targetCode} ?? string.Empty)";
         var indexCode = _emitExpression(index.Index);
         if (IsStringDictionary(target.Type))
         {
