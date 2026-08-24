@@ -127,7 +127,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
                   <Target Name="ReplaceOutputFromTrackedProperty"
-                          AfterTargets="Rebuild"
+                          AfterTargets="Build"
                           Condition="Exists('$(PayloadPath)')">
                     <Copy SourceFiles="$(PayloadPath)" DestinationFiles="$(TargetPath)" />
                   </Target>

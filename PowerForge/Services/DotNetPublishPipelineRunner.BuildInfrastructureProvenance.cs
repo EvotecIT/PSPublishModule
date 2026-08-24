@@ -133,7 +133,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 "-nologo",
                 "-verbosity:quiet",
                 "-restore",
-                "-target:Rebuild",
+                "-target:Build",
                 "-getProperty:TargetPath",
                 "-getItem:FileWrites"
             };

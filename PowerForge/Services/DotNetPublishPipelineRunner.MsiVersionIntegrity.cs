@@ -359,25 +359,84 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return untrustedSourceInputs;
         }
-        string[] gitRelativeBuildInputs = buildInputs
-            .Where(File.Exists)
-            .Select(path => ToGitRelativeExclusion(projectRoot, gitRoot, path))
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Select(path => path!.Replace('\\', '/').TrimStart('/'))
-            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
-            .ToArray();
-        string? ignoredOutput = ReadIgnoredGitPaths(gitRoot, gitRelativeBuildInputs);
-        if (ignoredOutput is null)
+        string[]? ignoredPaths = ReadIgnoredBuildInputPaths(
+            gitRoot,
+            buildInputs.Where(path =>
+                File.Exists(path) &&
+                ToGitRelativeExclusion(projectRoot, gitRoot, path) is not null));
+        if (ignoredPaths is null)
             return new[] { "Git ignored-input query failed" };
-        string[] ignoredPaths = ignoredOutput.Split(
-                new[] { '\0' },
-                StringSplitOptions.RemoveEmptyEntries)
-            .Select(path => path.Replace('\\', '/').TrimStart('/'))
-            .ToArray();
         return ignoredPaths
             .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .ToArray();
+    }
+
+    private static string[]? ReadIgnoredBuildInputPaths(
+        string gitRoot,
+        IEnumerable<string> buildInputs)
+    {
+        StringComparer comparer = IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        string fullGitRoot = Path.GetFullPath(gitRoot);
+        var inputsByRepository = new Dictionary<string, HashSet<string>>(comparer);
+        var repositoryByDirectory = new Dictionary<string, string?>(comparer);
+        foreach (string input in buildInputs)
+        {
+            string fullInput = Path.GetFullPath(input);
+            string inputDirectory = Path.GetDirectoryName(fullInput)!;
+            if (!repositoryByDirectory.TryGetValue(inputDirectory, out string? repositoryRoot))
+            {
+                repositoryRoot = ReadGitText(inputDirectory, "rev-parse --show-toplevel");
+                repositoryByDirectory[inputDirectory] = repositoryRoot;
+            }
+            if (string.IsNullOrWhiteSpace(repositoryRoot))
+                return null;
+
+            repositoryRoot = Path.GetFullPath(repositoryRoot!);
+            if (!IsSameOrBelowBuildInputPath(repositoryRoot, fullGitRoot) ||
+                !IsSameOrBelowBuildInputPath(fullInput, repositoryRoot))
+            {
+                return null;
+            }
+
+            string relativeInput = FrameworkCompatibility.GetRelativePath(
+                    repositoryRoot,
+                    fullInput)
+                .Replace('\\', '/')
+                .TrimStart('/');
+            if (!inputsByRepository.TryGetValue(repositoryRoot, out HashSet<string>? paths))
+            {
+                paths = new HashSet<string>(comparer);
+                inputsByRepository[repositoryRoot] = paths;
+            }
+            paths.Add(relativeInput);
+        }
+
+        var ignoredInputs = new List<string>();
+        foreach (KeyValuePair<string, HashSet<string>> repository in inputsByRepository)
+        {
+            string? ignoredOutput = ReadIgnoredGitPaths(repository.Key, repository.Value);
+            if (ignoredOutput is null)
+                return null;
+            foreach (string ignoredPath in ignoredOutput.Split(
+                         new[] { '\0' },
+                         StringSplitOptions.RemoveEmptyEntries))
+            {
+                string fullIgnoredPath = Path.GetFullPath(Path.Combine(
+                    repository.Key,
+                    ignoredPath.Replace('/', Path.DirectorySeparatorChar)));
+                if (!IsSameOrBelowBuildInputPath(fullIgnoredPath, fullGitRoot))
+                    return null;
+                ignoredInputs.Add(FrameworkCompatibility.GetRelativePath(
+                        fullGitRoot,
+                        fullIgnoredPath)
+                    .Replace('\\', '/')
+                    .TrimStart('/'));
+            }
+        }
+        return ignoredInputs.ToArray();
     }
 
     private static string? ReadIgnoredGitPaths(string gitRoot, IReadOnlyCollection<string> paths)

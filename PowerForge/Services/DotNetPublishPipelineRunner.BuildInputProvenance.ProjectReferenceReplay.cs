@@ -307,16 +307,18 @@ public sealed partial class DotNetPublishPipelineRunner
                      attribute.Name.LocalName.Equals("Update", StringComparison.OrdinalIgnoreCase) ||
                      attribute.Name.LocalName.Equals("Remove", StringComparison.OrdinalIgnoreCase)))
         {
-            if (!DoesProjectReferenceItemSpecMatch(
+            bool identityMatches = DoesProjectReferenceItemSpecMatch(
                     referencedPath,
                     declaration,
                     evaluatedConditionProperties,
                     identityBaseDirectories,
                     comparison,
-                    identity.Value))
-            {
+                    identity.Value,
+                    out bool identityMatchIsCertain);
+            if (!identityMatches)
                 continue;
-            }
+            if (!identityMatchIsCertain)
+                return ProjectReferenceDeclarationMatch.Ambiguous;
 
             XAttribute? exclude = declaration.Element.Attributes().FirstOrDefault(attribute =>
                 attribute.Name.LocalName.Equals("Exclude", StringComparison.OrdinalIgnoreCase));
@@ -447,22 +449,6 @@ public sealed partial class DotNetPublishPipelineRunner
         removesMetadata = removalOutcomes.Single();
         return true;
     }
-
-    private static bool DoesProjectReferenceItemSpecMatch(
-        string referencedPath,
-        PreprocessedProjectReferenceDeclaration declaration,
-        IReadOnlyDictionary<string, string> evaluatedConditionProperties,
-        IEnumerable<string> identityBaseDirectories,
-        StringComparison comparison,
-        string itemSpec)
-        => DoesProjectReferenceItemSpecMatch(
-            referencedPath,
-            declaration,
-            evaluatedConditionProperties,
-            identityBaseDirectories,
-            comparison,
-            itemSpec,
-            out _);
 
     private static bool DoesProjectReferenceItemSpecMatch(
         string referencedPath,
