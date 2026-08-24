@@ -153,6 +153,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
     {
         ValidateDescriptor(cmdlet);
 
+        if (cmdlet.Method.Aliases.Length > 0)
+            builder.AppendLine($"[Alias({string.Join(", ", cmdlet.Method.Aliases.Select(PowerShellCSharpLiteral.QuoteString))})]");
         builder.AppendLine($"[Cmdlet({PowerShellCSharpLiteral.QuoteString(cmdlet.Verb)}, {PowerShellCSharpLiteral.QuoteString(cmdlet.Noun)})]");
         var outputType = GetCmdletOutputTypeName(cmdlet.Method.ReturnType);
         if (outputType is not null)

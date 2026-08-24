@@ -140,7 +140,8 @@ public sealed class PowerShellTypedCompilationTranspiler
                         function.Extent.StartLineNumber,
                         parsed.Path,
                         emitted.RequiresPowerShellStreams,
-                        emitted.RequiresPowerShellCommandRegions));
+                        emitted.RequiresPowerShellCommandRegions,
+                        GetFunctionAliases(function)));
                 }
                 catch (PowerShellCSharpEmissionException ex)
                 {
@@ -225,6 +226,17 @@ public sealed class PowerShellTypedCompilationTranspiler
 
     private static string GetMethodKey(string sourcePath, string name, int sourceLine)
         => Path.GetFullPath(sourcePath) + "\0" + name + "\0" + sourceLine;
+
+    private static string[] GetFunctionAliases(FunctionDefinitionAst function)
+        => function.Body.ParamBlock?.Attributes
+            .OfType<AttributeAst>()
+            .Where(static attribute =>
+                attribute.TypeName.Name.Equals("Alias", StringComparison.OrdinalIgnoreCase) ||
+                attribute.TypeName.Name.Equals("AliasAttribute", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(static attribute => attribute.PositionalArguments.OfType<StringConstantExpressionAst>())
+            .Select(static alias => alias.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray() ?? Array.Empty<string>();
 
     private static string ResolveCollisionFreeTypeName(string requestedTypeName, IEnumerable<ScriptBlockAst> asts)
     {

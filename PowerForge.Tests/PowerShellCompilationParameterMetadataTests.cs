@@ -50,7 +50,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_BinaryModuleEmitsPowerShellParameterAttributesAndSwitchAdapter()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-MetadataProof { param([Alias('n')] [AllowNull()] [ValidateNotNullOrEmpty()] [ValidatePattern('^[A-Z]')] [string] $Name, [switch] $Force) if ($Force) { return $Name + '!' }; return $Name }",
+            "function Get-MetadataProof { [Alias('gmp')] param([Alias('n')] [AllowNull()] [ValidateNotNullOrEmpty()] [ValidatePattern('^[A-Z]')] [string] $Name, [switch] $Force) if ($Force) { return $Name + '!' }; return $Name }",
             ".psm1");
         var spec = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -67,6 +67,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var cmdletSourcePath = Directory.EnumerateFiles(result.GeneratedSourcePath!, "CompiledCmdlets.cs", SearchOption.AllDirectories).Single();
         var source = File.ReadAllText(cmdletSourcePath);
+        Assert.Contains("[Alias(\"gmp\")]", source, StringComparison.Ordinal);
         Assert.Contains("[Alias(\"n\")]", source, StringComparison.Ordinal);
         Assert.Contains("[AllowNull]", source, StringComparison.Ordinal);
         Assert.Contains("[ValidateNotNullOrEmpty]", source, StringComparison.Ordinal);
