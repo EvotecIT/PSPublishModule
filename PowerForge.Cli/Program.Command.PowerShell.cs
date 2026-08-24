@@ -45,12 +45,13 @@ internal static partial class Program
                 args,
                 new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--framework", "--rid", "--optimization", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
                 new[] { "--self-contained", "--emit-source", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
+                out var positionalPath,
                 out var argumentError))
             return WritePowerShellError(outputJson, 2, argumentError, logger, "powershell.build");
 
         var paths = GetOptionValues(args, "--path").ToList();
-        if (args.Length > 0 && !args[0].StartsWith("-", StringComparison.Ordinal))
-            paths.Insert(0, args[0]);
+        if (positionalPath is not null)
+            paths.Insert(0, positionalPath);
         if (paths.Count == 0)
             return WritePowerShellError(outputJson, 2, "A PowerShell source file is required.", logger, "powershell.build");
 
@@ -173,12 +174,15 @@ internal static partial class Program
                 args,
                 new[] { "--path", "--kind", "--mode", "--framework", "--output" },
                 new[] { "--no-recurse", "--json", "--output-json" },
+                out var positionalPath,
                 out var argumentError))
             return WritePowerShellError(outputJson, 2, argumentError, logger);
 
         var path = TryGetOptionValue(args, "--path");
-        if (string.IsNullOrWhiteSpace(path) && args.Length > 0 && !args[0].StartsWith("-", StringComparison.Ordinal))
-            path = args[0];
+        if (!string.IsNullOrWhiteSpace(path) && positionalPath is not null)
+            return WritePowerShellError(outputJson, 2, "Specify the PowerShell analysis path either positionally or with --path, not both.", logger, "powershell.analyze");
+        if (string.IsNullOrWhiteSpace(path))
+            path = positionalPath;
         if (string.IsNullOrWhiteSpace(path))
             return WritePowerShellError(outputJson, 2, "A PowerShell file or directory path is required.", logger);
 
@@ -241,12 +245,13 @@ internal static partial class Program
                 args,
                 new[] { "--path", "--framework", "--baseline", "--write-baseline", "--output" },
                 new[] { "--no-recurse", "--json", "--output-json" },
+                out var positionalPath,
                 out var argumentError))
             return WritePowerShellError(outputJson, 2, argumentError, logger, "powershell.census");
 
         var paths = GetOptionValues(args, "--path").ToList();
-        if (args.Length > 0 && !args[0].StartsWith("-", StringComparison.Ordinal))
-            paths.Insert(0, args[0]);
+        if (positionalPath is not null)
+            paths.Insert(0, positionalPath);
         if (paths.Count == 0)
             return WritePowerShellError(outputJson, 2, "At least one PowerShell product or source path is required.", logger, "powershell.census");
 
@@ -413,11 +418,12 @@ internal static partial class Program
         string[] args,
         IEnumerable<string> valueOptions,
         IEnumerable<string> switchOptions,
+        out string? positionalArgument,
         out string error)
     {
         var values = valueOptions.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var switches = switchOptions.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var positionalCount = 0;
+        positionalArgument = null;
         for (var index = 0; index < args.Length; index++)
         {
             var argument = args[index];
@@ -436,11 +442,12 @@ internal static partial class Program
                 error = $"Unknown PowerShell option '{argument}'.";
                 return false;
             }
-            if (++positionalCount > 1)
+            if (positionalArgument is not null)
             {
                 error = $"Unexpected PowerShell argument '{argument}'.";
                 return false;
             }
+            positionalArgument = argument;
         }
 
         error = string.Empty;

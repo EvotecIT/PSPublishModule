@@ -50,7 +50,8 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 throw new InvalidOperationException($"Conventional module source pattern '{relativePattern}' at {rootPath}:{command.Extent.StartLineNumber} may use wildcards only in its file name.");
 
             var searchRoot = Path.GetFullPath(Path.Combine(sourceRoot, directoryPart));
-            PowerShellCompilationPathSafety.EnsureContained(sourceRoot, searchRoot, $"Conventional module source pattern '{relativePattern}' escapes the module root.");
+            if (!PowerShellCompilationPathSafety.PathEquals(sourceRoot, searchRoot))
+                PowerShellCompilationPathSafety.EnsureContained(sourceRoot, searchRoot, $"Conventional module source pattern '{relativePattern}' escapes the module root.");
             if (!Directory.Exists(searchRoot))
                 continue;
             PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, searchRoot, $"Conventional module source pattern '{relativePattern}' traverses a symbolic link or junction.");

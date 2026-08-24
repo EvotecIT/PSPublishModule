@@ -8,6 +8,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     [Theory]
     [InlineData("powershell build missing.ps1 --kind exe --sing --output json", "powershell.build", "--sing")]
     [InlineData("powershell analyze missing.ps1 --recurs --output json", "powershell.analyze", "--recurs")]
+    [InlineData("powershell analyze one.ps1 --path two.ps1 --output json", "powershell.analyze", "either positionally")]
     [InlineData("powershell build missing.ps1 --kind exe --mode 999 --output json", "powershell.build", "999")]
     public async Task Commands_RejectInvalidOptions(string arguments, string command, string errorFragment)
     {
@@ -198,6 +199,38 @@ public sealed class PowerForgeCliPowerShellCompilationTests
             var result = document.RootElement.GetProperty("result");
             Assert.Equal(3, result.GetProperty("compilableUnits").GetInt32());
             Assert.Equal(0, result.GetProperty("runtimeFallbackUnits").GetInt32());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task CommandsAcceptPositionalSourceAfterOptions()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Positional Ordering Tests", Guid.NewGuid().ToString("N"));
+        var output = Path.Combine(root, "output");
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "Tool.ps1");
+        File.WriteAllText(source, "return 1");
+        try
+        {
+            var analyze = await RunCliAsync(
+                repositoryRoot,
+                $"powershell analyze --mode Strict \"{source}\" --framework net10.0 --output json");
+            Assert.True(analyze.ExitCode == 0, FormatFailure("option-first analyze", analyze));
+
+            var census = await RunCliAsync(
+                repositoryRoot,
+                $"powershell census --framework net10.0 \"{source}\" --output json");
+            Assert.True(census.ExitCode == 0, FormatFailure("option-first census", census));
+
+            var build = await RunCliAsync(
+                repositoryRoot,
+                $"powershell build --mode Strict --kind exe \"{source}\" --framework net10.0 --out \"{output}\" --name PositionalProof --output json");
+            Assert.True(build.ExitCode == 0, FormatFailure("option-first build", build));
         }
         finally
         {

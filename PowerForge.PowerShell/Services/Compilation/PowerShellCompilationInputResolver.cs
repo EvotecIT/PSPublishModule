@@ -90,7 +90,11 @@ public sealed class PowerShellCompilationInputResolver
                 throw new ArgumentException("A loose compilation file set may contain only .ps1 files. Point to a .psd1, .psm1, or module directory for module discovery.", nameof(paths));
         }
 
-        var resolvedKind = kind ?? PowerShellCompilationArtifactKind.Library;
+        var resolvedKind = kind ?? (string.IsNullOrWhiteSpace(entryPointPath)
+            ? PowerShellCompilationArtifactKind.Library
+            : PowerShellCompilationArtifactKind.Executable);
+        if (!string.IsNullOrWhiteSpace(entryPointPath) && resolvedKind != PowerShellCompilationArtifactKind.Executable)
+            throw new InvalidOperationException("An explicit entrypoint is valid only for an Executable artifact.");
         if (resolvedKind == PowerShellCompilationArtifactKind.Executable)
         {
             if (requestedPaths.Length > 1 && string.IsNullOrWhiteSpace(entryPointPath))

@@ -97,6 +97,27 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_HybridModuleHonorsModuleQualifiedExportCommand()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-QualifiedPublic { return 1 }; function Get-QualifiedPrivate { return (Get-Date).Year }; " +
+            "Microsoft.PowerShell.Core\\Export-ModuleMember -Function Get-QualifiedPublic",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.QualifiedExports",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var proof = RunModuleProof(
+            result.ArtifactPath!,
+            "Get-QualifiedPublic; [bool](Get-Command Get-QualifiedPrivate -ErrorAction SilentlyContinue)");
+        Assert.Equal(new[] { "1", "False" }, proof.Split(Environment.NewLine));
+    }
+
+    [Fact]
     public void Build_HybridModulePreservesEmptyConventionalLoaderDirectory()
     {
         using var fixture = ArtifactFixture.Create(

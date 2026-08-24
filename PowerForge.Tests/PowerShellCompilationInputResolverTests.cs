@@ -70,6 +70,25 @@ public sealed class PowerShellCompilationInputResolverTests
     }
 
     [Fact]
+    public void Resolve_ExplicitEntrypointInfersExecutableAndRejectsConflictingKind()
+    {
+        using var fixture = ResolverFixture.Create();
+        var entryPoint = fixture.Write("Main.ps1", ". \"$PSScriptRoot/Helper.ps1\"; return Get-Helper");
+        var helper = fixture.Write("Helper.ps1", "function Get-Helper { return 2 }");
+        var resolver = new PowerShellCompilationInputResolver();
+
+        var resolved = resolver.Resolve(new[] { entryPoint, helper }, entryPointPath: entryPoint);
+
+        Assert.Equal(PowerShellCompilationArtifactKind.Executable, resolved.Kind);
+        Assert.Equal(entryPoint, resolved.SourcePath);
+        var exception = Assert.Throws<InvalidOperationException>(() => resolver.Resolve(
+            new[] { entryPoint, helper },
+            PowerShellCompilationArtifactKind.Library,
+            entryPointPath: entryPoint));
+        Assert.Contains("entrypoint", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Resolve_LooseBinaryModuleSetRequiresStrictMode()
     {
         using var fixture = ResolverFixture.Create();
@@ -179,6 +198,23 @@ public sealed class PowerShellCompilationInputResolverTests
             new[] { privateFunction, publicFunction, root }.OrderBy(static path => path),
             resolved.CompilationSourceFiles.OrderBy(static path => path));
         Assert.DoesNotContain(resolved.SourceFiles, path => path.Contains("Ignored", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Resolve_ConventionalModuleLoaderAcceptsGlobRootedAtModuleDirectory()
+    {
+        using var fixture = ResolverFixture.Create("RootGlobModule");
+        fixture.Write("RootGlobModule.psd1", "@{ RootModule = 'RootGlobModule.psm1' }");
+        var root = fixture.Write(
+            "RootGlobModule.psm1",
+            "$Files = @(Get-ChildItem -Path \"$PSScriptRoot/*.ps1\"); foreach ($File in $Files) { . $File.FullName }");
+        var function = fixture.Write("Get-RootProof.ps1", "function Get-RootProof { return 1 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.Root);
+
+        Assert.Equal(
+            new[] { function, root }.OrderBy(static path => path),
+            resolved.CompilationSourceFiles.OrderBy(static path => path));
     }
 
     [Fact]

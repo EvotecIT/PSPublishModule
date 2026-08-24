@@ -31,8 +31,7 @@ internal sealed class PowerShellModuleExportContract
     internal static PowerShellModuleExportContract? TryRead(ScriptBlockAst ast)
     {
         var allCommands = ast.FindAll(
-                static node => node is CommandAst command &&
-                               command.GetCommandName()?.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) == true,
+                static node => node is CommandAst command && IsExportModuleMember(command),
                 searchNestedScriptBlocks: false)
             .Cast<CommandAst>()
             .ToArray();
@@ -44,7 +43,7 @@ internal sealed class PowerShellModuleExportContract
             .Where(static pipeline => pipeline.PipelineElements.Count == 1)
             .Select(static pipeline => pipeline.PipelineElements[0])
             .OfType<CommandAst>()
-            .Where(static command => command.GetCommandName()?.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) == true)
+            .Where(IsExportModuleMember)
             .OrderBy(static command => command.Extent.StartOffset)
             .ToArray();
         if (commands.Length != allCommands.Length)
@@ -106,6 +105,11 @@ internal sealed class PowerShellModuleExportContract
             throw new InvalidOperationException("Module export declarations could not be parsed.");
         return TryRead(ast);
     }
+
+    private static bool IsExportModuleMember(CommandAst command)
+        => command.GetCommandName() is { } name &&
+           (name.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("Microsoft.PowerShell.Core\\Export-ModuleMember", StringComparison.OrdinalIgnoreCase));
 
     private static string ResolveParameter(CommandParameterAst parameter)
     {
