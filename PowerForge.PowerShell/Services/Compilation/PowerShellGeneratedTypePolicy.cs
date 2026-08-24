@@ -171,7 +171,10 @@ internal static class PowerShellGeneratedTypePolicy
         return ResolveDotNetRoot(configured, pathDirectories);
     }
 
-    internal static string? ResolveDotNetRoot(string? configured, IEnumerable<string> pathDirectories)
+    internal static string? ResolveDotNetRoot(
+        string? configured,
+        IEnumerable<string> pathDirectories,
+        Func<string, string?>? sdkListProbe = null)
     {
         var configuredRoot = NormalizeDotNetRoot(configured);
         if (configuredRoot is not null)
@@ -193,11 +196,44 @@ internal static class PowerShellGeneratedTypePolicy
                 if (linkedRoot is not null)
                     return linkedRoot;
 #endif
+                var probedRoot = ResolveDotNetRootFromSdkList((sdkListProbe ?? ProbeDotNetSdkList)(candidate));
+                if (probedRoot is not null)
+                    return probedRoot;
             }
             catch
             {
                 // Ignore malformed PATH entries and continue to the next candidate.
             }
+        }
+        return null;
+    }
+
+    private static string? ProbeDotNetSdkList(string executable)
+    {
+        var result = new ProcessRunner().RunAsync(new ProcessRunRequest(
+                executable,
+                Environment.CurrentDirectory,
+                new[] { "--list-sdks" },
+                TimeSpan.FromSeconds(10)))
+            .GetAwaiter()
+            .GetResult();
+        return result.Succeeded ? result.StdOut : null;
+    }
+
+    private static string? ResolveDotNetRootFromSdkList(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+            return null;
+        foreach (var line in Enumerable.Reverse(output!.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)))
+        {
+            var closeBracket = line.LastIndexOf(']');
+            var openBracket = closeBracket > 0 ? line.LastIndexOf('[', closeBracket) : -1;
+            if (openBracket < 0 || closeBracket <= openBracket + 1)
+                continue;
+            var sdkDirectory = line.Substring(openBracket + 1, closeBracket - openBracket - 1).Trim();
+            var root = NormalizeDotNetRoot(Path.GetFullPath(Path.Combine(sdkDirectory, "..")));
+            if (root is not null)
+                return root;
         }
         return null;
     }

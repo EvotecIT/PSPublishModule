@@ -9,6 +9,7 @@ internal static class Program
     private const string ScriptResourceName = "PowerForge.Compiled.Source.ps1";
     private static readonly HashSet<string> Parameters = new(StringComparer.OrdinalIgnoreCase) { {{PARAMETERS}} };
     private static readonly HashSet<string> SwitchParameters = new(StringComparer.OrdinalIgnoreCase) { {{SWITCH_PARAMETERS}} };
+    private static readonly Dictionary<string, string> ParameterAliases = new(StringComparer.OrdinalIgnoreCase) { {{PARAMETER_ALIASES}} };
 
     private static int Main(string[] args)
     {
@@ -120,8 +121,13 @@ internal static class Program
     {
         var exact = Parameters.FirstOrDefault(candidate => candidate.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (exact is not null) return exact;
+        if (ParameterAliases.TryGetValue(name, out var aliased)) return aliased;
         var matches = Parameters
             .Where(candidate => candidate.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+            .Concat(ParameterAliases
+                .Where(alias => alias.Key.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+                .Select(alias => alias.Value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(2)
             .ToArray();
         return matches.Length switch

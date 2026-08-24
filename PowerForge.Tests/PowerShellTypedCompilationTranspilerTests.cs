@@ -279,6 +279,36 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         }
     }
 
+    [Fact]
+    public void ResolveDotNetRoot_UsesSdkListForRegularExecutableShim()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var sdkRoot = Path.Combine(root, "sdk-root");
+        var shimDirectory = Path.Combine(root, "shim");
+        Directory.CreateDirectory(Path.Combine(sdkRoot, "packs", "Microsoft.NETCore.App.Ref"));
+        Directory.CreateDirectory(Path.Combine(sdkRoot, "sdk"));
+        Directory.CreateDirectory(shimDirectory);
+        var shim = Path.Combine(shimDirectory, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet");
+        File.WriteAllText(shim, string.Empty);
+        try
+        {
+            var resolved = PowerShellGeneratedTypePolicy.ResolveDotNetRoot(
+                configured: null,
+                pathDirectories: new[] { shimDirectory },
+                sdkListProbe: executable =>
+                {
+                    Assert.Equal(Path.GetFullPath(shim), executable);
+                    return $"10.0.100 [{Path.Combine(sdkRoot, "sdk")}]";
+                });
+
+            Assert.Equal(Path.GetFullPath(sdkRoot), resolved);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     private sealed class TranspilerFixture : IDisposable
     {
         private TranspilerFixture(string rootPath, string scriptPath)

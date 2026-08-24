@@ -76,10 +76,11 @@ internal static class PowerShellCompiledModuleManifest
         var selectedCompiled = Select(explicitCompiled, manifestFunctions);
         var explicitCmdlets = explicitExports?.Cmdlets ?? Array.Empty<string>();
         var hasNestedModules = ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules").Any();
-        var preserveWildcardFunctions = HasNestedModuleWildcardFunctionExports(sourcePath);
-        var selectedFallback = preserveWildcardFunctions
-            ? new[] { "*" }
-            : Select(explicitFallback, manifestFunctions);
+        var nestedModuleFunctionPatterns = GetNestedModuleFunctionExportPatterns(sourcePath, allFunctions);
+        var selectedFallback = Select(explicitFallback, manifestFunctions)
+            .Concat(nestedModuleFunctionPatterns)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var preserveWildcardCmdlets = hasNestedModules && manifestCmdlets?.Contains("*", StringComparer.OrdinalIgnoreCase) == true;
         var selectedSourceCmdlets = manifestCmdlets?.Contains("*", StringComparer.OrdinalIgnoreCase) == true
             ? explicitCmdlets
@@ -174,13 +175,21 @@ internal static class PowerShellCompiledModuleManifest
         return rewritten.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    internal static bool HasNestedModuleWildcardFunctionExports(string sourcePath)
+    internal static string[] GetNestedModuleFunctionExportPatterns(
+        string sourcePath,
+        IEnumerable<string> sourceFunctionNames)
     {
         var sourceManifest = Path.ChangeExtension(sourcePath, ".psd1");
-        return File.Exists(sourceManifest) &&
-               ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules").Any() &&
-               ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "FunctionsToExport")
-                   ?.Contains("*", StringComparer.OrdinalIgnoreCase) == true;
+        if (!File.Exists(sourceManifest) ||
+            !ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(sourceManifest, "NestedModules").Any())
+        {
+            return Array.Empty<string>();
+        }
+
+        var manifestFunctions = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(sourceManifest, "FunctionsToExport");
+        if (manifestFunctions?.Contains("*", StringComparer.OrdinalIgnoreCase) == true)
+            return new[] { "*" };
+        return SelectPatternsWithoutMatches(sourceFunctionNames, manifestFunctions);
     }
 
     private static void ApplyTargetCompatibility(
@@ -244,6 +253,21 @@ internal static class PowerShellCompiledModuleManifest
             return names.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var matchers = patterns.Select(pattern => new WildcardPattern(pattern, WildcardOptions.IgnoreCase)).ToArray();
         return names.Where(name => matchers.Any(matcher => matcher.IsMatch(name)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string[] SelectPatternsWithoutMatches(IEnumerable<string> names, string[]? patterns)
+    {
+        if (patterns is null)
+            return Array.Empty<string>();
+        var candidates = names.ToArray();
+        return patterns
+            .Where(pattern =>
+            {
+                var matcher = new WildcardPattern(pattern, WildcardOptions.IgnoreCase);
+                return !candidates.Any(matcher.IsMatch);
+            })
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }

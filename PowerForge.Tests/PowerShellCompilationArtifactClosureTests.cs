@@ -251,6 +251,45 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_HybridModulePreservesLiteralFunctionExportFromNestedModule()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-TypedValue { return 1 }; Export-ModuleMember -Function Get-TypedValue",
+            ".psm1");
+        var nestedDirectory = Path.Combine(fixture.RootPath, "Nested");
+        Directory.CreateDirectory(nestedDirectory);
+        File.WriteAllText(
+            Path.Combine(nestedDirectory, "Nested.psm1"),
+            "function Get-NestedValue { return 9 }; Export-ModuleMember -Function Get-NestedValue");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; NestedModules = @('Nested/Nested.psm1'); FunctionsToExport = @('Get-TypedValue', 'Get-NestedValue'); CmdletsToExport = @() }");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.NestedLiteralExport",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-TypedValue; Get-NestedValue");
+        Assert.True(
+            run.ExitCode == 0,
+            $"Exit code: {run.ExitCode}{Environment.NewLine}{run.StandardError}{Environment.NewLine}{run.StandardOutput}{Environment.NewLine}" +
+            File.ReadAllText(result.ArtifactPath!) + Environment.NewLine +
+            string.Join(Environment.NewLine, result.Manifest!.Files.Select(file => file.Path)));
+        Assert.Equal(new[] { "1", "9" }, run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
     public void Build_StrictModuleAcceptsNestedBinaryManifestWithoutScriptFallback()
     {
         using var nestedFixture = ArtifactFixture.Create("function Get-NestedValue { return 9 }", ".psm1");

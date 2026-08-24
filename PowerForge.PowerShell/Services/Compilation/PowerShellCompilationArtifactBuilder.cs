@@ -157,7 +157,8 @@ public sealed class PowerShellCompilationArtifactBuilder
                     Path.Combine(workspace, "Program.cs"),
                     ReadTemplate(PackagedProgramTemplate)
                         .Replace("{{PARAMETERS}}", parameterInitializers.Parameters)
-                        .Replace("{{SWITCH_PARAMETERS}}", parameterInitializers.SwitchParameters),
+                        .Replace("{{SWITCH_PARAMETERS}}", parameterInitializers.SwitchParameters)
+                        .Replace("{{PARAMETER_ALIASES}}", parameterInitializers.ParameterAliases),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 projectPath = Path.Combine(workspace, artifactName + ".csproj");
                 File.WriteAllText(
@@ -489,7 +490,7 @@ public sealed class PowerShellCompilationArtifactBuilder
     private static string GeneratePackagedScript(string sourcePath)
         => PowerShellPackagedScriptRewriter.Rewrite(sourcePath);
 
-    private static (string Parameters, string SwitchParameters) GeneratePackagedParameterInitializers(string sourcePath)
+    private static (string Parameters, string SwitchParameters, string ParameterAliases) GeneratePackagedParameterInitializers(string sourcePath)
     {
         Token[] tokens;
         ParseError[] errors;
@@ -498,29 +499,40 @@ public sealed class PowerShellCompilationArtifactBuilder
             throw new InvalidOperationException("Packaged script parameters could not be parsed for native argument binding.");
         var parameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var switchParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parameterAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var parameter in ast.ParamBlock?.Parameters.AsEnumerable() ?? Enumerable.Empty<ParameterAst>())
         {
-            var names = new List<string> { parameter.Name.VariablePath.UserPath };
+            var name = parameter.Name.VariablePath.UserPath;
+            parameters.Add(name);
             foreach (var alias in parameter.Attributes.OfType<AttributeAst>().Where(static attribute => IsAttributeNamed(attribute, "Alias")))
             foreach (var value in alias.PositionalArguments.OfType<StringConstantExpressionAst>())
-                names.Add(value.Value);
-            parameters.UnionWith(names);
+                parameterAliases[value.Value] = name;
             if (parameter.StaticType == typeof(System.Management.Automation.SwitchParameter))
-                switchParameters.UnionWith(names);
+                switchParameters.Add(name);
         }
         if (ast.ParamBlock?.Attributes.OfType<AttributeAst>().Any(static attribute => IsAttributeNamed(attribute, "CmdletBinding")) == true)
         {
             var commonSwitches = new[] { "Verbose", "Debug", "WhatIf", "Confirm" };
             parameters.UnionWith(commonSwitches);
             switchParameters.UnionWith(commonSwitches);
+            parameterAliases["vb"] = "Verbose";
+            parameterAliases["db"] = "Debug";
+            parameterAliases["wi"] = "WhatIf";
+            parameterAliases["cf"] = "Confirm";
         }
-        return (GenerateInitializer(parameters), GenerateInitializer(switchParameters));
+        return (GenerateInitializer(parameters), GenerateInitializer(switchParameters), GenerateAliasInitializer(parameterAliases));
     }
 
     private static string GenerateInitializer(IEnumerable<string> values)
         => string.Join(", ", values
             .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
             .Select(PowerShellCSharpLiteral.QuoteString)
+            .ToArray());
+
+    private static string GenerateAliasInitializer(IEnumerable<KeyValuePair<string, string>> aliases)
+        => string.Join(", ", aliases
+            .OrderBy(static alias => alias.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(static alias => $"[{PowerShellCSharpLiteral.QuoteString(alias.Key)}] = {PowerShellCSharpLiteral.QuoteString(alias.Value)}")
             .ToArray());
 
     private static bool IsAttributeNamed(AttributeAst attribute, string name)
@@ -588,9 +600,10 @@ public sealed class PowerShellCompilationArtifactBuilder
             .Select(static method => method.SourceName)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var exportedFallbackFunctions = PowerShellCompiledModuleManifest.HasNestedModuleWildcardFunctionExports(sourcePath)
-            ? new[] { "*" }
-            : exportContract?.SelectFunctions(fallbackFunctions) ?? fallbackFunctions;
+        var exportedFallbackFunctions = (exportContract?.SelectFunctions(fallbackFunctions) ?? fallbackFunctions)
+            .Concat(PowerShellCompiledModuleManifest.GetNestedModuleFunctionExportPatterns(sourcePath, functions.Select(static function => function.Name)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var exportedCompiledCmdlets = exportContract?.SelectFunctions(compiledCmdlets) ?? compiledCmdlets;
         var additionalCmdlets = exportContract?.Cmdlets ?? Array.Empty<string>();
         var aliases = exportContract?.Aliases ?? new[] { "*" };

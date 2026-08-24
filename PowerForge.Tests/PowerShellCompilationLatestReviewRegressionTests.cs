@@ -549,4 +549,31 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             System.Numerics.BigInteger.Parse(value, System.Globalization.CultureInfo.InvariantCulture),
             type.GetMethod("Get_BigValue")!.Invoke(null, null));
     }
+
+    [Fact]
+    public void Build_PackagedExecutableRecognizesCommonSwitchAliases()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "[CmdletBinding()] param([string] $Name); Write-Verbose 'verbose-record'; Write-Debug 'debug-record'; return $Name");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.CommonSwitchAliases",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(result.ArtifactPath!, "-vb", "-db", "Ada");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Contains("VERBOSE: verbose-record", run.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("DEBUG: debug-record", run.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("Ada", run.StandardOutput, StringComparison.Ordinal);
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+
+        var abbreviatedRun = Run(result.ArtifactPath!, "-v", "Eve");
+        Assert.Equal(0, abbreviatedRun.ExitCode);
+        Assert.Contains("VERBOSE: verbose-record", abbreviatedRun.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("Eve", abbreviatedRun.StandardOutput, StringComparison.Ordinal);
+        Assert.True(string.IsNullOrWhiteSpace(abbreviatedRun.StandardError), abbreviatedRun.StandardError);
+    }
 }
