@@ -16,7 +16,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         string namespaceName = "PowerForge.Compiled",
         string typeName = "CompiledPowerShell",
         string? targetFramework = null)
-        => TranspileCore(new[] { sourcePath }, namespaceName, typeName, targetFramework, excludedMethods: null);
+        => TranspileCore(new[] { sourcePath }, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapability.None);
 
     /// <summary>Translates eligible functions from files sharing one PowerShell module scope.</summary>
     public PowerShellTypedCompilationResult Transpile(
@@ -24,22 +24,37 @@ public sealed class PowerShellTypedCompilationTranspiler
         string namespaceName = "PowerForge.Compiled",
         string typeName = "CompiledPowerShell",
         string? targetFramework = null)
-        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods: null);
+        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapability.None);
+
+    internal PowerShellTypedCompilationResult TranspileForBinaryModule(
+        IEnumerable<string> sourcePaths,
+        string namespaceName,
+        string typeName,
+        string? targetFramework)
+        => TranspileCore(
+            sourcePaths,
+            namespaceName,
+            typeName,
+            targetFramework,
+            excludedMethods: null,
+            PowerShellCompilationCapability.PowerShellStreams);
 
     internal PowerShellTypedCompilationResult TranspileExcluding(
         IEnumerable<string> sourcePaths,
         string namespaceName,
         string typeName,
         string? targetFramework,
-        ISet<string> excludedMethods)
-        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods);
+        ISet<string> excludedMethods,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
+        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods, capabilities);
 
     private static PowerShellTypedCompilationResult TranspileCore(
         IEnumerable<string> sourcePaths,
         string namespaceName,
         string typeName,
         string? targetFramework,
-        ISet<string>? excludedMethods)
+        ISet<string>? excludedMethods,
+        PowerShellCompilationCapability capabilities)
     {
         if (sourcePaths is null)
             throw new ArgumentNullException(nameof(sourcePaths));
@@ -60,7 +75,10 @@ public sealed class PowerShellTypedCompilationTranspiler
         var parsedFiles = new List<ParsedSource>();
         foreach (var fullPath in fullPaths)
         {
-            var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fullPath, targetFramework: targetFramework));
+            var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+                fullPath,
+                targetFramework: targetFramework,
+                capabilities: capabilities));
             var filePlan = plan.Files.Single();
             diagnostics.AddRange(filePlan.Diagnostics);
             diagnostics.AddRange(filePlan.Units.SelectMany(static unit => unit.Diagnostics));
@@ -112,7 +130,7 @@ public sealed class PowerShellTypedCompilationTranspiler
 
                 try
                 {
-                    var emitted = new PowerShellCSharpMethodEmitter(parsed.Path, function, targetFramework).Emit();
+                    var emitted = new PowerShellCSharpMethodEmitter(parsed.Path, function, targetFramework, capabilities).Emit();
                     methodSources.Add(emitted.Source);
                     methods.Add(new PowerShellCompiledMethod(
                         function.Name,
@@ -120,7 +138,9 @@ public sealed class PowerShellTypedCompilationTranspiler
                         emitted.ReturnType.FullName ?? emitted.ReturnType.Name,
                         unit.Parameters,
                         function.Extent.StartLineNumber,
-                        parsed.Path));
+                        parsed.Path,
+                        emitted.RequiresPowerShellStreams,
+                        emitted.RequiresPowerShellCommandRegions));
                 }
                 catch (PowerShellCSharpEmissionException ex)
                 {
@@ -250,14 +270,23 @@ internal sealed class PowerShellCSharpEmissionException : Exception
 
 internal sealed class PowerShellCSharpMethodEmission
 {
-    internal PowerShellCSharpMethodEmission(string generatedName, Type returnType, string source)
+    internal PowerShellCSharpMethodEmission(
+        string generatedName,
+        Type returnType,
+        string source,
+        bool requiresPowerShellStreams = false,
+        bool requiresPowerShellCommandRegions = false)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
         Source = source;
+        RequiresPowerShellStreams = requiresPowerShellStreams;
+        RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
     }
 
     internal string GeneratedName { get; }
     internal Type ReturnType { get; }
     internal string Source { get; }
+    internal bool RequiresPowerShellStreams { get; }
+    internal bool RequiresPowerShellCommandRegions { get; }
 }

@@ -74,7 +74,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             typed.NamespaceName,
             typed.TypeName,
             targetFramework,
-            invalid);
+            invalid,
+            PowerShellCompilationCapability.PowerShellStreams);
         return new PowerShellTypedCompilationResult(
             filtered.SourcePath,
             filtered.NamespaceName,
@@ -172,11 +173,24 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine($"    public {propertyType} {PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name)} {{ get; set; }}{(!parameter.IsSwitch && parameter.TypeName == typeof(string).FullName ? " = string.Empty;" : string.Empty)}");
             builder.AppendLine();
         }
+        if (cmdlet.Method.RequiresPowerShellCommandRegions)
+        {
+            builder.AppendLine("    private void InvokePowerShellRegion(string script, object?[] arguments)");
+            builder.AppendLine("    {");
+            builder.AppendLine("        foreach (var value in InvokeCommand.InvokeScript(script, arguments))");
+            builder.AppendLine("            WriteObject(value, enumerateCollection: false);");
+            builder.AppendLine("    }");
+            builder.AppendLine();
+        }
         builder.AppendLine("    protected override void ProcessRecord()");
         builder.AppendLine("    {");
-        var arguments = string.Join(", ", cmdlet.Method.Parameters.Select(parameter =>
-            PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name) + (parameter.IsSwitch ? ".IsPresent" : string.Empty)));
-        var invocation = $"{typed.TypeName}.{cmdlet.Method.GeneratedName}({arguments})";
+        var arguments = cmdlet.Method.Parameters.Select(parameter =>
+            PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name) + (parameter.IsSwitch ? ".IsPresent" : string.Empty));
+        if (cmdlet.Method.RequiresPowerShellStreams)
+            arguments = arguments.Concat(new[] { "WriteVerbose", "WriteDebug", "WriteWarning" });
+        if (cmdlet.Method.RequiresPowerShellCommandRegions)
+            arguments = arguments.Append("InvokePowerShellRegion");
+        var invocation = $"{typed.TypeName}.{cmdlet.Method.GeneratedName}({string.Join(", ", arguments)})";
         if (cmdlet.Method.ReturnType.Equals(typeof(void).FullName, StringComparison.Ordinal))
             builder.AppendLine($"        {invocation};");
         else

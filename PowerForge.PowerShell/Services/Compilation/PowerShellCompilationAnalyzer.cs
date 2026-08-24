@@ -47,7 +47,7 @@ public sealed class PowerShellCompilationAnalyzer
         var basePath = Directory.Exists(spec.Path) ? spec.Path : Path.GetDirectoryName(spec.Path) ?? Directory.GetCurrentDirectory();
         return new PowerShellCompilationPlan(
             spec.Mode,
-            files.Select(file => AnalyzeFile(file, basePath, analysisTargetFramework)).ToArray(),
+            files.Select(file => AnalyzeFile(file, basePath, analysisTargetFramework, spec.Capabilities)).ToArray(),
             spec.TargetFramework);
     }
 
@@ -101,7 +101,11 @@ public sealed class PowerShellCompilationAnalyzer
             ((exclusion.Equals("bin", StringComparison.OrdinalIgnoreCase) || exclusion.Equals("obj", StringComparison.OrdinalIgnoreCase)) &&
              directory.StartsWith(exclusion + "-", StringComparison.OrdinalIgnoreCase)));
 
-    private static PowerShellCompilationFilePlan AnalyzeFile(string file, string basePath, string? targetFramework)
+    private static PowerShellCompilationFilePlan AnalyzeFile(
+        string file,
+        string basePath,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities)
     {
         Token[] tokens;
         ParseError[] errors;
@@ -124,12 +128,12 @@ public sealed class PowerShellCompilationAnalyzer
             excludeModuleExports: Path.GetExtension(file).Equals(".psm1", StringComparison.OrdinalIgnoreCase));
         if (topLevelStatements.Length > 0 || ast.ParamBlock is not null || HasUnsupportedNamedBlocks(ast))
         {
-            var scriptUnit = AnalyzeUnit("<script>", PowerShellCompilationUnitKind.Script, ast, file, topLevelStatements);
+            var scriptUnit = AnalyzeUnit("<script>", PowerShellCompilationUnitKind.Script, ast, file, topLevelStatements, capabilities);
             if (scriptUnit.IsCompilable)
             {
                 try
                 {
-                    var emitted = new PowerShellCSharpMethodEmitter(file, ast, "<script>", "Invoke", topLevelStatements, targetFramework).Emit();
+                    var emitted = new PowerShellCSharpMethodEmitter(file, ast, "<script>", "Invoke", topLevelStatements, targetFramework, capabilities).Emit();
                     scriptUnit = ReplaceUnit(scriptUnit, emitted.ReturnType, Array.Empty<PowerShellCompilationDiagnostic>());
                 }
                 catch (PowerShellCSharpEmissionException ex)
@@ -163,7 +167,8 @@ public sealed class PowerShellCompilationAnalyzer
                 PowerShellCompilationUnitKind.Function,
                 function.Body,
                 file,
-                GetEndStatements(function.Body, excludeFunctionDefinitions: false, excludeModuleExports: false));
+                GetEndStatements(function.Body, excludeFunctionDefinitions: false, excludeModuleExports: false),
+                capabilities);
             if (function.IsFilter)
             {
                 functionUnit = ReplaceUnit(
@@ -182,7 +187,7 @@ public sealed class PowerShellCompilationAnalyzer
             {
                 try
                 {
-                    var emitted = new PowerShellCSharpMethodEmitter(file, function, targetFramework).Emit();
+                    var emitted = new PowerShellCSharpMethodEmitter(file, function, targetFramework, capabilities).Emit();
                     functionUnit = ReplaceUnit(functionUnit, emitted.ReturnType, Array.Empty<PowerShellCompilationDiagnostic>());
                 }
                 catch (PowerShellCSharpEmissionException ex)
@@ -282,20 +287,21 @@ public sealed class PowerShellCompilationAnalyzer
         PowerShellCompilationUnitKind kind,
         ScriptBlockAst root,
         string file,
-        IReadOnlyCollection<StatementAst> executableStatements)
+        IReadOnlyCollection<StatementAst> executableStatements,
+        PowerShellCompilationCapability capabilities)
     {
         var diagnostics = new List<PowerShellCompilationDiagnostic>();
         var localVariables = CollectLocalVariables(root);
-        var parameters = AnalyzeParameters(root.ParamBlock, root, file, diagnostics, localVariables);
+        var parameters = AnalyzeParameters(root.ParamBlock, root, file, diagnostics, localVariables, capabilities);
 
-        AnalyzeUnsupportedNamedBlock(root.DynamicParamBlock, "dynamicparam", root, file, diagnostics, localVariables);
-        AnalyzeUnsupportedNamedBlock(root.BeginBlock, "begin", root, file, diagnostics, localVariables);
-        AnalyzeUnsupportedNamedBlock(root.ProcessBlock, "process", root, file, diagnostics, localVariables);
-        AnalyzeUnsupportedNamedBlock(GetNamedBlock(root, "CleanBlock"), "clean", root, file, diagnostics, localVariables);
+        AnalyzeUnsupportedNamedBlock(root.DynamicParamBlock, "dynamicparam", root, file, diagnostics, localVariables, capabilities);
+        AnalyzeUnsupportedNamedBlock(root.BeginBlock, "begin", root, file, diagnostics, localVariables, capabilities);
+        AnalyzeUnsupportedNamedBlock(root.ProcessBlock, "process", root, file, diagnostics, localVariables, capabilities);
+        AnalyzeUnsupportedNamedBlock(GetNamedBlock(root, "CleanBlock"), "clean", root, file, diagnostics, localVariables, capabilities);
 
         foreach (var statement in executableStatements)
         {
-            AnalyzeNode(statement, root, file, diagnostics, localVariables);
+            AnalyzeNode(statement, root, file, diagnostics, localVariables, capabilities);
         }
 
         return new PowerShellCompilationUnitPlan(
@@ -312,13 +318,14 @@ public sealed class PowerShellCompilationAnalyzer
         Ast unitRoot,
         string file,
         List<PowerShellCompilationDiagnostic> diagnostics,
-        HashSet<string> localVariables)
+        HashSet<string> localVariables,
+        PowerShellCompilationCapability capabilities)
     {
         if (paramBlock is null)
             return Array.Empty<PowerShellCompilationParameter>();
 
         foreach (var attribute in paramBlock.Attributes)
-            AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables);
+            AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, capabilities);
 
         var result = new List<PowerShellCompilationParameter>();
         foreach (var parameter in paramBlock.Parameters)
@@ -345,7 +352,7 @@ public sealed class PowerShellCompilationAnalyzer
                 GetValidations(parameter)));
 
             foreach (var attribute in parameter.Attributes.Where(static attribute => attribute is not TypeConstraintAst))
-                AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables);
+                AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, capabilities);
             if (parameter.DefaultValue is not null)
             {
                 diagnostics.Add(CreateDiagnostic(
@@ -353,7 +360,7 @@ public sealed class PowerShellCompilationAnalyzer
                     $"Parameter '${parameter.Name.VariablePath.UserPath}' declares a PowerShell default value, which is not supported by the typed compiler.",
                     file,
                     parameter.DefaultValue.Extent));
-                AnalyzeNode(parameter.DefaultValue, unitRoot, file, diagnostics, localVariables);
+                AnalyzeNode(parameter.DefaultValue, unitRoot, file, diagnostics, localVariables, capabilities);
             }
         }
 
@@ -365,7 +372,13 @@ public sealed class PowerShellCompilationAnalyzer
            SupportedParameterTypes.Contains(type) ||
            (type.IsArray && type.GetArrayRank() == 1 && SupportedParameterTypes.Contains(type.GetElementType()!));
 
-    private static void AnalyzeNode(Ast node, Ast unitRoot, string file, List<PowerShellCompilationDiagnostic> diagnostics, HashSet<string> localVariables)
+    private static void AnalyzeNode(
+        Ast node,
+        Ast unitRoot,
+        string file,
+        List<PowerShellCompilationDiagnostic> diagnostics,
+        HashSet<string> localVariables,
+        PowerShellCompilationCapability capabilities)
     {
         foreach (var candidate in node.FindAll(static _ => true, searchNestedScriptBlocks: true))
         {
@@ -410,6 +423,12 @@ public sealed class PowerShellCompilationAnalyzer
                         conversion.Extent));
                     break;
                 case CommandAst command:
+                    if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+                        (PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _) ||
+                         (unitRoot is ScriptBlockAst commandBody &&
+                          command.Parent is PipelineAst commandPipeline &&
+                          PowerShellCommandIslandPolicy.IsRuntimeRegion(commandPipeline, commandBody))))
+                        break;
                     var commandName = command.GetCommandName();
                     diagnostics.Add(CreateDiagnostic(
                         commandName is null ? PowerShellCompilationDiagnosticCode.DynamicCommandInvocation : PowerShellCompilationDiagnosticCode.CommandInvocation,
@@ -703,7 +722,8 @@ public sealed class PowerShellCompilationAnalyzer
         Ast unitRoot,
         string file,
         List<PowerShellCompilationDiagnostic> diagnostics,
-        HashSet<string> localVariables)
+        HashSet<string> localVariables,
+        PowerShellCompilationCapability capabilities)
     {
         if (block is null)
             return;
@@ -714,7 +734,7 @@ public sealed class PowerShellCompilationAnalyzer
             file,
             block.Extent));
         foreach (var statement in block.Statements)
-            AnalyzeNode(statement, unitRoot, file, diagnostics, localVariables);
+            AnalyzeNode(statement, unitRoot, file, diagnostics, localVariables, capabilities);
     }
 
     private static bool HasBlockingAncestor(Ast candidate, Ast statementRoot, Ast unitRoot)

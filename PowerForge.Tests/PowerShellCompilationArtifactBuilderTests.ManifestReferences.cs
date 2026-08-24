@@ -170,7 +170,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_HybridModuleRewritesManifestFileListForGeneratedLayout()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-PublicValue { return 1 }; function Get-FallbackValue { Get-Date }",
+            "function Get-PublicValue { return 1 }; function Get-FallbackValue { try { return 2 } catch { return 3 } }",
             ".psm1");
         var assets = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Assets"));
         File.WriteAllText(Path.Combine(assets.FullName, "data.txt"), "payload");
@@ -199,7 +199,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_HybridModulePreservesExternalNestedModuleSpecificationWithoutFileStaging()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-PublicValue { return 1 }; function Get-FallbackValue { Get-Date }",
+            "function Get-PublicValue { return 1 }; function Get-FallbackValue { try { return 2 } catch { return 3 } }",
             ".psm1");
         File.WriteAllText(
             Path.ChangeExtension(fixture.ScriptPath, ".psd1"),

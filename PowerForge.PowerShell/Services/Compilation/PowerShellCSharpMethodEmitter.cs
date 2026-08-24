@@ -22,11 +22,18 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private readonly StringBuilder _builder = new();
     private readonly PowerShellCSharpMemberEmitter _memberEmitter;
     private readonly string? _targetFramework;
+    private readonly PowerShellCompilationCapability _capabilities;
+    private bool _requiresPowerShellStreams;
+    private bool _requiresPowerShellCommandRegions;
     private int _indent = 1;
     private int _switchIndex;
 
-    internal PowerShellCSharpMethodEmitter(string filePath, FunctionDefinitionAst function, string? targetFramework = null)
-        : this(filePath, function.Body, function.Name, SanitizeIdentifier(function.Name), null, targetFramework, initialize: true)
+    internal PowerShellCSharpMethodEmitter(
+        string filePath,
+        FunctionDefinitionAst function,
+        string? targetFramework = null,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
+        : this(filePath, function.Body, function.Name, SanitizeIdentifier(function.Name), null, targetFramework, capabilities, initialize: true)
     {
     }
 
@@ -36,8 +43,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         string sourceName,
         string generatedName,
         StatementAst[] statements,
-        string? targetFramework = null)
-        : this(filePath, body, sourceName, SanitizeIdentifier(generatedName), statements, targetFramework, initialize: true)
+        string? targetFramework = null,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
+        : this(filePath, body, sourceName, SanitizeIdentifier(generatedName), statements, targetFramework, capabilities, initialize: true)
     {
     }
 
@@ -48,6 +56,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         string generatedName,
         StatementAst[]? statements,
         string? targetFramework,
+        PowerShellCompilationCapability capabilities,
         bool initialize)
     {
         _filePath = filePath;
@@ -56,6 +65,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         _generatedName = generatedName;
         _statements = statements;
         _targetFramework = targetFramework;
+        _capabilities = capabilities;
         _memberEmitter = new PowerShellCSharpMemberEmitter(
             InferExpressionType,
             EmitExpression,
@@ -88,13 +98,28 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         }
 
         var statements = _statements ?? _body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
+        _requiresPowerShellStreams = _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+            statements.SelectMany(static statement => statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false))
+                .OfType<CommandAst>()
+                .Any(static command => PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _));
+        _requiresPowerShellCommandRegions = _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+            statements.OfType<PipelineAst>().Any(pipeline => PowerShellCommandIslandPolicy.IsRuntimeRegion(pipeline, _body));
         InferLocalTypes(statements);
         ValidateVariableReferences(statements);
         var returnType = InferReturnType(statements);
         if (returnType != typeof(void) && !HasTerminalValue(statements))
             throw Error(_body, $"Typed non-void unit '{_sourceName}' must end with an explicit return statement on the conservative compilation path.");
-        var parameterSource = string.Join(", ", parameters.Select(parameter =>
-            $"{GetTypeName(GetCompiledParameterType(parameter))} {SanitizeIdentifier(parameter.Name.VariablePath.UserPath)}"));
+        var parameterParts = parameters.Select(parameter =>
+            $"{GetTypeName(GetCompiledParameterType(parameter))} {SanitizeIdentifier(parameter.Name.VariablePath.UserPath)}").ToList();
+        if (_requiresPowerShellStreams)
+        {
+            parameterParts.Add("global::System.Action<string> __writeVerbose");
+            parameterParts.Add("global::System.Action<string> __writeDebug");
+            parameterParts.Add("global::System.Action<string> __writeWarning");
+        }
+        if (_requiresPowerShellCommandRegions)
+            parameterParts.Add("global::System.Action<string, object?[]> __invokePowerShellRegion");
+        var parameterSource = string.Join(", ", parameterParts);
 
         AppendLine($"public static {GetTypeName(returnType)} {_generatedName}({parameterSource})");
         AppendLine("{");
@@ -113,13 +138,42 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             _declaredLocals.Add(name);
         }
         for (var index = 0; index < statements.Length; index++)
+        {
+            if (_requiresPowerShellCommandRegions && statements[index] is PipelineAst regionStart && PowerShellCommandIslandPolicy.IsRuntimeRegion(regionStart, _body))
+            {
+                var region = new List<PipelineAst> { regionStart };
+                while (index + 1 < statements.Length &&
+                       statements[index + 1] is PipelineAst adjacent &&
+                       PowerShellCommandIslandPolicy.IsRuntimeRegion(adjacent, _body))
+                {
+                    region.Add(adjacent);
+                    index++;
+                }
+                EmitRuntimeRegion(region);
+                continue;
+            }
             EmitStatement(statements[index], returnType, allowImplicitReturn: index == statements.Length - 1);
+        }
         _indent--;
         AppendLine("}");
         _indent--;
         AppendLine("}");
 
-        return new PowerShellCSharpMethodEmission(_generatedName, returnType, _builder.ToString().TrimEnd());
+        return new PowerShellCSharpMethodEmission(
+            _generatedName,
+            returnType,
+            _builder.ToString().TrimEnd(),
+            _requiresPowerShellStreams,
+            _requiresPowerShellCommandRegions);
+    }
+
+    private void EmitRuntimeRegion(IReadOnlyList<PipelineAst> pipelines)
+    {
+        var parameters = _body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
+        var parameterBlock = "param(" + string.Join(", ", parameters.Select(static parameter => parameter.Name.Extent.Text)) + ")";
+        var script = parameterBlock + Environment.NewLine + string.Join(Environment.NewLine, pipelines.Select(static pipeline => pipeline.Extent.Text));
+        var arguments = string.Join(", ", parameters.Select(parameter => GetVariableIdentifier(parameter.Name.VariablePath.UserPath)));
+        AppendLine($"__invokePowerShellRegion({PowerShellCSharpLiteral.QuoteString(script)}, new object?[] {{ {arguments} }});");
     }
 
     private static Type GetCompiledParameterType(ParameterAst parameter)
@@ -366,6 +420,20 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             case ContinueStatementAst:
                 AppendLine("continue;");
                 return;
+            case PipelineAst pipeline when
+                _requiresPowerShellStreams &&
+                pipeline.PipelineElements.Count == 1 &&
+                pipeline.PipelineElements[0] is CommandAst command &&
+                PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out var streamKind, out var message):
+                var sink = streamKind switch
+                {
+                    PowerShellStreamCommandKind.Verbose => "__writeVerbose",
+                    PowerShellStreamCommandKind.Debug => "__writeDebug",
+                    PowerShellStreamCommandKind.Warning => "__writeWarning",
+                    _ => throw Error(command, "Unsupported PowerShell stream command island.")
+                };
+                AppendLine($"{sink}(global::System.Convert.ToString({EmitExpression(message)}, global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty);");
+                return;
             case PipelineAst pipeline when pipeline.PipelineElements.Count == 1 && pipeline.PipelineElements[0] is CommandExpressionAst:
                 var expressionType = InferExpressionType(pipeline);
                 if (expressionType == typeof(void))
@@ -414,123 +482,6 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         if (operation == "=" && _variables[name] == typeof(string) && _explicitlyTypedVariables.Contains(name))
             right = $"({right} ?? string.Empty)";
         AppendLine($"{left} {operation} {right}{suffix}");
-    }
-
-    private void EmitIf(IfStatementAst statement, Type returnType)
-    {
-        for (var index = 0; index < statement.Clauses.Count; index++)
-        {
-            var clause = statement.Clauses[index];
-            AppendLine($"{(index == 0 ? "if" : "else if")} ({EmitBooleanExpression(clause.Item1)})");
-            EmitBlock(clause.Item2, returnType);
-        }
-
-        if (statement.ElseClause is not null)
-        {
-            AppendLine("else");
-            EmitBlock(statement.ElseClause, returnType);
-        }
-    }
-
-    private void EmitSwitch(SwitchStatementAst statement, Type returnType)
-    {
-        if ((statement.Flags & (SwitchFlags.File | SwitchFlags.Regex | SwitchFlags.Wildcard | SwitchFlags.Parallel)) != 0)
-            throw Error(statement, $"Switch flags '{statement.Flags}' require PowerShell runtime matching semantics.");
-
-        var conditionType = InferExpressionType(statement.Condition);
-        if (!IsConservativeSwitchScalar(conditionType))
-            throw Error(statement.Condition, $"Scalar switch requires a Boolean, character, string, or numeric condition; resolved type was '{conditionType.FullName}'.");
-        var clauseTypes = statement.Clauses.Select(clause => InferExpressionType(clause.Item1)).ToArray();
-        var incompatibleClause = statement.Clauses
-            .Zip(clauseTypes, static (clause, type) => new { Clause = clause, Type = type })
-            .FirstOrDefault(item => item.Type != conditionType);
-        if (incompatibleClause is not null)
-            throw Error(incompatibleClause.Clause.Item1, $"Scalar switch clause type '{incompatibleClause.Type.FullName}' must exactly match condition type '{conditionType.FullName}' to avoid PowerShell coercion semantics.");
-
-        var index = _switchIndex++;
-        var valueName = $"__switchValue{index}";
-        var matchedName = $"__switchMatched{index}";
-        AppendLine($"{GetTypeName(conditionType)} {valueName} = {EmitExpression(statement.Condition)};");
-        AppendLine($"bool {matchedName} = false;");
-        AppendLine("do");
-        AppendLine("{");
-        _indent++;
-        for (var clauseIndex = 0; clauseIndex < statement.Clauses.Count; clauseIndex++)
-        {
-            var clause = statement.Clauses[clauseIndex];
-            var comparison = EmitSwitchComparison(valueName, conditionType, clause.Item1, statement.Flags);
-            AppendLine($"if ({comparison})");
-            AppendLine("{");
-            _indent++;
-            AppendLine($"{matchedName} = true;");
-            foreach (var bodyStatement in clause.Item2.Statements)
-                EmitStatement(bodyStatement, returnType);
-            _indent--;
-            AppendLine("}");
-        }
-        if (statement.Default is not null)
-        {
-            AppendLine($"if (!{matchedName})");
-            EmitBlock(statement.Default, returnType);
-        }
-        _indent--;
-        AppendLine("}");
-        AppendLine("while (false);");
-    }
-
-    private string EmitSwitchComparison(string valueName, Type conditionType, ExpressionAst clause, SwitchFlags flags)
-    {
-        var clauseSource = EmitExpression(clause);
-        if (conditionType == typeof(string))
-        {
-            var comparison = (flags & SwitchFlags.CaseSensitive) != 0 ? "Ordinal" : "OrdinalIgnoreCase";
-            return $"global::System.String.Equals({valueName}, {clauseSource}, global::System.StringComparison.{comparison})";
-        }
-        return $"{valueName} == {clauseSource}";
-    }
-
-    private static bool IsConservativeSwitchScalar(Type type)
-        => type == typeof(bool) || type == typeof(char) || type == typeof(string) || IsNumeric(type);
-
-    private void EmitFor(ForStatementAst statement, Type returnType)
-    {
-        var initializer = EmitInlinePipeline(statement.Initializer);
-        var condition = statement.Condition is null ? "true" : EmitBooleanExpression(statement.Condition);
-        var iterator = EmitInlinePipeline(statement.Iterator);
-        AppendLine($"for ({initializer}; {condition}; {iterator})");
-        EmitBlock(statement.Body, returnType);
-    }
-
-    private void EmitWhile(WhileStatementAst statement, Type returnType)
-    {
-        AppendLine($"while ({EmitBooleanExpression(statement.Condition)})");
-        EmitBlock(statement.Body, returnType);
-    }
-
-    private void EmitForEach(ForEachStatementAst statement, Type returnType)
-    {
-        var name = statement.Variable.VariablePath.UserPath;
-        var collectionType = InferExpressionType(statement.Condition);
-        var elementType = collectionType.IsArray ? collectionType.GetElementType() : CanUseScalarStringForeach(statement.Condition) ? typeof(string) : null;
-        if (elementType is null)
-            throw Error(statement.Condition, "foreach requires a statically typed one-dimensional array or scalar string.");
-        var collection = EmitExpression(statement.Condition);
-        _declaredLocals.Add(name);
-        var enumerable = _scalarForeachLoops.Contains(statement.Extent.StartOffset)
-            ? $"new[] {{ {collection} }}"
-            : $"({collection} ?? global::System.Array.Empty<{GetTypeName(elementType)}>())";
-        AppendLine($"foreach ({GetTypeName(_variables[name])} {GetVariableIdentifier(name)} in {enumerable})");
-        EmitBlock(statement.Body, returnType);
-    }
-
-    private void EmitBlock(StatementBlockAst block, Type returnType)
-    {
-        AppendLine("{");
-        _indent++;
-        foreach (var statement in block.Statements)
-            EmitStatement(statement, returnType);
-        _indent--;
-        AppendLine("}");
     }
 
     private string EmitInlinePipeline(PipelineBaseAst? pipeline)

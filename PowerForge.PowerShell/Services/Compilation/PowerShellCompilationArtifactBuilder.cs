@@ -46,7 +46,10 @@ public sealed class PowerShellCompilationArtifactBuilder
                     $"PowerShell compilation source '{sourcePath}' must not traverse a symbolic link or junction.");
             }
             ValidateRuntimeHookSourceOwnership(spec, compilationSourcePaths);
-            var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework);
+            var capabilities = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
+                ? PowerShellCompilationCapability.PowerShellStreams
+                : PowerShellCompilationCapability.None;
+            var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, capabilities);
             if (plan.ParseErrorFiles > 0)
                 throw new InvalidOperationException("PowerShell source contains parser errors; no artifact was produced.");
 
@@ -92,11 +95,18 @@ public sealed class PowerShellCompilationArtifactBuilder
             {
                 if (spec.Mode == PowerShellCompilationMode.Package)
                     throw new InvalidOperationException("DLL artifacts require Hybrid or Strict mode because they contain genuinely typed methods.");
-                typed = new PowerShellTypedCompilationTranspiler().Transpile(
-                    compilationSourcePaths,
-                    "PowerForge.Compiled",
-                    PowerShellCSharpMethodEmitter.SanitizeIdentifier(artifactName) + "Methods",
-                    spec.TargetFramework);
+                var transpiler = new PowerShellTypedCompilationTranspiler();
+                typed = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
+                    ? transpiler.TranspileForBinaryModule(
+                        compilationSourcePaths,
+                        "PowerForge.Compiled",
+                        PowerShellCSharpMethodEmitter.SanitizeIdentifier(artifactName) + "Methods",
+                        spec.TargetFramework)
+                    : transpiler.Transpile(
+                        compilationSourcePaths,
+                        "PowerForge.Compiled",
+                        PowerShellCSharpMethodEmitter.SanitizeIdentifier(artifactName) + "Methods",
+                        spec.TargetFramework);
                 string[]? exportedFunctions = null;
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
@@ -399,11 +409,16 @@ public sealed class PowerShellCompilationArtifactBuilder
     private static PowerShellCompilationPlan AnalyzeCompilationSources(
         IEnumerable<string> sourcePaths,
         PowerShellCompilationMode mode,
-        string targetFramework)
+        string targetFramework,
+        PowerShellCompilationCapability capabilities)
     {
         var analyzer = new PowerShellCompilationAnalyzer();
         var files = sourcePaths
-            .SelectMany(path => analyzer.Analyze(new PowerShellCompilationSpec(path, mode, targetFramework: targetFramework)).Files)
+            .SelectMany(path => analyzer.Analyze(new PowerShellCompilationSpec(
+                path,
+                mode,
+                targetFramework: targetFramework,
+                capabilities: capabilities)).Files)
             .ToArray();
         return new PowerShellCompilationPlan(mode, files);
     }

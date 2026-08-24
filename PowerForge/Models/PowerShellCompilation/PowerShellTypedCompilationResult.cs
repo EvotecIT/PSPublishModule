@@ -15,6 +15,20 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Creates a compiled-method description with authored file identity.</summary>
     public PowerShellCompiledMethod(string sourceName, string generatedName, string returnType, PowerShellCompilationParameter[] parameters, int sourceLine, string? sourcePath)
+        : this(sourceName, generatedName, returnType, parameters, sourceLine, sourcePath, false)
+    {
+    }
+
+    /// <summary>Creates a compiled-method description with authored file identity and host capability requirements.</summary>
+    public PowerShellCompiledMethod(
+        string sourceName,
+        string generatedName,
+        string returnType,
+        PowerShellCompilationParameter[] parameters,
+        int sourceLine,
+        string? sourcePath,
+        bool requiresPowerShellStreams,
+        bool requiresPowerShellCommandRegions = false)
     {
         SourceName = sourceName ?? string.Empty;
         GeneratedName = generatedName ?? string.Empty;
@@ -22,6 +36,8 @@ public sealed class PowerShellCompiledMethod
         Parameters = parameters ?? Array.Empty<PowerShellCompilationParameter>();
         SourceLine = sourceLine;
         SourcePath = sourcePath ?? string.Empty;
+        RequiresPowerShellStreams = requiresPowerShellStreams;
+        RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
     }
 
     /// <summary>Original PowerShell function name.</summary>
@@ -41,6 +57,12 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Full path of the authored PowerShell file containing the function.</summary>
     public string SourcePath { get; }
+
+    /// <summary>Whether the generated method expects PSCmdlet stream delegates.</summary>
+    public bool RequiresPowerShellStreams { get; }
+
+    /// <summary>Whether adjacent command statements are dispatched as one PowerShell runtime region.</summary>
+    public bool RequiresPowerShellCommandRegions { get; }
 }
 
 /// <summary>
