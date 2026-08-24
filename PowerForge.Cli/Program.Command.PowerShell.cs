@@ -8,6 +8,8 @@ internal static partial class Program
         "Usage: powerforge powershell analyze <path> [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--no-recurse] [--output json]";
     private const string PowerShellBuildUsage =
         "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
+    private const string PowerShellCensusUsage =
+        "Usage: powerforge powershell census <path> [--path <product-root> ...] [--framework <tfm>] [--baseline <census.json>] [--write-baseline <census.json>] [--no-recurse] [--output json]";
 
     private static int CommandPowerShell(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -23,6 +25,8 @@ internal static partial class Program
         {
             if (argv[0].Equals("build", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("compile", StringComparison.OrdinalIgnoreCase))
                 return CommandPowerShellBuild(argv.Skip(1).ToArray(), outputJson, logger);
+            if (argv[0].Equals("census", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("matrix", StringComparison.OrdinalIgnoreCase))
+                return CommandPowerShellCensus(argv.Skip(1).ToArray(), outputJson, logger);
             return WritePowerShellError(outputJson, 2, $"Unknown PowerShell subcommand '{argv[0]}'.", logger);
         }
 
@@ -214,6 +218,85 @@ internal static partial class Program
         }
     }
 
+    private static int CommandPowerShellCensus(string[] args, bool outputJson, ILogger logger)
+    {
+        if (args.Any(IsHelpArgument))
+        {
+            WritePowerShellHelp(outputJson);
+            return 0;
+        }
+
+        if (!TryValidatePowerShellArguments(
+                args,
+                new[] { "--path", "--framework", "--baseline", "--write-baseline", "--output" },
+                new[] { "--no-recurse", "--json", "--output-json" },
+                out var argumentError))
+            return WritePowerShellError(outputJson, 2, argumentError, logger, "powershell.census");
+
+        var paths = GetOptionValues(args, "--path").ToList();
+        if (args.Length > 0 && !args[0].StartsWith("-", StringComparison.Ordinal))
+            paths.Insert(0, args[0]);
+        if (paths.Count == 0)
+            return WritePowerShellError(outputJson, 2, "At least one PowerShell product or source path is required.", logger, "powershell.census");
+
+        try
+        {
+            var baselinePath = TryGetOptionValue(args, "--baseline");
+            PowerShellCompilationCensusResult? baseline = null;
+            if (!string.IsNullOrWhiteSpace(baselinePath))
+            {
+                var fullBaselinePath = Path.GetFullPath(baselinePath.Trim().Trim('"'));
+                baseline = JsonSerializer.Deserialize(
+                    File.ReadAllText(fullBaselinePath),
+                    CliJson.Context.PowerShellCompilationCensusResult)
+                    ?? throw new InvalidDataException($"Compilation census baseline is empty: {fullBaselinePath}");
+            }
+
+            var result = new PowerShellCompilationCensusRunner().Run(
+                paths,
+                TryGetOptionValue(args, "--framework"),
+                baseline,
+                recurse: !args.Any(static argument => argument.Equals("--no-recurse", StringComparison.OrdinalIgnoreCase)));
+            var writeBaselinePath = TryGetOptionValue(args, "--write-baseline");
+            if (!string.IsNullOrWhiteSpace(writeBaselinePath))
+            {
+                var fullWritePath = Path.GetFullPath(writeBaselinePath.Trim().Trim('"'));
+                var parent = Path.GetDirectoryName(fullWritePath);
+                if (!string.IsNullOrWhiteSpace(parent)) Directory.CreateDirectory(parent);
+                File.WriteAllText(fullWritePath, JsonSerializer.Serialize(result, CliJson.Context.PowerShellCompilationCensusResult));
+            }
+
+            var exitCode = result.Passed ? 0 : 1;
+            if (outputJson)
+            {
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "powershell.census",
+                    Success = result.Passed,
+                    ExitCode = exitCode,
+                    Result = CliJson.SerializeToElement(result, CliJson.Context.PowerShellCompilationCensusResult)
+                });
+                return exitCode;
+            }
+
+            logger.Info($"PowerShell compilation census: {result.SourceFiles} files, {result.TotalUnits} units, {result.CompilableUnits} typed, {result.RuntimeFallbackUnits} fallback, {result.ParseErrorFiles} parse-error files.");
+            foreach (var product in result.Products)
+            {
+                logger.Info($"{product.Name}: {product.SourceFiles} files, {product.CompilableUnits}/{product.TotalUnits} typed ({product.CompilationCoveragePercentage:0.0}%), {product.AnalysisMilliseconds:0.0} ms.");
+                foreach (var blocker in product.Blockers.Take(5))
+                    logger.Warn($"  {blocker.Occurrences}x [{blocker.Code}] {blocker.Message}");
+            }
+            foreach (var regression in result.Regressions)
+                logger.Error($"Census regression in {regression.Product}: {regression.Metric} was {regression.Baseline:0.###}, now {regression.Current:0.###}.");
+            return exitCode;
+        }
+        catch (Exception ex)
+        {
+            return WritePowerShellError(outputJson, 1, ex.Message, logger, "powershell.census");
+        }
+    }
+
     private static void WritePowerShellPlan(PowerShellCompilationPlan plan, ILogger logger)
     {
         logger.Info($"PowerShell compilation plan ({plan.Mode}): {plan.CompilableUnits}/{plan.TotalUnits} units eligible ({plan.CompilationCoveragePercentage:0.0}%).");
@@ -266,6 +349,7 @@ internal static partial class Program
             {
                 Console.WriteLine(PowerShellAnalyzeUsage);
                 Console.WriteLine(PowerShellBuildUsage);
+                Console.WriteLine(PowerShellCensusUsage);
             }
         }
 
@@ -282,13 +366,14 @@ internal static partial class Program
                 Command = "powershell",
                 Success = true,
                 ExitCode = 0,
-                Result = JsonSerializer.SerializeToElement(new { analyzeUsage = PowerShellAnalyzeUsage, buildUsage = PowerShellBuildUsage })
+                Result = JsonSerializer.SerializeToElement(new { analyzeUsage = PowerShellAnalyzeUsage, buildUsage = PowerShellBuildUsage, censusUsage = PowerShellCensusUsage })
             });
         }
         else
         {
             Console.WriteLine(PowerShellAnalyzeUsage);
             Console.WriteLine(PowerShellBuildUsage);
+            Console.WriteLine(PowerShellCensusUsage);
         }
     }
 

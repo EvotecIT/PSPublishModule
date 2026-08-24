@@ -15,6 +15,17 @@ public enum PowerShellCompilationUnitKind
     Function
 }
 
+/// <summary>Optional host capabilities available to genuinely compiled methods.</summary>
+[Flags]
+public enum PowerShellCompilationCapability
+{
+    /// <summary>Runtime-independent CLR compilation only.</summary>
+    None = 0,
+
+    /// <summary>Binary-module methods may route supported Write-* stream commands through their generated PSCmdlet.</summary>
+    PowerShellStreams = 1
+}
+
 /// <summary>
 /// A whole script body or function considered as one atomic compilation unit.
 /// </summary>
@@ -245,12 +256,15 @@ public sealed class PowerShellCompilationSpec
         PowerShellCompilationMode mode = PowerShellCompilationMode.Analyze,
         bool recurse = true,
         string[]? excludeDirectories = null,
-        string? targetFramework = null)
+        string? targetFramework = null,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("An input path is required.", nameof(path));
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             throw new ArgumentOutOfRangeException(nameof(mode));
+        if ((capabilities & ~PowerShellCompilationCapability.PowerShellStreams) != 0)
+            throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)
         {
@@ -264,6 +278,7 @@ public sealed class PowerShellCompilationSpec
         Mode = mode;
         Recurse = recurse;
         TargetFramework = string.IsNullOrEmpty(normalizedTargetFramework) ? null : normalizedTargetFramework;
+        Capabilities = capabilities;
         ExcludeDirectories = (excludeDirectories ?? new[] { ".git", ".vs", ".vscode", "bin", "obj", "packages", "node_modules", "artifacts", "Artefacts", "Ignore" })
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .ToArray();
@@ -280,6 +295,9 @@ public sealed class PowerShellCompilationSpec
 
     /// <summary>Optional generated-project target framework used for CLR type and member eligibility.</summary>
     public string? TargetFramework { get; }
+
+    /// <summary>Optional generated-host capabilities available to compiled methods.</summary>
+    public PowerShellCompilationCapability Capabilities { get; }
 
     /// <summary>Directory-name fragments excluded from recursive discovery.</summary>
     public string[] ExcludeDirectories { get; }

@@ -137,6 +137,50 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     }
 
     [Fact]
+    public async Task Census_WritesAndEnforcesRepeatableCoverageBaseline()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Census Tests", Guid.NewGuid().ToString("N"));
+        var product = Path.Combine(root, "SampleProduct");
+        var baseline = Path.Combine(root, "census.json");
+        Directory.CreateDirectory(product);
+        var source = Path.Combine(product, "Functions.psm1");
+        File.WriteAllText(source, "function Add-TypedValue { param([int] $Value) [int] $result = $Value; $result += 1; return $result }");
+
+        try
+        {
+            var capture = await RunCliAsync(
+                repositoryRoot,
+                $"powershell census \"{product}\" --framework net10.0 --write-baseline \"{baseline}\" --output json");
+            Assert.True(capture.ExitCode == 0, FormatFailure("census capture", capture));
+            Assert.True(File.Exists(baseline));
+            using (var document = JsonDocument.Parse(capture.StdOut))
+            {
+                var result = document.RootElement.GetProperty("result");
+                Assert.Equal(1, result.GetProperty("sourceFiles").GetInt32());
+                Assert.True(result.GetProperty("compilableUnits").GetInt32() == 1, capture.StdOut);
+                Assert.True(result.GetProperty("passed").GetBoolean());
+            }
+
+            File.WriteAllText(source, "function Add-TypedValue { try { return 1 } catch { return 2 } }");
+            var regression = await RunCliAsync(
+                repositoryRoot,
+                $"powershell census \"{product}\" --framework net10.0 --baseline \"{baseline}\" --output json");
+            Assert.Equal(1, regression.ExitCode);
+            using var regressionDocument = JsonDocument.Parse(regression.StdOut);
+            var regressionResult = regressionDocument.RootElement.GetProperty("result");
+            Assert.False(regressionResult.GetProperty("passed").GetBoolean());
+            Assert.Contains(
+                regressionResult.GetProperty("regressions").EnumerateArray(),
+                item => item.GetProperty("metric").GetString() == "CompilableUnits");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task Analyze_HonorsRequestedTargetFrameworkMemberSurface()
     {
         var repositoryRoot = FindRepositoryRoot();
