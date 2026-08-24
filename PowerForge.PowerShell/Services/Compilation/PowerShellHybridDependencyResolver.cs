@@ -135,7 +135,7 @@ internal static class PowerShellHybridDependencyResolver
         IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders)
         => conventionalLoaders?.Any(loader =>
             loader.StartOffset == command.Extent.StartOffset &&
-            loader.SourcePath.Equals(sourcePath, PowerShellCompilationPathSafety.PathComparison)) == true;
+            PowerShellCompilationPathSafety.PathEquals(loader.SourcePath, sourcePath)) == true;
 
     private static string ReadLiteralPath(CommandElementAst expression, string sourcePath, int line)
     {

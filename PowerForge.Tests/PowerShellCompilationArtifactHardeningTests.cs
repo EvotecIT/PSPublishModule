@@ -740,8 +740,9 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 
     private static void AssertPathsEqual(string expected, string actual)
     {
-        var comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        Assert.True(Path.GetFullPath(expected).Equals(Path.GetFullPath(actual), comparison), $"Expected '{expected}', got '{actual}'.");
+        Assert.True(
+            PowerShellCompilationPathSafety.PathEquals(Path.GetFullPath(expected), Path.GetFullPath(actual)),
+            $"Expected '{expected}', got '{actual}'.");
     }
 
     private sealed class ArtifactFixture : IDisposable

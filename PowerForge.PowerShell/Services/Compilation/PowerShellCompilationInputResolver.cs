@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace PowerForge;
 
 /// <summary>
@@ -73,7 +71,7 @@ public sealed class PowerShellCompilationInputResolver
         var requestedPaths = paths
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(path => Path.GetFullPath(path.Trim().Trim('"')))
-            .Distinct(GetPathComparer())
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
         if (requestedPaths.Length == 0)
             throw new ArgumentException("At least one PowerShell script path is required.", nameof(paths));
@@ -100,11 +98,11 @@ public sealed class PowerShellCompilationInputResolver
             var entryPoint = string.IsNullOrWhiteSpace(entryPointPath)
                 ? requestedPaths[0]
                 : Path.GetFullPath(entryPointPath!.Trim().Trim('"'));
-            if (!requestedPaths.Contains(entryPoint, GetPathComparer()))
+            if (!requestedPaths.Contains(entryPoint, PowerShellCompilationPathSafety.PathComparer))
                 throw new InvalidOperationException("The executable entrypoint must also be present in the requested path set.");
             var sourceRoot = Path.GetDirectoryName(entryPoint) ?? Directory.GetCurrentDirectory();
             var closure = PowerShellHybridDependencyResolver.DiscoverDependencies(entryPoint);
-            var unreachable = requestedPaths.Where(path => !closure.Contains(path, GetPathComparer())).ToArray();
+            var unreachable = requestedPaths.Where(path => !closure.Contains(path, PowerShellCompilationPathSafety.PathComparer)).ToArray();
             if (unreachable.Length > 0)
                 throw new InvalidOperationException($"Executable path set contains source file(s) unreachable from the entrypoint: {string.Join(", ", unreachable.Select(Path.GetFileName))}.");
             var executableMode = mode ?? PowerShellCompilationMode.Package;
@@ -219,7 +217,7 @@ public sealed class PowerShellCompilationInputResolver
                 : PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(sourcePath, manifestPath)
                     .Select(reference => ResolveContainedModulePath(moduleRoot, reference, "runtime script hook"))
                     .ToArray();
-            var runtimeHookSet = runtimeHooks.ToHashSet(GetPathComparer());
+            var runtimeHookSet = runtimeHooks.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
             compilationSourceFiles = PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(sourcePath)
                 .Concat(conventionalSources)
                 .Where(file => IsPowerShellSource(file))
@@ -258,7 +256,7 @@ public sealed class PowerShellCompilationInputResolver
             if (siblingManifest is not null)
             {
                 var manifestRoot = ResolveManifestRoot(siblingManifest);
-                if (!manifestRoot.Equals(path, GetPathComparison()))
+                if (!PowerShellCompilationPathSafety.PathEquals(manifestRoot, path))
                     throw new InvalidOperationException($"Sibling module manifest '{siblingManifest}' does not point back to selected module source '{path}'.");
             }
             return (path, siblingManifest, siblingManifest is null ? Path.GetFileNameWithoutExtension(path) : Path.GetFileNameWithoutExtension(siblingManifest));
@@ -307,7 +305,7 @@ public sealed class PowerShellCompilationInputResolver
         var sourcePath = ResolveContainedModulePath(moduleRoot, rootModule!, "RootModule");
         if (!File.Exists(sourcePath))
             throw new FileNotFoundException($"Module manifest RootModule '{rootModule}' was not found.", sourcePath);
-        if (!Path.GetDirectoryName(sourcePath)!.Equals(moduleRoot, GetPathComparison()))
+        if (!PowerShellCompilationPathSafety.PathEquals(Path.GetDirectoryName(sourcePath), moduleRoot))
             throw new InvalidOperationException($"Module manifest '{manifestPath}' uses nested RootModule '{rootModule}'. Direct compilation currently requires the .psm1 root beside its .psd1 manifest.");
         return sourcePath;
     }
@@ -363,9 +361,4 @@ public sealed class PowerShellCompilationInputResolver
            path.StartsWith("//", StringComparison.Ordinal) ||
            path.Length >= 2 && char.IsLetter(path[0]) && path[1] == ':';
 
-    private static StringComparison GetPathComparison()
-        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-
-    private static StringComparer GetPathComparer()
-        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 }

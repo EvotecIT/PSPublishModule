@@ -19,10 +19,10 @@ internal static class PowerShellGeneratedSourcePublisher
         var files = Directory.EnumerateFiles(workspace, "*", SearchOption.TopDirectoryOnly)
             .Where(path => Path.GetExtension(path).Equals(".cs", StringComparison.OrdinalIgnoreCase) ||
                            Path.GetExtension(path).Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
-                           path.Equals(projectPath, StringComparison.OrdinalIgnoreCase))
+                           PowerShellCompilationPathSafety.PathEquals(path, projectPath))
             .OrderBy(static path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        if (!files.Contains(projectPath, StringComparer.OrdinalIgnoreCase))
+        if (!files.Contains(projectPath, PowerShellCompilationPathSafety.PathComparer))
             throw new InvalidOperationException("Generated source publication could not locate the generated project file.");
         if (!files.Any(path => Path.GetExtension(path).Equals(".cs", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Generated source publication could not locate generated C# source.");

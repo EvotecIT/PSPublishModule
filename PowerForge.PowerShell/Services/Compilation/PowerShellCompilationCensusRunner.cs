@@ -163,7 +163,7 @@ public sealed class PowerShellCompilationCensusRunner
     {
         try
         {
-            return Path.GetFullPath(left).Equals(Path.GetFullPath(right), PowerShellCompilationPathSafety.PathComparison);
+            return PowerShellCompilationPathSafety.PathEquals(Path.GetFullPath(left), Path.GetFullPath(right));
         }
         catch (Exception)
         {

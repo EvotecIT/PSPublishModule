@@ -39,19 +39,16 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     [Fact]
     public void Build_RefusesCaseAliasedSourceReplacementOnCaseInsensitivePlatforms()
     {
-        Assert.Equal(
-            StringComparison.OrdinalIgnoreCase,
-            PowerShellCompilationPathSafety.GetPathComparison(isWindows: false, isMacOS: true));
-        if (PowerShellCompilationPathSafety.PathComparison != StringComparison.OrdinalIgnoreCase) return;
-
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
-        var sourceDirectory = Path.Combine(root, "Foo");
-        Directory.CreateDirectory(sourceDirectory);
-        var sourcePath = Path.Combine(sourceDirectory, "input.ps1");
-        const string source = "function Get-Value { return 1 }";
-        File.WriteAllText(sourcePath, source);
+        Directory.CreateDirectory(root);
         try
         {
+            if (PowerShellCompilationPathSafety.GetPathComparison(root) != StringComparison.OrdinalIgnoreCase) return;
+            var sourceDirectory = Path.Combine(root, "Foo");
+            Directory.CreateDirectory(sourceDirectory);
+            var sourcePath = Path.Combine(sourceDirectory, "input.ps1");
+            const string source = "function Get-Value { return 1 }";
+            File.WriteAllText(sourcePath, source);
             var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
                 sourcePath,
                 root,
@@ -67,6 +64,15 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         {
             try { Directory.Delete(root, recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public void PathComparison_UsesTheMacVolumeCaseSensitivity()
+    {
+        Assert.Equal(StringComparison.OrdinalIgnoreCase, PowerShellCompilationPathSafety.GetPathComparison(isWindows: true, isMacOS: false, isCaseSensitiveFileSystem: true));
+        Assert.Equal(StringComparison.OrdinalIgnoreCase, PowerShellCompilationPathSafety.GetPathComparison(isWindows: false, isMacOS: true, isCaseSensitiveFileSystem: false));
+        Assert.Equal(StringComparison.Ordinal, PowerShellCompilationPathSafety.GetPathComparison(isWindows: false, isMacOS: true, isCaseSensitiveFileSystem: true));
+        Assert.Equal(StringComparison.Ordinal, PowerShellCompilationPathSafety.GetPathComparison(isWindows: false, isMacOS: false, isCaseSensitiveFileSystem: false));
     }
 
     [Fact]

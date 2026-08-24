@@ -51,7 +51,7 @@ internal static class PowerShellTypedExecutableCompiler
         if (entryPointCollision is not null)
             throw new InvalidOperationException($"Typed executable local function '{entryPointCollision.Function.Name}' collides with the reserved generated entry-point method 'Invoke'.");
 
-        foreach (var source in parsed.Values.Where(source => !source.Path.Equals(entryPoint, PowerShellCompilationPathSafety.PathComparison)))
+        foreach (var source in parsed.Values.Where(source => !PowerShellCompilationPathSafety.PathEquals(source.Path, entryPoint)))
         {
             if (source.Ast.ParamBlock is not null)
                 throw new InvalidOperationException($"Typed executable dependency '{source.Path}' declares a parameter block whose dot-source binding semantics are not yet supported.");
@@ -76,7 +76,7 @@ internal static class PowerShellTypedExecutableCompiler
             .ToArray() ?? Array.Empty<StatementAst>();
         ValidateCommands(entrySource.Path, statements, byName);
         var entryUnit = plan.Files
-            .First(file => file.FullPath.Equals(entryPoint, PowerShellCompilationPathSafety.PathComparison))
+            .First(file => PowerShellCompilationPathSafety.PathEquals(file.FullPath, entryPoint))
             .Units.Single(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
         var entryMethod = new PowerShellCSharpMethodEmitter(
             entrySource.Path,
@@ -195,7 +195,7 @@ internal static class PowerShellTypedExecutableCompiler
         => source.Ast.EndBlock?.Statements.OfType<FunctionDefinitionAst>() ?? Enumerable.Empty<FunctionDefinitionAst>();
 
     private static PowerShellCompilationUnitPlan GetUnit(PowerShellCompilationPlan plan, string path, string name)
-        => plan.Files.First(file => file.FullPath.Equals(path, PowerShellCompilationPathSafety.PathComparison))
+        => plan.Files.First(file => PowerShellCompilationPathSafety.PathEquals(file.FullPath, path))
             .Units.Single(unit => unit.Kind == PowerShellCompilationUnitKind.Function && unit.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     private static bool IsTopLevelDotSource(StatementAst statement)

@@ -57,7 +57,7 @@ internal static class PowerShellArtifactSetPublisher
                 protectedPath,
                 $"Protected compilation source '{protectedPath}' must not traverse a symbolic link or junction.");
         }
-        if (!string.Equals(Path.GetDirectoryName(stagingPath), outputPath, PowerShellCompilationPathSafety.PathComparison))
+        if (!PowerShellCompilationPathSafety.PathEquals(Path.GetDirectoryName(stagingPath), outputPath))
             throw new InvalidOperationException("Artifact staging must be a direct child of the durable output directory.");
         using var publicationLock = AcquirePublicationLock(outputPath, artifactName);
 
@@ -181,7 +181,7 @@ internal static class PowerShellArtifactSetPublisher
             var target = Path.GetFullPath(Path.Combine(outputDirectory, name));
             if (!EntryExists(target)) continue;
             var protectedPath = protectedPaths.FirstOrDefault(path =>
-                string.Equals(target, path, PowerShellCompilationPathSafety.PathComparison) ||
+                PowerShellCompilationPathSafety.PathEquals(target, path) ||
                 Directory.Exists(target) && IsSameOrDescendant(path, target));
             if (protectedPath is not null)
                 throw new InvalidOperationException($"Artifact publication target '{target}' contains the input source '{protectedPath}' and cannot be replaced.");
@@ -191,9 +191,9 @@ internal static class PowerShellArtifactSetPublisher
     private static bool IsSameOrDescendant(string path, string directory)
     {
         var normalizedDirectory = NormalizeDirectoryPath(directory);
-        return string.Equals(path, normalizedDirectory, PowerShellCompilationPathSafety.PathComparison) ||
-               path.StartsWith(normalizedDirectory + Path.DirectorySeparatorChar, PowerShellCompilationPathSafety.PathComparison) ||
-               path.StartsWith(normalizedDirectory + Path.AltDirectorySeparatorChar, PowerShellCompilationPathSafety.PathComparison);
+        return PowerShellCompilationPathSafety.PathEquals(path, normalizedDirectory) ||
+               PowerShellCompilationPathSafety.PathStartsWith(path, normalizedDirectory + Path.DirectorySeparatorChar) ||
+               PowerShellCompilationPathSafety.PathStartsWith(path, normalizedDirectory + Path.AltDirectorySeparatorChar);
     }
 
     private static IDisposable AcquirePublicationLock(string outputDirectory, string artifactName)

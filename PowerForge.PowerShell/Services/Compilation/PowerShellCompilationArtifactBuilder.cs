@@ -10,7 +10,7 @@ namespace PowerForge;
 /// <summary>
 /// Produces runtime-packaged executables and genuinely typed CLR libraries from PowerShell source.
 /// </summary>
-public sealed class PowerShellCompilationArtifactBuilder
+public sealed partial class PowerShellCompilationArtifactBuilder
 {
     private const string TypedProjectTemplate = "PowerForge.PowerShell.Compilation.TypedLibrary.csproj.template";
     private const string PackagedProjectTemplate = "PowerForge.PowerShell.Compilation.PackagedExecutable.csproj.template";
@@ -305,7 +305,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                             spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid,
                             spec.ModuleManifestPath)
                         .Concat(compilationSourcePaths)
-                        .Distinct(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
+                        .Distinct(PowerShellCompilationPathSafety.PathComparer));
 
                 result.Succeeded = true;
                 result.ArtifactPath = artifactPath;
@@ -360,7 +360,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                 throw new ArgumentException("ModuleManifestPath must reference a .psd1 file.", nameof(spec));
             var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath));
             var manifestDirectory = Path.GetDirectoryName(Path.GetFullPath(moduleManifestPath));
-            if (!string.Equals(sourceDirectory, manifestDirectory, RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            if (!PowerShellCompilationPathSafety.PathEquals(sourceDirectory, manifestDirectory))
                 throw new ArgumentException("The source .psm1 and module manifest must reside in the same module directory.", nameof(spec));
             PowerShellCompiledModuleManifest.EnsureManifestOwnsSource(spec.SourcePath, moduleManifestPath);
             PowerShellCompilationPathSafety.EnsureNoLinks(
@@ -403,7 +403,7 @@ public sealed class PowerShellCompilationArtifactBuilder
             .Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(path => Path.GetFullPath(path.Trim().Trim('"')))
-            .Distinct(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
         foreach (var path in paths)
         {
@@ -412,7 +412,7 @@ public sealed class PowerShellCompilationArtifactBuilder
             var extension = Path.GetExtension(path);
             if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException($"PowerShell compilation source '{path}' must be a .ps1 or .psm1 file.", nameof(spec));
-            if (!path.Equals(sourcePath, RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            if (!PowerShellCompilationPathSafety.PathEquals(path, sourcePath))
                 PowerShellCompilationPathSafety.EnsureContained(sourceRoot, path, $"Additional compilation source '{path}' escapes the root module directory.");
             PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, path, $"Compilation source '{path}' traverses a symbolic link or junction.");
         }
@@ -440,8 +440,7 @@ public sealed class PowerShellCompilationArtifactBuilder
         if (spec.Kind != PowerShellCompilationArtifactKind.BinaryModule || string.IsNullOrWhiteSpace(spec.ModuleManifestPath))
             return;
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
-        var comparer = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var compilationSources = compilationSourcePaths.Select(Path.GetFullPath).ToHashSet(comparer);
+        var compilationSources = compilationSourcePaths.Select(Path.GetFullPath).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var overlap = PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(spec.SourcePath, spec.ModuleManifestPath)
             .Select(reference => Path.GetFullPath(Path.Combine(
                 sourceRoot,
@@ -543,21 +542,13 @@ public sealed class PowerShellCompilationArtifactBuilder
             .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .Select(path => CreateArtifactFile(
                 path,
-                path.Equals(primaryPath, StringComparison.OrdinalIgnoreCase)
+                PowerShellCompilationPathSafety.PathEquals(path, primaryPath)
                     ? "Primary"
-                    : path.Equals(generatedAssemblyPath, StringComparison.OrdinalIgnoreCase)
+                    : PowerShellCompilationPathSafety.PathEquals(path, generatedAssemblyPath)
                         ? "GeneratedAssembly"
                         : "RuntimeDependency"))
             .ToArray();
         return new CopiedArtifact(primaryPath, files);
-    }
-
-    internal static string GetExecutableFileName(string artifactName, string? runtimeIdentifier)
-    {
-        var targetsWindows = string.IsNullOrWhiteSpace(runtimeIdentifier)
-            ? RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            : runtimeIdentifier!.StartsWith("win", StringComparison.OrdinalIgnoreCase);
-        return targetsWindows ? artifactName + ".exe" : artifactName;
     }
 
     private static CopiedArtifact CopyHybridModule(
@@ -596,7 +587,7 @@ public sealed class PowerShellCompilationArtifactBuilder
         {
             var primaryManifest = manifestFiles.First(path => path.EndsWith(artifactName + ".psd1", StringComparison.OrdinalIgnoreCase));
             foreach (var manifestFile in manifestFiles)
-                files.Add(CreateArtifactFile(manifestFile, manifestFile.Equals(primaryManifest, StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
+                files.Add(CreateArtifactFile(manifestFile, PowerShellCompilationPathSafety.PathEquals(manifestFile, primaryManifest) ? "PrimaryModuleManifest" : "ModuleDependency"));
         }
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
         var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(spec.SourcePath);
@@ -611,9 +602,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                      moduleDirectory,
                      runtimeHooks,
                      path => PowerShellHybridModuleComposer.ComposeDependency(path, typed, wrappedCompiledMethods),
-                     typed.SourcePaths.Where(path => !path.Equals(
-                         spec.SourcePath,
-                         RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)),
+                     typed.SourcePaths.Where(path => !PowerShellCompilationPathSafety.PathEquals(path, spec.SourcePath)),
                      conventionalLoaders: conventionalDiscovery.Loaders))
             files.Add(CreateArtifactFile(dependency, "ModuleDependency"));
         var primaryPath = manifestFiles?.First(path => path.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase)) ?? modulePath;
@@ -643,7 +632,7 @@ public sealed class PowerShellCompilationArtifactBuilder
             spec.TargetFramework) ?? throw new InvalidOperationException("The sibling module manifest was not available during artifact publication.");
         var primaryManifest = manifestFiles.First(path => path.EndsWith(artifactName + ".psd1", StringComparison.OrdinalIgnoreCase));
         foreach (var manifestFile in manifestFiles)
-            files.Add(CreateArtifactFile(manifestFile, manifestFile.Equals(primaryManifest, StringComparison.OrdinalIgnoreCase) ? "PrimaryModuleManifest" : "ModuleDependency"));
+            files.Add(CreateArtifactFile(manifestFile, PowerShellCompilationPathSafety.PathEquals(manifestFile, primaryManifest) ? "PrimaryModuleManifest" : "ModuleDependency"));
         var manifestPath = primaryManifest;
         return new CopiedArtifact(manifestPath, files.ToArray());
     }
@@ -663,7 +652,7 @@ public sealed class PowerShellCompilationArtifactBuilder
         var sourceRoot = Path.GetDirectoryName(fullSourcePath) ?? Directory.GetCurrentDirectory();
         var dependencies = compilationSourcePaths
             .Select(Path.GetFullPath)
-            .Where(path => !path.Equals(fullSourcePath, PowerShellCompilationPathSafety.PathComparison))
+            .Where(path => !PowerShellCompilationPathSafety.PathEquals(path, fullSourcePath))
             .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .OrderBy(path => FrameworkCompatibility.GetRelativePath(sourceRoot, path), StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -861,27 +850,6 @@ public sealed class PowerShellCompilationArtifactBuilder
 
     private static PowerShellCompilationArtifactFile CreateArtifactFile(string path, string role)
         => new() { Path = path, Role = role, Sha256 = ComputeSha256(path), SizeBytes = new FileInfo(path).Length };
-
-    private static string? ResolveRuntimeIdentifier(PowerShellCompilationBuildSpec spec)
-    {
-        if (spec.Kind != PowerShellCompilationArtifactKind.Executable)
-            return null;
-        if (!string.IsNullOrWhiteSpace(spec.RuntimeIdentifier))
-            return spec.RuntimeIdentifier;
-        if (!spec.SingleFile && !spec.SelfContained)
-            return null;
-
-        var prefix = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "win" :
-            RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "osx" : "linux";
-        var architecture = RuntimeInformation.ProcessArchitecture switch
-        {
-            Architecture.X86 => "x86",
-            Architecture.Arm64 => "arm64",
-            Architecture.Arm => "arm",
-            _ => "x64"
-        };
-        return prefix + "-" + architecture;
-    }
 
     private static string GetPowerShellSdkVersion(string targetFramework)
         => targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ? "7.6.4" : "7.4.18";

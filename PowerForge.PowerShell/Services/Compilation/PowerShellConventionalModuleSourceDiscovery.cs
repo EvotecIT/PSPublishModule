@@ -1,6 +1,5 @@
 using System.Management.Automation;
 using System.Management.Automation.Language;
-using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
 namespace PowerForge;
@@ -22,7 +21,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         if (errors.Length > 0)
             throw new InvalidOperationException($"Conventional module source discovery could not parse '{rootPath}'.");
 
-        var discovered = new HashSet<string>(GetPathComparer());
+        var discovered = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         var loaders = new Dictionary<int, PowerShellConventionalLoaderIdentity>();
         foreach (var command in ast.FindAll(
                      node => node is CommandAst candidate && IsTopLevel(candidate, ast),
@@ -223,8 +222,6 @@ internal static class PowerShellConventionalModuleSourceDiscovery
            path.StartsWith("//", StringComparison.Ordinal) ||
            path.Length >= 2 && char.IsLetter(path[0]) && path[1] == ':';
 
-    private static StringComparer GetPathComparer()
-        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 }
 
 internal sealed class PowerShellConventionalModuleSourceDiscoveryResult

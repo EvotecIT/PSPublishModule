@@ -69,7 +69,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         var fullPaths = sourcePaths
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(path => Path.GetFullPath(path.Trim().Trim('"')))
-            .Distinct(GetPathComparer())
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
         if (fullPaths.Length == 0)
             throw new ArgumentException("At least one PowerShell source path is required.", nameof(sourcePaths));
@@ -86,7 +86,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         foreach (var fullPath in fullPaths)
         {
             var filePlan = combinedPlan.Files.Single(file =>
-                file.FullPath.Equals(fullPath, PowerShellCompilationPathSafety.PathComparison));
+                PowerShellCompilationPathSafety.PathEquals(file.FullPath, fullPath));
             diagnostics.AddRange(filePlan.Diagnostics);
             diagnostics.AddRange(filePlan.Units.SelectMany(static unit => unit.Diagnostics));
 
@@ -246,7 +246,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         var signatures = new Dictionary<string, PowerShellLocalFunctionSignature>(StringComparer.OrdinalIgnoreCase);
         var states = new Dictionary<string, FunctionVisitState>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var source in candidates.Values.OrderBy(static source => source.Parsed.Path, GetPathComparer()).ThenBy(static source => source.Function.Extent.StartOffset))
+        foreach (var source in candidates.Values.OrderBy(static source => source.Parsed.Path, PowerShellCompilationPathSafety.PathComparer).ThenBy(static source => source.Function.Extent.StartOffset))
         {
             TryEmitGraphFunction(
                 source,
@@ -467,11 +467,6 @@ public sealed class PowerShellTypedCompilationTranspiler
             candidate = PowerShellCSharpMethodEmitter.SanitizeIdentifier("_" + candidate.TrimStart('@'));
         return candidate;
     }
-
-    private static StringComparer GetPathComparer()
-        => System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal;
 
     private sealed class FunctionSource
     {

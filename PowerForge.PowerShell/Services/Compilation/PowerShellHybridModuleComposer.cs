@@ -1,5 +1,4 @@
 using System.Management.Automation.Language;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace PowerForge;
@@ -111,8 +110,9 @@ internal static class PowerShellHybridModuleComposer
         ISet<string> wrappedCompiledMethods)
     {
         var compiled = typed.Methods
-            .Where(method => (string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath)
-                .Equals(sourcePath, RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            .Where(method => PowerShellCompilationPathSafety.PathEquals(
+                string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
+                sourcePath))
             .Select(method => GetCompiledMethodKey(sourcePath, method.SourceName, method.SourceLine))
             .Where(wrappedCompiledMethods.Contains)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -151,7 +151,7 @@ internal static class PowerShellHybridModuleComposer
 
     private static IEnumerable<ModuleScopeFunction> ReadModuleScopeFunctions(IEnumerable<string> sourcePaths)
     {
-        foreach (var sourcePath in sourcePaths.Distinct(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+        foreach (var sourcePath in sourcePaths.Distinct(PowerShellCompilationPathSafety.PathComparer))
         {
             Token[] tokens;
             ParseError[] errors;

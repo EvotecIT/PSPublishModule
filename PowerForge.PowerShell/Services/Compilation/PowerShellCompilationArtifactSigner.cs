@@ -81,7 +81,7 @@ internal static class PowerShellCompilationArtifactSigner
             .Where(static file => BuildOwnedRoles.Contains(file.Role))
             .Select(static file => file.Path)
             .Where(path => SignableExtensions.Contains(Path.GetExtension(path)))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
 
     private static string NormalizeThumbprint(string? thumbprint)

@@ -48,9 +48,9 @@ internal static class PowerShellGeneratedTypePolicy
             return type.Assembly == typeof(object).Assembly;
         var runtimeDirectory = Path.GetFullPath(RuntimeEnvironment.GetRuntimeDirectory())
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!Path.GetFullPath(location).StartsWith(
-                runtimeDirectory,
-                PowerShellCompilationPathSafety.PathComparison))
+        if (!PowerShellCompilationPathSafety.PathStartsWith(
+                Path.GetFullPath(location),
+                runtimeDirectory))
             return false;
         if (string.IsNullOrWhiteSpace(targetFramework))
             return true;
